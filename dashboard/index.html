@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Etude</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Etude</h1>
+      <span class="sub" id="dbinfo"></span>
+      <span id="live" title="live connection"></span>
+    </header>
+
+    <div id="top">
+      <div>
+        <div id="stats"></div>
+        <div id="heatbox">
+          <h3>Activity <span id="heatsum"></span></h3>
+          <div id="heat"></div>
+          <div id="heatlegend">less <span class="hm"></span><span class="hm h1"></span><span class="hm h2"></span><span class="hm h3"></span><span class="hm h4"></span> more</div>
+        </div>
+      </div>
+      <div>
+        <div class="sidebox"><h3>Queues</h3><div id="queues"></div></div>
+        <div class="sidebox recent"><h3>Recent activity</h3><div id="recent"></div></div>
+      </div>
+    </div>
+
+    <div id="controls">
+      <div class="row">
+        <input type="text" id="q" placeholder="search id, prompt, tags…">
+        <select id="state">
+          <option value="">any state</option>
+          <option>new</option>
+          <option>learning</option>
+          <option>review</option>
+        </select>
+        <span class="toggle" id="andmode" title="tag filter mode">tags: OR</span>
+        <span class="toggle" id="archmode" title="show archived atoms">archived: hidden</span>
+        <span class="toggle" id="orphanmode" title="only atoms with no tags and no queue">orphans</span>
+      </div>
+      <div class="row"><div class="chips" id="chips"></div><span id="showall"></span></div>
+    </div>
+
+    <div id="count"></div>
+    <table>
+      <thead><tr>
+        <th data-k="__pos" id="posth">#</th>
+        <th data-k="id">ID<span class="arr"></span></th>
+        <th data-k="user_prompt">Prompt<span class="arr"></span></th>
+        <th data-k="state">State<span class="arr"></span></th>
+        <th data-k="streak">Streak<span class="arr"></span></th>
+        <th data-k="lapses">Lapses<span class="arr"></span></th>
+        <th data-k="attempts">Attempts<span class="arr"></span></th>
+        <th data-k="last_rating">Last<span class="arr"></span></th>
+        <th data-k="last_seen">Seen<span class="arr"></span></th>
+        <th data-k="due">Due<span class="arr"></span></th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <div id="overlay"></div>
+  <div id="detail"></div>
+  <script src="./app.js"></script>
+</body>
+</html>

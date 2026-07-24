@@ -1,4 +1,4 @@
-"""Etude's stdlib HTTP API, dashboard server, SSE feed, and applet renderer."""
+"""Etude's stdlib HTTP API, dashboard server, SSE feed, and widget renderer."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from . import algorithms, scheduler, schema, store
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DASHBOARD = _REPO_ROOT / "dashboard"
-_APPLETS = _REPO_ROOT / "applets"
+_WIDGETS = _REPO_ROOT / "widgets"
 
 _AUTO_RESIZE_BRIDGE = """<script>
 (() => {
@@ -71,7 +71,7 @@ def _inline_script_json(value: Any) -> str:
 ATOM_FIELDS = frozenset({
     "user_prompt", "agent_prompt", "expected", "agent_assisted", "tags", "topic",
     "source", "created", "archived", "state", "streak", "lapses", "last_rating",
-    "last_seen", "due", "notes", "attempts", "applet_data",
+    "last_seen", "due", "notes", "attempts", "widget_data", "applet_data",
 })
 QUEUE_FIELDS = frozenset({
     "label", "algorithm", "members", "order", "status", "agent_assisted",
@@ -227,6 +227,16 @@ def _atom_defaults(body: Mapping[str, Any]) -> dict[str, Any]:
     return atom
 
 
+def _canonical_atom_fields(body: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize the pre-widget field name at the API boundary."""
+    normalized = deepcopy(dict(body))
+    if "widget_data" in normalized and "applet_data" in normalized:
+        raise APIError(400, "use widget_data, not widget_data and applet_data together")
+    if "applet_data" in normalized:
+        normalized["widget_data"] = normalized.pop("applet_data")
+    return normalized
+
+
 def _queue_defaults(body: Mapping[str, Any], queue_id: str) -> dict[str, Any]:
     queue = {
         "label": body.get("label", queue_id),
@@ -251,7 +261,7 @@ def _resolved_queue(db: Mapping[str, Any], atom_id: str, requested: Any = None) 
             raise APIError(400, f"atom {atom_id} is not in queue {requested}")
         return queues[requested]
     memberships = [queue for queue in queues.values() if atom_id in queue.get("members", [])]
-    # Applets do not include their queue id in attempt bodies. Prefer a queue
+    # Widgets do not include their queue id in attempt bodies. Prefer a queue
     # that establishes deterministic inheritance so those submissions remain
     # gradable when an atom belongs to more than one queue.
     for queue in memberships:
@@ -276,13 +286,16 @@ def _named_file(kind: str, requested: str, suffix: str) -> Path:
     filename = requested if requested.endswith(suffix) else requested + suffix
     if Path(filename).name != filename:
         raise APIError(404, f"{kind} not found")
-    overlay_dir = Path.home() / ".etude" / "applets" / ("templates" if kind == "template" else "themes")
-    repo_dir = _APPLETS / ("templates" if kind == "template" else "themes")
-    available = {path.name for directory in (repo_dir, overlay_dir) if directory.is_dir() for path in directory.iterdir() if path.is_file()}
-    if filename not in available:
-        raise APIError(404, f"{kind} not found: {requested}")
-    overlay = overlay_dir / filename
-    return overlay if overlay.is_file() else repo_dir / filename
+    subdir = "templates" if kind == "template" else "themes"
+    candidates = (
+        Path.home() / ".etude" / "widgets" / subdir / filename,
+        Path.home() / ".etude" / "applets" / subdir / filename,
+        _WIDGETS / subdir / filename,
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise APIError(404, f"{kind} not found: {requested}")
 
 
 class EtudeHTTPServer(ThreadingMixIn, HTTPServer):
@@ -434,8 +447,11 @@ class EtudeHandler(BaseHTTPRequestHandler):
         if path == "/api/inbox":
             self._json(store.load_inbox(self.server.db_path))
             return
+        if path.startswith("/widgets/"):
+            self._widget(path.removeprefix("/widgets/"), query)
+            return
         if path.startswith("/applets/"):
-            self._applet(path.removeprefix("/applets/"), query)
+            self._widget(path.removeprefix("/applets/"), query)
             return
         self._static(path)
 
@@ -479,6 +495,7 @@ class EtudeHandler(BaseHTTPRequestHandler):
         path = unquote(urlsplit(self.path).path)
         body = self._body()
         if path == "/api/atoms":
+            body = _canonical_atom_fields(body)
             atom_id = body.get("id")
             if not isinstance(atom_id, str) or not atom_id:
                 raise APIError(400, "id is required")
@@ -566,12 +583,12 @@ class EtudeHandler(BaseHTTPRequestHandler):
             attempt = {
                 "ts": now_iso,
                 "rating": rating,
-                "mode": body.get("mode", "applet"),
+                "mode": "widget" if body.get("mode", "widget") == "applet" else body.get("mode", "widget"),
                 "variant": body.get("variant"),
                 "variant_prompt": body.get("variant_prompt"),
                 "answer": answer,
                 "feedback": feedback,
-                "via": body.get("via", "applet"),
+                "via": "widget" if body.get("via", "widget") == "applet" else body.get("via", "widget"),
             }
             if not isinstance(attempt["mode"], str) or not isinstance(attempt["via"], str):
                 raise APIError(400, "mode and via must be strings")
@@ -586,6 +603,7 @@ class EtudeHandler(BaseHTTPRequestHandler):
         path = unquote(urlsplit(self.path).path)
         body = self._body()
         if path.startswith("/api/atoms/"):
+            body = _canonical_atom_fields(body)
             atom_id = path.removeprefix("/api/atoms/")
             unknown = set(body).difference(ATOM_FIELDS)
             if unknown:
@@ -646,7 +664,7 @@ class EtudeHandler(BaseHTTPRequestHandler):
             content_type = "text/javascript"
         self._send(200, body, f"{content_type}; charset=utf-8")
 
-    def _applet(self, template_name: str, query: Mapping[str, list[str]]) -> None:
+    def _widget(self, template_name: str, query: Mapping[str, list[str]]) -> None:
         db = self._db()
         theme_name = query.get("theme", [None])[0] or db.get("meta", {}).get("default_theme", "default")
         if not isinstance(theme_name, str):
@@ -656,23 +674,24 @@ class EtudeHandler(BaseHTTPRequestHandler):
         try:
             template = template_path.read_text(encoding="utf-8")
             theme = theme_path.read_text(encoding="utf-8")
+            components = (_WIDGETS / "shadcn.css").read_text(encoding="utf-8")
         except OSError as exc:
             raise APIError(404, str(exc)) from exc
         if "/*__THEME__*/" not in template or "/*__DATA__*/null" not in template:
-            raise APIError(500, "applet template is missing injection markers")
-        if "</style" in theme.casefold():
-            raise APIError(400, "theme contains an unsafe closing style tag")
+            raise APIError(500, "widget template is missing injection markers")
+        if "</style" in theme.casefold() or "</style" in components.casefold():
+            raise APIError(400, "widget styles contain an unsafe closing style tag")
 
-        payload = self._applet_payload(db, template_name, query)
-        rendered = template.replace("/*__THEME__*/", theme).replace(
+        payload = self._widget_payload(db, template_name, query)
+        rendered = template.replace("/*__THEME__*/", f"{theme}\n{components}").replace(
             "/*__DATA__*/null", _inline_script_json(payload)
         )
         if "</body>" not in rendered:
-            raise APIError(500, "applet template is missing a closing body tag")
+            raise APIError(500, "widget template is missing a closing body tag")
         rendered = rendered.replace("</body>", f"{_AUTO_RESIZE_BRIDGE}\n</body>", 1)
         self._send(200, rendered.encode("utf-8"), "text/html; charset=utf-8")
 
-    def _applet_payload(
+    def _widget_payload(
         self, db: Mapping[str, Any], template_name: str, query: Mapping[str, list[str]]
     ) -> dict[str, Any]:
         """Per-template payload. Read-only widgets get focused payloads;
@@ -779,7 +798,7 @@ class EtudeHandler(BaseHTTPRequestHandler):
 
         n = _positive_int(query.get("n", [None])[0], 20, "n")
         # Mode resolves PER ATOM (atom.agent_assisted > queue.agent_assisted > True);
-        # the applet is deterministic when every included atom resolves deterministic.
+        # the widget is deterministic when every included atom resolves deterministic.
         ordered_ids = algorithms.order(db, queue_id, _now_iso())[:n]
         resolved = {
             atom_id: scheduler.resolve_agent_assisted(db["atoms"][atom_id], queue)
@@ -795,8 +814,9 @@ class EtudeHandler(BaseHTTPRequestHandler):
                 "topic": atom.get("topic", ""),
                 "tags": atom.get("tags", []),
             }
-            if "applet_data" in atom:
-                item["applet_data"] = atom["applet_data"]
+            widget_data = atom.get("widget_data", atom.get("applet_data"))
+            if widget_data is not None:
+                item["widget_data"] = widget_data
             if mode == "deterministic":
                 item["expected"] = atom.get("expected")
             atoms.append(item)

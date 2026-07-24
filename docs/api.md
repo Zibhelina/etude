@@ -60,7 +60,7 @@ $ etude --db /tmp/etude-doc/db.json context MATH-1 --queue review
 
 ### `attempt`
 
-**Synopsis:** `etude [--db PATH] attempt ID [--queue Q] [--rating 0..3] (--answer TEXT | --answer-file FILE) [--feedback-file FILE] [--variant VID] [--variant-prompt-file FILE] [--mode MODE] [--via chat|applet]`
+**Synopsis:** `etude [--db PATH] attempt ID [--queue Q] [--rating 0..3] (--answer TEXT | --answer-file FILE) [--feedback-file FILE] [--variant VID] [--variant-prompt-file FILE] [--mode MODE] [--via chat|widget]`
 
 - `--queue Q`: controls inherited `agent_assisted` and deadline scheduler preset selection.
 - `--rating`: required for agent-assisted atoms. Omit it for deterministic atoms; etude checks `expected` and computes 3 (right) or 0 (wrong).
@@ -68,7 +68,7 @@ $ etude --db /tmp/etude-doc/db.json context MATH-1 --queue review
 - `--feedback-file FILE`: verbatim feedback; default `""`.
 - `--variant VID`, `--variant-prompt-file FILE`: optional variant metadata.
 - `--mode MODE`: default `spaced-repetition`.
-- `--via chat|applet`: default `chat`.
+- `--via chat|widget`: default `chat`.
 
 ```console
 $ etude --db /tmp/etude-doc/db.json attempt GEO-1 --queue review --answer Paris
@@ -95,7 +95,7 @@ $ etude --db /tmp/etude-doc/db.json add --id GEO-1 --user-prompt 'Capital of Fra
 
 **Synopsis:** `etude [--db PATH] edit ID [--set field=value ...] [--archive | --unarchive]`
 
-`--set` is repeatable. Values that parse as JSON become the corresponding bool, null, number, list, or object; other values remain strings. Dot-separated fields update nested objects. `applet_data` is the optional structured object exposed to applet templates; for matching pairs, set `applet_data.pairs` to `[left, right]` tuples. Archiving never deletes the atom.
+`--set` is repeatable. Values that parse as JSON become the corresponding bool, null, number, list, or object; other values remain strings. Dot-separated fields update nested objects. `widget_data` is the optional structured object exposed to widget templates; for matching pairs, set `widget_data.pairs` to `[left, right]` tuples. Archiving never deletes the atom.
 
 ```console
 $ etude --db /tmp/etude-doc/db.json edit MATH-1 --set notes=reviewed --archive
@@ -286,7 +286,7 @@ Start the stdlib server with `etude --db /path/to/db.json serve --port 2600` or 
 
 Samples below are real responses observed from the test fixture on 2026-07-23. Long objects show only explicitly noted fields; no values are invented.
 
-### Dashboard and applets
+### Dashboard and widgets
 
 #### `GET /`, `GET /app.js`, `GET /style.css`
 
@@ -296,12 +296,12 @@ curl -i "$BASE/"
 
 Serves `dashboard/index.html` as `text/html`; JavaScript is `text/javascript` and CSS is `text/css`. The observed body begins `<!DOCTYPE html><html lang="en">`.
 
-#### `GET /applets/{template}?queue=Q&theme=T&n=N`
+#### `GET /widgets/{template}?queue=Q&theme=T&n=N`
 
-`queue` is required for queue-scoped and drill templates; `theme` defaults to `meta.default_theme`; `n` defaults to 20. Queue-free widgets use their own selectors: `recent-items?limit=N`, `streaks?days=N`, and `atom-card?atom=ID`. `recent-items` returns unique practiced atoms ordered by their latest attempt, newest first, and defaults to 10 rows. Template/theme names may omit `.html`/`.css` but must match directory entries (no traversal). `~/.etude/applets/` files override repository files. Atoms follow `etude.algorithms.order`. The server replaces both injection markers. Every drill atom includes `id`, `user_prompt`, `topic`, and `tags`, plus `applet_data` when present. Deterministic queue payloads also include `expected`; agent payloads never do. The matching-pairs template consumes `atom.applet_data.pairs`; the flashcard template uses the `true-false` tag to render direct binary controls.
+`queue` is required for queue-scoped and drill templates; `theme` defaults to `meta.default_theme`; `n` defaults to 20. Queue-free widgets use their own selectors: `recent-items?limit=N`, `streaks?days=N`, and `atom-card?atom=ID`. `recent-items` returns unique practiced atoms ordered by their latest attempt, newest first, and defaults to 10 rows. Template/theme names may omit `.html`/`.css` but must match directory entries (no traversal). `~/.etude/widgets/` files override repository files; the old `~/.etude/applets/` path is a lower-priority compatibility source. Atoms follow `etude.algorithms.order`. The server injects the selected theme, `widgets/shadcn.css`, the payload, and the resize bridge. Every drill atom includes `id`, `user_prompt`, `topic`, and `tags`, plus canonical `widget_data` when present. Deterministic queue payloads also include `expected`; agent payloads never do. The matching-pairs template consumes `atom.widget_data.pairs`; the flashcard template uses the `true-false` tag to render direct binary controls. `/applets/{template}` remains an alias for old links; new integrations use `/widgets/{template}`.
 
 ```sh
-curl "$BASE/applets/flashcard-drill?queue=agent&theme=everforest&n=1"
+curl "$BASE/widgets/flashcard-drill?queue=agent&theme=everforest&n=1"
 ```
 
 Observed injected data (the ephemeral test port varies):
@@ -346,7 +346,7 @@ curl "$BASE/api/atoms/DET-1"
 
 #### `POST /api/atoms`
 
-`id` and `user_prompt` are required. Schema rules require `agent_prompt` for agent-assisted atoms and `expected` for deterministic atoms. Optional `applet_data` must be an object. Scheduler fields receive new-atom defaults; unknown input fields are rejected.
+`id` and `user_prompt` are required. Schema rules require `agent_prompt` for agent-assisted atoms and `expected` for deterministic atoms. Optional `widget_data` must be an object. The old input name `applet_data` is accepted and normalized to `widget_data`; sending both is rejected. Scheduler fields receive new-atom defaults; unknown input fields are rejected.
 
 ```sh
 curl -X POST "$BASE/api/atoms" -H 'Content-Type: application/json' -d '{"id":"NEW-4","user_prompt":"2 + 2?","agent_assisted":false,"expected":"4","topic":"Arithmetic"}'
@@ -422,14 +422,14 @@ curl "$BASE/api/queues/new/next?n=1"
 
 #### `POST /api/attempts`
 
-Required: `atom_id`, string `answer`. Optional: `via` (default `applet`), `mode` (default `applet`), `rating`, `feedback`, `variant`, `variant_prompt`, offset-aware `ts`, and queue disambiguator `queue`. Agent-assisted atoms require rating 0–3. Without a rating, deterministic atoms use `scheduler.check_expected` to compute 3/0 and force empty feedback. The server appends the attempt, calls `scheduler.apply_attempt`, and returns the recorded attempt plus scheduler state.
+Required: `atom_id`, string `answer`. Optional: `via` (default `widget`), `mode` (default `widget`), `rating`, `feedback`, `variant`, `variant_prompt`, offset-aware `ts`, and queue disambiguator `queue`. Legacy `via=applet` or `mode=applet` is accepted and stored as `widget`. Agent-assisted atoms require rating 0–3. Without a rating, deterministic atoms use `scheduler.check_expected` to compute 3/0 and force empty feedback. The server appends the attempt, calls `scheduler.apply_attempt`, and returns the recorded attempt plus scheduler state.
 
 ```sh
-curl -X POST "$BASE/api/attempts" -H 'Content-Type: application/json' -d '{"atom_id":"DET-1","answer":"  paris ","via":"applet","ts":"2026-07-23T12:00:00+00:00"}'
+curl -X POST "$BASE/api/attempts" -H 'Content-Type: application/json' -d '{"atom_id":"DET-1","answer":"  paris ","via":"widget","ts":"2026-07-23T12:00:00+00:00"}'
 ```
 
 ```json
-{"attempt":{"ts":"2026-07-23T12:00:00+00:00","rating":3,"mode":"applet","variant":null,"variant_prompt":null,"answer":"  paris ","feedback":"","via":"applet"},"scheduler":{"state":"learning","streak":1,"lapses":0,"last_rating":3,"last_seen":"2026-07-23T12:00:00+00:00","due":"2026-07-28T12:00:00+00:00"}}
+{"attempt":{"ts":"2026-07-23T12:00:00+00:00","rating":3,"mode":"widget","variant":null,"variant_prompt":null,"answer":"  paris ","feedback":"","via":"widget"},"scheduler":{"state":"learning","streak":1,"lapses":0,"last_rating":3,"last_seen":"2026-07-23T12:00:00+00:00","due":"2026-07-28T12:00:00+00:00"}}
 ```
 
 Agent-assisted observed response:

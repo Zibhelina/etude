@@ -191,12 +191,12 @@ def _attempt(args: argparse.Namespace) -> dict[str, Any]:
     attempt = {
         "ts": timestamp,
         "rating": rating,
-        "mode": args.mode,
+        "mode": "widget" if args.mode == "applet" else args.mode,
         "variant": args.variant,
         "variant_prompt": variant_prompt,
         "answer": answer,
         "feedback": feedback if feedback is not None else "",
-        "via": args.via,
+        "via": "widget" if args.via == "applet" else args.via,
     }
     attempts = atom.setdefault("attempts", [])
     if not isinstance(attempts, list):
@@ -509,7 +509,7 @@ def build_parser() -> argparse.ArgumentParser:
     attempt.add_argument("--variant")
     attempt.add_argument("--variant-prompt-file")
     attempt.add_argument("--mode", default="spaced-repetition")
-    attempt.add_argument("--via", choices=("chat", "applet"), default="chat")
+    attempt.add_argument("--via", choices=("chat", "widget", "applet"), default="chat")
     attempt.set_defaults(handler=_attempt)
 
     add = commands.add_parser("add")

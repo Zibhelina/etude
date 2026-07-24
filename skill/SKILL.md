@@ -1,16 +1,16 @@
 ---
 name: etude
-description: "Operate etude, an agent-first practice engine — practice atoms with user_prompt/agent_prompt, agent-assisted or deterministic grading, queues with pluggable scheduling algorithms, CSS-like instruction cascade, themable applets, and an inbox for applet attempts. Load for practice sessions, atom/queue management, progress reporting, or applet serving."
-version: 1.1.0
+description: "Use etude for practice sessions and reusable widgets."
+version: 1.2.0
 license: MIT
 metadata:
   category: education
-  tags: [etude, practice-engine, spaced-repetition, agent-first, applets]
+  tags: [etude, practice-engine, spaced-repetition, agent-first, widgets]
 ---
 
 # Etude — agent-first practice engine
 
-Etude is a program; the agent operates it through its CLI/HTTP API — never by hand-editing the database. The user practices through chat; applets and the dashboard are surfaces.
+Etude is a program; the agent operates it through its CLI/HTTP API — never by hand-editing the database. The user practices through chat; widgets and the dashboard are surfaces.
 
 **Setup (first use):** if etude is not installed yet, clone the repository and verify it runs:
 
@@ -31,10 +31,10 @@ All output is compact JSON. Server: `etude serve --port 2600` (dashboard at http
 
 ## Concepts (30-second model)
 
-- **Atom** = `user_prompt` (markdown shown to the user) + `agent_prompt` (instructions to the AGENT: canonical answer, grading rubric, applet spec) + optional `expected` (deterministic accepted answers) + optional `applet_data` (structured object exposed to applet templates) + `agent_assisted` (atom > queue > default true) + tags + scheduler state + verbatim `attempts[]`. Atoms may be orphans (no tags, no queue).
+- **Atom** = `user_prompt` (markdown shown to the user) + `agent_prompt` (instructions to the AGENT: canonical answer, grading rubric, widget spec) + optional `expected` (deterministic accepted answers) + optional `widget_data` (structured object exposed to widget templates) + `agent_assisted` (atom > queue > default true) + tags + scheduler state + verbatim `attempts[]`. Atoms may be orphans (no tags, no queue).
 - **Queue** = ordered work list with one algorithm (fsrs, oldest-first, newest-first, weakest-first, least-practiced, manual, random, or custom declarative). Explicit `members` list. Optional `deadline` (<7 days away ⇒ compressed exam-horizon scheduling, due dates capped) and `agent_instructions`.
 - **Cascade** = card `agent_prompt` > tag `meta.tag_instructions` > queue `agent_instructions`. All non-conflicting layers apply together; inner layers win conflicts. `etude context ID --queue Q` returns the stack — READ IT before grading.
-- **Deterministic atoms** = flashcard mode: the program checks `expected`, rating is 0 or 3, no agent feedback. The agent's job is only to serve the applet.
+- **Deterministic atoms** = flashcard mode: the program checks `expected`, rating is 0 or 3, no agent feedback. The agent's job is only to serve the widget.
 
 ## Session workflows
 
@@ -49,19 +49,19 @@ All output is compact JSON. Server: `etude serve --port 2600` (dashboard at http
 ### Deterministic drill (flashcard-style)
 
 1. Confirm/create the queue with `agent_assisted` false (queue level or per atom). Deterministic atoms need `expected`.
-2. Ensure the server is running, then hand the user the link: `http://127.0.0.1:2600/applets/flashcard-drill?queue=Q` (append `&theme=X` on request). Attempts POST straight to the program — the agent is NOT in the per-attempt loop. Tag binary items `true-false`; the applet then renders direct two-choice controls instead of a free-text field.
+2. Ensure the server is running, then hand the user the link: `http://127.0.0.1:2600/widgets/flashcard-drill?queue=Q` (append `&theme=X` on request). Attempts POST straight to the program — the agent is NOT in the per-attempt loop. Tag binary items `true-false`; the widget then renders direct two-choice controls instead of a free-text field.
 3. Report afterwards from `etude stats --queue Q`.
 
-### Applet-mediated, agent-graded
+### Widget-mediated, agent-graded
 
 1. Serve an interactive template (e.g. `matching-pairs`). Its submit POSTs to `/api/inbox`.
-2. When the user says they're done (or after polling `etude inbox list`), grade each payload per the cascade, record with `etude attempt ID --rating N --answer-file - --feedback-file - --via applet`, then `etude inbox clear --id N`.
+2. When the user says they're done (or after polling `etude inbox list`), grade each payload per the cascade, record with `etude attempt ID --rating N --answer-file - --feedback-file - --via widget`, then `etude inbox clear --id N`.
 
-## Applet→session signal: per-platform protocol
+## Widget→session signal: per-platform protocol
 
-Some chat surfaces let an applet inject the user's attempt directly back into the SAME agent session; most do not. Before applet-mediated practice, resolve which case applies:
+Some chat surfaces let a widget inject the user's attempt directly back into the SAME agent session; most do not. Before widget-mediated practice, resolve which case applies:
 
-**Platforms with native applet→session signal support:**
+**Platforms with native widget→session signal support:**
 
 | platform | mechanism | notes |
 |---|---|---|
@@ -72,15 +72,15 @@ Some chat surfaces let an applet inject the user's attempt directly back into th
 **Everywhere else — the fallback protocol (always works):**
 
 1. State the plan up front, briefly: "I'll give you a link; practice there, then tell me when you're done."
-2. Serve the applet link (outside the chat if the surface can't embed it).
+2. Serve the widget link (outside the chat if the surface can't embed it).
 3. Interactive agent-graded attempts park in the etude inbox; deterministic attempts don't need the agent at all.
 4. When the user signals completion, read `etude inbox list` and grade. If the surface can't reach localhost links at all (remote/mobile), degrade further: the user sends a screenshot or types answers into chat, and the agent records them via `etude attempt`.
-5. If it's unclear whether the current surface supports embedding or direct signaling, INVESTIGATE first (this table, the surface's docs, `docs/research/applet-signal.md` in the repo), then offer the best available plan — never assume a bridge exists.
+5. If it's unclear whether the current surface supports embedding or direct signaling, INVESTIGATE first (this table, the surface's docs, `docs/research/widget-signal.md` in the repo), then offer the best available plan — never assume a bridge exists.
 
 ## Managing content
 
 - **Add atoms**: `etude add --id PREFIX-NN --user-prompt "..." [--agent-prompt-file -] [--expected X --expected Y] [--agent-assisted false] [--tags a,b] [--topic T]`. IDs are stable and never reused; a new domain gets a new prefix + domain tag. Ask the user (or infer clearly) whether new atoms join an existing queue — membership is materialized; tags do NOT auto-enroll.
-- **Applet data**: set structured template input with `etude edit ID --set 'applet_data={...}'`. Matching pairs require `applet_data.pairs` as `[left, right]` tuples, for example `--set 'applet_data={"pairs":[["200","OK"],["404","Not Found"]]}'`. Keep hidden answers and grading rubrics in `agent_prompt`, never in `applet_data`.
+- **Widget data**: set structured template input with `etude edit ID --set 'widget_data={...}'`. Matching pairs require `widget_data.pairs` as `[left, right]` tuples, for example `--set 'widget_data={"pairs":[["200","OK"],["404","Not Found"]]}'`. Keep hidden answers and grading rubrics in `agent_prompt`, never in `widget_data`.
 - **Queues**: `etude queue create Q --label L --algorithm A [--members ...] [--deadline ISO]`; `add-members` / `remove-members` / `edit` / `archive`.
 - **Custom algorithms**: `etude algorithms add NAME --spec-file F` (declarative `{order: [{key, dir}...], filter: {...}}`). Procedural policies: mark `agent_only: true` with the procedure in the description; the agent executes them.
 - **Archive, never delete**: `etude edit ID --archive`; queues via `status`. The program never destroys data.
@@ -91,18 +91,17 @@ Some chat surfaces let an applet inject the user's attempt directly back into th
 When the user asks how they're doing:
 
 - Numeric: `etude stats [--queue Q] [--tags T] [--days N]` → coverage, mastery (mean of min(streak,3)/3, unseen = 0 — coverage-weighted preparedness, not literal competence; say so when forecasting), rating distribution, per-day activity. Render as a compact table or inline progress bar.
-- Visual: read-only widget templates, ideal for embedding in chat surfaces that render iframes/applets — `http://127.0.0.1:2600/applets/queue-progress?queue=Q` (progress bar: done/remaining/total, mastery, rating chips), `/applets/queue-items?queue=Q` (algorithm-ordered practice-item table), `/applets/recent-items?limit=10` (latest practiced unique items across the DB), `/applets/streaks?days=35` (per-day activity squares + current/best streak), `/applets/atom-card?atom=ID` (full atom inspection: prompt, state, attempt history with feedback). Legacy overview: `/applets/progress?queue=Q`. Or the dashboard (deep link `/#ATOM-ID`). All accept `&theme=X` (`default` dark, `notion` minimalist light, `everforest`).
-- Reusable visualizations belong in `applets/templates/` — save good one-offs as templates instead of regenerating them.
+- Visual: read-only widget templates, ideal for embedding in chat surfaces that render iframes/widgets — `http://127.0.0.1:2600/widgets/queue-progress?queue=Q` (progress bar: done/remaining/total, mastery, rating chips), `/widgets/queue-items?queue=Q` (algorithm-ordered practice-item table), `/widgets/recent-items?limit=10` (latest practiced unique items across the DB), `/widgets/streaks?days=35` (per-day activity squares + current/best streak), `/widgets/atom-card?atom=ID` (full atom inspection: prompt, state, attempt history with feedback). Legacy overview: `/widgets/progress?queue=Q`. Or the dashboard (deep link `/#ATOM-ID`). All accept `&theme=X` (`default` dark, `notion` minimalist light, `everforest`).
+- Reusable visualizations belong in `widgets/templates/` — save good one-offs as templates instead of regenerating them.
 
 Keep the user in the loop on placement decisions — ask when it's genuinely their call ("new queue for this, or add to X?"), decide silently when context makes it obvious. Say where things landed either way.
 
-## Applets & themes
+## Widgets & themes
 
-- **Visual quality gate:** before creating or changing an applet, read `docs/applet-design.md`. Choose the display from the data shape first; use the shared light/dark tokens and fixed palette order; keep sentence case and weights 400/500; use 0.5px borders; omit gradients, decorative shadows, blur, glow, and arbitrary color cycling; round displayed values; pair status color with an icon and label; and give every visualization a text equivalent. Add or update visual-contract tests and inspect desktop and narrow widths.
-- Templates in `applets/templates/` — interactive: flashcard-drill, matching-pairs; read-only widgets: queue-progress, queue-items, recent-items, streaks, atom-card, progress. Matching-pairs reads `atom.applet_data.pairs`. Themes in `applets/themes/`: default (refined dark), notion (minimalist light), everforest. The server injects `/*__THEME__*/` (theme CSS variables), `const ETUDE = /*__DATA__*/null;` (payload), and a shared ResizeObserver bridge. In Lotus, the bridge resizes the iframe to the applet's current content height, including shrinking shorter states when the template opts in with `data-fit-content`, so the fence height is only an initial fallback and nested scrollbars should not appear. New templates MUST use exactly the two file markers, the shared design tokens for every color, `<meta name="color-scheme" content="dark light">`, self-contained HTML, and no external resources.
-- The current theme contract is documented in `docs/applet-design.md`: surfaces, text tiers, borders, radii, fixed categorical colors, status colors, and mono/sans stacks. Old short variable names remain compatibility aliases only; new templates use `--surface-*`, `--text-*`, and named palette tokens.
-- User-space overrides in `~/.etude/applets/` win over repo files.
-- Soft-commands (natural-language, user-reconfigurable): `#theme:NAME` = one-off theme for the next applet link; `#set-default-theme:NAME` = `etude edit-meta default_theme=NAME`. When creating a new theme, honor the variable contract and confirm rendering in a browser before delivering.
+- **Default UI system:** every new Etude widget uses shadcn/ui unless the user explicitly asks for another visual language. Read `docs/widget-design.md`; compose the shared open-code component classes in `widgets/shadcn.css` (`ui-card`, `ui-button`, `ui-input`, `ui-badge`, `ui-progress`, and related variants) and the shadcn semantic tokens (`--background`, `--foreground`, `--card`, `--primary`, `--secondary`, `--muted`, `--accent`, `--border`, `--input`, `--ring`, `--radius`, `--chart-*`). Do not imitate shadcn loosely with one-off CSS when a shared component already exists.
+- Templates in `widgets/templates/` include interactive flashcard-drill and matching-pairs plus read-only queue-progress, queue-items, recent-items, streaks, atom-card, and progress. Matching-pairs reads `atom.widget_data.pairs`. Themes live in `widgets/themes/`; `default` is the canonical shadcn-style dark theme. The server injects the theme, `widgets/shadcn.css`, the `ETUDE` payload, and the ResizeObserver bridge. New templates remain self-contained and use the two injection markers.
+- User-space overrides in `~/.etude/widgets/` win. Legacy `/applets/*`, `~/.etude/applets/`, and `applet_data` remain compatibility inputs only; never generate them for new work.
+- Soft-commands: `#theme:NAME` applies a one-off theme; `#set-default-theme:NAME` updates `meta.default_theme`. Verify new themes in a browser before delivery.
 
 ## Developer mode — `#etude/dev`
 

@@ -292,7 +292,7 @@ kbd {
     <div class="counter" id="counter"></div>
   </header>
   <div class="track" aria-hidden="true"><div class="fill" id="fill"></div></div>
-  <section class="card" id="card" aria-live="polite">
+  <section class="card ui-card" id="card" aria-live="polite">
     <div class="question-head"><div class="topic" id="topic"></div></div>
     <div class="prompt" id="prompt"></div>
     <div class="controls" id="controls"></div>
@@ -393,7 +393,7 @@ const ETUDE = /*__DATA__*/null;
     for (const body of pending) await postAttempt(body);
   }
   function attemptBody(atom, answer, rating) {
-    const body = {atom_id: atom.id, answer, via: 'applet', mode: 'applet'};
+    const body = {atom_id: atom.id, answer, via: 'widget', mode: 'widget'};
     if (rating != null) body.rating = rating;
     return body;
   }

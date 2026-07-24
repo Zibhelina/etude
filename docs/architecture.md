@@ -4,13 +4,13 @@ Agent-first systematic practice engine. This document is the **build contract**:
 
 ## 1. What etude is
 
-A practice system flexible enough to be a superset of a traditional flashcard app, designed to be operated **through a chat agent** rather than through its own GUI. The user talks to their agent ("let's practice for my CMPT-310 exam"); the agent manipulates etude through a clean CLI/HTTP API; the dashboard and in-chat applets are inspection/interaction surfaces. Distribution model (future): the user installs the program + adds an agent skill; the skill teaches the agent how to drive the API.
+A practice system flexible enough to be a superset of a traditional flashcard app, designed to be operated **through a chat agent** rather than through its own GUI. The user talks to their agent ("let's practice for my CMPT-310 exam"); the agent manipulates etude through a clean CLI/HTTP API; the dashboard and in-chat widgets are inspection/interaction surfaces. Distribution model (future): the user installs the program + adds an agent skill; the skill teaches the agent how to drive the API.
 
 Three practice interaction formats, all supported by one schema:
 
 1. **Agent-assisted, chat-native** — agent presents the prompt, user answers in chat (text/code/file path/attachment), agent grades against the atom's agent instructions, gives feedback + rating. (The CMPT-295 workflow.)
-2. **Deterministic, applet-native** — flashcard-style. Agent serves an applet (Anki/RemNote-like drill UI); the user's attempts are checked deterministically against `expected` and POSTed by the applet **directly to the program**, no agent in the loop per attempt. Feedback is right/wrong.
-3. **Agent-assisted, applet-mediated** — an interactive applet (matching pairs, puzzle) collects a structured attempt and hands it **to the agent** (via the inbox), which grades non-deterministically and writes feedback.
+2. **Deterministic, widget-native** — flashcard-style. Agent serves a widget (Anki/RemNote-like drill UI); the user's attempts are checked deterministically against `expected` and POSTed by the widget **directly to the program**, no agent in the loop per attempt. Feedback is right/wrong.
+3. **Agent-assisted, widget-mediated** — an interactive widget (matching pairs, puzzle) collects a structured attempt and hands it **to the agent** (via the inbox), which grades non-deterministically and writes feedback.
 
 ## 2. Repository layout
 
@@ -22,7 +22,7 @@ etude/
 │   ├── architecture.md        # this file
 │   ├── api.md                 # generated-from-spec API reference (written by CORE lane)
 │   └── research/
-│       └── applet-signal.md   # research: applet→chat/agent signal mechanics
+│       └── widget-signal.md   # research: widget→chat/agent signal mechanics
 ├── src/etude/                 # Python package (stdlib only)
 │   ├── __init__.py
 │   ├── store.py               # load/save/locate DB; unknown-key preservation
@@ -37,8 +37,9 @@ etude/
 │   ├── index.html
 │   ├── app.js
 │   └── style.css
-├── applets/
-│   ├── templates/             # reusable applet templates (self-contained HTML)
+├── widgets/
+│   ├── shadcn.css              # shared open-code shadcn component recipes
+│   ├── templates/             # reusable widget templates (self-contained HTML)
 │   │   ├── flashcard-drill.html
 │   │   ├── matching-pairs.html
 │   │   ├── progress.html
@@ -56,7 +57,7 @@ etude/
     └── validate.py            # thin wrapper over schema.validate for CI/manual use
 ```
 
-**Data lives outside the repo.** Default data dir: `~/.etude/` (`db.json`, `config.json`, `inbox.json`, `applets/` user-space overrides). Resolution order for the DB path: `--db` flag > `ETUDE_DB` env > `config.json` `db_path` > `~/.etude/db.json`. Users who keep notes in a synced vault can point `db_path` at a file inside it so their existing sync covers the data.
+**Data lives outside the repo.** Default data dir: `~/.etude/` (`db.json`, `config.json`, `inbox.json`, `widgets/` user-space overrides). Resolution order for the DB path: `--db` flag > `ETUDE_DB` env > `config.json` `db_path` > `~/.etude/db.json`. Users who keep notes in a synced vault can point `db_path` at a file inside it so their existing sync covers the data.
 
 ## 3. Schema v3
 
@@ -89,14 +90,14 @@ IDs: `PREFIX-NN`, human-stable, never reused.
   "user_prompt": "**der Hund** — English?",        // REQUIRED. Markdown shown to the user (text, code, ![img](...), links).
   "agent_prompt": "Accept 'dog'. If asked, note gender article usage.",
                                                    // Markdown FOR THE AGENT: canonical answer, grading rubric,
-                                                   // applet build spec, or interface guidance. Required when the
+                                                   // widget build spec, or interface guidance. Required when the
                                                    // atom is agent-assisted; optional (but recommended) otherwise.
   "expected": ["dog"],                             // Deterministic accepted answers (string or list).
                                                    // REQUIRED when agent_assisted resolves to false.
   "agent_assisted": false,                         // true | false | null (null = inherit queue, else default true)
   "tags": ["german", "vocab-week3"],               // optional — orphans legal
   "topic": "Hund",                                 // optional short label
-  "applet_data": {"pairs": [["der Hund", "dog"]]}, // optional structured object exposed to applet templates
+  "widget_data": {"pairs": [["der Hund", "dog"]]}, // optional structured object exposed to widget templates
   "source": "", "created": "YYYY-MM-DD",
   "archived": false,
   "state": "new", "streak": 0, "lapses": 0,
@@ -104,16 +105,18 @@ IDs: `PREFIX-NN`, human-stable, never reused.
   "notes": "",
   "attempts": [{
     "ts": "ISO-8601+offset", "rating": 0,
-    "mode": "spaced-repetition|random|agent-choice|applet (free-form label; these are conventions)",
+    "mode": "spaced-repetition|random|agent-choice|widget (free-form label; these are conventions)",
     "variant": "GER-01v1 | null", "variant_prompt": "…",
-    "answer": "learner's answer VERBATIM (or structured applet payload as JSON string)",
+    "answer": "learner's answer VERBATIM (or structured widget payload as JSON string)",
     "feedback": "correction/confirmation ('' for deterministic)",
-    "via": "chat | applet"
+    "via": "chat | widget"
   }]
 }
 ```
 
-`applet_data` is optional template-facing data. It must be an object and is included with the atom in rendered drill payloads; keep grading rubrics and hidden answers in `agent_prompt`, never in `applet_data`. The matching-pairs template reads `applet_data.pairs` as `[left, right]` tuples.
+`widget_data` is optional template-facing data. It must be an object and is included with the atom in rendered drill payloads; keep grading rubrics and hidden answers in `agent_prompt`, never in `widget_data`. The matching-pairs template reads `widget_data.pairs` as `[left, right]` tuples.
+
+Compatibility: API writes that use the old `applet_data` field are normalized to `widget_data`; existing databases containing `applet_data` still render. New code and documentation use only `widget_data`.
 
 `agent_assisted` resolution: atom explicit bool > queue `agent_assisted` > `true`.
 Deterministic rating mapping: wrong → 0, right → 3. Matching of `expected` is case-insensitive, whitespace-trimmed, any-of-list.
@@ -154,7 +157,7 @@ etude status                                  # counts, active queues, due-now s
 etude next --queue Q [-n 5] [--full]          # next N atoms per the queue's algorithm (default: ids+user_prompt; --full = whole atoms)
 etude show ID                                 # full atom
 etude context ID [--queue Q]                  # resolved agent-instruction cascade
-etude attempt ID --rating N --answer-file F [--feedback-file F] [--variant VID --variant-prompt-file F] [--mode M] [--via chat|applet]
+etude attempt ID --rating N --answer-file F [--feedback-file F] [--variant VID --variant-prompt-file F] [--mode M] [--via chat|widget]
                                               # records attempt + scheduler update in one call.
                                               # For deterministic atoms: omit --rating, pass --answer "..." — program checks `expected`, returns computed rating.
 etude add --id ID --user-prompt-file F [--agent-prompt-file F] [--expected ...] [--tags a,b] [--agent-assisted true|false] [...]
@@ -163,7 +166,7 @@ etude queue list | show Q | create Q --label L --algorithm A [--members ...] | e
 etude queue add-members Q ID... | remove-members Q ID...
 etude algorithms list | add NAME --spec-file F
 etude stats [--queue Q] [--tags ...] [--days N]   # coverage, mastery, rating dist, per-day activity
-etude inbox list | clear [--id N]             # applet→agent handoff (see 4.3)
+etude inbox list | clear [--id N]             # widget→agent handoff (see 4.3)
 etude serve [--port 2600]                     # dashboard + HTTP API
 etude validate                                # integrity check
 etude migrate-v2 --from PATH                  # one-shot v2→v3
@@ -173,7 +176,7 @@ Answers/feedback go through `--*-file` (or `-` for stdin) to keep verbatim conte
 
 ### 4.2 HTTP API (server.py, default port 2600)
 
-Serves `dashboard/` at `/`, applet templates at `/applets/…` (with theme CSS injection, see 4.4), and:
+Serves `dashboard/` at `/`, widget templates at `/widgets/…` (with theme CSS injection, see 4.4), and keeps `/applets/…` as a read-only route alias for old transcripts and links.
 
 ```
 GET  /api/db                       # full DB
@@ -188,8 +191,8 @@ GET  /api/queues/{id}/next?n=
 POST /api/attempts                 # {atom_id, answer, via, rating?, feedback?, mode?, variant?, variant_prompt?, ts?}
                                    # deterministic atom + no rating => server checks expected, computes rating, returns it
 GET  /api/stats?queue=&days=
-GET  /api/inbox                    # pending applet→agent submissions
-POST /api/inbox                    # {atom_id, payload, ts} — applet hands an attempt to the agent
+GET  /api/inbox                    # pending widget→agent submissions
+POST /api/inbox                    # {atom_id, payload, ts} — widget hands an attempt to the agent
 DELETE /api/inbox/{index}
 GET  /api/events                   # SSE: db.json/inbox.json mtime change → "reload"
 ```
@@ -201,18 +204,19 @@ Writes rebuild scheduler state exactly like the CLI (single shared code path in 
 | format | attempt flows | rating source | recorded by |
 |---|---|---|---|
 | chat, agent-assisted | user → chat → agent | agent grades per cascade | agent via `etude attempt` |
-| applet, deterministic | user → applet → `POST /api/attempts` | program checks `expected` | server directly |
-| applet, agent-assisted | user → applet → `POST /api/inbox` → agent reads `etude inbox` | agent grades payload | agent via `etude attempt --via applet` |
+| widget, deterministic | user → widget → `POST /api/attempts` | program checks `expected` | server directly |
+| widget, agent-assisted | user → widget → `POST /api/inbox` → agent reads `etude inbox` | agent grades payload | agent via `etude attempt --via widget` |
 
-The inbox is the v1 mechanism for "applet sends the attempt to the agent's session": chat surfaces cannot generally be injected into mid-session, so the applet parks the structured payload in the program and the agent picks it up on its next turn (the user says "done" / "fiz"; or the agent polls after presenting the applet). `docs/research/applet-signal.md` documents surface-specific upgrades (Obsidian Agents, Hermes desktop) where direct chat injection is possible.
+The inbox is the v1 mechanism for "widget sends the attempt to the agent's session": chat surfaces cannot generally be injected into mid-session, so the widget parks the structured payload in the program and the agent picks it up on its next turn (the user says "done" / "fiz"; or the agent polls after presenting the widget). `docs/research/widget-signal.md` documents surface-specific upgrades (Obsidian Agents, Hermes desktop) where direct chat injection is possible.
 
-### 4.4 Applets and themes
+### 4.4 Widgets and themes
 
-- **Templates** (`applets/templates/`): self-contained HTML files with two injection points: `/*__THEME__*/` (CSS variables block) and `/*__DATA__*/` (JSON payload: atoms to drill, API base URL, queue id). Drill atoms include `id`, `user_prompt`, `topic`, and `tags`, plus `applet_data` when the atom defines it; deterministic payloads also include `expected`, while agent-assisted payloads never expose it. The `queue-items` widget receives every queue member in algorithm order with its position, topic, prompt, resolved correction mode, scheduler state, attempt count, last rating, and due date. The queue-free `recent-items` widget receives the most recently attempted unique atoms, newest first, with `?limit=N` controlling the row count. The matching-pairs template reads `atom.applet_data.pairs`; the flashcard template uses the `true-false` tag to render direct binary controls instead of the free-text field. The server renders `GET /applets/{template}?queue=Q&theme=T` by injecting both and a shared `ResizeObserver` bridge. Payload JSON escapes HTML-significant characters before inline-script injection; themes containing a closing `style` tag are rejected. The bridge posts `{lotus: 1, type: "resize", height}` to a supporting parent whenever the document height changes; other surfaces ignore it. Templates whose height should shrink as their state becomes shorter opt in with `data-fit-content` on `<body>`; the bridge then measures the body children instead of the viewport floor. This keeps every Etude applet free of nested scrollbars in Lotus without duplicating sizing code across templates.
-- **Visual contract:** `docs/applet-design.md` defines display selection, hierarchy, palette order, typography, accessibility, chart rules, and the review gate. Templates use no external resources, no hardcoded colors, sentence-case labels, weights 400/500, 0.5px borders, keyboard focus, reduced-motion handling where needed, and text equivalents for visualizations.
-- **Theme contract:** every theme defines `--surface-0, --surface-1, --surface-2, --text-primary, --text-secondary, --text-muted, --border, --border-strong, --radius-control, --radius-card, --accent, --orange, --aqua, --yellow, --magenta, --green, --violet, --red`, accessible `*-text` variants, `--accent-strong, --on-accent, --status-good, --status-warning, --status-severe, --status-critical, --mono, --sans`. Shipped themes retain the old short names as compatibility aliases for pre-design-system user templates.
-- `meta.default_theme` names the active default; a request may override with `?theme=`. `default` is the refined dark theme; `notion` is the light option. Agent soft-commands (defined in the skill, not in code): `#theme:everforest` (one-off), `#set-default-theme:everforest` (persists via `etude edit-meta default_theme=…`).
-- Agents may add new templates/themes over time; user-space additions go in `~/.etude/applets/` which the server overlays over the repo's `applets/` (user-space wins on name collision).
+- **shadcn/ui is the default:** every new widget uses shadcn/ui unless the user asks for another visual language. Since Etude's served widgets are self-contained and dependency-free, the project carries adapted open component recipes in `widgets/shadcn.css` rather than importing a package. Templates compose shared `ui-*` classes before adding data-specific layout CSS.
+- **Templates** (`widgets/templates/`): self-contained HTML with two injection points, `/*__THEME__*/` and `/*__DATA__*/null`. The server injects the selected theme, `widgets/shadcn.css`, the JSON payload, and a shared `ResizeObserver` bridge. Payload JSON escapes HTML-significant characters; unsafe closing style tags are rejected. `data-fit-content` opts a template into natural-height measurement so Lotus widgets do not gain nested scrollbars.
+- **Payloads:** drill atoms include `id`, `user_prompt`, `topic`, and `tags`, plus canonical `widget_data` when present. Deterministic payloads also include `expected`; agent-assisted payloads never expose it. Read-only templates receive focused data shapes. The matching-pairs template reads `atom.widget_data.pairs`.
+- **Theme contract:** every theme defines shadcn semantic pairs (`--background`/`--foreground`, `--card`/`--card-foreground`, `--popover`, `--primary`, `--secondary`, `--muted`, `--accent`, `--destructive`, `--border`, `--input`, `--ring`, `--radius`, and `--chart-1` through `--chart-5`) plus Etude status/data tokens. Old `--surface-*`, `--text-*`, and short names remain compatibility aliases only.
+- **User overrides:** `~/.etude/widgets/` wins over repository widgets. `~/.etude/applets/` remains the lower-priority legacy override path. `meta.default_theme` selects the default; `?theme=` overrides one request.
+- **Visual contract:** `docs/widget-design.md` is mandatory before creating or changing a widget. New work must compose shared components, use semantic tokens, remain keyboard-accessible, include text equivalents for charts, render at narrow and desktop widths, and fit full natural content.
 
 ### 4.5 Dashboard
 
@@ -235,6 +239,6 @@ Presets `standard` (fail→+1d, then +2d/+5d/+12d, cap +30d; rating 1 half speed
 - **JSON file over SQLite**: human-diffable, vault-syncable, small data (<10MB realistic). Revisit only on measured pain.
 - **CLI-first agent interface**: cheaper than HTTP for the agent (no server dependency), single code path shared with the server.
 - **Materialized queue membership** (not live tag queries): stable, auditable; refresh deliberately.
-- **Inbox for applet→agent handoff**: works on every chat surface today; direct injection is a per-surface upgrade documented in research.
+- **Inbox for widget→agent handoff**: works on every chat surface today; direct injection is a per-surface upgrade documented in research.
 - **`user_prompt`/`agent_prompt` naming**: symmetric, self-explanatory; replaces v2 `prompt`/`answer` and the question/task type split.
 - **Name "etude"**: provisional; "praxis" rejected (malware name collision with a blocked tool).

@@ -123,7 +123,7 @@ def test_atom_filters_support_queue_tags_state_archived_and_text(running_server)
 def test_deterministic_attempt_computes_ratings_updates_scheduler_and_persists(running_server):
     base, db_path = running_server
     _, _, right = request(base, "/api/attempts", method="POST", body={
-        "atom_id": "DET-1", "answer": "  paris ", "via": "applet",
+        "atom_id": "DET-1", "answer": "  paris ", "via": "widget",
     })
     assert right["attempt"]["rating"] == 3
     assert right["attempt"]["feedback"] == ""
@@ -225,12 +225,12 @@ def test_sse_reports_ping_and_reload_after_db_change(running_server):
     connection.close()
 
 
-def test_applet_render_injects_data_hides_expected_in_agent_mode_and_overrides_theme(running_server):
+def test_widget_render_injects_data_hides_expected_in_agent_mode_and_overrides_theme(running_server):
     base, _ = running_server
-    _, _, html = request(base, "/applets/flashcard-drill?queue=agent&theme=everforest&n=1")
+    _, _, html = request(base, "/widgets/flashcard-drill?queue=agent&theme=everforest&n=1")
     assert "/*__THEME__*/" not in html
     assert "/*__DATA__*/null" not in html
-    assert "--surface-0: #2d353b" in html
+    assert "--background: #252e32" in html
     assert 'type: "resize"' in html
     assert "ResizeObserver" in html
     payload = _injected_payload(html)
@@ -243,7 +243,7 @@ def test_applet_render_injects_data_hides_expected_in_agent_mode_and_overrides_t
     }]
 
 
-def test_applet_payload_is_safe_inside_an_inline_script(running_server):
+def test_widget_payload_is_safe_inside_an_inline_script(running_server):
     base, db_path = running_server
     db = store.load(db_path)
     attack = "</ScRiPt><script>alert('x')</script>&"
@@ -251,7 +251,7 @@ def test_applet_payload_is_safe_inside_an_inline_script(running_server):
     db["atoms"]["DET-1"]["user_prompt"] = attack
     store.save(db, db_path)
 
-    _, _, html = request(base, "/applets/flashcard-drill?queue=det&n=1")
+    _, _, html = request(base, "/widgets/flashcard-drill?queue=det&n=1")
 
     assert "</ScRiPt>" not in html
     assert "\\u003c/ScRiPt\\u003e" in html
@@ -261,7 +261,7 @@ def test_applet_payload_is_safe_inside_an_inline_script(running_server):
     assert payload["atoms"][0]["user_prompt"] == attack
 
 
-def test_applet_rejects_theme_that_closes_the_style_element(running_server, tmp_path, monkeypatch):
+def test_widget_rejects_theme_that_closes_the_style_element(running_server, tmp_path, monkeypatch):
     base, _ = running_server
     template = tmp_path / "custom.html"
     theme = tmp_path / "unsafe.css"
@@ -271,14 +271,14 @@ def test_applet_rejects_theme_that_closes_the_style_element(running_server, tmp_
     monkeypatch.setattr(server_module, "_named_file", lambda kind, requested, suffix: template if kind == "template" else theme)
 
     with pytest.raises(HTTPError) as exc:
-        request(base, "/applets/custom?queue=det")
+        request(base, "/widgets/custom?queue=det")
     assert exc.value.code == 400
 
 
-def test_queue_items_applet_receives_ordered_practice_item_rows(running_server):
+def test_queue_items_widget_receives_ordered_practice_item_rows(running_server):
     base, _ = running_server
 
-    _, _, html = request(base, "/applets/queue-items?queue=det")
+    _, _, html = request(base, "/widgets/queue-items?queue=det")
     payload = _injected_payload(html)
 
     assert payload["queue"] == "det"
@@ -297,19 +297,19 @@ def test_queue_items_applet_receives_ordered_practice_item_rows(running_server):
     }]
 
 
-def test_recent_items_applet_returns_unique_items_in_latest_attempt_order(running_server):
+def test_recent_items_widget_returns_unique_items_in_latest_attempt_order(running_server):
     base, db_path = running_server
     db = store.load(db_path)
     db["atoms"]["DET-1"]["attempts"] = [
-        {"ts": "2026-07-23T09:00:00-07:00", "rating": 3, "mode": "applet", "via": "applet", "answer": "Paris", "feedback": ""},
-        {"ts": "2026-07-24T10:00:00-07:00", "rating": 0, "mode": "applet", "via": "applet", "answer": "Lyon", "feedback": ""},
+        {"ts": "2026-07-23T09:00:00-07:00", "rating": 3, "mode": "widget", "via": "widget", "answer": "Paris", "feedback": ""},
+        {"ts": "2026-07-24T10:00:00-07:00", "rating": 0, "mode": "widget", "via": "widget", "answer": "Lyon", "feedback": ""},
     ]
     db["atoms"]["AG-2"]["attempts"] = [
         {"ts": "2026-07-24T09:30:00-08:00", "rating": 2, "mode": "spaced-repetition", "via": "chat", "answer": "SYN", "feedback": "Good."},
     ]
     store.save(db, db_path)
 
-    _, _, html = request(base, "/applets/recent-items?limit=2")
+    _, _, html = request(base, "/widgets/recent-items?limit=2")
     payload = _injected_payload(html)
 
     assert payload["total_seen"] == 2
@@ -322,13 +322,13 @@ def test_recent_items_applet_returns_unique_items_in_latest_attempt_order(runnin
         {
             "id": "DET-1", "topic": "Topic", "user_prompt": "Capital of France?",
             "attempt_count": 2, "last_seen": "2026-07-24T10:00:00-07:00",
-            "last_rating": 0, "mode": "applet", "via": "applet",
+            "last_rating": 0, "mode": "widget", "via": "widget",
         },
     ]
 
 
 def test_queue_items_template_localizes_portuguese_chrome():
-    template = (Path(__file__).parents[1] / "applets" / "templates" / "queue-items.html").read_text()
+    template = (Path(__file__).parents[1] / "widgets" / "templates" / "queue-items.html").read_text()
 
     assert "function isPortuguese" in template
     assert "Practice items" in template
@@ -338,7 +338,7 @@ def test_queue_items_template_localizes_portuguese_chrome():
 
 
 def test_queue_items_uses_compact_mode_labels_at_narrow_widths():
-    template = (Path(__file__).parents[1] / "applets" / "templates" / "queue-items.html").read_text()
+    template = (Path(__file__).parents[1] / "widgets" / "templates" / "queue-items.html").read_text()
 
     assert "className = 'mode-short'" in template
     assert ".mode-short { display: none; }" in template
@@ -346,7 +346,7 @@ def test_queue_items_uses_compact_mode_labels_at_narrow_widths():
     assert "col.state, col.streak { display: none; }" in template
 
 
-def test_matching_pairs_applet_receives_structured_atom_data(running_server):
+def test_matching_pairs_widget_receives_structured_atom_data(running_server):
     base, _ = running_server
     pairs = [["200", "OK"], ["404", "Not Found"]]
 
@@ -354,17 +354,17 @@ def test_matching_pairs_applet_receives_structured_atom_data(running_server):
         base,
         "/api/atoms/AG-2",
         method="PATCH",
-        body={"applet_data": {"pairs": pairs}},
+        body={"widget_data": {"pairs": pairs}},
     )
-    assert atom["applet_data"] == {"pairs": pairs}
+    assert atom["widget_data"] == {"pairs": pairs}
 
-    _, _, html = request(base, "/applets/matching-pairs?queue=agent&n=1")
+    _, _, html = request(base, "/widgets/matching-pairs?queue=agent&n=1")
     payload = _injected_payload(html)
-    assert payload["atoms"][0]["applet_data"] == {"pairs": pairs}
-    assert "atom.applet_data" in html
+    assert payload["atoms"][0]["widget_data"] == {"pairs": pairs}
+    assert "atom.widget_data" in html
 
 
-def test_applet_data_must_be_an_object(running_server):
+def test_widget_data_must_be_an_object(running_server):
     base, _ = running_server
 
     with pytest.raises(HTTPError) as exc:
@@ -372,15 +372,15 @@ def test_applet_data_must_be_an_object(running_server):
             base,
             "/api/atoms/AG-2",
             method="PATCH",
-            body={"applet_data": [["200", "OK"]]},
+            body={"widget_data": [["200", "OK"]]},
         )
 
     assert exc.value.code == 400
-    assert "applet_data must be an object" in json.loads(exc.value.read())["error"]
+    assert "widget_data must be an object" in json.loads(exc.value.read())["error"]
 
 
 def test_flashcard_template_has_question_aware_binary_controls():
-    template = (Path(__file__).parents[1] / "applets" / "templates" / "flashcard-drill.html").read_text()
+    template = (Path(__file__).parents[1] / "widgets" / "templates" / "flashcard-drill.html").read_text()
 
     assert "function renderBinary" in template
     assert "true-false" in template
@@ -389,7 +389,7 @@ def test_flashcard_template_has_question_aware_binary_controls():
 
 
 def test_flashcard_template_localizes_portuguese_study_chrome():
-    template = (Path(__file__).parents[1] / "applets" / "templates" / "flashcard-drill.html").read_text()
+    template = (Path(__file__).parents[1] / "widgets" / "templates" / "flashcard-drill.html").read_text()
 
     assert "function isPortuguese" in template
     assert "Mostrar resposta" in template
@@ -397,7 +397,7 @@ def test_flashcard_template_localizes_portuguese_study_chrome():
 
 
 def test_flashcard_completion_is_compact_localized_and_can_shrink():
-    template = (Path(__file__).parents[1] / "applets" / "templates" / "flashcard-drill.html").read_text()
+    template = (Path(__file__).parents[1] / "widgets" / "templates" / "flashcard-drill.html").read_text()
 
     assert "data-fit-content" in template
     assert "Sessão concluída" in template
@@ -406,7 +406,7 @@ def test_flashcard_completion_is_compact_localized_and_can_shrink():
 
 
 def test_atom_card_localizes_chrome_and_removes_duplicate_topic_heading():
-    template = (Path(__file__).parents[1] / "applets" / "templates" / "atom-card.html").read_text()
+    template = (Path(__file__).parents[1] / "widgets" / "templates" / "atom-card.html").read_text()
 
     assert "function isPortuguese" in template
     assert "function uiFor" in template
@@ -416,7 +416,7 @@ def test_atom_card_localizes_chrome_and_removes_duplicate_topic_heading():
 
 
 def test_matching_completion_is_compact_and_can_shrink():
-    template = (Path(__file__).parents[1] / "applets" / "templates" / "matching-pairs.html").read_text()
+    template = (Path(__file__).parents[1] / "widgets" / "templates" / "matching-pairs.html").read_text()
 
     assert "<body data-fit-content>" in template
     assert "html, body { min-height: 0; }" in template
@@ -424,8 +424,8 @@ def test_matching_completion_is_compact_and_can_shrink():
     assert "min-height: 420px" not in template
 
 
-def test_matching_applet_localizes_chrome_and_does_not_show_raw_markdown():
-    template = (Path(__file__).parents[1] / "applets" / "templates" / "matching-pairs.html").read_text()
+def test_matching_widget_localizes_chrome_and_does_not_show_raw_markdown():
+    template = (Path(__file__).parents[1] / "widgets" / "templates" / "matching-pairs.html").read_text()
 
     assert "function isPortuguese" in template
     assert "function uiFor" in template
@@ -436,7 +436,7 @@ def test_matching_applet_localizes_chrome_and_does_not_show_raw_markdown():
 
 def test_auto_resize_bridge_supports_content_fit_opt_in(running_server):
     base, _ = running_server
-    _, _, html = request(base, "/applets/flashcard-drill?queue=det")
+    _, _, html = request(base, "/widgets/flashcard-drill?queue=det")
 
     assert "data-fit-content" in html
     assert "getBoundingClientRect" in html
@@ -445,23 +445,23 @@ def test_auto_resize_bridge_supports_content_fit_opt_in(running_server):
 def test_compact_widgets_measure_natural_content_instead_of_iframe_height(running_server):
     base, _ = running_server
 
-    for path in ("/applets/queue-progress?queue=det", "/applets/streaks?days=7"):
+    for path in ("/widgets/queue-progress?queue=det", "/widgets/streaks?days=7"):
         _, _, html = request(base, path)
         assert "<body data-fit-content>" in html
         assert ".wrap { display: flex; flex-direction: column; height: 100%;" not in html
 
 
-def test_every_applet_template_includes_the_auto_resize_bridge(running_server):
+def test_every_widget_template_includes_the_auto_resize_bridge(running_server):
     base, _ = running_server
     paths = [
-        "/applets/flashcard-drill?queue=det",
-        "/applets/matching-pairs?queue=agent",
-        "/applets/progress?queue=det",
-        "/applets/queue-progress?queue=det",
-        "/applets/queue-items?queue=det",
-        "/applets/recent-items?limit=5",
-        "/applets/streaks?days=7",
-        "/applets/atom-card?atom=DET-1",
+        "/widgets/flashcard-drill?queue=det",
+        "/widgets/matching-pairs?queue=agent",
+        "/widgets/progress?queue=det",
+        "/widgets/queue-progress?queue=det",
+        "/widgets/queue-items?queue=det",
+        "/widgets/recent-items?limit=5",
+        "/widgets/streaks?days=7",
+        "/widgets/atom-card?atom=DET-1",
     ]
 
     for path in paths:
@@ -469,40 +469,44 @@ def test_every_applet_template_includes_the_auto_resize_bridge(running_server):
         assert template_html.count('type: "resize"') == 1
         assert template_html.count("ResizeObserver") == 1
 
-    _, _, atom_card_html = request(base, "/applets/atom-card?atom=DET-1")
+    _, _, atom_card_html = request(base, "/widgets/atom-card?atom=DET-1")
     assert ".card { min-height: 100%; }" in atom_card_html
     assert "overflow-y: auto" not in atom_card_html
 
 
-def test_progress_applet_gets_stats_and_template_path_traversal_is_rejected(running_server):
+def test_progress_widget_gets_stats_and_template_path_traversal_is_rejected(running_server):
     base, _ = running_server
-    _, _, html = request(base, "/applets/progress?queue=det")
+    _, _, html = request(base, "/widgets/progress?queue=det")
     stats = _injected_payload(html)["stats"]
     assert set(stats) >= {"total", "seen", "mastery", "per_queue", "per_day", "rating_dist"}
     assert len(stats["per_day"]) == 30
 
-    for path in ("/applets/../../etc/passwd", "/applets/%2e%2e%2f%2e%2e%2fetc%2fpasswd"):
+    for path in ("/widgets/../../etc/passwd", "/widgets/%2e%2e%2f%2e%2e%2fetc%2fpasswd"):
         with pytest.raises(HTTPError) as exc:
             request(base, path)
         assert 400 <= exc.value.code < 500
 
 
-APPLET_TEMPLATE_DIR = Path(__file__).parents[1] / "applets" / "templates"
-APPLET_THEME_DIR = Path(__file__).parents[1] / "applets" / "themes"
+WIDGET_TEMPLATE_DIR = Path(__file__).parents[1] / "widgets" / "templates"
+WIDGET_THEME_DIR = Path(__file__).parents[1] / "widgets" / "themes"
 
 
-def test_applet_themes_expose_the_shared_visual_design_tokens():
+def test_widget_themes_expose_the_shared_visual_design_tokens():
     required = {
+        "background", "foreground", "card", "card-foreground", "popover", "popover-foreground",
+        "primary", "primary-foreground", "secondary", "secondary-foreground", "muted", "muted-foreground",
+        "accent", "accent-foreground", "destructive", "border", "input", "ring", "radius",
+        "chart-1", "chart-2", "chart-3", "chart-4", "chart-5",
         "surface-0", "surface-1", "surface-2",
         "text-primary", "text-secondary", "text-muted",
         "border", "border-strong", "radius-control", "radius-card",
-        "accent", "orange", "aqua", "yellow", "magenta", "green", "violet", "red",
+        "orange", "aqua", "yellow", "magenta", "green", "violet", "red",
         "accent-text", "yellow-text", "green-text", "red-text", "violet-text", "accent-strong", "on-accent",
         "status-good", "status-warning", "status-severe", "status-critical",
         "mono", "sans",
     }
 
-    for theme_path in APPLET_THEME_DIR.glob("*.css"):
+    for theme_path in WIDGET_THEME_DIR.glob("*.css"):
         theme = theme_path.read_text()
         variables = set(re.findall(r"--([a-z0-9-]+)\s*:", theme))
         assert required <= variables, f"{theme_path.name} is missing {sorted(required - variables)}"
@@ -518,29 +522,33 @@ def test_theme_text_tokens_meet_wcag_contrast_on_every_surface():
         bright, dark = sorted((luminance(first), luminance(second)), reverse=True)
         return (bright + 0.05) / (dark + 0.05)
 
-    text_tokens = (
-        "text-primary", "text-secondary", "text-muted",
-        "accent-text", "yellow-text", "green-text", "red-text", "violet-text",
+    pairs = (
+        ("foreground", "background"),
+        ("card-foreground", "card"),
+        ("popover-foreground", "popover"),
+        ("primary-foreground", "primary"),
+        ("secondary-foreground", "secondary"),
+        ("muted-foreground", "muted"),
+        ("accent-foreground", "accent"),
     )
-    for theme_path in APPLET_THEME_DIR.glob("*.css"):
+    for theme_path in WIDGET_THEME_DIR.glob("*.css"):
         values = dict(re.findall(r"--([a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})", theme_path.read_text()))
-        surfaces = [values[f"surface-{index}"] for index in range(3)]
-        for token in text_tokens:
-            assert min(contrast(values[token], surface) for surface in surfaces) >= 4.5, (theme_path.name, token)
-        assert contrast(values["accent-strong"], values["on-accent"]) >= 4.5, theme_path.name
+        for foreground, background in pairs:
+            assert contrast(values[foreground], values[background]) >= 4.5, (
+                theme_path.name, foreground, background,
+            )
 
 
-def test_applet_templates_follow_the_visual_design_contract():
+def test_widget_templates_follow_the_visual_design_contract():
     forbidden = {
         "gradient": re.compile(r"(?:linear|radial|conic)-gradient", re.I),
         "decorative shadow": re.compile(r"box-shadow\s*:", re.I),
         "blur": re.compile(r"(?:backdrop-)?filter\s*:[^;]*blur", re.I),
         "all-caps transform": re.compile(r"text-transform\s*:\s*uppercase", re.I),
-        "heavy font weight": re.compile(r"font-weight\s*:\s*(?:[6-9]00|5[1-9]0|[6-9][0-9]{2})", re.I),
-        "one-pixel border": re.compile(r"border(?:-(?:top|right|bottom|left))?\s*:\s*1px", re.I),
+        "heavy font weight": re.compile(r"font-weight\s*:\s*(?:[7-9]00|[7-9][0-9]{2})", re.I),
     }
 
-    for template_path in APPLET_TEMPLATE_DIR.glob("*.html"):
+    for template_path in WIDGET_TEMPLATE_DIR.glob("*.html"):
         template = template_path.read_text()
         assert 'name="color-scheme"' in template, f"{template_path.name} must declare color-scheme"
         assert "var(--surface-" in template, f"{template_path.name} must use shared surface tokens"
@@ -553,14 +561,14 @@ def test_palette_fill_colors_are_not_used_directly_for_small_text():
     raw_palette = "accent|orange|aqua|yellow|magenta|green|violet|red"
     direct_text_color = re.compile(rf"(?<![-\w])color:\s*var\(--(?:{raw_palette})\)")
 
-    for template_path in APPLET_TEMPLATE_DIR.glob("*.html"):
+    for template_path in WIDGET_TEMPLATE_DIR.glob("*.html"):
         assert not direct_text_color.search(template_path.read_text()), template_path.name
 
 
 def test_visualizations_have_accessible_text_equivalents():
-    queue_progress = (APPLET_TEMPLATE_DIR / "queue-progress.html").read_text()
-    streaks = (APPLET_TEMPLATE_DIR / "streaks.html").read_text()
-    progress = (APPLET_TEMPLATE_DIR / "progress.html").read_text()
+    queue_progress = (WIDGET_TEMPLATE_DIR / "queue-progress.html").read_text()
+    streaks = (WIDGET_TEMPLATE_DIR / "streaks.html").read_text()
+    progress = (WIDGET_TEMPLATE_DIR / "progress.html").read_text()
 
     assert queue_progress.count('role="progressbar"') >= 2
     assert "aria-valuetext" in queue_progress
@@ -570,15 +578,79 @@ def test_visualizations_have_accessible_text_equivalents():
 
 
 def test_progress_chart_keeps_edge_dates_outside_the_bar_cells():
-    template = (APPLET_TEMPLATE_DIR / "progress.html").read_text()
+    template = (WIDGET_TEMPLATE_DIR / "progress.html").read_text()
 
     assert 'class="chart-dates"' in template
     assert 'id="chartDateStart"' in template
     assert 'id="chartDateEnd"' in template
 
 
-def test_interactive_applets_expose_keyboard_focus_and_reduced_motion_modes():
+def test_widget_route_is_canonical_and_applet_route_remains_a_compatibility_alias(running_server):
+    base, _ = running_server
+
+    _, _, widget_html = request(base, "/widgets/flashcard-drill?queue=det&n=1")
+    _, _, legacy_html = request(base, "/applets/flashcard-drill?queue=det&n=1")
+
+    assert _injected_payload(widget_html)["template"] == "flashcard-drill"
+    assert widget_html == legacy_html
+
+
+def test_widget_data_is_canonical_and_legacy_applet_data_is_normalized(running_server):
+    base, _ = running_server
+    pairs = [["200", "OK"], ["404", "Not Found"]]
+
+    _, _, atom = request(
+        base,
+        "/api/atoms/AG-2",
+        method="PATCH",
+        body={"applet_data": {"pairs": pairs}},
+    )
+    assert atom["widget_data"] == {"pairs": pairs}
+    assert "applet_data" not in atom
+
+    _, _, html = request(base, "/widgets/matching-pairs?queue=agent&n=1")
+    payload = _injected_payload(html)
+    assert payload["atoms"][0]["widget_data"] == {"pairs": pairs}
+    assert "atom.widget_data" in html
+
+
+def test_widget_defaults_record_widget_provenance(running_server):
+    base, _ = running_server
+
+    _, _, result = request(base, "/api/attempts", method="POST", body={
+        "atom_id": "DET-1", "answer": "Paris",
+    })
+
+    assert result["attempt"]["mode"] == "widget"
+    assert result["attempt"]["via"] == "widget"
+
+
+def test_widget_themes_expose_shadcn_semantic_tokens_and_shared_components():
+    root = Path(__file__).parents[1] / "widgets"
+    required = {
+        "background", "foreground", "card", "card-foreground", "popover", "popover-foreground",
+        "primary", "primary-foreground", "secondary", "secondary-foreground", "muted", "muted-foreground",
+        "accent", "accent-foreground", "destructive", "border", "input", "ring", "radius",
+        "chart-1", "chart-2", "chart-3", "chart-4", "chart-5",
+    }
+
+    for theme_path in (root / "themes").glob("*.css"):
+        variables = set(re.findall(r"--([a-z0-9-]+)\s*:", theme_path.read_text()))
+        assert required <= variables, f"{theme_path.name} is missing {sorted(required - variables)}"
+
+    components = (root / "shadcn.css").read_text()
+    for class_name in (".ui-card", ".ui-button", ".ui-input", ".ui-badge", ".ui-progress"):
+        assert class_name in components
+
+
+def test_every_widget_composes_shared_shadcn_primitives():
+    for template_path in WIDGET_TEMPLATE_DIR.glob("*.html"):
+        template = template_path.read_text()
+        assert re.search(r'class="[^"]*\bui-', template), f"{template_path.name} does not compose a shared shadcn primitive"
+
+
+def test_interactive_widgets_expose_keyboard_focus_and_reduced_motion_modes():
     for name in ("flashcard-drill.html", "matching-pairs.html"):
-        template = (APPLET_TEMPLATE_DIR / name).read_text()
+        template = (WIDGET_TEMPLATE_DIR / name).read_text()
         assert ":focus-visible" in template
         assert "prefers-reduced-motion" in template

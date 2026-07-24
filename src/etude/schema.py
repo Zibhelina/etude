@@ -126,8 +126,11 @@ def validate(db: Mapping[str, Any]) -> tuple[list[str], list[str]]:
             errors.append(f"{prefix}.user_prompt must be a non-empty string")
         if atom.get("agent_assisted") is not None and not isinstance(atom.get("agent_assisted"), bool):
             errors.append(f"{prefix}.agent_assisted must be true, false, or null")
-        if "applet_data" in atom and not isinstance(atom["applet_data"], dict):
-            errors.append(f"{prefix}.applet_data must be an object")
+        for field in ("widget_data", "applet_data"):
+            if field in atom and not isinstance(atom[field], dict):
+                errors.append(f"{prefix}.{field} must be an object")
+        if "widget_data" in atom and "applet_data" in atom:
+            errors.append(f"{prefix} must not define both widget_data and legacy applet_data")
 
         resolutions = [resolve_agent_assisted(atom, queue) for queue in _atom_contexts(db, atom_id)]
         if any(resolutions) and not _nonempty_string(atom.get("agent_prompt")):

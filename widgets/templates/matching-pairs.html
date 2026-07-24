@@ -48,7 +48,7 @@ h1 { margin: 8px 0 0; font-size: clamp(25px, 5vw, 38px); font-weight: 500; lette
 <body data-fit-content>
 <main class="shell">
   <header><div><div class="eyebrow" id="eyebrow">Etude · Match</div><h1 id="title">Connect the pairs</h1></div><div class="meta" id="meta"></div></header>
-  <section class="board" id="board">
+  <section class="board ui-card" id="board">
     <p class="instructions" id="instructions">Choose one item from each column. Matched pairs lock in place.</p>
     <div class="columns"><div class="column" id="leftColumn" aria-label="Left choices"></div><div class="column" id="rightColumn" aria-label="Right choices"></div></div>
     <div class="footer"><div class="status" id="status" aria-live="polite"></div><button class="submit" id="submit" type="button">Submit</button></div>
@@ -59,10 +59,10 @@ h1 { margin: 8px 0 0; font-size: clamp(25px, 5vw, 38px); font-weight: 500; lette
 const ETUDE = /*__DATA__*/null;
 (() => {
   'use strict';
-  // The owning atom exposes applet_data.pairs as [left, right] tuples.
+  // The owning atom exposes widget_data.pairs as [left, right] tuples.
   const data = ETUDE || {}, atom = Array.isArray(data.atoms) ? data.atoms[0] : null;
-  const appletData = atom && atom.applet_data && typeof atom.applet_data === 'object' ? atom.applet_data : {};
-  const sourcePairs = Array.isArray(appletData.pairs) ? appletData.pairs.filter(pair => Array.isArray(pair) && pair.length >= 2) : [];
+  const widgetData = atom && atom.widget_data && typeof atom.widget_data === 'object' ? atom.widget_data : {};
+  const sourcePairs = Array.isArray(widgetData.pairs) ? widgetData.pairs.filter(pair => Array.isArray(pair) && pair.length >= 2) : [];
   const startedAt = Date.now();
   let selectedLeft = null, selectedRight = null, mismatchCount = 0, locked = new Set(), proposals = [], resolving = false, sent = false;
   const $ = id => document.getElementById(id);

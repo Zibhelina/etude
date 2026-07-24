@@ -1,0 +1,204 @@
+/*
+ * Etude's dependency-free shadcn/ui component layer.
+ *
+ * shadcn/ui ships source, not a runtime package. Etude widgets use the same
+ * semantic tokens, states, proportions, and composition while remaining
+ * self-contained vanilla HTML. Templates compose these ui-* classes instead
+ * of inventing controls per widget.
+ */
+
+.ui-card {
+  color: var(--card-foreground);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 0.5rem);
+}
+
+.ui-card-header {
+  display: grid;
+  gap: 0.375rem;
+  padding: 1.5rem;
+}
+
+.ui-card-title {
+  margin: 0;
+  color: var(--card-foreground);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+}
+
+.ui-card-description {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.ui-card-content {
+  padding: 0 1.5rem 1.5rem;
+}
+
+.ui-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 1.5rem 1.5rem;
+}
+
+.ui-button {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  color: var(--primary-foreground);
+  font: 500 0.875rem/1 var(--sans);
+  white-space: nowrap;
+  background: var(--primary);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+}
+
+.ui-button:hover { opacity: 0.9; }
+.ui-button:active { opacity: 0.82; }
+.ui-button:disabled,
+.ui-button[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
+.ui-button--secondary { color: var(--secondary-foreground); background: var(--secondary); }
+.ui-button--outline { color: var(--foreground); background: transparent; border-color: var(--border); }
+.ui-button--outline:hover { background: var(--accent); color: var(--accent-foreground); opacity: 1; }
+.ui-button--ghost { color: var(--foreground); background: transparent; }
+.ui-button--ghost:hover { background: var(--accent); color: var(--accent-foreground); opacity: 1; }
+.ui-button--destructive { color: #fff; background: var(--destructive); }
+.ui-button--icon { width: 2.5rem; padding: 0; }
+.ui-button--sm { min-height: 2.25rem; padding: 0.375rem 0.75rem; font-size: 0.8125rem; }
+.ui-button--lg { min-height: 2.75rem; padding: 0.625rem 1.5rem; }
+
+.ui-input,
+.ui-textarea,
+.ui-select {
+  width: 100%;
+  color: var(--foreground);
+  font: 400 0.875rem/1.4 var(--sans);
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.ui-input,
+.ui-select { min-height: 2.5rem; padding: 0.5rem 0.75rem; }
+.ui-textarea { min-height: 6rem; padding: 0.75rem; resize: vertical; }
+.ui-input::placeholder,
+.ui-textarea::placeholder { color: var(--muted-foreground); }
+.ui-input:disabled,
+.ui-textarea:disabled,
+.ui-select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ui-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--foreground);
+  font: 500 0.875rem/1 var(--sans);
+}
+
+.ui-badge {
+  display: inline-flex;
+  min-height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.625rem;
+  color: var(--primary-foreground);
+  font: 500 0.75rem/1 var(--sans);
+  white-space: nowrap;
+  background: var(--primary);
+  border: 1px solid transparent;
+  border-radius: 999px;
+}
+
+.ui-badge--secondary { color: var(--secondary-foreground); background: var(--secondary); }
+.ui-badge--outline { color: var(--foreground); background: transparent; border-color: var(--border); }
+.ui-badge--destructive { color: #fff; background: var(--destructive); }
+
+.ui-progress {
+  position: relative;
+  width: 100%;
+  height: 0.5rem;
+  overflow: hidden;
+  background: var(--secondary);
+  border-radius: 999px;
+}
+
+.ui-progress > span,
+.ui-progress > [data-state="indicator"] {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: inherit;
+  transition: width 300ms ease;
+}
+
+.ui-separator {
+  width: 100%;
+  height: 1px;
+  background: var(--border);
+}
+
+.ui-nav-item {
+  display: flex;
+  min-height: 2.5rem;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--muted-foreground);
+  font: 500 0.875rem/1 var(--sans);
+  text-decoration: none;
+  border-radius: var(--radius);
+}
+
+.ui-nav-item:hover,
+.ui-nav-item[aria-current="page"],
+.ui-nav-item[data-active="true"] {
+  color: var(--accent-foreground);
+  background: var(--accent);
+}
+
+.ui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.ui-table th,
+.ui-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.ui-table th { color: var(--muted-foreground); font-weight: 500; }
+
+.ui-button:focus-visible,
+.ui-input:focus-visible,
+.ui-textarea:focus-visible,
+.ui-select:focus-visible,
+.ui-nav-item:focus-visible,
+.ui-badge:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-button,
+  .ui-input,
+  .ui-textarea,
+  .ui-select,
+  .ui-progress > span,
+  .ui-progress > [data-state="indicator"] { transition: none; }
+}

@@ -133,7 +133,7 @@ def test_attempt_with_rating_and_verbatim_files(tmp_path: Path):
     assert attempt["answer"] == "line one\nline two\n"
     assert attempt["feedback"] == "Useful feedback.\n"
     assert attempt["variant_prompt"] == "A variant prompt"
-    assert attempt["mode"] == "random" and attempt["via"] == "applet"
+    assert attempt["mode"] == "random" and attempt["via"] == "widget"
     assert result["atom"]["streak"] == 1
     assert result["atom"]["last_rating"] == 2
     error = run_cli(db, "attempt", "CLI-1", "--answer", "ungraded", ok=False)

@@ -1,0 +1,67 @@
+:root {
+  color-scheme: dark;
+  --radius: 1rem;
+  --background: #090909;
+  --foreground: #f5f5f5;
+  --card: #171717;
+  --card-foreground: #f5f5f5;
+  --popover: #1b1b1b;
+  --popover-foreground: #f5f5f5;
+  --primary: #f1f1f1;
+  --primary-foreground: #111111;
+  --secondary: #242424;
+  --secondary-foreground: #f5f5f5;
+  --muted: #242424;
+  --muted-foreground: #a0a0a0;
+  --accent: #2a2a2a;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --border: #2b2b2b;
+  --border-strong: #3a3a3a;
+  --input: #292929;
+  --ring: #777777;
+  --chart-1: #d4d4d4;
+  --chart-2: #a3a3a3;
+  --chart-3: #737373;
+  --chart-4: #525252;
+  --chart-5: #404040;
+
+  /* Etude data and status tokens. */
+  --orange: #e9865b;
+  --aqua: #5ebfa3;
+  --yellow: #f2c400;
+  --magenta: #d977a9;
+  --green: #57b87a;
+  --violet: #9b8afb;
+  --red: #ef6a6a;
+  --accent-text: #d4d4d4;
+  --yellow-text: #f3d25f;
+  --green-text: #7bd99b;
+  --red-text: #ff9292;
+  --violet-text: #b7aafc;
+  --accent-strong: var(--primary);
+  --on-accent: var(--primary-foreground);
+  --status-good: #57b87a;
+  --status-warning: #f2c400;
+  --status-severe: #e9865b;
+  --status-critical: #ef4444;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  --sans: Inter, Geist, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+
+  /* Compatibility aliases for older templates and user overrides. */
+  --surface-0: var(--background);
+  --surface-1: var(--card);
+  --surface-2: var(--secondary);
+  --text-primary: var(--foreground);
+  --text-secondary: var(--muted-foreground);
+  --text-muted: #777777;
+  --radius-control: 999px;
+  --radius-card: 24px;
+  --bg: var(--background);
+  --panel: var(--card);
+  --panel2: var(--secondary);
+  --text: var(--foreground);
+  --dim: var(--muted-foreground);
+  --faint: var(--text-muted);
+  --purple: var(--violet);
+}

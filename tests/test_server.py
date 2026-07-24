@@ -230,12 +230,35 @@ def test_applet_render_injects_data_hides_expected_in_agent_mode_and_overrides_t
     assert "/*__THEME__*/" not in html
     assert "/*__DATA__*/null" not in html
     assert "--bg: #2d353b" in html
+    assert 'type: "resize"' in html
+    assert "ResizeObserver" in html
     payload = _injected_payload(html)
     assert payload["api"] == base
     assert payload["queue"] == "agent"
     assert payload["queue_label"] == "Agent queue"
     assert payload["mode"] == "agent"
     assert payload["atoms"] == [{"id": "AG-2", "user_prompt": "Explain TCP", "topic": "Topic"}]
+
+
+def test_every_applet_template_includes_the_auto_resize_bridge(running_server):
+    base, _ = running_server
+    paths = [
+        "/applets/flashcard-drill?queue=det",
+        "/applets/matching-pairs?queue=agent",
+        "/applets/progress?queue=det",
+        "/applets/queue-progress?queue=det",
+        "/applets/streaks?days=7",
+        "/applets/atom-card?atom=DET-1",
+    ]
+
+    for path in paths:
+        _, _, template_html = request(base, path)
+        assert template_html.count('type: "resize"') == 1
+        assert template_html.count("ResizeObserver") == 1
+
+    _, _, atom_card_html = request(base, "/applets/atom-card?atom=DET-1")
+    assert ".card { min-height: 100%; }" in atom_card_html
+    assert "overflow-y: auto" not in atom_card_html
 
 
 def test_progress_applet_gets_stats_and_template_path_traversal_is_rejected(running_server):

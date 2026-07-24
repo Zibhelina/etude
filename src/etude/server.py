@@ -21,6 +21,32 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DASHBOARD = _REPO_ROOT / "dashboard"
 _APPLETS = _REPO_ROOT / "applets"
 
+_AUTO_RESIZE_BRIDGE = """<script>
+(() => {
+  'use strict';
+  let lastHeight = 0;
+  let frame = 0;
+  const measure = () => {
+    frame = 0;
+    const bodyHeight = document.body ? document.body.scrollHeight : 0;
+    const height = Math.ceil(Math.max(document.documentElement.scrollHeight, bodyHeight));
+    if (height > 0 && height !== lastHeight) {
+      lastHeight = height;
+      window.parent.postMessage({lotus: 1, type: "resize", height}, "*");
+    }
+  };
+  const schedule = () => {
+    if (frame) cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(measure);
+  };
+  const observer = new ResizeObserver(schedule);
+  observer.observe(document.documentElement);
+  if (document.body) observer.observe(document.body);
+  window.addEventListener('load', schedule, {once: true});
+  schedule();
+})();
+</script>"""
+
 ATOM_FIELDS = frozenset({
     "user_prompt", "agent_prompt", "expected", "agent_assisted", "tags", "topic",
     "source", "created", "archived", "state", "streak", "lapses", "last_rating",
@@ -618,6 +644,9 @@ class EtudeHandler(BaseHTTPRequestHandler):
         rendered = template.replace("/*__THEME__*/", theme).replace(
             "/*__DATA__*/null", json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         )
+        if "</body>" not in rendered:
+            raise APIError(500, "applet template is missing a closing body tag")
+        rendered = rendered.replace("</body>", f"{_AUTO_RESIZE_BRIDGE}\n</body>", 1)
         self._send(200, rendered.encode("utf-8"), "text/html; charset=utf-8")
 
     def _applet_payload(

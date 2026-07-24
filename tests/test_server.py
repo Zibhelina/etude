@@ -301,6 +301,15 @@ def test_flashcard_completion_is_compact_localized_and_can_shrink():
     assert "min-height: 330px" not in template
 
 
+def test_matching_completion_is_compact_and_can_shrink():
+    template = (Path(__file__).parents[1] / "applets" / "templates" / "matching-pairs.html").read_text()
+
+    assert "<body data-fit-content>" in template
+    assert "html, body { min-height: 0; }" in template
+    assert ".confirmation { min-height: 0;" in template
+    assert "min-height: 420px" not in template
+
+
 def test_auto_resize_bridge_supports_content_fit_opt_in(running_server):
     base, _ = running_server
     _, _, html = request(base, "/applets/flashcard-drill?queue=det")

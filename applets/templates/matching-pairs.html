@@ -7,7 +7,7 @@
 <style>
 /*__THEME__*/
 * { box-sizing: border-box; }
-html, body { min-height: 100%; }
+html, body { min-height: 0; }
 body { margin: 0; padding: 24px; background: var(--bg); color: var(--text); font-family: var(--sans); display: grid; place-items: center; }
 button { font: inherit; }
 button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
@@ -34,7 +34,7 @@ h1 { margin: 8px 0 0; font-size: clamp(25px, 5vw, 38px); letter-spacing: -.025em
 .status { color: var(--dim); font: 13px/1.4 var(--mono); }
 .submit { padding: 13px 20px; color: var(--bg); background: var(--accent); border: 1px solid var(--accent); border-radius: 11px; cursor: pointer; font-weight: 800; }
 .submit:disabled { color: var(--faint); background: var(--panel2); border-color: var(--border); cursor: not-allowed; }
-.confirmation { min-height: 420px; padding: 40px; display: grid; place-items: center; text-align: center; background: var(--panel); border: 1px solid var(--green); border-radius: 20px; }
+.confirmation { min-height: 0; padding: clamp(28px, 5vw, 40px); display: grid; place-items: center; text-align: center; background: var(--panel); border: 1px solid var(--green); border-radius: 20px; }
 .confirmation h2 { margin: 14px 0 8px; font-size: clamp(28px, 5vw, 42px); }
 .confirmation p { max-width: 520px; margin: 0; color: var(--dim); font-size: 18px; line-height: 1.55; }
 .check { width: 58px; height: 58px; display: grid; place-items: center; border-radius: 50%; color: var(--bg); background: var(--green); font-size: 28px; font-weight: 900; }
@@ -44,7 +44,7 @@ h1 { margin: 8px 0 0; font-size: clamp(25px, 5vw, 38px); letter-spacing: -.025em
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
-<body>
+<body data-fit-content>
 <main class="shell">
   <header><div><div class="eyebrow">Etude · Match</div><h1 id="title">Connect the pairs</h1></div><div class="meta" id="meta"></div></header>
   <section class="board" id="board">

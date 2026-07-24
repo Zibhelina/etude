@@ -276,6 +276,15 @@ def test_auto_resize_bridge_supports_content_fit_opt_in(running_server):
     assert "getBoundingClientRect" in html
 
 
+def test_compact_widgets_measure_natural_content_instead_of_iframe_height(running_server):
+    base, _ = running_server
+
+    for path in ("/applets/queue-progress?queue=det", "/applets/streaks?days=7"):
+        _, _, html = request(base, path)
+        assert "<body data-fit-content>" in html
+        assert ".wrap { display: flex; flex-direction: column; height: 100%;" not in html
+
+
 def test_every_applet_template_includes_the_auto_resize_bridge(running_server):
     base, _ = running_server
     paths = [

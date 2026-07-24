@@ -1,0 +1,16 @@
+:root {
+  --bg: #101014;
+  --panel: #17171d;
+  --panel2: #1d1d25;
+  --border: #2a2a35;
+  --text: #d8d8e0;
+  --dim: #8a8a98;
+  --faint: #5a5a68;
+  --accent: #8ab4f8;
+  --green: #7dcf85;
+  --yellow: #e2c06a;
+  --red: #e07a6a;
+  --purple: #b48af8;
+  --mono: ui-monospace,SF Mono,Menlo,monospace;
+  --sans: -apple-system,Inter,system-ui,sans-serif;
+}

@@ -126,6 +126,8 @@ def validate(db: Mapping[str, Any]) -> tuple[list[str], list[str]]:
             errors.append(f"{prefix}.user_prompt must be a non-empty string")
         if atom.get("agent_assisted") is not None and not isinstance(atom.get("agent_assisted"), bool):
             errors.append(f"{prefix}.agent_assisted must be true, false, or null")
+        if "applet_data" in atom and not isinstance(atom["applet_data"], dict):
+            errors.append(f"{prefix}.applet_data must be an object")
 
         resolutions = [resolve_agent_assisted(atom, queue) for queue in _atom_contexts(db, atom_id)]
         if any(resolutions) and not _nonempty_string(atom.get("agent_prompt")):

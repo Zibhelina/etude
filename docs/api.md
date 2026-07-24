@@ -95,7 +95,7 @@ $ etude --db /tmp/etude-doc/db.json add --id GEO-1 --user-prompt 'Capital of Fra
 
 **Synopsis:** `etude [--db PATH] edit ID [--set field=value ...] [--archive | --unarchive]`
 
-`--set` is repeatable. Values that parse as JSON become the corresponding bool, null, number, list, or object; other values remain strings. Dot-separated fields update nested objects. Archiving never deletes the atom.
+`--set` is repeatable. Values that parse as JSON become the corresponding bool, null, number, list, or object; other values remain strings. Dot-separated fields update nested objects. `applet_data` is the optional structured object exposed to applet templates; for matching pairs, set `applet_data.pairs` to `[left, right]` tuples. Archiving never deletes the atom.
 
 ```console
 $ etude --db /tmp/etude-doc/db.json edit MATH-1 --set notes=reviewed --archive
@@ -298,7 +298,7 @@ Serves `dashboard/index.html` as `text/html`; JavaScript is `text/javascript` an
 
 #### `GET /applets/{template}?queue=Q&theme=T&n=N`
 
-`queue` is required; `theme` defaults to `meta.default_theme`; `n` defaults to 20. Template/theme names may omit `.html`/`.css` but must match directory entries (no traversal). `~/.etude/applets/` files override repository files. Atoms follow `etude.algorithms.order`. The server replaces both injection markers. Every drill atom includes `id`, `user_prompt`, `topic`, and `tags`. Deterministic queue payloads also include `expected`; agent payloads never do. The flashcard template uses the `true-false` tag to render direct binary controls.
+`queue` is required; `theme` defaults to `meta.default_theme`; `n` defaults to 20. Template/theme names may omit `.html`/`.css` but must match directory entries (no traversal). `~/.etude/applets/` files override repository files. Atoms follow `etude.algorithms.order`. The server replaces both injection markers. Every drill atom includes `id`, `user_prompt`, `topic`, and `tags`, plus `applet_data` when present. Deterministic queue payloads also include `expected`; agent payloads never do. The matching-pairs template consumes `atom.applet_data.pairs`; the flashcard template uses the `true-false` tag to render direct binary controls.
 
 ```sh
 curl "$BASE/applets/flashcard-drill?queue=agent&theme=everforest&n=1"
@@ -346,7 +346,7 @@ curl "$BASE/api/atoms/DET-1"
 
 #### `POST /api/atoms`
 
-`id` and `user_prompt` are required. Schema rules require `agent_prompt` for agent-assisted atoms and `expected` for deterministic atoms. Scheduler fields receive new-atom defaults; unknown input fields are rejected.
+`id` and `user_prompt` are required. Schema rules require `agent_prompt` for agent-assisted atoms and `expected` for deterministic atoms. Optional `applet_data` must be an object. Scheduler fields receive new-atom defaults; unknown input fields are rejected.
 
 ```sh
 curl -X POST "$BASE/api/atoms" -H 'Content-Type: application/json' -d '{"id":"NEW-4","user_prompt":"2 + 2?","agent_assisted":false,"expected":"4","topic":"Arithmetic"}'

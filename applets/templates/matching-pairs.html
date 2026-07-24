@@ -58,10 +58,10 @@ h1 { margin: 8px 0 0; font-size: clamp(25px, 5vw, 38px); letter-spacing: -.025em
 const ETUDE = /*__DATA__*/null;
 (() => {
   'use strict';
-  // Matching payload extension: ETUDE.pairs is an array of [left, right] tuples;
-  // ETUDE.atoms[0] is the agent-assisted atom that owns the exercise.
+  // The owning atom exposes applet_data.pairs as [left, right] tuples.
   const data = ETUDE || {}, atom = Array.isArray(data.atoms) ? data.atoms[0] : null;
-  const sourcePairs = Array.isArray(data.pairs) ? data.pairs.filter(pair => Array.isArray(pair) && pair.length >= 2) : [];
+  const appletData = atom && atom.applet_data && typeof atom.applet_data === 'object' ? atom.applet_data : {};
+  const sourcePairs = Array.isArray(appletData.pairs) ? appletData.pairs.filter(pair => Array.isArray(pair) && pair.length >= 2) : [];
   const startedAt = Date.now();
   let selectedLeft = null, selectedRight = null, mismatchCount = 0, locked = new Set(), proposals = [], resolving = false, sent = false;
   const $ = id => document.getElementById(id);

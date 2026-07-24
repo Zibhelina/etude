@@ -242,6 +242,39 @@ def test_applet_render_injects_data_hides_expected_in_agent_mode_and_overrides_t
     }]
 
 
+def test_matching_pairs_applet_receives_structured_atom_data(running_server):
+    base, _ = running_server
+    pairs = [["200", "OK"], ["404", "Not Found"]]
+
+    _, _, atom = request(
+        base,
+        "/api/atoms/AG-2",
+        method="PATCH",
+        body={"applet_data": {"pairs": pairs}},
+    )
+    assert atom["applet_data"] == {"pairs": pairs}
+
+    _, _, html = request(base, "/applets/matching-pairs?queue=agent&n=1")
+    payload = _injected_payload(html)
+    assert payload["atoms"][0]["applet_data"] == {"pairs": pairs}
+    assert "atom.applet_data" in html
+
+
+def test_applet_data_must_be_an_object(running_server):
+    base, _ = running_server
+
+    with pytest.raises(HTTPError) as exc:
+        request(
+            base,
+            "/api/atoms/AG-2",
+            method="PATCH",
+            body={"applet_data": [["200", "OK"]]},
+        )
+
+    assert exc.value.code == 400
+    assert "applet_data must be an object" in json.loads(exc.value.read())["error"]
+
+
 def test_flashcard_template_has_question_aware_binary_controls():
     template = (Path(__file__).parents[1] / "applets" / "templates" / "flashcard-drill.html").read_text()
 

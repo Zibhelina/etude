@@ -1,7 +1,7 @@
 ---
 name: etude
 description: "Operate etude, an agent-first practice engine — practice atoms with user_prompt/agent_prompt, agent-assisted or deterministic grading, queues with pluggable scheduling algorithms, CSS-like instruction cascade, themable applets, and an inbox for applet attempts. Load for practice sessions, atom/queue management, progress reporting, or applet serving."
-version: 1.0.0
+version: 1.0.1
 license: MIT
 metadata:
   category: education
@@ -31,7 +31,7 @@ All output is compact JSON. Server: `etude serve --port 2600` (dashboard at http
 
 ## Concepts (30-second model)
 
-- **Atom** = `user_prompt` (markdown shown to the user) + `agent_prompt` (instructions to the AGENT: canonical answer, grading rubric, applet spec) + optional `expected` (deterministic accepted answers) + `agent_assisted` (atom > queue > default true) + tags + scheduler state + verbatim `attempts[]`. Atoms may be orphans (no tags, no queue).
+- **Atom** = `user_prompt` (markdown shown to the user) + `agent_prompt` (instructions to the AGENT: canonical answer, grading rubric, applet spec) + optional `expected` (deterministic accepted answers) + optional `applet_data` (structured object exposed to applet templates) + `agent_assisted` (atom > queue > default true) + tags + scheduler state + verbatim `attempts[]`. Atoms may be orphans (no tags, no queue).
 - **Queue** = ordered work list with one algorithm (fsrs, oldest-first, newest-first, weakest-first, least-practiced, manual, random, or custom declarative). Explicit `members` list. Optional `deadline` (<7 days away ⇒ compressed exam-horizon scheduling, due dates capped) and `agent_instructions`.
 - **Cascade** = card `agent_prompt` > tag `meta.tag_instructions` > queue `agent_instructions`. All non-conflicting layers apply together; inner layers win conflicts. `etude context ID --queue Q` returns the stack — READ IT before grading.
 - **Deterministic atoms** = flashcard mode: the program checks `expected`, rating is 0 or 3, no agent feedback. The agent's job is only to serve the applet.
@@ -80,6 +80,7 @@ Some chat surfaces let an applet inject the user's attempt directly back into th
 ## Managing content
 
 - **Add atoms**: `etude add --id PREFIX-NN --user-prompt "..." [--agent-prompt-file -] [--expected X --expected Y] [--agent-assisted false] [--tags a,b] [--topic T]`. IDs are stable and never reused; a new domain gets a new prefix + domain tag. Ask the user (or infer clearly) whether new atoms join an existing queue — membership is materialized; tags do NOT auto-enroll.
+- **Applet data**: set structured template input with `etude edit ID --set 'applet_data={...}'`. Matching pairs require `applet_data.pairs` as `[left, right]` tuples, for example `--set 'applet_data={"pairs":[["200","OK"],["404","Not Found"]]}'`. Keep hidden answers and grading rubrics in `agent_prompt`, never in `applet_data`.
 - **Queues**: `etude queue create Q --label L --algorithm A [--members ...] [--deadline ISO]`; `add-members` / `remove-members` / `edit` / `archive`.
 - **Custom algorithms**: `etude algorithms add NAME --spec-file F` (declarative `{order: [{key, dir}...], filter: {...}}`). Procedural policies: mark `agent_only: true` with the procedure in the description; the agent executes them.
 - **Archive, never delete**: `etude edit ID --archive`; queues via `status`. The program never destroys data.
@@ -97,7 +98,7 @@ Keep the user in the loop on placement decisions — ask when it's genuinely the
 
 ## Applets & themes
 
-- Templates in `applets/templates/` — interactive: flashcard-drill, matching-pairs; read-only widgets: queue-progress, streaks, atom-card, progress. Themes in `applets/themes/`: default (refined dark), notion (minimalist light), everforest. The server injects `/*__THEME__*/` (theme CSS variables), `const ETUDE = /*__DATA__*/null;` (payload), and a shared ResizeObserver bridge. In Lotus, the bridge resizes the iframe to the applet's current content height, including shrinking shorter states when the template opts in with `data-fit-content`, so the fence height is only an initial fallback and nested scrollbars should not appear. New templates MUST use exactly the two file markers, only `var(--…)` colors, self-contained HTML, no external resources.
+- Templates in `applets/templates/` — interactive: flashcard-drill, matching-pairs; read-only widgets: queue-progress, streaks, atom-card, progress. Matching-pairs reads `atom.applet_data.pairs`. Themes in `applets/themes/`: default (refined dark), notion (minimalist light), everforest. The server injects `/*__THEME__*/` (theme CSS variables), `const ETUDE = /*__DATA__*/null;` (payload), and a shared ResizeObserver bridge. In Lotus, the bridge resizes the iframe to the applet's current content height, including shrinking shorter states when the template opts in with `data-fit-content`, so the fence height is only an initial fallback and nested scrollbars should not appear. New templates MUST use exactly the two file markers, only `var(--…)` colors, self-contained HTML, no external resources.
 - Themes in `applets/themes/`. Contract: exactly the variables `--bg,--panel,--panel2,--border,--text,--dim,--faint,--accent,--green,--yellow,--red,--purple,--mono,--sans` in a `:root` block.
 - User-space overrides in `~/.etude/applets/` win over repo files.
 - Soft-commands (natural-language, user-reconfigurable): `#theme:NAME` = one-off theme for the next applet link; `#set-default-theme:NAME` = `etude edit-meta default_theme=NAME`. When creating a new theme, honor the variable contract and confirm rendering in a browser before delivering.

@@ -61,7 +61,7 @@ _AUTO_RESIZE_BRIDGE = """<script>
 ATOM_FIELDS = frozenset({
     "user_prompt", "agent_prompt", "expected", "agent_assisted", "tags", "topic",
     "source", "created", "archived", "state", "streak", "lapses", "last_rating",
-    "last_seen", "due", "notes", "attempts",
+    "last_seen", "due", "notes", "attempts", "applet_data",
 })
 QUEUE_FIELDS = frozenset({
     "label", "algorithm", "members", "order", "status", "agent_assisted",
@@ -724,6 +724,8 @@ class EtudeHandler(BaseHTTPRequestHandler):
                 "topic": atom.get("topic", ""),
                 "tags": atom.get("tags", []),
             }
+            if "applet_data" in atom:
+                item["applet_data"] = atom["applet_data"]
             if mode == "deterministic":
                 item["expected"] = atom.get("expected")
             atoms.append(item)

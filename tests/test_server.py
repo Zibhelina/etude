@@ -259,6 +259,23 @@ def test_flashcard_template_localizes_portuguese_study_chrome():
     assert "function displayQueueLabel" in template
 
 
+def test_flashcard_completion_is_compact_localized_and_can_shrink():
+    template = (Path(__file__).parents[1] / "applets" / "templates" / "flashcard-drill.html").read_text()
+
+    assert "data-fit-content" in template
+    assert "Sessão concluída" in template
+    assert "completion-label" in template
+    assert "min-height: 330px" not in template
+
+
+def test_auto_resize_bridge_supports_content_fit_opt_in(running_server):
+    base, _ = running_server
+    _, _, html = request(base, "/applets/flashcard-drill?queue=det")
+
+    assert "data-fit-content" in html
+    assert "getBoundingClientRect" in html
+
+
 def test_every_applet_template_includes_the_auto_resize_bridge(running_server):
     base, _ = running_server
     paths = [

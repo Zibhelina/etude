@@ -28,8 +28,19 @@ _AUTO_RESIZE_BRIDGE = """<script>
   let frame = 0;
   const measure = () => {
     frame = 0;
-    const bodyHeight = document.body ? document.body.scrollHeight : 0;
-    const height = Math.ceil(Math.max(document.documentElement.scrollHeight, bodyHeight));
+    const body = document.body;
+    let height;
+    if (body && body.hasAttribute("data-fit-content")) {
+      const bodyRect = body.getBoundingClientRect();
+      const style = getComputedStyle(body);
+      const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
+      const bottoms = [...body.children].map(child => child.getBoundingClientRect().bottom);
+      const contentBottom = bottoms.length ? Math.max(...bottoms) : bodyRect.top;
+      height = Math.ceil(contentBottom - bodyRect.top + paddingBottom);
+    } else {
+      const bodyHeight = body ? body.scrollHeight : 0;
+      height = Math.ceil(Math.max(document.documentElement.scrollHeight, bodyHeight));
+    }
     if (height > 0 && height !== lastHeight) {
       lastHeight = height;
       window.parent.postMessage({lotus: 1, type: "resize", height}, "*");

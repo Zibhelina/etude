@@ -7,7 +7,7 @@
 <style>
 /*__THEME__*/
 * { box-sizing: border-box; }
-html, body { min-height: 100%; }
+html, body { min-height: 0; }
 body {
   margin: 0;
   padding: clamp(16px, 3vw, 24px);
@@ -251,14 +251,22 @@ kbd {
   border-radius: 5px;
   font: 500 10px/1.2 var(--mono);
 }
-.end { display: grid; place-items: center; gap: 18px; min-height: 330px; text-align: center; }
-.end h1 { margin: 0; font-size: clamp(34px, 7vw, 52px); font-weight: 510; letter-spacing: -.045em; }
+.end {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  padding: clamp(30px, 5vw, 38px);
+  text-align: center;
+}
+.completion-label { margin: 0 0 12px; color: var(--accent); font-size: 12px; font-weight: 590; }
+.end h1 { margin: 0 0 22px; font-size: clamp(34px, 7vw, 52px); font-weight: 510; letter-spacing: -.045em; }
 .score { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
 .chip { padding: 8px 11px; background: var(--panel2); border: 1px solid var(--border); border-radius: 999px; font: 500 11px/1 var(--mono); }
 .good { color: var(--green); }
 .bad { color: var(--red); }
 .unsent { color: var(--yellow); }
-.end-actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.end-actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
 .hidden { display: none !important; }
 @media (max-width: 560px) {
   body { padding: 12px; }
@@ -274,7 +282,7 @@ kbd {
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
-<body>
+<body data-fit-content>
 <main class="shell">
   <header class="session-bar">
     <div class="brand-line">
@@ -337,6 +345,9 @@ const ETUDE = /*__DATA__*/null;
       next: 'Próximo item', summary: 'Ver resumo', answer: 'Resposta', review: 'Rever · 1', gotIt: 'Acertei · 3',
       toAnswer: 'para responder', toCheck: 'para verificar', toContinue: 'para continuar',
       reviewAgain: 'rever', reveal: 'para revelar',
+      sessionComplete: 'Sessão concluída', scoreSuffix: 'de acertos', retryMissed: 'Refazer erros',
+      retryUnsent: 'Reenviar tentativas', restartAll: 'Recomeçar', saved: 'Todas as tentativas foram salvas.',
+      rightNoun: 'acerto', wrongNoun: 'erro', unsentNoun: 'pendente',
     };
     return {
       placeholder: 'Type your answer…', check: 'Check answer', show: 'Show answer',
@@ -344,6 +355,9 @@ const ETUDE = /*__DATA__*/null;
       next: 'Next card', summary: 'See summary', answer: 'Answer', review: 'Review again · 1', gotIt: 'Got it · 3',
       toAnswer: 'to answer', toCheck: 'to check', toContinue: 'to continue',
       reviewAgain: 'review again', reveal: 'to reveal',
+      sessionComplete: 'Session complete', scoreSuffix: 'correct', retryMissed: 'Retry missed cards',
+      retryUnsent: 'Retry unsent attempts', restartAll: 'Restart all', saved: 'All attempts saved.',
+      rightNoun: 'right', wrongNoun: 'wrong', unsentNoun: 'unsent',
     };
   }
   function displayQueueLabel(value) {
@@ -479,12 +493,16 @@ const ETUDE = /*__DATA__*/null;
     await retryUnsent();
     $('card').className = 'card end';
     const uniqueWrong = [...new Map(wrongCards.map(atom => [atom.id, atom])).values()];
-    $('card').innerHTML = `<div class="brand">Session complete</div><h1>${right + wrong ? Math.round(right / (right + wrong) * 100) : 0}% correct</h1><div class="score"><span class="chip good">${right} right</span><span class="chip bad">${wrong} wrong</span><span class="chip unsent">${unsent.length} unsent</span></div><div class="end-actions" id="endActions"></div>`;
+    const atom = original[0] || {};
+    const ui = uiFor(atom, accepted(atom));
+    const percentage = right + wrong ? Math.round(right / (right + wrong) * 100) : 0;
+    const plural = (count, noun) => isPortuguese(atom) && count !== 1 ? `${noun}s` : noun;
+    $('card').innerHTML = `<div class="completion-label">${ui.sessionComplete}</div><h1>${percentage}% ${ui.scoreSuffix}</h1><div class="score"><span class="chip good">${right} ${plural(right, ui.rightNoun)}</span><span class="chip bad">${wrong} ${plural(wrong, ui.wrongNoun)}</span><span class="chip unsent">${unsent.length} ${plural(unsent.length, ui.unsentNoun)}</span></div><div class="end-actions" id="endActions"></div>`;
     const actions = $('endActions');
-    if (uniqueWrong.length) actions.append(button('Retry missed cards', 'primary', () => { deck = uniqueWrong; index = right = wrong = 0; wrongCards = []; render(); }));
-    if (unsent.length) actions.append(button('Retry unsent attempts', '', async () => { await retryUnsent(); renderEnd(); }));
-    actions.append(button('Restart all', '', () => { deck = original.slice(); index = right = wrong = 0; wrongCards = []; render(); }));
-    $('hint').textContent = unsent.length ? 'Some attempts could not reach Etude. Keep this page open and retry.' : 'All attempts saved.';
+    if (uniqueWrong.length) actions.append(button(ui.retryMissed, 'primary', () => { deck = uniqueWrong; index = right = wrong = 0; wrongCards = []; render(); }));
+    if (unsent.length) actions.append(button(ui.retryUnsent, '', async () => { await retryUnsent(); renderEnd(); }));
+    actions.append(button(ui.restartAll, '', () => { deck = original.slice(); index = right = wrong = 0; wrongCards = []; render(); }));
+    $('hint').textContent = unsent.length ? 'Some attempts could not reach Etude. Keep this page open and retry.' : ui.saved;
   }
   document.addEventListener('keydown', event => {
     if (event.target instanceof HTMLInputElement) return;

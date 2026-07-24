@@ -206,7 +206,7 @@ The inbox is the v1 mechanism for "applet sends the attempt to the agent's sessi
 
 ### 4.5 Dashboard
 
-The v2 dashboard, ported: stats cards, GitHub-style activity heatmap, queues sidebar (click = table scoped in that queue's algorithm order with position column), recent activity, tag/state/archived/orphan filters, sortable table, atom detail panel (user_prompt, agent_prompt behind reveal, cascade view, tags, queue membership, scheduler state, full verbatim attempt timeline), SSE live reload, deep links `/#ATOM-ID`. Now split into `index.html` + `app.js` + `style.css` and reading the REST API. Mastery = mean of `min(streak,3)/3`, unseen = 0, tooltip states the formula.
+The prototype dashboard, ported: stats cards, GitHub-style activity heatmap, queues sidebar (click = table scoped in that queue's algorithm order with position column), recent activity, tag/state/archived/orphan filters, sortable table, atom detail panel (user_prompt, agent_prompt behind reveal, cascade view, tags, queue membership, scheduler state, full verbatim attempt timeline), SSE live reload, deep links `/#ATOM-ID`. Now split into `index.html` + `app.js` + `style.css` and reading the REST API. Mastery = mean of `min(streak,3)/3`, unseen = 0, tooltip states the formula.
 
 ## 5. Scheduler (unchanged mechanics from v2)
 

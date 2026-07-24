@@ -32,7 +32,7 @@ etude/
 │   ├── cascade.py             # agent-instruction cascade resolution
 │   ├── cli.py                 # `etude` CLI (argparse), JSON output
 │   ├── server.py              # HTTP API + SSE + static file serving (stdlib http.server)
-│   └── migrate_v2.py          # one-shot: legacy schema-v2 db.json → v3
+│   └── migrate_v2.py          # one-shot: prototype schema-v2 db.json → v3
 ├── dashboard/                 # static frontend served by server.py at /
 │   ├── index.html
 │   ├── app.js
@@ -50,7 +50,7 @@ etude/
     └── validate.py            # thin wrapper over schema.validate for CI/manual use
 ```
 
-**Data lives outside the repo.** Default data dir: `~/.etude/` (`db.json`, `config.json`, `inbox.json`, `applets/` user-space overrides). Resolution order for the DB path: `--db` flag > `ETUDE_DB` env > `config.json` `db_path` > `~/.etude/db.json`. An instance may point `db_path` at a synced folder so existing backups keep covering it.
+**Data lives outside the repo.** Default data dir: `~/.etude/` (`db.json`, `config.json`, `inbox.json`, `applets/` user-space overrides). Resolution order for the DB path: `--db` flag > `ETUDE_DB` env > `config.json` `db_path` > `~/.etude/db.json`. Users who keep notes in a synced vault can point `db_path` at a file inside it so their existing sync covers the data.
 
 ## 3. Schema v3
 
@@ -97,7 +97,7 @@ IDs: `PREFIX-NN`, human-stable, never reused.
   "notes": "",
   "attempts": [{
     "ts": "ISO-8601+offset", "rating": 0,
-    "mode": "spaced-repetition|random|agent-choice|applet",
+    "mode": "spaced-repetition|random|agent-choice|applet (free-form label; these are conventions)",
     "variant": "GER-01v1 | null", "variant_prompt": "…",
     "answer": "learner's answer VERBATIM (or structured applet payload as JSON string)",
     "feedback": "correction/confirmation ('' for deterministic)",

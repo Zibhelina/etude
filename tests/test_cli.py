@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parents[1]
-PYTHON = "python3.11"
+PYTHON = os.environ.get("ETUDE_TEST_PYTHON", sys.executable)
 
 
 def run_cli(db: Path, *args: str, input_text: str | None = None, ok: bool = True):

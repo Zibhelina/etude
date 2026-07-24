@@ -116,7 +116,7 @@ Do not hold an agent/tool turn open indefinitely, poll faster than once per seco
 
 ### 3.1 Obsidian Agents
 
-Canonical inspected checkout: a local checkout of the plugin source.
+Canonical inspected checkout: a local checkout of the `obsidian-agents` plugin source.
 
 #### What exists today
 
@@ -139,7 +139,7 @@ There is **no supported mechanism today** for HTML/React chat applets, DataviewJ
 
 ### 3.2 Hermes Desktop
 
-Inspected a local checkout of the agent source and docs; no profile sessions, transcripts, memories, or state databases were read.
+Inspected a local checkout of the `hermes-agent` source and docs; no profile sessions, transcripts, memories, or state databases were read.
 
 #### What exists today
 

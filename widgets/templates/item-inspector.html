@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · Item inspector</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 20px; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1 { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.prompt { margin: 14px 0 0; padding: 14px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.tag { font: 500 11px/1.6 var(--mono); color: var(--text-secondary); background: var(--surface-2); border-radius: 999px; padding: 2px 9px; }
+.stats { display: flex; flex-wrap: wrap; margin-top: 20px; padding-top: 18px; border-top: 0.5px solid var(--border); }
+.stat { flex: 1 1 88px; min-width: 0; }
+.stat + .stat { padding-left: 18px; border-left: 0.5px solid var(--border); margin-left: 18px; }
+.stat .v { font-size: 22px; font-weight: 500; letter-spacing: -.02em; line-height: 1.2; }
+.stat .v small { font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-left: 3px; }
+.stat .k { margin-top: 2px; color: var(--text-secondary); font-size: 12.5px; }
+.dates { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 16px; color: var(--text-muted); font: 500 11.5px/1.5 var(--mono); }
+h2 { margin: 24px 0 0; padding-top: 18px; border-top: 0.5px solid var(--border); font-size: 13px; font-weight: 500; color: var(--text-secondary); letter-spacing: .01em; }
+.history { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.attempt { padding: 13px 15px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); }
+.attempt-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.rating { font: 500 11px/1.6 var(--mono); border-radius: 999px; padding: 1px 9px; background: var(--surface-2); color: var(--text-secondary); }
+.rating[data-band="good"] { background: color-mix(in srgb, var(--green) 22%, var(--surface-2)); color: var(--green-text); }
+.rating[data-band="hard"] { background: color-mix(in srgb, var(--yellow) 22%, var(--surface-2)); color: var(--yellow-text); }
+.rating[data-band="fail"] { background: color-mix(in srgb, var(--red) 22%, var(--surface-2)); color: var(--red-text); }
+.when { color: var(--text-muted); font: 500 11.5px/1.5 var(--mono); }
+.via { color: var(--text-muted); font: 500 11px/1.5 var(--mono); }
+.field { margin-top: 9px; }
+.field .k { color: var(--text-muted); font: 500 11px/1.5 var(--sans); }
+.field .v { margin-top: 2px; font-size: 13.5px; line-height: 1.55; color: var(--text-secondary); white-space: pre-wrap; }
+.field .v.answer { color: var(--text-primary); }
+.empty { margin-top: 12px; padding: 20px; text-align: center; color: var(--text-secondary); background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 13.5px; }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap ui-card">
+  <div class="label" id="label">Etude item</div>
+  <h1 id="title"></h1>
+  <div class="prompt" id="prompt"></div>
+  <div class="tags" id="tags"></div>
+  <div class="stats" id="stats"></div>
+  <div class="dates" id="dates"></div>
+  <h2>Answer history</h2>
+  <ul class="history" id="history"></ul>
+</div>
+<script>
+const ETUDE = /*__DATA__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const atom = data.atom && typeof data.atom === 'object' ? data.atom : {};
+  const $ = id => document.getElementById(id);
+  const text = value => (typeof value === 'string' ? value : '');
+  const whole = value => Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0;
+
+  $('title').textContent = text(atom.topic) || text(atom.id) || 'Practice item';
+  $('label').textContent = text(atom.id) ? `Etude item · ${text(atom.id)}` : 'Etude item';
+  $('prompt').textContent = text(atom.user_prompt) || 'No prompt recorded.';
+
+  const tags = Array.isArray(atom.tags) ? atom.tags.filter(t => typeof t === 'string') : [];
+  const tagRow = $('tags');
+  tags.forEach(tag => {
+    const chip = document.createElement('span');
+    chip.className = 'tag';
+    chip.textContent = tag;
+    tagRow.append(chip);
+  });
+
+  const attempts = Array.isArray(atom.attempts) ? atom.attempts.filter(a => a && typeof a === 'object') : [];
+  const ratings = attempts.map(a => Number(a.rating)).filter(Number.isFinite);
+  const mean = ratings.length ? ratings.reduce((sum, r) => sum + r, 0) / ratings.length : null;
+
+  const stats = [
+    { k: 'State', v: text(atom.state) || 'new' },
+    { k: 'Streak', v: String(whole(atom.streak)) },
+    { k: 'Lapses', v: String(whole(atom.lapses)) },
+    { k: 'Attempts', v: String(attempts.length) },
+    { k: 'Mean score', v: mean === null ? '—' : mean.toFixed(1), unit: mean === null ? '' : '/ 3' },
+  ];
+  stats.forEach(entry => {
+    const cell = document.createElement('div');
+    cell.className = 'stat';
+    const value = document.createElement('div');
+    value.className = 'v';
+    value.textContent = entry.v;
+    if (entry.unit) {
+      const unit = document.createElement('small');
+      unit.textContent = entry.unit;
+      value.append(unit);
+    }
+    const key = document.createElement('div');
+    key.className = 'k';
+    key.textContent = entry.k;
+    cell.append(value, key);
+    $('stats').append(cell);
+  });
+
+  const shortDate = value => {
+    const raw = text(value);
+    if (!raw) return '';
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? raw : parsed.toISOString().slice(0, 16).replace('T', ' ');
+  };
+  const dates = [
+    ['created', text(atom.created)],
+    ['last seen', shortDate(atom.last_seen)],
+    ['due', shortDate(atom.due)],
+  ].filter(entry => entry[1]);
+  dates.forEach(([key, value]) => {
+    const cell = document.createElement('span');
+    cell.textContent = `${key} ${value}`;
+    $('dates').append(cell);
+  });
+
+  const BAND = { 0: 'fail', 1: 'hard', 2: 'good', 3: 'good' };
+  const NAME = { 0: 'fail', 1: 'hard', 2: 'good', 3: 'easy' };
+  const history = $('history');
+  if (!attempts.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'No attempts recorded yet.';
+    history.replaceWith(empty);
+    return;
+  }
+
+  attempts.slice().reverse().forEach(attempt => {
+    const row = document.createElement('li');
+    row.className = 'attempt';
+
+    const head = document.createElement('div');
+    head.className = 'attempt-head';
+    const rating = Number(attempt.rating);
+    const chip = document.createElement('span');
+    chip.className = 'rating';
+    if (Number.isFinite(rating)) {
+      chip.dataset.band = BAND[rating] || 'fail';
+      chip.textContent = `${rating} · ${NAME[rating] || 'rated'}`;
+    } else {
+      chip.textContent = 'unrated';
+    }
+    const when = document.createElement('span');
+    when.className = 'when';
+    when.textContent = shortDate(attempt.ts);
+    head.append(chip, when);
+    const via = text(attempt.via) || text(attempt.mode);
+    if (via) {
+      const viaChip = document.createElement('span');
+      viaChip.className = 'via';
+      viaChip.textContent = via;
+      head.append(viaChip);
+    }
+    row.append(head);
+
+    const answer = text(attempt.answer);
+    if (answer) {
+      const field = document.createElement('div');
+      field.className = 'field';
+      const key = document.createElement('div');
+      key.className = 'k';
+      key.textContent = 'Answer';
+      const value = document.createElement('div');
+      value.className = 'v answer';
+      value.textContent = answer;
+      field.append(key, value);
+      row.append(field);
+    }
+
+    const feedback = text(attempt.feedback);
+    if (feedback) {
+      const field = document.createElement('div');
+      field.className = 'field';
+      const key = document.createElement('div');
+      key.className = 'k';
+      key.textContent = 'Feedback';
+      const value = document.createElement('div');
+      value.className = 'v';
+      value.textContent = feedback;
+      field.append(key, value);
+      row.append(field);
+    }
+
+    history.append(row);
+  });
+})();
+</script>
+</body>
+</html>

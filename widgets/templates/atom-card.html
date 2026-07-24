@@ -8,9 +8,8 @@
 <style>
 /*__THEME__*/
 * { box-sizing: border-box; }
-html, body { min-height: 100%; }
-body { margin: 0; background: var(--surface-0); color: var(--text-primary); font: 16px/1.7 var(--sans); }
-.card { min-height: 100%; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.card { min-height: 0; }
 .header, .content, .history { padding: 20px 26px; }
 .header, .content { border-bottom: 0.5px solid var(--border); }
 .identity { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 12px; }
@@ -54,7 +53,7 @@ pre { margin: 10px 0; padding: 12px; overflow-x: auto; white-space: pre-wrap; fo
 @media (max-width: 440px) { .header, .content, .history { padding: 20px 18px; } .stat { padding: 0 8px; } }
 </style>
 </head>
-<body>
+<body data-fit-content>
 <main class="card ui-card">
   <header class="header">
     <div class="identity"><span class="atom-id" id="atomId">—</span><h1 id="topic">Untitled atom</h1></div>

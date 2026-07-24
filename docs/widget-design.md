@@ -103,7 +103,9 @@ Reusable widgets live in `widgets/templates/` and contain both injection markers
 
 The server injects the selected theme, `widgets/shadcn.css`, the data payload, and the shared resize bridge. Templates remain self-contained and use no remote resources. Include `<meta name="color-scheme" content="dark light">`.
 
-Use `data-fit-content` on `<body>` when natural content height should resize the Lotus frame. Design from 320 px upward. Content should fit without a nested scrollbar during normal use.
+Set `data-fit-content` on every `<body>`: without it the bridge falls back to `scrollHeight`, which cannot shrink below the descriptor's initial height and leaves dead space under the card. Never pin the document with `html, body { min-height: 100% }`.
+
+Template bodies stay transparent. The widget is embedded in a host surface (the Lotus chat canvas) whose background is not `--background`; painting an opaque body draws a visible block around the card. Style the card, not the page. Design from 320 px upward. Content should fit without a nested scrollbar during normal use.
 
 ## Type, spacing, and geometry
 

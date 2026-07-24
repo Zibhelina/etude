@@ -94,12 +94,47 @@ When the user asks how they're doing:
 - Visual: read-only widget templates, ideal for embedding in chat surfaces that render iframes/widgets — `http://127.0.0.1:2600/widgets/queue-progress?queue=Q` (progress bar: done/remaining/total, mastery, rating chips), `/widgets/queue-items?queue=Q` (algorithm-ordered practice-item table), `/widgets/recent-items?limit=10` (latest practiced unique items across the DB), `/widgets/streaks?days=35` (per-day activity squares + current/best streak), `/widgets/atom-card?atom=ID` (full atom inspection: prompt, state, attempt history with feedback). Legacy overview: `/widgets/progress?queue=Q`. Or the dashboard (deep link `/#ATOM-ID`). All accept `&theme=X` (`default` dark, `notion` minimalist light, `everforest`).
 - Reusable visualizations belong in `widgets/templates/` — save good one-offs as templates instead of regenerating them.
 
+### Widget nudges — `#etude/<widget>`
+
+Widgets are slices of the app surfaced on demand: instead of one central dashboard, the agent renders the slice that answers the question being asked. When the user types a nudge, serve that widget immediately — no clarifying questions, no numeric summary first. Ensure the server is up, then emit the fenced block.
+
+| nudge | route | answers |
+|---|---|---|
+| `#etude/progress` | `/widgets/queue-progress?queue=Q` | How far through this queue am I? |
+| `#etude/queues` | `/widgets/queue-overview` | What queues exist and what's due in each? |
+| `#etude/carousel` | `/widgets/item-carousel?queue=Q&limit=12` | Show me the upcoming items as cards |
+| `#etude/item` | `/widgets/item-inspector?atom=ID` | Everything about ONE item: tags, state, score, dates, full answer + feedback history |
+| `#etude/tags` | `/widgets/tag-breakdown?limit=12` | Which topics am I weakest in? |
+| `#etude/due` | `/widgets/due-forecast?days=7` | What's overdue and what lands this week? |
+| `#etude/session` | `/widgets/session-summary?hours=24` | What did I just practice, and how did it go? |
+| `#etude/streak` | `/widgets/streaks?days=35` | Am I keeping the habit? |
+| `#etude/recent` | `/widgets/recent-items?limit=10` | What did I touch most recently? |
+| `#etude/items` | `/widgets/queue-items?queue=Q` | The full ordered work list as a table |
+
+Resolution rules:
+
+- `queue=` is **required** for `#etude/progress` and `#etude/items`; **optional** for `#etude/carousel` and `#etude/due` (omit to span the whole DB). If a queue is needed and the user has exactly one active queue, use it silently; if several, ask which — that is a genuine fork, not a guess.
+- `#etude/item` needs an atom ID. If the user names an item instead ("the UTF-8 one"), resolve it via `etude list --tags`/search, then serve the widget for the matching ID.
+- Every route takes `&theme=X`. Bare `#etude/<name>` with no known match: list the table above rather than inventing a route.
+- Nudges are shorthand for the user, not a restriction on the agent — serve the same widgets unprompted whenever they answer the question better than prose.
+
+In Lotus, emit the widget as a fenced `widget` block so it renders inline in the chat:
+
+~~~
+```widget
+{"url": "http://127.0.0.1:2600/widgets/tag-breakdown?limit=12", "height": 420}
+```
+~~~
+
+`height` is only the initial fallback — every template reports its true content height through the resize bridge, so the frame settles to the content. Widget bodies are transparent by design: they inherit the host's chat background instead of painting a visible block. Do not add an opaque `background` to a template `body`.
+
 Keep the user in the loop on placement decisions — ask when it's genuinely their call ("new queue for this, or add to X?"), decide silently when context makes it obvious. Say where things landed either way.
 
 ## Widgets & themes
 
 - **Default UI system:** every new Etude widget uses shadcn/ui unless the user explicitly asks for another visual language. Read `docs/widget-design.md`; compose the shared open-code component classes in `widgets/shadcn.css` (`ui-card`, `ui-button`, `ui-input`, `ui-badge`, `ui-progress`, and related variants) and the shadcn semantic tokens (`--background`, `--foreground`, `--card`, `--primary`, `--secondary`, `--muted`, `--accent`, `--border`, `--input`, `--ring`, `--radius`, `--chart-*`). Do not imitate shadcn loosely with one-off CSS when a shared component already exists.
-- Templates in `widgets/templates/` include interactive flashcard-drill and matching-pairs plus read-only queue-progress, queue-items, recent-items, streaks, atom-card, and progress. Matching-pairs reads `atom.widget_data.pairs`. Themes live in `widgets/themes/`; `default` is the canonical shadcn-style dark theme. The server injects the theme, `widgets/shadcn.css`, the `ETUDE` payload, and the ResizeObserver bridge. New templates remain self-contained and use the two injection markers.
+- Templates in `widgets/templates/` include interactive flashcard-drill and matching-pairs plus read-only queue-progress, queue-items, queue-overview, item-carousel, item-inspector, tag-breakdown, due-forecast, session-summary, recent-items, streaks, atom-card, and progress. Matching-pairs reads `atom.widget_data.pairs`.
+- **Every template body is transparent and theme-driven.** Widgets inherit the host surface (the Lotus chat canvas) rather than painting their own; all color comes from semantic tokens, so a theme switch restyles the whole widget. Never hardcode a hex/rgb color or set an opaque `background` on `body`. Progress fills band low→mid→high→full through `--status-critical/severe/warning/good`, which keeps them legible on every theme's track. Themes live in `widgets/themes/`; `default` is the canonical shadcn-style dark theme. The server injects the theme, `widgets/shadcn.css`, the `ETUDE` payload, and the ResizeObserver bridge. New templates remain self-contained and use the two injection markers.
 - User-space overrides in `~/.etude/widgets/` win. Legacy `/applets/*`, `~/.etude/applets/`, and `applet_data` remain compatibility inputs only; never generate them for new work.
 - Soft-commands: `#theme:NAME` applies a one-off theme; `#set-default-theme:NAME` updates `meta.default_theme`. Verify new themes in a browser before delivery.
 

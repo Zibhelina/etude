@@ -123,6 +123,37 @@ def _seen(atom: Mapping[str, Any]) -> bool:
     return isinstance(atom.get("attempts"), list) and bool(atom["attempts"])
 
 
+def _timestamp(value: Any) -> datetime | None:
+    """Parse a stored timestamp. Tolerates 'Z' and the '+0000' offset form."""
+    if not isinstance(value, str) or not value:
+        return None
+    text = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        if len(text) > 5 and (text[-5] in "+-") and text[-5:].lstrip("+-").isdigit():
+            try:
+                parsed = datetime.fromisoformat(f"{text[:-5]}{text[-5:-2]}:{text[-2:]}")
+            except ValueError:
+                return None
+        else:
+            return None
+    return parsed if parsed.tzinfo is not None else parsed.astimezone()
+
+
+def _due_datetime(atom: Mapping[str, Any]) -> datetime | None:
+    return _timestamp(atom.get("due"))
+
+
+def _attempt_datetime(attempt: Mapping[str, Any]) -> datetime | None:
+    return _timestamp(attempt.get("ts"))
+
+
+def _is_due(atom: Mapping[str, Any], now: datetime) -> bool:
+    due = _due_datetime(atom)
+    return due is not None and due <= now
+
+
 def _queue_atoms(db: Mapping[str, Any], queue_id: str) -> list[Mapping[str, Any]]:
     try:
         queue = db.get("queues", {})[queue_id]
@@ -754,11 +785,181 @@ class EtudeHandler(BaseHTTPRequestHandler):
             items = [entry[2] for entry in ranked_items[:limit]]
             return {**base, "total_seen": len(ranked_items), "items": items}
 
-        if template_name == "atom-card":
+        if template_name in ("atom-card", "item-inspector"):
             atom_id = query.get("atom", [None])[0]
             if not atom_id or atom_id not in db.get("atoms", {}):
                 raise APIError(400, "atom must name an existing atom")
             return {**base, "atom": {"id": atom_id, **db["atoms"][atom_id]}}
+
+        if template_name == "queue-overview":
+            now = datetime.fromisoformat(_now_iso())
+            queues = []
+            for queue_id, queue in db.get("queues", {}).items():
+                if queue.get("archived"):
+                    continue
+                members = _queue_atoms(db, queue_id)
+                queues.append({
+                    "id": queue_id,
+                    "label": queue.get("label", queue_id),
+                    "algorithm": queue.get("algorithm", ""),
+                    "total": len(members),
+                    "seen": sum(_seen(atom) for atom in members),
+                    "due_count": sum(_is_due(atom, now) for atom in members),
+                    "deadline": queue.get("deadline") or "",
+                })
+            queues.sort(key=lambda entry: (-entry["due_count"], entry["id"]))
+            return {**base, "queues": queues}
+
+        if template_name == "tag-breakdown":
+            limit = _positive_int(query.get("limit", [None])[0], 12, "limit")
+            buckets: dict[str, list[Mapping[str, Any]]] = {}
+            for atom in db.get("atoms", {}).values():
+                if atom.get("archived"):
+                    continue
+                tags = atom.get("tags")
+                if not isinstance(tags, list):
+                    continue
+                for tag in tags:
+                    if isinstance(tag, str) and tag:
+                        buckets.setdefault(tag, []).append(atom)
+            rows = [
+                {
+                    "tag": tag,
+                    "total": len(atoms),
+                    "seen": sum(_seen(atom) for atom in atoms),
+                    "mastery": _mastery(atoms),
+                }
+                for tag, atoms in buckets.items()
+            ]
+            rows.sort(key=lambda entry: (-entry["total"], entry["tag"]))
+            return {**base, "tags": rows[:limit]}
+
+        if template_name == "due-forecast":
+            days = _positive_int(query.get("days", [None])[0], 7, "days")
+            requested_queue = query.get("queue", [None])[0]
+            if requested_queue is not None and requested_queue not in db.get("queues", {}):
+                raise APIError(400, "queue must name an existing queue")
+            if requested_queue is None:
+                atoms = [atom for atom in db.get("atoms", {}).values() if not atom.get("archived")]
+                queue_label = ""
+            else:
+                atoms = [atom for atom in _queue_atoms(db, requested_queue) if not atom.get("archived")]
+                queue_label = db["queues"][requested_queue].get("label", requested_queue)
+
+            now = datetime.fromisoformat(_now_iso())
+            today = now.date()
+            per_day = [
+                {"date": (today + timedelta(days=offset)).isoformat(), "count": 0}
+                for offset in range(days)
+            ]
+            index = {entry["date"]: entry for entry in per_day}
+            overdue = scheduled = 0
+            for atom in atoms:
+                due = _due_datetime(atom)
+                if due is None:
+                    continue
+                scheduled += 1
+                due_date = due.date()
+                if due_date < today:
+                    overdue += 1
+                    per_day[0]["count"] += 1
+                elif due_date.isoformat() in index:
+                    index[due_date.isoformat()]["count"] += 1
+            for offset, entry in enumerate(per_day):
+                entry["label"] = "today" if offset == 0 else entry["date"][5:]
+            return {
+                **base,
+                "queue_label": queue_label,
+                "per_day": per_day,
+                "overdue": overdue,
+                "due_today": per_day[0]["count"] if per_day else 0,
+                "due_week": sum(entry["count"] for entry in per_day),
+                "scheduled": scheduled,
+            }
+
+        if template_name == "session-summary":
+            hours = _positive_int(query.get("hours", [None])[0], 24, "hours")
+            cutoff = datetime.fromisoformat(_now_iso()) - timedelta(hours=hours)
+            ranked = []
+            attempts_total = 0
+            ratings = {0: 0, 1: 0, 2: 0, 3: 0}
+            for atom_id, atom in db.get("atoms", {}).items():
+                attempts = atom.get("attempts")
+                if not isinstance(attempts, list):
+                    continue
+                recent = []
+                for attempt in attempts:
+                    if not isinstance(attempt, Mapping) or not isinstance(attempt.get("ts"), str):
+                        continue
+                    stamp = _attempt_datetime(attempt)
+                    if stamp is None or stamp < cutoff:
+                        continue
+                    recent.append((stamp, attempt))
+                if not recent:
+                    continue
+                attempts_total += len(recent)
+                for _, attempt in recent:
+                    rating = attempt.get("rating")
+                    if isinstance(rating, int) and rating in ratings:
+                        ratings[rating] += 1
+                latest_stamp, latest = max(recent, key=lambda entry: entry[0])
+                ranked.append((latest_stamp, atom_id, {
+                    "id": atom_id,
+                    "topic": atom.get("topic", ""),
+                    "user_prompt": atom.get("user_prompt", ""),
+                    "last_rating": latest.get("rating"),
+                    "attempt_count": len(recent),
+                }))
+            ranked.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
+            return {
+                **base,
+                "hours": hours,
+                "attempts": attempts_total,
+                "unique_items": len(ranked),
+                "ratings": {str(key): value for key, value in ratings.items()},
+                "items": [entry[2] for entry in ranked],
+            }
+
+        if template_name == "item-carousel":
+            limit = _positive_int(query.get("limit", [None])[0], 12, "limit")
+            requested_queue = query.get("queue", [None])[0]
+            if requested_queue is not None and requested_queue not in db.get("queues", {}):
+                raise APIError(400, "queue must name an existing queue")
+            atoms = db.get("atoms", {})
+            if requested_queue is None:
+                ordered_ids = [
+                    atom_id for atom_id, atom in atoms.items() if not atom.get("archived")
+                ]
+                ordered_ids.sort()
+                queue_label = ""
+            else:
+                ordered_ids = [
+                    atom_id
+                    for atom_id in algorithms.order(db, requested_queue, _now_iso())
+                    if not atoms[atom_id].get("archived")
+                ]
+                queue_label = db["queues"][requested_queue].get("label", requested_queue)
+            items = []
+            for atom_id in ordered_ids[:limit]:
+                atom = atoms[atom_id]
+                attempts = atom.get("attempts")
+                items.append({
+                    "id": atom_id,
+                    "topic": atom.get("topic", ""),
+                    "user_prompt": atom.get("user_prompt", ""),
+                    "tags": [tag for tag in atom.get("tags", []) if isinstance(tag, str)],
+                    "state": atom.get("state", "new"),
+                    "streak": atom.get("streak", 0),
+                    "attempt_count": len(attempts) if isinstance(attempts, list) else 0,
+                    "last_rating": atom.get("last_rating"),
+                    "due": atom.get("due"),
+                })
+            return {
+                **base,
+                "queue_label": queue_label,
+                "total": len(ordered_ids),
+                "items": items,
+            }
 
         queue_id = query.get("queue", [None])[0]
         if not queue_id or queue_id not in db.get("queues", {}):

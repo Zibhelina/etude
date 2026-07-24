@@ -343,7 +343,26 @@ def test_queue_items_uses_compact_mode_labels_at_narrow_widths():
     assert "className = 'mode-short'" in template
     assert ".mode-short { display: none; }" in template
     assert ".mode-short { display: inline; }" in template
-    assert "col.state, col.streak { display: none; }" in template
+
+
+def test_queue_items_scrolls_sideways_instead_of_squeezing_cells():
+    """Narrow frames scroll the table rather than compressing columns: squeezing
+    pushed pill labels outside their own border and clipped the last column.
+    The scrollbar chrome stays hidden — scrolling works, the bar is not drawn."""
+    template = (Path(__file__).parents[1] / "widgets" / "templates" / "queue-items.html").read_text()
+
+    shell = re.search(r"\.table-shell \{[^}]*\}", template)
+    assert shell and "overflow-x: auto" in shell.group(0), "table must scroll horizontally"
+    assert "scrollbar-width: none" in shell.group(0), "scrollbar chrome must be hidden"
+    assert ".table-shell::-webkit-scrollbar { display: none; }" in template
+
+    table = re.search(r"\btable \{[^}]*\}", template)
+    assert table and "min-width:" in table.group(0), "table needs a floor width to scroll past"
+    assert "table-layout: fixed" not in template, "fixed layout is what squeezed the cells"
+
+    pill = re.search(r"\.pill \{[^}]*\}", template)
+    assert pill and "flex: none" in pill.group(0), "the pill must not be compressed by its cell"
+    assert "max-width: 100%" not in pill.group(0), "capping the pill re-clips its label"
 
 
 def test_matching_pairs_widget_receives_structured_atom_data(running_server):
@@ -451,6 +470,61 @@ def test_compact_widgets_measure_natural_content_instead_of_iframe_height(runnin
         assert ".wrap { display: flex; flex-direction: column; height: 100%;" not in html
 
 
+def test_templates_never_hardcode_colors_so_themes_stay_in_control():
+    """Every color must come from a semantic token, so switching themes (or the
+    host's own background) restyles the widget instead of leaving fixed colors."""
+    literal_color = re.compile(r"#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(")
+    for template_path in WIDGET_TEMPLATE_DIR.glob("*.html"):
+        style = re.search(r"<style>.*?</style>", template_path.read_text(), re.S)
+        assert style, f"{template_path.name} must declare a style block"
+        found = literal_color.search(style.group(0))
+        assert not found, f"{template_path.name} hardcodes the color {found.group(0)}"
+
+
+def test_progress_fills_use_status_tokens_across_the_value_range():
+    """Progress fills band low→full through semantic status tokens, so each
+    theme supplies its own ramp and the bar stays legible against the track."""
+    for name in ("queue-overview.html", "tag-breakdown.html", "queue-progress.html", "progress.html"):
+        template = (WIDGET_TEMPLATE_DIR / name).read_text()
+        for band, token in (
+            ("low", "--status-critical"),
+            ("mid", "--status-severe"),
+            ("high", "--status-warning"),
+            ("full", "--status-good"),
+        ):
+            assert f'[data-band="{band}"] {{ background: var({token}); }}' in template, (
+                f"{name} is missing the {band} band"
+            )
+        assert 'dataset.band' in template or '.dataset.band' in template, (
+            f"{name} never assigns a band"
+        )
+
+
+def test_widget_bodies_are_transparent_so_hosts_show_their_own_background():
+    """Widgets sit on the host's canvas (Lotus chat). An opaque body paints a
+    visible block around the card whenever the host background differs."""
+    for template_path in WIDGET_TEMPLATE_DIR.glob("*.html"):
+        template = template_path.read_text()
+        body_rule = re.search(r"\bbody \{[^}]*\}", template)
+        assert body_rule, f"{template_path.name} must declare a body rule"
+        assert "background" not in body_rule.group(0), (
+            f"{template_path.name} paints an opaque body background"
+        )
+
+
+def test_every_template_measures_natural_height_and_never_pins_full_height():
+    """A body without data-fit-content falls back to scrollHeight, which cannot
+    shrink below the descriptor's initial height and leaves dead space."""
+    for template_path in WIDGET_TEMPLATE_DIR.glob("*.html"):
+        template = template_path.read_text()
+        assert "<body data-fit-content>" in template, (
+            f"{template_path.name} must opt into natural-height measurement"
+        )
+        assert "html, body { min-height: 100%; }" not in template, (
+            f"{template_path.name} pins the document to the full iframe height"
+        )
+
+
 def test_every_widget_template_includes_the_auto_resize_bridge(running_server):
     base, _ = running_server
     paths = [
@@ -462,6 +536,12 @@ def test_every_widget_template_includes_the_auto_resize_bridge(running_server):
         "/widgets/recent-items?limit=5",
         "/widgets/streaks?days=7",
         "/widgets/atom-card?atom=DET-1",
+        "/widgets/item-carousel?limit=5",
+        "/widgets/item-inspector?atom=DET-1",
+        "/widgets/queue-overview",
+        "/widgets/tag-breakdown?limit=5",
+        "/widgets/due-forecast?days=7",
+        "/widgets/session-summary?hours=24",
     ]
 
     for path in paths:
@@ -470,7 +550,6 @@ def test_every_widget_template_includes_the_auto_resize_bridge(running_server):
         assert template_html.count("ResizeObserver") == 1
 
     _, _, atom_card_html = request(base, "/widgets/atom-card?atom=DET-1")
-    assert ".card { min-height: 100%; }" in atom_card_html
     assert "overflow-y: auto" not in atom_card_html
 
 
@@ -647,6 +726,21 @@ def test_every_widget_composes_shared_shadcn_primitives():
     for template_path in WIDGET_TEMPLATE_DIR.glob("*.html"):
         template = template_path.read_text()
         assert re.search(r'class="[^"]*\bui-', template), f"{template_path.name} does not compose a shared shadcn primitive"
+
+
+def test_matching_pairs_marks_the_selected_tile_before_it_resolves():
+    """Clicking one side must be visible on its own. Border-color alone reads as
+    the hover state, so the user cannot tell what they picked while waiting for
+    the second choice."""
+    template = (WIDGET_TEMPLATE_DIR / "matching-pairs.html").read_text()
+    selected = re.search(r"\.pair\.selected \{[^}]*\}", template)
+    assert selected, "matching-pairs must style the selected tile"
+    rule = selected.group(0)
+    assert "outline:" in rule, "selection needs a ring, not only a border color"
+    assert "background:" in rule, "selection needs its own surface"
+    hover = re.search(r"\.pair:hover:not\(:disabled\) \{[^}]*\}", template)
+    assert hover and hover.group(0) != rule, "selection must not look identical to hover"
+    assert 'aria-pressed' in template, "selection must be exposed to assistive tech"
 
 
 def test_interactive_widgets_expose_keyboard_focus_and_reduced_motion_modes():

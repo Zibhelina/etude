@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · Practice items</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 20px; }
+.head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1 { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.count { color: var(--text-secondary); font: 500 12.5px/1.4 var(--mono); white-space: nowrap; padding-top: 3px; }
+.rail { display: flex; gap: 12px; margin-top: 18px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding-bottom: 4px; }
+.rail::-webkit-scrollbar { display: none; }
+.card { scroll-snap-align: start; flex: 0 0 auto; width: 268px; min-height: 172px; display: flex; flex-direction: column; padding: 16px 17px 15px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); }
+.card-top { display: flex; align-items: center; gap: 8px; }
+.id { font: 500 11.5px/1.4 var(--mono); color: var(--text-secondary); }
+.topic { margin: 9px 0 0; font-size: 14.5px; font-weight: 500; line-height: 1.4; letter-spacing: -.005em; }
+.prompt { margin: 5px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 11px; }
+.tag { font: 500 11px/1.5 var(--mono); color: var(--text-secondary); background: var(--surface-2); border-radius: 999px; padding: 1px 8px; }
+.foot { display: flex; align-items: center; gap: 10px; margin-top: auto; padding-top: 12px; color: var(--text-muted); font: 500 11.5px/1.4 var(--mono); }
+.dot { width: 6px; height: 6px; border-radius: 999px; background: var(--text-muted); flex: none; }
+.dot[data-state="review"] { background: var(--green); }
+.dot[data-state="learning"] { background: var(--yellow); }
+.empty { margin-top: 18px; padding: 22px; text-align: center; color: var(--text-secondary); background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 13.5px; }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap ui-card">
+  <div class="head">
+    <div>
+      <div class="label" id="label">Etude items</div>
+      <h1 id="title">Practice items</h1>
+    </div>
+    <div class="count" id="count"></div>
+  </div>
+  <div class="rail" id="rail" tabindex="0" role="list" aria-label="Practice items"></div>
+</div>
+<script>
+const ETUDE = /*__DATA__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const $ = id => document.getElementById(id);
+  const items = Array.isArray(data.items) ? data.items.filter(i => i && typeof i === 'object') : [];
+  const text = value => (typeof value === 'string' ? value : '');
+  const whole = value => Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0;
+
+  if (text(data.queue_label)) { $('label').textContent = 'Etude queue'; $('title').textContent = text(data.queue_label); }
+  const total = whole(data.total || items.length);
+  $('count').textContent = items.length ? `${items.length} of ${total}` : '';
+
+  const rail = $('rail');
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'No practice items to show.';
+    rail.replaceWith(empty);
+    return;
+  }
+
+  const STATE_LABEL = { new: 'new', learning: 'learning', review: 'review' };
+  items.forEach(item => {
+    const card = document.createElement('article');
+    card.className = 'card';
+    card.setAttribute('role', 'listitem');
+
+    const top = document.createElement('div');
+    top.className = 'card-top';
+    const id = document.createElement('span');
+    id.className = 'id';
+    id.textContent = text(item.id);
+    top.append(id);
+    card.append(top);
+
+    const topic = document.createElement('div');
+    topic.className = 'topic';
+    topic.textContent = text(item.topic) || text(item.id);
+    card.append(topic);
+
+    const prompt = document.createElement('p');
+    prompt.className = 'prompt';
+    prompt.textContent = text(item.user_prompt);
+    card.append(prompt);
+
+    const tags = Array.isArray(item.tags) ? item.tags.filter(t => typeof t === 'string').slice(0, 3) : [];
+    if (tags.length) {
+      const row = document.createElement('div');
+      row.className = 'tags';
+      tags.forEach(tag => {
+        const chip = document.createElement('span');
+        chip.className = 'tag';
+        chip.textContent = tag;
+        row.append(chip);
+      });
+      card.append(row);
+    }
+
+    const foot = document.createElement('div');
+    foot.className = 'foot';
+    const state = text(item.state) || 'new';
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.dataset.state = state;
+    const stateText = document.createElement('span');
+    stateText.textContent = STATE_LABEL[state] || state;
+    const attempts = document.createElement('span');
+    attempts.textContent = `${whole(item.attempt_count)} attempts`;
+    foot.append(dot, stateText, attempts);
+    card.append(foot);
+
+    card.setAttribute('aria-label',
+      `${text(item.id)}${text(item.topic) ? `, ${text(item.topic)}` : ''}, state ${STATE_LABEL[state] || state}, ${whole(item.attempt_count)} attempts`);
+    rail.append(card);
+  });
+})();
+</script>
+</body>
+</html>

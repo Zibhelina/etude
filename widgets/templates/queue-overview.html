@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · Queues</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 20px; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1 { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.rows { list-style: none; margin: 18px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.row { padding: 14px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); }
+.row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.name { font-size: 14.5px; font-weight: 500; line-height: 1.4; letter-spacing: -.005em; min-width: 0; }
+.alg { color: var(--text-muted); font: 500 11px/1.5 var(--mono); white-space: nowrap; }
+.meter { position: relative; height: 6px; margin-top: 11px; background: var(--border-strong); border-radius: 999px; overflow: hidden; }
+.fill { position: absolute; inset: 0 auto 0 0; background: var(--status-critical); border-radius: 999px; }
+.fill[data-band="low"] { background: var(--status-critical); }
+.fill[data-band="mid"] { background: var(--status-severe); }
+.fill[data-band="high"] { background: var(--status-warning); }
+.fill[data-band="full"] { background: var(--status-good); }
+
+.figs { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; color: var(--text-secondary); font: 500 11.5px/1.5 var(--mono); }
+.due { color: var(--yellow-text); }
+.empty { margin-top: 18px; padding: 22px; text-align: center; color: var(--text-secondary); background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 13.5px; }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap ui-card">
+  <div class="label">Etude overview</div>
+  <h1>Queues</h1>
+  <ul class="rows" id="rows"></ul>
+</div>
+<script>
+const ETUDE = /*__DATA__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const $ = id => document.getElementById(id);
+  const text = value => (typeof value === 'string' ? value : '');
+  const whole = value => Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0;
+  const band = percent => percent >= 75 ? 'full' : percent >= 50 ? 'high' : percent >= 25 ? 'mid' : 'low';
+  const queues = Array.isArray(data.queues) ? data.queues.filter(q => q && typeof q === 'object') : [];
+
+  const rows = $('rows');
+  if (!queues.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'No queues yet.';
+    rows.replaceWith(empty);
+    return;
+  }
+
+  queues.forEach(queue => {
+    const total = whole(queue.total);
+    const seen = Math.min(whole(queue.seen), total);
+    const percent = total ? Math.round((seen / total) * 100) : 0;
+
+    const row = document.createElement('li');
+    row.className = 'row';
+
+    const head = document.createElement('div');
+    head.className = 'row-head';
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = text(queue.label) || text(queue.id);
+    const alg = document.createElement('span');
+    alg.className = 'alg';
+    alg.textContent = text(queue.algorithm);
+    head.append(name, alg);
+    row.append(head);
+
+    const meter = document.createElement('div');
+    meter.className = 'meter';
+    meter.setAttribute('role', 'progressbar');
+    meter.setAttribute('aria-valuemin', '0');
+    meter.setAttribute('aria-valuemax', String(total));
+    meter.setAttribute('aria-valuenow', String(seen));
+    meter.setAttribute('aria-valuetext', `${seen} of ${total} practiced, ${percent}%`);
+    const fill = document.createElement('div');
+    fill.className = 'fill';
+    fill.dataset.band = band(percent);
+    fill.style.width = `${percent}%`;
+    meter.append(fill);
+    row.append(meter);
+
+    const figs = document.createElement('div');
+    figs.className = 'figs';
+    const parts = [
+      `${seen}/${total} practiced`,
+      `${percent}%`,
+      `${whole(queue.due_count)} due`,
+    ];
+    parts.forEach((part, index) => {
+      const cell = document.createElement('span');
+      cell.textContent = part;
+      if (index === 2 && whole(queue.due_count) > 0) cell.className = 'due';
+      figs.append(cell);
+    });
+    if (text(queue.deadline)) {
+      const cell = document.createElement('span');
+      cell.textContent = `deadline ${text(queue.deadline).slice(0, 10)}`;
+      figs.append(cell);
+    }
+    row.append(figs);
+    rows.append(row);
+  });
+})();
+</script>
+</body>
+</html>

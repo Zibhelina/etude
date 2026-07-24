@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · Due forecast</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 20px; }
+.head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1 { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.overdue { text-align: right; }
+.overdue .v { font-size: 22px; font-weight: 500; letter-spacing: -.02em; line-height: 1.2; color: var(--yellow-text); }
+.overdue .k { color: var(--text-secondary); font-size: 12px; }
+.chart { display: flex; align-items: flex-end; gap: 6px; margin-top: 22px; height: 96px; }
+.col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+.bar { background: var(--chart-2); border-radius: 4px 4px 2px 2px; min-height: 2px; }
+.bar[data-today="true"] { background: var(--green); }
+.axis { display: flex; gap: 6px; margin-top: 8px; }
+.tick { flex: 1 1 0; min-width: 0; text-align: center; color: var(--text-muted); font: 500 10.5px/1.4 var(--mono); overflow: hidden; }
+.counts { display: flex; gap: 6px; margin-top: 3px; }
+.count { flex: 1 1 0; min-width: 0; text-align: center; color: var(--text-secondary); font: 500 11px/1.4 var(--mono); }
+.stats { display: flex; margin-top: 22px; padding-top: 18px; border-top: 0.5px solid var(--border); }
+.stat { flex: 1; min-width: 0; }
+.stat + .stat { padding-left: 22px; border-left: 0.5px solid var(--border); margin-left: 22px; }
+.stat .v { font-size: 22px; font-weight: 500; letter-spacing: -.02em; line-height: 1.2; }
+.stat .k { margin-top: 2px; color: var(--text-secondary); font-size: 12.5px; }
+.empty { margin-top: 18px; padding: 22px; text-align: center; color: var(--text-secondary); background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 13.5px; }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap ui-card">
+  <div class="head">
+    <div>
+      <div class="label">Etude schedule</div>
+      <h1 id="title">Due forecast</h1>
+    </div>
+    <div class="overdue" id="overdueBox" hidden>
+      <div class="v" id="overdue">0</div>
+      <div class="k">overdue</div>
+    </div>
+  </div>
+  <div class="chart" id="chart" role="img" aria-label="Items due per day"></div>
+  <div class="axis" id="axis"></div>
+  <div class="counts" id="counts"></div>
+  <div class="stats" id="stats"></div>
+</div>
+<script>
+const ETUDE = /*__DATA__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const $ = id => document.getElementById(id);
+  const text = value => (typeof value === 'string' ? value : '');
+  const whole = value => Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0;
+  const days = Array.isArray(data.per_day) ? data.per_day.filter(d => d && typeof d === 'object') : [];
+
+  if (text(data.queue_label)) $('title').textContent = `Due · ${text(data.queue_label)}`;
+
+  const overdue = whole(data.overdue);
+  if (overdue > 0) {
+    $('overdueBox').hidden = false;
+    $('overdue').textContent = overdue.toLocaleString();
+  }
+
+  if (!days.length) {
+    $('chart').replaceWith(Object.assign(document.createElement('div'), {
+      className: 'empty',
+      textContent: 'Nothing scheduled in this window.',
+    }));
+    $('axis').remove();
+    $('counts').remove();
+  } else {
+    const max = Math.max(1, ...days.map(day => whole(day.count)));
+    const chart = $('chart');
+    const axis = $('axis');
+    const counts = $('counts');
+    days.forEach((day, index) => {
+      const count = whole(day.count);
+      const col = document.createElement('div');
+      col.className = 'col';
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      bar.style.height = `${Math.max(2, Math.round((count / max) * 100))}%`;
+      if (index === 0) bar.dataset.today = 'true';
+      col.append(bar);
+      chart.append(col);
+
+      const tick = document.createElement('div');
+      tick.className = 'tick';
+      tick.textContent = text(day.label) || text(day.date).slice(5);
+      axis.append(tick);
+
+      const value = document.createElement('div');
+      value.className = 'count';
+      value.textContent = String(count);
+      counts.append(value);
+    });
+    chart.setAttribute('aria-label',
+      `Items due per day: ${days.map(day => `${text(day.date) || 'unknown date'}, ${whole(day.count)}`).join('; ')}`);
+  }
+
+  const stats = [
+    { k: 'Due today', v: whole(data.due_today) },
+    { k: 'Next 7 days', v: whole(data.due_week) },
+    { k: 'Scheduled', v: whole(data.scheduled) },
+  ];
+  stats.forEach(entry => {
+    const cell = document.createElement('div');
+    cell.className = 'stat';
+    const value = document.createElement('div');
+    value.className = 'v';
+    value.textContent = entry.v.toLocaleString();
+    const key = document.createElement('div');
+    key.className = 'k';
+    key.textContent = entry.k;
+    cell.append(value, key);
+    $('stats').append(cell);
+  });
+})();
+</script>
+</body>
+</html>

@@ -9,7 +9,7 @@
 /*__THEME__*/
 * { box-sizing: border-box; }
 html, body { min-height: 0; }
-body { margin: 0; padding: 24px; background: var(--surface-0); color: var(--text-primary); font: 16px/1.7 var(--sans); display: grid; place-items: center; }
+body { margin: 0; padding: 24px; color: var(--text-primary); font: 16px/1.7 var(--sans); display: grid; place-items: center; }
 button { font: inherit; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .shell { width: min(860px, 100%); }
@@ -22,12 +22,13 @@ h1 { margin: 8px 0 0; font-size: clamp(25px, 5vw, 38px); font-weight: 500; lette
 .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px clamp(18px, 5vw, 46px); }
 .column { display: grid; align-content: start; gap: 10px; }
 .pair {
-  min-height: 62px; padding: 13px 16px; border: 0.5px solid var(--border); border-radius: var(--radius-control);
+  position: relative; min-height: 62px; padding: 13px 26px 13px 16px; border: 0.5px solid var(--border); border-radius: var(--radius-control);
   color: var(--text-primary); background: var(--surface-2); cursor: pointer; font-size: clamp(16px, 2.5vw, 19px); line-height: 1.35;
   transition: transform .14s ease, border-color .14s ease, opacity .14s ease;
 }
-.pair:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-1px); }
-.pair.selected { border-color: var(--accent); }
+.pair:hover:not(:disabled) { border-color: var(--border-strong); transform: translateY(-1px); }
+.pair.selected { border-color: var(--foreground); background: var(--surface-1); outline: 2px solid var(--foreground); outline-offset: -2px; font-weight: 500; }
+.pair.selected::after { content: ""; position: absolute; inset-block: 50%; inset-inline-end: 10px; width: 7px; height: 7px; margin-block-start: -3.5px; border-radius: 999px; background: var(--foreground); }
 .pair.matched { color: var(--green-text); border-color: var(--green); background: var(--surface-1); cursor: default; opacity: .76; }
 .pair.mismatch { color: var(--red-text); border-color: var(--red); animation: shake .25s ease; }
 @keyframes shake { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }

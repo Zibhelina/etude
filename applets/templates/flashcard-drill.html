@@ -9,96 +9,288 @@
 * { box-sizing: border-box; }
 html, body { min-height: 100%; }
 body {
-  margin: 0; padding: 18px; color: var(--text); font-family: var(--sans);
-  background: radial-gradient(circle at 50% -30%, var(--panel2), transparent 52%), var(--bg);
-  display: grid; place-items: center; font-feature-settings: "cv01", "ss03";
+  margin: 0;
+  padding: clamp(16px, 3vw, 24px);
+  color: var(--text);
+  background: var(--bg);
+  font-family: var(--sans);
+  font-feature-settings: "cv01", "ss03";
+  -webkit-font-smoothing: antialiased;
 }
 button, input { font: inherit; }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.shell { width: min(800px, 100%); }
-.topline { display: flex; justify-content: space-between; align-items: end; gap: 20px; margin-bottom: 10px; padding: 0 2px; }
-.eyebrow { color: var(--accent); font: 600 11px/1 var(--mono); letter-spacing: .11em; text-transform: uppercase; }
-.queue { margin-top: 6px; color: var(--dim); font-size: 13px; font-weight: 500; }
-.counter { color: var(--dim); font: 500 12px/1 var(--mono); }
-.track { height: 3px; overflow: hidden; background: var(--panel2); border-radius: 99px; margin-bottom: 14px; }
-.fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--purple)); transition: width .25s ease; }
+button:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.shell { width: min(760px, 100%); margin: 0 auto; }
+.session-bar {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 14px;
+  padding: 0 2px;
+}
+.brand-line { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 590;
+  letter-spacing: -.01em;
+}
+.brand-mark {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 16px var(--accent);
+}
+.queue {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dim);
+  font-size: 13px;
+  font-weight: 450;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.counter {
+  padding: 5px 9px;
+  color: var(--dim);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font: 500 11px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.track {
+  height: 2px;
+  margin: 0 2px 18px;
+  overflow: hidden;
+  background: var(--panel2);
+  border-radius: 999px;
+}
+.fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width .28s ease;
+}
 .card {
-  min-height: 338px; padding: clamp(24px, 4vw, 34px); background: var(--panel);
-  border: 1px solid var(--border); border-radius: 16px; display: flex; flex-direction: column;
-  box-shadow: 0 1px 0 var(--border), 0 20px 50px var(--bg);
+  position: relative;
+  overflow: hidden;
+  padding: clamp(24px, 5vw, 40px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 1px 0 var(--border);
+}
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: var(--panel2);
+  pointer-events: none;
+}
+.question-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: clamp(26px, 5vw, 38px);
 }
 .topic {
-  min-height: 17px; width: fit-content; padding: 5px 8px; color: var(--purple);
-  background: var(--panel2); border: 1px solid var(--border); border-radius: 6px;
-  font: 600 10px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 6px 9px;
+  color: var(--purple);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 590;
+  letter-spacing: .07em;
+  line-height: 1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 .prompt {
-  flex: 1; min-height: 174px; display: grid; place-items: center; padding: 22px 2vw;
-  text-align: center; font-size: clamp(22px, 3.8vw, 32px); font-weight: 450;
-  line-height: 1.28; letter-spacing: -.025em; overflow-wrap: anywhere; word-break: break-word;
+  max-width: 650px;
+  margin: 0 auto;
+  color: var(--text);
+  text-align: center;
+  font-size: clamp(25px, 4.4vw, 36px);
+  font-weight: 510;
+  letter-spacing: -.035em;
+  line-height: 1.22;
+  overflow-wrap: anywhere;
 }
 .prompt strong { font-weight: 590; }
 .prompt code, .answer code {
-  padding: .08em .3em; color: var(--text); background: var(--panel2);
-  border: 1px solid var(--border); border-radius: 5px; font-family: var(--mono); font-size: .78em;
+  display: inline;
+  padding: .06em .24em;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: .76em;
+  font-weight: 500;
+  letter-spacing: -.02em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
-.controls { display: grid; gap: 10px; }
-.answer-row { display: flex; gap: 8px; }
+.controls {
+  display: grid;
+  gap: 12px;
+  width: min(610px, 100%);
+  margin: clamp(30px, 6vw, 46px) auto 0;
+}
+.answer-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
 input {
-  min-width: 0; flex: 1; height: 46px; padding: 0 14px; color: var(--text); background: var(--panel2);
-  border: 1px solid var(--border); border-radius: 8px; transition: border-color .15s ease, background .15s ease;
+  width: 100%;
+  min-width: 0;
+  height: 50px;
+  padding: 0 16px;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
 }
 input::placeholder { color: var(--faint); }
-input:hover, input:focus { border-color: var(--dim); background: var(--panel); }
-button {
-  min-height: 44px; cursor: pointer; border: 1px solid var(--border); border-radius: 8px;
-  padding: 0 16px; color: var(--text); background: var(--panel2); font-weight: 590;
-  transition: transform .12s ease, border-color .12s ease, background .12s ease;
+input:hover { border-color: var(--dim); }
+input:focus {
+  border-color: var(--accent);
+  background: var(--panel);
+  box-shadow: 0 0 0 3px var(--panel2);
 }
-button:hover { border-color: var(--dim); transform: translateY(-1px); }
-button:active { transform: translateY(0); }
+button {
+  min-height: 48px;
+  padding: 0 18px;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 590;
+  transition: transform .12s ease, border-color .12s ease, background .12s ease, color .12s ease;
+}
+button:hover:not(:disabled) { border-color: var(--dim); background: var(--panel); transform: translateY(-1px); }
+button:active:not(:disabled) { transform: translateY(0); }
+button:disabled { cursor: wait; opacity: .68; }
 .primary { color: var(--bg); background: var(--accent); border-color: var(--accent); }
-.primary:hover { border-color: var(--accent); background: var(--text); }
-.secondary { min-height: 28px; justify-self: center; color: var(--dim); background: transparent; border-color: transparent; font-size: 12px; padding: 0 8px; }
-.secondary:hover { color: var(--text); border-color: transparent; }
-.feedback { padding: 13px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel2); line-height: 1.45; }
+.primary:hover:not(:disabled) { color: var(--bg); background: var(--text); border-color: var(--text); }
+.secondary {
+  min-height: 38px;
+  justify-self: center;
+  padding: 0 13px;
+  color: var(--dim);
+  background: var(--panel2);
+  border-color: var(--border);
+  font-size: 13px;
+  font-weight: 500;
+}
+.secondary:hover:not(:disabled) { color: var(--text); background: var(--panel); border-color: var(--dim); }
+.binary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.binary-choice {
+  min-height: 64px;
+  background: var(--panel2);
+  font-size: 16px;
+  letter-spacing: -.01em;
+}
+.binary-choice:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.choice-key {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 9px;
+  color: var(--faint);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: 500 10px/1 var(--mono);
+}
+.feedback {
+  padding: 16px 18px;
+  color: var(--dim);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  line-height: 1.5;
+}
 .feedback.right { border-color: var(--green); }
 .feedback.wrong { border-color: var(--red); }
-.feedback strong { color: var(--text); }
+.feedback strong { color: var(--text); font-weight: 590; }
 .feedback .label { color: var(--dim); font-size: 13px; }
-.grades { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grades { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .wrong-button { border-color: var(--red); }
 .right-button { border-color: var(--green); }
-.end { text-align: center; justify-content: center; gap: 18px; }
-.end h1 { margin: 0; font-size: clamp(30px, 6vw, 46px); font-weight: 590; letter-spacing: -.04em; }
+.hint {
+  min-height: 17px;
+  margin: 18px 0 0;
+  color: var(--faint);
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.5;
+}
+kbd {
+  display: inline-block;
+  min-width: 21px;
+  margin: 0 2px;
+  padding: 2px 5px;
+  color: var(--dim);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: 500 10px/1.2 var(--mono);
+}
+.end { display: grid; place-items: center; gap: 18px; min-height: 330px; text-align: center; }
+.end h1 { margin: 0; font-size: clamp(34px, 7vw, 52px); font-weight: 510; letter-spacing: -.045em; }
 .score { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
-.chip { padding: 8px 11px; background: var(--panel2); border: 1px solid var(--border); border-radius: 99px; font: 600 12px/1 var(--mono); }
-.good { color: var(--green); } .bad { color: var(--red); } .unsent { color: var(--yellow); }
+.chip { padding: 8px 11px; background: var(--panel2); border: 1px solid var(--border); border-radius: 999px; font: 500 11px/1 var(--mono); }
+.good { color: var(--green); }
+.bad { color: var(--red); }
+.unsent { color: var(--yellow); }
 .end-actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
-.hint { margin: 10px 0 0; text-align: center; color: var(--faint); font: 11px/1.4 var(--mono); }
 .hidden { display: none !important; }
 @media (max-width: 560px) {
   body { padding: 12px; }
-  .card { min-height: 0; padding: 22px 18px; }
-  .prompt { min-height: 160px; padding: 20px 0; }
-  .answer-row { flex-direction: column; }
+  .session-bar { gap: 10px; }
+  .brand { display: none; }
+  .card { padding: 24px 18px; border-radius: 14px; }
+  .question-head { margin-bottom: 26px; }
+  .prompt { font-size: clamp(23px, 7vw, 30px); }
+  .controls { margin-top: 30px; }
+  .answer-row { grid-template-columns: 1fr; }
+  .binary-grid { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 <main class="shell">
-  <header class="topline">
-    <div><div class="eyebrow">Etude · Drill</div><div class="queue" id="queueLabel"></div></div>
+  <header class="session-bar">
+    <div class="brand-line">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand">Etude</span>
+      <span class="queue" id="queueLabel"></span>
+    </div>
     <div class="counter" id="counter"></div>
   </header>
   <div class="track" aria-hidden="true"><div class="fill" id="fill"></div></div>
   <section class="card" id="card" aria-live="polite">
-    <div class="topic" id="topic"></div>
+    <div class="question-head"><div class="topic" id="topic"></div></div>
     <div class="prompt" id="prompt"></div>
     <div class="controls" id="controls"></div>
   </section>
-  <p class="hint" id="hint">Enter to check · choose “show answer” to self-grade</p>
+  <p class="hint" id="hint"></p>
 </main>
 <script>
 const ETUDE = /*__DATA__*/null;
@@ -110,7 +302,7 @@ const ETUDE = /*__DATA__*/null;
   const $ = id => document.getElementById(id);
 
   function escapeHtml(value) {
-    return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    return String(value ?? '').replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
   }
   function lightMarkdown(value) {
     let html = escapeHtml(value);
@@ -118,17 +310,59 @@ const ETUDE = /*__DATA__*/null;
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     return html.replace(/\r?\n/g, '<br>');
   }
+  function normalizedText(value) {
+    return String(value ?? '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+  }
+  function stripDuplicateHeading(prompt, topic) {
+    const match = String(prompt ?? '').match(/^\s*\*\*([^*]+)\*\*\s*(?:\r?\n)+/);
+    if (!match || normalizedText(match[1]) !== normalizedText(topic)) return String(prompt ?? '');
+    return String(prompt).slice(match[0].length);
+  }
   function accepted(atom) {
     if (atom.expected == null) return [];
     return (Array.isArray(atom.expected) ? atom.expected : [atom.expected]).map(String);
   }
   function normalize(value) { return String(value).trim().toLocaleLowerCase(); }
+  function hasTag(atom, tag) {
+    return Array.isArray(atom.tags) && atom.tags.some(value => normalize(value) === tag);
+  }
+  function isPortuguese(atom, answers = accepted(atom)) {
+    return answers.some(answer => ['verdadeiro', 'falso'].includes(normalize(answer)))
+      || /\b(verdadeiro|falso|uma|qual|explique)\b|[áàãâéêíóôõúç]/i.test(atom.user_prompt || '');
+  }
+  function uiFor(atom, answers = accepted(atom)) {
+    if (isPortuguese(atom, answers)) return {
+      placeholder: 'Digite sua resposta…', check: 'Verificar', show: 'Mostrar resposta',
+      answerWithoutReveal: 'Responder sem revelar', correct: 'Correto', notQuite: 'Ainda não', accepted: 'Aceitas',
+      next: 'Próximo item', summary: 'Ver resumo', answer: 'Resposta', review: 'Rever · 1', gotIt: 'Acertei · 3',
+      toAnswer: 'para responder', toCheck: 'para verificar', toContinue: 'para continuar',
+      reviewAgain: 'rever', reveal: 'para revelar',
+    };
+    return {
+      placeholder: 'Type your answer…', check: 'Check answer', show: 'Show answer',
+      answerWithoutReveal: 'Answer without revealing', correct: 'Correct', notQuite: 'Not quite', accepted: 'Accepted',
+      next: 'Next card', summary: 'See summary', answer: 'Answer', review: 'Review again · 1', gotIt: 'Got it · 3',
+      toAnswer: 'to answer', toCheck: 'to check', toContinue: 'to continue',
+      reviewAgain: 'review again', reveal: 'to reveal',
+    };
+  }
+  function displayQueueLabel(value) {
+    return String(value || 'Practice queue').replace(/^Etude\s*·\s*/i, '');
+  }
   function updateProgress() {
     $('counter').textContent = deck.length ? `${Math.min(index + 1, deck.length)} / ${deck.length}` : '0 / 0';
-    $('fill').style.width = `${deck.length ? (index / deck.length) * 100 : 0}%`;
+    $('fill').style.width = `${deck.length ? (Math.min(index + 1, deck.length) / deck.length) * 100 : 0}%`;
   }
   function button(label, className, handler) {
-    const el = document.createElement('button'); el.type = 'button'; el.textContent = label; el.className = className || ''; el.addEventListener('click', handler); return el;
+    const element = document.createElement('button');
+    element.type = 'button'; element.textContent = label; element.className = className || '';
+    element.addEventListener('click', handler); return element;
+  }
+  function buttonWithKey(label, key, handler) {
+    const element = button('', 'binary-choice', handler);
+    const keycap = document.createElement('span'); keycap.className = 'choice-key'; keycap.textContent = key;
+    const text = document.createElement('span'); text.textContent = label;
+    element.append(keycap, text); return element;
   }
   async function postAttempt(body) {
     if (!data.api) { unsent.push(body); return false; }
@@ -154,17 +388,46 @@ const ETUDE = /*__DATA__*/null;
     busy = false; selfMode = false; updateProgress();
     if (index >= deck.length) { renderEnd(); return; }
     const atom = deck[index];
-    $('card').className = 'card'; $('topic').textContent = atom.topic || '';
-    $('prompt').innerHTML = lightMarkdown(atom.user_prompt || '');
-    $('controls').replaceChildren(); $('hint').textContent = 'Enter to check · choose “show answer” to self-grade';
+    $('card').className = 'card';
+    $('topic').textContent = atom.topic || 'Practice item';
+    $('prompt').innerHTML = lightMarkdown(stripDuplicateHeading(atom.user_prompt || '', atom.topic || ''));
+    $('controls').replaceChildren(); $('hint').textContent = '';
     const answers = accepted(atom);
-    if (answers.length) renderTyped(atom, answers); else renderFlip(atom, answers);
+    if (hasTag(atom, 'true-false')) renderBinary(atom, answers);
+    else if (answers.length) renderTyped(atom, answers);
+    else renderFlip(atom, answers);
+  }
+  function binaryOptions(atom, answers) {
+    const portuguese = isPortuguese(atom, answers);
+    return portuguese
+      ? [{label:'Verdadeiro', value:'verdadeiro'}, {label:'Falso', value:'falso'}]
+      : [{label:'True', value:'true'}, {label:'False', value:'false'}];
+  }
+  function renderBinary(atom, answers) {
+    const ui = uiFor(atom, answers);
+    const grid = document.createElement('div'); grid.className = "binary-grid";
+    binaryOptions(atom, answers).forEach((option, optionIndex) => {
+      const choice = buttonWithKey(option.label, String(optionIndex + 1), async () => {
+        if (busy) return; busy = true;
+        [...grid.querySelectorAll('button')].forEach(element => { element.disabled = true; });
+        const isRight = answers.some(answer => normalize(answer) === normalize(option.value));
+        recordResult(atom, isRight);
+        await postAttempt(attemptBody(atom, option.value));
+        showTypedFeedback(isRight, answers);
+      });
+      grid.append(choice);
+    });
+    $('controls').append(grid, button(ui.show, 'secondary', () => renderFlip(atom, answers)));
+    $('hint').innerHTML = isPortuguese(atom, answers)
+      ? `Pressione <kbd>1</kbd> ou <kbd>2</kbd> ${ui.toAnswer}`
+      : `Press <kbd>1</kbd> or <kbd>2</kbd> ${ui.toAnswer}`;
   }
   function renderTyped(atom, answers) {
+    const ui = uiFor(atom, answers);
     const row = document.createElement('form'); row.className = 'answer-row';
     const input = document.createElement('input'); input.type = 'text'; input.autocomplete = 'off'; input.spellcheck = false;
-    input.placeholder = 'Type your answer…'; input.setAttribute('aria-label', 'Your answer');
-    const submit = button('Check', 'primary'); submit.type = 'submit'; row.append(input, submit);
+    input.placeholder = ui.placeholder; input.setAttribute('aria-label', ui.placeholder);
+    const submit = button(ui.check, 'primary'); submit.type = 'submit'; row.append(input, submit);
     row.addEventListener('submit', async event => {
       event.preventDefault(); if (busy || !input.value.trim()) return; busy = true;
       input.disabled = true; submit.disabled = true;
@@ -173,28 +436,35 @@ const ETUDE = /*__DATA__*/null;
       await postAttempt(attemptBody(atom, input.value));
       showTypedFeedback(isRight, answers);
     });
-    $('controls').append(row, button('Show answer · self-grade instead', 'secondary', () => renderFlip(atom, answers)));
+    $('controls').append(row, button(ui.show, 'secondary', () => renderFlip(atom, answers)));
+    $('hint').innerHTML = `<kbd>Enter</kbd> ${ui.toCheck}`;
     setTimeout(() => input.focus(), 0);
   }
   function showTypedFeedback(isRight, answers) {
+    const atom = deck[index];
+    const ui = uiFor(atom, answers);
     const box = document.createElement('div'); box.className = `feedback ${isRight ? 'right' : 'wrong'}`;
-    box.innerHTML = `<strong>${isRight ? 'Right' : 'Not quite'}</strong><br><span class="label">Accepted: ${answers.map(lightMarkdown).join(' · ')}</span>`;
-    const next = button(index + 1 < deck.length ? 'Next card' : 'See summary', 'primary', advance);
-    $('controls').replaceChildren(box, next); $('hint').textContent = 'Enter for next card'; next.focus();
+    box.innerHTML = `<strong>${isRight ? ui.correct : ui.notQuite}</strong><br><span class="label">${ui.accepted}: ${answers.map(lightMarkdown).join(' · ')}</span>`;
+    const next = button(index + 1 < deck.length ? ui.next : ui.summary, 'primary', advance);
+    $('controls').replaceChildren(box, next); $('hint').innerHTML = `<kbd>Enter</kbd> ${ui.toContinue}`; next.focus();
   }
   function renderFlip(atom, answers) {
+    const ui = uiFor(atom, answers);
     selfMode = true; $('controls').replaceChildren();
-    const show = button('Show answer', 'primary', () => {
+    const show = button(ui.show, 'primary', () => {
       const box = document.createElement('div'); box.className = 'feedback';
       const display = answers.length ? answers.map(lightMarkdown).join(' · ') : 'No reference answer provided.';
-      box.innerHTML = `<span class="label">Answer</span><br><strong class="answer">${display}</strong>`;
+      box.innerHTML = `<span class="label">${ui.answer}</span><br><strong class="answer">${display}</strong>`;
       const grades = document.createElement('div'); grades.className = 'grades';
-      grades.append(button('Wrong · 1', 'wrong-button', () => selfGrade(atom, false)), button('Right · 3', 'right-button', () => selfGrade(atom, true)));
-      $('controls').replaceChildren(box, grades); $('hint').textContent = 'Press 1 for wrong · 3 for right';
+      grades.append(button(ui.review, 'wrong-button', () => selfGrade(atom, false)), button(ui.gotIt, 'right-button', () => selfGrade(atom, true)));
+      $('controls').replaceChildren(box, grades); $('hint').innerHTML = `<kbd>1</kbd> ${ui.reviewAgain} · <kbd>3</kbd> ${ui.gotIt.replace(' · 3', '').toLocaleLowerCase()}`;
     });
     $('controls').append(show);
-    if (answers.length) $('controls').append(button('Type answer instead', 'secondary', () => { selfMode = false; renderTyped(atom, answers); }));
-    $('hint').textContent = 'Space or Enter to reveal'; show.focus();
+    if (answers.length) $('controls').append(button(ui.answerWithoutReveal, 'secondary', () => {
+      selfMode = false;
+      if (hasTag(atom, 'true-false')) renderBinary(atom, answers); else renderTyped(atom, answers);
+    }));
+    $('hint').innerHTML = `<kbd>Space</kbd> / <kbd>Enter</kbd> ${ui.reveal}`; show.focus();
   }
   function recordResult(atom, isRight) {
     if (isRight) right += 1; else { wrong += 1; wrongCards.push(atom); }
@@ -209,25 +479,30 @@ const ETUDE = /*__DATA__*/null;
     await retryUnsent();
     $('card').className = 'card end';
     const uniqueWrong = [...new Map(wrongCards.map(atom => [atom.id, atom])).values()];
-    $('card').innerHTML = `<div class="eyebrow">Session complete</div><h1>${right + wrong ? Math.round(right / (right + wrong) * 100) : 0}% correct</h1><div class="score"><span class="chip good">${right} right</span><span class="chip bad">${wrong} wrong</span><span class="chip unsent">${unsent.length} unsent</span></div><div class="end-actions" id="endActions"></div>`;
+    $('card').innerHTML = `<div class="brand">Session complete</div><h1>${right + wrong ? Math.round(right / (right + wrong) * 100) : 0}% correct</h1><div class="score"><span class="chip good">${right} right</span><span class="chip bad">${wrong} wrong</span><span class="chip unsent">${unsent.length} unsent</span></div><div class="end-actions" id="endActions"></div>`;
     const actions = $('endActions');
-    if (uniqueWrong.length) actions.append(button('Retry wrong cards', 'primary', () => { deck = uniqueWrong; index = right = wrong = 0; wrongCards = []; render(); }));
+    if (uniqueWrong.length) actions.append(button('Retry missed cards', 'primary', () => { deck = uniqueWrong; index = right = wrong = 0; wrongCards = []; render(); }));
     if (unsent.length) actions.append(button('Retry unsent attempts', '', async () => { await retryUnsent(); renderEnd(); }));
     actions.append(button('Restart all', '', () => { deck = original.slice(); index = right = wrong = 0; wrongCards = []; render(); }));
     $('hint').textContent = unsent.length ? 'Some attempts could not reach Etude. Keep this page open and retry.' : 'All attempts saved.';
   }
   document.addEventListener('keydown', event => {
     if (event.target instanceof HTMLInputElement) return;
+    if (!selfMode && document.querySelector('.binary-grid') && (event.key === '1' || event.key === '2')) {
+      const choices = [...document.querySelectorAll('.binary-grid button')];
+      const selected = choices[Number(event.key) - 1]; if (selected) { event.preventDefault(); selected.click(); }
+      return;
+    }
     if (event.key === 'Enter' || (event.key === ' ' && selfMode)) {
       const focused = document.activeElement;
       if (focused instanceof HTMLButtonElement) { event.preventDefault(); focused.click(); }
     }
     if (selfMode && (event.key === '1' || event.key === '3')) {
       const buttons = [...document.querySelectorAll('.grades button')];
-      const chosen = event.key === '1' ? buttons[0] : buttons[1]; if (chosen) chosen.click();
+      const selected = event.key === '1' ? buttons[0] : buttons[1]; if (selected) selected.click();
     }
   });
-  $('queueLabel').textContent = data.queue_label || data.queue || 'Practice queue';
+  $('queueLabel').textContent = displayQueueLabel(data.queue_label || data.queue);
   render();
 })();
 </script>

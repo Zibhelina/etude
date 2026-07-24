@@ -298,7 +298,7 @@ Serves `dashboard/index.html` as `text/html`; JavaScript is `text/javascript` an
 
 #### `GET /applets/{template}?queue=Q&theme=T&n=N`
 
-`queue` is required; `theme` defaults to `meta.default_theme`; `n` defaults to 20. Template/theme names may omit `.html`/`.css` but must match directory entries (no traversal). `~/.etude/applets/` files override repository files. Atoms follow `etude.algorithms.order`. The server replaces both injection markers. Deterministic queue payloads include `expected`; agent payloads never do.
+`queue` is required; `theme` defaults to `meta.default_theme`; `n` defaults to 20. Template/theme names may omit `.html`/`.css` but must match directory entries (no traversal). `~/.etude/applets/` files override repository files. Atoms follow `etude.algorithms.order`. The server replaces both injection markers. Every drill atom includes `id`, `user_prompt`, `topic`, and `tags`. Deterministic queue payloads also include `expected`; agent payloads never do. The flashcard template uses the `true-false` tag to render direct binary controls.
 
 ```sh
 curl "$BASE/applets/flashcard-drill?queue=agent&theme=everforest&n=1"
@@ -307,7 +307,7 @@ curl "$BASE/applets/flashcard-drill?queue=agent&theme=everforest&n=1"
 Observed injected data (the ephemeral test port varies):
 
 ```json
-{"api":"http://127.0.0.1:43817","queue":"agent","queue_label":"Agent queue","mode":"agent","atoms":[{"id":"AG-2","user_prompt":"Explain TCP","topic":"Topic"}],"stats":{"total":1,"seen":0,"mastery":0.0,"per_queue":[{"id":"det","label":"Deterministic queue","total":1,"seen":0,"mastery":0.0},{"id":"agent","label":"Agent queue","total":1,"seen":0,"mastery":0.0}],"per_day":[{"date":"2026-06-24","count":0}],"days":30,"rating_dist":{"0":0,"1":0,"2":0,"3":0}}}
+{"api":"http://127.0.0.1:43817","queue":"agent","queue_label":"Agent queue","mode":"agent","atoms":[{"id":"AG-2","user_prompt":"Explain TCP","topic":"Topic","tags":["network"]}],"stats":{"total":1,"seen":0,"mastery":0.0,"per_queue":[{"id":"det","label":"Deterministic queue","total":1,"seen":0,"mastery":0.0},{"id":"agent","label":"Agent queue","total":1,"seen":0,"mastery":0.0}],"per_day":[{"date":"2026-06-24","count":0}],"days":30,"rating_dist":{"0":0,"1":0,"2":0,"3":0}}}
 ```
 
 The actual `per_day` array contains all 30 consecutive dates; one observed entry is shown.

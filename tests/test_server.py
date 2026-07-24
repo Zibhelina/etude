@@ -237,7 +237,26 @@ def test_applet_render_injects_data_hides_expected_in_agent_mode_and_overrides_t
     assert payload["queue"] == "agent"
     assert payload["queue_label"] == "Agent queue"
     assert payload["mode"] == "agent"
-    assert payload["atoms"] == [{"id": "AG-2", "user_prompt": "Explain TCP", "topic": "Topic"}]
+    assert payload["atoms"] == [{
+        "id": "AG-2", "user_prompt": "Explain TCP", "topic": "Topic", "tags": ["network"],
+    }]
+
+
+def test_flashcard_template_has_question_aware_binary_controls():
+    template = (Path(__file__).parents[1] / "applets" / "templates" / "flashcard-drill.html").read_text()
+
+    assert "function renderBinary" in template
+    assert "true-false" in template
+    assert 'className = "binary-grid"' in template
+    assert "stripDuplicateHeading" in template
+
+
+def test_flashcard_template_localizes_portuguese_study_chrome():
+    template = (Path(__file__).parents[1] / "applets" / "templates" / "flashcard-drill.html").read_text()
+
+    assert "function isPortuguese" in template
+    assert "Mostrar resposta" in template
+    assert "function displayQueueLabel" in template
 
 
 def test_every_applet_template_includes_the_auto_resize_bridge(running_server):

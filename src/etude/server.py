@@ -707,7 +707,12 @@ class EtudeHandler(BaseHTTPRequestHandler):
         atoms = []
         for atom_id in ordered_ids:
             atom = db["atoms"][atom_id]
-            item = {"id": atom_id, "user_prompt": atom.get("user_prompt", ""), "topic": atom.get("topic", "")}
+            item = {
+                "id": atom_id,
+                "user_prompt": atom.get("user_prompt", ""),
+                "topic": atom.get("topic", ""),
+                "tags": atom.get("tags", []),
+            }
             if mode == "deterministic":
                 item["expected"] = atom.get("expected")
             atoms.append(item)

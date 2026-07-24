@@ -49,7 +49,7 @@ All output is compact JSON. Server: `etude serve --port 2600` (dashboard at http
 ### Deterministic drill (flashcard-style)
 
 1. Confirm/create the queue with `agent_assisted` false (queue level or per atom). Deterministic atoms need `expected`.
-2. Ensure the server is running, then hand the user the link: `http://127.0.0.1:2600/applets/flashcard-drill?queue=Q` (append `&theme=X` on request). Attempts POST straight to the program — the agent is NOT in the per-attempt loop.
+2. Ensure the server is running, then hand the user the link: `http://127.0.0.1:2600/applets/flashcard-drill?queue=Q` (append `&theme=X` on request). Attempts POST straight to the program — the agent is NOT in the per-attempt loop. Tag binary items `true-false`; the applet then renders direct two-choice controls instead of a free-text field.
 3. Report afterwards from `etude stats --queue Q`.
 
 ### Applet-mediated, agent-graded

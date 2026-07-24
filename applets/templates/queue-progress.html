@@ -7,49 +7,62 @@
 <style>
 /*__THEME__*/
 * { box-sizing: border-box; }
-html, body { min-height: 100%; }
-body { margin: 0; padding: 12px; background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); }
-.card { width: min(620px, 100%); min-height: 360px; margin: 0 auto; padding: 28px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
-.label { color: var(--dim); font: 600 11px/1.3 var(--sans); letter-spacing: .1em; text-transform: uppercase; }
-h1 { margin: 8px 0 34px; font-size: 24px; line-height: 1.25; letter-spacing: -.02em; overflow-wrap: anywhere; }
-.metric-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 10px; }
-.metric-title { font-weight: 600; }
-.metric-value { color: var(--dim); font: 12px/1.4 var(--mono); white-space: nowrap; }
-.track { width: 100%; height: 18px; overflow: hidden; background: var(--panel2); border: 1px solid var(--border); border-radius: 7px; }
-.fill { height: 100%; width: 0; background: var(--accent); transition: width .2s ease; }
-.summary { margin-top: 10px; color: var(--dim); font-size: 13px; }
-.mastery { margin-top: 28px; }
-.mastery .track { height: 7px; border-radius: 6px; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); }
+.wrap { display: flex; flex-direction: column; height: 100%; padding: 22px 26px 20px; }
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.label { color: var(--faint); font: 600 10.5px/1.3 var(--sans); letter-spacing: .12em; text-transform: uppercase; }
+h1 { margin: 2px 0 0; font-size: 19px; line-height: 1.3; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.hero { display: flex; align-items: baseline; gap: 8px; margin-top: 18px; }
+.hero .big { font-size: 34px; font-weight: 700; letter-spacing: -.02em; line-height: 1; }
+.hero .of { color: var(--faint); font-size: 16px; }
+.hero .pct { margin-left: auto; color: var(--dim); font: 600 13px/1 var(--mono); }
+.track { width: 100%; height: 10px; margin-top: 12px; overflow: hidden; background: var(--panel2); border-radius: 999px; }
+.fill { height: 100%; width: 0; background: var(--accent); border-radius: 999px; transition: width .3s ease; }
+.stats { display: flex; gap: 0; margin-top: 14px; color: var(--dim); font-size: 13px; }
+.stats span + span::before { content: '·'; margin: 0 8px; color: var(--faint); }
+.stats b { color: var(--text); font-weight: 600; }
+.bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--border); }
+.mastery { flex: 1; min-width: 0; }
+.mastery .row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
+.mastery .row .t { font-size: 13px; font-weight: 600; }
+.mastery .row .v { color: var(--dim); font: 600 12px/1 var(--mono); }
+.mastery .track { height: 6px; margin-top: 0; }
 .mastery .fill { background: var(--green); }
-.ratings { margin-top: 32px; padding-top: 22px; border-top: 1px solid var(--border); }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.chip { padding: 5px 9px; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; font: 600 12px/1.2 var(--mono); transition: background .15s ease; }
-.chip:hover { background: var(--bg); }
-.chip[data-rating="0"] { color: var(--red); }
-.chip[data-rating="1"] { color: var(--yellow); }
-.chip[data-rating="2"] { color: var(--green); }
-.chip[data-rating="3"] { color: var(--accent); }
-@media (max-width: 420px) { .card { padding: 22px 18px; } .metric-head { align-items: start; flex-direction: column; gap: 4px; } }
+.chips { display: flex; gap: 6px; flex-shrink: 0; }
+.chip { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 40px; padding: 6px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+.chip .n { font: 700 14px/1.1 var(--mono); }
+.chip .r { color: var(--faint); font: 600 9.5px/1 var(--sans); letter-spacing: .06em; }
+.chip[data-rating="0"] .n { color: var(--red); }
+.chip[data-rating="1"] .n { color: var(--yellow); }
+.chip[data-rating="2"] .n { color: var(--green); }
+.chip[data-rating="3"] .n { color: var(--accent); }
+@media (max-width: 480px) { .bottom { flex-direction: column; align-items: stretch; } .chips { justify-content: space-between; } }
 </style>
 </head>
 <body>
-<main class="card">
-  <div class="label">Queue progress</div>
-  <h1 id="queueLabel">Untitled queue</h1>
-  <section>
-    <div class="metric-head"><span class="metric-title">Coverage</span><span class="metric-value" id="coveragePercent">0%</span></div>
-    <div class="track" id="coverageTrack" role="progressbar" aria-label="Queue coverage"><div class="fill" id="coverageFill"></div></div>
-    <div class="summary" id="summary">0 done · 0 remaining · 0 total</div>
-  </section>
-  <section class="mastery">
-    <div class="metric-head"><span class="metric-title">Mastery</span><span class="metric-value" id="masteryPercent">0%</span></div>
-    <div class="track" id="masteryTrack" role="progressbar" aria-label="Queue mastery"><div class="fill" id="masteryFill"></div></div>
-  </section>
-  <section class="ratings">
-    <div class="label">Rating distribution</div>
-    <div class="chips" id="ratings"></div>
-  </section>
-</main>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <div class="label">Queue progress</div>
+      <h1 id="queueLabel">Untitled queue</h1>
+    </div>
+  </div>
+  <div class="hero">
+    <span class="big" id="seenBig">0</span>
+    <span class="of" id="ofTotal">/ 0 practiced</span>
+    <span class="pct" id="coveragePercent">0%</span>
+  </div>
+  <div class="track" role="progressbar" aria-label="Queue coverage" id="coverageTrack"><div class="fill" id="coverageFill"></div></div>
+  <div class="stats" id="statsLine"></div>
+  <div class="bottom">
+    <div class="mastery">
+      <div class="row"><span class="t">Mastery</span><span class="v" id="masteryPercent">0%</span></div>
+      <div class="track" role="progressbar" aria-label="Queue mastery" id="masteryTrack"><div class="fill" id="masteryFill"></div></div>
+    </div>
+    <div class="chips" id="ratings" aria-label="Rating distribution"></div>
+  </div>
+</div>
 <script>
 const ETUDE = /*__DATA__*/null;
 (() => {
@@ -60,41 +73,39 @@ const ETUDE = /*__DATA__*/null;
   const num = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
   const whole = value => Math.max(0, Math.floor(num(value)));
   const ratio = value => Math.max(0, Math.min(1, num(value)));
-  const mdLite = value => {
-    const escaped = String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const parts = escaped.split(/```([\s\S]*?)```/g);
-    return parts.map((part, index) => index % 2
-      ? `<pre>${part.replace(/^\n|\n$/g, '')}</pre>`
-      : part.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
-    ).join('');
-  };
 
-  const total = whole(stats.total), seen = Math.min(total || whole(stats.seen), whole(stats.seen));
+  const total = whole(stats.total);
+  const seen = Math.min(total || whole(stats.seen), whole(stats.seen));
   const remaining = Number.isFinite(Number(stats.remaining)) ? whole(stats.remaining) : Math.max(0, total - seen);
   const coverage = total ? ratio(seen / total) : 0;
   const mastery = ratio(stats.mastery);
+
   $('queueLabel').textContent = data.queue_label || data.queue || 'Untitled queue';
-  $('summary').textContent = `${seen.toLocaleString()} done · ${remaining.toLocaleString()} remaining · ${total.toLocaleString()} total`;
+  $('seenBig').textContent = seen.toLocaleString();
+  $('ofTotal').textContent = `/ ${total.toLocaleString()} practiced`;
+  $('statsLine').innerHTML = `<span><b>${remaining.toLocaleString()}</b> remaining</span><span><b>${total.toLocaleString()}</b> total</span>`;
 
   function setProgress(trackId, fillId, value, textId) {
     const percent = Math.round(value * 100);
     $(fillId).style.width = `${percent}%`;
     $(textId).textContent = `${percent}%`;
-    $(trackId).setAttribute('aria-valuemin', '0');
-    $(trackId).setAttribute('aria-valuemax', '100');
-    $(trackId).setAttribute('aria-valuenow', String(percent));
+    const track = $(trackId);
+    track.setAttribute('aria-valuemin', '0');
+    track.setAttribute('aria-valuemax', '100');
+    track.setAttribute('aria-valuenow', String(percent));
   }
   setProgress('coverageTrack', 'coverageFill', coverage, 'coveragePercent');
   setProgress('masteryTrack', 'masteryFill', mastery, 'masteryPercent');
 
   const dist = stats.rating_dist && typeof stats.rating_dist === 'object' ? stats.rating_dist : {};
+  const names = ['fail', 'hard', 'good', 'easy'];
   [0, 1, 2, 3].forEach(rating => {
     const chip = document.createElement('span');
-    chip.className = 'chip'; chip.dataset.rating = String(rating);
-    chip.textContent = `${rating} · ${whole(dist[String(rating)] ?? dist[rating])}`;
+    chip.className = 'chip';
+    chip.dataset.rating = String(rating);
+    chip.innerHTML = `<span class="n">${whole(dist[String(rating)] ?? dist[rating])}</span><span class="r">${names[rating]}</span>`;
     $('ratings').append(chip);
   });
-  void mdLite;
 })();
 </script>
 </body>

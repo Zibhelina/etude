@@ -90,14 +90,14 @@ Some chat surfaces let an applet inject the user's attempt directly back into th
 When the user asks how they're doing:
 
 - Numeric: `etude stats [--queue Q] [--tags T] [--days N]` → coverage, mastery (mean of min(streak,3)/3, unseen = 0 — coverage-weighted preparedness, not literal competence; say so when forecasting), rating distribution, per-day activity. Render as a compact table or inline progress bar.
-- Visual: `http://127.0.0.1:2600/applets/progress?queue=Q`, or the dashboard (deep link `/#ATOM-ID`).
+- Visual: read-only widget templates, ideal for embedding in chat surfaces that render iframes/applets — `http://127.0.0.1:2600/applets/queue-progress?queue=Q` (progress bar: done/remaining/total, mastery, rating chips), `/applets/streaks?days=35` (per-day activity squares + current/best streak), `/applets/atom-card?atom=ID` (full atom inspection: prompt, state, attempt history with feedback). Legacy overview: `/applets/progress?queue=Q`. Or the dashboard (deep link `/#ATOM-ID`). All accept `&theme=X` (`default` dark, `notion` minimalist light, `everforest`).
 - Reusable visualizations belong in `applets/templates/` — save good one-offs as templates instead of regenerating them.
 
 Keep the user in the loop on placement decisions — ask when it's genuinely their call ("new queue for this, or add to X?"), decide silently when context makes it obvious. Say where things landed either way.
 
 ## Applets & themes
 
-- Templates in `applets/templates/` (flashcard-drill, matching-pairs, progress). The server injects `/*__THEME__*/` (theme CSS variables) and `const ETUDE = /*__DATA__*/null;` (payload). New templates MUST use exactly these two markers, only `var(--…)` colors, self-contained HTML, no external resources.
+- Templates in `applets/templates/` — interactive: flashcard-drill, matching-pairs; read-only widgets: queue-progress, streaks, atom-card, progress. Themes in `applets/themes/`: default (dark), notion (minimalist light), everforest. The server injects `/*__THEME__*/` (theme CSS variables) and `const ETUDE = /*__DATA__*/null;` (payload). New templates MUST use exactly these two markers, only `var(--…)` colors, self-contained HTML, no external resources.
 - Themes in `applets/themes/`. Contract: exactly the variables `--bg,--panel,--panel2,--border,--text,--dim,--faint,--accent,--green,--yellow,--red,--purple,--mono,--sans` in a `:root` block.
 - User-space overrides in `~/.etude/applets/` win over repo files.
 - Soft-commands (natural-language, user-reconfigurable): `#theme:NAME` = one-off theme for the next applet link; `#set-default-theme:NAME` = `etude edit-meta default_theme=NAME`. When creating a new theme, honor the variable contract and confirm rendering in a browser before delivering.

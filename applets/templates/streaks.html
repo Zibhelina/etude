@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Etude · Practice streak</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body { margin: 0; padding: 12px; background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); }
+.card { width: min(620px, 100%); min-height: 360px; margin: 0 auto; padding: 28px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+.label { color: var(--dim); font: 600 11px/1.3 var(--sans); letter-spacing: .1em; text-transform: uppercase; }
+h1 { margin: 8px 0 30px; font-size: 24px; line-height: 1.25; letter-spacing: -.02em; }
+.activity-wrap { overflow-x: auto; padding: 4px 0 12px; }
+.activity { min-width: max-content; display: flex; justify-content: flex-end; gap: 4px; }
+.day { position: relative; width: 14px; height: 14px; flex: 0 0 14px; overflow: hidden; background: var(--panel2); border: 1px solid var(--border); border-radius: 3px; transition: border-color .15s ease; }
+.day:hover { border-color: var(--dim); }
+.day::after { content: ''; position: absolute; inset: 0; background: var(--green); opacity: var(--intensity, 0); }
+.legend { display: flex; justify-content: space-between; gap: 16px; margin-top: 8px; color: var(--faint); font-size: 12px; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 30px; border-top: 1px solid var(--border); }
+.stat { min-width: 0; padding: 24px 18px 0 0; }
+.stat + .stat { padding-left: 18px; border-left: 1px solid var(--border); }
+.value { font-size: 34px; font-weight: 650; line-height: 1; letter-spacing: -.04em; }
+.unit { margin-left: 5px; color: var(--dim); font-size: 13px; }
+.stat-name { margin-top: 10px; color: var(--dim); font-size: 12px; }
+.empty { color: var(--faint); }
+@media (max-width: 440px) { .card { padding: 22px 18px; } .stats { grid-template-columns: 1fr; } .stat, .stat + .stat { padding: 18px 0; border-left: 0; border-bottom: 1px solid var(--border); } .stat:last-child { border-bottom: 0; } }
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="label">Etude activity</div>
+  <h1>Practice streak</h1>
+  <section aria-label="Daily practice activity">
+    <div class="activity-wrap" id="activityWrap"><div class="activity" id="activity"></div></div>
+    <div class="legend"><span id="firstDate"></span><span id="lastDate"></span></div>
+  </section>
+  <section class="stats">
+    <div class="stat"><span class="value" id="current">0</span><span class="unit">days</span><div class="stat-name">Current streak</div></div>
+    <div class="stat"><span class="value" id="best">0</span><span class="unit">days</span><div class="stat-name">Best streak</div></div>
+    <div class="stat"><span class="value" id="attempts">0</span><div class="stat-name">Total attempts</div></div>
+  </section>
+</main>
+<script>
+const ETUDE = /*__DATA__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const stats = data.stats && typeof data.stats === 'object' ? data.stats : {};
+  const $ = id => document.getElementById(id);
+  const whole = value => Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0;
+  const mdLite = value => {
+    const escaped = String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const parts = escaped.split(/```([\s\S]*?)```/g);
+    return parts.map((part, index) => index % 2
+      ? `<pre>${part.replace(/^\n|\n$/g, '')}</pre>`
+      : part.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('')
+    ).join('');
+  };
+
+  const days = Array.isArray(stats.per_day) ? stats.per_day : [];
+  const max = Math.max(0, ...days.map(day => whole(day && day.count)));
+  if (!days.length) {
+    const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = 'No activity yet';
+    $('activity').append(empty);
+  } else {
+    days.forEach(day => {
+      const count = whole(day && day.count), date = String(day && day.date || 'Unknown date');
+      const level = count === 0 ? 0 : Math.min(3, Math.max(1, Math.ceil(count / Math.max(1, max) * 3)));
+      const square = document.createElement('span'); square.className = 'day';
+      square.style.setProperty('--intensity', String([0, .32, .62, 1][level]));
+      square.title = `${date} · ${count}`;
+      square.setAttribute('aria-label', `${date}: ${count} attempts`);
+      $('activity').append(square);
+    });
+    $('firstDate').textContent = String(days[0]?.date || '');
+    $('lastDate').textContent = String(days[days.length - 1]?.date || '');
+    requestAnimationFrame(() => { $('activityWrap').scrollLeft = $('activityWrap').scrollWidth; });
+  }
+  $('current').textContent = whole(stats.current_streak).toLocaleString();
+  $('best').textContent = whole(stats.best_streak).toLocaleString();
+  $('attempts').textContent = whole(stats.total_attempts).toLocaleString();
+  void mdLite;
+})();
+</script>
+</body>
+</html>

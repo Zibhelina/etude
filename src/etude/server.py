@@ -601,14 +601,9 @@ class EtudeHandler(BaseHTTPRequestHandler):
 
     def _applet(self, template_name: str, query: Mapping[str, list[str]]) -> None:
         db = self._db()
-        queue_id = query.get("queue", [None])[0]
-        if not queue_id or queue_id not in db.get("queues", {}):
-            raise APIError(400, "queue must name an existing queue")
-        queue = db["queues"][queue_id]
         theme_name = query.get("theme", [None])[0] or db.get("meta", {}).get("default_theme", "default")
         if not isinstance(theme_name, str):
             raise APIError(400, "theme must be a string")
-        n = _positive_int(query.get("n", [None])[0], 20, "n")
         template_path = _named_file("template", template_name, ".html")
         theme_path = _named_file("theme", theme_name, ".css")
         try:
@@ -618,6 +613,60 @@ class EtudeHandler(BaseHTTPRequestHandler):
             raise APIError(404, str(exc)) from exc
         if "/*__THEME__*/" not in template or "/*__DATA__*/null" not in template:
             raise APIError(500, "applet template is missing injection markers")
+
+        payload = self._applet_payload(db, template_name, query)
+        rendered = template.replace("/*__THEME__*/", theme).replace(
+            "/*__DATA__*/null", json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        )
+        self._send(200, rendered.encode("utf-8"), "text/html; charset=utf-8")
+
+    def _applet_payload(
+        self, db: Mapping[str, Any], template_name: str, query: Mapping[str, list[str]]
+    ) -> dict[str, Any]:
+        """Per-template payload. Widget templates (queue-progress, streaks,
+        atom-card) get focused read-only payloads; everything else gets the
+        classic drill payload (queue required, atoms ordered by algorithm)."""
+        api = f"http://127.0.0.1:{self.server.server_port}"
+        base = {"api": api, "template": template_name}
+
+        if template_name == "streaks":
+            days = _positive_int(query.get("days", [None])[0], 35, "days")
+            stats = _stats(db, None, days)
+            per_day = stats["per_day"]
+            counts = [entry["count"] for entry in per_day]
+            current = 0
+            for count in reversed(counts):
+                if count <= 0:
+                    break
+                current += 1
+            best = run = 0
+            for count in counts:
+                run = run + 1 if count > 0 else 0
+                best = max(best, run)
+            return {**base, "stats": {
+                "per_day": per_day,
+                "current_streak": current,
+                "best_streak": best,
+                "total_attempts": sum(counts),
+            }}
+
+        if template_name == "atom-card":
+            atom_id = query.get("atom", [None])[0]
+            if not atom_id or atom_id not in db.get("atoms", {}):
+                raise APIError(400, "atom must name an existing atom")
+            return {**base, "atom": {"id": atom_id, **db["atoms"][atom_id]}}
+
+        queue_id = query.get("queue", [None])[0]
+        if not queue_id or queue_id not in db.get("queues", {}):
+            raise APIError(400, "queue must name an existing queue")
+        queue = db["queues"][queue_id]
+
+        if template_name == "queue-progress":
+            stats = _stats(db, queue_id, 30)
+            stats["remaining"] = max(stats["total"] - stats["seen"], 0)
+            return {**base, "queue": queue_id, "queue_label": queue.get("label", queue_id), "stats": stats}
+
+        n = _positive_int(query.get("n", [None])[0], 20, "n")
         # Mode resolves PER ATOM (atom.agent_assisted > queue.agent_assisted > True);
         # the applet is deterministic when every included atom resolves deterministic.
         ordered_ids = algorithms.order(db, queue_id, _now_iso())[:n]
@@ -633,18 +682,14 @@ class EtudeHandler(BaseHTTPRequestHandler):
             if mode == "deterministic":
                 item["expected"] = atom.get("expected")
             atoms.append(item)
-        payload = {
-            "api": f"http://127.0.0.1:{self.server.server_port}",
+        return {
+            **base,
             "queue": queue_id,
             "queue_label": queue.get("label", queue_id),
             "mode": mode,
             "atoms": atoms,
             "stats": _stats(db, queue_id, 30),
         }
-        rendered = template.replace("/*__THEME__*/", theme).replace(
-            "/*__DATA__*/null", json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-        )
-        self._send(200, rendered.encode("utf-8"), "text/html; charset=utf-8")
 
     @staticmethod
     def _mtime(path: Path) -> int | None:

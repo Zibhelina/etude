@@ -1,16 +1,43 @@
 :root {
-  --bg: #2d353b;
-  --panel: #343f44;
-  --panel2: #3d484d;
-  --border: #475258;
-  --text: #d3c6aa;
-  --dim: #9da9a0;
-  --faint: #7a8478;
+  color-scheme: dark;
+  --surface-0: #2d353b;
+  --surface-1: #343f44;
+  --surface-2: #3d484d;
+  --text-primary: #e3d8bd;
+  --text-secondary: #b4bdb5;
+  --text-muted: #adb7ad;
+  --border: rgba(211,198,170,0.12);
+  --border-strong: rgba(211,198,170,0.20);
+  --radius-control: 8px;
+  --radius-card: 12px;
   --accent: #7fbbb3;
-  --green: #a7c080;
+  --orange: #e69875;
+  --aqua: #83c092;
   --yellow: #dbbc7f;
+  --magenta: #d699b6;
+  --green: #a7c080;
+  --violet: #d699b6;
   --red: #e67e80;
-  --purple: #d699b6;
-  --mono: ui-monospace,SF Mono,Menlo,monospace;
-  --sans: -apple-system,Inter,system-ui,sans-serif;
+  --accent-text: #91cec5;
+  --yellow-text: #e4c98e;
+  --green-text: #b7cf92;
+  --red-text: #f3a5a6;
+  --violet-text: #e0acd0;
+  --accent-strong: #7fbbb3;
+  --on-accent: #1a1a19;
+  --status-good: #a7c080;
+  --status-warning: #dbbc7f;
+  --status-severe: #e69875;
+  --status-critical: #e67e80;
+  --mono: ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+  --sans: -apple-system, Inter, system-ui, sans-serif;
+
+  /* Compatibility aliases for pre-design-system user templates. */
+  --bg: var(--surface-0);
+  --panel: var(--surface-1);
+  --panel2: var(--surface-2);
+  --text: var(--text-primary);
+  --dim: var(--text-secondary);
+  --faint: var(--text-muted);
+  --purple: var(--violet);
 }

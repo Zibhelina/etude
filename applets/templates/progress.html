@@ -3,42 +3,44 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
 <title>Etude · Progress</title>
 <style>
 /*__THEME__*/
 * { box-sizing: border-box; }
 html, body { min-height: 100%; }
-body { margin: 0; padding: clamp(18px, 4vw, 42px); background: var(--bg); color: var(--text); font-family: var(--sans); }
+body { margin: 0; padding: clamp(18px, 4vw, 42px); background: var(--surface-0); color: var(--text-primary); font: 16px/1.7 var(--sans); }
 .shell { width: min(1040px, 100%); margin: 0 auto; }
 header { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 28px; }
-.eyebrow { color: var(--accent); font: 700 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
-h1 { margin: 8px 0 0; font-size: clamp(32px, 6vw, 52px); letter-spacing: -.04em; }
-.scope { color: var(--dim); font: 600 13px/1.4 var(--mono); text-align: right; }
+.eyebrow { color: var(--accent-text); font: 500 12px/1 var(--mono); letter-spacing: .02em; }
+h1 { margin: 8px 0 0; font-size: clamp(32px, 6vw, 52px); font-weight: 500; letter-spacing: -.04em; }
+.scope { color: var(--text-secondary); font: 500 13px/1.4 var(--mono); text-align: right; }
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
-.panel { padding: 22px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; }
+.panel { padding: 22px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card); }
 .summary { grid-column: span 4; min-height: 160px; }
 .queues { grid-column: span 8; grid-row: span 2; }
 .ratings { grid-column: span 4; }
 .activity { grid-column: 1 / -1; }
-.label { color: var(--dim); font: 700 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
-.big { margin-top: 13px; font-size: clamp(42px, 7vw, 64px); font-weight: 800; letter-spacing: -.05em; }
-.sub { margin-top: 4px; color: var(--dim); }
-h2 { margin: 0 0 20px; font-size: 18px; }
+.label { color: var(--text-secondary); font: 500 12px/1 var(--mono); letter-spacing: .02em; }
+.big { margin-top: 13px; font-size: clamp(42px, 7vw, 64px); font-weight: 500; letter-spacing: -.05em; }
+.sub { margin-top: 4px; color: var(--text-secondary); }
+h2 { margin: 0 0 20px; font-size: 18px; font-weight: 500; }
 .queue-list { display: grid; gap: 20px; }
 .queue-head { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 9px; }
-.queue-name { font-weight: 700; overflow-wrap: anywhere; }
-.queue-count { flex: none; color: var(--dim); font: 12px/1.4 var(--mono); }
-.track { height: 8px; overflow: hidden; background: var(--panel2); border-radius: 99px; }
+.queue-name { font-weight: 500; overflow-wrap: anywhere; }
+.queue-count { flex: none; color: var(--text-secondary); font: 12px/1.4 var(--mono); }
+.track { height: 8px; overflow: hidden; background: var(--surface-2); border-radius: 99px; }
 .fill { height: 100%; background: var(--accent); border-radius: inherit; }
 .chips { display: flex; flex-wrap: wrap; gap: 9px; }
-.chip { padding: 9px 12px; background: var(--panel2); border: 1px solid var(--border); border-radius: 99px; font: 700 12px/1 var(--mono); }
-.chip[data-rating="0"] { color: var(--red); } .chip[data-rating="1"] { color: var(--yellow); } .chip[data-rating="2"] { color: var(--accent); } .chip[data-rating="3"] { color: var(--green); }
+.chip { padding: 9px 12px; background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 99px; font: 500 12px/1 var(--mono); }
+.chip[data-rating="0"] { color: var(--red-text); } .chip[data-rating="1"] { color: var(--yellow-text); } .chip[data-rating="2"] { color: var(--accent-text); } .chip[data-rating="3"] { color: var(--green-text); }
 .chart-wrap { overflow-x: auto; padding-top: 8px; }
-.chart { min-width: 420px; height: 170px; display: flex; align-items: end; gap: clamp(4px, 1vw, 10px); border-bottom: 1px solid var(--border); }
-.day { flex: 1; min-width: 7px; height: 100%; display: flex; flex-direction: column; justify-content: end; align-items: center; gap: 7px; }
-.bar { width: 100%; min-height: 2px; background: var(--purple); border-radius: 5px 5px 0 0; }
-.day-label { height: 16px; color: var(--faint); font: 10px/1 var(--mono); white-space: nowrap; }
-.empty { color: var(--faint); line-height: 1.6; }
+.chart { min-width: 420px; height: 132px; display: flex; align-items: end; gap: clamp(4px, 1vw, 10px); padding: 0 4px; border-bottom: 0.5px solid var(--border-strong); }
+.day { flex: 1; min-width: 7px; height: 100%; display: flex; align-items: end; }
+.bar { width: 100%; min-height: 2px; background: var(--accent); border-radius: 5px 5px 0 0; }
+.chart-dates { min-width: 420px; display: flex; justify-content: space-between; padding: 8px 4px 0; color: var(--text-secondary); font: 12px/1.4 var(--mono); }
+.empty { color: var(--text-muted); line-height: 1.6; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 760px) { header { align-items: start; flex-direction: column; } .scope { text-align: left; } .summary, .queues, .ratings { grid-column: 1 / -1; } .queues { grid-row: auto; } }
 </style>
 </head>
@@ -49,7 +51,7 @@ h2 { margin: 0 0 20px; font-size: 18px; }
     <section class="panel summary"><div class="label">Mastery</div><div class="big" id="mastery">—</div><div class="sub" id="coverage"></div></section>
     <section class="panel queues"><h2>Queue progress</h2><div class="queue-list" id="queues"></div></section>
     <section class="panel ratings"><h2>Rating distribution</h2><div class="chips" id="ratings"></div></section>
-    <section class="panel activity"><h2 id="activityTitle">Daily activity</h2><div class="chart-wrap"><div class="chart" id="chart"></div></div></section>
+    <section class="panel activity"><h2 id="activityTitle">Daily activity</h2><p class="sr-only" id="chartSummary"></p><div class="chart-wrap"><div class="chart" id="chart" role="img" aria-label="Daily practice attempts over time"></div><div class="chart-dates"><span id="chartDateStart"></span><span id="chartDateEnd"></span></div></div></section>
   </div>
 </main>
 <script>
@@ -59,6 +61,7 @@ const ETUDE = /*__DATA__*/null;
   const data = ETUDE || {}, stats = data.stats && typeof data.stats === 'object' ? data.stats : {};
   const $ = id => document.getElementById(id);
   const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+  const whole = value => Math.max(0, Math.round(number(value, 0)));
   const percent = value => {
     const n = number(value, NaN); if (!Number.isFinite(n)) return null;
     return Math.max(0, Math.min(100, n <= 1 ? n * 100 : n));
@@ -74,20 +77,20 @@ const ETUDE = /*__DATA__*/null;
   const queueData = asArray(stats.queues || stats.per_queue || data.queues);
   if (!queueData.length) $('queues').innerHTML = '<div class="empty">No queue progress was provided.</div>';
   else queueData.forEach((queue, index) => {
-    const done = number(queue.done ?? queue.seen ?? queue.completed, 0), queueTotal = number(queue.total, 0);
+    const done = whole(queue.done ?? queue.seen ?? queue.completed), queueTotal = whole(queue.total);
     const ratio = queueTotal ? Math.max(0, Math.min(100, done / queueTotal * 100)) : 0;
     const row = document.createElement('div'); row.className = 'queue-row';
     const head = document.createElement('div'); head.className = 'queue-head';
     const name = document.createElement('div'); name.className = 'queue-name'; name.textContent = queue.label || queue.name || queue.id || `Queue ${index + 1}`;
     const count = document.createElement('div'); count.className = 'queue-count'; count.textContent = `${done} / ${queueTotal}`;
-    const track = document.createElement('div'); track.className = 'track'; track.setAttribute('role', 'progressbar'); track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', String(queueTotal)); track.setAttribute('aria-valuenow', String(done));
+    const track = document.createElement('div'); track.className = 'track'; track.setAttribute('role', 'progressbar'); track.setAttribute('aria-label', `${name.textContent} progress`); track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', String(queueTotal)); track.setAttribute('aria-valuenow', String(done)); track.setAttribute('aria-valuetext', `${done} of ${queueTotal}`);
     const fill = document.createElement('div'); fill.className = 'fill'; fill.style.width = `${ratio}%`;
     head.append(name, count); track.append(fill); row.append(head, track); $('queues').append(row);
   });
 
   const distribution = stats.rating_distribution || stats.ratings || stats.rating_dist || {};
   const ratingNames = ['Fail', 'Hard', 'Good', 'Easy'];
-  const ratingEntries = [0,1,2,3].map(rating => [rating, number(distribution[rating] ?? distribution[String(rating)], 0)]);
+  const ratingEntries = [0,1,2,3].map(rating => [rating, whole(distribution[rating] ?? distribution[String(rating)])]);
   if (!ratingEntries.some(([, count]) => count)) $('ratings').innerHTML = '<div class="empty">No ratings yet.</div>';
   else ratingEntries.forEach(([rating, count]) => {
     const chip = document.createElement('span'); chip.className = 'chip'; chip.dataset.rating = String(rating); chip.textContent = `${ratingNames[rating]} ${count}`; $('ratings').append(chip);
@@ -99,14 +102,17 @@ const ETUDE = /*__DATA__*/null;
   $('activityTitle').textContent = `Daily activity${requestedDays ? ` · last ${requestedDays} days` : ''}`;
   if (!activity.length) $('chart').innerHTML = '<div class="empty">No daily activity was provided.</div>';
   else {
-    const counts = activity.map(day => number(day.count ?? day.attempts ?? day.total ?? day.value, 0));
+    const counts = activity.map(day => whole(day.count ?? day.attempts ?? day.total ?? day.value));
     const max = Math.max(1, ...counts);
+    $('chartSummary').textContent = activity.map((day, index) => `${String(day.date || day.day || day.id || 'Day')}: ${Math.round(counts[index])} attempts`).join('; ');
+    $('chartDateStart').textContent = String(activity[0].date || activity[0].day || activity[0].id || '');
+    const lastDay = activity[activity.length - 1];
+    $('chartDateEnd').textContent = String(lastDay.date || lastDay.day || lastDay.id || '');
     activity.forEach((day, index) => {
       const date = String(day.date || day.day || day.id || ''); const count = counts[index];
       const cell = document.createElement('div'); cell.className = 'day'; cell.title = `${date || 'Day'}: ${count} attempts`;
-      const bar = document.createElement('div'); bar.className = 'bar'; bar.style.height = `${Math.max(2, count / max * 138)}px`; bar.setAttribute('aria-label', cell.title);
-      const label = document.createElement('div'); label.className = 'day-label'; label.textContent = (index === 0 || index === activity.length - 1 || activity.length <= 10 || index % 5 === 0) ? date.slice(5) : '';
-      cell.append(bar, label); $('chart').append(cell);
+      const bar = document.createElement('div'); bar.className = 'bar'; bar.style.height = `${Math.max(2, count / max * 124)}px`; bar.setAttribute('aria-label', cell.title);
+      cell.append(bar); $('chart').append(cell);
     });
   }
 })();

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
 <title>Etude · Flashcard drill</title>
 <style>
 /*__THEME__*/
@@ -11,9 +12,11 @@ html, body { min-height: 0; }
 body {
   margin: 0;
   padding: clamp(16px, 3vw, 24px);
-  color: var(--text);
-  background: var(--bg);
+  color: var(--text-primary);
+  background: var(--surface-0);
   font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.7;
   font-feature-settings: "cv01", "ss03";
   -webkit-font-smoothing: antialiased;
 }
@@ -33,9 +36,9 @@ button:focus-visible, input:focus-visible {
 }
 .brand-line { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand {
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 12px;
-  font-weight: 590;
+  font-weight: 500;
   letter-spacing: -.01em;
 }
 .brand-mark {
@@ -44,22 +47,21 @@ button:focus-visible, input:focus-visible {
   flex: 0 0 auto;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 16px var(--accent);
 }
 .queue {
   min-width: 0;
   overflow: hidden;
-  color: var(--dim);
+  color: var(--text-secondary);
   font-size: 13px;
-  font-weight: 450;
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .counter {
   padding: 5px 9px;
-  color: var(--dim);
-  background: var(--panel);
-  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border);
   border-radius: 999px;
   font: 500 11px/1 var(--mono);
   font-variant-numeric: tabular-nums;
@@ -68,7 +70,7 @@ button:focus-visible, input:focus-visible {
   height: 2px;
   margin: 0 2px 18px;
   overflow: hidden;
-  background: var(--panel2);
+  background: var(--surface-2);
   border-radius: 999px;
 }
 .fill {
@@ -82,17 +84,16 @@ button:focus-visible, input:focus-visible {
   position: relative;
   overflow: hidden;
   padding: clamp(24px, 5vw, 40px);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  box-shadow: 0 1px 0 var(--border);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-card);
 }
 .card::before {
   content: "";
   position: absolute;
   inset: 0 0 auto;
   height: 1px;
-  background: var(--panel2);
+  background: var(--surface-2);
   pointer-events: none;
 }
 .question-head {
@@ -107,36 +108,35 @@ button:focus-visible, input:focus-visible {
   max-width: 100%;
   overflow: hidden;
   padding: 6px 9px;
-  color: var(--purple);
-  background: var(--panel2);
-  border: 1px solid var(--border);
-  border-radius: 7px;
+  color: var(--violet-text);
+  background: var(--surface-2);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-control);
   font-size: 10px;
-  font-weight: 590;
+  font-weight: 500;
   letter-spacing: .07em;
   line-height: 1;
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 .prompt {
   max-width: 650px;
   margin: 0 auto;
-  color: var(--text);
+  color: var(--text-primary);
   text-align: center;
   font-size: clamp(25px, 4.4vw, 36px);
-  font-weight: 510;
+  font-weight: 500;
   letter-spacing: -.035em;
   line-height: 1.22;
   overflow-wrap: anywhere;
 }
-.prompt strong { font-weight: 590; }
+.prompt strong { font-weight: 500; }
 .prompt code, .answer code {
   display: inline;
   padding: .06em .24em;
-  color: var(--text);
-  background: var(--panel2);
-  border: 1px solid var(--border);
+  color: var(--text-primary);
+  background: var(--surface-2);
+  border: 0.5px solid var(--border);
   border-radius: 6px;
   font-family: var(--mono);
   font-size: .76em;
@@ -157,85 +157,84 @@ input {
   min-width: 0;
   height: 50px;
   padding: 0 16px;
-  color: var(--text);
-  background: var(--panel2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+  color: var(--text-primary);
+  background: var(--surface-2);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-control);
+  transition: border-color .15s ease, background .15s ease;
 }
-input::placeholder { color: var(--faint); }
-input:hover { border-color: var(--dim); }
+input::placeholder { color: var(--text-muted); }
+input:hover { border-color: var(--text-secondary); }
 input:focus {
   border-color: var(--accent);
-  background: var(--panel);
-  box-shadow: 0 0 0 3px var(--panel2);
+  background: var(--surface-1);
 }
 button {
   min-height: 48px;
   padding: 0 18px;
-  color: var(--text);
-  background: var(--panel2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  color: var(--text-primary);
+  background: var(--surface-2);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-control);
   cursor: pointer;
-  font-weight: 590;
+  font-weight: 500;
   transition: transform .12s ease, border-color .12s ease, background .12s ease, color .12s ease;
 }
-button:hover:not(:disabled) { border-color: var(--dim); background: var(--panel); transform: translateY(-1px); }
+button:hover:not(:disabled) { border-color: var(--text-secondary); background: var(--surface-1); transform: translateY(-1px); }
 button:active:not(:disabled) { transform: translateY(0); }
 button:disabled { cursor: wait; opacity: .68; }
-.primary { color: var(--bg); background: var(--accent); border-color: var(--accent); }
-.primary:hover:not(:disabled) { color: var(--bg); background: var(--text); border-color: var(--text); }
+.primary { color: var(--on-accent); background: var(--accent-strong); border-color: var(--accent-strong); }
+.primary:hover:not(:disabled) { color: var(--surface-0); background: var(--text-primary); border-color: var(--text-primary); }
 .secondary {
   min-height: 38px;
   justify-self: center;
   padding: 0 13px;
-  color: var(--dim);
-  background: var(--panel2);
+  color: var(--text-secondary);
+  background: var(--surface-2);
   border-color: var(--border);
   font-size: 13px;
   font-weight: 500;
 }
-.secondary:hover:not(:disabled) { color: var(--text); background: var(--panel); border-color: var(--dim); }
+.secondary:hover:not(:disabled) { color: var(--text-primary); background: var(--surface-1); border-color: var(--text-secondary); }
 .binary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .binary-choice {
   min-height: 64px;
-  background: var(--panel2);
+  background: var(--surface-2);
   font-size: 16px;
   letter-spacing: -.01em;
 }
-.binary-choice:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.binary-choice:hover:not(:disabled) { color: var(--accent-text); border-color: var(--accent); }
 .choice-key {
   display: inline-grid;
   place-items: center;
   width: 22px;
   height: 22px;
   margin-right: 9px;
-  color: var(--faint);
-  background: var(--panel);
-  border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border);
   border-radius: 5px;
   font: 500 10px/1 var(--mono);
 }
 .feedback {
   padding: 16px 18px;
-  color: var(--dim);
-  background: var(--panel2);
-  border: 1px solid var(--border);
-  border-radius: 11px;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-card);
   line-height: 1.5;
 }
 .feedback.right { border-color: var(--green); }
 .feedback.wrong { border-color: var(--red); }
-.feedback strong { color: var(--text); font-weight: 590; }
-.feedback .label { color: var(--dim); font-size: 13px; }
+.feedback strong { color: var(--text-primary); font-weight: 500; }
+.feedback .label { color: var(--text-secondary); font-size: 13px; }
 .grades { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .wrong-button { border-color: var(--red); }
 .right-button { border-color: var(--green); }
 .hint {
   min-height: 17px;
   margin: 18px 0 0;
-  color: var(--faint);
+  color: var(--text-muted);
   text-align: center;
   font-size: 11px;
   line-height: 1.5;
@@ -245,9 +244,9 @@ kbd {
   min-width: 21px;
   margin: 0 2px;
   padding: 2px 5px;
-  color: var(--dim);
-  background: var(--panel);
-  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border);
   border-radius: 5px;
   font: 500 10px/1.2 var(--mono);
 }
@@ -259,20 +258,20 @@ kbd {
   padding: clamp(30px, 5vw, 38px);
   text-align: center;
 }
-.completion-label { margin: 0 0 12px; color: var(--accent); font-size: 12px; font-weight: 590; }
-.end h1 { margin: 0 0 22px; font-size: clamp(34px, 7vw, 52px); font-weight: 510; letter-spacing: -.045em; }
+.completion-label { margin: 0 0 12px; color: var(--accent-text); font-size: 12px; font-weight: 500; }
+.end h1 { margin: 0 0 22px; font-size: clamp(34px, 7vw, 52px); font-weight: 500; letter-spacing: -.045em; }
 .score { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
-.chip { padding: 8px 11px; background: var(--panel2); border: 1px solid var(--border); border-radius: 999px; font: 500 11px/1 var(--mono); }
-.good { color: var(--green); }
-.bad { color: var(--red); }
-.unsent { color: var(--yellow); }
+.chip { padding: 8px 11px; background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 999px; font: 500 11px/1 var(--mono); }
+.good { color: var(--green-text); }
+.bad { color: var(--red-text); }
+.unsent { color: var(--yellow-text); }
 .end-actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
 .hidden { display: none !important; }
 @media (max-width: 560px) {
   body { padding: 12px; }
   .session-bar { gap: 10px; }
   .brand { display: none; }
-  .card { padding: 24px 18px; border-radius: 14px; }
+  .card { padding: 24px 18px; border-radius: var(--radius-card); }
   .question-head { margin-bottom: 26px; }
   .prompt { font-size: clamp(23px, 7vw, 30px); }
   .controls { margin-top: 30px; }
@@ -341,7 +340,7 @@ const ETUDE = /*__DATA__*/null;
   function uiFor(atom, answers = accepted(atom)) {
     if (isPortuguese(atom, answers)) return {
       placeholder: 'Digite sua resposta…', check: 'Verificar', show: 'Mostrar resposta',
-      answerWithoutReveal: 'Responder sem revelar', correct: 'Correto', notQuite: 'Ainda não', accepted: 'Aceitas',
+      answerWithoutReveal: 'Responder sem revelar', correct: 'Correto', notQuite: 'Resposta incorreta', accepted: 'Aceitas',
       next: 'Próximo item', summary: 'Ver resumo', answer: 'Resposta', review: 'Rever · 1', gotIt: 'Acertei · 3',
       toAnswer: 'para responder', toCheck: 'para verificar', toContinue: 'para continuar',
       reviewAgain: 'rever', reveal: 'para revelar',
@@ -351,7 +350,7 @@ const ETUDE = /*__DATA__*/null;
     };
     return {
       placeholder: 'Type your answer…', check: 'Check answer', show: 'Show answer',
-      answerWithoutReveal: 'Answer without revealing', correct: 'Correct', notQuite: 'Not quite', accepted: 'Accepted',
+      answerWithoutReveal: 'Answer without revealing', correct: 'Correct', notQuite: 'Incorrect answer', accepted: 'Accepted',
       next: 'Next card', summary: 'See summary', answer: 'Answer', review: 'Review again · 1', gotIt: 'Got it · 3',
       toAnswer: 'to answer', toCheck: 'to check', toContinue: 'to continue',
       reviewAgain: 'review again', reveal: 'to reveal',
@@ -458,7 +457,7 @@ const ETUDE = /*__DATA__*/null;
     const atom = deck[index];
     const ui = uiFor(atom, answers);
     const box = document.createElement('div'); box.className = `feedback ${isRight ? 'right' : 'wrong'}`;
-    box.innerHTML = `<strong>${isRight ? ui.correct : ui.notQuite}</strong><br><span class="label">${ui.accepted}: ${answers.map(lightMarkdown).join(' · ')}</span>`;
+    box.innerHTML = `<strong><span aria-hidden="true">${isRight ? '✓' : '!'}</span> ${isRight ? ui.correct : ui.notQuite}</strong><br><span class="label">${ui.accepted}: ${answers.map(lightMarkdown).join(' · ')}</span>`;
     const next = button(index + 1 < deck.length ? ui.next : ui.summary, 'primary', advance);
     $('controls').replaceChildren(box, next); $('hint').innerHTML = `<kbd>Enter</kbd> ${ui.toContinue}`; next.focus();
   }

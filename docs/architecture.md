@@ -41,9 +41,14 @@ etude/
 │   ├── templates/             # reusable applet templates (self-contained HTML)
 │   │   ├── flashcard-drill.html
 │   │   ├── matching-pairs.html
-│   │   └── progress.html
+│   │   ├── progress.html
+│   │   ├── queue-progress.html
+│   │   ├── queue-items.html
+│   │   ├── streaks.html
+│   │   └── atom-card.html
 │   └── themes/
 │       ├── default.css        # dark, refined (dashboard palette)
+│       ├── notion.css         # light, neutral
 │       └── everforest.css
 ├── tests/                     # pytest, stdlib-runnable via python -m pytest
 └── scripts/
@@ -202,8 +207,9 @@ The inbox is the v1 mechanism for "applet sends the attempt to the agent's sessi
 
 ### 4.4 Applets and themes
 
-- **Templates** (`applets/templates/`): self-contained HTML files with two injection points: `/*__THEME__*/` (CSS variables block) and `/*__DATA__*/` (JSON payload: atoms to drill, API base URL, queue id). Drill atoms include `id`, `user_prompt`, `topic`, and `tags`, plus `applet_data` when the atom defines it; deterministic payloads also include `expected`, while agent-assisted payloads never expose it. The matching-pairs template reads `atom.applet_data.pairs`; the flashcard template uses the `true-false` tag to render direct binary controls instead of a free-text field. The server renders `GET /applets/{template}?queue=Q&theme=T` by injecting both and a shared `ResizeObserver` bridge. The bridge posts `{lotus: 1, type: "resize", height}` to a supporting parent whenever the document height changes; other surfaces ignore it. Templates whose height should shrink as their state becomes shorter opt in with `data-fit-content` on `<body>`; the bridge then measures the body children instead of the viewport floor. This keeps every Etude applet free of nested scrollbars in Lotus without duplicating sizing code across templates. Templates never hardcode colors — only `var(--…)` from the theme contract.
-- **Theme contract** (every theme defines exactly these variables): `--bg, --panel, --panel2, --border, --text, --dim, --faint, --accent, --green, --yellow, --red, --purple, --mono, --sans`.
+- **Templates** (`applets/templates/`): self-contained HTML files with two injection points: `/*__THEME__*/` (CSS variables block) and `/*__DATA__*/` (JSON payload: atoms to drill, API base URL, queue id). Drill atoms include `id`, `user_prompt`, `topic`, and `tags`, plus `applet_data` when the atom defines it; deterministic payloads also include `expected`, while agent-assisted payloads never expose it. The `queue-items` widget receives every queue member in algorithm order with its position, topic, prompt, resolved correction mode, scheduler state, attempt count, last rating, and due date. The matching-pairs template reads `atom.applet_data.pairs`; the flashcard template uses the `true-false` tag to render direct binary controls instead of the free-text field. The server renders `GET /applets/{template}?queue=Q&theme=T` by injecting both and a shared `ResizeObserver` bridge. Payload JSON escapes HTML-significant characters before inline-script injection; themes containing a closing `style` tag are rejected. The bridge posts `{lotus: 1, type: "resize", height}` to a supporting parent whenever the document height changes; other surfaces ignore it. Templates whose height should shrink as their state becomes shorter opt in with `data-fit-content` on `<body>`; the bridge then measures the body children instead of the viewport floor. This keeps every Etude applet free of nested scrollbars in Lotus without duplicating sizing code across templates.
+- **Visual contract:** `docs/applet-design.md` defines display selection, hierarchy, palette order, typography, accessibility, chart rules, and the review gate. Templates use no external resources, no hardcoded colors, sentence-case labels, weights 400/500, 0.5px borders, keyboard focus, reduced-motion handling where needed, and text equivalents for visualizations.
+- **Theme contract:** every theme defines `--surface-0, --surface-1, --surface-2, --text-primary, --text-secondary, --text-muted, --border, --border-strong, --radius-control, --radius-card, --accent, --orange, --aqua, --yellow, --magenta, --green, --violet, --red`, accessible `*-text` variants, `--accent-strong, --on-accent, --status-good, --status-warning, --status-severe, --status-critical, --mono, --sans`. Shipped themes retain the old short names as compatibility aliases for pre-design-system user templates.
 - `meta.default_theme` names the active default; a request may override with `?theme=`. `default` is the refined dark theme; `notion` is the light option. Agent soft-commands (defined in the skill, not in code): `#theme:everforest` (one-off), `#set-default-theme:everforest` (persists via `etude edit-meta default_theme=…`).
 - Agents may add new templates/themes over time; user-space additions go in `~/.etude/applets/` which the server overlays over the repo's `applets/` (user-space wins on name collision).
 

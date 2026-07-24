@@ -71,7 +71,7 @@ Full reference: [`docs/api.md`](docs/api.md). Same operations over HTTP (`/api/�
 
 ### Applets and themes
 
-`GET /applets/flashcard-drill?queue=german-w3&theme=everforest` returns a self-contained HTML drill: the server injects the theme's CSS variables and the queue's atoms into the template. Deterministic drills POST attempts straight to `/api/attempts`; interactive templates (matching-pairs) POST structured payloads to `/api/inbox` for the agent to grade. Templates live in `applets/templates/`, themes in `applets/themes/`; user-space additions in `~/.etude/applets/` override the shipped ones. Agents are expected to grow this library over time instead of regenerating UI per session.
+`GET /applets/flashcard-drill?queue=german-w3&theme=everforest` returns a self-contained HTML drill: the server injects the theme's CSS variables and the queue's atoms into the template. Deterministic drills POST attempts straight to `/api/attempts`; interactive templates (matching-pairs) POST structured payloads to `/api/inbox` for the agent to grade. Read-only templates cover queue progress, queue items, streaks, atom inspection, and overview stats. Templates live in `applets/templates/`, themes in `applets/themes/`; user-space additions in `~/.etude/applets/` override the shipped ones. Agents are expected to grow this library over time instead of regenerating UI per session. New UI follows the professional visual and accessibility contract in [`docs/applet-design.md`](docs/applet-design.md).
 
 ## Architecture
 
@@ -90,11 +90,11 @@ applets/              # templates + themes
 docs/architecture.md  # the full contract: schema, API, decisions
 docs/api.md           # CLI + HTTP reference
 docs/research/        # applet→agent signal mechanics per chat surface
-tests/                # pytest (39 tests)
+tests/                # pytest (61 passing tests)
 ```
 
 Key decisions (rationale in `docs/architecture.md` §7): single JSON file over SQLite (human-diffable, vault-syncable); CLI-first agent interface sharing one code path with the server; materialized queue membership over live tag queries; an inbox for applet→agent handoff (works on every chat surface; direct chat injection is a per-surface upgrade, researched in `docs/research/applet-signal.md`); the program never deletes user data.
 
 ## Status
 
-Working v1: core engine, CLI, HTTP API, dashboard, three applet templates, two themes, migration from the v2 prototype. Real use (one user, daily university practice) is the current test bed. Packaging for distribution (skill + install flow) is the next phase.
+Working v1: core engine, CLI, HTTP API, dashboard, seven applet templates, three themes, migration from the v2 prototype, and a distributable operator skill. Real use (one user, daily university practice) is the current test bed.

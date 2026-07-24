@@ -14,6 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
+from etude import server as server_module
 from etude import store
 from etude.server import make_server
 
@@ -229,7 +230,7 @@ def test_applet_render_injects_data_hides_expected_in_agent_mode_and_overrides_t
     _, _, html = request(base, "/applets/flashcard-drill?queue=agent&theme=everforest&n=1")
     assert "/*__THEME__*/" not in html
     assert "/*__DATA__*/null" not in html
-    assert "--bg: #2d353b" in html
+    assert "--surface-0: #2d353b" in html
     assert 'type: "resize"' in html
     assert "ResizeObserver" in html
     payload = _injected_payload(html)
@@ -240,6 +241,79 @@ def test_applet_render_injects_data_hides_expected_in_agent_mode_and_overrides_t
     assert payload["atoms"] == [{
         "id": "AG-2", "user_prompt": "Explain TCP", "topic": "Topic", "tags": ["network"],
     }]
+
+
+def test_applet_payload_is_safe_inside_an_inline_script(running_server):
+    base, db_path = running_server
+    db = store.load(db_path)
+    attack = "</ScRiPt><script>alert('x')</script>&"
+    db["queues"]["det"]["label"] = attack
+    db["atoms"]["DET-1"]["user_prompt"] = attack
+    store.save(db, db_path)
+
+    _, _, html = request(base, "/applets/flashcard-drill?queue=det&n=1")
+
+    assert "</ScRiPt>" not in html
+    assert "\\u003c/ScRiPt\\u003e" in html
+    assert "\\u0026" in html
+    payload = _injected_payload(html)
+    assert payload["queue_label"] == attack
+    assert payload["atoms"][0]["user_prompt"] == attack
+
+
+def test_applet_rejects_theme_that_closes_the_style_element(running_server, tmp_path, monkeypatch):
+    base, _ = running_server
+    template = tmp_path / "custom.html"
+    theme = tmp_path / "unsafe.css"
+    template.write_text("<style>/*__THEME__*/</style><body><script>const ETUDE = /*__DATA__*/null;</script></body>")
+    theme.write_text(":root { color: red; }</StYlE><script>alert(1)</script>")
+
+    monkeypatch.setattr(server_module, "_named_file", lambda kind, requested, suffix: template if kind == "template" else theme)
+
+    with pytest.raises(HTTPError) as exc:
+        request(base, "/applets/custom?queue=det")
+    assert exc.value.code == 400
+
+
+def test_queue_items_applet_receives_ordered_practice_item_rows(running_server):
+    base, _ = running_server
+
+    _, _, html = request(base, "/applets/queue-items?queue=det")
+    payload = _injected_payload(html)
+
+    assert payload["queue"] == "det"
+    assert payload["queue_label"] == "Deterministic queue"
+    assert payload["items"] == [{
+        "id": "DET-1",
+        "position": 1,
+        "topic": "Topic",
+        "user_prompt": "Capital of France?",
+        "mode": "deterministic",
+        "state": "new",
+        "streak": 0,
+        "attempt_count": 0,
+        "last_rating": None,
+        "due": None,
+    }]
+
+
+def test_queue_items_template_localizes_portuguese_chrome():
+    template = (Path(__file__).parents[1] / "applets" / "templates" / "queue-items.html").read_text()
+
+    assert "function isPortuguese" in template
+    assert "Practice items" in template
+    assert "Itens de prática" in template
+    assert "Determinístico" in template
+    assert "Tentativas" in template
+
+
+def test_queue_items_uses_compact_mode_labels_at_narrow_widths():
+    template = (Path(__file__).parents[1] / "applets" / "templates" / "queue-items.html").read_text()
+
+    assert "className = 'mode-short'" in template
+    assert ".mode-short { display: none; }" in template
+    assert ".mode-short { display: inline; }" in template
+    assert "col.state, col.streak { display: none; }" in template
 
 
 def test_matching_pairs_applet_receives_structured_atom_data(running_server):
@@ -301,6 +375,16 @@ def test_flashcard_completion_is_compact_localized_and_can_shrink():
     assert "min-height: 330px" not in template
 
 
+def test_atom_card_localizes_chrome_and_removes_duplicate_topic_heading():
+    template = (Path(__file__).parents[1] / "applets" / "templates" / "atom-card.html").read_text()
+
+    assert "function isPortuguese" in template
+    assert "function uiFor" in template
+    assert "function stripDuplicateHeading" in template
+    assert "Mostrar notas do agente" in template
+    assert "aria-label" in template
+
+
 def test_matching_completion_is_compact_and_can_shrink():
     template = (Path(__file__).parents[1] / "applets" / "templates" / "matching-pairs.html").read_text()
 
@@ -308,6 +392,16 @@ def test_matching_completion_is_compact_and_can_shrink():
     assert "html, body { min-height: 0; }" in template
     assert ".confirmation { min-height: 0;" in template
     assert "min-height: 420px" not in template
+
+
+def test_matching_applet_localizes_chrome_and_does_not_show_raw_markdown():
+    template = (Path(__file__).parents[1] / "applets" / "templates" / "matching-pairs.html").read_text()
+
+    assert "function isPortuguese" in template
+    assert "function uiFor" in template
+    assert "Escolha um item de cada coluna" in template
+    assert "function cleanInstruction" in template
+    assert "aria-pressed" in template
 
 
 def test_auto_resize_bridge_supports_content_fit_opt_in(running_server):
@@ -334,6 +428,7 @@ def test_every_applet_template_includes_the_auto_resize_bridge(running_server):
         "/applets/matching-pairs?queue=agent",
         "/applets/progress?queue=det",
         "/applets/queue-progress?queue=det",
+        "/applets/queue-items?queue=det",
         "/applets/streaks?days=7",
         "/applets/atom-card?atom=DET-1",
     ]
@@ -359,3 +454,100 @@ def test_progress_applet_gets_stats_and_template_path_traversal_is_rejected(runn
         with pytest.raises(HTTPError) as exc:
             request(base, path)
         assert 400 <= exc.value.code < 500
+
+
+APPLET_TEMPLATE_DIR = Path(__file__).parents[1] / "applets" / "templates"
+APPLET_THEME_DIR = Path(__file__).parents[1] / "applets" / "themes"
+
+
+def test_applet_themes_expose_the_shared_visual_design_tokens():
+    required = {
+        "surface-0", "surface-1", "surface-2",
+        "text-primary", "text-secondary", "text-muted",
+        "border", "border-strong", "radius-control", "radius-card",
+        "accent", "orange", "aqua", "yellow", "magenta", "green", "violet", "red",
+        "accent-text", "yellow-text", "green-text", "red-text", "violet-text", "accent-strong", "on-accent",
+        "status-good", "status-warning", "status-severe", "status-critical",
+        "mono", "sans",
+    }
+
+    for theme_path in APPLET_THEME_DIR.glob("*.css"):
+        theme = theme_path.read_text()
+        variables = set(re.findall(r"--([a-z0-9-]+)\s*:", theme))
+        assert required <= variables, f"{theme_path.name} is missing {sorted(required - variables)}"
+
+
+def test_theme_text_tokens_meet_wcag_contrast_on_every_surface():
+    def luminance(hex_color: str) -> float:
+        channels = [int(hex_color[index:index + 2], 16) / 255 for index in (1, 3, 5)]
+        linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in channels]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    def contrast(first: str, second: str) -> float:
+        bright, dark = sorted((luminance(first), luminance(second)), reverse=True)
+        return (bright + 0.05) / (dark + 0.05)
+
+    text_tokens = (
+        "text-primary", "text-secondary", "text-muted",
+        "accent-text", "yellow-text", "green-text", "red-text", "violet-text",
+    )
+    for theme_path in APPLET_THEME_DIR.glob("*.css"):
+        values = dict(re.findall(r"--([a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})", theme_path.read_text()))
+        surfaces = [values[f"surface-{index}"] for index in range(3)]
+        for token in text_tokens:
+            assert min(contrast(values[token], surface) for surface in surfaces) >= 4.5, (theme_path.name, token)
+        assert contrast(values["accent-strong"], values["on-accent"]) >= 4.5, theme_path.name
+
+
+def test_applet_templates_follow_the_visual_design_contract():
+    forbidden = {
+        "gradient": re.compile(r"(?:linear|radial|conic)-gradient", re.I),
+        "decorative shadow": re.compile(r"box-shadow\s*:", re.I),
+        "blur": re.compile(r"(?:backdrop-)?filter\s*:[^;]*blur", re.I),
+        "all-caps transform": re.compile(r"text-transform\s*:\s*uppercase", re.I),
+        "heavy font weight": re.compile(r"font-weight\s*:\s*(?:[6-9]00|5[1-9]0|[6-9][0-9]{2})", re.I),
+        "one-pixel border": re.compile(r"border(?:-(?:top|right|bottom|left))?\s*:\s*1px", re.I),
+    }
+
+    for template_path in APPLET_TEMPLATE_DIR.glob("*.html"):
+        template = template_path.read_text()
+        assert 'name="color-scheme"' in template, f"{template_path.name} must declare color-scheme"
+        assert "var(--surface-" in template, f"{template_path.name} must use shared surface tokens"
+        assert "var(--text-" in template, f"{template_path.name} must use shared text tokens"
+        for label, pattern in forbidden.items():
+            assert not pattern.search(template), f"{template_path.name} uses forbidden {label}"
+
+
+def test_palette_fill_colors_are_not_used_directly_for_small_text():
+    raw_palette = "accent|orange|aqua|yellow|magenta|green|violet|red"
+    direct_text_color = re.compile(rf"(?<![-\w])color:\s*var\(--(?:{raw_palette})\)")
+
+    for template_path in APPLET_TEMPLATE_DIR.glob("*.html"):
+        assert not direct_text_color.search(template_path.read_text()), template_path.name
+
+
+def test_visualizations_have_accessible_text_equivalents():
+    queue_progress = (APPLET_TEMPLATE_DIR / "queue-progress.html").read_text()
+    streaks = (APPLET_TEMPLATE_DIR / "streaks.html").read_text()
+    progress = (APPLET_TEMPLATE_DIR / "progress.html").read_text()
+
+    assert queue_progress.count('role="progressbar"') >= 2
+    assert "aria-valuetext" in queue_progress
+    assert 'role="img"' in streaks and 'aria-label="Daily practice activity"' in streaks
+    assert 'role="img"' in progress and "aria-label" in progress
+    assert 'class="sr-only"' in progress
+
+
+def test_progress_chart_keeps_edge_dates_outside_the_bar_cells():
+    template = (APPLET_TEMPLATE_DIR / "progress.html").read_text()
+
+    assert 'class="chart-dates"' in template
+    assert 'id="chartDateStart"' in template
+    assert 'id="chartDateEnd"' in template
+
+
+def test_interactive_applets_expose_keyboard_focus_and_reduced_motion_modes():
+    for name in ("flashcard-drill.html", "matching-pairs.html"):
+        template = (APPLET_TEMPLATE_DIR / name).read_text()
+        assert ":focus-visible" in template
+        assert "prefers-reduced-motion" in template

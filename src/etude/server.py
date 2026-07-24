@@ -58,6 +58,16 @@ _AUTO_RESIZE_BRIDGE = """<script>
 })();
 </script>"""
 
+
+def _inline_script_json(value: Any) -> str:
+    """Serialize JSON without leaving HTML-significant bytes in script data."""
+    return (
+        json.dumps(value, ensure_ascii=True, separators=(",", ":"))
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+    )
+
 ATOM_FIELDS = frozenset({
     "user_prompt", "agent_prompt", "expected", "agent_assisted", "tags", "topic",
     "source", "created", "archived", "state", "streak", "lapses", "last_rating",
@@ -650,10 +660,12 @@ class EtudeHandler(BaseHTTPRequestHandler):
             raise APIError(404, str(exc)) from exc
         if "/*__THEME__*/" not in template or "/*__DATA__*/null" not in template:
             raise APIError(500, "applet template is missing injection markers")
+        if "</style" in theme.casefold():
+            raise APIError(400, "theme contains an unsafe closing style tag")
 
         payload = self._applet_payload(db, template_name, query)
         rendered = template.replace("/*__THEME__*/", theme).replace(
-            "/*__DATA__*/null", json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            "/*__DATA__*/null", _inline_script_json(payload)
         )
         if "</body>" not in rendered:
             raise APIError(500, "applet template is missing a closing body tag")
@@ -663,9 +675,9 @@ class EtudeHandler(BaseHTTPRequestHandler):
     def _applet_payload(
         self, db: Mapping[str, Any], template_name: str, query: Mapping[str, list[str]]
     ) -> dict[str, Any]:
-        """Per-template payload. Widget templates (queue-progress, streaks,
-        atom-card) get focused read-only payloads; everything else gets the
-        classic drill payload (queue required, atoms ordered by algorithm)."""
+        """Per-template payload. Read-only widgets get focused payloads;
+        everything else gets the classic drill payload (queue required, atoms
+        ordered by algorithm)."""
         api = f"http://127.0.0.1:{self.server.server_port}"
         base = {"api": api, "template": template_name}
 
@@ -705,6 +717,32 @@ class EtudeHandler(BaseHTTPRequestHandler):
             stats = _stats(db, queue_id, 30)
             stats["remaining"] = max(stats["total"] - stats["seen"], 0)
             return {**base, "queue": queue_id, "queue_label": queue.get("label", queue_id), "stats": stats}
+
+        if template_name == "queue-items":
+            ordered_ids = algorithms.order(db, queue_id, _now_iso())
+            items = []
+            for position, atom_id in enumerate(ordered_ids, start=1):
+                atom = db["atoms"][atom_id]
+                assisted = scheduler.resolve_agent_assisted(atom, queue)
+                attempts = atom.get("attempts", [])
+                items.append({
+                    "id": atom_id,
+                    "position": position,
+                    "topic": atom.get("topic", ""),
+                    "user_prompt": atom.get("user_prompt", ""),
+                    "mode": "agent" if assisted else "deterministic",
+                    "state": atom.get("state", "new"),
+                    "streak": atom.get("streak", 0),
+                    "attempt_count": len(attempts) if isinstance(attempts, list) else 0,
+                    "last_rating": atom.get("last_rating"),
+                    "due": atom.get("due"),
+                })
+            return {
+                **base,
+                "queue": queue_id,
+                "queue_label": queue.get("label", queue_id),
+                "items": items,
+            }
 
         n = _positive_int(query.get("n", [None])[0], 20, "n")
         # Mode resolves PER ATOM (atom.agent_assisted > queue.agent_assisted > True);

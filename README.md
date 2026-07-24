@@ -29,11 +29,23 @@ Three interaction formats, one schema:
 
 Requires Python 3.11+. Stdlib only — no dependencies.
 
+### Option A — let your agent install it (recommended)
+
+Etude is agent-first, so the natural installer is your agent. Copy the skill file at [`skill/SKILL.md`](skill/SKILL.md) (raw link works too) and paste it to your agent — or just tell it:
+
+> Install the etude skill from https://github.com/Zibhelina/etude — download `skill/SKILL.md`, add it to your skills, clone the repo, and verify `etude status` runs.
+
+The skill teaches the agent everything: how to clone the repo, drive the CLI/API, run practice sessions, serve applets, and even modify the codebase on request (`#etude/dev`).
+
+### Option B — manual
+
 ```sh
-git clone <repo> etude && cd etude
+git clone https://github.com/Zibhelina/etude.git && cd etude
 PYTHONPATH=src python3 -m etude status            # CLI
 PYTHONPATH=src python3 -m etude serve             # dashboard + API on :2600
 ```
+
+Then add [`skill/SKILL.md`](skill/SKILL.md) to your agent's skill library so it knows how to operate the program.
 
 Data lives in `~/.etude/db.json` by default. Override with `--db`, `ETUDE_DB`, or `db_path` in `~/.etude/config.json`.
 

@@ -702,6 +702,39 @@ class EtudeHandler(BaseHTTPRequestHandler):
                 "total_attempts": sum(counts),
             }}
 
+        if template_name == "recent-items":
+            limit = _positive_int(query.get("limit", [None])[0], 10, "limit")
+            ranked_items = []
+            for atom_id, atom in db.get("atoms", {}).items():
+                attempts = atom.get("attempts", [])
+                if not isinstance(attempts, list):
+                    continue
+                valid_attempts = [
+                    attempt for attempt in attempts
+                    if isinstance(attempt, Mapping) and isinstance(attempt.get("ts"), str)
+                ]
+                if not valid_attempts:
+                    continue
+                latest = max(
+                    valid_attempts,
+                    key=lambda attempt: datetime.fromisoformat(attempt["ts"].replace("Z", "+00:00")).timestamp(),
+                )
+                item = {
+                    "id": atom_id,
+                    "topic": atom.get("topic", ""),
+                    "user_prompt": atom.get("user_prompt", ""),
+                    "attempt_count": len(valid_attempts),
+                    "last_seen": latest["ts"],
+                    "last_rating": latest.get("rating"),
+                    "mode": latest.get("mode", ""),
+                    "via": latest.get("via", ""),
+                }
+                rank = datetime.fromisoformat(latest["ts"].replace("Z", "+00:00")).timestamp()
+                ranked_items.append((rank, atom_id, item))
+            ranked_items.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
+            items = [entry[2] for entry in ranked_items[:limit]]
+            return {**base, "total_seen": len(ranked_items), "items": items}
+
         if template_name == "atom-card":
             atom_id = query.get("atom", [None])[0]
             if not atom_id or atom_id not in db.get("atoms", {}):

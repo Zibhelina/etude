@@ -297,6 +297,36 @@ def test_queue_items_applet_receives_ordered_practice_item_rows(running_server):
     }]
 
 
+def test_recent_items_applet_returns_unique_items_in_latest_attempt_order(running_server):
+    base, db_path = running_server
+    db = store.load(db_path)
+    db["atoms"]["DET-1"]["attempts"] = [
+        {"ts": "2026-07-23T09:00:00-07:00", "rating": 3, "mode": "applet", "via": "applet", "answer": "Paris", "feedback": ""},
+        {"ts": "2026-07-24T10:00:00-07:00", "rating": 0, "mode": "applet", "via": "applet", "answer": "Lyon", "feedback": ""},
+    ]
+    db["atoms"]["AG-2"]["attempts"] = [
+        {"ts": "2026-07-24T09:30:00-08:00", "rating": 2, "mode": "spaced-repetition", "via": "chat", "answer": "SYN", "feedback": "Good."},
+    ]
+    store.save(db, db_path)
+
+    _, _, html = request(base, "/applets/recent-items?limit=2")
+    payload = _injected_payload(html)
+
+    assert payload["total_seen"] == 2
+    assert payload["items"] == [
+        {
+            "id": "AG-2", "topic": "Topic", "user_prompt": "Explain TCP",
+            "attempt_count": 1, "last_seen": "2026-07-24T09:30:00-08:00",
+            "last_rating": 2, "mode": "spaced-repetition", "via": "chat",
+        },
+        {
+            "id": "DET-1", "topic": "Topic", "user_prompt": "Capital of France?",
+            "attempt_count": 2, "last_seen": "2026-07-24T10:00:00-07:00",
+            "last_rating": 0, "mode": "applet", "via": "applet",
+        },
+    ]
+
+
 def test_queue_items_template_localizes_portuguese_chrome():
     template = (Path(__file__).parents[1] / "applets" / "templates" / "queue-items.html").read_text()
 
@@ -429,6 +459,7 @@ def test_every_applet_template_includes_the_auto_resize_bridge(running_server):
         "/applets/progress?queue=det",
         "/applets/queue-progress?queue=det",
         "/applets/queue-items?queue=det",
+        "/applets/recent-items?limit=5",
         "/applets/streaks?days=7",
         "/applets/atom-card?atom=DET-1",
     ]

@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · Recent practice items</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+html, body { min-height: 0; }
+body { margin: 0; background: var(--surface-0); color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.wrap { padding: 22px 24px 24px; }
+.header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
+.eyebrow { color: var(--text-secondary); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1 { margin: 3px 0 0; font-size: 20px; line-height: 1.3; font-weight: 500; letter-spacing: -.015em; }
+.summary { color: var(--text-secondary); font: 12px/1.4 var(--mono); white-space: nowrap; }
+.list { overflow: hidden; margin: 0; padding: 0; border: 0.5px solid var(--border); border-radius: var(--radius-card); background: var(--surface-1); list-style: none; }
+.item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px 20px; padding: 14px 16px; border-top: 0.5px solid var(--border); }
+.item:first-child { border-top: 0; }
+.item:hover { background: var(--surface-2); }
+.identity { min-width: 0; }
+.identity-top { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+.atom-id { flex: 0 0 auto; color: var(--accent-text); font: 500 12px/1.3 var(--mono); }
+.topic { min-width: 0; overflow: hidden; color: var(--text-primary); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.prompt { margin-top: 3px; overflow: hidden; color: var(--text-secondary); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.details { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 244px; }
+.rating { display: inline-flex; align-items: center; gap: 6px; min-width: 76px; padding: 4px 8px; border: 0.5px solid var(--border); border-radius: 999px; font-size: 11.5px; line-height: 1.3; white-space: nowrap; }
+.rating[data-rating="0"] { color: var(--red-text); }
+.rating[data-rating="1"] { color: var(--yellow-text); }
+.rating[data-rating="2"] { color: var(--accent-text); }
+.rating[data-rating="3"] { color: var(--green-text); }
+.time { color: var(--text-secondary); font: 12px/1.4 var(--mono); white-space: nowrap; }
+.count { color: var(--text-muted); font: 12px/1.4 var(--mono); white-space: nowrap; }
+.empty { padding: 34px 20px; border: 0.5px solid var(--border); border-radius: var(--radius-card); background: var(--surface-1); color: var(--text-muted); text-align: center; }
+@media (max-width: 680px) {
+  .wrap { padding: 18px 14px; }
+  .header { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .item { grid-template-columns: 1fr; gap: 9px; padding: 13px 14px; }
+  .details { justify-content: flex-start; min-width: 0; }
+}
+@media (max-width: 430px) {
+  .count { display: none; }
+  .details { gap: 8px; }
+  .rating { min-width: 0; }
+}
+</style>
+</head>
+<body data-fit-content>
+<main class="wrap">
+  <header class="header">
+    <div>
+      <div class="eyebrow" id="eyebrow">Practice history</div>
+      <h1 id="title">Recent practice items</h1>
+    </div>
+    <div class="summary" id="summary">0 items</div>
+  </header>
+  <ol class="list" id="items" aria-label="Recently practiced items"></ol>
+  <div class="empty" id="empty" hidden>No practice history yet.</div>
+</main>
+<script>
+const ETUDE = /*__DATA__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const items = Array.isArray(data.items) ? data.items : [];
+  const $ = id => document.getElementById(id);
+  const whole = value => Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0;
+  const firstLine = value => String(value || '').replace(/[*_`#>]/g, '').split(/\n+/).find(line => line.trim())?.trim() || 'No prompt';
+  function isPortuguese() {
+    const sample = items.slice(0, 8).flatMap(item => [item.topic, item.user_prompt]).join(' ');
+    return /^pt\b/i.test(navigator.language || '') || /[ãõçáéíóú]|\b(?:resposta|qual|explique|verdadeiro|prática|código|com|uma)\b/i.test(sample);
+  }
+  const portuguese = isPortuguese();
+  const ratingUi = rating => {
+    const value = Number(rating);
+    const english = {
+      0: ['×', 'Fail'], 1: ['!', 'Hard'], 2: ['●', 'Good'], 3: ['✓', 'Easy'],
+    };
+    const pt = {
+      0: ['×', 'Falhou'], 1: ['!', 'Difícil'], 2: ['●', 'Bom'], 3: ['✓', 'Fácil'],
+    };
+    return (portuguese ? pt : english)[value] || ['○', portuguese ? 'Sem nota' : 'Unrated'];
+  };
+  const formatTime = value => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    const now = new Date();
+    const sameDay = date.toDateString() === now.toDateString();
+    if (sameDay) {
+      const time = new Intl.DateTimeFormat(portuguese ? 'pt-BR' : undefined, {hour: '2-digit', minute: '2-digit'}).format(date);
+      return portuguese ? `Hoje, ${time}` : `Today, ${time}`;
+    }
+    return new Intl.DateTimeFormat(portuguese ? 'pt-BR' : undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}).format(date);
+  };
+
+  if (portuguese) {
+    document.documentElement.lang = 'pt-BR';
+    $('eyebrow').textContent = 'Histórico de prática';
+    $('title').textContent = 'Practice items recentes';
+    $('items').setAttribute('aria-label', 'Practice items feitos recentemente');
+    $('empty').textContent = 'Ainda não há histórico de prática.';
+  }
+
+  const totalSeen = whole(data.total_seen);
+  $('summary').textContent = portuguese
+    ? `${items.length} de ${totalSeen} vistos`
+    : `${items.length} of ${totalSeen} seen`;
+
+  if (!items.length) {
+    $('items').hidden = true;
+    $('empty').hidden = false;
+    return;
+  }
+
+  items.forEach(item => {
+    const row = document.createElement('li');
+    row.className = 'item';
+
+    const identity = document.createElement('div');
+    identity.className = 'identity';
+    const identityTop = document.createElement('div');
+    identityTop.className = 'identity-top';
+    const atomId = document.createElement('span');
+    atomId.className = 'atom-id';
+    atomId.textContent = item.id || '—';
+    const topic = document.createElement('span');
+    topic.className = 'topic';
+    topic.textContent = item.topic || firstLine(item.user_prompt);
+    const prompt = document.createElement('div');
+    prompt.className = 'prompt';
+    prompt.textContent = firstLine(item.user_prompt);
+    identityTop.append(atomId, topic);
+    identity.append(identityTop, prompt);
+
+    const details = document.createElement('div');
+    details.className = 'details';
+    const rating = document.createElement('span');
+    rating.className = 'rating';
+    rating.dataset.rating = String(item.last_rating ?? '');
+    const [icon, label] = ratingUi(item.last_rating);
+    rating.textContent = `${icon} ${label}`;
+    const time = document.createElement('time');
+    time.className = 'time';
+    time.dateTime = item.last_seen || '';
+    time.textContent = formatTime(item.last_seen);
+    const count = document.createElement('span');
+    count.className = 'count';
+    const attempts = whole(item.attempt_count);
+    count.textContent = portuguese
+      ? `${attempts} ${attempts === 1 ? 'tentativa' : 'tentativas'}`
+      : `${attempts} ${attempts === 1 ? 'attempt' : 'attempts'}`;
+    details.append(rating, time, count);
+
+    row.append(identity, details);
+    $('items').append(row);
+  });
+})();
+</script>
+</body>
+</html>

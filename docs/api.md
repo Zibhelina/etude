@@ -298,7 +298,7 @@ Serves `dashboard/index.html` as `text/html`; JavaScript is `text/javascript` an
 
 #### `GET /applets/{template}?queue=Q&theme=T&n=N`
 
-`queue` is required; `theme` defaults to `meta.default_theme`; `n` defaults to 20. Template/theme names may omit `.html`/`.css` but must match directory entries (no traversal). `~/.etude/applets/` files override repository files. Atoms follow `etude.algorithms.order`. The server replaces both injection markers. Every drill atom includes `id`, `user_prompt`, `topic`, and `tags`, plus `applet_data` when present. Deterministic queue payloads also include `expected`; agent payloads never do. The matching-pairs template consumes `atom.applet_data.pairs`; the flashcard template uses the `true-false` tag to render direct binary controls.
+`queue` is required for queue-scoped and drill templates; `theme` defaults to `meta.default_theme`; `n` defaults to 20. Queue-free widgets use their own selectors: `recent-items?limit=N`, `streaks?days=N`, and `atom-card?atom=ID`. `recent-items` returns unique practiced atoms ordered by their latest attempt, newest first, and defaults to 10 rows. Template/theme names may omit `.html`/`.css` but must match directory entries (no traversal). `~/.etude/applets/` files override repository files. Atoms follow `etude.algorithms.order`. The server replaces both injection markers. Every drill atom includes `id`, `user_prompt`, `topic`, and `tags`, plus `applet_data` when present. Deterministic queue payloads also include `expected`; agent payloads never do. The matching-pairs template consumes `atom.applet_data.pairs`; the flashcard template uses the `true-false` tag to render direct binary controls.
 
 ```sh
 curl "$BASE/applets/flashcard-drill?queue=agent&theme=everforest&n=1"

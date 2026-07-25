@@ -1,0 +1,6 @@
+{
+ "katex": "0.16.47",
+ "codemirror": "6.0.2",
+ "@replit/codemirror-vim": "6.3.0",
+ "@codemirror/lint": "6.9.7"
+}

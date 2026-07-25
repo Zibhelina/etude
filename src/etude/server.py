@@ -100,6 +100,44 @@ _AUTO_RESIZE_BRIDGE = """<script>
 </script>"""
 
 
+_VENDOR_MARKERS = {
+    "/*__KATEX__*/": ("katex.css", "katex.js"),
+    "/*__CODEMIRROR__*/": (None, "codemirror.js"),
+}
+
+
+def _vendor_asset(name: str) -> str:
+    """Read a vendored library. These are large, self-contained builds committed
+    under widgets/vendor/ because widget sandboxes have no network access."""
+    try:
+        return (_WIDGETS / "vendor" / name).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise APIError(500, f"vendored asset missing: {name}") from exc
+
+
+def _inject_vendor(rendered: str) -> str:
+    """Replace each vendor marker a template declares with the library itself.
+
+    Opt-in by marker rather than injected everywhere: KaTeX plus CodeMirror is
+    well over a megabyte, and no template needs both.
+    """
+    for marker, (css_name, js_name) in _VENDOR_MARKERS.items():
+        if marker not in rendered:
+            continue
+        parts = []
+        if css_name:
+            css = _vendor_asset(css_name)
+            if "</style" in css.casefold():
+                raise APIError(500, f"vendored css closes its style element: {css_name}")
+            parts.append(f"<style>{css}</style>")
+        script = _vendor_asset(js_name)
+        if "</script" in script.casefold():
+            raise APIError(500, f"vendored script closes its script element: {js_name}")
+        parts.append(f"<script>{script}</script>")
+        rendered = rendered.replace(marker, "\n".join(parts), 1)
+    return rendered
+
+
 def _inline_script_json(value: Any) -> str:
     """Serialize JSON without leaving HTML-significant bytes in script data."""
     return (
@@ -811,6 +849,10 @@ class EtudeHandler(BaseHTTPRequestHandler):
             raise APIError(500, "widget template is missing a closing body tag")
         if "</head>" not in rendered:
             raise APIError(500, "widget template is missing a closing head tag")
+        # Vendored libraries are opt-in per template: a marker keeps KaTeX out of
+        # the code editor and CodeMirror out of the note editor. Injected before
+        # the markdown helper so both are ready when the template script runs.
+        rendered = _inject_vendor(rendered)
         # Markdown helper goes in <head> so it is defined before the template's
         # own script runs; the resize bridge stays at the end of <body>.
         rendered = rendered.replace("</head>", f"{_MARKDOWN_HELPER}\n</head>", 1)
@@ -880,7 +922,32 @@ class EtudeHandler(BaseHTTPRequestHandler):
             items = [entry[2] for entry in ranked_items[:limit]]
             return {**base, "total_seen": len(ranked_items), "items": items}
 
-        if template_name == "draw-canvas":
+        if template_name in ("markdown-canvas", "coding-canvas"):
+            atom_id = query.get("atom", [None])[0]
+            if not atom_id or atom_id not in db.get("atoms", {}):
+                raise APIError(400, "atom must name an existing atom")
+            atom = db["atoms"][atom_id]
+            widget_data = atom.get("widget_data", atom.get("applet_data"))
+            widget_data = widget_data if isinstance(widget_data, Mapping) else {}
+            # The prompt is the user's; agent_prompt holds the answer and rubric
+            # and must never reach the sandbox.
+            result = {
+                **base,
+                "atom": {
+                    "id": atom_id,
+                    "user_prompt": atom.get("user_prompt", ""),
+                    "topic": atom.get("topic", ""),
+                    "tags": [tag for tag in atom.get("tags", []) if isinstance(tag, str)],
+                },
+            }
+            if template_name == "coding-canvas":
+                language = query.get("language", [None])[0] or widget_data.get("language")
+                starter = widget_data.get("starter")
+                result["language"] = language if isinstance(language, str) else ""
+                result["starter"] = starter if isinstance(starter, str) else ""
+            return result
+
+        if template_name == "drawing-canvas":
             atom_id = query.get("atom", [None])[0]
             if not atom_id or atom_id not in db.get("atoms", {}):
                 raise APIError(400, "atom must name an existing atom")

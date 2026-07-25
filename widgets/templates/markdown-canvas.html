@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · Markdown</title>
+/*__KATEX__*/
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+html, body { overflow-y: hidden; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 20px; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
+.prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
+.tabs { display: flex; gap: 6px; margin-top: 16px; }
+.tab { padding: 5px 12px; border-radius: 999px; border: 0.5px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; font: 500 12.5px/1.5 var(--sans); }
+.tab[aria-selected="true"] { background: var(--surface-2); color: var(--text-primary); border-color: var(--border-strong); }
+.tab:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.panes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.panes[data-mode="write"] { grid-template-columns: 1fr; }
+.panes[data-mode="write"] .preview-pane { display: none; }
+.panes[data-mode="preview"] { grid-template-columns: 1fr; }
+.panes[data-mode="preview"] .editor-pane { display: none; }
+.pane { display: flex; flex-direction: column; min-width: 0; border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); background: var(--surface-1); overflow: hidden; }
+.pane-head { padding: 7px 13px; color: var(--text-muted); font: 500 11px/1.5 var(--mono); border-bottom: 0.5px solid var(--border); }
+textarea { width: 100%; min-height: 260px; padding: 14px 16px; border: 0; resize: vertical; background: transparent; color: var(--text-primary); font: 14px/1.7 var(--mono); tab-size: 2; }
+textarea:focus { outline: none; }
+.preview { padding: 14px 16px; min-height: 260px; overflow-wrap: anywhere; }
+.preview > :first-child { margin-top: 0; }
+.preview > :last-child { margin-bottom: 0; }
+.preview h1, .preview h2, .preview h3 { margin: 18px 0 8px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.preview h1 { font-size: 21px; } .preview h2 { font-size: 18px; } .preview h3 { font-size: 15.5px; color: var(--text-secondary); }
+.preview p { margin: 0 0 10px; }
+.preview ul, .preview ol { margin: 0 0 10px; padding-left: 22px; }
+.preview li { margin: 3px 0; }
+.preview li.task { list-style: none; margin-left: -22px; padding-left: 22px; position: relative; }
+.preview li.task::before { content: '○'; position: absolute; left: 4px; color: var(--text-muted); }
+.preview li.task[data-done="true"]::before { content: '✓'; color: var(--green-text); }
+.preview blockquote { margin: 0 0 10px; padding: 2px 0 2px 13px; border-left: 2px solid var(--border-strong); color: var(--text-secondary); }
+.preview code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
+.preview pre { margin: 0 0 10px; padding: 11px 13px; background: var(--surface-2); border-radius: 8px; overflow-x: auto; }
+.preview pre code { padding: 0; background: none; font-size: 12.5px; }
+.preview table { width: 100%; margin: 0 0 10px; border-collapse: collapse; font-size: 13.5px; }
+.preview th, .preview td { padding: 6px 10px; border: 0.5px solid var(--border); text-align: left; }
+.preview th { background: var(--surface-2); font-weight: 500; }
+.preview hr { margin: 14px 0; border: 0; border-top: 0.5px solid var(--border); }
+.preview a { color: var(--accent-text); }
+.preview .katex-display { margin: 12px 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+.preview .math-error { color: var(--red-text); font: 12.5px/1.5 var(--mono); }
+.tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.spacer { flex: 1 1 auto; }
+.counts { color: var(--text-muted); font: 500 11.5px/1.5 var(--mono); }
+button { font: inherit; }
+button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.status { margin-top: 10px; min-height: 18px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
+.status[data-tone="error"] { color: var(--red-text); }
+.done { margin-top: 14px; padding: 20px; text-align: center; background: var(--surface-1); border: 0.5px solid var(--green); border-radius: var(--radius-card, 12px); }
+.done h2 { margin: 0 0 6px; font-size: 16px; font-weight: 500; }
+.done p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.hidden { display: none; }
+@media (max-width: 720px) { .panes { grid-template-columns: 1fr; } .preview-pane { display: none; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap ui-card">
+  <div class="label" id="label">Etude · Written answer</div>
+  <h1 class="title" id="title">Compose your answer</h1>
+  <div class="prompt" id="prompt"></div>
+  <div class="tabs" role="tablist" aria-label="Editor layout">
+    <button class="tab" id="tabSplit" role="tab" type="button" aria-selected="true">Split</button>
+    <button class="tab" id="tabWrite" role="tab" type="button" aria-selected="false">Write</button>
+    <button class="tab" id="tabPreview" role="tab" type="button" aria-selected="false">Preview</button>
+  </div>
+  <div class="panes" id="panes" data-mode="split">
+    <div class="pane editor-pane">
+      <div class="pane-head" id="headWrite">markdown</div>
+      <textarea id="source" spellcheck="true" aria-label="Markdown source"></textarea>
+    </div>
+    <div class="pane preview-pane">
+      <div class="pane-head" id="headPreview">preview</div>
+      <div class="preview" id="preview" aria-live="polite"></div>
+    </div>
+  </div>
+  <div class="tools">
+    <span class="counts" id="counts"></span>
+    <span class="spacer"></span>
+    <button class="ui-button ui-button--outline ui-button--sm" id="clear" type="button">Clear</button>
+    <button class="ui-button ui-button--sm" id="submit" type="button" disabled>Send to agent</button>
+  </div>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+  <div class="done hidden" id="done">
+    <h2 id="doneTitle">Sent to your agent</h2>
+    <p id="doneBody">Your answer is waiting in Etude. Tell your agent you are done so they can review it.</p>
+  </div>
+</div>
+<script>
+const ETUDE = /*__DATA__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const atom = data.atom && typeof data.atom === 'object' ? data.atom : {};
+  const $ = id => document.getElementById(id);
+  const text = value => (typeof value === 'string' ? value : '');
+  // Heading is a single line: strip markers instead of rendering them.
+  const plain = value => String(value || '').replace(/`{1,3}|\*{1,2}|[_#>]/g, '').replace(/\s+/g, ' ').trim();
+  const api = String(data.api || '').replace(/\/$/, '');
+
+  const portuguese = /[áàãâéêíóôõúç]|\b(explique|descreva|resposta|justifique|escreva)\b/i
+    .test(`${text(atom.user_prompt)} ${text(atom.topic)}`);
+  const ui = portuguese
+    ? { title: 'Escreva sua resposta', label: 'Etude · Resposta escrita', send: 'Enviar ao agente',
+        clear: 'Limpar', sending: 'Enviando…', empty: 'Escreva algo antes de enviar.',
+        failed: 'Não foi possível alcançar o Etude. Seu texto continua aqui — tente de novo.',
+        sentTitle: 'Enviado ao agente', split: 'Dividido', write: 'Escrever', preview: 'Prévia',
+        words: 'palavras', chars: 'caracteres',
+        sentBody: 'Sua resposta está aguardando no Etude. Avise o agente que terminou para receber o feedback.',
+        placeholder: '# Título\n\nEscreva em markdown. Equação inline: $E = mc^2$\n\nBloco:\n\n$$\n\\int_0^1 x^2 dx = \\frac{1}{3}\n$$\n\n- item\n- [ ] tarefa' }
+    : { title: 'Compose your answer', label: 'Etude · Written answer', send: 'Send to agent',
+        clear: 'Clear', sending: 'Sending…', empty: 'Write something before sending.',
+        failed: 'Could not reach Etude. Your text is still here — try again.',
+        sentTitle: 'Sent to your agent', split: 'Split', write: 'Write', preview: 'Preview',
+        words: 'words', chars: 'chars',
+        sentBody: 'Your answer is waiting in Etude. Tell your agent you are done so they can review it.',
+        placeholder: '# Heading\n\nWrite markdown. Inline math: $E = mc^2$\n\nBlock:\n\n$$\n\\int_0^1 x^2 dx = \\frac{1}{3}\n$$\n\n- item\n- [ ] task' };
+
+  if (portuguese) document.documentElement.lang = 'pt-BR';
+  $('label').textContent = text(atom.id) ? `${ui.label} · ${text(atom.id)}` : ui.label;
+  $('title').textContent = plain(atom.topic) || ui.title;
+  window.ETUDE_MD_INTO($('prompt'), text(atom.user_prompt) || ui.title);
+  $('tabSplit').textContent = ui.split;
+  $('tabWrite').textContent = ui.write;
+  $('tabPreview').textContent = ui.preview;
+  $('clear').textContent = ui.clear;
+  $('submit').textContent = ui.send;
+  $('doneTitle').textContent = ui.sentTitle;
+  $('doneBody').textContent = ui.sentBody;
+  $('source').placeholder = ui.placeholder;
+
+  let sent = false;
+  const source = $('source');
+
+  // Escape & and < only. A literal '>' must survive so blockquote lines are
+  // still recognisable to the block parser; it is harmless without a '<'.
+  const escapeHtml = value => String(value ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+  // Math is extracted BEFORE markdown runs and restored after, so markdown never
+  // mangles TeX (underscores are subscripts, asterisks are multiplication).
+  const math = [];
+  function stashMath(input) {
+    return input
+      .replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => `\u0000M${math.push({tex, display: true}) - 1}\u0000`)
+      .replace(/(^|[^\\$])\$([^$\n]+?)\$/g, (_, lead, tex) =>
+        `${lead}\u0000M${math.push({tex, display: false}) - 1}\u0000`);
+  }
+  function renderMath(html) {
+    return html.replace(/\u0000M(\d+)\u0000/g, (_, index) => {
+      const entry = math[Number(index)];
+      if (!entry) return '';
+      try {
+        return katex.renderToString(entry.tex, {displayMode: entry.display, throwOnError: true});
+      } catch (error) {
+        return `<span class="math-error">${escapeHtml(entry.display ? `$$${entry.tex}$$` : `$${entry.tex}$`)}</span>`;
+      }
+    });
+  }
+
+  const inline = value => value
+    .replace(/`([^`\n]+)`/g, (_, code) => `<code>${code}</code>`)
+    .replace(/!\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)/g, '$1')
+    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g,
+      (_, label, href) => `<a href="${href}" rel="noreferrer noopener" target="_blank">${label}</a>`)
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>')
+    .replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>')
+    .replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
+
+  function renderTable(rows) {
+    const cells = row => row.replace(/^\||\|$/g, '').split('|').map(cell => cell.trim());
+    const head = cells(rows[0]);
+    const body = rows.slice(2).map(cells);
+    const th = head.map(cell => `<th>${inline(cell)}</th>`).join('');
+    const tr = body.map(row => `<tr>${row.map(cell => `<td>${inline(cell)}</td>`).join('')}</tr>`).join('');
+    return `<table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
+  }
+
+  function renderMarkdown(raw) {
+    math.length = 0;
+    const escaped = stashMath(escapeHtml(raw));
+    const lines = escaped.split('\n');
+    const out = [];
+    let index = 0;
+
+    while (index < lines.length) {
+      const line = lines[index];
+
+      const fence = line.match(/^```(\w*)\s*$/);
+      if (fence) {
+        const buffer = [];
+        index += 1;
+        while (index < lines.length && !/^```\s*$/.test(lines[index])) buffer.push(lines[index++]);
+        index += 1;
+        out.push(`<pre><code>${buffer.join('\n')}</code></pre>`);
+        continue;
+      }
+
+      const heading = line.match(/^(#{1,6})\s+(.*)$/);
+      if (heading) {
+        const level = Math.min(heading[1].length, 3);
+        out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+        index += 1;
+        continue;
+      }
+
+      if (/^\s*(?:---|\*\*\*|___)\s*$/.test(line)) { out.push('<hr>'); index += 1; continue; }
+
+      if (/^\s*\|.*\|\s*$/.test(line) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[index + 1] || '')) {
+        const rows = [];
+        while (index < lines.length && /^\s*\|.*\|\s*$/.test(lines[index])) rows.push(lines[index++].trim());
+        out.push(renderTable(rows));
+        continue;
+      }
+
+      if (/^\s*>/.test(line)) {
+        const buffer = [];
+        while (index < lines.length && /^\s*>/.test(lines[index])) buffer.push(lines[index++].replace(/^\s*>\s?/, ''));
+        out.push(`<blockquote>${buffer.map(entry => `<p>${inline(entry)}</p>`).join('')}</blockquote>`);
+        continue;
+      }
+
+      const bullet = /^(\s*)([-*+]|\d+\.)\s+(.*)$/;
+      if (bullet.test(line)) {
+        const ordered = /^\s*\d+\./.test(line);
+        const items = [];
+        while (index < lines.length && bullet.test(lines[index])) {
+          const [, , , rest] = lines[index].match(bullet);
+          const task = rest.match(/^\[([ xX])\]\s+(.*)$/);
+          items.push(task
+            ? `<li class="task" data-done="${task[1].toLowerCase() === 'x'}">${inline(task[2])}</li>`
+            : `<li>${inline(rest)}</li>`);
+          index += 1;
+        }
+        out.push(`<${ordered ? 'ol' : 'ul'}>${items.join('')}</${ordered ? 'ol' : 'ul'}>`);
+        continue;
+      }
+
+      if (!line.trim()) { index += 1; continue; }
+
+      const buffer = [];
+      while (index < lines.length && lines[index].trim()
+             && !/^(#{1,6}\s|\s*[-*+]\s|\s*\d+\.\s|\s*>|```|\s*\|)/.test(lines[index])) {
+        buffer.push(lines[index++]);
+      }
+      out.push(`<p>${inline(buffer.join('\n')).replace(/\n/g, '<br>')}</p>`);
+    }
+
+    return renderMath(out.join(''));
+  }
+
+  let frame = 0;
+  function update() {
+    const value = source.value;
+    $('preview').innerHTML = renderMarkdown(value);
+    const words = value.trim() ? value.trim().split(/\s+/).length : 0;
+    $('counts').textContent = `${words} ${ui.words} · ${value.length} ${ui.chars}`;
+    $('submit').disabled = sent || !value.trim();
+    $('clear').disabled = sent || !value;
+  }
+  const schedule = () => { if (frame) cancelAnimationFrame(frame); frame = requestAnimationFrame(update); };
+
+  source.addEventListener('input', schedule);
+  source.addEventListener('keydown', event => {
+    if (event.key !== 'Tab') return;
+    event.preventDefault();
+    const { selectionStart: start, selectionEnd: end, value } = source;
+    source.value = `${value.slice(0, start)}  ${value.slice(end)}`;
+    source.selectionStart = source.selectionEnd = start + 2;
+    schedule();
+  });
+
+  const setMode = mode => {
+    $('panes').dataset.mode = mode;
+    for (const [id, name] of [['tabSplit', 'split'], ['tabWrite', 'write'], ['tabPreview', 'preview']]) {
+      $(id).setAttribute('aria-selected', String(name === mode));
+    }
+  };
+  $('tabSplit').addEventListener('click', () => setMode('split'));
+  $('tabWrite').addEventListener('click', () => setMode('write'));
+  $('tabPreview').addEventListener('click', () => setMode('preview'));
+  if (window.innerWidth < 720) setMode('write');
+
+  $('clear').addEventListener('click', () => { source.value = ''; schedule(); source.focus(); });
+
+  function setStatus(message, tone) {
+    const node = $('status');
+    node.textContent = message;
+    if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
+  }
+
+  $('submit').addEventListener('click', async () => {
+    const value = source.value.trim();
+    if (sent || !value) { if (!value) setStatus(ui.empty, 'error'); return; }
+    const atomId = text(atom.id);
+    if (!atomId || !api) { setStatus(ui.failed, 'error'); return; }
+
+    $('submit').disabled = true;
+    setStatus(ui.sending);
+    try {
+      const response = await fetch(`${api}/api/inbox`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          atom_id: atomId,
+          payload: { kind: 'markdown', text: value, chars: value.length },
+          ts: new Date().toISOString(),
+        }),
+      });
+      if (!response.ok) throw new Error(String(response.status));
+      sent = true;
+      source.readOnly = true;
+      update();
+      $('done').classList.remove('hidden');
+      setStatus('');
+      window.parent.postMessage({
+        lotus: 1,
+        type: 'submit',
+        text: `I submitted a written answer for ${atomId} via the markdown canvas. Read it from the Etude inbox, grade it, and record the attempt.`,
+      }, '*');
+    } catch {
+      $('submit').disabled = false;
+      setStatus(ui.failed, 'error');
+    }
+  });
+
+  update();
+})();
+</script>
+</body>
+</html>

@@ -57,21 +57,27 @@ All output is compact JSON. Server: `etude serve --port 2600` (dashboard at http
 1. Serve an interactive template (e.g. `matching-pairs`). Its submit POSTs to `/api/inbox`.
 2. When the user says they're done (or after polling `etude inbox list`), grade each payload per the cascade, record with `etude attempt ID --rating N --answer-file - --feedback-file - --via widget`, then `etude inbox clear --id N`.
 
-### Handwriting and sketch practice (`draw-canvas`, nudge `#etude/canvas`)
+### Answer canvases (`#etude/drawing-canvas`, `#etude/markdown-canvas`, `#etude/coding-canvas`)
 
-For characters, formulas, diagrams, or anything the user must produce **by hand**: the widget gives them a canvas, saves the drawing as a PNG, and hands the agent a file path to look at.
+Three surfaces for items where the user must **produce** an answer rather than recall one. All are agent-graded: `user_prompt` states the task, `agent_prompt` holds the answer plus the rubric and never reaches the sandbox.
 
-1. The atom is agent-assisted; `user_prompt` states what to draw ("write the kanji for *house*"), `agent_prompt` holds the answer plus the grading rubric (stroke order, proportion, radicals). Optional `widget_data`: `{"guides": true}` draws centering guides, `{"aspect": 1}` sets the canvas ratio.
-2. Serve `/widgets/draw-canvas?atom=ID`.
-3. On submit the widget `POST`s the PNG to `/api/drawings`, which saves it to `<db-dir>/drawings/ID-<timestamp>.png` and returns the path, then files an inbox entry `{kind: "drawing", path, strokes, bytes}`. In Lotus it also injects a submit message naming the path, so the request lands in the chat automatically.
-4. **Open the PNG with your image-reading tool and actually look at it** before grading — the path is the point of this flow. Judge against `agent_prompt` + cascade, give specific feedback (which stroke, which proportion), then record it:
+| canvas | for | submits |
+|---|---|---|
+| `drawing-canvas` | handwriting, characters, sketches, diagrams | PNG saved to `<db-dir>/drawings/`; inbox gets the path |
+| `markdown-canvas` | essays, explanations, derivations | markdown text; live preview with LaTeX (`$inline$`, `$$block$$`), headings, lists, tables, task lists, code fences |
+| `coding-canvas` | code answers | source text plus its language; editor has line numbers, syntax highlighting, bracket/quote linting, and an optional vim mode |
+
+1. Serve `/widgets/<canvas>?atom=ID`. Optional `widget_data`: drawing takes `{"guides": true, "aspect": 1}`; coding takes `{"language": "python", "starter": "def solve():\n    "}` (or `&language=` on the URL).
+2. On submit the widget files an inbox entry and, in Lotus, injects a message into the same chat session.
+3. Read the entry with `etude inbox list`. For a drawing, **open the PNG with your image tool and actually look at it** — the path is the point. For markdown or code, the answer text is in the payload.
+4. Grade against `agent_prompt` + cascade, then record and clear:
 
 ```sh
-etude attempt ID --rating N --feedback-file - --answer 'Handwritten drawing: <path>' --via widget --mode widget
+etude attempt ID --rating N --feedback-file - --answer-file - --via widget --mode widget
 etude inbox clear --id <index>
 ```
 
-Keep the path in `--answer` so the attempt history stays linked to the image. Drawings are never inlined as base64 into the database: files stay readable and `db.json` stays small.
+For drawings keep the file path in `--answer` so the history stays linked to the image; for markdown and code pass the submitted text verbatim. Images are never inlined as base64 into the database: files stay readable and `db.json` stays small.
 
 ## Widget→session signal: per-platform protocol
 
@@ -123,7 +129,9 @@ Widgets are slices of the app surfaced on demand: instead of one central dashboa
 | `#etude/tags` | `/widgets/tag-breakdown?limit=12` | Which topics am I weakest in? |
 | `#etude/due` | `/widgets/due-forecast?days=7` | What's overdue and what lands this week? |
 | `#etude/session` | `/widgets/session-summary?hours=24` | What did I just practice, and how did it go? |
-| `#etude/canvas` | `/widgets/draw-canvas?atom=ID` | Let me handwrite/sketch the answer and grade the image (alias: `#etude/draw`) |
+| `#etude/drawing-canvas` | `/widgets/drawing-canvas?atom=ID` | Let me handwrite/sketch the answer; the agent reads the image (aliases: `#etude/canvas`, `#etude/draw`) |
+| `#etude/markdown-canvas` | `/widgets/markdown-canvas?atom=ID` | Let me write a long-form answer in markdown with live preview and LaTeX |
+| `#etude/coding-canvas` | `/widgets/coding-canvas?atom=ID` | Let me write code with line numbers, syntax highlighting, linting, and optional vim mode |
 | `#etude/streak` | `/widgets/streaks?days=35` | Am I keeping the habit? |
 | `#etude/recent` | `/widgets/recent-items?limit=10` | What did I touch most recently? |
 | `#etude/items` | `/widgets/queue-items?queue=Q` | The full ordered work list as a table |
@@ -132,7 +140,7 @@ Resolution rules:
 
 - `queue=` is **required** for `#etude/progress` and `#etude/items`; **optional** for `#etude/carousel` and `#etude/due` (omit to span the whole DB). If a queue is needed and the user has exactly one active queue, use it silently; if several, ask which — that is a genuine fork, not a guess.
 - `#etude/item` needs an atom ID. If the user names an item instead ("the UTF-8 one"), resolve it via `etude list --tags`/search, then serve the widget for the matching ID.
-- `#etude/canvas` (alias `#etude/draw`) also takes an atom ID, but a bare invocation means "give me something to write" — don't stop to ask. Pick the next due handwriting-style item (`etude next`, or search tags like `handwriting`/`kanji`/`draw`) and serve it. If the user names a target that has no atom yet ("kanji de água"), create the atom first — `user_prompt` = what to draw, `agent_prompt` = the answer plus the stroke/proportion rubric — then serve the canvas for it. After they submit, open the PNG and grade it; see the handwriting workflow above.
+- **The three answer canvases** (`#etude/drawing-canvas`, `#etude/markdown-canvas`, `#etude/coding-canvas`) all take an atom ID, and a bare invocation means "give me something to answer" — don't stop to ask. Pick the next due item that suits the surface (`etude next`, or search tags: `handwriting`/`kanji` for drawing, `explain`/`essay` for markdown, `write-assembly`/`code` for coding) and serve it. If the user names a target with no atom yet ("kanji de água"), create the atom first — `user_prompt` = the task, `agent_prompt` = the answer plus the rubric — then serve the canvas. `#etude/canvas` and `#etude/draw` remain aliases for the drawing canvas. After they submit, read the inbox entry (open the PNG for drawings) and grade it; see the answer-canvas workflow above.
 - Every route takes `&theme=X`. Bare `#etude/<name>` with no known match: list the table above rather than inventing a route.
 - Nudges are shorthand for the user, not a restriction on the agent — serve the same widgets unprompted whenever they answer the question better than prose.
 
@@ -151,8 +159,9 @@ Keep the user in the loop on placement decisions — ask when it's genuinely the
 ## Widgets & themes
 
 - **Default UI system:** every new Etude widget uses shadcn/ui unless the user explicitly asks for another visual language. Read `docs/widget-design.md`; compose the shared open-code component classes in `widgets/shadcn.css` (`ui-card`, `ui-button`, `ui-input`, `ui-badge`, `ui-progress`, and related variants) and the shadcn semantic tokens (`--background`, `--foreground`, `--card`, `--primary`, `--secondary`, `--muted`, `--accent`, `--border`, `--input`, `--ring`, `--radius`, `--chart-*`). Do not imitate shadcn loosely with one-off CSS when a shared component already exists.
-- Templates in `widgets/templates/` include interactive flashcard-drill, matching-pairs, and draw-canvas plus read-only queue-progress, queue-items, queue-overview, item-carousel, item-inspector, tag-breakdown, due-forecast, session-summary, recent-items, streaks, atom-card, and progress. Matching-pairs reads `atom.widget_data.pairs`.
+- Templates in `widgets/templates/` include interactive flashcard-drill, matching-pairs, drawing-canvas, markdown-canvas, and coding-canvas plus read-only queue-progress, queue-items, queue-overview, item-carousel, item-inspector, tag-breakdown, due-forecast, session-summary, recent-items, streaks, atom-card, and progress. Matching-pairs reads `atom.widget_data.pairs`.
 - **Every template body is transparent and theme-driven.** Widgets inherit the host surface (the Lotus chat canvas) rather than painting their own; all color comes from semantic tokens, so a theme switch restyles the whole widget. Never hardcode a hex/rgb color or set an opaque `background` on `body`. Progress fills band low→mid→high→full through `--status-critical/severe/warning/good`, which keeps them legible on every theme's track. Themes live in `widgets/themes/`; `default` is the canonical shadcn-style dark theme. The server injects the theme, `widgets/shadcn.css`, the `ETUDE` payload, and the ResizeObserver bridge. New templates remain self-contained and use the two injection markers.
+- **Vendored libraries** live in `widgets/vendor/` (KaTeX for math, CodeMirror 6 with vim for code) because sandboxes have no network. They are opt-in per template via the `/*__KATEX__*/` and `/*__CODEMIRROR__*/` markers — never inject both, they are over a megabyte together.
 - User-space overrides in `~/.etude/widgets/` win. Legacy `/applets/*`, `~/.etude/applets/`, and `applet_data` remain compatibility inputs only; never generate them for new work.
 - Soft-commands: `#theme:NAME` applies a one-off theme; `#set-default-theme:NAME` updates `meta.default_theme`. Verify new themes in a browser before delivery.
 

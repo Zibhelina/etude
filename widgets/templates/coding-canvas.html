@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · Code</title>
+/*__CODEMIRROR__*/
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+html, body { overflow-y: hidden; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 20px; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
+.prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
+.prompt pre { margin: 8px 0 0; padding: 10px 12px; background: var(--surface-2); border-radius: 8px; overflow-x: auto; font: 12.5px/1.5 var(--mono); }
+.bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.spacer { flex: 1 1 auto; }
+label.field { display: inline-flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 12.5px; }
+select { padding: 4px 9px; border-radius: 999px; border: 0.5px solid var(--border); background: var(--surface-2); color: var(--text-primary); font: 500 12.5px/1.5 var(--sans); }
+select:focus-visible, input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.toggle { display: inline-flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 12.5px; cursor: pointer; }
+.editor { margin-top: 12px; border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); background: var(--surface-1); overflow: hidden; }
+.cm-editor { background: transparent; font: 13.5px/1.6 var(--mono); }
+.cm-editor.cm-focused { outline: none; }
+.cm-scroller { font-family: var(--mono); }
+.cm-gutters { background: var(--surface-1); border-right: 0.5px solid var(--border); color: var(--text-muted); }
+.cm-activeLineGutter { background: var(--surface-2); color: var(--text-secondary); }
+.cm-activeLine { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+.cm-content { caret-color: var(--foreground); padding: 10px 0; }
+.cm-cursor, .cm-dropCursor { border-left-color: var(--foreground); }
+.cm-selectionBackground, .cm-editor .cm-selectionBackground,
+.cm-editor.cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--accent-strong, var(--accent)) 34%, transparent) !important; }
+.cm-fat-cursor, .cm-editor .cm-fat-cursor { background: color-mix(in srgb, var(--foreground) 62%, transparent) !important; outline: none !important; }
+.cm-panels { background: var(--surface-2); color: var(--text-primary); border-color: var(--border); }
+.cm-tooltip { background: var(--surface-2); border: 0.5px solid var(--border); color: var(--text-primary); }
+.cm-lint-marker-error { content: none; }
+.cm-diagnostic { border-left-color: var(--red); font: 12.5px/1.5 var(--mono); }
+.cm-diagnostic-error { border-left-color: var(--red); }
+.cm-diagnostic-warning { border-left-color: var(--yellow); }
+.cm-searchMatch { background: color-mix(in srgb, var(--yellow) 30%, transparent); }
+/* Syntax tokens resolve from the widget theme so the editor follows it. */
+.cm-editor {
+  --cm-keyword: var(--violet-text);
+  --cm-string: var(--green-text);
+  --cm-comment: var(--text-muted);
+  --cm-number: var(--yellow-text);
+  --cm-function: var(--accent-text);
+  --cm-type: var(--aqua, var(--accent-text));
+  --cm-operator: var(--text-secondary);
+  --cm-property: var(--text-primary);
+  --cm-invalid: var(--red-text);
+}
+.problems { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+.problem { display: flex; gap: 9px; padding: 7px 11px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: 8px; font: 12.5px/1.5 var(--mono); color: var(--text-secondary); }
+.problem[data-severity="error"] { border-color: color-mix(in srgb, var(--red) 45%, var(--border)); }
+.problem .where { color: var(--text-muted); flex: none; }
+.tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.counts { color: var(--text-muted); font: 500 11.5px/1.5 var(--mono); }
+button { font: inherit; }
+button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.status { margin-top: 10px; min-height: 18px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
+.status[data-tone="error"] { color: var(--red-text); }
+.done { margin-top: 14px; padding: 20px; text-align: center; background: var(--surface-1); border: 0.5px solid var(--green); border-radius: var(--radius-card, 12px); }
+.done h2 { margin: 0 0 6px; font-size: 16px; font-weight: 500; }
+.done p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.hidden { display: none; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap ui-card">
+  <div class="label" id="label">Etude · Code</div>
+  <h1 class="title" id="title">Write your solution</h1>
+  <div class="prompt" id="prompt"></div>
+  <div class="bar">
+    <label class="field" for="language" id="languageLabel">Language
+      <select id="language"></select>
+    </label>
+    <label class="toggle" for="vim"><input type="checkbox" id="vim"> <span id="vimLabel">Vim mode</span></label>
+    <span class="spacer"></span>
+    <span class="counts" id="counts"></span>
+  </div>
+  <div class="editor" id="editor"></div>
+  <div class="problems" id="problems"></div>
+  <div class="tools">
+    <span class="spacer"></span>
+    <button class="ui-button ui-button--outline ui-button--sm" id="reset" type="button">Reset</button>
+    <button class="ui-button ui-button--sm" id="submit" type="button" disabled>Send to agent</button>
+  </div>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+  <div class="done hidden" id="done">
+    <h2 id="doneTitle">Sent to your agent</h2>
+    <p id="doneBody">Your code is waiting in Etude. Tell your agent you are done so they can review it.</p>
+  </div>
+</div>
+<script>
+const ETUDE = /*__DATA__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const atom = data.atom && typeof data.atom === 'object' ? data.atom : {};
+  const $ = id => document.getElementById(id);
+  const text = value => (typeof value === 'string' ? value : '');
+  // Heading is a single line: strip markers instead of rendering them.
+  const plain = value => String(value || '').replace(/`{1,3}|\*{1,2}|[_#>]/g, '').replace(/\s+/g, ' ').trim();
+  const api = String(data.api || '').replace(/\/$/, '');
+
+  const portuguese = /[áàãâéêíóôõúç]|\b(escreva|implemente|função|programa|resposta)\b/i
+    .test(`${text(atom.user_prompt)} ${text(atom.topic)}`);
+  const ui = portuguese
+    ? { title: 'Escreva sua solução', label: 'Etude · Código', send: 'Enviar ao agente', reset: 'Restaurar',
+        sending: 'Enviando…', empty: 'Escreva algum código antes de enviar.', language: 'Linguagem', vim: 'Modo Vim',
+        failed: 'Não foi possível alcançar o Etude. Seu código continua aqui — tente de novo.',
+        sentTitle: 'Enviado ao agente', lines: 'linhas', problems: 'problemas',
+        sentBody: 'Seu código está aguardando no Etude. Avise o agente que terminou para receber o feedback.' }
+    : { title: 'Write your solution', label: 'Etude · Code', send: 'Send to agent', reset: 'Reset',
+        sending: 'Sending…', empty: 'Write some code before sending.', language: 'Language', vim: 'Vim mode',
+        failed: 'Could not reach Etude. Your code is still here — try again.',
+        sentTitle: 'Sent to your agent', lines: 'lines', problems: 'problems',
+        sentBody: 'Your code is waiting in Etude. Tell your agent you are done so they can review it.' };
+
+  if (portuguese) document.documentElement.lang = 'pt-BR';
+  $('label').textContent = text(atom.id) ? `${ui.label} · ${text(atom.id)}` : ui.label;
+  $('title').textContent = plain(atom.topic) || ui.title;
+  window.ETUDE_MD_INTO($('prompt'), text(atom.user_prompt) || ui.title);
+  $('languageLabel').childNodes[0].nodeValue = `${ui.language} `;
+  $('vimLabel').textContent = ui.vim;
+  $('reset').textContent = ui.reset;
+  $('submit').textContent = ui.send;
+  $('doneTitle').textContent = ui.sentTitle;
+  $('doneBody').textContent = ui.sentBody;
+
+  const LABELS = { python: 'Python', javascript: 'JavaScript', typescript: 'TypeScript',
+                   cpp: 'C++', c: 'C', rust: 'Rust' };
+  const available = (window.ETUDE_CM && window.ETUDE_CM.LANGUAGES) || ['python'];
+  const requested = text(data.language).toLowerCase();
+  const language = available.includes(requested) ? requested : 'python';
+  for (const name of available) {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = LABELS[name] || name;
+    if (name === language) option.selected = true;
+    $('language').append(option);
+  }
+
+  const starter = text(data.starter);
+  let sent = false;
+
+  // Syntax-only linting: balance and stray-character checks that hold for every
+  // supported language. Semantic correctness is the agent's job, not the widget's.
+  function lint(code) {
+    const diagnostics = [];
+    const lines = code.split('\n');
+    const offsets = [];
+    let running = 0;
+    for (const line of lines) { offsets.push(running); running += line.length + 1; }
+
+    const pairs = { ')': '(', ']': '[', '}': '{' };
+    const opens = { '(': ')', '[': ']', '{': '}' };
+    const stack = [];
+    let inString = null;
+    let lineIndex = 0;
+    for (let index = 0; index < code.length; index += 1) {
+      const char = code[index];
+      if (char === '\n') { lineIndex += 1; if (inString && inString.simple) inString = null; continue; }
+      if (inString) {
+        if (char === '\\') { index += 1; continue; }
+        if (char === inString.quote) inString = null;
+        continue;
+      }
+      if (char === '"' || char === "'" || char === '`') { inString = { quote: char, simple: char !== '`' }; continue; }
+      if (char === '#' || (char === '/' && code[index + 1] === '/')) {
+        while (index < code.length && code[index] !== '\n') index += 1;
+        lineIndex += 1;
+        continue;
+      }
+      if (opens[char]) stack.push({ char, index });
+      else if (pairs[char]) {
+        const top = stack.pop();
+        if (!top || top.char !== pairs[char]) {
+          diagnostics.push({ from: index, to: index + 1, severity: 'error',
+            message: `Unmatched "${char}"` });
+        }
+      }
+    }
+    for (const item of stack) {
+      diagnostics.push({ from: item.index, to: item.index + 1, severity: 'error',
+        message: `Unclosed "${item.char}"` });
+    }
+    if (inString) {
+      diagnostics.push({ from: Math.max(0, code.length - 1), to: code.length, severity: 'error',
+        message: 'Unterminated string' });
+    }
+    lines.forEach((line, index) => {
+      if (/\s+$/.test(line) && line.trim()) {
+        diagnostics.push({ from: offsets[index] + line.replace(/\s+$/, '').length,
+          to: offsets[index] + line.length, severity: 'warning', message: 'Trailing whitespace' });
+      }
+      if (/\t/.test(line)) {
+        diagnostics.push({ from: offsets[index], to: offsets[index] + line.length,
+          severity: 'warning', message: 'Tab character — this editor indents with spaces' });
+      }
+    });
+    return diagnostics;
+  }
+
+  function showProblems(code) {
+    const found = lint(code);
+    const list = $('problems');
+    list.textContent = '';
+    const lineOf = position => code.slice(0, position).split('\n').length;
+    found.slice(0, 6).forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'problem';
+      row.dataset.severity = item.severity;
+      const where = document.createElement('span');
+      where.className = 'where';
+      where.textContent = `L${lineOf(item.from)}`;
+      const message = document.createElement('span');
+      message.textContent = item.message;
+      row.append(where, message);
+      list.append(row);
+    });
+    return found;
+  }
+
+  let editor = null;
+  const value = () => (editor ? editor.getValue() : '');
+
+  function refresh() {
+    const code = value();
+    const lines = code ? code.split('\n').length : 0;
+    const found = showProblems(code);
+    const errors = found.filter(item => item.severity === 'error').length;
+    $('counts').textContent = `${lines} ${ui.lines}${errors ? ` · ${errors} ${ui.problems}` : ''}`;
+    $('submit').disabled = sent || !code.trim();
+    $('reset').disabled = sent;
+  }
+
+  if (window.ETUDE_CM) {
+    editor = window.ETUDE_CM.createEditor({
+      parent: $('editor'),
+      doc: starter,
+      language,
+      vimMode: false,
+      onChange: refresh,
+      onLint: lint,
+    });
+  } else {
+    // The bundle failed to load: fall back to a plain textarea rather than
+    // leaving the user with no way to answer.
+    const area = document.createElement('textarea');
+    area.style.cssText = 'width:100%;min-height:280px;padding:12px 14px;border:0;background:transparent;color:inherit;font:13.5px/1.6 var(--mono);resize:vertical;';
+    area.value = starter;
+    area.addEventListener('input', refresh);
+    $('editor').append(area);
+    editor = { getValue: () => area.value, setLanguage() {}, setVim() {}, focus: () => area.focus() };
+  }
+
+  $('language').addEventListener('change', event => { editor.setLanguage(event.target.value); refresh(); });
+  $('vim').addEventListener('change', event => { editor.setVim(event.target.checked); editor.focus(); });
+  $('reset').addEventListener('click', () => {
+    if (window.ETUDE_CM && editor.view) {
+      editor.view.dispatch({ changes: { from: 0, to: editor.view.state.doc.length, insert: starter } });
+    }
+    refresh();
+  });
+
+  function setStatus(message, tone) {
+    const node = $('status');
+    node.textContent = message;
+    if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
+  }
+
+  $('submit').addEventListener('click', async () => {
+    const code = value().trim();
+    if (sent || !code) { if (!code) setStatus(ui.empty, 'error'); return; }
+    const atomId = text(atom.id);
+    if (!atomId || !api) { setStatus(ui.failed, 'error'); return; }
+
+    $('submit').disabled = true;
+    setStatus(ui.sending);
+    try {
+      const response = await fetch(`${api}/api/inbox`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          atom_id: atomId,
+          payload: { kind: 'code', language: $('language').value, text: code,
+                     lines: code.split('\n').length },
+          ts: new Date().toISOString(),
+        }),
+      });
+      if (!response.ok) throw new Error(String(response.status));
+      sent = true;
+      refresh();
+      $('done').classList.remove('hidden');
+      setStatus('');
+      window.parent.postMessage({
+        lotus: 1,
+        type: 'submit',
+        text: `I submitted a ${$('language').value} solution for ${atomId} via the coding canvas. Read it from the Etude inbox, review it, and record the attempt.`,
+      }, '*');
+    } catch {
+      $('submit').disabled = false;
+      setStatus(ui.failed, 'error');
+    }
+  });
+
+  refresh();
+})();
+</script>
+</body>
+</html>

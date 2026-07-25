@@ -542,7 +542,7 @@ def test_draw_canvas_widget_gets_its_prompt_without_leaking_the_answer(running_s
     """The canvas shows the atom's prompt; agent_prompt holds the answer and the
     grading rubric, so it must never reach the sandbox."""
     base, _ = running_server
-    _, _, html = request(base, "/widgets/draw-canvas?atom=AG-2")
+    _, _, html = request(base, "/widgets/drawing-canvas?atom=AG-2")
 
     assert "toDataURL('image/png')" in html
     assert "/api/drawings" in html
@@ -575,6 +575,50 @@ def test_templates_never_show_raw_markdown_markers_for_prompts():
             assert re.search(r"\b(plain|firstLine|stripMarkdown)\s*\(", expression), (
                 f"{template_path.name} shows a raw prompt: {expression.strip()}"
             )
+
+
+def test_vendored_libraries_are_opt_in_per_template(running_server):
+    """KaTeX and CodeMirror are together well over a megabyte, and no template
+    needs both. Each declares a marker and gets only what it asked for."""
+    base, _ = running_server
+    _, _, markdown = request(base, "/widgets/markdown-canvas?atom=AG-2")
+    _, _, coding = request(base, "/widgets/coding-canvas?atom=AG-2")
+    _, _, plain = request(base, "/widgets/streaks?days=7")
+
+    assert "katex" in markdown.casefold() and "ETUDE_CM" not in markdown
+    assert "ETUDE_CM" in coding and "katex" not in coding.casefold()
+    assert "katex" not in plain.casefold() and "ETUDE_CM" not in plain
+    # Markers are consumed, never served raw.
+    for html in (markdown, coding, plain):
+        assert "/*__KATEX__*/" not in html and "/*__CODEMIRROR__*/" not in html
+
+
+def test_answer_canvases_never_leak_the_expected_answer(running_server):
+    """All three canvases show the prompt and collect an answer; agent_prompt
+    holds the rubric and canonical answer and must stay server-side."""
+    base, _ = running_server
+    for path in ("/widgets/markdown-canvas?atom=AG-2", "/widgets/coding-canvas?atom=AG-2",
+                 "/widgets/drawing-canvas?atom=AG-2"):
+        _, _, html = request(base, path)
+        payload = _injected_payload(html)
+        assert payload["atom"]["id"] == "AG-2"
+        assert "agent_prompt" not in payload["atom"]
+        assert "expected" not in payload["atom"]
+
+
+def test_coding_canvas_takes_starter_code_and_language_from_widget_data(running_server):
+    base, _ = running_server
+    request(base, "/api/atoms/AG-2", method="PATCH",
+            body={"widget_data": {"language": "rust", "starter": "fn main() {}"}})
+
+    _, _, html = request(base, "/widgets/coding-canvas?atom=AG-2")
+    payload = _injected_payload(html)
+    assert payload["language"] == "rust"
+    assert payload["starter"] == "fn main() {}"
+
+    # An explicit query parameter wins over the stored default.
+    _, _, overridden = request(base, "/widgets/coding-canvas?atom=AG-2&language=python")
+    assert _injected_payload(overridden)["language"] == "python"
 
 
 def test_widgets_never_scroll_vertically_inside_their_frame():

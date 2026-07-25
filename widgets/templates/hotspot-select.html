@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · Hotspot</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+html, body { overflow-y: hidden; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 14px; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
+.prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
+
+.bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.spacer { flex: 1 1 auto; }
+.count { color: var(--text-muted); font: 500 11.5px/1.5 var(--mono); white-space: nowrap; }
+.mode { color: var(--text-muted); font: 500 11.5px/1.5 var(--sans); }
+
+.stage { position: relative; margin-top: 12px; border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px);
+  background: var(--surface-1); overflow: hidden; touch-action: manipulation; }
+svg { display: block; width: 100%; height: auto; }
+.region { fill: var(--surface-2); fill-opacity: .55; stroke: var(--border-strong); stroke-width: 1.2;
+  stroke-linejoin: round; transition: fill-opacity .12s ease, fill .12s ease; cursor: pointer; outline: none; }
+.region:hover { fill: color-mix(in srgb, var(--foreground) 22%, var(--surface-2)); fill-opacity: .8; }
+.region[data-selected="true"] { fill: var(--status-good); fill-opacity: .78; stroke: var(--foreground); stroke-width: 1.8; }
+.region[data-selected="true"]:hover { fill: color-mix(in srgb, var(--status-good) 78%, var(--foreground)); }
+.region:focus-visible { stroke: var(--ring); stroke-width: 2.4; }
+.pin { fill: var(--foreground); font: 500 11px/1 var(--sans); pointer-events: none; user-select: none; }
+.hoverName { position: absolute; inset: 10px 10px auto auto; padding: 3px 10px; border-radius: 999px;
+  background: var(--surface-2); border: 0.5px solid var(--border); color: var(--text-secondary);
+  font: 500 12px/1.6 var(--sans); pointer-events: none; opacity: 0; transition: opacity .12s ease; }
+.hoverName[data-show="true"] { opacity: 1; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.legend button { display: inline-flex; align-items: center; min-height: 40px; padding: 6px 14px; border-radius: 999px;
+  border: 0.5px solid var(--border); background: var(--surface-2); color: var(--text-secondary);
+  font: 500 12.5px/1.4 var(--sans); cursor: pointer; }
+.legend button:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.legend button[aria-checked="true"] { background: var(--surface-3, var(--surface-2)); color: var(--text-primary); border-color: var(--foreground); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; padding: 3px 6px 3px 11px; border-radius: 999px;
+  background: var(--surface-2); border: 0.5px solid var(--border); color: var(--text-primary); font-size: 12.5px; }
+.chip button { width: 17px; height: 17px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 999px;
+  background: transparent; color: var(--text-muted); cursor: pointer; font: 500 13px/1 var(--sans); }
+.chip button:hover { color: var(--text-primary); background: var(--surface-1); }
+.empty { margin-top: 12px; color: var(--text-muted); font-size: 12.5px; }
+
+.tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+button { font: inherit; }
+button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.tools .ui-button { min-height: 40px; }
+.status:not(:empty) { margin-top: 10px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
+.status[data-tone="error"] { color: var(--red-text); }
+.notice { margin-top: 12px; padding: 14px 16px; background: var(--surface-1); border: 0.5px solid var(--border);
+  border-radius: var(--radius-card, 12px); color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
+.notice strong { display: block; margin-bottom: 4px; color: var(--text-primary); font-weight: 500; }
+.done { margin-top: 14px; padding: 20px; text-align: center; background: var(--surface-1); border: 0.5px solid var(--green); border-radius: var(--radius-card, 12px); }
+.done h2 { margin: 0 0 6px; font-size: 16px; font-weight: 500; }
+.done p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.hidden { display: none; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap ui-card">
+  <div class="label" id="label">Etude · Hotspot</div>
+  <h1 class="title" id="title">Select on the diagram</h1>
+  <div class="prompt" id="prompt"></div>
+
+  <div class="notice hidden" id="configError">
+    <strong id="configErrorTitle">Nothing to select yet</strong>
+    <span id="configErrorBody"></span>
+  </div>
+
+  <div class="bar">
+    <span class="mode" id="mode"></span>
+    <span class="spacer"></span>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="stage" id="stage">
+    <svg id="diagram" role="group" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="hoverName" id="hoverName"></div>
+  </div>
+
+  <div class="legend" id="legend"></div>
+  <div class="chips" id="chips"></div>
+  <div class="empty hidden" id="emptyHint"></div>
+
+  <div class="tools">
+    <span class="spacer"></span>
+    <button class="ui-button ui-button--outline ui-button--sm" id="clear" type="button">Clear</button>
+    <button class="ui-button ui-button--sm" id="submit" type="button" disabled>Send to agent</button>
+  </div>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+  <div class="done hidden" id="done">
+    <h2 id="doneTitle">Sent to your agent</h2>
+    <p id="doneBody">Your selection is waiting in Etude. Tell your agent you are done so they can review it.</p>
+  </div>
+</div>
+<script>
+const ETUDE = /*__DATA__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const atom = data.atom && typeof data.atom === 'object' ? data.atom : {};
+  const config = atom.widget_data && typeof atom.widget_data === 'object' ? atom.widget_data : {};
+  const $ = id => document.getElementById(id);
+  const text = value => (typeof value === 'string' ? value : '');
+  const plain = value => String(value || '').replace(/`{1,3}|\*{1,2}|[_#>]/g, '').replace(/\s+/g, ' ').trim();
+  const api = String(data.api || '').replace(/\/$/, '');
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  const portuguese = /[áàãâéêíóôõúç]|\b(selecione|clique|diagrama|regi(ão|ões)|imagem|marque)\b/i
+    .test(`${text(atom.user_prompt)} ${text(atom.topic)}`);
+  const ui = portuguese
+    ? { title: 'Selecione no diagrama', label: 'Etude · Diagrama', send: 'Enviar ao agente', clear: 'Limpar',
+        sending: 'Enviando…', empty: 'Selecione ao menos uma região antes de enviar.',
+        failed: 'Não foi possível alcançar o Etude. Sua seleção continua aqui — tente de novo.',
+        sentTitle: 'Enviado ao agente', selected: 'selecionadas', one: 'Escolha uma região.',
+        many: 'Escolha quantas regiões quiser.',
+        hint: 'Clique em uma região, ou use Tab e Enter para escolher pelo teclado.',
+        badTitle: 'Nada para selecionar ainda',
+        badBody: 'Este item não traz regiões utilizáveis. Peça ao agente para reenviar a configuração do diagrama.',
+        picked: name => `${name} selecionada`, dropped: name => `${name} removida`,
+        sentBody: 'Sua seleção está aguardando no Etude. Avise o agente que terminou para receber o feedback.' }
+    : { title: 'Select on the diagram', label: 'Etude · Hotspot', send: 'Send to agent', clear: 'Clear',
+        sending: 'Sending…', empty: 'Select at least one region before sending.',
+        failed: 'Could not reach Etude. Your selection is still here — try again.',
+        sentTitle: 'Sent to your agent', selected: 'selected', one: 'Pick one region.',
+        many: 'Pick as many regions as you need.',
+        hint: 'Click a region, or use Tab and Enter to choose from the keyboard.',
+        badTitle: 'Nothing to select yet',
+        badBody: 'This item carries no usable regions. Ask your agent to send the diagram configuration again.',
+        picked: name => `${name} selected`, dropped: name => `${name} removed`,
+        sentBody: 'Your selection is waiting in Etude. Tell your agent you are done so they can review it.' };
+
+  if (portuguese) document.documentElement.lang = 'pt-BR';
+  $('label').textContent = text(atom.id) ? `${ui.label} · ${text(atom.id)}` : ui.label;
+  $('title').textContent = plain(atom.topic) || ui.title;
+  window.ETUDE_MD_INTO($('prompt'), text(atom.user_prompt) || ui.title);
+  $('clear').textContent = ui.clear;
+  $('submit').textContent = ui.send;
+  $('doneTitle').textContent = ui.sentTitle;
+  $('doneBody').textContent = ui.sentBody;
+  $('emptyHint').textContent = ui.hint;
+  $('configErrorTitle').textContent = ui.badTitle;
+  $('configErrorBody').textContent = ui.badBody;
+
+  // `multiple` defaults to true: an atom opts into single-answer mode, it does
+  // not have to opt into the common case.
+  const multiple = config.multiple !== false;
+  const diagram = $('diagram');
+  diagram.setAttribute('aria-label', plain(atom.topic) || ui.title);
+  $('mode').textContent = multiple ? ui.many : ui.one;
+
+  const number = value => (Number.isFinite(value) ? value : (Number.isFinite(Number(value)) ? Number(value) : null));
+
+  // A malformed view_box must not collapse the diagram to nothing; fall back to
+  // a plain square frame and still draw whatever regions parse.
+  function readViewBox(raw) {
+    if (!Array.isArray(raw) || raw.length !== 4) return [0, 0, 100, 100];
+    const parts = raw.map(number);
+    if (parts.some(part => part === null)) return [0, 0, 100, 100];
+    if (!(parts[2] > 0) || !(parts[3] > 0)) return [0, 0, 100, 100];
+    return parts;
+  }
+  const viewBox = readViewBox(config.view_box);
+  diagram.setAttribute('viewBox', viewBox.join(' '));
+
+  function buildShape(region) {
+    if (typeof region.path === 'string' && region.path.trim()) {
+      const node = document.createElementNS(SVG_NS, 'path');
+      node.setAttribute('d', region.path);
+      return node;
+    }
+    const rect = region.rect;
+    if (rect && typeof rect === 'object') {
+      const x = number(rect.x), y = number(rect.y);
+      const width = number(rect.width), height = number(rect.height);
+      if (x !== null && y !== null && width > 0 && height > 0) {
+        const node = document.createElementNS(SVG_NS, 'rect');
+        node.setAttribute('x', x);
+        node.setAttribute('y', y);
+        node.setAttribute('width', width);
+        node.setAttribute('height', height);
+        return node;
+      }
+    }
+    const circle = region.circle;
+    if (circle && typeof circle === 'object') {
+      const cx = number(circle.cx), cy = number(circle.cy), r = number(circle.r);
+      if (cx !== null && cy !== null && r > 0) {
+        const node = document.createElementNS(SVG_NS, 'circle');
+        node.setAttribute('cx', cx);
+        node.setAttribute('cy', cy);
+        node.setAttribute('r', r);
+        return node;
+      }
+    }
+    if (Array.isArray(region.polygon)) {
+      const pairs = region.polygon
+        .filter(point => Array.isArray(point) && point.length >= 2)
+        .map(point => [number(point[0]), number(point[1])])
+        .filter(point => point[0] !== null && point[1] !== null);
+      if (pairs.length >= 3) {
+        const node = document.createElementNS(SVG_NS, 'polygon');
+        node.setAttribute('points', pairs.map(point => point.join(',')).join(' '));
+        return node;
+      }
+    }
+    return null;
+  }
+
+  const rawRegions = Array.isArray(config.regions) ? config.regions : [];
+  const regions = [];
+  for (const raw of rawRegions) {
+    if (!raw || typeof raw !== 'object') continue;
+    const id = typeof raw.id === 'string' && raw.id ? raw.id : null;
+    if (!id || regions.some(region => region.id === id)) continue;
+    const shape = buildShape(raw);
+    if (!shape) continue;
+    regions.push({ id, label: plain(raw.label) || id, shape });
+  }
+
+  const selected = new Map();
+  const nodes = new Map();
+  const legendButtons = new Map();
+  let sent = false;
+  const usable = regions.length === 0 ? false : true;
+
+  // The optional image is a data URL from the atom, so the widget still makes
+  // no network request; a remote href would break the offline contract.
+  const image = text(config.image);
+  if (usable && image.startsWith('data:')) {
+    const node = document.createElementNS(SVG_NS, 'image');
+    node.setAttribute('href', image);
+    node.setAttribute('x', viewBox[0]);
+    node.setAttribute('y', viewBox[1]);
+    node.setAttribute('width', viewBox[2]);
+    node.setAttribute('height', viewBox[3]);
+    node.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    diagram.append(node);
+  }
+
+  function render() {
+    if (!usable) {
+      $('configError').classList.remove('hidden');
+      $('stage').classList.add('hidden');
+      return;
+    }
+    for (const region of regions) {
+      const shape = region.shape;
+      shape.setAttribute('class', 'region');
+      shape.setAttribute('tabindex', '0');
+      shape.setAttribute('role', multiple ? 'checkbox' : 'radio');
+      shape.setAttribute('aria-checked', 'false');
+      shape.setAttribute('aria-label', region.label);
+      shape.dataset.id = region.id;
+      shape.dataset.selected = 'false';
+      diagram.append(shape);
+      nodes.set(region.id, shape);
+    }
+    // Small regions and dense diagrams are hard to hit precisely, so every
+    // region also gets a full-size labelled control below the picture.
+    const legend = $('legend');
+    for (const region of regions) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = region.label;
+      button.setAttribute('role', multiple ? 'checkbox' : 'radio');
+      button.setAttribute('aria-checked', 'false');
+      button.addEventListener('click', () => toggle(region.id));
+      legend.append(button);
+      legendButtons.set(region.id, button);
+    }
+  }
+
+  function paint(id) {
+    const on = selected.has(id);
+    const node = nodes.get(id);
+    if (node) {
+      node.dataset.selected = String(on);
+      node.setAttribute('aria-checked', String(on));
+    }
+    const button = legendButtons.get(id);
+    if (button) button.setAttribute('aria-checked', String(on));
+  }
+
+  function toggle(id) {
+    if (sent || !nodes.has(id)) return;
+    const region = regions.find(entry => entry.id === id);
+    if (selected.has(id)) {
+      selected.delete(id);
+      setStatus(ui.dropped(region.label));
+    } else {
+      if (!multiple) {
+        for (const other of [...selected.keys()]) { selected.delete(other); paint(other); }
+      }
+      selected.set(id, region.label);
+      setStatus(ui.picked(region.label));
+    }
+    paint(id);
+    refresh();
+  }
+
+  function refresh() {
+    const chips = $('chips');
+    chips.textContent = '';
+    for (const [id, label] of selected) {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.append(document.createTextNode(label));
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', `Remove ${label}`);
+      remove.addEventListener('click', () => toggle(id));
+      chip.append(remove);
+      chips.append(chip);
+    }
+    $('count').textContent = selected.size ? `${selected.size} ${ui.selected}` : '';
+    $('emptyHint').classList.toggle('hidden', selected.size > 0 || !usable);
+    $('submit').disabled = sent || !usable || selected.size === 0;
+    $('clear').disabled = sent || selected.size === 0;
+  }
+
+  diagram.addEventListener('click', event => {
+    const shape = event.target.closest('.region');
+    if (shape) toggle(shape.dataset.id);
+  });
+  diagram.addEventListener('keydown', event => {
+    const shape = event.target.closest('.region');
+    if (!shape || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    toggle(shape.dataset.id);
+  });
+  diagram.addEventListener('pointerover', event => {
+    const shape = event.target.closest('.region');
+    if (!shape) return;
+    $('hoverName').textContent = shape.getAttribute('aria-label');
+    $('hoverName').dataset.show = 'true';
+  });
+  diagram.addEventListener('pointerout', event => {
+    if (!event.relatedTarget || !event.relatedTarget.closest('.region')) $('hoverName').dataset.show = 'false';
+  });
+
+  $('clear').addEventListener('click', () => {
+    for (const id of [...selected.keys()]) { selected.delete(id); paint(id); }
+    setStatus('');
+    refresh();
+  });
+
+  function setStatus(message, tone) {
+    const node = $('status');
+    node.textContent = message;
+    if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
+  }
+
+  $('submit').addEventListener('click', async () => {
+    if (sent || selected.size === 0) { if (!selected.size) setStatus(ui.empty, 'error'); return; }
+    const atomId = text(atom.id);
+    if (!atomId || !api) { setStatus(ui.failed, 'error'); return; }
+
+    $('submit').disabled = true;
+    setStatus(ui.sending);
+    const ids = [...selected.keys()];
+    const labels = ids.map(id => selected.get(id));
+    try {
+      const response = await fetch(`${api}/api/inbox`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          atom_id: atomId,
+          payload: { kind: 'hotspot-select', ids, labels, count: ids.length },
+          ts: new Date().toISOString(),
+        }),
+      });
+      if (!response.ok) throw new Error(String(response.status));
+      sent = true;
+      refresh();
+      $('done').classList.remove('hidden');
+      setStatus('');
+      window.parent.postMessage({
+        lotus: 1,
+        type: 'submit',
+        text: `I selected ${labels.length} region(s) on the diagram for ${atomId}: ${labels.join(', ')}. Read it from the Etude inbox, grade it, record the attempt, and clear the inbox item.`,
+      }, '*');
+    } catch {
+      $('submit').disabled = false;
+      setStatus(ui.failed, 'error');
+    }
+  });
+
+  render();
+  refresh();
+})();
+</script>
+</body>
+</html>

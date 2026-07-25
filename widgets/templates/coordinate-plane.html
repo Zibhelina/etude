@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · Coordinate plane</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+html, body { overflow-y: hidden; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 14px; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border);
+  border-radius: var(--radius-card, 12px); font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
+.prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
+
+.bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.spacer { flex: 1 1 auto; }
+.hint { color: var(--text-muted); font-size: 12.5px; line-height: 1.5; }
+.readout { color: var(--text-secondary); font: 500 11.5px/1.5 var(--mono); white-space: nowrap; }
+
+.stage { position: relative; margin-top: 12px; border: 0.5px solid var(--border);
+  border-radius: var(--radius-card, 12px); background: var(--surface-1); overflow: hidden; touch-action: none; }
+svg { display: block; width: 100%; height: auto; cursor: crosshair; }
+svg.dragging { cursor: grabbing; }
+.grid-line { stroke: var(--border); stroke-width: .5; }
+.grid-line.major { stroke: var(--border-strong); stroke-width: .7; }
+.axis { stroke: var(--text-muted); stroke-width: 1; }
+.tick-label { fill: var(--text-muted); font: 9px/1 var(--mono); }
+.axis-name { fill: var(--text-secondary); font: 10px/1 var(--mono); }
+.bg-shape { fill: none; stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 4 3; }
+.bg-shape[data-closed="true"] { fill: var(--surface-2); fill-opacity: .5; }
+.bg-dot { fill: var(--text-muted); }
+.bg-label { fill: var(--text-muted); font: 9.5px/1 var(--sans); }
+.trace { fill: none; stroke: var(--accent-strong); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.trace[data-closed="true"] { fill: var(--accent-strong); fill-opacity: .16; }
+.pt { fill: var(--accent-strong); stroke: var(--surface-0); stroke-width: 1.4; cursor: grab; outline: none; }
+.pt:hover { stroke: var(--foreground); }
+.pt:focus-visible { stroke: var(--ring); stroke-width: 2.4; }
+.pt[data-active="true"] { stroke: var(--foreground); stroke-width: 2.2; }
+.pt-hit { fill: transparent; cursor: grab; }
+.pt-label { fill: var(--text-secondary); font: 9.5px/1 var(--mono); pointer-events: none; }
+
+.list { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.list li { display: inline-flex; align-items: center; gap: 7px; padding: 3px 6px 3px 11px; border-radius: 999px;
+  background: var(--surface-2); border: 0.5px solid var(--border); font: 12.5px/1.6 var(--mono); }
+.list li[data-role="from"], .list li[data-role="to"] { border-color: var(--border-strong); }
+.list .role { color: var(--text-muted); font: 500 10.5px/1.6 var(--sans); letter-spacing: .02em; }
+.list button { width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 999px;
+  background: transparent; color: var(--text-muted); cursor: pointer; font: 500 13px/1 var(--sans); }
+.list button:hover { color: var(--text-primary); background: var(--surface-1); }
+.empty { margin-top: 12px; color: var(--text-muted); font-size: 12.5px; }
+
+.tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+button { font: inherit; }
+button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.status:not(:empty) { margin-top: 10px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
+.status[data-tone="error"] { color: var(--red-text); }
+.done { margin-top: 14px; padding: 20px; text-align: center; background: var(--surface-1);
+  border: 0.5px solid var(--green); border-radius: var(--radius-card, 12px); }
+.done h2 { margin: 0 0 6px; font-size: 16px; font-weight: 500; }
+.done p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.notice { margin-top: 14px; padding: 16px 18px; background: var(--surface-1); border: 0.5px solid var(--border);
+  border-radius: var(--radius-card, 12px); color: var(--text-secondary); font-size: 13.5px; line-height: 1.55; }
+.notice strong { display: block; margin-bottom: 4px; color: var(--text-primary); font-weight: 500; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.hidden { display: none; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap ui-card">
+  <div class="label" id="label">Etude · Coordinate plane</div>
+  <h1 class="title" id="title">Plot on the plane</h1>
+  <div class="prompt" id="prompt"></div>
+
+  <div class="bar">
+    <span class="hint" id="hint"></span>
+    <span class="spacer"></span>
+    <span class="readout ui-badge ui-badge--outline" id="readout"></span>
+  </div>
+
+  <div class="stage" id="stage">
+    <svg id="plane" role="application" preserveAspectRatio="xMidYMid meet" aria-label="Coordinate plane"></svg>
+  </div>
+
+  <h2 class="sr-only" id="listHeading">Plotted points</h2>
+  <ul class="list" id="list" aria-labelledby="listHeading"></ul>
+  <div class="empty hidden" id="emptyHint"></div>
+
+  <div class="tools">
+    <span class="spacer"></span>
+    <button class="ui-button ui-button--outline ui-button--sm" id="clear" type="button">Clear</button>
+    <button class="ui-button ui-button--sm" id="submit" type="button" disabled>Send to agent</button>
+  </div>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+  <div class="notice hidden" id="configError"></div>
+  <div class="done hidden" id="done">
+    <h2 id="doneTitle">Sent to your agent</h2>
+    <p id="doneBody">Your answer is waiting in Etude. Tell your agent you are done so they can review it.</p>
+  </div>
+</div>
+<script>
+const ETUDE = /*__DATA__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const atom = data.atom && typeof data.atom === 'object' ? data.atom : {};
+  const config = atom.widget_data && typeof atom.widget_data === 'object' ? atom.widget_data : {};
+  const $ = id => document.getElementById(id);
+  const text = value => (typeof value === 'string' ? value : '');
+  const plain = value => String(value || '').replace(/`{1,3}|\*{1,2}|[_#>]/g, '').replace(/\s+/g, ' ').trim();
+  const api = String(data.api || '').replace(/\/$/, '');
+  const atomId = text(atom.id);
+
+  const portuguese = /[áàãâéêíóôõúç]|\b(plote|marque|clique|plano|coordenadas|gráfico|vetor|reta|região)\b/i
+    .test(`${text(atom.user_prompt)} ${text(atom.topic)}`);
+  const ui = portuguese
+    ? { title: 'Marque no plano', label: 'Etude · Plano cartesiano', send: 'Enviar ao agente', clear: 'Limpar',
+        sending: 'Enviando…', remove: 'Remover ponto', empty: 'Marque ao menos um ponto antes de enviar.',
+        failed: 'Não foi possível alcançar o Etude. Seu trabalho continua aqui — tente de novo.',
+        sentTitle: 'Enviado ao agente', from: 'origem', to: 'destino', point: 'Ponto',
+        sentBody: 'Sua resposta está aguardando no Etude. Avise o agente que terminou para receber o feedback.',
+        badConfigTitle: 'Plano indisponível',
+        badConfig: 'A configuração deste exercício está incompleta ou inválida. Peça ao seu agente para corrigir os limites do plano.',
+        hints: {
+          points: 'Clique para marcar pontos. Arraste para mover. Com um ponto focado, use as setas para mover e Delete para remover.',
+          polyline: 'Clique para acrescentar vértices em ordem. Arraste para ajustar; setas movem o ponto focado.',
+          vector: 'Clique uma vez para a origem e outra para o destino. Arraste para ajustar.',
+          region: 'Clique para traçar os vértices da região. Arraste para ajustar; setas movem o ponto focado.',
+        } }
+    : { title: 'Plot on the plane', label: 'Etude · Coordinate plane', send: 'Send to agent', clear: 'Clear',
+        sending: 'Sending…', remove: 'Remove point', empty: 'Plot at least one point before sending.',
+        failed: 'Could not reach Etude. Your work is still here — try again.',
+        sentTitle: 'Sent to your agent', from: 'from', to: 'to', point: 'Point',
+        sentBody: 'Your answer is waiting in Etude. Tell your agent you are done so they can review it.',
+        badConfigTitle: 'Plane unavailable',
+        badConfig: 'This exercise is missing a valid plane configuration. Ask your agent to fix the axis bounds.',
+        hints: {
+          points: 'Click to place points. Drag to move. With a point focused, arrow keys nudge it and Delete removes it.',
+          polyline: 'Click to add vertices in order. Drag to adjust; arrow keys nudge the focused point.',
+          vector: 'Click once for the start and once for the end. Drag either end to adjust.',
+          region: 'Click to trace the region vertices. Drag to adjust; arrow keys nudge the focused point.',
+        } };
+
+  if (portuguese) document.documentElement.lang = 'pt-BR';
+  $('label').textContent = atomId ? `${ui.label} · ${atomId}` : ui.label;
+  $('title').textContent = plain(atom.topic) || ui.title;
+  window.ETUDE_MD_INTO($('prompt'), text(atom.user_prompt) || ui.title);
+  $('clear').textContent = ui.clear;
+  $('submit').textContent = ui.send;
+  $('doneTitle').textContent = ui.sentTitle;
+  $('doneBody').textContent = ui.sentBody;
+
+  // --- configuration ---------------------------------------------------
+  // Bounds come from the atom, so a bad authoring pass must land as a calm
+  // message rather than an exception that leaves an empty card behind.
+  const MODES = ['points', 'polyline', 'vector', 'region'];
+  const number = value => (typeof value === 'number' ? value : Number(value));
+  const finite = value => { const n = number(value); return Number.isFinite(n) ? n : null; };
+
+  function readConfig() {
+    const xMin = finite(config.x_min);
+    const xMax = finite(config.x_max);
+    const yMin = finite(config.y_min);
+    const yMax = finite(config.y_max);
+    if (xMin === null || xMax === null || yMin === null || yMax === null) return null;
+    if (xMax - xMin <= 0 || yMax - yMin <= 0) return null;
+    let step = finite(config.step);
+    if (step === null || step <= 0) step = 1;
+    // A step that cannot divide the range at a usable density is worse than
+    // no step at all: fall back rather than drawing thousands of grid lines.
+    const spanX = xMax - xMin;
+    const spanY = yMax - yMin;
+    if (spanX / step > 400 || spanY / step > 400) step = Math.max(spanX, spanY) / 20;
+    const snap = config.snap === undefined || config.snap === null ? true : Boolean(config.snap);
+    const mode = MODES.includes(config.mode) ? config.mode : 'points';
+    return { xMin, xMax, yMin, yMax, step, snap, mode };
+  }
+
+  let plane = null;
+  try {
+    plane = readConfig();
+  } catch {
+    plane = null;
+  }
+
+  if (!plane) {
+    const notice = $('configError');
+    notice.classList.remove('hidden');
+    const heading = document.createElement('strong');
+    heading.textContent = ui.badConfigTitle;
+    notice.append(heading, document.createTextNode(ui.badConfig));
+    $('stage').classList.add('hidden');
+    $('submit').disabled = true;
+    $('clear').disabled = true;
+    $('hint').textContent = '';
+    return;
+  }
+
+  const { xMin, xMax, yMin, yMax, step, snap, mode } = plane;
+  $('hint').textContent = ui.hints[mode];
+
+  // --- geometry --------------------------------------------------------
+  // The drawing surface is a fixed user-space box; the SVG scales it to the
+  // container, so the widget stays responsive without re-measuring on resize.
+  const PAD = 26;
+  const BOX = { w: 520, h: 360 };
+  const inner = { w: BOX.w - PAD * 2, h: BOX.h - PAD * 2 };
+  const svg = $('plane');
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  svg.setAttribute('viewBox', `0 0 ${BOX.w} ${BOX.h}`);
+
+  const toPixelX = x => PAD + ((x - xMin) / (xMax - xMin)) * inner.w;
+  const toPixelY = y => PAD + (1 - (y - yMin) / (yMax - yMin)) * inner.h;
+  const toValueX = px => xMin + ((px - PAD) / inner.w) * (xMax - xMin);
+  const toValueY = py => yMin + (1 - (py - PAD) / inner.h) * (yMax - yMin);
+
+  // Decimals follow the step, so a step of 0.25 keeps two places and a step of
+  // 1 never shows "3.0000000004".
+  const decimals = Math.min(4, Math.max(0, Math.ceil(-Math.log10(step * 0.5 || 1))));
+  const round = value => Number(value.toFixed(decimals));
+  const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
+
+  function quantize(value, low, high) {
+    const clamped = clamp(value, low, high);
+    if (!snap) return round(clamped);
+    const snapped = low + Math.round((clamped - low) / step) * step;
+    return round(clamp(snapped, low, high));
+  }
+
+  const format = value => value.toFixed(decimals);
+  const labelOf = point => `(${format(point.x)}, ${format(point.y)})`;
+
+  // --- state -----------------------------------------------------------
+  const points = [];
+  let nextId = 1;
+  let activeId = null;
+  let sent = false;
+  const maxPoints = mode === 'vector' ? 2 : Infinity;
+
+  const el = { gridLayer: null, shapeLayer: null, pointLayer: null };
+
+  function drawStatic() {
+    const grid = document.createElementNS(SVGNS, 'g');
+    // Cap the drawn grid so a fine step on a wide range stays legible.
+    const strideX = Math.max(1, Math.ceil((xMax - xMin) / step / 24));
+    const strideY = Math.max(1, Math.ceil((yMax - yMin) / step / 18));
+    const countX = Math.floor((xMax - xMin) / step);
+    const countY = Math.floor((yMax - yMin) / step);
+
+    for (let i = 0; i <= countX; i += strideX) {
+      const x = round(xMin + i * step);
+      const line = document.createElementNS(SVGNS, 'line');
+      line.setAttribute('x1', toPixelX(x)); line.setAttribute('x2', toPixelX(x));
+      line.setAttribute('y1', PAD); line.setAttribute('y2', PAD + inner.h);
+      line.setAttribute('class', x === 0 ? 'grid-line major' : 'grid-line');
+      grid.append(line);
+      const tick = document.createElementNS(SVGNS, 'text');
+      tick.setAttribute('class', 'tick-label');
+      tick.setAttribute('x', toPixelX(x));
+      tick.setAttribute('y', PAD + inner.h + 12);
+      tick.setAttribute('text-anchor', 'middle');
+      tick.textContent = format(x);
+      grid.append(tick);
+    }
+    for (let i = 0; i <= countY; i += strideY) {
+      const y = round(yMin + i * step);
+      const line = document.createElementNS(SVGNS, 'line');
+      line.setAttribute('y1', toPixelY(y)); line.setAttribute('y2', toPixelY(y));
+      line.setAttribute('x1', PAD); line.setAttribute('x2', PAD + inner.w);
+      line.setAttribute('class', y === 0 ? 'grid-line major' : 'grid-line');
+      grid.append(line);
+      const tick = document.createElementNS(SVGNS, 'text');
+      tick.setAttribute('class', 'tick-label');
+      tick.setAttribute('x', PAD - 5);
+      tick.setAttribute('y', toPixelY(y) + 3);
+      tick.setAttribute('text-anchor', 'end');
+      tick.textContent = format(y);
+      grid.append(tick);
+    }
+
+    for (const axis of [['x', 0], ['y', 0]]) {
+      const line = document.createElementNS(SVGNS, 'line');
+      line.setAttribute('class', 'axis');
+      if (axis[0] === 'x') {
+        const y = toPixelY(clamp(0, yMin, yMax));
+        line.setAttribute('x1', PAD); line.setAttribute('x2', PAD + inner.w);
+        line.setAttribute('y1', y); line.setAttribute('y2', y);
+      } else {
+        const x = toPixelX(clamp(0, xMin, xMax));
+        line.setAttribute('y1', PAD); line.setAttribute('y2', PAD + inner.h);
+        line.setAttribute('x1', x); line.setAttribute('x2', x);
+      }
+      grid.append(line);
+    }
+    for (const name of [['x', PAD + inner.w + 6, toPixelY(clamp(0, yMin, yMax)) + 3, 'start'],
+                        ['y', toPixelX(clamp(0, xMin, xMax)), PAD - 10, 'middle']]) {
+      const node = document.createElementNS(SVGNS, 'text');
+      node.setAttribute('class', 'axis-name');
+      node.setAttribute('x', name[1]); node.setAttribute('y', name[2]);
+      node.setAttribute('text-anchor', name[3]);
+      node.textContent = name[0];
+      grid.append(node);
+    }
+    svg.append(grid);
+    el.gridLayer = grid;
+
+    // Public background objects give context (a reference line, a target
+    // polygon). They are decoration only and never enter the answer.
+    const background = document.createElementNS(SVGNS, 'g');
+    const items = Array.isArray(config.background) ? config.background : [];
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue;
+      const label = text(item.label);
+      const pts = Array.isArray(item.points) ? item.points : null;
+      if (Number.isFinite(finite(item.x)) && Number.isFinite(finite(item.y))) {
+        const dot = document.createElementNS(SVGNS, 'circle');
+        dot.setAttribute('class', 'bg-dot');
+        dot.setAttribute('cx', toPixelX(clamp(finite(item.x), xMin, xMax)));
+        dot.setAttribute('cy', toPixelY(clamp(finite(item.y), yMin, yMax)));
+        dot.setAttribute('r', 3);
+        background.append(dot);
+        if (label) appendLabel(background, label, toPixelX(clamp(finite(item.x), xMin, xMax)) + 6,
+                               toPixelY(clamp(finite(item.y), yMin, yMax)) - 6);
+        continue;
+      }
+      if (!pts || pts.length < 2) continue;
+      const coords = pts
+        .map(pair => Array.isArray(pair)
+          ? { x: finite(pair[0]), y: finite(pair[1]) }
+          : { x: finite(pair && pair.x), y: finite(pair && pair.y) })
+        .filter(pair => pair.x !== null && pair.y !== null);
+      if (coords.length < 2) continue;
+      const closed = item.type === 'polygon' || item.type === 'region';
+      const shape = document.createElementNS(SVGNS, closed ? 'polygon' : 'polyline');
+      shape.setAttribute('class', 'bg-shape');
+      shape.dataset.closed = String(closed);
+      shape.setAttribute('points', coords
+        .map(pair => `${toPixelX(clamp(pair.x, xMin, xMax))},${toPixelY(clamp(pair.y, yMin, yMax))}`)
+        .join(' '));
+      background.append(shape);
+      if (label) appendLabel(background, label, toPixelX(clamp(coords[0].x, xMin, xMax)) + 6,
+                             toPixelY(clamp(coords[0].y, yMin, yMax)) - 6);
+    }
+    svg.append(background);
+
+    el.shapeLayer = document.createElementNS(SVGNS, 'g');
+    el.pointLayer = document.createElementNS(SVGNS, 'g');
+    svg.append(el.shapeLayer, el.pointLayer);
+  }
+
+  function appendLabel(parent, value, x, y) {
+    const node = document.createElementNS(SVGNS, 'text');
+    node.setAttribute('class', 'bg-label');
+    node.setAttribute('x', x);
+    node.setAttribute('y', y);
+    node.textContent = value;
+    parent.append(node);
+  }
+
+  function roleOf(index) {
+    if (mode !== 'vector') return '';
+    return index === 0 ? ui.from : ui.to;
+  }
+
+  function describe(point, index) {
+    const role = roleOf(index);
+    return role ? `${role} ${labelOf(point)}` : `${ui.point} ${index + 1} ${labelOf(point)}`;
+  }
+
+  function renderPlane() {
+    el.shapeLayer.textContent = '';
+    el.pointLayer.textContent = '';
+
+    if (points.length >= 2 && mode !== 'points') {
+      const closed = mode === 'region';
+      const shape = document.createElementNS(SVGNS, closed ? 'polygon' : 'polyline');
+      shape.setAttribute('class', 'trace');
+      shape.dataset.closed = String(closed);
+      shape.setAttribute('points', points.map(p => `${toPixelX(p.x)},${toPixelY(p.y)}`).join(' '));
+      el.shapeLayer.append(shape);
+      if (mode === 'vector') {
+        const head = document.createElementNS(SVGNS, 'polygon');
+        const [a, b] = points;
+        const angle = Math.atan2(toPixelY(b.y) - toPixelY(a.y), toPixelX(b.x) - toPixelX(a.x));
+        const tipX = toPixelX(b.x);
+        const tipY = toPixelY(b.y);
+        const wing = (offset) => `${tipX - 9 * Math.cos(angle - offset)},${tipY - 9 * Math.sin(angle - offset)}`;
+        head.setAttribute('class', 'trace');
+        head.dataset.closed = 'true';
+        head.setAttribute('points', `${tipX},${tipY} ${wing(0.45)} ${wing(-0.45)}`);
+        el.shapeLayer.append(head);
+      }
+    }
+
+    points.forEach((point, index) => {
+      const group = document.createElementNS(SVGNS, 'g');
+      // A 40 px-equivalent transparent disc under the visible dot keeps the
+      // touch target usable without drawing an oversized marker.
+      const hit = document.createElementNS(SVGNS, 'circle');
+      hit.setAttribute('class', 'pt-hit');
+      hit.setAttribute('cx', toPixelX(point.x));
+      hit.setAttribute('cy', toPixelY(point.y));
+      hit.setAttribute('r', 14);
+      hit.dataset.id = String(point.id);
+
+      const dot = document.createElementNS(SVGNS, 'circle');
+      dot.setAttribute('class', 'pt');
+      dot.setAttribute('cx', toPixelX(point.x));
+      dot.setAttribute('cy', toPixelY(point.y));
+      dot.setAttribute('r', 5.5);
+      dot.setAttribute('tabindex', '0');
+      dot.setAttribute('role', 'button');
+      dot.setAttribute('aria-label', describe(point, index));
+      dot.dataset.id = String(point.id);
+      if (activeId === point.id) dot.dataset.active = 'true';
+
+      const caption = document.createElementNS(SVGNS, 'text');
+      caption.setAttribute('class', 'pt-label');
+      caption.setAttribute('x', toPixelX(point.x) + 8);
+      caption.setAttribute('y', toPixelY(point.y) - 8);
+      caption.textContent = roleOf(index) ? `${roleOf(index)} ${labelOf(point)}` : labelOf(point);
+
+      group.append(hit, dot, caption);
+      el.pointLayer.append(group);
+    });
+  }
+
+  function renderList() {
+    const list = $('list');
+    list.textContent = '';
+    points.forEach((point, index) => {
+      const item = document.createElement('li');
+      if (mode === 'vector') item.dataset.role = index === 0 ? 'from' : 'to';
+      if (roleOf(index)) {
+        const role = document.createElement('span');
+        role.className = 'role';
+        role.textContent = roleOf(index);
+        item.append(role);
+      }
+      item.append(document.createTextNode(labelOf(point)));
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', `${ui.remove} ${describe(point, index)}`);
+      remove.addEventListener('click', () => removePoint(point.id));
+      item.append(remove);
+      list.append(item);
+    });
+    $('emptyHint').textContent = points.length ? '' : ui.hints[mode];
+    $('emptyHint').classList.toggle('hidden', points.length > 0);
+    $('readout').textContent = points.length
+      ? points.map(labelOf).join(' → ')
+      : '';
+    $('submit').disabled = sent || points.length === 0;
+    $('clear').disabled = sent || points.length === 0;
+  }
+
+  function announce(message) {
+    const node = $('status');
+    node.textContent = message;
+    delete node.dataset.tone;
+  }
+
+  function refresh(message) {
+    renderPlane();
+    renderList();
+    if (message) announce(message);
+  }
+
+  function addPoint(x, y) {
+    if (sent) return;
+    if (points.length >= maxPoints) {
+      // Vector mode holds exactly two ends: a third click retargets the end
+      // rather than silently doing nothing.
+      const last = points[points.length - 1];
+      last.x = x; last.y = y;
+      activeId = last.id;
+      refresh(describe(last, points.length - 1));
+      return;
+    }
+    const point = { id: nextId++, x, y };
+    points.push(point);
+    activeId = point.id;
+    refresh(describe(point, points.length - 1));
+  }
+
+  function removePoint(id) {
+    if (sent) return;
+    const index = points.findIndex(point => point.id === id);
+    if (index < 0) return;
+    points.splice(index, 1);
+    if (activeId === id) activeId = null;
+    refresh(points.length ? points.map(labelOf).join(', ') : ui.hints[mode]);
+  }
+
+  function movePoint(id, dx, dy) {
+    const point = points.find(entry => entry.id === id);
+    if (!point || sent) return;
+    point.x = quantize(point.x + dx, xMin, xMax);
+    point.y = quantize(point.y + dy, yMin, yMax);
+    activeId = id;
+    refresh(labelOf(point));
+  }
+
+  function eventToValue(event) {
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const px = ((event.clientX - rect.left) / rect.width) * BOX.w;
+    const py = ((event.clientY - rect.top) / rect.height) * BOX.h;
+    return { x: quantize(toValueX(px), xMin, xMax), y: quantize(toValueY(py), yMin, yMax) };
+  }
+
+  // --- pointer ---------------------------------------------------------
+  let drag = null;
+  const DRAG_SLOP = 3;
+
+  svg.addEventListener('pointerdown', event => {
+    if (sent) return;
+    const target = event.target.closest('[data-id]');
+    if (target) {
+      drag = { id: Number(target.dataset.id), x: event.clientX, y: event.clientY, moved: false };
+      activeId = drag.id;
+      svg.setPointerCapture(event.pointerId);
+      svg.classList.add('dragging');
+    } else {
+      drag = { id: null, x: event.clientX, y: event.clientY, moved: false };
+    }
+  });
+
+  svg.addEventListener('pointermove', event => {
+    if (!drag || drag.id === null) return;
+    if (!drag.moved && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) <= DRAG_SLOP) return;
+    drag.moved = true;
+    const value = eventToValue(event);
+    if (!value) return;
+    const point = points.find(entry => entry.id === drag.id);
+    if (!point) return;
+    point.x = value.x;
+    point.y = value.y;
+    refresh(labelOf(point));
+  });
+
+  const endDrag = event => {
+    if (drag && drag.id !== null && event && svg.hasPointerCapture?.(event.pointerId)) {
+      svg.releasePointerCapture(event.pointerId);
+    }
+    svg.classList.remove('dragging');
+    drag = null;
+  };
+  svg.addEventListener('pointerup', event => {
+    // A click on empty canvas places a point; a click that ended a drag or
+    // landed on an existing point must not add one.
+    const wasDrag = drag && (drag.id !== null || drag.moved);
+    const value = wasDrag ? null : eventToValue(event);
+    endDrag(event);
+    if (value) addPoint(value.x, value.y);
+  });
+  svg.addEventListener('pointercancel', endDrag);
+
+  // --- keyboard --------------------------------------------------------
+  const ARROWS = {
+    ArrowUp: [0, 1], ArrowDown: [0, -1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+  };
+  svg.addEventListener('keydown', event => {
+    const target = event.target.closest('.pt');
+    if (!target) return;
+    const id = Number(target.dataset.id);
+    const arrow = ARROWS[event.key];
+    if (arrow) {
+      event.preventDefault();
+      movePoint(id, arrow[0] * step, arrow[1] * step);
+      const next = el.pointLayer.querySelector(`.pt[data-id="${id}"]`);
+      if (next) next.focus();
+      return;
+    }
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      event.preventDefault();
+      removePoint(id);
+      const first = el.pointLayer.querySelector('.pt');
+      if (first) first.focus(); else svg.focus();
+    }
+  });
+  svg.addEventListener('focusin', event => {
+    const target = event.target.closest('.pt');
+    if (!target) return;
+    activeId = Number(target.dataset.id);
+    announce(target.getAttribute('aria-label') || '');
+  });
+
+  $('clear').addEventListener('click', () => {
+    if (sent) return;
+    points.length = 0;
+    activeId = null;
+    refresh(ui.hints[mode]);
+  });
+
+  function setStatus(message, tone) {
+    const node = $('status');
+    node.textContent = message;
+    if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
+  }
+
+  function answerPayload() {
+    const coords = points.map(point => ({ x: point.x, y: point.y }));
+    const payload = { kind: 'coordinate-plane', mode, points: coords, labels: points.map(labelOf) };
+    if (mode === 'vector' && coords.length === 2) {
+      payload.vector = { from: coords[0], to: coords[1] };
+    }
+    return payload;
+  }
+
+  $('submit').addEventListener('click', async () => {
+    if (sent) return;
+    if (points.length === 0) { setStatus(ui.empty, 'error'); return; }
+    if (!atomId || !api) { setStatus(ui.failed, 'error'); return; }
+
+    $('submit').disabled = true;
+    setStatus(ui.sending);
+    const payload = answerPayload();
+    try {
+      const response = await fetch(`${api}/api/inbox`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ atom_id: atomId, payload, ts: new Date().toISOString() }),
+      });
+      if (!response.ok) throw new Error(String(response.status));
+      sent = true;
+      renderList();
+      $('done').classList.remove('hidden');
+      setStatus('');
+      window.parent.postMessage({
+        lotus: 1,
+        type: 'submit',
+        text: `I plotted my ${mode} answer for ${atomId}: ${points.map(labelOf).join(', ')}. `
+          + 'Read it from the Etude inbox, grade it, record the attempt, and clear the inbox item.',
+      }, '*');
+    } catch {
+      // The plotted work stays on the plane so a failed POST is retryable.
+      $('submit').disabled = false;
+      setStatus(ui.failed, 'error');
+    }
+  });
+
+  drawStatic();
+  refresh('');
+})();
+</script>
+</body>
+</html>

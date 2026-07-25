@@ -171,7 +171,9 @@ def test_inbox_post_get_delete_roundtrip(running_server):
 
 
 def _injected_payload(html):
-    match = re.search(r"const ETUDE = (.*?);\n\(\(\) =>", html, re.DOTALL)
+    # The payload is one line; templates may declare further consts after it
+    # (map-select adds `const WORLD = …`), so stop at the newline, not the IIFE.
+    match = re.search(r"const ETUDE = (.*?);\n", html)
     assert match
     return json.loads(match.group(1))
 
@@ -619,6 +621,34 @@ def test_coding_canvas_takes_starter_code_and_language_from_widget_data(running_
     # An explicit query parameter wins over the stored default.
     _, _, overridden = request(base, "/widgets/coding-canvas?atom=AG-2&language=python")
     assert _injected_payload(overridden)["language"] == "python"
+
+
+def test_map_select_injects_world_geometry_and_narrows_by_region(running_server):
+    """The map ships as vendored data, not a library: pre-projected SVG paths
+    injected at a marker, so no projection code runs in the sandbox."""
+    base, _ = running_server
+    _, _, html = request(base, "/widgets/map-select?atom=AG-2")
+
+    assert "/*__WORLD_MAP__*/null" not in html, "the marker must be consumed"
+    world = json.loads(re.search(r"const WORLD = (\{.*?\});\n", html, re.S).group(1))
+    assert len(world["countries"]) > 150
+    first = world["countries"][0]
+    assert {"d", "id", "name", "region"} <= set(first), "each country needs a path, id, name and region"
+    assert first["d"].startswith("M"), "geometry must already be an SVG path"
+
+    payload = _injected_payload(html)
+    assert payload["region"] == ""
+    _, _, europe = request(base, "/widgets/map-select?atom=AG-2&region=Europe")
+    assert _injected_payload(europe)["region"] == "Europe"
+
+
+def test_map_select_never_leaks_the_expected_answer(running_server):
+    base, _ = running_server
+    payload = _injected_payload(request(base, "/widgets/map-select?atom=AG-2")[2])
+
+    assert payload["atom"]["id"] == "AG-2"
+    assert "agent_prompt" not in payload["atom"]
+    assert "expected" not in payload["atom"]
 
 
 def test_widgets_never_scroll_vertically_inside_their_frame():

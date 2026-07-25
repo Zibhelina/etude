@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · Map</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+html, body { overflow-y: hidden; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 14px; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
+.prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
+
+.bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.spacer { flex: 1 1 auto; }
+.search { flex: 1 1 180px; min-width: 0; max-width: 280px; padding: 5px 11px; border-radius: 999px;
+  border: 0.5px solid var(--border); background: var(--surface-2); color: var(--text-primary); font: 13px/1.5 var(--sans); }
+.search:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.count { color: var(--text-muted); font: 500 11.5px/1.5 var(--mono); white-space: nowrap; }
+
+.stage { position: relative; margin-top: 12px; border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px);
+  background: var(--surface-1); overflow: hidden; touch-action: none; }
+svg { display: block; width: 100%; height: auto; cursor: grab; }
+svg.dragging { cursor: grabbing; }
+.country { fill: var(--surface-2); stroke: var(--border-strong); stroke-width: .4; stroke-linejoin: round;
+  transition: fill .12s ease; cursor: pointer; outline: none; }
+.country:hover { fill: color-mix(in srgb, var(--foreground) 22%, var(--surface-2)); }
+.country[data-selected="true"] { fill: var(--status-good); stroke: var(--foreground); stroke-width: .6; }
+.country[data-selected="true"]:hover { fill: color-mix(in srgb, var(--status-good) 78%, var(--foreground)); }
+.country:focus-visible { stroke: var(--ring); stroke-width: 1.2; }
+.country[data-dim="true"] { opacity: .28; pointer-events: none; }
+
+.zoom { position: absolute; inset: auto auto 10px 10px; display: flex; gap: 5px; }
+.zoom button { width: 27px; height: 27px; display: grid; place-items: center; padding: 0; border-radius: 8px;
+  border: 0.5px solid var(--border); background: var(--surface-2); color: var(--text-secondary); cursor: pointer;
+  font: 500 14px/1 var(--mono); }
+.zoom button:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.hoverName { position: absolute; inset: 10px 10px auto auto; padding: 3px 10px; border-radius: 999px;
+  background: var(--surface-2); border: 0.5px solid var(--border); color: var(--text-secondary);
+  font: 500 12px/1.6 var(--sans); pointer-events: none; opacity: 0; transition: opacity .12s ease; }
+.hoverName[data-show="true"] { opacity: 1; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; padding: 3px 6px 3px 11px; border-radius: 999px;
+  background: var(--surface-2); border: 0.5px solid var(--border); color: var(--text-primary); font-size: 12.5px; }
+.chip button { width: 17px; height: 17px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 999px;
+  background: transparent; color: var(--text-muted); cursor: pointer; font: 500 13px/1 var(--sans); }
+.chip button:hover { color: var(--text-primary); background: var(--surface-1); }
+.empty { margin-top: 12px; color: var(--text-muted); font-size: 12.5px; }
+
+.tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+button { font: inherit; }
+button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.status:not(:empty) { margin-top: 10px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
+.status[data-tone="error"] { color: var(--red-text); }
+.done { margin-top: 14px; padding: 20px; text-align: center; background: var(--surface-1); border: 0.5px solid var(--green); border-radius: var(--radius-card, 12px); }
+.done h2 { margin: 0 0 6px; font-size: 16px; font-weight: 500; }
+.done p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.hidden { display: none; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap ui-card">
+  <div class="label" id="label">Etude · Map</div>
+  <h1 class="title" id="title">Select on the map</h1>
+  <div class="prompt" id="prompt"></div>
+
+  <div class="bar">
+    <input class="search" id="search" type="search" autocomplete="off" spellcheck="false">
+    <span class="spacer"></span>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="stage">
+    <svg id="map" role="group" aria-label="World map" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="zoom">
+      <button id="zoomIn" type="button" aria-label="Zoom in">+</button>
+      <button id="zoomOut" type="button" aria-label="Zoom out">−</button>
+      <button id="zoomReset" type="button" aria-label="Reset view">⤾</button>
+    </div>
+    <div class="hoverName" id="hoverName"></div>
+  </div>
+
+  <div class="chips" id="chips"></div>
+  <div class="empty hidden" id="emptyHint"></div>
+
+  <div class="tools">
+    <span class="spacer"></span>
+    <button class="ui-button ui-button--outline ui-button--sm" id="clear" type="button">Clear</button>
+    <button class="ui-button ui-button--sm" id="submit" type="button" disabled>Send to agent</button>
+  </div>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+  <div class="done hidden" id="done">
+    <h2 id="doneTitle">Sent to your agent</h2>
+    <p id="doneBody">Your selection is waiting in Etude. Tell your agent you are done so they can review it.</p>
+  </div>
+</div>
+<script>
+const ETUDE = /*__DATA__*/null;
+const WORLD = /*__WORLD_MAP__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const atom = data.atom && typeof data.atom === 'object' ? data.atom : {};
+  const world = WORLD && typeof WORLD === 'object' ? WORLD : { countries: [], height: 500, width: 980 };
+  const $ = id => document.getElementById(id);
+  const text = value => (typeof value === 'string' ? value : '');
+  const plain = value => String(value || '').replace(/`{1,3}|\*{1,2}|[_#>]/g, '').replace(/\s+/g, ' ').trim();
+  const api = String(data.api || '').replace(/\/$/, '');
+
+  const portuguese = /[áàãâéêíóôõúç]|\b(selecione|clique|mapa|países|regiões)\b/i
+    .test(`${text(atom.user_prompt)} ${text(atom.topic)}`);
+  const ui = portuguese
+    ? { title: 'Selecione no mapa', label: 'Etude · Mapa', send: 'Enviar ao agente', clear: 'Limpar',
+        sending: 'Enviando…', empty: 'Selecione ao menos um país antes de enviar.',
+        failed: 'Não foi possível alcançar o Etude. Sua seleção continua aqui — tente de novo.',
+        sentTitle: 'Enviado ao agente', selected: 'selecionados', search: 'Buscar país…',
+        hint: 'Clique para selecionar. Arraste para mover, role para dar zoom.',
+        sentBody: 'Sua seleção está aguardando no Etude. Avise o agente que terminou para receber o feedback.' }
+    : { title: 'Select on the map', label: 'Etude · Map', send: 'Send to agent', clear: 'Clear',
+        sending: 'Sending…', empty: 'Select at least one country before sending.',
+        failed: 'Could not reach Etude. Your selection is still here — try again.',
+        sentTitle: 'Sent to your agent', selected: 'selected', search: 'Search country…',
+        hint: 'Click to select. Drag to pan, scroll to zoom.',
+        sentBody: 'Your selection is waiting in Etude. Tell your agent you are done so they can review it.' };
+
+  if (portuguese) document.documentElement.lang = 'pt-BR';
+  $('label').textContent = text(atom.id) ? `${ui.label} · ${text(atom.id)}` : ui.label;
+  $('title').textContent = plain(atom.topic) || ui.title;
+  window.ETUDE_MD_INTO($('prompt'), text(atom.user_prompt) || ui.title);
+  $('search').placeholder = ui.search;
+  $('clear').textContent = ui.clear;
+  $('submit').textContent = ui.send;
+  $('doneTitle').textContent = ui.sentTitle;
+  $('doneBody').textContent = ui.sentBody;
+  $('emptyHint').textContent = ui.hint;
+
+  // An atom can narrow the map to one region, so a question about Europe does
+  // not make the user hunt across the whole world.
+  const regionFilter = text(data.region).toLowerCase();
+  const countries = world.countries.filter(c =>
+    !regionFilter || String(c.region || '').toLowerCase() === regionFilter);
+
+  const selected = new Map();
+  let sent = false;
+
+  const svg = $('map');
+  const view = { x: 0, y: 0, w: world.width, h: world.height };
+  // Fit the viewBox to the visible subset so a region fills the frame.
+  const nodes = new Map();
+
+  function render() {
+    svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+    for (const country of countries) {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', country.d);
+      path.setAttribute('class', 'country');
+      path.setAttribute('tabindex', '0');
+      path.setAttribute('role', 'checkbox');
+      path.setAttribute('aria-checked', 'false');
+      path.setAttribute('aria-label', country.name);
+      path.dataset.id = country.id;
+      path.dataset.name = country.name;
+      svg.append(path);
+      nodes.set(country.id, path);
+    }
+  }
+
+  function fitToContent() {
+    if (!regionFilter) return;
+    // Frame the bulk of the region, not its extremes: one far-flung territory
+    // (Russia's Pacific coast in "Europe") would otherwise shrink everything
+    // else to nothing. Drop the outer 4% of country centroids per axis.
+    const boxes = [];
+    for (const node of nodes.values()) {
+      const box = node.getBBox();
+      if (box.width > 0 || box.height > 0) boxes.push(box);
+    }
+    if (boxes.length === 0) return;
+    const cut = (values, q) => values.slice().sort((a, b) => a - b)[
+      Math.min(values.length - 1, Math.max(0, Math.round((values.length - 1) * q)))];
+    const left = cut(boxes.map(b => b.x), 0.04);
+    const right = cut(boxes.map(b => b.x + b.width), 0.96);
+    const top = cut(boxes.map(b => b.y), 0.04);
+    const bottom = cut(boxes.map(b => b.y + b.height), 0.96);
+    const width = Math.max(right - left, 1);
+    const height = Math.max(bottom - top, 1);
+    const pad = Math.max(width, height) * 0.06;
+    view.x = left - pad;
+    view.y = top - pad;
+    view.w = width + pad * 2;
+    view.h = height + pad * 2;
+    // Keep the frame's aspect close to the stage so the map is not letterboxed.
+    const aspect = world.width / world.height;
+    if (view.w / view.h < aspect) {
+      const grow = view.h * aspect - view.w;
+      view.x -= grow / 2;
+      view.w += grow;
+    } else {
+      const grow = view.w / aspect - view.h;
+      view.y -= grow / 2;
+      view.h += grow;
+    }
+    svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+  }
+
+  function toggle(id) {
+    if (sent) return;
+    const node = nodes.get(id);
+    if (!node) return;
+    if (selected.has(id)) selected.delete(id);
+    else selected.set(id, node.dataset.name);
+    node.dataset.selected = String(selected.has(id));
+    node.setAttribute('aria-checked', String(selected.has(id)));
+    refresh();
+  }
+
+  function refresh() {
+    const chips = $('chips');
+    chips.textContent = '';
+    for (const [id, name] of selected) {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.append(document.createTextNode(name));
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', `Remove ${name}`);
+      remove.addEventListener('click', () => toggle(id));
+      chip.append(remove);
+      chips.append(chip);
+    }
+    $('count').textContent = selected.size ? `${selected.size} ${ui.selected}` : '';
+    $('emptyHint').classList.toggle('hidden', selected.size > 0);
+    $('submit').disabled = sent || selected.size === 0;
+    $('clear').disabled = sent || selected.size === 0;
+  }
+
+  svg.addEventListener('click', event => {
+    const path = event.target.closest('.country');
+    // Suppress the click that ends a pan, but only when the pointer really
+    // moved: a plain click still emits pointermove, so a boolean "moved" flag
+    // would swallow every selection.
+    if (path && !panned) toggle(path.dataset.id);
+  });
+  svg.addEventListener('keydown', event => {
+    const path = event.target.closest('.country');
+    if (!path || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    toggle(path.dataset.id);
+  });
+  svg.addEventListener('pointerover', event => {
+    const path = event.target.closest('.country');
+    if (!path) return;
+    $('hoverName').textContent = path.dataset.name;
+    $('hoverName').dataset.show = 'true';
+  });
+  svg.addEventListener('pointerout', event => {
+    if (!event.relatedTarget || !event.relatedTarget.closest('.country')) $('hoverName').dataset.show = 'false';
+  });
+
+  // Search dims non-matches rather than hiding them: the map keeps its shape,
+  // and a tiny country stays findable.
+  $('search').addEventListener('input', event => {
+    const query = event.target.value.trim().toLowerCase();
+    for (const country of countries) {
+      const node = nodes.get(country.id);
+      if (!node) continue;
+      if (!query) delete node.dataset.dim;
+      else node.dataset.dim = String(!country.name.toLowerCase().includes(query));
+    }
+  });
+
+  // --- pan and zoom ---
+  let dragging = null;
+  let panned = false;
+  const PAN_SLOP = 4;
+  svg.addEventListener('pointerdown', event => {
+    dragging = { id: event.pointerId, x: event.clientX, y: event.clientY, vx: view.x, vy: view.y };
+    panned = false;
+  });
+  svg.addEventListener('pointermove', event => {
+    if (!dragging) return;
+    const rect = svg.getBoundingClientRect();
+    const movedX = event.clientX - dragging.x;
+    const movedY = event.clientY - dragging.y;
+    if (!panned && Math.hypot(movedX, movedY) > PAN_SLOP) {
+      // Capture here, not on pointerdown: capturing early retargets the click
+      // to the <svg> and the country path never receives it.
+      panned = true;
+      svg.classList.add('dragging');
+      svg.setPointerCapture(event.pointerId);
+    }
+    if (!panned) return;
+    const dx = movedX * (view.w / rect.width);
+    const dy = movedY * (view.h / rect.height);
+    view.x = dragging.vx - dx;
+    view.y = dragging.vy - dy;
+    svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+  });
+  const endDrag = event => {
+    dragging = null;
+    svg.classList.remove('dragging');
+    if (event && svg.hasPointerCapture?.(event.pointerId)) svg.releasePointerCapture(event.pointerId);
+  };
+  svg.addEventListener('pointerup', endDrag);
+  svg.addEventListener('pointercancel', endDrag);
+
+  function zoom(factor, cx, cy) {
+    const next = Math.min(Math.max(view.w * factor, world.width / 12), world.width * 1.4);
+    const scale = next / view.w;
+    view.x = cx - (cx - view.x) * scale;
+    view.y = cy - (cy - view.y) * scale;
+    view.w = next;
+    view.h *= scale;
+    svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+  }
+  svg.addEventListener('wheel', event => {
+    event.preventDefault();
+    const rect = svg.getBoundingClientRect();
+    const cx = view.x + ((event.clientX - rect.left) / rect.width) * view.w;
+    const cy = view.y + ((event.clientY - rect.top) / rect.height) * view.h;
+    zoom(event.deltaY > 0 ? 1.15 : 0.87, cx, cy);
+  }, { passive: false });
+  $('zoomIn').addEventListener('click', () => zoom(0.75, view.x + view.w / 2, view.y + view.h / 2));
+  $('zoomOut').addEventListener('click', () => zoom(1.33, view.x + view.w / 2, view.y + view.h / 2));
+  $('zoomReset').addEventListener('click', () => {
+    view.x = 0; view.y = 0; view.w = world.width; view.h = world.height;
+    svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+    fitToContent();
+  });
+
+  $('clear').addEventListener('click', () => {
+    for (const id of [...selected.keys()]) {
+      const node = nodes.get(id);
+      if (node) { node.dataset.selected = 'false'; node.setAttribute('aria-checked', 'false'); }
+    }
+    selected.clear();
+    refresh();
+  });
+
+  function setStatus(message, tone) {
+    const node = $('status');
+    node.textContent = message;
+    if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
+  }
+
+  $('submit').addEventListener('click', async () => {
+    if (sent || selected.size === 0) { if (!selected.size) setStatus(ui.empty, 'error'); return; }
+    const atomId = text(atom.id);
+    if (!atomId || !api) { setStatus(ui.failed, 'error'); return; }
+
+    $('submit').disabled = true;
+    setStatus(ui.sending);
+    const names = [...selected.values()].sort();
+    try {
+      const response = await fetch(`${api}/api/inbox`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          atom_id: atomId,
+          payload: { kind: 'map-select', names, ids: [...selected.keys()], count: names.length },
+          ts: new Date().toISOString(),
+        }),
+      });
+      if (!response.ok) throw new Error(String(response.status));
+      sent = true;
+      refresh();
+      $('done').classList.remove('hidden');
+      setStatus('');
+      window.parent.postMessage({
+        lotus: 1,
+        type: 'submit',
+        text: `I selected ${names.length} on the map for ${atomId}: ${names.join(', ')}. Read it from the Etude inbox, grade it, and record the attempt.`,
+      }, '*');
+    } catch {
+      $('submit').disabled = false;
+      setStatus(ui.failed, 'error');
+    }
+  });
+
+  render();
+  fitToContent();
+  refresh();
+})();
+</script>
+</body>
+</html>

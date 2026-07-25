@@ -4,5 +4,7 @@
  "@replit/codemirror-vim": "6.3.0",
  "@codemirror/lint": "6.9.7",
  "@codemirror/lang-markdown": "6.5.1",
- "@lezer/markdown": "1.7.2"
+ "@lezer/markdown": "1.7.2",
+ "world-atlas": "2.0.2",
+ "_world-map.json": "derived from world-atlas countries-110m via d3-geo naturalEarth1 (pre-projected SVG paths, 1dp)"
 }

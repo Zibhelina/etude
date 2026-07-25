@@ -108,6 +108,11 @@ _VENDOR_MARKERS = {
     "/*__CODEMIRROR__*/": (None, ("codemirror.js",)),
 }
 
+# Vendored JSON injected in place of a marker rather than served as a library:
+# the world map is data. It carries pre-projected SVG paths, so no projection
+# code ships with it.
+_VENDOR_DATA = {"/*__WORLD_MAP__*/null": "world-map.json"}
+
 
 def _vendor_asset(name: str) -> str:
     """Read a vendored library. These are large, self-contained builds committed
@@ -139,6 +144,17 @@ def _inject_vendor(rendered: str) -> str:
                 raise APIError(500, f"vendored script closes its script element: {js_name}")
             parts.append(f"<script>{script}</script>")
         rendered = rendered.replace(marker, "\n".join(parts), 1)
+
+    for marker, name in _VENDOR_DATA.items():
+        if marker not in rendered:
+            continue
+        try:
+            data = json.loads(_vendor_asset(name))
+        except json.JSONDecodeError as exc:
+            raise APIError(500, f"vendored data is not valid json: {name}") from exc
+        # Same escaping as the payload: no HTML-significant bytes inside a script.
+        rendered = rendered.replace(marker, _inline_script_json(data), 1)
+
     return rendered
 
 
@@ -925,6 +941,27 @@ class EtudeHandler(BaseHTTPRequestHandler):
             ranked_items.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
             items = [entry[2] for entry in ranked_items[:limit]]
             return {**base, "total_seen": len(ranked_items), "items": items}
+
+        if template_name == "map-select":
+            atom_id = query.get("atom", [None])[0]
+            if not atom_id or atom_id not in db.get("atoms", {}):
+                raise APIError(400, "atom must name an existing atom")
+            atom = db["atoms"][atom_id]
+            widget_data = atom.get("widget_data", atom.get("applet_data"))
+            widget_data = widget_data if isinstance(widget_data, Mapping) else {}
+            region = query.get("region", [None])[0] or widget_data.get("region")
+            return {
+                **base,
+                "atom": {
+                    "id": atom_id,
+                    "user_prompt": atom.get("user_prompt", ""),
+                    "topic": atom.get("topic", ""),
+                    "tags": [tag for tag in atom.get("tags", []) if isinstance(tag, str)],
+                },
+                # Narrow the map to one continent so a regional question does not
+                # make the user hunt across the whole world.
+                "region": region if isinstance(region, str) else "",
+            }
 
         if template_name in ("markdown-canvas", "coding-canvas"):
             atom_id = query.get("atom", [None])[0]

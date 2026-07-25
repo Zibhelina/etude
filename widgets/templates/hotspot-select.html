@@ -31,7 +31,11 @@ svg { display: block; width: 100%; height: auto; }
 .region[data-selected="true"] { fill: var(--status-good); fill-opacity: .78; stroke: var(--foreground); stroke-width: 1.8; }
 .region[data-selected="true"]:hover { fill: color-mix(in srgb, var(--status-good) 78%, var(--foreground)); }
 .region:focus-visible { stroke: var(--ring); stroke-width: 2.4; }
-.pin { fill: var(--foreground); font: 500 11px/1 var(--sans); pointer-events: none; user-select: none; }
+.pin { pointer-events: none; user-select: none; }
+.pin circle { fill: var(--surface-0); stroke: var(--foreground); stroke-width: 1; }
+.pin text { fill: var(--text-primary); font: 600 11px/1 var(--mono); text-anchor: middle; dominant-baseline: central; }
+.pin[data-selected="true"] circle { fill: var(--status-good); }
+.pin[data-selected="true"] text { fill: var(--surface-0); }
 .hoverName { position: absolute; inset: 10px 10px auto auto; padding: 3px 10px; border-radius: 999px;
   background: var(--surface-2); border: 0.5px solid var(--border); color: var(--text-secondary);
   font: 500 12px/1.6 var(--sans); pointer-events: none; opacity: 0; transition: opacity .12s ease; }
@@ -43,6 +47,9 @@ svg { display: block; width: 100%; height: auto; }
   font: 500 12.5px/1.4 var(--sans); cursor: pointer; }
 .legend button:hover { color: var(--text-primary); border-color: var(--border-strong); }
 .legend button[aria-checked="true"] { background: var(--surface-3, var(--surface-2)); color: var(--text-primary); border-color: var(--foreground); }
+.legendIndex { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 7px;
+  border: 0.5px solid var(--border-strong); border-radius: 999px; color: var(--text-primary); font: 600 11px/1 var(--mono); }
+.legend button[aria-checked="true"] .legendIndex { background: var(--status-good); color: var(--surface-0); border-color: var(--foreground); }
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .chip { display: inline-flex; align-items: center; gap: 7px; padding: 3px 6px 3px 11px; border-radius: 999px;
@@ -53,6 +60,8 @@ svg { display: block; width: 100%; height: auto; }
 .empty { margin-top: 12px; color: var(--text-muted); font-size: 12.5px; }
 
 .tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.tools .ui-button:disabled { opacity: 1; background: var(--surface-1); color: var(--text-muted);
+  border-color: var(--border); cursor: not-allowed; }
 button { font: inherit; }
 button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .tools .ui-button { min-height: 40px; }
@@ -228,7 +237,7 @@ const ETUDE = /*__DATA__*/null;
     if (!id || regions.some(region => region.id === id)) continue;
     const shape = buildShape(raw);
     if (!shape) continue;
-    regions.push({ id, label: plain(raw.label) || id, shape });
+    regions.push({ id, label: plain(raw.label) || id, shape, index: regions.length + 1, pin: null });
   }
 
   const selected = new Map();
@@ -268,6 +277,24 @@ const ETUDE = /*__DATA__*/null;
       shape.dataset.selected = 'false';
       diagram.append(shape);
       nodes.set(region.id, shape);
+
+      const box = shape.getBBox();
+      const pin = document.createElementNS(SVG_NS, 'g');
+      pin.setAttribute('class', 'pin');
+      pin.dataset.selected = 'false';
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      const disc = document.createElementNS(SVG_NS, 'circle');
+      disc.setAttribute('cx', cx);
+      disc.setAttribute('cy', cy);
+      disc.setAttribute('r', 12);
+      const marker = document.createElementNS(SVG_NS, 'text');
+      marker.setAttribute('x', cx);
+      marker.setAttribute('y', cy);
+      marker.textContent = String(region.index);
+      pin.append(disc, marker);
+      diagram.append(pin);
+      region.pin = pin;
     }
     // Small regions and dense diagrams are hard to hit precisely, so every
     // region also gets a full-size labelled control below the picture.
@@ -275,7 +302,10 @@ const ETUDE = /*__DATA__*/null;
     for (const region of regions) {
       const button = document.createElement('button');
       button.type = 'button';
-      button.textContent = region.label;
+      const legendIndex = document.createElement('span');
+      legendIndex.className = 'legendIndex';
+      legendIndex.textContent = String(region.index);
+      button.append(legendIndex, document.createTextNode(region.label));
       button.setAttribute('role', multiple ? 'checkbox' : 'radio');
       button.setAttribute('aria-checked', 'false');
       button.addEventListener('click', () => toggle(region.id));
@@ -293,6 +323,8 @@ const ETUDE = /*__DATA__*/null;
     }
     const button = legendButtons.get(id);
     if (button) button.setAttribute('aria-checked', String(on));
+    const region = regions.find(entry => entry.id === id);
+    if (region && region.pin) region.pin.dataset.selected = String(on);
   }
 
   function toggle(id) {

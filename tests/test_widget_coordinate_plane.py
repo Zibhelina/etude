@@ -119,6 +119,14 @@ def test_grid_and_axes_render_responsively_in_svg(template):
     assert re.search(r"svg \{[^}]*width: 100%", template), "the plane must scale to its container"
 
 
+def test_interaction_hint_is_not_duplicated_when_the_plane_is_empty(template):
+    assert "$('emptyHint').textContent = points.length ? '' : ui.hints[mode]" not in template
+
+
+def test_coordinate_readout_is_hidden_until_a_point_exists(template):
+    assert "$('readout').classList.toggle('hidden', points.length === 0)" in template
+
+
 def test_coordinates_are_clamped_snapped_and_rounded(template):
     assert "Math.min" in template and "Math.max" in template, "clamp to bounds"
     assert "Math.round" in template, "round to meaningful precision"

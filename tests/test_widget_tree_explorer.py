@@ -118,6 +118,13 @@ def test_reveal_on_expand_starts_from_the_start_node(source):
     assert "neighbor" in source.lower()
 
 
+def test_svg_scales_inside_the_stage_instead_of_being_clipped(source):
+    """A wide host must not enlarge the intrinsic SVG past a capped container.
+    The SVG itself owns the display height; capping only the stage clips nodes."""
+    assert "$('stage').style.maxHeight" not in source
+    assert re.search(r"svg\.style\.height\s*=", source)
+
+
 def test_goals_are_distinguishable_without_color(source):
     """Status never relies on color alone: goals carry a label or shape too."""
     assert "goals" in source

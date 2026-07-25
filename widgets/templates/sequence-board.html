@@ -17,7 +17,7 @@ h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3;
 .prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
 .prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
 
-.hint { margin-top: 12px; color: var(--text-muted); font-size: 12.5px; line-height: 1.5; }
+.hint { margin-top: 12px; color: var(--text-secondary); font-size: 12.5px; line-height: 1.5; }
 
 /* The list is the answer, so every row carries its position as a number the
    learner can read at a glance — color and order alone are not enough. */
@@ -30,20 +30,24 @@ h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3;
 .row[data-moved="true"] { background: var(--surface-2); }
 .pos { flex: 0 0 auto; min-width: 26px; text-align: right; color: var(--text-secondary);
   font: 500 13px/1.5 var(--mono); font-variant-numeric: tabular-nums; }
-.grip { flex: 0 0 auto; width: 24px; height: 40px; display: grid; place-items: center; color: var(--text-muted);
-  cursor: grab; font: 13px/1 var(--mono); touch-action: none; user-select: none; }
+.grip { flex: 0 0 auto; width: 28px; height: 40px; display: grid; place-items: center; color: var(--text-secondary);
+  border-radius: 8px; cursor: grab; font: 18px/1 var(--mono); touch-action: none; user-select: none;
+  transition: color .12s ease, background .12s ease; }
+.row:hover .grip, .grip:hover, .grip:focus-visible { color: var(--text-primary); background: var(--surface-2); }
 .row[data-dragging="true"] .grip { cursor: grabbing; }
 .body { flex: 1 1 auto; min-width: 0; }
 .itemLabel { font-size: 14.5px; line-height: 1.45; overflow-wrap: anywhere; }
-.itemDesc { margin-top: 2px; color: var(--text-muted); font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.itemDesc { margin-top: 2px; color: var(--text-secondary); font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
 .moves { flex: 0 0 auto; display: flex; gap: 4px; }
 .moves button { width: 40px; height: 40px; display: grid; place-items: center; padding: 0; border-radius: 10px;
-  border: 0.5px solid var(--border); background: var(--surface-2); color: var(--text-secondary);
-  cursor: pointer; font: 500 13px/1 var(--mono); }
-.moves button:hover:not(:disabled) { color: var(--text-primary); border-color: var(--border-strong); }
-.moves button:disabled { opacity: .35; cursor: default; }
+  border: 0.5px solid var(--border); background: var(--surface-2); color: var(--text-primary);
+  cursor: pointer; font: 500 16px/1 var(--mono); }
+.moves button:hover:not(:disabled) { color: var(--foreground); border-color: var(--border-strong); }
+.moves button:disabled { color: var(--text-muted); opacity: .45; cursor: default; }
 
 .tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.tools .ui-button:disabled { opacity: 1; background: var(--surface-1); color: var(--text-muted);
+  border-color: var(--border); cursor: not-allowed; }
 .spacer { flex: 1 1 auto; }
 button { font: inherit; }
 button:focus-visible, .grip:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }

@@ -106,6 +106,14 @@ def test_selection_state_is_exposed_to_assistive_technology(template):
     assert "data-selected" in template
 
 
+def test_regions_and_legend_share_visible_number_markers(template):
+    """Anonymous diagram shapes need a visible mapping to their labelled pills."""
+    assert "getBBox" in template
+    assert "region.index" in template
+    assert "legendIndex" in template
+    assert re.search(r"class[^\n]*pin", template)
+
+
 def test_chips_clear_and_submit_are_separate_explicit_controls(template):
     """The learner removes one selection with its chip, clears everything, and
     submits only on an explicit action — never on every click."""

@@ -64,6 +64,8 @@ svg { display: block; width: 100%; height: auto; }
 .goalPick select { min-height: 40px; }
 
 .tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.tools .ui-button:disabled { opacity: 1; background: var(--surface-1); color: var(--text-muted);
+  border-color: var(--border); cursor: not-allowed; }
 button, select { font: inherit; }
 button:focus-visible, select:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
@@ -288,8 +290,10 @@ const ETUDE = /*__DATA__*/null;
   const svg = $('graph');
   svg.setAttribute('viewBox', `${minX - PAD} ${minY - PAD} ${viewW} ${viewH}`);
   svg.setAttribute('aria-label', ui.graphLabel);
-  // Keep the drawing from stretching tall on narrow screens.
-  $('stage').style.maxHeight = `${Math.min(520, viewH + 40)}px`;
+  // Cap the SVG itself, not its container. A width-driven intrinsic height can
+  // otherwise grow past a capped stage and clip lower nodes on wide hosts.
+  const displayH = Math.min(520, Math.max(260, viewH + 40));
+  svg.style.height = `${displayH}px`;
 
   const RADIUS = 26;
 

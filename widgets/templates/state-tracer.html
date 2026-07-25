@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · State tracer</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+html, body { overflow-y: hidden; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 14px; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
+.prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
+
+.bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.spacer { flex: 1 1 auto; }
+.step { color: var(--text-muted); font: 500 11.5px/1.5 var(--mono); white-space: nowrap; }
+
+/* Current operation: the instruction the learner is predicting the effect of. */
+.op { margin-top: 12px; padding: 14px 16px; background: var(--surface-1);
+  border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); }
+.op-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.op-label { font-size: 14.5px; font-weight: 500; }
+.op-code { margin: 10px 0 0; padding: 10px 12px; background: var(--surface-2);
+  border: 0.5px solid var(--border); border-radius: 8px; color: var(--text-primary);
+  font: 13px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.op-desc { margin: 9px 0 0; color: var(--text-secondary); font-size: 13.5px; line-height: 1.55; }
+
+/* Editable state, grouped the way the atom groups it. */
+.sections { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.section { padding: 13px 16px 15px; background: var(--surface-1);
+  border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); }
+.section-label { color: var(--text-muted); font: 500 12px/1.4 var(--sans); }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 10px 14px; margin-top: 10px; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field-label { color: var(--text-secondary); font: 500 12.5px/1.4 var(--mono); overflow-wrap: anywhere; }
+.field input, .field select { width: 100%; min-width: 0; font: 13.5px/1.5 var(--mono); }
+.field[data-dirty="true"] .field-label { color: var(--text-primary); }
+
+/* Captured snapshots: the answer so far, in capture order. */
+.snapshots { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.snap { padding: 11px 14px; background: var(--surface-1); border: 0.5px solid var(--border);
+  border-radius: 10px; }
+.snap-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.snap-index { color: var(--text-muted); font: 500 11.5px/1.5 var(--mono); }
+.snap-label { font-size: 13.5px; font-weight: 500; }
+.snap-state { margin: 6px 0 0; color: var(--text-secondary); font: 12.5px/1.6 var(--mono); overflow-wrap: anywhere; }
+.hint { margin-top: 12px; color: var(--text-muted); font-size: 12.5px; }
+
+.tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+button { font: inherit; }
+button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.status:not(:empty) { margin-top: 10px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
+.status[data-tone="error"] { color: var(--red-text); }
+.setup { margin-top: 14px; padding: 18px 20px; background: var(--surface-1);
+  border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); }
+.setup h2 { margin: 0 0 6px; font-size: 15px; font-weight: 500; }
+.setup p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
+.done { margin-top: 14px; padding: 20px; text-align: center; background: var(--surface-1);
+  border: 0.5px solid var(--green); border-radius: var(--radius-card, 12px); }
+.done h2 { margin: 0 0 6px; font-size: 16px; font-weight: 500; }
+.done p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.hidden { display: none; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap ui-card">
+  <div class="label" id="label">Etude · State tracer</div>
+  <h1 class="title" id="title">Trace the state</h1>
+  <div class="prompt" id="prompt"></div>
+
+  <div class="bar">
+    <span class="step ui-badge ui-badge--outline" id="step"></span>
+    <span class="spacer"></span>
+    <span class="step" id="capturedCount"></span>
+  </div>
+
+  <div class="op hidden" id="op">
+    <div class="op-head">
+      <span class="op-label" id="opLabel"></span>
+    </div>
+    <pre class="op-code hidden" id="opCode"></pre>
+    <p class="op-desc hidden" id="opDesc"></p>
+  </div>
+
+  <div class="sections" id="sections"></div>
+
+  <div class="snapshots" id="snapshots"></div>
+  <div class="hint hidden" id="hint"></div>
+
+  <div class="tools">
+    <span class="spacer"></span>
+    <button class="ui-button ui-button--ghost ui-button--sm" id="undo" type="button" disabled>Undo</button>
+    <button class="ui-button ui-button--outline ui-button--sm" id="reset" type="button" disabled>Reset</button>
+    <button class="ui-button ui-button--secondary ui-button--sm" id="capture" type="button">Capture</button>
+    <button class="ui-button ui-button--sm" id="submit" type="button" disabled>Send to agent</button>
+  </div>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+
+  <div class="setup hidden" id="setupError">
+    <h2 id="setupTitle">This tracer has no state to trace yet</h2>
+    <p id="setupBody">The atom is missing its initial state or its operations. Ask your agent to add them, then reopen this widget.</p>
+  </div>
+  <div class="done hidden" id="done">
+    <h2 id="doneTitle">Sent to your agent</h2>
+    <p id="doneBody">Your trace is waiting in Etude. Tell your agent you are done so they can review it.</p>
+  </div>
+</div>
+<script>
+const ETUDE = /*__DATA__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const atom = data.atom && typeof data.atom === 'object' ? data.atom : {};
+  const config = atom.widget_data && typeof atom.widget_data === 'object' ? atom.widget_data : {};
+  const $ = id => document.getElementById(id);
+  const text = value => (typeof value === 'string' ? value : '');
+  const plain = value => String(value || '').replace(/`{1,3}|\*{1,2}|[_#>]/g, '').replace(/\s+/g, ' ').trim();
+  const api = String(data.api || '').replace(/\/$/, '');
+  const atomId = text(atom.id);
+
+  const portuguese = /[áàãâéêíóôõúç]|\b(estado|operação|operações|registre|rastreamento|variáveis|passo)\b/i
+    .test(`${text(atom.user_prompt)} ${text(atom.topic)}`);
+  const ui = portuguese
+    ? { title: 'Rastreie o estado', label: 'Etude · Rastreador de estado',
+        send: 'Enviar ao agente', capture: 'Capturar', undo: 'Desfazer', reset: 'Reiniciar',
+        sending: 'Enviando…', step: 'Operação', of: 'de', captured: 'capturadas',
+        capturedOne: 'capturada', done: 'Todas as operações capturadas',
+        needWork: 'Capture ao menos uma operação antes de enviar.',
+        capturedNote: 'Estado capturado para', advanced: 'Agora edite o estado para',
+        undone: 'Última captura removida.', resetNote: 'Estado voltou aos valores iniciais.',
+        hint: 'Edite os campos para o estado previsto e capture antes de avançar.',
+        failed: 'Não foi possível alcançar o Etude. Seu trabalho continua aqui — tente de novo.',
+        sentTitle: 'Enviado ao agente',
+        sentBody: 'Seu rastreamento está aguardando no Etude. Avise o agente que terminou para receber o feedback.',
+        setupTitle: 'Este rastreador ainda não tem estado para rastrear',
+        setupBody: 'O atom está sem o estado inicial ou sem as operações. Peça ao agente para adicioná-los e reabra o widget.' }
+    : { title: 'Trace the state', label: 'Etude · State tracer',
+        send: 'Send to agent', capture: 'Capture', undo: 'Undo', reset: 'Reset',
+        sending: 'Sending…', step: 'Operation', of: 'of', captured: 'captured',
+        capturedOne: 'captured', done: 'All operations captured',
+        needWork: 'Capture at least one operation before sending.',
+        capturedNote: 'Captured state for', advanced: 'Now edit the state for',
+        undone: 'Last capture removed.', resetNote: 'State returned to its initial values.',
+        hint: 'Edit the fields to the state you predict, then capture before advancing.',
+        failed: 'Could not reach Etude. Your work is still here — try again.',
+        sentTitle: 'Sent to your agent',
+        sentBody: 'Your trace is waiting in Etude. Tell your agent you are done so they can review it.',
+        setupTitle: 'This tracer has no state to trace yet',
+        setupBody: 'The atom is missing its initial state or its operations. Ask your agent to add them, then reopen this widget.' };
+
+  if (portuguese) document.documentElement.lang = 'pt-BR';
+  $('label').textContent = atomId ? `${ui.label} · ${atomId}` : ui.label;
+  $('title').textContent = plain(atom.topic) || ui.title;
+  window.ETUDE_MD_INTO($('prompt'), text(atom.user_prompt) || ui.title);
+  $('capture').textContent = ui.capture;
+  $('undo').textContent = ui.undo;
+  $('reset').textContent = ui.reset;
+  $('submit').textContent = ui.send;
+  $('hint').textContent = ui.hint;
+  $('doneTitle').textContent = ui.sentTitle;
+  $('doneBody').textContent = ui.sentBody;
+  $('setupTitle').textContent = ui.setupTitle;
+  $('setupBody').textContent = ui.setupBody;
+
+  // --- public config ---------------------------------------------------------
+  // Only the shapes documented in the payload contract are trusted. Anything
+  // malformed is dropped rather than thrown on, so a half-written atom still
+  // renders a readable card.
+  const FIELD_TYPES = new Set(['text', 'number', 'select']);
+
+  function readFields(raw) {
+    if (!Array.isArray(raw)) return [];
+    const fields = [];
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue;
+      const id = text(item.id);
+      if (!id) continue;
+      const declared = text(item.type).toLowerCase();
+      const options = Array.isArray(item.options)
+        ? item.options.filter(option => typeof option === 'string' || typeof option === 'number').map(String)
+        : [];
+      // A field with options is a select even when the atom forgot to say so.
+      let type = FIELD_TYPES.has(declared) ? declared : (options.length ? 'select' : 'text');
+      if (type === 'select' && !options.length) type = 'text';
+      const value = item.value === null || item.value === undefined ? '' : String(item.value);
+      fields.push({ id, label: text(item.label) || id, type, options, initial: value });
+    }
+    return fields;
+  }
+
+  function readSections(raw) {
+    if (!Array.isArray(raw)) return [];
+    const sections = [];
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue;
+      const fields = readFields(item.fields);
+      if (!fields.length) continue;
+      sections.push({ id: text(item.id) || `section-${sections.length + 1}`, label: text(item.label), fields });
+    }
+    return sections;
+  }
+
+  function readOperations(raw) {
+    if (!Array.isArray(raw)) return [];
+    const operations = [];
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue;
+      const id = text(item.id);
+      if (!id) continue;
+      operations.push({
+        id,
+        label: text(item.label) || id,
+        code: text(item.code),
+        description: text(item.description),
+      });
+    }
+    return operations;
+  }
+
+  const sections = readSections(config.initial_state);
+  const operations = readOperations(config.operations);
+  const allFields = sections.flatMap(section => section.fields);
+
+  // The learner's working state, keyed by field id. Never derived from the
+  // operation code: predicting the result is the whole exercise, so the widget
+  // has no notion of a canonical future state.
+  const current = new Map(allFields.map(field => [field.id, field.initial]));
+  const inputs = new Map();
+  const snapshots = [];
+  let index = 0;
+  let sent = false;
+
+  function setStatus(message, tone) {
+    const node = $('status');
+    node.textContent = message || '';
+    if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
+  }
+
+  // --- render ----------------------------------------------------------------
+
+  function renderSections() {
+    const host = $('sections');
+    host.textContent = '';
+    for (const section of sections) {
+      const box = document.createElement('div');
+      box.className = 'section';
+      if (section.label) {
+        const label = document.createElement('div');
+        label.className = 'section-label';
+        label.textContent = section.label;
+        box.append(label);
+      }
+      const grid = document.createElement('div');
+      grid.className = 'fields';
+      for (const field of section.fields) {
+        const cell = document.createElement('div');
+        cell.className = 'field';
+        const inputId = `field-${section.id}-${field.id}`;
+        const label = document.createElement('label');
+        label.className = 'field-label';
+        label.htmlFor = inputId;
+        label.textContent = field.label;
+        cell.append(label);
+
+        let control;
+        if (field.type === 'select') {
+          control = document.createElement('select');
+          control.className = 'ui-select';
+          for (const option of field.options) {
+            const node = document.createElement('option');
+            node.value = option;
+            node.textContent = option;
+            control.append(node);
+          }
+          // Keep an unlisted initial value reachable instead of silently
+          // snapping the field to the first option.
+          if (!field.options.includes(field.initial)) {
+            const node = document.createElement('option');
+            node.value = field.initial;
+            node.textContent = field.initial;
+            control.prepend(node);
+          }
+        } else {
+          control = document.createElement('input');
+          control.className = 'ui-input';
+          control.type = field.type === 'number' ? 'number' : 'text';
+          control.autocomplete = 'off';
+          control.spellcheck = false;
+          if (field.type === 'number') control.step = 'any';
+        }
+        control.id = inputId;
+        control.value = current.get(field.id);
+        control.setAttribute('aria-label', field.label);
+        control.dataset.fieldId = field.id;
+        control.addEventListener('input', () => {
+          current.set(field.id, control.value);
+          cell.dataset.dirty = String(control.value !== field.initial);
+          // Editing a field makes Reset meaningful, so refresh the controls.
+          // Nothing is submitted here: only the Send button posts.
+          syncControls();
+        });
+        cell.dataset.dirty = String(current.get(field.id) !== field.initial);
+        cell.append(control);
+        grid.append(cell);
+        inputs.set(field.id, control);
+      }
+      box.append(grid);
+      host.append(box);
+    }
+  }
+
+  function renderOperation() {
+    const operation = operations[index];
+    const box = $('op');
+    if (!operation) {
+      box.classList.add('hidden');
+      return;
+    }
+    box.classList.remove('hidden');
+    $('opLabel').textContent = operation.label;
+    const code = $('opCode');
+    code.textContent = operation.code;
+    code.classList.toggle('hidden', !operation.code);
+    const desc = $('opDesc');
+    desc.textContent = operation.description;
+    desc.classList.toggle('hidden', !operation.description);
+  }
+
+  function renderSnapshots() {
+    const host = $('snapshots');
+    host.textContent = '';
+    snapshots.forEach((snapshot, position) => {
+      const box = document.createElement('div');
+      box.className = 'snap';
+      const head = document.createElement('div');
+      head.className = 'snap-head';
+      const number = document.createElement('span');
+      number.className = 'snap-index';
+      number.textContent = `${position + 1}.`;
+      const label = document.createElement('span');
+      label.className = 'snap-label';
+      label.textContent = snapshot.operation_label;
+      head.append(number, label);
+      box.append(head);
+      const state = document.createElement('p');
+      state.className = 'snap-state';
+      // Field ids and values, exactly as they will be submitted.
+      state.textContent = Object.entries(snapshot.state)
+        .map(([id, value]) => `${id} = ${value === '' ? '—' : value}`)
+        .join('   ');
+      box.append(state);
+      host.append(box);
+    });
+  }
+
+  // Button and indicator state only. Kept separate from the field markup so a
+  // keystroke never rebuilds the inputs and steals focus mid-edit.
+  function syncControls() {
+    const total = operations.length;
+    const remaining = index < total;
+    $('step').textContent = remaining
+      ? `${ui.step} ${index + 1} ${ui.of} ${total}`
+      : ui.done;
+    $('capturedCount').textContent = snapshots.length
+      ? `${snapshots.length} ${snapshots.length === 1 ? ui.capturedOne : ui.captured}`
+      : '';
+    $('hint').classList.toggle('hidden', !remaining || snapshots.length > 0 || sent);
+    $('capture').disabled = sent || !remaining;
+    $('capture').classList.toggle('hidden', sent || !remaining);
+    $('undo').disabled = sent || snapshots.length === 0;
+    // Reset is only meaningful once something has moved away from the initial
+    // values — either a capture or an edited field.
+    const edited = allFields.some(field => current.get(field.id) !== field.initial);
+    $('reset').disabled = sent || (snapshots.length === 0 && !edited);
+    $('submit').disabled = sent || snapshots.length === 0;
+  }
+
+  function refresh() {
+    syncControls();
+    renderOperation();
+    renderSnapshots();
+  }
+
+  // --- actions ---------------------------------------------------------------
+
+  function stateNow() {
+    const state = {};
+    for (const field of allFields) state[field.id] = current.get(field.id);
+    return state;
+  }
+
+  $('capture').addEventListener('click', () => {
+    if (sent) return;
+    const operation = operations[index];
+    if (!operation) return;
+    snapshots.push({
+      operation_id: operation.id,
+      operation_label: operation.label,
+      state: stateNow(),
+    });
+    const captured = operation.label;
+    index += 1;
+    refresh();
+    const next = operations[index];
+    setStatus(next
+      ? `${ui.capturedNote} ${captured}. ${ui.advanced} ${next.label}.`
+      : `${ui.capturedNote} ${captured}. ${ui.done}.`);
+  });
+
+  $('undo').addEventListener('click', () => {
+    if (sent || !snapshots.length) return;
+    const removed = snapshots.pop();
+    index = Math.max(0, index - 1);
+    // Put the fields back to what that snapshot recorded, so the learner
+    // resumes from where they were rather than from a blank slate.
+    for (const [id, value] of Object.entries(removed.state)) {
+      if (!current.has(id)) continue;
+      current.set(id, value);
+      const input = inputs.get(id);
+      if (input) input.value = value;
+    }
+    for (const field of allFields) {
+      const input = inputs.get(field.id);
+      if (input) input.parentElement.dataset.dirty = String(current.get(field.id) !== field.initial);
+    }
+    refresh();
+    setStatus(ui.undone);
+  });
+
+  $('reset').addEventListener('click', () => {
+    if (sent) return;
+    snapshots.length = 0;
+    index = 0;
+    for (const field of allFields) {
+      current.set(field.id, field.initial);
+      const input = inputs.get(field.id);
+      if (input) {
+        input.value = field.initial;
+        input.parentElement.dataset.dirty = 'false';
+      }
+    }
+    refresh();
+    setStatus(ui.resetNote);
+  });
+
+  $('submit').addEventListener('click', async () => {
+    if (sent) return;
+    if (!snapshots.length) { setStatus(ui.needWork, 'error'); return; }
+    if (!atomId || !api) { setStatus(ui.failed, 'error'); return; }
+
+    $('submit').disabled = true;
+    setStatus(ui.sending);
+    try {
+      const response = await fetch(`${api}/api/inbox`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          atom_id: atomId,
+          payload: {
+            kind: 'state-tracer',
+            snapshots: snapshots.map(snapshot => ({
+              operation_id: snapshot.operation_id,
+              operation_label: snapshot.operation_label,
+              state: { ...snapshot.state },
+            })),
+          },
+          ts: new Date().toISOString(),
+        }),
+      });
+      if (!response.ok) throw new Error(String(response.status));
+      sent = true;
+      refresh();
+      $('done').classList.remove('hidden');
+      setStatus('');
+      const traced = snapshots.map(snapshot => snapshot.operation_label).join(', ');
+      window.parent.postMessage({
+        lotus: 1,
+        type: 'submit',
+        text: `I traced the state for ${atomId} across ${snapshots.length} operations: ${traced}. Read it from the Etude inbox, grade it, record the attempt, and clear the inbox item.`,
+      }, '*');
+    } catch {
+      // Snapshots stay in memory so a network failure costs no work.
+      $('submit').disabled = false;
+      setStatus(ui.failed, 'error');
+    }
+  });
+
+  // --- boot ------------------------------------------------------------------
+  // A malformed or empty config is a calm, explanatory card: the learner sees
+  // why there is nothing to do instead of a blank frame.
+  if (!sections.length || !operations.length) {
+    $('setupError').classList.remove('hidden');
+    for (const id of ['capture', 'undo', 'reset', 'submit']) $(id).disabled = true;
+    $('step').classList.add('hidden');
+    $('hint').classList.add('hidden');
+  } else {
+    renderSections();
+    refresh();
+  }
+})();
+</script>
+</body>
+</html>

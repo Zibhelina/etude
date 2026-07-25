@@ -10,7 +10,7 @@
 * { box-sizing: border-box; }
 html, body { overflow-y: hidden; }
 body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
-.wrap { display: flex; flex-direction: column; padding: 22px 26px 20px; }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 14px; }
 .label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
 h1 { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
 .prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 15px; line-height: 1.55; overflow-wrap: anywhere; }
@@ -30,7 +30,7 @@ canvas { display: block; width: 100%; touch-action: none; cursor: crosshair; bac
 input[type="range"] { width: 92px; accent-color: var(--foreground); }
 button { font: inherit; }
 button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.status { margin-top: 12px; min-height: 20px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
+.status:not(:empty) { margin-top: 10px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
 .status[data-tone="error"] { color: var(--red-text); }
 .status[data-tone="ok"] { color: var(--green-text); }
 .done { margin-top: 16px; padding: 22px; text-align: center; background: var(--surface-1); border: 0.5px solid var(--green); border-radius: var(--radius-card, 12px); }

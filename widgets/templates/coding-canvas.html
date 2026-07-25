@@ -11,7 +11,7 @@
 * { box-sizing: border-box; }
 html, body { overflow-y: hidden; }
 body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
-.wrap { display: flex; flex-direction: column; padding: 22px 26px 20px; }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 14px; }
 .label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
 h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
 .prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
@@ -28,28 +28,22 @@ select:focus-visible, input:focus-visible { outline: 2px solid var(--ring); outl
   background: var(--surface-1); overflow: hidden; }
 /* A code block deserves room: default to a roughly square editor, capped so a
    long answer still fits the chat. Single-line items opt out via lines=1. */
-.editor:not([data-inline]) .cm-editor,
-.editor:not([data-inline]) .cm-editor .cm-scroller { min-height: min(60vw, 460px); }
-/* The gutter is a flex child of the scroller: stretching it makes the number
-   column run the full height instead of stopping at the last line. */
-.cm-editor .cm-scroller { align-items: stretch; }
-/* The gutters box only grows to the last line; stretch it to the scroller so
-   the number column runs the full editor height. */
-.editor:not([data-inline]) .cm-editor .cm-gutters { height: auto !important; align-self: stretch; }
+/* Height comes from the content area; the gutter has no surface of its own,
+   so an empty column cannot look detached or misaligned. */
+.editor:not([data-inline]) .cm-editor .cm-content { min-height: min(60vw, 440px); }
 .editor[data-inline] .cm-content { min-height: 0; }
 .cm-editor { background: transparent; font: 13.5px/1.6 var(--mono); }
 .cm-editor.cm-focused { outline: none; }
 .cm-scroller { font-family: var(--mono); }
-.cm-editor .cm-gutters { background: var(--surface-2) !important; border-right: 0.5px solid var(--border);
-  color: var(--text-muted); border-radius: 0; }
+.cm-editor .cm-gutters { background: transparent !important; border-right: 0 !important;
+  color: var(--text-muted); }
 .cm-editor .cm-gutter, .cm-editor .cm-gutterElement { background: transparent !important; }
-.cm-editor .cm-lineNumbers .cm-gutterElement { padding: 0 7px 0 8px; min-width: 0;
+.cm-editor .cm-lineNumbers .cm-gutterElement { padding: 0 10px 0 14px; min-width: 0;
   color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: right; }
 .cm-editor .cm-gutters { min-width: 0; }
 /* The fold column adds width for little value in a short answer. */
 .cm-editor .cm-foldGutter { display: none; }
-.cm-editor .cm-activeLineGutter { background: color-mix(in srgb, var(--foreground) 9%, transparent) !important;
-  color: var(--text-primary) !important; }
+.cm-editor .cm-activeLineGutter { background: transparent !important; color: var(--text-primary) !important; }
 .cm-activeLine { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
 .cm-content { caret-color: var(--foreground); padding: 12px 0; }
 .cm-cursor, .cm-dropCursor { border-left-color: var(--foreground); }
@@ -83,7 +77,7 @@ select:focus-visible, input:focus-visible { outline: 2px solid var(--ring); outl
 .counts { color: var(--text-muted); font: 500 11.5px/1.5 var(--mono); }
 button { font: inherit; }
 button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.status { margin-top: 10px; min-height: 18px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
+.status:not(:empty) { margin-top: 10px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
 .status[data-tone="error"] { color: var(--red-text); }
 .done { margin-top: 14px; padding: 20px; text-align: center; background: var(--surface-1); border: 0.5px solid var(--green); border-radius: var(--radius-card, 12px); }
 .done h2 { margin: 0 0 6px; font-size: 16px; font-weight: 500; }

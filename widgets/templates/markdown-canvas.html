@@ -54,7 +54,7 @@ h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3;
 .counts { color: var(--text-muted); font: 500 11.5px/1.5 var(--mono); }
 button { font: inherit; }
 button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.status { margin-top: 8px; min-height: 0; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
+.status:not(:empty) { margin-top: 10px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
 .status[data-tone="error"] { color: var(--red-text); }
 .done { margin-top: 14px; padding: 20px; text-align: center; background: var(--surface-1); border: 0.5px solid var(--green); border-radius: var(--radius-card, 12px); }
 .done h2 { margin: 0 0 6px; font-size: 16px; font-weight: 500; }

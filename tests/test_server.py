@@ -500,6 +500,32 @@ def test_progress_fills_use_status_tokens_across_the_value_range():
         )
 
 
+def test_widgets_never_scroll_vertically_inside_their_frame():
+    """The host sizes the frame to the reported height, so a widget must never
+    scroll vertically: sub-pixel rounding used to leave a few pixels of overflow
+    and the host drew a nested scrollbar beside the card."""
+    for template_path in WIDGET_TEMPLATE_DIR.glob("*.html"):
+        template = template_path.read_text()
+        rules = re.findall(r"html, body \{([^}]*)\}", template)
+        assert any("overflow-y: hidden" in rule for rule in rules), (
+            f"{template_path.name} must not scroll vertically"
+        )
+
+
+def test_resize_bridge_reports_a_height_that_clears_subpixel_rounding(running_server):
+    """The measured height carries a small margin and includes child bottom
+    margins. Without it the frame lands a pixel or two short and scrolls."""
+    base, _ = running_server
+    _, _, html = request(base, "/widgets/streaks?days=7")
+
+    assert "marginBottom" in html, "child bottom margins must count toward height"
+    assert re.search(r"paddingBottom\) \+ 2", html), "height needs slack past sub-pixel rounding"
+    assert "document.documentElement.scrollHeight)" not in html.split("else {")[0], (
+        "fit-content measurement must not use scrollHeight; it equals the viewport "
+        "in a tall frame and would stop the widget shrinking"
+    )
+
+
 def test_widget_bodies_are_transparent_so_hosts_show_their_own_background():
     """Widgets sit on the host's canvas (Lotus chat). An opaque body paints a
     visible block around the card whenever the host background differs."""

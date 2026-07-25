@@ -34,9 +34,16 @@ _AUTO_RESIZE_BRIDGE = """<script>
       const bodyRect = body.getBoundingClientRect();
       const style = getComputedStyle(body);
       const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
-      const bottoms = [...body.children].map(child => child.getBoundingClientRect().bottom);
+      const bottoms = [...body.children].map(child => {
+        const margin = Number.parseFloat(getComputedStyle(child).marginBottom) || 0;
+        return child.getBoundingClientRect().bottom + margin;
+      });
       const contentBottom = bottoms.length ? Math.max(...bottoms) : bodyRect.top;
-      height = Math.ceil(contentBottom - bodyRect.top + paddingBottom);
+      // Round up past sub-pixel layout: reporting even a fraction short makes the
+      // host draw a nested scrollbar. Never measure against scrollHeight here --
+      // in a frame taller than the content it equals the viewport, which would
+      // pin the widget open and stop it shrinking.
+      height = Math.ceil(contentBottom - bodyRect.top + paddingBottom) + 2;
     } else {
       const bodyHeight = body ? body.scrollHeight : 0;
       height = Math.ceil(Math.max(document.documentElement.scrollHeight, bodyHeight));

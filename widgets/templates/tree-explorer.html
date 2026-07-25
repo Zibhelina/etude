@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · Tree</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+html, body { overflow-y: hidden; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 14px; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
+.prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
+
+.bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.spacer { flex: 1 1 auto; }
+.count { color: var(--text-muted); font: 500 11.5px/1.5 var(--mono); white-space: nowrap; }
+
+.stage { position: relative; margin-top: 12px; border: 0.5px solid var(--border);
+  border-radius: var(--radius-card, 12px); background: var(--surface-1); overflow: hidden; }
+svg { display: block; width: 100%; height: auto; }
+
+/* Edges sit under nodes; the halo keeps a cost label legible where it crosses a line. */
+.edge { stroke: var(--border-strong); stroke-width: 1.4; fill: none; stroke-linecap: round; }
+.edge[data-active="true"] { stroke: var(--text-secondary); stroke-width: 1.8; }
+.edge[data-hidden="true"] { display: none; }
+.edgeLabel { fill: var(--text-secondary); font: 500 9px/1 var(--mono); text-anchor: middle;
+  paint-order: stroke; stroke: var(--surface-1); stroke-width: 3px; stroke-linejoin: round; }
+.edgeLabel[data-hidden="true"] { display: none; }
+
+.node { cursor: pointer; outline: none; }
+.node[data-hidden="true"] { display: none; }
+.node .shape { fill: var(--surface-2); stroke: var(--border-strong); stroke-width: 1;
+  transition: fill .12s ease, stroke .12s ease; }
+.node:hover .shape { fill: color-mix(in srgb, var(--foreground) 18%, var(--surface-2)); }
+.node:focus-visible .shape { stroke: var(--ring); stroke-width: 2.2; }
+.node[data-expanded="true"] .shape { fill: var(--status-good); stroke: var(--foreground); }
+.node[data-goal="true"] .shape { stroke: var(--text-primary); stroke-width: 1.8; stroke-dasharray: 3 2; }
+.node[data-start="true"] .shape { stroke: var(--text-primary); stroke-width: 1.8; }
+.node .caption { fill: var(--text-primary); font: 500 10.5px/1 var(--sans); text-anchor: middle; }
+.node[data-expanded="true"] .caption { fill: var(--surface-0); }
+/* Expansion rank rides on the node so order is readable from the picture alone. */
+.node .rank { fill: var(--surface-0); font: 600 8.5px/1 var(--mono); text-anchor: middle; }
+.node .marker { fill: var(--text-secondary); font: 600 8.5px/1 var(--mono); text-anchor: middle; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px;
+  color: var(--text-muted); font: 12px/1.5 var(--sans); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+
+.order { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.step { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 999px;
+  background: var(--surface-2); border: 0.5px solid var(--border); color: var(--text-primary); font-size: 12.5px; }
+.step em { color: var(--text-muted); font: 600 10.5px/1 var(--mono); font-style: normal; }
+.arrow { color: var(--text-muted); font-size: 11px; }
+.empty { margin-top: 12px; color: var(--text-muted); font-size: 12.5px; }
+
+.goalPick { display: flex; align-items: center; gap: 8px; margin-top: 12px;
+  color: var(--text-secondary); font-size: 13px; flex-wrap: wrap; }
+.goalPick select { min-height: 40px; }
+
+.tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+button, select { font: inherit; }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.status:not(:empty) { margin-top: 10px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
+.status[data-tone="error"] { color: var(--red-text); }
+.notice { margin-top: 14px; padding: 18px 20px; background: var(--surface-1);
+  border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); }
+.notice h2 { margin: 0 0 6px; font-size: 15px; font-weight: 500; }
+.notice p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.done { border-color: var(--green); }
+.hidden { display: none; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (max-width: 420px) { .wrap { padding: 18px 16px 12px; } }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap ui-card">
+  <div class="label" id="label">Etude · Tree</div>
+  <h1 class="title" id="title">Explore the graph</h1>
+  <div class="prompt" id="prompt"></div>
+
+  <div class="bar">
+    <span class="spacer"></span>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="stage" id="stage">
+    <svg id="graph" role="img" preserveAspectRatio="xMidYMid meet"></svg>
+  </div>
+  <p class="sr" id="graphText"></p>
+  <div class="legend" id="legend"></div>
+
+  <div class="order" id="order"></div>
+  <div class="empty hidden" id="emptyHint"></div>
+
+  <div class="goalPick hidden" id="goalPick">
+    <label for="goalSelect" id="goalLabel">Goal reached</label>
+    <select class="ui-select" id="goalSelect"></select>
+  </div>
+
+  <div class="tools">
+    <span class="spacer"></span>
+    <button class="ui-button ui-button--outline ui-button--sm" id="undo" type="button" disabled>Undo</button>
+    <button class="ui-button ui-button--outline ui-button--sm" id="reset" type="button" disabled>Reset</button>
+    <button class="ui-button ui-button--sm" id="submit" type="button" disabled>Send to agent</button>
+  </div>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+  <div class="notice done hidden" id="done">
+    <h2 id="doneTitle">Sent to your agent</h2>
+    <p id="doneBody">Your traversal is waiting in Etude. Tell your agent you are done so they can review it.</p>
+  </div>
+  <div class="notice hidden" id="broken">
+    <h2 id="brokenTitle">Nothing to explore yet</h2>
+    <p id="brokenBody">This atom has no graph configured. Ask your agent to add nodes and edges.</p>
+  </div>
+</div>
+<script>
+const ETUDE = /*__DATA__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const atom = data.atom && typeof data.atom === 'object' ? data.atom : {};
+  const $ = id => document.getElementById(id);
+  const text = value => (typeof value === 'string' ? value : '');
+  const plain = value => String(value || '').replace(/`{1,3}|\*{1,2}|[_#>]/g, '').replace(/\s+/g, ' ').trim();
+  const api = String(data.api || '').replace(/\/$/, '');
+  const config = atom.widget_data && typeof atom.widget_data === 'object' ? atom.widget_data : {};
+
+  const portuguese = /[áàãâéêíóôõúç]|\b(explore|percorra|busca|árvore|grafo|nós|expanda)\b/i
+    .test(`${text(atom.user_prompt)} ${text(atom.topic)}`);
+  const ui = portuguese
+    ? { title: 'Explore o grafo', label: 'Etude · Árvore', send: 'Enviar ao agente',
+        undo: 'Desfazer', reset: 'Reiniciar', sending: 'Enviando…',
+        empty: 'Expanda ao menos um nó antes de enviar.',
+        failed: 'Não foi possível alcançar o Etude. Seu percurso continua aqui — tente de novo.',
+        sentTitle: 'Enviado ao agente', expanded: 'expandidos',
+        hint: 'Clique em um nó para expandi-lo. Use Tab e Enter pelo teclado.',
+        goalLabel: 'Objetivo alcançado', goalNone: 'Nenhum',
+        legendStart: 'Início', legendGoal: 'Objetivo (tracejado)', legendDone: 'Expandido',
+        brokenTitle: 'Nada para explorar ainda',
+        brokenBody: 'Este atom não tem um grafo configurado. Peça ao agente para adicionar nós e arestas.',
+        graphLabel: 'Grafo de busca',
+        sentBody: 'Seu percurso está aguardando no Etude. Avise o agente que terminou para receber o feedback.' }
+    : { title: 'Explore the graph', label: 'Etude · Tree', send: 'Send to agent',
+        undo: 'Undo', reset: 'Reset', sending: 'Sending…',
+        empty: 'Expand at least one node before sending.',
+        failed: 'Could not reach Etude. Your traversal is still here — try again.',
+        sentTitle: 'Sent to your agent', expanded: 'expanded',
+        hint: 'Click a node to expand it. Use Tab and Enter from the keyboard.',
+        goalLabel: 'Goal reached', goalNone: 'None',
+        legendStart: 'Start', legendGoal: 'Goal (dashed)', legendDone: 'Expanded',
+        brokenTitle: 'Nothing to explore yet',
+        brokenBody: 'This atom has no graph configured. Ask your agent to add nodes and edges.',
+        graphLabel: 'Search graph',
+        sentBody: 'Your traversal is waiting in Etude. Tell your agent you are done so they can review it.' };
+
+  if (portuguese) document.documentElement.lang = 'pt-BR';
+  $('label').textContent = text(atom.id) ? `${ui.label} · ${text(atom.id)}` : ui.label;
+  $('title').textContent = plain(atom.topic) || ui.title;
+  window.ETUDE_MD_INTO($('prompt'), text(atom.user_prompt) || ui.title);
+  $('undo').textContent = ui.undo;
+  $('reset').textContent = ui.reset;
+  $('submit').textContent = ui.send;
+  $('doneTitle').textContent = ui.sentTitle;
+  $('doneBody').textContent = ui.sentBody;
+  $('brokenTitle').textContent = ui.brokenTitle;
+  $('brokenBody').textContent = ui.brokenBody;
+  $('emptyHint').textContent = ui.hint;
+  $('goalLabel').textContent = ui.goalLabel;
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const el = (name, attrs) => {
+    const node = document.createElementNS(SVG_NS, name);
+    for (const key in attrs) node.setAttribute(key, String(attrs[key]));
+    return node;
+  };
+
+  // --- read the public config defensively -------------------------------
+  // A malformed atom is a content bug, not a crash: every field is coerced and
+  // anything unusable leaves the widget in the calm "nothing to explore" state.
+  const rawNodes = Array.isArray(config.nodes) ? config.nodes : [];
+  const rawEdges = Array.isArray(config.edges) ? config.edges : [];
+  const directed = Boolean(config.directed);
+  const revealOnExpand = Boolean(config.reveal_on_expand);
+
+  const nodes = [];
+  const byId = new Map();
+  for (const raw of rawNodes) {
+    if (!raw || typeof raw !== 'object') continue;
+    const id = typeof raw.id === 'string' ? raw.id : (typeof raw.id === 'number' ? String(raw.id) : '');
+    if (!id || byId.has(id)) continue;
+    const node = {
+      id,
+      label: text(raw.label) || id,
+      meta: text(raw.meta) || (raw.meta != null && typeof raw.meta !== 'object' ? String(raw.meta) : ''),
+      x: Number.isFinite(raw.x) ? Number(raw.x) : null,
+      y: Number.isFinite(raw.y) ? Number(raw.y) : null,
+      neighbors: [],
+    };
+    byId.set(id, node);
+    nodes.push(node);
+  }
+
+  const edges = [];
+  for (const raw of rawEdges) {
+    if (!raw || typeof raw !== 'object') continue;
+    const from = typeof raw.from === 'string' ? raw.from : String(raw.from ?? '');
+    const to = typeof raw.to === 'string' ? raw.to : String(raw.to ?? '');
+    if (!byId.has(from) || !byId.has(to) || from === to) continue;
+    const cost = Number.isFinite(raw.cost) ? Number(raw.cost) : null;
+    const edge = { from, to, label: text(raw.label), cost };
+    edges.push(edge);
+    byId.get(from).neighbors.push(to);
+    if (!directed) byId.get(to).neighbors.push(from);
+  }
+
+  const startId = byId.has(text(config.start)) ? text(config.start) : (nodes[0] ? nodes[0].id : '');
+  const goals = (Array.isArray(config.goals) ? config.goals : [])
+    .map(value => (typeof value === 'string' ? value : String(value ?? '')))
+    .filter(id => byId.has(id));
+  const goalSet = new Set(goals);
+
+  if (nodes.length === 0) {
+    // Calm, usable error state — the card still explains itself.
+    $('stage').classList.add('hidden');
+    $('broken').classList.remove('hidden');
+    $('order').classList.add('hidden');
+    $('undo').disabled = $('reset').disabled = $('submit').disabled = true;
+    return;
+  }
+
+  // --- deterministic layout ---------------------------------------------
+  // Nodes may omit coordinates. Layer by BFS depth from the start node so the
+  // picture reflects graph structure, and order within a layer by first
+  // discovery, which keeps the same config rendering identically every time.
+  const CELL_X = 132;
+  const CELL_Y = 92;
+  function layout() {
+    const depth = new Map();
+    const queue = [];
+    if (startId) { depth.set(startId, 0); queue.push(startId); }
+    for (let head = 0; head < queue.length; head += 1) {
+      const current = byId.get(queue[head]);
+      for (const next of current.neighbors) {
+        if (!depth.has(next)) { depth.set(next, depth.get(current.id) + 1); queue.push(next); }
+      }
+    }
+    // Disconnected nodes still need a home: append them in declaration order.
+    let orphanDepth = queue.length ? Math.max(...depth.values()) + 1 : 0;
+    for (const node of nodes) {
+      if (!depth.has(node.id)) { depth.set(node.id, orphanDepth); queue.push(node.id); }
+    }
+
+    const layers = new Map();
+    for (const id of queue) {
+      const level = depth.get(id);
+      if (!layers.has(level)) layers.set(level, []);
+      layers.get(level).push(id);
+    }
+    const widest = Math.max(1, ...[...layers.values()].map(row => row.length));
+    for (const [level, row] of layers) {
+      row.forEach((id, index) => {
+        const node = byId.get(id);
+        if (node.x != null && node.y != null) return;
+        // Center each layer against the widest one.
+        const offset = (widest - row.length) / 2;
+        node.x = (offset + index) * CELL_X + CELL_X / 2;
+        node.y = level * CELL_Y + CELL_Y / 2;
+      });
+    }
+  }
+  layout();
+
+  const minX = Math.min(...nodes.map(n => n.x));
+  const maxX = Math.max(...nodes.map(n => n.x));
+  const minY = Math.min(...nodes.map(n => n.y));
+  const maxY = Math.max(...nodes.map(n => n.y));
+  const PAD = 46;
+  const viewW = Math.max(maxX - minX, 1) + PAD * 2;
+  const viewH = Math.max(maxY - minY, 1) + PAD * 2;
+  const svg = $('graph');
+  svg.setAttribute('viewBox', `${minX - PAD} ${minY - PAD} ${viewW} ${viewH}`);
+  svg.setAttribute('aria-label', ui.graphLabel);
+  // Keep the drawing from stretching tall on narrow screens.
+  $('stage').style.maxHeight = `${Math.min(520, viewH + 40)}px`;
+
+  const RADIUS = 26;
+
+  // --- state -------------------------------------------------------------
+  const expansion = [];
+  let sent = false;
+
+  const visible = new Set();
+  function recomputeVisible() {
+    visible.clear();
+    if (!revealOnExpand) { for (const node of nodes) visible.add(node.id); return; }
+    // Reveal mode: the start node is shown first, and each expansion reveals
+    // that node's neighbors — the frontier the learner is choosing from.
+    if (startId) visible.add(startId);
+    for (const id of expansion) {
+      visible.add(id);
+      for (const neighbor of (byId.get(id) ? byId.get(id).neighbors : [])) visible.add(neighbor);
+    }
+  }
+
+  const edgeNodes = [];
+  const nodeNodes = new Map();
+
+  function buildEdges() {
+    for (const edge of edges) {
+      const a = byId.get(edge.from);
+      const b = byId.get(edge.to);
+      const line = el('line', { class: 'edge', x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+      if (directed) line.setAttribute('marker-end', 'url(#arrow)');
+      svg.append(line);
+      const caption = [edge.label, edge.cost != null ? String(edge.cost) : ''].filter(Boolean).join(' · ');
+      let text_ = null;
+      if (caption) {
+        text_ = el('text', { class: 'edgeLabel', x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 4 });
+        text_.textContent = caption;
+        svg.append(text_);
+      }
+      edgeNodes.push({ edge, line, text: text_ });
+    }
+  }
+
+  function buildNodes() {
+    for (const node of nodes) {
+      const group = el('g', { class: 'node', tabindex: '0', role: 'button' });
+      group.dataset.id = node.id;
+      const isGoal = goalSet.has(node.id);
+      // Goals are a different shape as well as a different outline, so they do
+      // not depend on color to be identified.
+      const shape = isGoal
+        ? el('rect', { class: 'shape', x: node.x - RADIUS, y: node.y - RADIUS * 0.78,
+            width: RADIUS * 2, height: RADIUS * 1.56, rx: 7 })
+        : el('circle', { class: 'shape', cx: node.x, cy: node.y, r: RADIUS });
+      group.append(shape);
+
+      const caption = el('text', { class: 'caption', x: node.x, y: node.y + 3.5 });
+      caption.textContent = node.label.length > 9 ? `${node.label.slice(0, 8)}…` : node.label;
+      group.append(caption);
+
+      const marker = el('text', { class: 'marker', x: node.x, y: node.y - RADIUS - 6 });
+      group.append(marker);
+      const rank = el('text', { class: 'rank', x: node.x, y: node.y + RADIUS - 6 });
+      group.append(rank);
+
+      if (isGoal) group.dataset.goal = 'true';
+      if (node.id === startId) group.dataset.start = 'true';
+      svg.append(group);
+      nodeNodes.set(node.id, { group, marker, rank });
+    }
+  }
+
+  if (directed) {
+    const defs = el('defs', {});
+    const marker = el('marker', { id: 'arrow', viewBox: '0 0 10 10', refX: 9, refY: 5,
+      markerWidth: 6, markerHeight: 6, orient: 'auto-start-reverse' });
+    const path = el('path', { d: 'M 0 0 L 10 5 L 0 10 z', fill: 'var(--border-strong)' });
+    marker.append(path);
+    defs.append(marker);
+    svg.append(defs);
+  }
+  buildEdges();
+  buildNodes();
+
+  function legend() {
+    const parts = [];
+    if (startId) parts.push(`▣ ${ui.legendStart}: ${byId.get(startId).label}`);
+    if (goals.length) parts.push(`▭ ${ui.legendGoal}`);
+    parts.push(`① ${ui.legendDone}`);
+    const box = $('legend');
+    box.textContent = '';
+    for (const part of parts) {
+      const span = document.createElement('span');
+      span.textContent = part;
+      box.append(span);
+    }
+  }
+  legend();
+
+  function describe() {
+    const steps = expansion.map((id, index) => `${index + 1}. ${byId.get(id).label}`);
+    const shown = nodes.filter(node => visible.has(node.id)).length;
+    return `${ui.graphLabel}: ${nodes.length} ${portuguese ? 'nós' : 'nodes'}, ${edges.length} ${portuguese ? 'arestas' : 'edges'}, ${shown} ${portuguese ? 'visíveis' : 'visible'}. `
+      + (steps.length ? `${portuguese ? 'Ordem de expansão' : 'Expansion order'}: ${steps.join('; ')}.` : ui.hint);
+  }
+
+  function refresh() {
+    recomputeVisible();
+    const rankOf = new Map(expansion.map((id, index) => [id, index + 1]));
+
+    for (const [id, parts] of nodeNodes) {
+      const node = byId.get(id);
+      const shown = visible.has(id);
+      parts.group.dataset.hidden = String(!shown);
+      parts.group.dataset.expanded = String(rankOf.has(id));
+      parts.group.setAttribute('tabindex', shown && !sent ? '0' : '-1');
+      parts.rank.textContent = rankOf.has(id) ? String(rankOf.get(id)) : '';
+      parts.marker.textContent = node.meta || (id === startId ? ui.legendStart : '');
+      const bits = [node.label];
+      if (id === startId) bits.push(ui.legendStart);
+      if (goalSet.has(id)) bits.push(portuguese ? 'objetivo' : 'goal');
+      if (node.meta) bits.push(node.meta);
+      bits.push(rankOf.has(id)
+        ? `${portuguese ? 'expandido, passo' : 'expanded, step'} ${rankOf.get(id)}`
+        : (portuguese ? 'não expandido' : 'not expanded'));
+      parts.group.setAttribute('aria-label', bits.join(', '));
+      parts.group.setAttribute('aria-pressed', String(rankOf.has(id)));
+    }
+
+    for (const item of edgeNodes) {
+      const shown = visible.has(item.edge.from) && visible.has(item.edge.to);
+      item.line.dataset.hidden = String(!shown);
+      item.line.dataset.active = String(rankOf.has(item.edge.from) && rankOf.has(item.edge.to));
+      if (item.text) item.text.dataset.hidden = String(!shown);
+    }
+
+    const order = $('order');
+    order.textContent = '';
+    expansion.forEach((id, index) => {
+      if (index > 0) {
+        const arrow = document.createElement('span');
+        arrow.className = 'arrow';
+        arrow.textContent = '→';
+        arrow.setAttribute('aria-hidden', 'true');
+        order.append(arrow);
+      }
+      const step = document.createElement('span');
+      step.className = 'step';
+      const rank = document.createElement('em');
+      rank.textContent = String(index + 1);
+      step.append(rank, document.createTextNode(byId.get(id).label));
+      order.append(step);
+    });
+
+    $('count').textContent = expansion.length ? `${expansion.length} ${ui.expanded}` : '';
+    $('emptyHint').classList.toggle('hidden', expansion.length > 0);
+    $('graphText').textContent = describe();
+    $('undo').disabled = sent || expansion.length === 0;
+    $('reset').disabled = sent || expansion.length === 0;
+    $('submit').disabled = sent || expansion.length === 0;
+    $('goalPick').classList.toggle('hidden', goals.length === 0 || sent);
+  }
+
+  function expand(id) {
+    if (sent) return;
+    const node = byId.get(id);
+    if (!node || !visible.has(id)) return;
+    if (expansion.includes(id)) return;
+    expansion.push(id);
+    refresh();
+  }
+
+  svg.addEventListener('click', event => {
+    const group = event.target.closest('.node');
+    if (group) expand(group.dataset.id);
+  });
+  svg.addEventListener('keydown', event => {
+    const group = event.target.closest('.node');
+    if (!group || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    expand(group.dataset.id);
+  });
+
+  if (goals.length) {
+    const select = $('goalSelect');
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = ui.goalNone;
+    select.append(none);
+    for (const id of goals) {
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = byId.get(id).label;
+      select.append(option);
+    }
+  }
+
+  $('undo').addEventListener('click', () => {
+    if (sent || !expansion.length) return;
+    expansion.pop();
+    refresh();
+  });
+  $('reset').addEventListener('click', () => {
+    if (sent) return;
+    expansion.length = 0;
+    $('goalSelect').value = '';
+    setStatus('');
+    refresh();
+  });
+
+  function setStatus(message, tone) {
+    const node = $('status');
+    node.textContent = message;
+    if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
+  }
+
+  $('submit').addEventListener('click', async () => {
+    if (sent) return;
+    if (expansion.length === 0) { setStatus(ui.empty, 'error'); return; }
+    const atomId = text(atom.id);
+    if (!atomId || !api) { setStatus(ui.failed, 'error'); return; }
+
+    $('submit').disabled = true;
+    setStatus(ui.sending);
+    const labels = expansion.map(id => byId.get(id).label);
+    const selectedGoal = goals.length ? $('goalSelect').value : '';
+    const payload = { kind: 'tree-explorer', expansion_order: [...expansion], labels };
+    if (selectedGoal) payload.selected_goal = selectedGoal;
+    try {
+      const response = await fetch(`${api}/api/inbox`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ atom_id: atomId, payload, ts: new Date().toISOString() }),
+      });
+      if (!response.ok) throw new Error(String(response.status));
+      sent = true;
+      refresh();
+      $('done').classList.remove('hidden');
+      setStatus('');
+      const goalText = selectedGoal ? ` I stopped at the goal ${byId.get(selectedGoal).label}.` : '';
+      window.parent.postMessage({
+        lotus: 1,
+        type: 'submit',
+        text: `I explored the graph for ${atomId} in this order: ${labels.join(' → ')}.${goalText} Read it from the Etude inbox, grade it, record the attempt, and clear the inbox item.`,
+      }, '*');
+    } catch {
+      // Keep the traversal: it is the whole answer and is costly to redo.
+      $('submit').disabled = false;
+      setStatus(ui.failed, 'error');
+    }
+  });
+
+  refresh();
+})();
+</script>
+</body>
+</html>

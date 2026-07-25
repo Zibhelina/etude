@@ -57,7 +57,7 @@ All output is compact JSON. Server: `etude serve --port 2600` (dashboard at http
 1. Serve an interactive template (e.g. `matching-pairs`). Its submit POSTs to `/api/inbox`.
 2. When the user says they're done (or after polling `etude inbox list`), grade each payload per the cascade, record with `etude attempt ID --rating N --answer-file - --feedback-file - --via widget`, then `etude inbox clear --id N`.
 
-### Handwriting and sketch practice (`draw-canvas`)
+### Handwriting and sketch practice (`draw-canvas`, nudge `#etude/canvas`)
 
 For characters, formulas, diagrams, or anything the user must produce **by hand**: the widget gives them a canvas, saves the drawing as a PNG, and hands the agent a file path to look at.
 
@@ -123,7 +123,7 @@ Widgets are slices of the app surfaced on demand: instead of one central dashboa
 | `#etude/tags` | `/widgets/tag-breakdown?limit=12` | Which topics am I weakest in? |
 | `#etude/due` | `/widgets/due-forecast?days=7` | What's overdue and what lands this week? |
 | `#etude/session` | `/widgets/session-summary?hours=24` | What did I just practice, and how did it go? |
-| `#etude/draw` | `/widgets/draw-canvas?atom=ID` | Let me handwrite/sketch the answer and grade the image |
+| `#etude/canvas` | `/widgets/draw-canvas?atom=ID` | Let me handwrite/sketch the answer and grade the image (alias: `#etude/draw`) |
 | `#etude/streak` | `/widgets/streaks?days=35` | Am I keeping the habit? |
 | `#etude/recent` | `/widgets/recent-items?limit=10` | What did I touch most recently? |
 | `#etude/items` | `/widgets/queue-items?queue=Q` | The full ordered work list as a table |
@@ -132,6 +132,7 @@ Resolution rules:
 
 - `queue=` is **required** for `#etude/progress` and `#etude/items`; **optional** for `#etude/carousel` and `#etude/due` (omit to span the whole DB). If a queue is needed and the user has exactly one active queue, use it silently; if several, ask which — that is a genuine fork, not a guess.
 - `#etude/item` needs an atom ID. If the user names an item instead ("the UTF-8 one"), resolve it via `etude list --tags`/search, then serve the widget for the matching ID.
+- `#etude/canvas` (alias `#etude/draw`) also takes an atom ID, but a bare invocation means "give me something to write" — don't stop to ask. Pick the next due handwriting-style item (`etude next`, or search tags like `handwriting`/`kanji`/`draw`) and serve it. If the user names a target that has no atom yet ("kanji de água"), create the atom first — `user_prompt` = what to draw, `agent_prompt` = the answer plus the stroke/proportion rubric — then serve the canvas for it. After they submit, open the PNG and grade it; see the handwriting workflow above.
 - Every route takes `&theme=X`. Bare `#etude/<name>` with no known match: list the table above rather than inventing a route.
 - Nudges are shorthand for the user, not a restriction on the agent — serve the same widgets unprompted whenever they answer the question better than prose.
 

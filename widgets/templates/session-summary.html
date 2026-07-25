@@ -62,6 +62,8 @@ const ETUDE = /*__DATA__*/null;
   const $ = id => document.getElementById(id);
   const text = value => (typeof value === 'string' ? value : '');
   const whole = value => Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0;
+  // Single-line cell: strip markdown markers rather than render them.
+  const plain = value => String(value || '').replace(/[*_`#>]/g, '').split(/\n+/).find(l => l.trim())?.trim() || '';
   const items = Array.isArray(data.items) ? data.items.filter(i => i && typeof i === 'object') : [];
 
   if (text(data.queue_label)) $('label').textContent = `Etude session · ${text(data.queue_label)}`;
@@ -154,7 +156,7 @@ const ETUDE = /*__DATA__*/null;
     id.textContent = text(item.id);
     const topic = document.createElement('span');
     topic.className = 'item-topic';
-    topic.textContent = text(item.topic) || text(item.user_prompt);
+    topic.textContent = plain(text(item.topic) || text(item.user_prompt));
     row.append(chip, id, topic);
     list.append(row);
   });

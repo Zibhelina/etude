@@ -27,6 +27,34 @@ _WIDGETS = _REPO_ROOT / "widgets"
 # ~4 MB of base64 -> ~3 MB of PNG; a handwriting canvas is far smaller.
 _MAX_DRAWING_B64 = 4 * 1024 * 1024
 
+_MARKDOWN_HELPER = """<script>
+// Shared inline-markdown renderer. Prompts are markdown (docs/architecture.md),
+// so a template that drops them into textContent shows literal ** and backticks.
+// Escapes HTML first, then renders a deliberately small subset: fenced/inline
+// code, bold, italic, links, and paragraphs. window.ETUDE_MD(value) -> HTML.
+(() => {
+  'use strict';
+  const escapeHtml = value => String(value ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const inline = text => text
+    .replace(/`([^`\\n]+)`/g, '<code>$1</code>')
+    .replace(/\\*\\*([^*\\n]+)\\*\\*/g, '<strong>$1</strong>')
+    .replace(/(^|[\\s(])\\*([^*\\n]+)\\*(?=[\\s).,;:!?]|$)/g, '$1<em>$2</em>')
+    .replace(/\\[([^\\]\\n]+)\\]\\((https?:\\/\\/[^)\\s]+)\\)/g,
+      '<a href="$1" rel="noreferrer noopener" target="_blank">$1</a>'.replace('href="$1"', 'href="$2"'));
+  window.ETUDE_MD = value => escapeHtml(value)
+    .split(/```([\\s\\S]*?)```/g)
+    .map((part, index) => index % 2
+      ? `<pre>${part.replace(/^[a-zA-Z0-9_+-]*\\n/, '').replace(/^\\n|\\n$/g, '')}</pre>`
+      : part.split(/\\n{2,}/).filter(Boolean)
+          .map(block => `<p>${inline(block).replace(/\\n/g, '<br>')}</p>`).join(''))
+    .join('');
+  // Convenience: render markdown into a node without touching innerHTML at
+  // each call site.
+  window.ETUDE_MD_INTO = (node, value) => { if (node) node.innerHTML = window.ETUDE_MD(value); };
+})();
+</script>"""
+
 _AUTO_RESIZE_BRIDGE = """<script>
 (() => {
   'use strict';
@@ -781,6 +809,11 @@ class EtudeHandler(BaseHTTPRequestHandler):
         )
         if "</body>" not in rendered:
             raise APIError(500, "widget template is missing a closing body tag")
+        if "</head>" not in rendered:
+            raise APIError(500, "widget template is missing a closing head tag")
+        # Markdown helper goes in <head> so it is defined before the template's
+        # own script runs; the resize bridge stays at the end of <body>.
+        rendered = rendered.replace("</head>", f"{_MARKDOWN_HELPER}\n</head>", 1)
         rendered = rendered.replace("</body>", f"{_AUTO_RESIZE_BRIDGE}\n</body>", 1)
         self._send(200, rendered.encode("utf-8"), "text/html; charset=utf-8")
 

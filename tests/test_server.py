@@ -549,6 +549,34 @@ def test_draw_canvas_widget_gets_its_prompt_without_leaking_the_answer(running_s
     assert "agent_prompt" not in html.split("const ETUDE = ")[1].split("\n")[0]
 
 
+def test_widgets_receive_a_shared_markdown_renderer(running_server):
+    """Prompts are markdown. Templates that drop them into textContent show
+    literal ** and backticks, so the server injects one shared renderer into
+    <head> — before the template's own script runs."""
+    base, _ = running_server
+    _, _, html = request(base, "/widgets/atom-card?atom=DET-1")
+
+    assert "window.ETUDE_MD" in html
+    assert html.index("window.ETUDE_MD") < html.index("const ETUDE = ")
+    assert "</head>" in html and html.index("window.ETUDE_MD") < html.index("</head>")
+    # Escaping happens before rendering, so markup in a prompt cannot inject HTML.
+    assert "replace(/&/g, '&amp;')" in html
+
+
+def test_templates_never_show_raw_markdown_markers_for_prompts():
+    """Every template that displays a prompt either renders it as markdown
+    (block context) or strips the markers (single-line cells and clamped
+    previews). Dropping a raw prompt into textContent shows literal ** to
+    the user."""
+    for template_path in WIDGET_TEMPLATE_DIR.glob("*.html"):
+        template = template_path.read_text()
+        for match in re.finditer(r"^\s*\w+\.textContent = ([^;]*user_prompt[^;]*);", template, re.M):
+            expression = match.group(1)
+            assert re.search(r"\b(plain|firstLine|stripMarkdown)\s*\(", expression), (
+                f"{template_path.name} shows a raw prompt: {expression.strip()}"
+            )
+
+
 def test_widgets_never_scroll_vertically_inside_their_frame():
     """The host sizes the frame to the reported height, so a widget must never
     scroll vertically: sub-pixel rounding used to leave a few pixels of overflow

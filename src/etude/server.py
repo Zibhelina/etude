@@ -101,8 +101,11 @@ _AUTO_RESIZE_BRIDGE = """<script>
 
 
 _VENDOR_MARKERS = {
-    "/*__KATEX__*/": ("katex.css", "katex.js"),
-    "/*__CODEMIRROR__*/": (None, "codemirror.js"),
+    # The live-preview markdown editor renders math through KaTeX, so it needs
+    # both; KaTeX is listed first so window.katex exists when the editor loads.
+    "/*__MARKDOWN_EDITOR__*/": ("katex.css", ("katex.js", "mdeditor.js")),
+    "/*__KATEX__*/": ("katex.css", ("katex.js",)),
+    "/*__CODEMIRROR__*/": (None, ("codemirror.js",)),
 }
 
 
@@ -121,7 +124,7 @@ def _inject_vendor(rendered: str) -> str:
     Opt-in by marker rather than injected everywhere: KaTeX plus CodeMirror is
     well over a megabyte, and no template needs both.
     """
-    for marker, (css_name, js_name) in _VENDOR_MARKERS.items():
+    for marker, (css_name, js_names) in _VENDOR_MARKERS.items():
         if marker not in rendered:
             continue
         parts = []
@@ -130,10 +133,11 @@ def _inject_vendor(rendered: str) -> str:
             if "</style" in css.casefold():
                 raise APIError(500, f"vendored css closes its style element: {css_name}")
             parts.append(f"<style>{css}</style>")
-        script = _vendor_asset(js_name)
-        if "</script" in script.casefold():
-            raise APIError(500, f"vendored script closes its script element: {js_name}")
-        parts.append(f"<script>{script}</script>")
+        for js_name in js_names:
+            script = _vendor_asset(js_name)
+            if "</script" in script.casefold():
+                raise APIError(500, f"vendored script closes its script element: {js_name}")
+            parts.append(f"<script>{script}</script>")
         rendered = rendered.replace(marker, "\n".join(parts), 1)
     return rendered
 
@@ -945,6 +949,13 @@ class EtudeHandler(BaseHTTPRequestHandler):
                 starter = widget_data.get("starter")
                 result["language"] = language if isinstance(language, str) else ""
                 result["starter"] = starter if isinstance(starter, str) else ""
+                # lines=1 marks a one-expression answer; the editor then skips
+                # its square minimum height.
+                lines = query.get("lines", [None])[0] or widget_data.get("lines")
+                try:
+                    result["lines"] = int(lines) if lines is not None else 0
+                except (TypeError, ValueError):
+                    result["lines"] = 0
             return result
 
         if template_name == "drawing-canvas":

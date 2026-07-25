@@ -24,14 +24,34 @@ label.field { display: inline-flex; align-items: center; gap: 7px; color: var(--
 select { padding: 4px 9px; border-radius: 999px; border: 0.5px solid var(--border); background: var(--surface-2); color: var(--text-primary); font: 500 12.5px/1.5 var(--sans); }
 select:focus-visible, input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .toggle { display: inline-flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 12.5px; cursor: pointer; }
-.editor { margin-top: 12px; border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); background: var(--surface-1); overflow: hidden; }
+.editor { margin-top: 12px; border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px);
+  background: var(--surface-1); overflow: hidden; }
+/* A code block deserves room: default to a roughly square editor, capped so a
+   long answer still fits the chat. Single-line items opt out via lines=1. */
+.editor:not([data-inline]) .cm-editor,
+.editor:not([data-inline]) .cm-editor .cm-scroller { min-height: min(60vw, 460px); }
+/* The gutter is a flex child of the scroller: stretching it makes the number
+   column run the full height instead of stopping at the last line. */
+.cm-editor .cm-scroller { align-items: stretch; }
+/* The gutters box only grows to the last line; stretch it to the scroller so
+   the number column runs the full editor height. */
+.editor:not([data-inline]) .cm-editor .cm-gutters { height: auto !important; align-self: stretch; }
+.editor[data-inline] .cm-content { min-height: 0; }
 .cm-editor { background: transparent; font: 13.5px/1.6 var(--mono); }
 .cm-editor.cm-focused { outline: none; }
 .cm-scroller { font-family: var(--mono); }
-.cm-gutters { background: var(--surface-1); border-right: 0.5px solid var(--border); color: var(--text-muted); }
-.cm-activeLineGutter { background: var(--surface-2); color: var(--text-secondary); }
+.cm-editor .cm-gutters { background: var(--surface-2) !important; border-right: 0.5px solid var(--border);
+  color: var(--text-muted); border-radius: 0; }
+.cm-editor .cm-gutter, .cm-editor .cm-gutterElement { background: transparent !important; }
+.cm-editor .cm-lineNumbers .cm-gutterElement { padding: 0 7px 0 8px; min-width: 0;
+  color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: right; }
+.cm-editor .cm-gutters { min-width: 0; }
+/* The fold column adds width for little value in a short answer. */
+.cm-editor .cm-foldGutter { display: none; }
+.cm-editor .cm-activeLineGutter { background: color-mix(in srgb, var(--foreground) 9%, transparent) !important;
+  color: var(--text-primary) !important; }
 .cm-activeLine { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
-.cm-content { caret-color: var(--foreground); padding: 10px 0; }
+.cm-content { caret-color: var(--foreground); padding: 12px 0; }
 .cm-cursor, .cm-dropCursor { border-left-color: var(--foreground); }
 .cm-selectionBackground, .cm-editor .cm-selectionBackground,
 .cm-editor.cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--accent-strong, var(--accent)) 34%, transparent) !important; }
@@ -149,6 +169,10 @@ const ETUDE = /*__DATA__*/null;
   }
 
   const starter = text(data.starter);
+  // lines=1 means the answer is a single expression: don't reserve a whole block.
+  const requestedLines = Number(data.lines);
+  const inline = Number.isFinite(requestedLines) && requestedLines > 0 && requestedLines <= 2;
+  if (inline) $('editor').dataset.inline = 'true';
   let sent = false;
 
   // Syntax-only linting: balance and stray-character checks that hold for every

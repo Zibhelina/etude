@@ -5,65 +5,61 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <title>Etude · Markdown</title>
-/*__KATEX__*/
+/*__MARKDOWN_EDITOR__*/
 <style>
 /*__THEME__*/
 * { box-sizing: border-box; }
 html, body { overflow-y: hidden; }
 body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
-.wrap { display: flex; flex-direction: column; padding: 22px 26px 20px; }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 14px; }
 .label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
 h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
 .prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
 .prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
 .prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
-.tabs { display: flex; gap: 6px; margin-top: 16px; }
-.tab { padding: 5px 12px; border-radius: 999px; border: 0.5px solid var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; font: 500 12.5px/1.5 var(--sans); }
-.tab[aria-selected="true"] { background: var(--surface-2); color: var(--text-primary); border-color: var(--border-strong); }
-.tab:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.panes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
-.panes[data-mode="write"] { grid-template-columns: 1fr; }
-.panes[data-mode="write"] .preview-pane { display: none; }
-.panes[data-mode="preview"] { grid-template-columns: 1fr; }
-.panes[data-mode="preview"] .editor-pane { display: none; }
-.pane { display: flex; flex-direction: column; min-width: 0; border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); background: var(--surface-1); overflow: hidden; }
-.pane-head { padding: 7px 13px; color: var(--text-muted); font: 500 11px/1.5 var(--mono); border-bottom: 0.5px solid var(--border); }
-textarea { width: 100%; min-height: 260px; padding: 14px 16px; border: 0; resize: vertical; background: transparent; color: var(--text-primary); font: 14px/1.7 var(--mono); tab-size: 2; }
-textarea:focus { outline: none; }
-.preview { padding: 14px 16px; min-height: 260px; overflow-wrap: anywhere; }
-.preview > :first-child { margin-top: 0; }
-.preview > :last-child { margin-bottom: 0; }
-.preview h1, .preview h2, .preview h3 { margin: 18px 0 8px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
-.preview h1 { font-size: 21px; } .preview h2 { font-size: 18px; } .preview h3 { font-size: 15.5px; color: var(--text-secondary); }
-.preview p { margin: 0 0 10px; }
-.preview ul, .preview ol { margin: 0 0 10px; padding-left: 22px; }
-.preview li { margin: 3px 0; }
-.preview li.task { list-style: none; margin-left: -22px; padding-left: 22px; position: relative; }
-.preview li.task::before { content: '○'; position: absolute; left: 4px; color: var(--text-muted); }
-.preview li.task[data-done="true"]::before { content: '✓'; color: var(--green-text); }
-.preview blockquote { margin: 0 0 10px; padding: 2px 0 2px 13px; border-left: 2px solid var(--border-strong); color: var(--text-secondary); }
-.preview code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
-.preview pre { margin: 0 0 10px; padding: 11px 13px; background: var(--surface-2); border-radius: 8px; overflow-x: auto; }
-.preview pre code { padding: 0; background: none; font-size: 12.5px; }
-.preview table { width: 100%; margin: 0 0 10px; border-collapse: collapse; font-size: 13.5px; }
-.preview th, .preview td { padding: 6px 10px; border: 0.5px solid var(--border); text-align: left; }
-.preview th { background: var(--surface-2); font-weight: 500; }
-.preview hr { margin: 14px 0; border: 0; border-top: 0.5px solid var(--border); }
-.preview a { color: var(--accent-text); }
-.preview .katex-display { margin: 12px 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
-.preview .math-error { color: var(--red-text); font: 12.5px/1.5 var(--mono); }
-.tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.prompt pre { margin: 8px 0 0; padding: 10px 12px; background: var(--surface-2); border-radius: 8px; overflow-x: auto; font: 12.5px/1.5 var(--mono); }
+
+/* One document, Obsidian-style: the line under the cursor shows its raw
+   markdown, every other line shows the rendered result. */
+.editor { margin-top: 16px; border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); background: var(--surface-1); overflow: hidden; }
+.cm-editor, .cm-editor .cm-content, .cm-editor .cm-scroller, .cm-editor .cm-line {
+  font-family: var(--sans) !important; font-size: 15px; line-height: 1.75; }
+.cm-editor { background: transparent; }
+/* Inline code and fences keep the mono stack. */
+.cm-editor .cm-line span[class*="tok-monospace"] { font-family: var(--mono) !important; }
+.cm-editor.cm-focused { outline: none; }
+.cm-editor .cm-content { padding: 20px 0; caret-color: var(--foreground); min-height: 240px; }
+.cm-editor .cm-line { padding: 0 26px; }
+.cm-cursor, .cm-dropCursor { border-left-color: var(--foreground); }
+.cm-editor .cm-activeLine { background: transparent; }
+.cm-selectionBackground, .cm-editor .cm-selectionBackground,
+.cm-editor.cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--accent-strong, var(--accent)) 32%, transparent) !important; }
+.cm-editor {
+  --md-code: var(--green-text);
+  --md-link: var(--accent-text);
+  --md-quote: var(--text-secondary);
+  --md-marker: var(--text-muted);
+}
+.cm-bullet { color: var(--text-muted); }
+.cm-task { display: inline-block; width: 1em; color: var(--text-muted); }
+.cm-task-done { color: var(--green-text); }
+.cm-rule { display: inline-block; width: 100%; border-top: 0.5px solid var(--border); vertical-align: middle; }
+.cm-math { color: var(--text-primary); }
+.cm-math-block { display: block; text-align: center; margin: 6px 0; }
+.cm-math-error { color: var(--red-text); font: 13px/1.5 var(--mono); }
+.cm-math .katex-display { margin: 4px 0; }
+.hint { margin-top: 9px; color: var(--text-muted); font-size: 11.5px; line-height: 1.5; }
+.tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
 .spacer { flex: 1 1 auto; }
 .counts { color: var(--text-muted); font: 500 11.5px/1.5 var(--mono); }
 button { font: inherit; }
 button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.status { margin-top: 10px; min-height: 18px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
+.status { margin-top: 8px; min-height: 0; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
 .status[data-tone="error"] { color: var(--red-text); }
 .done { margin-top: 14px; padding: 20px; text-align: center; background: var(--surface-1); border: 0.5px solid var(--green); border-radius: var(--radius-card, 12px); }
 .done h2 { margin: 0 0 6px; font-size: 16px; font-weight: 500; }
 .done p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
 .hidden { display: none; }
-@media (max-width: 720px) { .panes { grid-template-columns: 1fr; } .preview-pane { display: none; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
@@ -72,21 +68,8 @@ button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
   <div class="label" id="label">Etude · Written answer</div>
   <h1 class="title" id="title">Compose your answer</h1>
   <div class="prompt" id="prompt"></div>
-  <div class="tabs" role="tablist" aria-label="Editor layout">
-    <button class="tab" id="tabSplit" role="tab" type="button" aria-selected="true">Split</button>
-    <button class="tab" id="tabWrite" role="tab" type="button" aria-selected="false">Write</button>
-    <button class="tab" id="tabPreview" role="tab" type="button" aria-selected="false">Preview</button>
-  </div>
-  <div class="panes" id="panes" data-mode="split">
-    <div class="pane editor-pane">
-      <div class="pane-head" id="headWrite">markdown</div>
-      <textarea id="source" spellcheck="true" aria-label="Markdown source"></textarea>
-    </div>
-    <div class="pane preview-pane">
-      <div class="pane-head" id="headPreview">preview</div>
-      <div class="preview" id="preview" aria-live="polite"></div>
-    </div>
-  </div>
+  <div class="editor" id="editor"></div>
+  <div class="hint" id="hint"></div>
   <div class="tools">
     <span class="counts" id="counts"></span>
     <span class="spacer"></span>
@@ -117,185 +100,51 @@ const ETUDE = /*__DATA__*/null;
     ? { title: 'Escreva sua resposta', label: 'Etude · Resposta escrita', send: 'Enviar ao agente',
         clear: 'Limpar', sending: 'Enviando…', empty: 'Escreva algo antes de enviar.',
         failed: 'Não foi possível alcançar o Etude. Seu texto continua aqui — tente de novo.',
-        sentTitle: 'Enviado ao agente', split: 'Dividido', write: 'Escrever', preview: 'Prévia',
-        words: 'palavras', chars: 'caracteres',
-        sentBody: 'Sua resposta está aguardando no Etude. Avise o agente que terminou para receber o feedback.',
-        placeholder: '# Título\n\nEscreva em markdown. Equação inline: $E = mc^2$\n\nBloco:\n\n$$\n\\int_0^1 x^2 dx = \\frac{1}{3}\n$$\n\n- item\n- [ ] tarefa' }
+        sentTitle: 'Enviado ao agente', words: 'palavras', chars: 'caracteres',
+        hint: 'Formata enquanto você escreve. A linha do cursor mostra a sintaxe crua — clique fora para ver renderizado. Matemática: $inline$ e $$bloco$$.',
+        sentBody: 'Sua resposta está aguardando no Etude. Avise o agente que terminou para receber o feedback.' }
     : { title: 'Compose your answer', label: 'Etude · Written answer', send: 'Send to agent',
         clear: 'Clear', sending: 'Sending…', empty: 'Write something before sending.',
         failed: 'Could not reach Etude. Your text is still here — try again.',
-        sentTitle: 'Sent to your agent', split: 'Split', write: 'Write', preview: 'Preview',
-        words: 'words', chars: 'chars',
-        sentBody: 'Your answer is waiting in Etude. Tell your agent you are done so they can review it.',
-        placeholder: '# Heading\n\nWrite markdown. Inline math: $E = mc^2$\n\nBlock:\n\n$$\n\\int_0^1 x^2 dx = \\frac{1}{3}\n$$\n\n- item\n- [ ] task' };
+        sentTitle: 'Sent to your agent', words: 'words', chars: 'chars',
+        hint: 'Formats as you type. The cursor line shows raw syntax — click away to see it rendered. Math: $inline$ and $$block$$.',
+        sentBody: 'Your answer is waiting in Etude. Tell your agent you are done so they can review it.' };
 
   if (portuguese) document.documentElement.lang = 'pt-BR';
   $('label').textContent = text(atom.id) ? `${ui.label} · ${text(atom.id)}` : ui.label;
   $('title').textContent = plain(atom.topic) || ui.title;
   window.ETUDE_MD_INTO($('prompt'), text(atom.user_prompt) || ui.title);
-  $('tabSplit').textContent = ui.split;
-  $('tabWrite').textContent = ui.write;
-  $('tabPreview').textContent = ui.preview;
+  $('hint').textContent = ui.hint;
   $('clear').textContent = ui.clear;
   $('submit').textContent = ui.send;
   $('doneTitle').textContent = ui.sentTitle;
   $('doneBody').textContent = ui.sentBody;
-  $('source').placeholder = ui.placeholder;
 
   let sent = false;
-  const source = $('source');
+  let editor = null;
 
-  // Escape & and < only. A literal '>' must survive so blockquote lines are
-  // still recognisable to the block parser; it is harmless without a '<'.
-  const escapeHtml = value => String(value ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;');
-
-  // Math is extracted BEFORE markdown runs and restored after, so markdown never
-  // mangles TeX (underscores are subscripts, asterisks are multiplication).
-  const math = [];
-  function stashMath(input) {
-    return input
-      .replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => `\u0000M${math.push({tex, display: true}) - 1}\u0000`)
-      .replace(/(^|[^\\$])\$([^$\n]+?)\$/g, (_, lead, tex) =>
-        `${lead}\u0000M${math.push({tex, display: false}) - 1}\u0000`);
-  }
-  function renderMath(html) {
-    return html.replace(/\u0000M(\d+)\u0000/g, (_, index) => {
-      const entry = math[Number(index)];
-      if (!entry) return '';
-      try {
-        return katex.renderToString(entry.tex, {displayMode: entry.display, throwOnError: true});
-      } catch (error) {
-        return `<span class="math-error">${escapeHtml(entry.display ? `$$${entry.tex}$$` : `$${entry.tex}$`)}</span>`;
-      }
-    });
-  }
-
-  const inline = value => value
-    .replace(/`([^`\n]+)`/g, (_, code) => `<code>${code}</code>`)
-    .replace(/!\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)/g, '$1')
-    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g,
-      (_, label, href) => `<a href="${href}" rel="noreferrer noopener" target="_blank">${label}</a>`)
-    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>')
-    .replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>')
-    .replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
-
-  function renderTable(rows) {
-    const cells = row => row.replace(/^\||\|$/g, '').split('|').map(cell => cell.trim());
-    const head = cells(rows[0]);
-    const body = rows.slice(2).map(cells);
-    const th = head.map(cell => `<th>${inline(cell)}</th>`).join('');
-    const tr = body.map(row => `<tr>${row.map(cell => `<td>${inline(cell)}</td>`).join('')}</tr>`).join('');
-    return `<table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>`;
-  }
-
-  function renderMarkdown(raw) {
-    math.length = 0;
-    const escaped = stashMath(escapeHtml(raw));
-    const lines = escaped.split('\n');
-    const out = [];
-    let index = 0;
-
-    while (index < lines.length) {
-      const line = lines[index];
-
-      const fence = line.match(/^```(\w*)\s*$/);
-      if (fence) {
-        const buffer = [];
-        index += 1;
-        while (index < lines.length && !/^```\s*$/.test(lines[index])) buffer.push(lines[index++]);
-        index += 1;
-        out.push(`<pre><code>${buffer.join('\n')}</code></pre>`);
-        continue;
-      }
-
-      const heading = line.match(/^(#{1,6})\s+(.*)$/);
-      if (heading) {
-        const level = Math.min(heading[1].length, 3);
-        out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
-        index += 1;
-        continue;
-      }
-
-      if (/^\s*(?:---|\*\*\*|___)\s*$/.test(line)) { out.push('<hr>'); index += 1; continue; }
-
-      if (/^\s*\|.*\|\s*$/.test(line) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[index + 1] || '')) {
-        const rows = [];
-        while (index < lines.length && /^\s*\|.*\|\s*$/.test(lines[index])) rows.push(lines[index++].trim());
-        out.push(renderTable(rows));
-        continue;
-      }
-
-      if (/^\s*>/.test(line)) {
-        const buffer = [];
-        while (index < lines.length && /^\s*>/.test(lines[index])) buffer.push(lines[index++].replace(/^\s*>\s?/, ''));
-        out.push(`<blockquote>${buffer.map(entry => `<p>${inline(entry)}</p>`).join('')}</blockquote>`);
-        continue;
-      }
-
-      const bullet = /^(\s*)([-*+]|\d+\.)\s+(.*)$/;
-      if (bullet.test(line)) {
-        const ordered = /^\s*\d+\./.test(line);
-        const items = [];
-        while (index < lines.length && bullet.test(lines[index])) {
-          const [, , , rest] = lines[index].match(bullet);
-          const task = rest.match(/^\[([ xX])\]\s+(.*)$/);
-          items.push(task
-            ? `<li class="task" data-done="${task[1].toLowerCase() === 'x'}">${inline(task[2])}</li>`
-            : `<li>${inline(rest)}</li>`);
-          index += 1;
-        }
-        out.push(`<${ordered ? 'ol' : 'ul'}>${items.join('')}</${ordered ? 'ol' : 'ul'}>`);
-        continue;
-      }
-
-      if (!line.trim()) { index += 1; continue; }
-
-      const buffer = [];
-      while (index < lines.length && lines[index].trim()
-             && !/^(#{1,6}\s|\s*[-*+]\s|\s*\d+\.\s|\s*>|```|\s*\|)/.test(lines[index])) {
-        buffer.push(lines[index++]);
-      }
-      out.push(`<p>${inline(buffer.join('\n')).replace(/\n/g, '<br>')}</p>`);
-    }
-
-    return renderMath(out.join(''));
-  }
-
-  let frame = 0;
-  function update() {
-    const value = source.value;
-    $('preview').innerHTML = renderMarkdown(value);
+  function refresh() {
+    const value = editor ? editor.getValue() : '';
     const words = value.trim() ? value.trim().split(/\s+/).length : 0;
     $('counts').textContent = `${words} ${ui.words} · ${value.length} ${ui.chars}`;
     $('submit').disabled = sent || !value.trim();
     $('clear').disabled = sent || !value;
   }
-  const schedule = () => { if (frame) cancelAnimationFrame(frame); frame = requestAnimationFrame(update); };
 
-  source.addEventListener('input', schedule);
-  source.addEventListener('keydown', event => {
-    if (event.key !== 'Tab') return;
-    event.preventDefault();
-    const { selectionStart: start, selectionEnd: end, value } = source;
-    source.value = `${value.slice(0, start)}  ${value.slice(end)}`;
-    source.selectionStart = source.selectionEnd = start + 2;
-    schedule();
-  });
+  if (window.ETUDE_MDE) {
+    editor = window.ETUDE_MDE.createMarkdownEditor({ parent: $('editor'), doc: '', onChange: refresh });
+    // Exposed so the widget can be driven and inspected in tests.
+    window.__etudeEditor = editor;
+  } else {
+    // Bundle failed to load: a plain textarea still lets the user answer.
+    const area = document.createElement('textarea');
+    area.style.cssText = 'width:100%;min-height:240px;padding:16px 18px;border:0;background:transparent;color:inherit;font:15px/1.75 var(--sans);resize:vertical;';
+    area.addEventListener('input', refresh);
+    $('editor').append(area);
+    editor = { getValue: () => area.value, setValue: value => { area.value = value; }, focus: () => area.focus() };
+  }
 
-  const setMode = mode => {
-    $('panes').dataset.mode = mode;
-    for (const [id, name] of [['tabSplit', 'split'], ['tabWrite', 'write'], ['tabPreview', 'preview']]) {
-      $(id).setAttribute('aria-selected', String(name === mode));
-    }
-  };
-  $('tabSplit').addEventListener('click', () => setMode('split'));
-  $('tabWrite').addEventListener('click', () => setMode('write'));
-  $('tabPreview').addEventListener('click', () => setMode('preview'));
-  if (window.innerWidth < 720) setMode('write');
-
-  $('clear').addEventListener('click', () => { source.value = ''; schedule(); source.focus(); });
+  $('clear').addEventListener('click', () => { editor.setValue(''); refresh(); editor.focus(); });
 
   function setStatus(message, tone) {
     const node = $('status');
@@ -304,7 +153,7 @@ const ETUDE = /*__DATA__*/null;
   }
 
   $('submit').addEventListener('click', async () => {
-    const value = source.value.trim();
+    const value = editor.getValue().trim();
     if (sent || !value) { if (!value) setStatus(ui.empty, 'error'); return; }
     const atomId = text(atom.id);
     if (!atomId || !api) { setStatus(ui.failed, 'error'); return; }
@@ -323,8 +172,7 @@ const ETUDE = /*__DATA__*/null;
       });
       if (!response.ok) throw new Error(String(response.status));
       sent = true;
-      source.readOnly = true;
-      update();
+      refresh();
       $('done').classList.remove('hidden');
       setStatus('');
       window.parent.postMessage({
@@ -338,7 +186,7 @@ const ETUDE = /*__DATA__*/null;
     }
   });
 
-  update();
+  refresh();
 })();
 </script>
 </body>

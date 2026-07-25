@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import http.client
 import json
 import re
@@ -498,6 +499,54 @@ def test_progress_fills_use_status_tokens_across_the_value_range():
         assert 'dataset.band' in template or '.dataset.band' in template, (
             f"{name} never assigns a band"
         )
+
+
+def test_drawing_upload_saves_a_png_beside_the_database(running_server):
+    """Drawings are saved as files and referenced by path: base64 inlined into
+    inbox.json bloats the database and cannot be opened by the agent."""
+    base, db_path = running_server
+    png = (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+        + b"\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    image = "data:image/png;base64," + base64.b64encode(png).decode()
+
+    status, _, saved = request(
+        base, "/api/drawings", method="POST", body={"atom_id": "DET-1", "image": image}
+    )
+    assert status == 201
+    path = Path(saved["path"])
+    assert path.exists() and path.read_bytes() == png
+    assert path.parent == Path(db_path).parent / "drawings"
+    assert path.suffix == ".png"
+
+
+def test_drawing_upload_rejects_non_png_oversize_and_unknown_atoms(running_server):
+    base, _ = running_server
+    png_b64 = base64.b64encode(b"\x89PNG\r\n\x1a\nrest").decode()
+
+    for body, expected in (
+        ({"atom_id": "DET-1", "image": "data:image/jpeg;base64,AAAA"}, 400),
+        ({"atom_id": "DET-1", "image": "data:image/png;base64," + base64.b64encode(b"nope").decode()}, 400),
+        ({"atom_id": "MISSING", "image": "data:image/png;base64," + png_b64}, 400),
+        ({"atom_id": "DET-1"}, 400),
+        ({"atom_id": "DET-1", "image": "data:image/png;base64," + "A" * (4 * 1024 * 1024 + 4)}, 413),
+    ):
+        with pytest.raises(HTTPError) as exc:
+            request(base, "/api/drawings", method="POST", body=body)
+        assert exc.value.code == expected, body.get("atom_id")
+
+
+def test_draw_canvas_widget_gets_its_prompt_without_leaking_the_answer(running_server):
+    """The canvas shows the atom's prompt; agent_prompt holds the answer and the
+    grading rubric, so it must never reach the sandbox."""
+    base, _ = running_server
+    _, _, html = request(base, "/widgets/draw-canvas?atom=AG-2")
+
+    assert "toDataURL('image/png')" in html
+    assert "/api/drawings" in html
+    assert "agent_prompt" not in html.split("const ETUDE = ")[1].split("\n")[0]
 
 
 def test_widgets_never_scroll_vertically_inside_their_frame():

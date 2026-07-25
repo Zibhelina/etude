@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · Draw</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+html, body { overflow-y: hidden; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 20px; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1 { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 15px; line-height: 1.55; white-space: pre-wrap; }
+.stage { position: relative; margin-top: 16px; border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); background: var(--surface-1); overflow: hidden; }
+canvas { display: block; width: 100%; touch-action: none; cursor: crosshair; background: var(--surface-1); }
+.guide { position: absolute; inset: 0; pointer-events: none; }
+.guide span { position: absolute; background: var(--border); }
+.guide .v { inset-block: 8% auto; top: 8%; bottom: 8%; left: 50%; width: 1px; }
+.guide .h { inset-inline: 8%; left: 8%; right: 8%; top: 50%; height: 1px; }
+.hint { position: absolute; inset-inline: 0; bottom: 10px; text-align: center; color: var(--text-muted); font-size: 12.5px; pointer-events: none; }
+.tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.spacer { flex: 1 1 auto; }
+.stroke { display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 12.5px; }
+input[type="range"] { width: 92px; accent-color: var(--foreground); }
+button { font: inherit; }
+button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.status { margin-top: 12px; min-height: 20px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
+.status[data-tone="error"] { color: var(--red-text); }
+.status[data-tone="ok"] { color: var(--green-text); }
+.done { margin-top: 16px; padding: 22px; text-align: center; background: var(--surface-1); border: 0.5px solid var(--green); border-radius: var(--radius-card, 12px); }
+.done h2 { margin: 0 0 6px; font-size: 17px; font-weight: 500; }
+.done p { margin: 0; color: var(--text-secondary); font-size: 13.5px; line-height: 1.55; }
+.hidden { display: none; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap ui-card">
+  <div class="label" id="label">Etude · Handwriting</div>
+  <h1 id="title">Draw your answer</h1>
+  <div class="prompt" id="prompt"></div>
+  <div class="stage">
+    <canvas id="pad" aria-label="Drawing area. Use the buttons below to undo or clear."></canvas>
+    <div class="guide" id="guide" hidden><span class="v"></span><span class="h"></span></div>
+    <div class="hint" id="hint">Draw here</div>
+  </div>
+  <div class="tools">
+    <button class="ui-button ui-button--outline ui-button--sm" id="undo" type="button">Undo</button>
+    <button class="ui-button ui-button--outline ui-button--sm" id="clear" type="button">Clear</button>
+    <label class="stroke" for="width">Stroke
+      <input id="width" type="range" min="2" max="18" step="1" value="7">
+    </label>
+    <span class="spacer"></span>
+    <button class="ui-button ui-button--sm" id="submit" type="button" disabled>Send to agent</button>
+  </div>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+  <div class="done hidden" id="done">
+    <h2 id="doneTitle">Sent to your agent</h2>
+    <p id="doneBody">Your drawing is waiting in Etude. Tell your agent you are done so they can review it.</p>
+  </div>
+</div>
+<script>
+const ETUDE = /*__DATA__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const atom = data.atom && typeof data.atom === 'object' ? data.atom : {};
+  const $ = id => document.getElementById(id);
+  const text = value => (typeof value === 'string' ? value : '');
+  const api = String(data.api || '').replace(/\/$/, '');
+
+  const portuguese = /[áàãâéêíóôõúç]|\b(escreva|desenhe|caractere|palavra|significa)\b/i
+    .test(`${text(atom.user_prompt)} ${text(atom.topic)}`);
+  const ui = portuguese
+    ? { draw: 'Desenhe aqui', undo: 'Desfazer', clear: 'Limpar', send: 'Enviar ao agente',
+        sending: 'Enviando…', empty: 'Desenhe algo antes de enviar.',
+        failed: 'Não foi possível alcançar o Etude. Seu desenho continua aqui — tente de novo.',
+        sentTitle: 'Enviado ao agente', title: 'Desenhe sua resposta', label: 'Etude · Escrita à mão',
+        sentBody: 'Seu desenho está aguardando no Etude. Avise o agente que terminou para receber o feedback.' }
+    : { draw: 'Draw here', undo: 'Undo', clear: 'Clear', send: 'Send to agent',
+        sending: 'Sending…', empty: 'Draw something before sending.',
+        failed: 'Could not reach Etude. Your drawing is still here — try again.',
+        sentTitle: 'Sent to your agent', title: 'Draw your answer', label: 'Etude · Handwriting',
+        sentBody: 'Your drawing is waiting in Etude. Tell your agent you are done so they can review it.' };
+
+  if (portuguese) document.documentElement.lang = 'pt-BR';
+  $('label').textContent = text(atom.id) ? `${ui.label} · ${text(atom.id)}` : ui.label;
+  $('title').textContent = text(atom.topic) || ui.title;
+  $('prompt').textContent = text(atom.user_prompt) || ui.title;
+  $('hint').textContent = ui.draw;
+  $('undo').textContent = ui.undo;
+  $('clear').textContent = ui.clear;
+  $('submit').textContent = ui.send;
+  $('doneTitle').textContent = ui.sentTitle;
+  $('doneBody').textContent = ui.sentBody;
+  if (data.guides) $('guide').hidden = false;
+
+  const canvas = $('pad');
+  const ctx = canvas.getContext('2d', { willReadFrequently: false });
+  const ratio = Math.min(window.devicePixelRatio || 1, 3);
+  const aspect = Number.isFinite(Number(data.aspect)) && Number(data.aspect) > 0 ? Number(data.aspect) : 1;
+  // Strokes are stored as point lists, not pixels: undo and DPR-aware resize
+  // both need to redraw from the source rather than scale a bitmap.
+  const strokes = [];
+  let current = null;
+  let sent = false;
+
+  const inkColor = () => getComputedStyle(document.body).getPropertyValue('--foreground').trim() || '#f5f5f5';
+
+  function sizeCanvas() {
+    const width = canvas.clientWidth || 320;
+    const height = Math.round(width / aspect);
+    canvas.style.height = `${height}px`;
+    canvas.width = Math.round(width * ratio);
+    canvas.height = Math.round(height * ratio);
+    redraw();
+  }
+
+  function redraw() {
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.clearRect(0, 0, canvas.width / ratio, canvas.height / ratio);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = inkColor();
+    for (const stroke of strokes) {
+      if (stroke.points.length < 2) {
+        const [point] = stroke.points;
+        if (!point) continue;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, stroke.width / 2, 0, Math.PI * 2);
+        ctx.fillStyle = inkColor();
+        ctx.fill();
+        continue;
+      }
+      ctx.lineWidth = stroke.width;
+      ctx.beginPath();
+      ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+      for (let index = 1; index < stroke.points.length; index += 1) {
+        ctx.lineTo(stroke.points[index].x, stroke.points[index].y);
+      }
+      ctx.stroke();
+    }
+    const empty = strokes.length === 0;
+    $('hint').style.visibility = empty ? 'visible' : 'hidden';
+    $('submit').disabled = empty || sent;
+    $('undo').disabled = empty || sent;
+    $('clear').disabled = empty || sent;
+  }
+
+  const pointFrom = event => {
+    const rect = canvas.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  };
+
+  canvas.addEventListener('pointerdown', event => {
+    if (sent || event.button !== 0 && event.pointerType === 'mouse') return;
+    canvas.setPointerCapture(event.pointerId);
+    current = { width: Number($('width').value) || 7, points: [pointFrom(event)] };
+    strokes.push(current);
+    redraw();
+  });
+  canvas.addEventListener('pointermove', event => {
+    if (!current) return;
+    current.points.push(pointFrom(event));
+    redraw();
+  });
+  const finish = () => { current = null; };
+  canvas.addEventListener('pointerup', finish);
+  canvas.addEventListener('pointercancel', finish);
+  canvas.addEventListener('pointerleave', finish);
+
+  $('undo').addEventListener('click', () => { strokes.pop(); redraw(); setStatus(''); });
+  $('clear').addEventListener('click', () => { strokes.length = 0; redraw(); setStatus(''); });
+
+  function setStatus(message, tone) {
+    const node = $('status');
+    node.textContent = message;
+    if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
+  }
+
+  // Flatten onto the card surface so the PNG is legible on its own: a
+  // transparent background would reach the agent as ink on black.
+  function exportPng() {
+    const flat = document.createElement('canvas');
+    flat.width = canvas.width;
+    flat.height = canvas.height;
+    const flatCtx = flat.getContext('2d');
+    const surface = getComputedStyle(document.body).getPropertyValue('--card').trim()
+      || getComputedStyle(document.body).getPropertyValue('--surface-1').trim() || '#171717';
+    flatCtx.fillStyle = surface;
+    flatCtx.fillRect(0, 0, flat.width, flat.height);
+    flatCtx.drawImage(canvas, 0, 0);
+    return flat.toDataURL('image/png');
+  }
+
+  $('submit').addEventListener('click', async () => {
+    if (sent || !strokes.length) { if (!strokes.length) setStatus(ui.empty, 'error'); return; }
+    const atomId = text(atom.id);
+    if (!atomId || !api) { setStatus(ui.failed, 'error'); return; }
+
+    $('submit').disabled = true;
+    setStatus(ui.sending);
+    try {
+      const response = await fetch(`${api}/api/drawings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ atom_id: atomId, image: exportPng() }),
+      });
+      if (!response.ok) throw new Error(String(response.status));
+      const saved = await response.json();
+
+      await fetch(`${api}/api/inbox`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          atom_id: atomId,
+          payload: { kind: 'drawing', path: saved.path, strokes: strokes.length, bytes: saved.bytes },
+          ts: new Date().toISOString(),
+        }),
+      });
+
+      sent = true;
+      redraw();
+      $('done').classList.remove('hidden');
+      setStatus('');
+      // Lotus can inject the request straight back into the same chat session.
+      window.parent.postMessage({
+        lotus: 1,
+        type: 'submit',
+        text: `I submitted a drawing for ${atomId}. The image is at ${saved.path} — open it, grade the handwriting, and record the attempt.`,
+      }, '*');
+    } catch {
+      $('submit').disabled = false;
+      setStatus(ui.failed, 'error');
+    }
+  });
+
+  new ResizeObserver(sizeCanvas).observe(canvas.parentElement);
+  sizeCanvas();
+})();
+</script>
+</body>
+</html>

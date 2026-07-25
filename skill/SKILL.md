@@ -57,6 +57,22 @@ All output is compact JSON. Server: `etude serve --port 2600` (dashboard at http
 1. Serve an interactive template (e.g. `matching-pairs`). Its submit POSTs to `/api/inbox`.
 2. When the user says they're done (or after polling `etude inbox list`), grade each payload per the cascade, record with `etude attempt ID --rating N --answer-file - --feedback-file - --via widget`, then `etude inbox clear --id N`.
 
+### Handwriting and sketch practice (`draw-canvas`)
+
+For characters, formulas, diagrams, or anything the user must produce **by hand**: the widget gives them a canvas, saves the drawing as a PNG, and hands the agent a file path to look at.
+
+1. The atom is agent-assisted; `user_prompt` states what to draw ("write the kanji for *house*"), `agent_prompt` holds the answer plus the grading rubric (stroke order, proportion, radicals). Optional `widget_data`: `{"guides": true}` draws centering guides, `{"aspect": 1}` sets the canvas ratio.
+2. Serve `/widgets/draw-canvas?atom=ID`.
+3. On submit the widget `POST`s the PNG to `/api/drawings`, which saves it to `<db-dir>/drawings/ID-<timestamp>.png` and returns the path, then files an inbox entry `{kind: "drawing", path, strokes, bytes}`. In Lotus it also injects a submit message naming the path, so the request lands in the chat automatically.
+4. **Open the PNG with your image-reading tool and actually look at it** before grading — the path is the point of this flow. Judge against `agent_prompt` + cascade, give specific feedback (which stroke, which proportion), then record it:
+
+```sh
+etude attempt ID --rating N --feedback-file - --answer 'Handwritten drawing: <path>' --via widget --mode widget
+etude inbox clear --id <index>
+```
+
+Keep the path in `--answer` so the attempt history stays linked to the image. Drawings are never inlined as base64 into the database: files stay readable and `db.json` stays small.
+
 ## Widget→session signal: per-platform protocol
 
 Some chat surfaces let a widget inject the user's attempt directly back into the SAME agent session; most do not. Before widget-mediated practice, resolve which case applies:
@@ -65,7 +81,7 @@ Some chat surfaces let a widget inject the user's attempt directly back into the
 
 | platform | mechanism | notes |
 |---|---|---|
-| *(none verified yet)* | | |
+| Lotus (Hermes Desktop fork) | ```widget``` fenced block; the sandbox posts `{lotus: 1, type: "submit", text}` to `window.parent` | Verified live. Host validates the envelope, ignores the first 500 ms, debounces to one submit per 2 s, and routes the text through the composer's own submit path. `type: "resize"` reports content height. |
 
 *(Update this table when a surface gains support. Verify the mechanism live before listing it.)*
 
@@ -107,6 +123,7 @@ Widgets are slices of the app surfaced on demand: instead of one central dashboa
 | `#etude/tags` | `/widgets/tag-breakdown?limit=12` | Which topics am I weakest in? |
 | `#etude/due` | `/widgets/due-forecast?days=7` | What's overdue and what lands this week? |
 | `#etude/session` | `/widgets/session-summary?hours=24` | What did I just practice, and how did it go? |
+| `#etude/draw` | `/widgets/draw-canvas?atom=ID` | Let me handwrite/sketch the answer and grade the image |
 | `#etude/streak` | `/widgets/streaks?days=35` | Am I keeping the habit? |
 | `#etude/recent` | `/widgets/recent-items?limit=10` | What did I touch most recently? |
 | `#etude/items` | `/widgets/queue-items?queue=Q` | The full ordered work list as a table |
@@ -133,7 +150,7 @@ Keep the user in the loop on placement decisions — ask when it's genuinely the
 ## Widgets & themes
 
 - **Default UI system:** every new Etude widget uses shadcn/ui unless the user explicitly asks for another visual language. Read `docs/widget-design.md`; compose the shared open-code component classes in `widgets/shadcn.css` (`ui-card`, `ui-button`, `ui-input`, `ui-badge`, `ui-progress`, and related variants) and the shadcn semantic tokens (`--background`, `--foreground`, `--card`, `--primary`, `--secondary`, `--muted`, `--accent`, `--border`, `--input`, `--ring`, `--radius`, `--chart-*`). Do not imitate shadcn loosely with one-off CSS when a shared component already exists.
-- Templates in `widgets/templates/` include interactive flashcard-drill and matching-pairs plus read-only queue-progress, queue-items, queue-overview, item-carousel, item-inspector, tag-breakdown, due-forecast, session-summary, recent-items, streaks, atom-card, and progress. Matching-pairs reads `atom.widget_data.pairs`.
+- Templates in `widgets/templates/` include interactive flashcard-drill, matching-pairs, and draw-canvas plus read-only queue-progress, queue-items, queue-overview, item-carousel, item-inspector, tag-breakdown, due-forecast, session-summary, recent-items, streaks, atom-card, and progress. Matching-pairs reads `atom.widget_data.pairs`.
 - **Every template body is transparent and theme-driven.** Widgets inherit the host surface (the Lotus chat canvas) rather than painting their own; all color comes from semantic tokens, so a theme switch restyles the whole widget. Never hardcode a hex/rgb color or set an opaque `background` on `body`. Progress fills band low→mid→high→full through `--status-critical/severe/warning/good`, which keeps them legible on every theme's track. Themes live in `widgets/themes/`; `default` is the canonical shadcn-style dark theme. The server injects the theme, `widgets/shadcn.css`, the `ETUDE` payload, and the ResizeObserver bridge. New templates remain self-contained and use the two injection markers.
 - User-space overrides in `~/.etude/widgets/` win. Legacy `/applets/*`, `~/.etude/applets/`, and `applet_data` remain compatibility inputs only; never generate them for new work.
 - Soft-commands: `#theme:NAME` applies a one-off theme; `#set-default-theme:NAME` updates `meta.default_theme`. Verify new themes in a browser before delivery.

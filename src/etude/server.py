@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import json
+import re
 import mimetypes
 import threading
 import time
@@ -20,6 +23,9 @@ from . import algorithms, scheduler, schema, store
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DASHBOARD = _REPO_ROOT / "dashboard"
 _WIDGETS = _REPO_ROOT / "widgets"
+
+# ~4 MB of base64 -> ~3 MB of PNG; a handwriting canvas is far smaller.
+_MAX_DRAWING_B64 = 4 * 1024 * 1024
 
 _AUTO_RESIZE_BRIDGE = """<script>
 (() => {
@@ -568,6 +574,9 @@ class EtudeHandler(BaseHTTPRequestHandler):
         if path == "/api/attempts":
             self._attempt(body)
             return
+        if path == "/api/drawings":
+            self._drawing(body)
+            return
         if path == "/api/inbox":
             atom_id = body.get("atom_id")
             if not isinstance(atom_id, str) or not atom_id or "payload" not in body or "ts" not in body:
@@ -586,6 +595,52 @@ class EtudeHandler(BaseHTTPRequestHandler):
             self._json({"index": len(inbox) - 1, **item}, 201)
             return
         raise APIError(404, "not found")
+
+    def _drawing(self, body: Mapping[str, Any]) -> None:
+        """Persist a canvas PNG next to the database and return its path.
+
+        Drawings are files, not inbox payloads: a base64 image inlined into
+        inbox.json bloats the database and is unreadable to the agent, which
+        needs a path it can open to actually see the drawing.
+        """
+        atom_id = body.get("atom_id")
+        image = body.get("image")
+        if not isinstance(atom_id, str) or not atom_id:
+            raise APIError(400, "atom_id is required")
+        if not isinstance(image, str) or not image:
+            raise APIError(400, "image is required")
+        if set(body) - {"atom_id", "image", "ts"}:
+            raise APIError(400, "drawing body allows only atom_id, image, and ts")
+
+        prefix = "data:image/png;base64,"
+        if not image.startswith(prefix):
+            raise APIError(400, "image must be a data:image/png;base64 URL")
+        encoded = image[len(prefix):]
+        if len(encoded) > _MAX_DRAWING_B64:
+            raise APIError(413, "drawing is too large")
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise APIError(400, "image is not valid base64") from exc
+        if not raw.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise APIError(400, "image is not a PNG")
+
+        db = self._db()
+        if atom_id not in db.get("atoms", {}):
+            raise APIError(400, "atom_id must name an existing atom")
+
+        # Never let a supplied id escape the drawings directory.
+        safe_id = re.sub(r"[^A-Za-z0-9._-]", "_", atom_id)
+        stamp = _now_iso().replace(":", "").replace("-", "")[:15]
+        directory = self.server.db_path.parent / "drawings"
+        directory.mkdir(parents=True, exist_ok=True)
+        target = directory / f"{safe_id}-{stamp}.png"
+        counter = 1
+        while target.exists():
+            target = directory / f"{safe_id}-{stamp}-{counter}.png"
+            counter += 1
+        target.write_bytes(raw)
+        self._json({"atom_id": atom_id, "bytes": len(raw), "path": str(target)}, 201)
 
     def _attempt(self, body: Mapping[str, Any]) -> None:
         atom_id = body.get("atom_id")
@@ -791,6 +846,27 @@ class EtudeHandler(BaseHTTPRequestHandler):
             ranked_items.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
             items = [entry[2] for entry in ranked_items[:limit]]
             return {**base, "total_seen": len(ranked_items), "items": items}
+
+        if template_name == "draw-canvas":
+            atom_id = query.get("atom", [None])[0]
+            if not atom_id or atom_id not in db.get("atoms", {}):
+                raise APIError(400, "atom must name an existing atom")
+            atom = db["atoms"][atom_id]
+            widget_data = atom.get("widget_data", atom.get("applet_data"))
+            widget_data = widget_data if isinstance(widget_data, Mapping) else {}
+            aspect = widget_data.get("aspect")
+            return {
+                **base,
+                # The prompt is the atom's; the expected answer stays server-side.
+                "atom": {
+                    "id": atom_id,
+                    "user_prompt": atom.get("user_prompt", ""),
+                    "topic": atom.get("topic", ""),
+                    "tags": [tag for tag in atom.get("tags", []) if isinstance(tag, str)],
+                },
+                "aspect": aspect if isinstance(aspect, (int, float)) and aspect > 0 else 1,
+                "guides": bool(widget_data.get("guides")),
+            }
 
         if template_name in ("atom-card", "item-inspector"):
             atom_id = query.get("atom", [None])[0]

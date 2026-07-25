@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · Sequence</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+html, body { overflow-y: hidden; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 14px; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
+.prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
+
+.hint { margin-top: 12px; color: var(--text-muted); font-size: 12.5px; line-height: 1.5; }
+
+/* The list is the answer, so every row carries its position as a number the
+   learner can read at a glance — color and order alone are not enough. */
+.board { list-style: none; display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; padding: 0; }
+.row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 10px 8px 12px;
+  background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px);
+  transition: border-color .12s ease, background .12s ease; }
+.row[data-dragging="true"] { background: var(--surface-2); border-color: var(--border-strong); }
+.row[data-drop="true"] { border-color: var(--ring); }
+.row[data-moved="true"] { background: var(--surface-2); }
+.pos { flex: 0 0 auto; min-width: 26px; text-align: right; color: var(--text-secondary);
+  font: 500 13px/1.5 var(--mono); font-variant-numeric: tabular-nums; }
+.grip { flex: 0 0 auto; width: 24px; height: 40px; display: grid; place-items: center; color: var(--text-muted);
+  cursor: grab; font: 13px/1 var(--mono); touch-action: none; user-select: none; }
+.row[data-dragging="true"] .grip { cursor: grabbing; }
+.body { flex: 1 1 auto; min-width: 0; }
+.itemLabel { font-size: 14.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.itemDesc { margin-top: 2px; color: var(--text-muted); font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.moves { flex: 0 0 auto; display: flex; gap: 4px; }
+.moves button { width: 40px; height: 40px; display: grid; place-items: center; padding: 0; border-radius: 10px;
+  border: 0.5px solid var(--border); background: var(--surface-2); color: var(--text-secondary);
+  cursor: pointer; font: 500 13px/1 var(--mono); }
+.moves button:hover:not(:disabled) { color: var(--text-primary); border-color: var(--border-strong); }
+.moves button:disabled { opacity: .35; cursor: default; }
+
+.tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.spacer { flex: 1 1 auto; }
+button { font: inherit; }
+button:focus-visible, .grip:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.row:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.status:not(:empty) { margin-top: 10px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
+.status[data-tone="error"] { color: var(--red-text); }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.done { margin-top: 14px; padding: 20px; text-align: center; background: var(--surface-1); border: 0.5px solid var(--green); border-radius: var(--radius-card, 12px); }
+.done h2 { margin: 0 0 6px; font-size: 16px; font-weight: 500; }
+.done p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.notice { margin-top: 14px; padding: 16px 18px; background: var(--surface-1); border: 0.5px solid var(--border);
+  border-radius: var(--radius-card, 12px); color: var(--text-secondary); font-size: 13.5px; line-height: 1.55; }
+.notice h2 { margin: 0 0 6px; color: var(--text-primary); font-size: 15px; font-weight: 500; }
+.hidden { display: none; }
+@media (max-width: 420px) {
+  .wrap { padding: 18px 16px 12px; }
+  .itemDesc { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap ui-card">
+  <div class="label" id="label">Etude · Sequence</div>
+  <h1 class="title" id="title">Put these in order</h1>
+  <div class="prompt" id="prompt"></div>
+
+  <p class="hint" id="hint"></p>
+  <ol class="board" id="board"></ol>
+
+  <div class="notice hidden" id="configError">
+    <h2 id="configErrorTitle">Nothing to order yet</h2>
+    <p id="configErrorBody"></p>
+  </div>
+
+  <div class="tools" id="tools">
+    <span class="spacer"></span>
+    <button class="ui-button ui-button--outline ui-button--sm" id="reset" type="button">Reset order</button>
+    <button class="ui-button ui-button--sm" id="submit" type="button">Send to agent</button>
+  </div>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+  <div class="sr-only" id="announce" role="status" aria-live="polite"></div>
+  <div class="done hidden" id="done">
+    <h2 id="doneTitle">Sent to your agent</h2>
+    <p id="doneBody">Your ordering is waiting in Etude. Tell your agent you are done so they can review it.</p>
+  </div>
+</div>
+<script>
+const ETUDE = /*__DATA__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const atom = data.atom && typeof data.atom === 'object' ? data.atom : {};
+  const config = atom.widget_data && typeof atom.widget_data === 'object' ? atom.widget_data : {};
+  const $ = id => document.getElementById(id);
+  const text = value => (typeof value === 'string' ? value : '');
+  const plain = value => String(value || '').replace(/`{1,3}|\*{1,2}|[_#>]/g, '').replace(/\s+/g, ' ').trim();
+  const api = String(data.api || '').replace(/\/$/, '');
+
+  const portuguese = /[áàãâéêíóôõúç]|\b(ordene|ordem|sequência|coloque|organize|passos|etapas)\b/i
+    .test(`${text(atom.user_prompt)} ${text(atom.topic)}`);
+  const ui = portuguese
+    ? { title: 'Coloque em ordem', label: 'Etude · Sequência', send: 'Enviar ao agente', reset: 'Ordem inicial',
+        sending: 'Enviando…', position: 'Posição', up: 'Mover para cima', down: 'Mover para baixo',
+        hint: 'Arraste pelo punho ou use os botões de mover. A posição de cada item aparece à esquerda.',
+        moved: (label, at, total) => `${label} agora está na posição ${at} de ${total}.`,
+        resetDone: 'Ordem inicial restaurada.',
+        failed: 'Não foi possível alcançar o Etude. Sua ordem continua aqui — tente de novo.',
+        sentTitle: 'Enviado ao agente', sentBody: 'Sua ordem está aguardando no Etude. Avise o agente que terminou para receber o feedback.',
+        errorTitle: 'Nada para ordenar', errorBody: 'Este item não traz uma lista para ordenar. Peça ao seu agente para adicionar os itens e abra de novo.',
+        lotus: (count, atomId, list) => `Ordenei ${count} itens de ${atomId}: ${list}. Leia da inbox do Etude, corrija a ordem, registre a tentativa e limpe o item da inbox.` }
+    : { title: 'Put these in order', label: 'Etude · Sequence', send: 'Send to agent', reset: 'Reset order',
+        sending: 'Sending…', position: 'Position', up: 'Move up', down: 'Move down',
+        hint: 'Drag by the handle or use the move buttons. Each item shows its position on the left.',
+        moved: (label, at, total) => `${label} is now at position ${at} of ${total}.`,
+        resetDone: 'Initial order restored.',
+        failed: 'Could not reach Etude. Your order is still here — try again.',
+        sentTitle: 'Sent to your agent', sentBody: 'Your ordering is waiting in Etude. Tell your agent you are done so they can review it.',
+        errorTitle: 'Nothing to order yet', errorBody: 'This item does not carry a list to order. Ask your agent to add the items and open it again.',
+        lotus: (count, atomId, list) => `I ordered ${count} items for ${atomId}: ${list}. Read it from the Etude inbox, grade the order, record the attempt, and clear the inbox item.` };
+
+  if (portuguese) document.documentElement.lang = 'pt-BR';
+  $('label').textContent = text(atom.id) ? `${ui.label} · ${text(atom.id)}` : ui.label;
+  $('title').textContent = plain(atom.topic) || ui.title;
+  window.ETUDE_MD_INTO($('prompt'), text(atom.user_prompt) || ui.title);
+  $('hint').textContent = ui.hint;
+  $('reset').textContent = ui.reset;
+  $('submit').textContent = ui.send;
+  $('doneTitle').textContent = ui.sentTitle;
+  $('doneBody').textContent = ui.sentBody;
+  $('configErrorTitle').textContent = ui.errorTitle;
+  $('configErrorBody').textContent = ui.errorBody;
+
+  // Accept only well-formed entries: a malformed atom should render a calm
+  // explanation rather than throw and leave the host with an empty frame.
+  const rawItems = Array.isArray(config.items) ? config.items : [];
+  const items = new Map();
+  for (const raw of rawItems) {
+    if (!raw || typeof raw !== 'object') continue;
+    const id = text(raw.id) || (typeof raw.id === 'number' ? String(raw.id) : '');
+    if (!id || items.has(id)) continue;
+    items.set(id, { id, label: text(raw.label) || id, description: text(raw.description) });
+  }
+
+  // initial_order is a starting arrangement the learner sees, never a key: any
+  // id it does not name keeps its position from `items`.
+  const requested = Array.isArray(config.initial_order) ? config.initial_order : [];
+  const initialOrder = [];
+  for (const value of requested) {
+    const id = text(value) || (typeof value === 'number' ? String(value) : '');
+    if (items.has(id) && !initialOrder.includes(id)) initialOrder.push(id);
+  }
+  for (const id of items.keys()) if (!initialOrder.includes(id)) initialOrder.push(id);
+
+  let order = initialOrder.slice();
+  let sent = false;
+
+  if (!items.size) {
+    $('configError').classList.remove('hidden');
+    $('hint').classList.add('hidden');
+    $('tools').classList.add('hidden');
+    return;
+  }
+
+  const board = $('board');
+  const rows = new Map();
+
+  function buildRow(id) {
+    const item = items.get(id);
+    const row = document.createElement('li');
+    row.className = 'row';
+    row.dataset.id = id;
+
+    const pos = document.createElement('span');
+    pos.className = 'pos';
+    row.append(pos);
+
+    const grip = document.createElement('span');
+    grip.className = 'grip';
+    grip.setAttribute('aria-hidden', 'true');
+    grip.textContent = '⠿';
+    row.append(grip);
+
+    const body = document.createElement('div');
+    body.className = 'body';
+    const label = document.createElement('div');
+    label.className = 'itemLabel';
+    label.textContent = item.label;
+    body.append(label);
+    if (item.description) {
+      const desc = document.createElement('div');
+      desc.className = 'itemDesc';
+      desc.textContent = item.description;
+      body.append(desc);
+    }
+    row.append(body);
+
+    const moves = document.createElement('div');
+    moves.className = 'moves';
+    for (const dir of ['up', 'down']) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.dir = dir;
+      button.dataset.id = id;
+      button.textContent = dir === 'up' ? '↑' : '↓';
+      button.setAttribute('aria-label', `${dir === 'up' ? ui.up : ui.down}: ${item.label}`);
+      button.addEventListener('click', () => moveBy(id, dir === 'up' ? -1 : 1));
+      moves.append(button);
+    }
+    row.append(moves);
+    rows.set(id, { row, pos });
+    return row;
+  }
+
+  function render() {
+    board.textContent = '';
+    for (const id of order) board.append(rows.get(id)?.row || buildRow(id));
+    refresh();
+  }
+
+  function refresh() {
+    order.forEach((id, index) => {
+      const entry = rows.get(id);
+      if (!entry) return;
+      const item = items.get(id);
+      const at = index + 1;
+      entry.pos.textContent = String(at);
+      entry.row.setAttribute('aria-label', `${ui.position} ${at} ${portuguese ? 'de' : 'of'} ${order.length}: ${item.label}`);
+      for (const button of entry.row.querySelectorAll('.moves button')) {
+        button.disabled = sent || (button.dataset.dir === 'up' ? index === 0 : index === order.length - 1);
+      }
+    });
+    $('reset').disabled = sent || sameAsInitial();
+    $('submit').disabled = sent;
+  }
+
+  function sameAsInitial() {
+    return order.every((id, index) => initialOrder[index] === id);
+  }
+
+  function announce(message) {
+    // Reordering moves focus with the row, so the change must also be spoken.
+    $('announce').textContent = message;
+  }
+
+  function moveBy(id, delta) {
+    if (sent) return;
+    const from = order.indexOf(id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= order.length) return;
+    moveTo(from, to);
+    // Keep the keyboard on the button the user pressed, not on the row that
+    // slid into its place, so repeated presses keep moving the same item.
+    const button = rows.get(id)?.row.querySelector(`.moves button[data-dir="${delta < 0 ? 'up' : 'down'}"]`);
+    render();
+    const next = rows.get(id)?.row.querySelector(`.moves button[data-dir="${delta < 0 ? 'up' : 'down'}"]`);
+    if (next && !next.disabled) next.focus();
+    else if (button) rows.get(id)?.row.querySelector('.moves button:not(:disabled)')?.focus();
+    announce(ui.moved(items.get(id).label, order.indexOf(id) + 1, order.length));
+    flash(id);
+  }
+
+  function moveTo(from, to) {
+    const [id] = order.splice(from, 1);
+    order.splice(to, 0, id);
+  }
+
+  function flash(id) {
+    const entry = rows.get(id);
+    if (!entry) return;
+    entry.row.dataset.moved = 'true';
+    setTimeout(() => { delete entry.row.dataset.moved; }, 400);
+  }
+
+  // --- pointer drag ---
+  // Drag from the grip only: the row also holds buttons, and capturing the
+  // whole row would swallow their clicks.
+  let drag = null;
+
+  board.addEventListener('pointerdown', event => {
+    if (sent) return;
+    const grip = event.target.closest('.grip');
+    const row = event.target.closest('.row');
+    if (!grip || !row) return;
+    event.preventDefault();
+    drag = { id: row.dataset.id, pointerId: event.pointerId };
+    row.dataset.dragging = 'true';
+    board.setPointerCapture(event.pointerId);
+  });
+
+  board.addEventListener('pointermove', event => {
+    if (!drag) return;
+    const over = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('.row');
+    for (const { row } of rows.values()) delete row.dataset.drop;
+    if (!over || over.dataset.id === drag.id) return;
+    over.dataset.drop = 'true';
+    const from = order.indexOf(drag.id);
+    const to = order.indexOf(over.dataset.id);
+    if (from < 0 || to < 0) return;
+    moveTo(from, to);
+    render();
+    const moving = rows.get(drag.id)?.row;
+    if (moving) moving.dataset.dragging = 'true';
+  });
+
+  const endDrag = () => {
+    if (!drag) return;
+    const moving = rows.get(drag.id);
+    for (const { row } of rows.values()) { delete row.dataset.drop; delete row.dataset.dragging; }
+    if (board.hasPointerCapture?.(drag.pointerId)) board.releasePointerCapture(drag.pointerId);
+    if (moving) announce(ui.moved(items.get(drag.id).label, order.indexOf(drag.id) + 1, order.length));
+    drag = null;
+    refresh();
+  };
+  board.addEventListener('pointerup', endDrag);
+  board.addEventListener('pointercancel', endDrag);
+
+  $('reset').addEventListener('click', () => {
+    if (sent) return;
+    order = initialOrder.slice();
+    render();
+    announce(ui.resetDone);
+    $('reset').focus();
+  });
+
+  function setStatus(message, tone) {
+    const node = $('status');
+    node.textContent = message;
+    if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
+  }
+
+  $('submit').addEventListener('click', async () => {
+    if (sent) return;
+    const atomId = text(atom.id);
+    if (!atomId || !api) { setStatus(ui.failed, 'error'); return; }
+
+    $('submit').disabled = true;
+    setStatus(ui.sending);
+    const labels = order.map(id => items.get(id).label);
+    try {
+      const response = await fetch(`${api}/api/inbox`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          atom_id: atomId,
+          payload: { kind: 'sequence-board', order: order.slice(), labels },
+          ts: new Date().toISOString(),
+        }),
+      });
+      if (!response.ok) throw new Error(String(response.status));
+      sent = true;
+      refresh();
+      $('done').classList.remove('hidden');
+      setStatus('');
+      window.parent.postMessage({
+        lotus: 1,
+        type: 'submit',
+        text: ui.lotus(order.length, atomId, labels.join(' → ')),
+      }, '*');
+    } catch {
+      // Keep the learner's ordering: a failed POST must be retryable.
+      $('submit').disabled = false;
+      setStatus(ui.failed, 'error');
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

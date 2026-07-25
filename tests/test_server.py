@@ -651,6 +651,48 @@ def test_map_select_never_leaks_the_expected_answer(running_server):
     assert "expected" not in payload["atom"]
 
 
+@pytest.mark.parametrize("template_name", (
+    "hotspot-select", "sequence-board", "state-tracer", "tree-explorer", "coordinate-plane",
+))
+def test_structured_answer_widgets_receive_public_atom_data_only(
+    running_server, tmp_path, monkeypatch, template_name
+):
+    """Reusable answer surfaces share one public payload contract. The learner's
+    prompt and widget configuration reach the sandbox; the rubric and canonical
+    answer never do."""
+    base, _ = running_server
+    widget_data = {"fixture": template_name, "items": [{"id": "one", "label": "One"}]}
+    request(base, "/api/atoms/AG-2", method="PATCH", body={"widget_data": widget_data})
+
+    template = tmp_path / f"{template_name}.html"
+    theme = tmp_path / "theme.css"
+    template.write_text(
+        '<!doctype html><html><head><style>/*__THEME__*/</style></head>'
+        '<body data-fit-content><div class="ui-card"></div>'
+        '<script>const ETUDE = /*__DATA__*/null;\n</script></body></html>'
+    )
+    theme.write_text(":root { --background: transparent; }")
+    monkeypatch.setattr(
+        server_module,
+        "_named_file",
+        lambda kind, requested, suffix: template if kind == "template" else theme,
+    )
+
+    _, _, html = request(base, f"/widgets/{template_name}?atom=AG-2")
+    payload = _injected_payload(html)
+
+    assert payload["template"] == template_name
+    assert payload["atom"] == {
+        "id": "AG-2",
+        "user_prompt": "Explain TCP",
+        "topic": "Topic",
+        "tags": ["network"],
+        "widget_data": widget_data,
+    }
+    assert "agent_prompt" not in payload["atom"]
+    assert "expected" not in payload["atom"]
+
+
 def test_widgets_never_scroll_vertically_inside_their_frame():
     """The host sizes the frame to the reported height, so a widget must never
     scroll vertically: sub-pixel rounding used to leave a few pixels of overflow

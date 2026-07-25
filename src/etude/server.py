@@ -942,6 +942,26 @@ class EtudeHandler(BaseHTTPRequestHandler):
             items = [entry[2] for entry in ranked_items[:limit]]
             return {**base, "total_seen": len(ranked_items), "items": items}
 
+        if template_name in {
+            "hotspot-select", "sequence-board", "state-tracer", "tree-explorer", "coordinate-plane",
+        }:
+            atom_id = query.get("atom", [None])[0]
+            if not atom_id or atom_id not in db.get("atoms", {}):
+                raise APIError(400, "atom must name an existing atom")
+            atom = db["atoms"][atom_id]
+            widget_data = atom.get("widget_data", atom.get("applet_data"))
+            widget_data = deepcopy(dict(widget_data)) if isinstance(widget_data, Mapping) else {}
+            return {
+                **base,
+                "atom": {
+                    "id": atom_id,
+                    "user_prompt": atom.get("user_prompt", ""),
+                    "topic": atom.get("topic", ""),
+                    "tags": [tag for tag in atom.get("tags", []) if isinstance(tag, str)],
+                    "widget_data": widget_data,
+                },
+            }
+
         if template_name == "map-select":
             atom_id = query.get("atom", [None])[0]
             if not atom_id or atom_id not in db.get("atoms", {}):

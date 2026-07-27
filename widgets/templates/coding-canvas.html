@@ -14,18 +14,18 @@ body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
 .wrap { display: flex; flex-direction: column; padding: 22px 26px 14px; }
 .label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
 h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
-.prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.prompt { margin: 14px 0 0; font-size: 14.5px; line-height: 1.6; overflow-wrap: anywhere; }
 .prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
 .prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
 .prompt pre { margin: 8px 0 0; padding: 10px 12px; background: var(--surface-2); border-radius: 8px; overflow-x: auto; font: 12.5px/1.5 var(--mono); }
-.bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.code-card { margin-top: 12px; padding: 0; overflow: hidden; }
 .spacer { flex: 1 1 auto; }
 label.field { display: inline-flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 12.5px; }
 select { padding: 4px 9px; border-radius: 999px; border: 0.5px solid var(--border); background: var(--surface-2); color: var(--text-primary); font: 500 12.5px/1.5 var(--sans); }
 select:focus-visible, input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .toggle { display: inline-flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 12.5px; cursor: pointer; }
-.editor { margin-top: 12px; border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px);
-  background: var(--surface-1); overflow: hidden; }
+.editor { border: 0; background: transparent; overflow: hidden; }
 /* A code block deserves room: default to a roughly square editor, capped so a
    long answer still fits the chat. Single-line items opt out via lines=1. */
 /* Height comes from the content area; the gutter has no surface of its own,
@@ -87,7 +87,7 @@ button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 </style>
 </head>
 <body data-fit-content>
-<div class="wrap ui-card">
+<div class="wrap">
   <div class="label" id="label">Etude · Code</div>
   <h1 class="title" id="title">Write your solution</h1>
   <div class="prompt" id="prompt"></div>
@@ -99,7 +99,9 @@ button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
     <span class="spacer"></span>
     <span class="counts" id="counts"></span>
   </div>
-  <div class="editor" id="editor"></div>
+  <div class="code-card ui-card">
+    <div class="editor" id="editor"></div>
+  </div>
   <div class="problems" id="problems"></div>
   <div class="tools">
     <span class="spacer"></span>
@@ -141,7 +143,9 @@ const ETUDE = /*__DATA__*/null;
   if (portuguese) document.documentElement.lang = 'pt-BR';
   $('label').textContent = text(atom.id) ? `${ui.label} · ${text(atom.id)}` : ui.label;
   $('title').textContent = plain(atom.topic) || ui.title;
-  window.ETUDE_MD_INTO($('prompt'), text(atom.user_prompt) || ui.title);
+  const promptText = text(atom.user_prompt) || ui.title;
+  $('title').hidden = window.ETUDE_MD_HAS_LEADING_HEADING(promptText);
+  window.ETUDE_MD_INTO($('prompt'), promptText);
   $('languageLabel').childNodes[0].nodeValue = `${ui.language} `;
   $('vimLabel').textContent = ui.vim;
   $('reset').textContent = ui.reset;

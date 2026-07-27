@@ -282,3 +282,52 @@ def test_include_archived_and_cascade_resolution():
     assert "A-2" in algorithms.order(db, "q", "2026-01-01T00:00:00+00:00")
     with pytest.raises(KeyError):
         cascade.resolve(db, "missing", "q")
+
+
+def _tag_rank_db(atoms):
+    """A declarative algorithm that prefers ready work, then ranked tags."""
+    db = db_with_atoms(atoms, "phase-priority")
+    db["meta"]["queue_algorithms"]["phase-priority"] = {
+        "label": "Phase priority",
+        "tag_rank": ["opening", "middlegame", "endgame"],
+        "order": [
+            {"key": "ready", "dir": "desc"},
+            {"key": "tag_rank", "dir": "asc"},
+            {"key": "due", "dir": "asc"},
+            {"key": "mastery", "dir": "asc"},
+            {"key": "id", "dir": "asc"},
+        ],
+    }
+    return db
+
+
+def test_tag_rank_orders_by_declared_tag_priority():
+    """`tag_rank` is a generic ranked-tag key: the algorithm names the tag order
+    and every atom sorts by the position of its first ranked tag. Unranked atoms
+    sort last, never before a ranked one."""
+    db = _tag_rank_db({
+        "A-1": atom(tags=["chess", "endgame"]),
+        "A-2": atom(tags=["chess", "opening"]),
+        "A-3": atom(tags=["chess", "middlegame"]),
+        "A-4": atom(tags=["chess"]),
+        "A-5": atom(tags=["chess", "opening"]),
+    })
+    assert algorithms.order(db, "q", "2026-01-05T00:00:00+00:00") == [
+        "A-2", "A-5", "A-3", "A-1", "A-4",
+    ]
+
+
+def test_ready_key_keeps_lower_ranked_tags_from_starving():
+    """`ready` (due now or never seen) outranks the tag preference, so a phase
+    whose items are all scheduled into the future yields to the next phase
+    instead of blocking the queue forever."""
+    now = "2026-01-05T00:00:00+00:00"
+    db = _tag_rank_db({
+        "A-1": atom(tags=["opening"], state="review", streak=3, due="2026-01-20T00:00:00+00:00"),
+        "A-2": atom(tags=["middlegame"], state="new"),
+        "A-3": atom(tags=["endgame"], state="new"),
+        "A-4": atom(tags=["opening"], state="review", streak=1, due="2026-01-04T00:00:00+00:00"),
+    })
+    # A-4 is due, A-2/A-3 are new: all three are ready and sort by phase.
+    # A-1 is scheduled ahead and drops behind every ready item.
+    assert algorithms.order(db, "q", now) == ["A-4", "A-2", "A-3", "A-1"]

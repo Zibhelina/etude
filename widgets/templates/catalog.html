@@ -1,0 +1,1496 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · Catalog</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+html, body { overflow-y: hidden; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+
+/* One measure for the whole instrument. Wider than a drill widget: this is a
+   console with four control groups side by side, not a single answer surface. */
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 16px;
+  max-width: 980px; margin: 0 auto; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.subtitle { margin: 6px 0 0; font-size: 14px; color: var(--text-muted); }
+
+.hidden { display: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Transport and device rows sit outside the instrument card: they annotate the
+   instrument rather than being part of the playing surface. */
+/* One control height across every strip, so the device row, the transport and
+   the save actions read as one instrument rather than separate toolbars. */
+:root { --ctl-h: 30px; }
+.deviceRow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.deviceRow label { font-size: 13px; color: var(--text-muted); }
+.deviceRow .ui-select,
+.deviceRow .ui-badge,
+.deviceRow .ui-button {
+  height: var(--ctl-h); min-height: var(--ctl-h); padding: 0 12px; font-size: 12.5px;
+  border-radius: 999px; display: inline-flex; align-items: center;
+}
+/* Connection state is a status, not an action. */
+.deviceRow .ui-badge { border: 0; background: none; padding: 0 2px;
+  color: var(--text-muted); font-weight: 400; }
+.deviceRow .ui-select { width: auto; min-width: 130px; max-width: 190px; padding-right: 26px; }
+.deviceRow .spacer { flex: 1 1 auto; }
+
+.notice { margin: 10px 0 0; font-size: 13.5px; line-height: 1.6; }
+.notice code { font-family: var(--mono); font-size: 12.5px;
+  background: var(--panel); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+
+/* ---- the instrument card: keyboard + pads, the surfaces you actually play */
+.card { margin-top: 12px; display: flex; flex-direction: column; gap: 14px; }
+
+/* Keyboard. Drawn as real buttons so it is playable by mouse and keyboard, not
+   only by MIDI: the widget must do something useful before a device connects. */
+.keys { position: relative; width: 100%; height: 116px; user-select: none;
+  touch-action: none; }
+@media (max-width: 640px) { .keys { height: 96px; } }
+/* The keyboard needs a frame of its own: white keys on a light host page are
+   invisible without one, and the instrument read as a blank rectangle. */
+.keysWrap { border: 1px solid var(--panel-edge); border-radius: calc(var(--radius) * .4);
+  overflow: hidden; background: var(--panel); }
+.key { position: absolute; top: 0; margin: 0; padding: 0; cursor: pointer;
+  border: 0.5px solid var(--key-edge); background: var(--key-white);
+  border-radius: 0 0 calc(var(--radius) * .3) calc(var(--radius) * .3); }
+.key.black { background: var(--key-black); z-index: 2; height: 62%; }
+.key.on { background: var(--key-active); }
+.key:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; z-index: 3; }
+.keyName { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center;
+  font-size: 9.5px; color: var(--text-muted); pointer-events: none; }
+
+/* Pads: an 8-slot grid matching the MPK mini's 2x4 layout. */
+.pads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+@media (max-width: 520px) { .pads { grid-template-columns: repeat(2, 1fr); } }
+/* Pads are a secondary surface: sized to a comfortable touch target rather than
+   to an aspect ratio, which at full width grew them into slabs taller than the
+   keyboard they sit under. */
+.pad { position: relative; height: 58px; cursor: pointer;
+  border: 1px solid var(--panel-edge); border-radius: calc(var(--radius) * .5);
+  background: var(--panel); color: var(--text-primary);
+  font: 500 12px/1.2 var(--sans); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 3px; padding: 4px;
+  transition: background .08s linear, transform .08s linear; }
+.pad .padNum { font-size: 9.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pad.on { background: var(--key-active); transform: scale(.97); }
+.pad:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .pad { transition: none; } }
+
+/* ---- control console: the knobs and settings, outside the playing card */
+/* align-items:start stops a short group from stretching to the tallest one in
+   its row; minmax fits four groups side by side on a desktop canvas so the
+   console packs evenly instead of stranding one box on a second row. */
+.console { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px; margin-top: 14px; align-items: start; }
+.group { border: 1px solid var(--panel-edge); border-radius: calc(var(--radius) * .6);
+  padding: 12px 14px 14px; background: var(--panel); }
+.group h2 { margin: 0 0 10px; font: 500 12.5px/1.3 var(--sans); letter-spacing: .02em;
+  color: var(--text-muted); }
+.ctl { display: grid; grid-template-columns: 1fr auto; align-items: center;
+  gap: 4px 10px; margin-bottom: 9px; }
+.ctl:last-child { margin-bottom: 0; }
+.ctl label { font-size: 13px; }
+.ctl .val { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums;
+  min-width: 44px; text-align: right; }
+/* Neutral accent: a knob is a control, not a status. Colouring 15 sliders with
+   a chart token made the console read as a chart and fought the restrained
+   palette the design contract asks for. */
+.ctl input[type=range] { grid-column: 1 / -1; width: 100%; margin: 0; accent-color: var(--foreground); }
+.ctl input[type=range]:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.ctl select.ui-select { grid-column: 1 / -1; width: 100%; }
+/* A knob that a physical CC is currently driving gets a visible mark, so the
+   mapping is legible without watching values twitch. */
+.ctl.bound label::after { content: ' ● CC'; font-size: 10px; color: var(--key-active);
+  letter-spacing: .02em; }
+.ctl.learning label::after { content: ' ○ gire um knob'; font-size: 10px; color: var(--text-muted); }
+
+.rowActions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+.rowActions .ui-button { height: var(--ctl-h); min-height: var(--ctl-h); padding: 0 14px;
+  font-size: 12.5px; border-radius: 999px; }
+/* A disabled primary is not the next action, so it recedes rather than keeping
+   a dimmed fill that still outshouts the controls around it. */
+.rowActions .ui-button:disabled { background: transparent; color: var(--text-muted);
+  border-color: var(--border); opacity: 1; }
+.rowActions .spacer { flex: 1 1 auto; }
+
+.recDot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--rec-dot); margin-right: 6px; vertical-align: middle; }
+@media (prefers-reduced-motion: no-preference) {
+  .recording .recDot { animation: pulse 1.1s ease-in-out infinite; }
+}
+@keyframes pulse { 50% { opacity: .25; } }
+
+.status { margin: 10px 0 0; font-size: 14px; min-height: 1.7em; }
+
+/* Saved material. A short list, so a list beats a table here. */
+.library { margin-top: 14px; }
+.library h2 { margin: 0 0 8px; font: 500 12.5px/1.3 var(--sans); letter-spacing: .02em;
+  color: var(--text-muted); }
+.library ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.library .ui-button { height: var(--ctl-h); min-height: var(--ctl-h); padding: 0 12px;
+  font-size: 12.5px; border-radius: 999px; }
+
+/* Save dialog: a plain inline form, not a modal — a modal inside a chat-embedded
+   frame has nowhere to go. */
+.saveForm { margin-top: 12px; border: 1px solid var(--panel-edge); background: var(--panel);
+  border-radius: calc(var(--radius) * .6); padding: 12px 14px; }
+.saveForm .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.saveForm .ui-input { flex: 1 1 200px; min-width: 0; }
+.saveForm p { margin: 0 0 8px; font-size: 13px; color: var(--text-muted); }
+
+/* Instrument colour tokens, same convention as midi-rhythm: "white key",
+   "black key", "active" are semantics of a keyboard, not of body text.
+
+   `--panel` is the widget's own surface, and it is mixed rather than taken from
+   --muted. The console is a grid of boxes sitting directly on the host canvas,
+   and on a light host --muted against a white page is only a couple of percent
+   apart: the whole instrument washed out into one white rectangle. Mixing toward
+   --foreground darkens the panel on a light theme and lightens it on a dark one,
+   so the boxes read as boxes under either. */
+:root {
+  --panel: color-mix(in oklab, var(--foreground) 5%, var(--surface-1));
+  --panel-edge: color-mix(in oklab, var(--foreground) 18%, var(--surface-1));
+  /* A white key must stay lighter than the panel it sits on in BOTH themes.
+     Taking it straight from --card made it pure white on the light theme, the
+     same colour as the page, so the keyboard disappeared. */
+  --key-white: var(--piano-key-white, color-mix(in oklab, var(--background) 22%, var(--card)));
+  --key-black: var(--piano-key-black, color-mix(in oklab, var(--foreground) 82%, var(--card)));
+  --key-edge: var(--piano-key-edge, color-mix(in oklab, var(--foreground) 28%, var(--card)));
+  --key-active: var(--piano-key-active, var(--chart-1));
+  /* The record dot: red is the right convention for "recording", unlike the
+     piano roll's strike line. */
+  --rec-dot: var(--destructive);
+}
+
+@media (max-width: 400px) { .wrap { padding: 16px 14px 12px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap">
+  <div class="label" id="kindLabel"></div>
+  <h1 class="title" id="topic">Catalog</h1>
+  <p class="subtitle" id="subtitle"></p>
+
+  <div class="deviceRow">
+    <label for="device" id="deviceLabel"></label>
+    <select class="ui-select" id="device"></select>
+    <span class="ui-badge" id="deviceBadge"></span>
+    <span class="spacer"></span>
+    <button type="button" class="ui-button ui-button-outline" id="panic"></button>
+  </div>
+
+  <p class="notice ui-muted hidden" id="midiNotice"></p>
+
+  <section class="card">
+    <div class="keysWrap"><div class="keys" id="keys" role="group"></div></div>
+    <div class="pads" id="pads" role="group"></div>
+  </section>
+
+  <div class="rowActions">
+    <button type="button" class="ui-button" id="record"></button>
+    <button type="button" class="ui-button ui-button-outline" id="play" disabled></button>
+    <button type="button" class="ui-button ui-button-outline" id="metronome" aria-pressed="false"></button>
+    <button type="button" class="ui-button ui-button-outline" id="arp" aria-pressed="false"></button>
+    <button type="button" class="ui-button ui-button-outline" id="loop" aria-pressed="false"></button>
+    <span class="spacer"></span>
+    <button type="button" class="ui-button ui-button-secondary" id="learn" aria-pressed="false"></button>
+  </div>
+
+  <p class="status" id="status" aria-live="polite"></p>
+
+  <div class="console" id="console"></div>
+
+  <div class="library hidden" id="library">
+    <h2 id="libraryTitle"></h2>
+    <ul id="libraryList"></ul>
+  </div>
+
+  <div class="rowActions">
+    <button type="button" class="ui-button ui-button-secondary" id="savePreset"></button>
+    <button type="button" class="ui-button ui-button-secondary hidden" id="saveTake"></button>
+  </div>
+
+  <form class="saveForm hidden" id="saveForm">
+    <p id="saveHint"></p>
+    <div class="row">
+      <input type="text" class="ui-input" id="saveName" autocomplete="off">
+      <button type="submit" class="ui-button" id="saveConfirm"></button>
+      <button type="button" class="ui-button ui-button-ghost" id="saveCancel"></button>
+    </div>
+  </form>
+</div>
+
+<script>const ETUDE = /*__DATA__*/null;</script>
+<script>
+(() => {
+  'use strict';
+  const data = ETUDE || {};
+  const atom = data.atom || null;
+  const loaded = (atom && atom.widget_data) || {};
+  const $ = id => document.getElementById(id);
+
+  /* ---------------------------------------------------------------- i18n
+     The queue and its material are Portuguese, and so is the user. Same
+     detection idiom as midi-rhythm: look at the served text, default to PT
+     for this instrument because the queue itself is Portuguese. */
+  function isPortuguese() {
+    const text = `${(atom && atom.user_prompt) || ''} ${(atom && atom.topic) || ''}`;
+    if (!text.trim()) return true;
+    return /[áàãâéêíóôõúç]/i.test(text)
+      || /\b(toque|ritmo|teclado|musica|música|som|preset|gravação)\b/i.test(text);
+  }
+  const pt = isPortuguese();
+  const ui = pt ? {
+    kind: 'Instrumento livre',
+    blank: 'Toque à vontade — nada aqui é corrigido.',
+    device: 'Entrada MIDI',
+    noDevice: 'nenhum dispositivo',
+    connected: 'conectado',
+    waiting: 'aguardando dispositivo',
+    panic: 'Silenciar tudo',
+    record: 'Gravar',
+    recording: 'Gravando',
+    stopRec: 'Parar',
+    play: 'Tocar',
+    stopPlay: 'Parar',
+    metronome: 'Metrônomo',
+    arp: 'Arpejo',
+    loop: 'Loop',
+    learn: 'Mapear knob',
+    learning: 'Gire um knob…',
+    savePreset: 'Salvar preset',
+    saveTake: 'Salvar gravação',
+    saveConfirm: 'Salvar',
+    saveCancel: 'Cancelar',
+    presetHint: 'Nome do preset (som atual: timbre, reverb, envelope, pitch).',
+    takeHint: 'Nome da gravação (as notas tocadas mais o preset atual).',
+    saved: name => `Salvo: ${name}. O agente cria o item na fila catalog.`,
+    saveFailed: 'Não foi possível salvar. Tente de novo.',
+    nameRequired: 'Dê um nome antes de salvar.',
+    emptyTake: 'Nada gravado ainda.',
+    library: 'Material salvo',
+    loadedPreset: name => `Preset carregado: ${name}.`,
+    loadedTake: name => `Gravação carregada: ${name}. Clique em Tocar.`,
+    recStarted: 'Gravando — toque o que quiser.',
+    recStopped: n => `${n} ${n === 1 ? 'nota gravada' : 'notas gravadas'}.`,
+    playing: 'Tocando a gravação.',
+    learnArmed: 'Gire um knob do controlador para mapear.',
+    learnBound: (cc, name) => `CC ${cc} → ${name}.`,
+    midiBlocked: 'O MIDI está bloqueado neste painel',
+    midiBlockedBody: 'Abra o instrumento numa aba do navegador para usar o teclado:',
+    mouseHint: 'Sem teclado MIDI você ainda pode tocar clicando nas teclas e nos pads.',
+  } : {
+    kind: 'Free instrument',
+    blank: 'Play freely — nothing here is graded.',
+    device: 'MIDI input',
+    noDevice: 'no device',
+    connected: 'connected',
+    waiting: 'waiting for device',
+    panic: 'Silence all',
+    record: 'Record',
+    recording: 'Recording',
+    stopRec: 'Stop',
+    play: 'Play',
+    stopPlay: 'Stop',
+    metronome: 'Metronome',
+    arp: 'Arpeggio',
+    loop: 'Loop',
+    learn: 'Map knob',
+    learning: 'Turn a knob…',
+    savePreset: 'Save preset',
+    saveTake: 'Save recording',
+    saveConfirm: 'Save',
+    saveCancel: 'Cancel',
+    presetHint: 'Preset name (current sound: timbre, reverb, envelope, pitch).',
+    takeHint: 'Recording name (the notes played plus the current preset).',
+    saved: name => `Saved: ${name}. The agent files it in the catalog queue.`,
+    saveFailed: 'Could not save. Try again.',
+    nameRequired: 'Give it a name first.',
+    emptyTake: 'Nothing recorded yet.',
+    library: 'Saved material',
+    loadedPreset: name => `Preset loaded: ${name}.`,
+    loadedTake: name => `Recording loaded: ${name}. Press Play.`,
+    recStarted: 'Recording — play anything.',
+    recStopped: n => `${n} ${n === 1 ? 'note' : 'notes'} recorded.`,
+    playing: 'Playing the recording.',
+    learnArmed: 'Turn a knob on the controller to map it.',
+    learnBound: (cc, name) => `CC ${cc} → ${name}.`,
+    midiBlocked: 'MIDI is blocked in this panel',
+    midiBlockedBody: 'Open the instrument in a browser tab to use the keyboard:',
+    mouseHint: 'Without a MIDI keyboard you can still play by clicking the keys and pads.',
+  };
+
+  /* ------------------------------------------------------------ parameters
+     One declarative table drives the console UI, the preset payload, and the
+     CC mapping. Adding a knob here gives it a slider, a saved value and a
+     learnable CC binding without touching three places. */
+  const TIMBRES = {
+    soft:      {partials: 5, tilt: 1.7, inharmonic: 0.0002, decay: 7.0, hammer: 0.05, tone: 2, gain: 0.34},
+    piano:     {partials: 6, tilt: 1.35, inharmonic: 0.0004, decay: 5.5, hammer: 0.09, tone: 3, gain: 0.34},
+    bright:    {partials: 8, tilt: 1.1, inharmonic: 0.0006, decay: 4.5, hammer: 0.14, tone: 4, gain: 0.30},
+    musicBox:  {partials: 3, tilt: 2.2, inharmonic: 0.0016, decay: 2.2, hammer: 0.07, tone: 6,
+                tremolo: {rate: 5.2, depth: 0.16}, gain: 0.30},
+    celeste:   {partials: 4, tilt: 1.9, inharmonic: 0.0011, decay: 4.0, hammer: 0.05, tone: 5,
+                tremolo: {rate: 3.4, depth: 0.10}, gain: 0.30},
+    warm:      {partials: 3, tilt: 2.0, inharmonic: 0.0001, decay: 9.0, hammer: 0.02, tone: 2, gain: 0.32},
+  };
+  const TIMBRE_LABELS = pt
+    ? {piano: 'Piano', soft: 'Suave', bright: 'Brilhante', musicBox: 'Caixinha', celeste: 'Celeste', warm: 'Quente'}
+    : {piano: 'Piano', soft: 'Soft', bright: 'Bright', musicBox: 'Music box', celeste: 'Celeste', warm: 'Warm'};
+
+  const ARP_PATTERNS = pt
+    ? {up: 'Subindo', down: 'Descendo', updown: 'Sobe e desce', random: 'Aleatório'}
+    : {up: 'Up', down: 'Down', updown: 'Up & down', random: 'Random'};
+
+  // group: which console box the control lives in.
+  // cc: whether a physical knob can be mapped to it (all continuous ones can).
+  const PARAMS = [
+    {key: 'timbre', group: 'sound', kind: 'select', options: TIMBRE_LABELS, def: 'piano',
+     label: pt ? 'Timbre' : 'Timbre'},
+    {key: 'reverb', group: 'sound', kind: 'range', min: 0, max: 1, step: 0.01, def: 0.25,
+     label: pt ? 'Reverb' : 'Reverb', format: v => `${Math.round(v * 100)}%`},
+    {key: 'size', group: 'sound', kind: 'range', min: 0.2, max: 1, step: 0.01, def: 0.5,
+     label: pt ? 'Sala' : 'Room', format: v => `${Math.round(v * 100)}%`},
+    {key: 'tone', group: 'sound', kind: 'range', min: 400, max: 12000, step: 100, def: 12000,
+     label: pt ? 'Filtro' : 'Filter', format: v => v >= 12000 ? (pt ? 'aberto' : 'open') : `${Math.round(v)} Hz`},
+    {key: 'volume', group: 'sound', kind: 'range', min: 0, max: 1, step: 0.01, def: 0.8,
+     label: pt ? 'Volume' : 'Volume', format: v => `${Math.round(v * 100)}%`},
+
+    {key: 'transpose', group: 'pitch', kind: 'range', min: -24, max: 24, step: 1, def: 0,
+     label: pt ? 'Transpor' : 'Transpose',
+     format: v => `${v > 0 ? '+' : ''}${Math.round(v)} ${pt ? 'semitons' : 'st'}`},
+    {key: 'detune', group: 'pitch', kind: 'range', min: -50, max: 50, step: 1, def: 0,
+     label: pt ? 'Afinação' : 'Detune', format: v => `${v > 0 ? '+' : ''}${Math.round(v)} cents`},
+    {key: 'bendRange', group: 'pitch', kind: 'range', min: 1, max: 12, step: 1, def: 2,
+     label: pt ? 'Alcance do bend' : 'Bend range',
+     format: v => `±${Math.round(v)} ${pt ? 'semitons' : 'st'}`},
+
+    {key: 'attack', group: 'envelope', kind: 'range', min: 0.001, max: 1.5, step: 0.001, def: 0.004,
+     label: pt ? 'Ataque' : 'Attack', format: v => `${Math.round(v * 1000)} ms`},
+    {key: 'decay', group: 'envelope', kind: 'range', min: 0.3, max: 14, step: 0.1, def: 0,
+     label: pt ? 'Decaimento' : 'Decay',
+     // 0 means "follow the timbre's own decay", which is the honest default.
+     format: v => v <= 0.3 ? (pt ? 'do timbre' : 'timbre') : `${v.toFixed(1)} s`},
+    {key: 'sustain', group: 'envelope', kind: 'range', min: 0, max: 1, step: 0.01, def: 0,
+     label: pt ? 'Sustain' : 'Sustain', format: v => `${Math.round(v * 100)}%`},
+    {key: 'release', group: 'envelope', kind: 'range', min: 0.02, max: 4, step: 0.01, def: 0.18,
+     label: pt ? 'Release' : 'Release', format: v => `${v.toFixed(2)} s`},
+
+    {key: 'tempo', group: 'rhythm', kind: 'range', min: 40, max: 220, step: 1, def: 90,
+     label: 'BPM', format: v => `${Math.round(v)}`},
+    {key: 'arpPattern', group: 'rhythm', kind: 'select', options: ARP_PATTERNS, def: 'up',
+     label: pt ? 'Padrão do arpejo' : 'Arp pattern'},
+    {key: 'arpRate', group: 'rhythm', kind: 'range', min: 1, max: 8, step: 1, def: 2,
+     label: pt ? 'Velocidade do arpejo' : 'Arp rate',
+     format: v => `${Math.round(v)}/${pt ? 'tempo' : 'beat'}`},
+    {key: 'swing', group: 'rhythm', kind: 'range', min: 0, max: 0.6, step: 0.01, def: 0,
+     label: 'Swing', format: v => `${Math.round(v * 100)}%`},
+    {key: 'padVolume', group: 'rhythm', kind: 'range', min: 0, max: 1, step: 0.01, def: 0.7,
+     label: pt ? 'Volume dos pads' : 'Pad volume', format: v => `${Math.round(v * 100)}%`},
+  ];
+  const GROUP_LABELS = pt
+    ? {sound: 'Som', pitch: 'Afinação', envelope: 'Envelope', rhythm: 'Ritmo'}
+    : {sound: 'Sound', pitch: 'Pitch', envelope: 'Envelope', rhythm: 'Rhythm'};
+
+  const params = {};
+  for (const spec of PARAMS) params[spec.key] = spec.def;
+  // A saved preset (or a recording's preset) restores every known key and
+  // silently ignores anything it does not recognise.
+  function applyPreset(preset) {
+    if (!preset || typeof preset !== 'object') return;
+    for (const spec of PARAMS) {
+      const value = preset[spec.key];
+      if (value === undefined || value === null) continue;
+      if (spec.kind === 'select') {
+        if (Object.prototype.hasOwnProperty.call(spec.options, value)) params[spec.key] = value;
+      } else if (Number.isFinite(Number(value))) {
+        params[spec.key] = Math.min(spec.max, Math.max(spec.min, Number(value)));
+      }
+    }
+    if (preset.cc && typeof preset.cc === 'object') {
+      for (const [cc, key] of Object.entries(preset.cc)) {
+        if (PARAMS.some(spec => spec.key === key && spec.kind === 'range')) ccMap[cc] = key;
+      }
+    }
+    if (Array.isArray(preset.pads)) {
+      preset.pads.forEach((sound, index) => {
+        if (index < PADS.length && SOUNDS[sound]) padSounds[index] = sound;
+      });
+    }
+  }
+
+  /* -------------------------------------------------------------- pad kit
+     Percussion is synthesised, not sampled: the sandbox has no network and a
+     kit of wav files would dwarf the template. Each voice is the standard
+     cheap synthesis of its instrument — a pitch-swept sine for the kick,
+     filtered noise for the snare and hats, a short noise burst for the clap. */
+  const SOUNDS = {
+    kick:   {label: pt ? 'Bumbo' : 'Kick'},
+    snare:  {label: pt ? 'Caixa' : 'Snare'},
+    hihat:  {label: pt ? 'Chimbal' : 'Hi-hat'},
+    open:   {label: pt ? 'Chimbal aberto' : 'Open hat'},
+    clap:   {label: pt ? 'Palma' : 'Clap'},
+    tom:    {label: pt ? 'Tom' : 'Tom'},
+    rim:    {label: pt ? 'Aro' : 'Rim'},
+    cowbell:{label: pt ? 'Cowbell' : 'Cowbell'},
+  };
+  const PADS = ['kick', 'snare', 'hihat', 'open', 'clap', 'tom', 'rim', 'cowbell'];
+  const padSounds = [...PADS];
+  // The MPK mini's pads send notes 36..43 on bank A. Anything in that range
+  // hits a pad instead of the keyboard.
+  const PAD_BASE = 36;
+  const PAD_COUNT = 8;
+
+  /* ---------------------------------------------------------------- audio */
+  let audio = null;
+  let dryBus = null, wetSend = null, masterGain = null, toneFilter = null, convolver = null;
+  const voices = new Map();
+  let bendSemitones = 0;
+
+  function buildImpulse(context, seconds, decayPower) {
+    const rate = context.sampleRate;
+    const length = Math.max(1, Math.floor(rate * seconds));
+    const impulse = context.createBuffer(2, length, rate);
+    for (let channel = 0; channel < 2; channel += 1) {
+      const channelData = impulse.getChannelData(channel);
+      for (let i = 0; i < length; i += 1) {
+        const t = i / length;
+        channelData[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decayPower);
+      }
+    }
+    return impulse;
+  }
+
+  /* Browsers refuse to start an AudioContext before a gesture, so the graph is
+     built on the first note or click, never at load. The chain is fixed —
+     voices → filter → dry/wet → master → out — and the knobs only move
+     parameter values on it, so turning a knob never rebuilds the graph. */
+  function ensureAudio() {
+    if (audio) return audio;
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) return null;
+    try { audio = new Ctor(); } catch (_) { return null; }
+
+    masterGain = audio.createGain();
+    masterGain.gain.value = params.volume;
+    masterGain.connect(audio.destination);
+
+    toneFilter = audio.createBiquadFilter();
+    toneFilter.type = 'lowpass';
+    toneFilter.frequency.value = params.tone;
+    toneFilter.Q.value = 0.7;
+    toneFilter.connect(masterGain);
+
+    dryBus = audio.createGain();
+    dryBus.gain.value = 1;
+    dryBus.connect(toneFilter);
+
+    if (typeof audio.createConvolver === 'function') {
+      try {
+        convolver = audio.createConvolver();
+        convolver.buffer = buildImpulse(audio, 1.4 + params.size * 2.6, 2.2);
+        const damp = audio.createBiquadFilter();
+        damp.type = 'lowpass';
+        damp.frequency.value = 3200;
+        wetSend = audio.createGain();
+        wetSend.gain.value = params.reverb;
+        wetSend.connect(convolver).connect(damp).connect(masterGain);
+      } catch (_) { wetSend = null; convolver = null; }
+    }
+    applyAudioParams();
+    return audio;
+  }
+
+  // Push the live parameter values onto the running graph. Called on every knob
+  // move; cheap because it only sets values on nodes that already exist.
+  function applyAudioParams() {
+    if (!audio) return;
+    const now = audio.currentTime;
+    try {
+      if (masterGain) masterGain.gain.setTargetAtTime(params.volume, now, 0.01);
+      if (toneFilter) toneFilter.frequency.setTargetAtTime(params.tone, now, 0.01);
+      if (wetSend) wetSend.gain.setTargetAtTime(params.reverb, now, 0.01);
+      if (dryBus) dryBus.gain.setTargetAtTime(1 - params.reverb * 0.35, now, 0.01);
+    } catch (_) { /* context closing */ }
+  }
+  // The room size changes the impulse itself, so it is rebuilt — but only on
+  // release of the slider, since building a 4-second buffer per input event
+  // would stutter the audio thread.
+  function rebuildRoom() {
+    if (!audio || !convolver) return;
+    try { convolver.buffer = buildImpulse(audio, 1.4 + params.size * 2.6, 2.2); } catch (_) { /* ignore */ }
+  }
+
+  function timbreOf() {
+    return {...TIMBRES.piano, ...(TIMBRES[params.timbre] || {})};
+  }
+
+  function frequencyOf(pitch) {
+    const shifted = pitch + params.transpose + bendSemitones + params.detune / 100;
+    return 440 * Math.pow(2, (shifted - 69) / 12);
+  }
+
+  /* A struck string modelled the same way midi-rhythm does — inharmonic
+     partials, per-partial decay, a hammer noise transient — but with the
+     envelope under the user's control, because this is an instrument rather
+     than a fixed drill voice. */
+  function startVoice(pitch, velocity) {
+    if (!ensureAudio()) return;
+    stopVoice(pitch, true);
+    const timbre = timbreOf();
+    const now = audio.currentTime;
+    const root = frequencyOf(pitch);
+    const level = Math.max(0.05, Math.min(1, (velocity || 100) / 127));
+    // Bass notes ring far longer than treble ones on a real instrument. A
+    // decay knob above its floor overrides the timbre's own figure.
+    const base = params.decay > 0.3 ? params.decay : timbre.decay;
+    const decay = Math.max(0.6, base * Math.pow(2, -(pitch - 36) / 26));
+    const attack = Math.max(0.001, params.attack);
+
+    const out = audio.createGain();
+    out.gain.value = timbre.gain * level;
+    out.connect(dryBus);
+    if (wetSend) out.connect(wetSend);
+
+    let lfo = null;
+    if (timbre.tremolo) {
+      lfo = audio.createOscillator();
+      const depth = audio.createGain();
+      lfo.frequency.value = timbre.tremolo.rate;
+      depth.gain.value = timbre.gain * level * timbre.tremolo.depth;
+      lfo.connect(depth).connect(out.gain);
+      lfo.start(now);
+    }
+
+    const partials = Array.from({length: Math.max(1, Math.round(timbre.partials))}, (_, i) => i + 1);
+    const parts = [];
+    for (const n of partials) {
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.type = 'sine';
+      // Stretched partial: f_n = n*f0*sqrt(1 + B*n^2)
+      osc.frequency.value = root * n * Math.sqrt(1 + timbre.inharmonic * n * n);
+      const peak = 0.5 / Math.pow(n, timbre.tilt);
+      const life = decay / Math.pow(n, 0.55);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(peak, now + attack);
+      // Sustain holds the note under the finger instead of letting it die, which
+      // is what turns the piano voice into a pad. At 0 it decays as a string does.
+      const floor = Math.max(0.0001, peak * params.sustain);
+      if (params.sustain > 0.01) {
+        gain.gain.exponentialRampToValueAtTime(floor, now + attack + life * 0.6);
+      } else {
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + attack + life);
+      }
+      osc.connect(gain).connect(out);
+      osc.start(now);
+      // A sustaining voice must not self-stop: it is stopped on note-off.
+      if (params.sustain <= 0.01) osc.stop(now + attack + life + 0.1);
+      parts.push({osc, gain});
+    }
+
+    if (timbre.hammer > 0.001) {
+      const noiseLength = Math.floor(audio.sampleRate * 0.03);
+      const buffer = audio.createBuffer(1, noiseLength, audio.sampleRate);
+      const channel = buffer.getChannelData(0);
+      for (let i = 0; i < noiseLength; i += 1) {
+        channel[i] = (Math.random() * 2 - 1) * (1 - i / noiseLength);
+      }
+      const noise = audio.createBufferSource();
+      noise.buffer = buffer;
+      const noiseFilter = audio.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.value = Math.min(18000, root * timbre.tone);
+      noiseFilter.Q.value = 0.8;
+      const noiseGain = audio.createGain();
+      noiseGain.gain.setValueAtTime(timbre.hammer * level, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+      noise.connect(noiseFilter).connect(noiseGain).connect(out);
+      noise.start(now);
+      noise.stop(now + 0.06);
+    }
+
+    voices.set(pitch, {parts, out, lfo});
+  }
+
+  function stopVoice(pitch, immediate) {
+    const voice = voices.get(pitch);
+    if (!voice || !audio) return;
+    voices.delete(pitch);
+    const now = audio.currentTime;
+    const release = immediate ? 0.01 : Math.max(0.02, params.release);
+    try {
+      voice.out.gain.cancelScheduledValues(now);
+      voice.out.gain.setValueAtTime(Math.max(voice.out.gain.value, 0.0001), now);
+      voice.out.gain.exponentialRampToValueAtTime(0.0001, now + release);
+    } catch (_) { /* context may be closing */ }
+    for (const part of voice.parts) {
+      try { part.osc.stop(now + release + 0.02); } catch (_) { /* already stopped */ }
+    }
+    if (voice.lfo) {
+      try { voice.lfo.stop(now + release + 0.02); } catch (_) { /* already stopped */ }
+    }
+  }
+
+  function silenceAll() {
+    for (const pitch of [...voices.keys()]) stopVoice(pitch, true);
+    held.clear();
+    arpHeld.length = 0;
+    renderKeyState();
+  }
+
+  /* ------------------------------------------------------------ percussion */
+  function hitPad(index, velocity) {
+    if (!ensureAudio()) return;
+    const sound = padSounds[index] || PADS[index] || 'kick';
+    const now = audio.currentTime;
+    const level = Math.max(0.05, Math.min(1, (velocity || 110) / 127)) * params.padVolume;
+    const out = audio.createGain();
+    out.gain.value = level;
+    out.connect(dryBus);
+    if (wetSend) out.connect(wetSend);
+
+    const noiseBurst = (seconds, type, frequency, q, peak) => {
+      const length = Math.max(1, Math.floor(audio.sampleRate * seconds));
+      const buffer = audio.createBuffer(1, length, audio.sampleRate);
+      const channel = buffer.getChannelData(0);
+      for (let i = 0; i < length; i += 1) channel[i] = Math.random() * 2 - 1;
+      const source = audio.createBufferSource();
+      source.buffer = buffer;
+      const filter = audio.createBiquadFilter();
+      filter.type = type;
+      filter.frequency.value = frequency;
+      filter.Q.value = q;
+      const gain = audio.createGain();
+      gain.gain.setValueAtTime(peak, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
+      source.connect(filter).connect(gain).connect(out);
+      source.start(now);
+      source.stop(now + seconds + 0.02);
+    };
+    const sweep = (from, to, seconds, peak) => {
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(from, now);
+      osc.frequency.exponentialRampToValueAtTime(to, now + seconds);
+      gain.gain.setValueAtTime(peak, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
+      osc.connect(gain).connect(out);
+      osc.start(now);
+      osc.stop(now + seconds + 0.02);
+    };
+
+    if (sound === 'kick') sweep(150, 45, 0.42, 0.9);
+    else if (sound === 'tom') sweep(240, 90, 0.34, 0.7);
+    else if (sound === 'snare') { sweep(220, 150, 0.11, 0.35); noiseBurst(0.19, 'highpass', 1400, 0.6, 0.6); }
+    else if (sound === 'rim') noiseBurst(0.05, 'bandpass', 2200, 3, 0.7);
+    else if (sound === 'hihat') noiseBurst(0.055, 'highpass', 7000, 0.9, 0.4);
+    else if (sound === 'open') noiseBurst(0.34, 'highpass', 6500, 0.9, 0.35);
+    else if (sound === 'clap') {
+      // Three staggered bursts: a clap is several hands, not one.
+      [0, 0.012, 0.026].forEach(offset => {
+        const length = Math.max(1, Math.floor(audio.sampleRate * 0.13));
+        const buffer = audio.createBuffer(1, length, audio.sampleRate);
+        const channel = buffer.getChannelData(0);
+        for (let i = 0; i < length; i += 1) channel[i] = (Math.random() * 2 - 1) * (1 - i / length);
+        const source = audio.createBufferSource();
+        source.buffer = buffer;
+        const filter = audio.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 1200;
+        filter.Q.value = 1.1;
+        const gain = audio.createGain();
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.5, now + offset + 0.002);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.13);
+        source.connect(filter).connect(gain).connect(out);
+        source.start(now + offset);
+        source.stop(now + offset + 0.15);
+      });
+    } else if (sound === 'cowbell') {
+      // Two detuned squares is the classic cowbell recipe.
+      [540, 800].forEach(frequency => {
+        const osc = audio.createOscillator();
+        const gain = audio.createGain();
+        osc.type = 'square';
+        osc.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+        osc.connect(gain).connect(out);
+        osc.start(now);
+        osc.stop(now + 0.3);
+      });
+    }
+    flashPad(index);
+  }
+
+  /* ---------------------------------------------------------- keyboard UI
+     Real buttons, not canvas: the instrument has to be playable and reachable
+     without a MIDI device, and a canvas keyboard is neither. */
+  const LOW = 48, HIGH = 84;                       // C3..C6, the MPK's range plus room
+  const BLACK = new Set([1, 3, 6, 8, 10]);
+  const NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const held = new Set();
+  const keyButtons = new Map();
+
+  function noteLabel(pitch) {
+    return `${NAMES[((pitch % 12) + 12) % 12]}${Math.floor(pitch / 12) - 1}`;
+  }
+
+  function buildKeys() {
+    const host = $('keys');
+    host.replaceChildren();
+    host.setAttribute('aria-label', pt ? 'Teclado' : 'Keyboard');
+    const whites = [];
+    for (let pitch = LOW; pitch <= HIGH; pitch += 1) {
+      if (!BLACK.has(((pitch % 12) + 12) % 12)) whites.push(pitch);
+    }
+    const width = 100 / whites.length;
+    let whiteIndex = 0;
+    for (let pitch = LOW; pitch <= HIGH; pitch += 1) {
+      const isBlack = BLACK.has(((pitch % 12) + 12) % 12);
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = isBlack ? 'key black' : 'key';
+      button.dataset.pitch = String(pitch);
+      button.setAttribute('aria-label', noteLabel(pitch));
+      if (isBlack) {
+        button.style.left = `${whiteIndex * width - width * 0.3}%`;
+        button.style.width = `${width * 0.6}%`;
+      } else {
+        button.style.left = `${whiteIndex * width}%`;
+        button.style.width = `${width}%`;
+        button.style.height = '100%';
+        if (pitch % 12 === 0) {
+          const name = document.createElement('span');
+          name.className = 'keyName';
+          name.textContent = noteLabel(pitch);
+          button.append(name);
+        }
+        whiteIndex += 1;
+      }
+      keyButtons.set(pitch, button);
+      host.append(button);
+    }
+  }
+
+  function renderKeyState() {
+    for (const [pitch, button] of keyButtons) {
+      button.classList.toggle('on', held.has(pitch));
+    }
+  }
+
+  function buildPads() {
+    const host = $('pads');
+    host.replaceChildren();
+    host.setAttribute('aria-label', 'Pads');
+    for (let index = 0; index < PAD_COUNT; index += 1) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pad';
+      button.dataset.pad = String(index);
+      const num = document.createElement('span');
+      num.className = 'padNum';
+      num.textContent = String(index + 1);
+      const name = document.createElement('span');
+      name.className = 'padName';
+      name.textContent = SOUNDS[padSounds[index]].label;
+      button.append(num, name);
+      button.setAttribute('aria-label', `Pad ${index + 1}: ${SOUNDS[padSounds[index]].label}`);
+      host.append(button);
+    }
+  }
+
+  function flashPad(index) {
+    const button = $('pads').querySelector(`[data-pad="${index}"]`);
+    if (!button) return;
+    button.classList.add('on');
+    setTimeout(() => button.classList.remove('on'), 110);
+  }
+
+  /* ------------------------------------------------------------- console UI */
+  function buildConsole() {
+    const host = $('console');
+    host.replaceChildren();
+    const groups = new Map();
+    for (const spec of PARAMS) {
+      if (!groups.has(spec.group)) groups.set(spec.group, []);
+      groups.get(spec.group).push(spec);
+    }
+    for (const [group, specs] of groups) {
+      const box = document.createElement('div');
+      box.className = 'group';
+      const heading = document.createElement('h2');
+      heading.textContent = GROUP_LABELS[group] || group;
+      box.append(heading);
+      for (const spec of specs) {
+        const row = document.createElement('div');
+        row.className = 'ctl';
+        row.dataset.param = spec.key;
+        const label = document.createElement('label');
+        label.setAttribute('for', `p-${spec.key}`);
+        label.textContent = spec.label;
+        row.append(label);
+
+        if (spec.kind === 'select') {
+          const select = document.createElement('select');
+          select.className = 'ui-select';
+          select.id = `p-${spec.key}`;
+          for (const [value, text] of Object.entries(spec.options)) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = text;
+            select.append(option);
+          }
+          select.value = params[spec.key];
+          select.addEventListener('change', () => {
+            params[spec.key] = select.value;
+            // A new timbre must not leave the old one ringing underneath.
+            if (spec.key === 'timbre') silenceAll();
+          });
+          row.append(select);
+        } else {
+          const value = document.createElement('span');
+          value.className = 'val';
+          value.id = `v-${spec.key}`;
+          value.textContent = spec.format ? spec.format(params[spec.key]) : params[spec.key];
+          const range = document.createElement('input');
+          range.type = 'range';
+          range.id = `p-${spec.key}`;
+          range.min = String(spec.min);
+          range.max = String(spec.max);
+          range.step = String(spec.step);
+          range.value = String(params[spec.key]);
+          range.setAttribute('aria-describedby', `v-${spec.key}`);
+          range.addEventListener('input', () => {
+            setParam(spec.key, Number(range.value), false);
+          });
+          if (spec.key === 'size') range.addEventListener('change', rebuildRoom);
+          row.append(value, range);
+        }
+        // Clicking a control's label while learn is armed picks the target, so
+        // a knob can be aimed at a specific parameter rather than the last one.
+        label.addEventListener('click', () => {
+          if (!learnArmed) return;
+          learnTarget = spec.kind === 'range' ? spec.key : null;
+          refreshLearnMarks();
+        });
+        box.append(row);
+      }
+      host.append(box);
+    }
+    refreshCcMarks();
+  }
+
+  function setParam(key, value, syncInput) {
+    const spec = PARAMS.find(entry => entry.key === key);
+    if (!spec) return;
+    const clamped = Math.min(spec.max, Math.max(spec.min, value));
+    params[key] = clamped;
+    const readout = $(`v-${key}`);
+    if (readout) readout.textContent = spec.format ? spec.format(clamped) : clamped;
+    if (syncInput) {
+      const input = $(`p-${key}`);
+      if (input) input.value = String(clamped);
+    }
+    applyAudioParams();
+  }
+
+  /* --------------------------------------------------------- CC mapping
+     "Learn" is the standard hardware idiom: arm it, turn a physical knob, and
+     the knob that moved is bound to the chosen parameter. Bindings live in the
+     preset, so a saved sound carries its own control surface. */
+  const ccMap = {};                                 // ccNumber -> param key
+  let learnArmed = false;
+  let learnTarget = null;
+
+  function refreshCcMarks() {
+    for (const row of document.querySelectorAll('.ctl')) {
+      const key = row.dataset.param;
+      row.classList.toggle('bound', Object.values(ccMap).includes(key));
+    }
+  }
+  function refreshLearnMarks() {
+    for (const row of document.querySelectorAll('.ctl')) {
+      row.classList.toggle('learning', learnArmed && row.dataset.param === learnTarget);
+    }
+  }
+
+  function handleControlChange(cc, value) {
+    if (learnArmed) {
+      const target = learnTarget || firstUnboundRange();
+      if (target) {
+        // One CC drives one parameter: rebinding a knob releases its old target.
+        for (const [existing, key] of Object.entries(ccMap)) {
+          if (key === target) delete ccMap[existing];
+        }
+        ccMap[cc] = target;
+        learnArmed = false;
+        learnTarget = null;
+        $('learn').setAttribute('aria-pressed', 'false');
+        $('learn').textContent = ui.learn;
+        refreshCcMarks();
+        refreshLearnMarks();
+        const spec = PARAMS.find(entry => entry.key === target);
+        setStatus(ui.learnBound(cc, spec ? spec.label : target));
+      }
+      return;
+    }
+    const key = ccMap[cc];
+    if (!key) return;
+    const spec = PARAMS.find(entry => entry.key === key);
+    if (!spec) return;
+    // MIDI CC is 0..127; map it across the parameter's own range.
+    setParam(key, spec.min + (value / 127) * (spec.max - spec.min), true);
+  }
+
+  function firstUnboundRange() {
+    const bound = new Set(Object.values(ccMap));
+    const spec = PARAMS.find(entry => entry.kind === 'range' && !bound.has(entry.key));
+    return spec ? spec.key : null;
+  }
+
+  /* ------------------------------------------------------------- recording
+     Note on/off with timestamps, plus pad hits. Times are seconds from the
+     first event so a take is tempo-independent and replayable. */
+  let recording = false;
+  let recStart = 0;
+  let take = [];
+  let playing = false;
+  const playTimers = [];
+
+  function nowSeconds() {
+    return (audio ? audio.currentTime : performance.now() / 1000);
+  }
+
+  function recordEvent(event) {
+    if (!recording) return;
+    if (!take.length) recStart = nowSeconds();
+    take.push({...event, t: Math.max(0, nowSeconds() - recStart)});
+  }
+
+  function startRecording() {
+    take = [];
+    recording = true;
+    recStart = nowSeconds();
+    $('record').textContent = ui.stopRec;
+    $('record').classList.add('recording');
+    $('record').setAttribute('aria-pressed', 'true');
+    setStatus(ui.recStarted);
+  }
+
+  function stopRecording() {
+    recording = false;
+    $('record').textContent = ui.record;
+    $('record').classList.remove('recording');
+    $('record').setAttribute('aria-pressed', 'false');
+    const notes = take.filter(event => event.type === 'on').length;
+    $('play').disabled = !take.length;
+    $('saveTake').classList.toggle('hidden', !take.length);
+    setStatus(notes ? ui.recStopped(notes) : ui.emptyTake);
+  }
+
+  function stopPlayback() {
+    playing = false;
+    while (playTimers.length) clearTimeout(playTimers.pop());
+    silenceAll();
+    $('play').textContent = ui.play;
+    $('play').setAttribute('aria-pressed', 'false');
+  }
+
+  function playTake() {
+    if (!take.length) return;
+    ensureAudio();
+    playing = true;
+    $('play').textContent = ui.stopPlay;
+    $('play').setAttribute('aria-pressed', 'true');
+    setStatus(ui.playing);
+    const span = take.length ? take[take.length - 1].t + 1 : 0;
+    for (const event of take) {
+      playTimers.push(setTimeout(() => {
+        if (!playing) return;
+        if (event.type === 'on') { held.add(event.pitch); startVoice(event.pitch, event.velocity); renderKeyState(); }
+        else if (event.type === 'off') { held.delete(event.pitch); stopVoice(event.pitch); renderKeyState(); }
+        else if (event.type === 'pad') hitPad(event.pad, event.velocity);
+      }, event.t * 1000));
+    }
+    playTimers.push(setTimeout(() => {
+      if (!playing) return;
+      if (loopOn) playTake();          // a loop restarts itself
+      else stopPlayback();
+    }, span * 1000));
+  }
+
+  /* ------------------------------------------- metronome, arpeggiator, loop */
+  let metronomeOn = false, arpOn = false, loopOn = false;
+  let clockTimer = null;
+  let clockStep = 0;
+  const arpHeld = [];
+  let arpIndex = 0;
+
+  function beatSeconds() { return 60 / params.tempo; }
+
+  function clockTick() {
+    if (!metronomeOn && !arpOn) return;
+    const step = clockStep;
+    const subdivision = Math.max(1, Math.round(params.arpRate));
+    // Swing delays every second subdivision, which is what makes it swing
+    // rather than just run slower.
+    const swingDelay = (step % 2 === 1) ? params.swing * (beatSeconds() / subdivision) : 0;
+
+    if (metronomeOn && step % subdivision === 0) {
+      const beat = Math.floor(step / subdivision);
+      clickAt(beat % 4 === 0);
+    }
+    if (arpOn && arpHeld.length) {
+      const order = arpOrder();
+      const pitch = order[arpIndex % order.length];
+      arpIndex += 1;
+      // The arpeggiator plays short notes regardless of the release knob, or
+      // successive steps would smear into a chord.
+      startVoice(pitch, 96);
+      recordEvent({type: 'on', pitch, velocity: 96});
+      setTimeout(() => {
+        stopVoice(pitch);
+        recordEvent({type: 'off', pitch});
+      }, Math.max(60, (beatSeconds() / subdivision) * 1000 * 0.8));
+    }
+    clockStep += 1;
+    clockTimer = setTimeout(clockTick, (beatSeconds() / subdivision + swingDelay) * 1000);
+  }
+
+  function arpOrder() {
+    const sorted = [...arpHeld].sort((a, b) => a - b);
+    const pattern = params.arpPattern;
+    if (pattern === 'down') return sorted.reverse();
+    if (pattern === 'updown') return sorted.concat(sorted.slice(1, -1).reverse());
+    if (pattern === 'random') return sorted.map((_, i, list) => list[Math.floor(Math.random() * list.length)]);
+    return sorted;
+  }
+
+  function clickAt(accent) {
+    if (!ensureAudio()) return;
+    const now = audio.currentTime;
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
+    osc.type = 'square';
+    osc.frequency.value = accent ? 1600 : 1100;
+    gain.gain.setValueAtTime(accent ? 0.16 : 0.09, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+    // The click bypasses the reverb and the tone filter: it is a reference,
+    // not part of the instrument's sound.
+    osc.connect(gain).connect(masterGain || audio.destination);
+    osc.start(now);
+    osc.stop(now + 0.06);
+  }
+
+  function startClock() {
+    if (clockTimer) return;
+    clockStep = 0;
+    ensureAudio();
+    clockTick();
+  }
+  function stopClockIfIdle() {
+    if (metronomeOn || arpOn) return;
+    if (clockTimer) clearTimeout(clockTimer);
+    clockTimer = null;
+  }
+
+  /* -------------------------------------------------------- note dispatch */
+  function noteOn(pitch, velocity) {
+    if (arpOn) {
+      // Under the arpeggiator a held key feeds the pattern instead of sounding
+      // directly, which is what an arpeggiator is.
+      if (!arpHeld.includes(pitch)) arpHeld.push(pitch);
+      held.add(pitch);
+      renderKeyState();
+      return;
+    }
+    held.add(pitch);
+    startVoice(pitch, velocity);
+    recordEvent({type: 'on', pitch, velocity: velocity || 100});
+    renderKeyState();
+  }
+
+  function noteOff(pitch) {
+    held.delete(pitch);
+    const index = arpHeld.indexOf(pitch);
+    if (index >= 0) arpHeld.splice(index, 1);
+    if (!arpOn) {
+      stopVoice(pitch);
+      recordEvent({type: 'off', pitch});
+    }
+    renderKeyState();
+  }
+
+  function padHit(index, velocity) {
+    hitPad(index, velocity);
+    recordEvent({type: 'pad', pad: index, velocity: velocity || 110});
+  }
+
+  /* ------------------------------------------------------------ MIDI input */
+  let access = null;
+  let boundInput = null;
+
+  function handleMessage(event) {
+    const [statusByte, first, second] = event.data;
+    const command = statusByte & 0xf0;
+    if (command === 0x90 && second > 0) {
+      if (first >= PAD_BASE && first < PAD_BASE + PAD_COUNT) padHit(first - PAD_BASE, second);
+      else noteOn(first, second);
+    } else if (command === 0x80 || (command === 0x90 && second === 0)) {
+      if (!(first >= PAD_BASE && first < PAD_BASE + PAD_COUNT)) noteOff(first);
+    } else if (command === 0xb0) {
+      handleControlChange(first, second);
+    } else if (command === 0xe0) {
+      // Pitch bend is 14-bit, centred at 8192.
+      const value = ((second << 7) | first) - 8192;
+      bendSemitones = (value / 8192) * params.bendRange;
+      for (const [pitch, voice] of voices) {
+        const root = frequencyOf(pitch);
+        const timbre = timbreOf();
+        voice.parts.forEach((part, i) => {
+          const n = i + 1;
+          try {
+            part.osc.frequency.setTargetAtTime(
+              root * n * Math.sqrt(1 + timbre.inharmonic * n * n), audio.currentTime, 0.01);
+          } catch (_) { /* stopped */ }
+        });
+      }
+    }
+  }
+
+  function bindInput(id) {
+    if (boundInput) boundInput.onmidimessage = null;
+    boundInput = null;
+    if (!access) return;
+    for (const input of access.inputs.values()) {
+      if (!id || input.id === id) { boundInput = input; break; }
+    }
+    if (boundInput) {
+      boundInput.onmidimessage = handleMessage;
+      $('deviceBadge').textContent = ui.connected;
+    } else {
+      $('deviceBadge').textContent = ui.noDevice;
+    }
+  }
+
+  function refreshDevices() {
+    const select = $('device');
+    const previous = select.value;
+    select.replaceChildren();
+    const inputs = access ? [...access.inputs.values()] : [];
+    if (!inputs.length) {
+      const option = document.createElement('option');
+      option.textContent = ui.noDevice;
+      option.value = '';
+      select.append(option);
+      $('deviceBadge').textContent = ui.waiting;
+      boundInput = null;
+      return;
+    }
+    for (const input of inputs) {
+      const option = document.createElement('option');
+      option.value = input.id;
+      option.textContent = input.name || input.id;
+      select.append(option);
+    }
+    const keep = inputs.some(input => input.id === previous) ? previous : inputs[0].id;
+    select.value = keep;
+    bindInput(keep);
+  }
+
+  function showMidiNotice(message) {
+    const notice = $('midiNotice');
+    notice.replaceChildren();
+    const text = document.createElement('span');
+    text.textContent = `${message} `;
+    notice.append(text);
+    if (data.self_url) {
+      const code = document.createElement('code');
+      code.textContent = data.self_url;
+      notice.append(code);
+    }
+    notice.classList.remove('hidden');
+    $('deviceBadge').textContent = ui.noDevice;
+  }
+
+  async function initMidi() {
+    if (!navigator.requestMIDIAccess) {
+      // The API is absent entirely: the frame's permissions policy stripped it,
+      // which is a different failure from the permission denial below.
+      console.error('[etude/catalog] navigator.requestMIDIAccess is undefined — frame policy blocked the feature');
+      showMidiNotice(`${ui.midiBlocked}. ${ui.midiBlockedBody}`);
+      return;
+    }
+    try {
+      access = await navigator.requestMIDIAccess({sysex: false});
+    } catch (error) {
+      console.error('[etude/catalog] requestMIDIAccess rejected:',
+        error && error.name, error && error.message);
+      showMidiNotice(`${ui.midiBlocked}. ${ui.midiBlockedBody}`);
+      return;
+    }
+    access.onstatechange = refreshDevices;
+    refreshDevices();
+  }
+
+  /* -------------------------------------------------------------- saving
+     Free play is not an attempt, so nothing here posts to /api/attempts. New
+     material goes to the inbox and the agent files it as an atom. */
+  let pendingKind = 'preset';
+
+  function currentPreset() {
+    const preset = {};
+    for (const spec of PARAMS) preset[spec.key] = params[spec.key];
+    preset.cc = {...ccMap};
+    preset.pads = [...padSounds];
+    return preset;
+  }
+
+  function setStatus(text) { $('status').textContent = text || ''; }
+
+  async function save(name) {
+    const payload = {
+      kind: pendingKind,
+      name,
+      preset: currentPreset(),
+      created_with: 'catalog',
+    };
+    if (pendingKind === 'recording') {
+      payload.events = take;
+      payload.duration = take.length ? take[take.length - 1].t : 0;
+      payload.note_count = take.filter(event => event.type === 'on').length;
+    }
+    // The inbox requires an atom that already exists, and new material has none
+    // yet. Saves therefore attach to the queue's anchor atom (its mailbox); the
+    // agent reads the payload and files it as a fresh atom. `source_atom` keeps
+    // the provenance when the instrument was opened on saved material, so a
+    // revision can be told from something new.
+    const target = data.anchor || (atom && atom.id) || '';
+    if (!data.api || !target) { setStatus(ui.saveFailed); return; }
+    const body = {
+      atom_id: target,
+      payload: {
+        template: 'catalog',
+        queue: data.queue || '',
+        source_atom: (atom && atom.id) || null,
+        ...payload,
+      },
+      // The server rejects an invented timestamp, so this is the client clock in
+      // the offset-aware form the API requires.
+      ts: new Date().toISOString().replace('Z', '+00:00'),
+    };
+    try {
+      const response = await fetch(`${String(data.api).replace(/\/$/, '')}/api/inbox`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      setStatus(ui.saved(name));
+      if (window.etudeWidget && typeof window.etudeWidget.signal === 'function') {
+        try { window.etudeWidget.signal({kind: 'catalog-save', name}); } catch (_) { /* optional */ }
+      }
+    } catch (error) {
+      console.error('[etude/catalog] save failed:', error);
+      setStatus(ui.saveFailed);
+    }
+  }
+
+  /* ------------------------------------------------------------------ wiring */
+  function labelButtons() {
+    $('kindLabel').textContent = ui.kind;
+    $('deviceLabel').textContent = ui.device;
+    $('panic').textContent = ui.panic;
+    $('record').textContent = ui.record;
+    $('play').textContent = ui.play;
+    $('metronome').textContent = ui.metronome;
+    $('arp').textContent = ui.arp;
+    $('loop').textContent = ui.loop;
+    $('learn').textContent = ui.learn;
+    $('savePreset').textContent = ui.savePreset;
+    $('saveTake').textContent = ui.saveTake;
+    $('saveConfirm').textContent = ui.saveConfirm;
+    $('saveCancel').textContent = ui.saveCancel;
+    $('libraryTitle').textContent = ui.library;
+  }
+
+  function toggle(button, on, label) {
+    button.setAttribute('aria-pressed', on ? 'true' : 'false');
+    button.classList.toggle('ui-button-secondary', on);
+    button.classList.toggle('ui-button-outline', !on);
+    if (label) button.textContent = label;
+  }
+
+  function bindUi() {
+    $('device').addEventListener('change', event => bindInput(event.target.value));
+    $('panic').addEventListener('click', silenceAll);
+
+    // Pointer play on the drawn keyboard. Pointer capture keeps a glissando
+    // working when the finger leaves the key it started on.
+    const keys = $('keys');
+    let pointerDown = false;
+    const pitchAt = target => {
+      const key = target && target.closest ? target.closest('.key') : null;
+      return key ? Number(key.dataset.pitch) : null;
+    };
+    keys.addEventListener('pointerdown', event => {
+      const pitch = pitchAt(event.target);
+      if (pitch === null) return;
+      pointerDown = true;
+      noteOn(pitch, 100);
+      event.preventDefault();
+    });
+    keys.addEventListener('pointerup', event => {
+      const pitch = pitchAt(event.target);
+      pointerDown = false;
+      if (pitch !== null) noteOff(pitch);
+      else silenceAll();
+    });
+    keys.addEventListener('pointerleave', () => { if (pointerDown) { pointerDown = false; silenceAll(); } });
+    keys.addEventListener('pointerover', event => {
+      if (!pointerDown) return;
+      const pitch = pitchAt(event.target);
+      if (pitch !== null) noteOn(pitch, 100);
+    });
+    keys.addEventListener('pointerout', event => {
+      if (!pointerDown) return;
+      const pitch = pitchAt(event.target);
+      if (pitch !== null) noteOff(pitch);
+    });
+    // Keyboard access: space/enter on a focused key sounds it.
+    keys.addEventListener('keydown', event => {
+      if (event.key !== ' ' && event.key !== 'Enter') return;
+      const pitch = pitchAt(event.target);
+      if (pitch === null || event.repeat) return;
+      event.preventDefault();
+      noteOn(pitch, 100);
+    });
+    keys.addEventListener('keyup', event => {
+      if (event.key !== ' ' && event.key !== 'Enter') return;
+      const pitch = pitchAt(event.target);
+      if (pitch !== null) noteOff(pitch);
+    });
+
+    const pads = $('pads');
+    pads.addEventListener('pointerdown', event => {
+      const pad = event.target.closest('.pad');
+      if (!pad) return;
+      padHit(Number(pad.dataset.pad), 110);
+      event.preventDefault();
+    });
+    pads.addEventListener('keydown', event => {
+      if (event.key !== ' ' && event.key !== 'Enter') return;
+      const pad = event.target.closest('.pad');
+      if (!pad || event.repeat) return;
+      event.preventDefault();
+      padHit(Number(pad.dataset.pad), 110);
+    });
+
+    $('record').addEventListener('click', () => {
+      if (recording) stopRecording();
+      else { ensureAudio(); startRecording(); }
+    });
+    $('play').addEventListener('click', () => {
+      if (playing) stopPlayback();
+      else playTake();
+    });
+    $('metronome').addEventListener('click', () => {
+      metronomeOn = !metronomeOn;
+      toggle($('metronome'), metronomeOn);
+      if (metronomeOn) startClock(); else stopClockIfIdle();
+    });
+    $('arp').addEventListener('click', () => {
+      arpOn = !arpOn;
+      toggle($('arp'), arpOn);
+      if (arpOn) { startClock(); }
+      else { arpHeld.length = 0; silenceAll(); stopClockIfIdle(); }
+    });
+    $('loop').addEventListener('click', () => {
+      loopOn = !loopOn;
+      toggle($('loop'), loopOn);
+    });
+    $('learn').addEventListener('click', () => {
+      learnArmed = !learnArmed;
+      learnTarget = null;
+      toggle($('learn'), learnArmed, learnArmed ? ui.learning : ui.learn);
+      refreshLearnMarks();
+      if (learnArmed) setStatus(ui.learnArmed);
+    });
+
+    $('savePreset').addEventListener('click', () => openSave('preset'));
+    $('saveTake').addEventListener('click', () => openSave('recording'));
+    $('saveCancel').addEventListener('click', () => $('saveForm').classList.add('hidden'));
+    $('saveForm').addEventListener('submit', event => {
+      event.preventDefault();
+      const name = $('saveName').value.trim();
+      if (!name) { setStatus(ui.nameRequired); return; }
+      $('saveForm').classList.add('hidden');
+      save(name);
+    });
+  }
+
+  function openSave(kind) {
+    pendingKind = kind;
+    $('saveHint').textContent = kind === 'preset' ? ui.presetHint : ui.takeHint;
+    $('saveForm').classList.remove('hidden');
+    $('saveName').value = '';
+    $('saveName').focus();
+  }
+
+  function buildLibrary() {
+    const items = Array.isArray(data.library) ? data.library : [];
+    if (!items.length) return;
+    const list = $('libraryList');
+    list.replaceChildren();
+    for (const item of items) {
+      const li = document.createElement('li');
+      const link = document.createElement('a');
+      link.className = 'ui-button ui-button-outline';
+      const suffix = data.queue ? `&queue=${encodeURIComponent(data.queue)}` : '';
+      link.href = `/widgets/catalog?atom=${encodeURIComponent(item.id)}${suffix}`;
+      link.textContent = `${item.kind === 'recording' ? '● ' : ''}${item.name}`;
+      li.append(link);
+      list.append(li);
+    }
+    $('library').classList.remove('hidden');
+  }
+
+  /* ------------------------------------------------------------------ boot */
+  function boot() {
+    labelButtons();
+    if (atom) {
+      $('topic').textContent = atom.topic || atom.user_prompt || 'Catalog';
+      applyPreset(loaded.preset || loaded);
+      if (loaded.kind === 'recording' && Array.isArray(loaded.events)) {
+        take = loaded.events.filter(event => event && typeof event.t === 'number');
+        $('play').disabled = !take.length;
+        $('saveTake').classList.toggle('hidden', !take.length);
+      }
+    }
+    buildKeys();
+    buildPads();
+    buildConsole();
+    buildLibrary();
+    bindUi();
+    $('subtitle').textContent = ui.blank;
+    if (atom && loaded.kind === 'recording') setStatus(ui.loadedTake(atom.topic || atom.user_prompt || ''));
+    else if (atom) setStatus(ui.loadedPreset(atom.topic || atom.user_prompt || ''));
+    else setStatus(ui.mouseHint);
+    initMidi();
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

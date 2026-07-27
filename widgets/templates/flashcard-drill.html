@@ -82,13 +82,15 @@ button:focus-visible, input:focus-visible {
 }
 .card {
   position: relative;
-  overflow: hidden;
-  padding: clamp(24px, 5vw, 40px);
-  background: var(--surface-1);
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-card);
 }
-.card::before {
+.answer-card {
+  position: relative;
+  overflow: hidden;
+  width: min(650px, 100%);
+  margin: clamp(30px, 6vw, 46px) auto 0;
+  padding: clamp(22px, 4vw, 32px);
+}
+.answer-card::before {
   content: "";
   position: absolute;
   inset: 0 0 auto;
@@ -131,6 +133,8 @@ button:focus-visible, input:focus-visible {
   overflow-wrap: anywhere;
 }
 .prompt strong { font-weight: 500; }
+.prompt p { margin: 0 0 0.6em; }
+.prompt p:last-child { margin-bottom: 0; }
 .prompt code, .answer code {
   display: inline;
   padding: .06em .24em;
@@ -149,7 +153,7 @@ button:focus-visible, input:focus-visible {
   display: grid;
   gap: 12px;
   width: min(610px, 100%);
-  margin: clamp(30px, 6vw, 46px) auto 0;
+  margin: 0 auto;
 }
 .answer-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
 input {
@@ -271,10 +275,10 @@ kbd {
   body { padding: 12px; }
   .session-bar { gap: 10px; }
   .brand { display: none; }
-  .card { padding: 24px 18px; border-radius: var(--radius-card); }
+  .answer-card { padding: 20px 16px; border-radius: var(--radius-card); }
   .question-head { margin-bottom: 26px; }
   .prompt { font-size: clamp(23px, 7vw, 30px); }
-  .controls { margin-top: 30px; }
+  .controls { margin-top: 0; }
   .answer-row { grid-template-columns: 1fr; }
   .binary-grid { grid-template-columns: 1fr; }
 }
@@ -292,10 +296,10 @@ kbd {
     <div class="counter" id="counter"></div>
   </header>
   <div class="track" aria-hidden="true"><div class="fill" id="fill"></div></div>
-  <section class="card ui-card" id="card" aria-live="polite">
+  <section class="card" id="card" aria-live="polite">
     <div class="question-head"><div class="topic" id="topic"></div></div>
     <div class="prompt" id="prompt"></div>
-    <div class="controls" id="controls"></div>
+    <div class="answer-card ui-card" id="answerCard"><div class="controls" id="controls"></div></div>
   </section>
   <p class="hint" id="hint"></p>
 </main>
@@ -397,13 +401,20 @@ const ETUDE = /*__DATA__*/null;
     if (rating != null) body.rating = rating;
     return body;
   }
+  function restoreQuestionStructure() {
+    if ($('topic') && $('prompt') && $('controls')) return;
+    $('card').innerHTML = '<div class="question-head"><div class="topic" id="topic"></div></div>'
+      + '<div class="prompt" id="prompt"></div>'
+      + '<div class="answer-card ui-card" id="answerCard"><div class="controls" id="controls"></div></div>';
+  }
   function render() {
     busy = false; selfMode = false; updateProgress();
     if (index >= deck.length) { renderEnd(); return; }
     const atom = deck[index];
     $('card').className = 'card';
+    restoreQuestionStructure();
     $('topic').textContent = atom.topic || 'Practice item';
-    $('prompt').innerHTML = lightMarkdown(stripDuplicateHeading(atom.user_prompt || '', atom.topic || ''));
+    window.ETUDE_MD_INTO($('prompt'), stripDuplicateHeading(atom.user_prompt || '', atom.topic || ''));
     $('controls').replaceChildren(); $('hint').textContent = '';
     const answers = accepted(atom);
     if (hasTag(atom, 'true-false')) renderBinary(atom, answers);
@@ -488,9 +499,10 @@ const ETUDE = /*__DATA__*/null;
   }
   function advance() { index += 1; render(); }
   async function renderEnd() {
-    $('fill').style.width = '100%'; $('counter').textContent = `${deck.length} / ${deck.length}`; $('topic').textContent = '';
+    $('fill').style.width = '100%'; $('counter').textContent = `${deck.length} / ${deck.length}`;
+    if ($('topic')) $('topic').textContent = '';
     await retryUnsent();
-    $('card').className = 'card end';
+    $('card').className = 'card end ui-card';
     const uniqueWrong = [...new Map(wrongCards.map(atom => [atom.id, atom])).values()];
     const atom = original[0] || {};
     const ui = uiFor(atom, accepted(atom));

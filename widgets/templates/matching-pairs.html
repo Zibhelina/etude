@@ -19,7 +19,8 @@ header { display: flex; justify-content: space-between; align-items: end; gap: 2
 h1 { margin: 8px 0 0; font-size: clamp(25px, 5vw, 38px); font-weight: 500; letter-spacing: -.025em; }
 .meta { color: var(--text-secondary); font: 500 13px/1.4 var(--mono); text-align: right; }
 .board { padding: clamp(18px, 4vw, 32px); background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card); }
-.instructions { margin: 0 0 22px; color: var(--text-secondary); line-height: 1.5; }
+.instructions { margin: 0 0 18px; color: var(--text-secondary); line-height: 1.55; }
+.instructions p { margin: 0; }
 .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px clamp(18px, 5vw, 46px); }
 .column { display: grid; align-content: start; gap: 10px; }
 .pair {
@@ -50,11 +51,11 @@ h1 { margin: 8px 0 0; font-size: clamp(25px, 5vw, 38px); font-weight: 500; lette
 <body data-fit-content>
 <main class="shell">
   <header><div><div class="eyebrow" id="eyebrow">Etude · Match</div><h1 id="title">Connect the pairs</h1></div><div class="meta" id="meta"></div></header>
+  <p class="instructions" id="instructions">Choose one item from each column. Matched pairs lock in place.</p>
   <section class="board ui-card" id="board">
-    <p class="instructions" id="instructions">Choose one item from each column. Matched pairs lock in place.</p>
     <div class="columns"><div class="column" id="leftColumn" aria-label="Left choices"></div><div class="column" id="rightColumn" aria-label="Right choices"></div></div>
-    <div class="footer"><div class="status" id="status" aria-live="polite"></div><button class="submit" id="submit" type="button">Submit</button></div>
   </section>
+  <div class="footer" id="footer"><div class="status" id="status" aria-live="polite"></div><button class="submit" id="submit" type="button">Submit</button></div>
   <section class="confirmation hidden" id="confirmation" aria-live="polite"></section>
 </main>
 <script>
@@ -162,7 +163,8 @@ const ETUDE = /*__DATA__*/null;
     try {
       const response = await fetch(`${String(data.api || '').replace(/\/$/, '')}/api/inbox`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      $('board').classList.add('hidden'); $('confirmation').classList.remove('hidden');
+      $('board').classList.add('hidden'); $('instructions').classList.add('hidden'); $('footer').classList.add('hidden');
+      $('confirmation').classList.remove('hidden');
       $('confirmation').innerHTML = `<div><div class="check" aria-hidden="true">✓</div><h2>${ui.sentTitle}</h2><p>${ui.sentBody}</p></div>`;
     } catch (_) {
       sent = false; $('submit').disabled = false; $('submit').textContent = ui.retry;
@@ -173,7 +175,7 @@ const ETUDE = /*__DATA__*/null;
   $('rightColumn').append(...rightItems.map(item => makeChoice('right', item)));
   $('eyebrow').textContent = ui.eyebrow;
   $('title').textContent = (atom && atom.topic) || ui.title;
-  $('instructions').textContent = cleanInstruction(atom && atom.user_prompt);
+  window.ETUDE_MD_INTO($('instructions'), cleanInstruction(atom && atom.user_prompt));
   $('leftColumn').setAttribute('aria-label', ui.leftChoices);
   $('rightColumn').setAttribute('aria-label', ui.rightChoices);
   $('meta').textContent = String(data.queue_label || data.queue || ui.mode).replace(/^Etude\s*·\s*/i, '');

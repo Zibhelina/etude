@@ -13,7 +13,7 @@ body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
 .wrap { display: flex; flex-direction: column; padding: 22px 26px 14px; }
 .label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
 h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
-.prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.prompt { margin: 14px 0 0; font-size: 14.5px; line-height: 1.6; overflow-wrap: anywhere; }
 .prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
 .prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
 
@@ -21,7 +21,7 @@ h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3;
 
 /* The list is the answer, so every row carries its position as a number the
    learner can read at a glance — color and order alone are not enough. */
-.board { list-style: none; display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; padding: 0; }
+.board { list-style: none; display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; padding: 12px; }
 .row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 10px 8px 12px;
   background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px);
   transition: border-color .12s ease, background .12s ease; }
@@ -71,13 +71,13 @@ button:focus-visible, .grip:focus-visible { outline: 2px solid var(--ring); outl
 </style>
 </head>
 <body data-fit-content>
-<div class="wrap ui-card">
+<div class="wrap">
   <div class="label" id="label">Etude · Sequence</div>
   <h1 class="title" id="title">Put these in order</h1>
   <div class="prompt" id="prompt"></div>
 
   <p class="hint" id="hint"></p>
-  <ol class="board" id="board"></ol>
+  <ol class="board ui-card" id="board"></ol>
 
   <div class="notice hidden" id="configError">
     <h2 id="configErrorTitle">Nothing to order yet</h2>
@@ -133,7 +133,9 @@ const ETUDE = /*__DATA__*/null;
   if (portuguese) document.documentElement.lang = 'pt-BR';
   $('label').textContent = text(atom.id) ? `${ui.label} · ${text(atom.id)}` : ui.label;
   $('title').textContent = plain(atom.topic) || ui.title;
-  window.ETUDE_MD_INTO($('prompt'), text(atom.user_prompt) || ui.title);
+  const promptText = text(atom.user_prompt) || ui.title;
+  $('title').hidden = window.ETUDE_MD_HAS_LEADING_HEADING(promptText);
+  window.ETUDE_MD_INTO($('prompt'), promptText);
   $('hint').textContent = ui.hint;
   $('reset').textContent = ui.reset;
   $('submit').textContent = ui.send;

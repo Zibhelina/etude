@@ -17,7 +17,7 @@ ID_REGEX = ID_PATTERN
 QUEUE_STATUSES = frozenset({"active", "archived"})
 SORT_KEYS = frozenset({
     "created", "last_seen", "due", "streak", "lapses", "last_rating",
-    "attempts", "mastery", "id",
+    "attempts", "mastery", "id", "ready", "tag_rank",
 })
 SORT_DIRECTIONS = frozenset({"asc", "desc"})
 THEME_VARIABLES = [
@@ -64,6 +64,11 @@ def _validate_algorithm(name: str, spec: Any, errors: list[str]) -> None:
                     errors.append(f"meta.queue_algorithms.{name}.order[{index}] unknown key {key!r}")
                 if direction not in SORT_DIRECTIONS:
                     errors.append(f"meta.queue_algorithms.{name}.order[{index}] invalid dir {direction!r}")
+    ranking = spec.get("tag_rank")
+    if ranking is not None and (
+        not isinstance(ranking, list) or not all(isinstance(tag, str) and tag for tag in ranking)
+    ):
+        errors.append(f"meta.queue_algorithms.{name}.tag_rank must be a list of tag names")
     filter_spec = spec.get("filter")
     if filter_spec is not None:
         if not isinstance(filter_spec, dict):

@@ -44,6 +44,31 @@
   --status-warning: #b77900;
   --status-severe: #c95d32;
   --status-critical: #c93d3d;
+
+  /* Chess board — see default.css for why these are stated, not derived. */
+  --board-light: #ecebe6;
+  --board-dark: #a3a08f;
+  --board-piece-white: #fdfdfc;
+  --board-piece-black: #33312c;
+  --board-piece-edge: #1c1a17;
+
+  /* Piano roll — light theme: the roll stays a dark stage so the falling notes
+     keep their contrast, while the keys follow the page. */
+  --piano-roll-bg: #2b2a27;
+  --piano-roll-lane: #3a3934;
+  --piano-roll-grid: #454440;
+  --piano-roll-grid-bar: #5c5a54;
+  --piano-roll-note-next: #f0c264;
+  --piano-roll-note-accomp: #4a7fd0;
+  --piano-roll-note: #e0a93b;
+  --piano-roll-note-hit: #4a9d5f;
+  --piano-roll-note-miss: #c0392b;
+  --piano-roll-line: #9a9a94;
+  --piano-key-white: #fdfdfc;
+  --piano-key-black: #33312c;
+  --piano-key-edge: #a3a08f;
+  --piano-key-active: #e0a93b;
+
   --mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, monospace;
   --sans: Inter, Geist, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 

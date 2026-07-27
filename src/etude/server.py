@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from socketserver import ThreadingMixIn
 from typing import Any, Mapping
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from . import algorithms, scheduler, schema, store
 
@@ -27,31 +27,172 @@ _WIDGETS = _REPO_ROOT / "widgets"
 # ~4 MB of base64 -> ~3 MB of PNG; a handwriting canvas is far smaller.
 _MAX_DRAWING_B64 = 4 * 1024 * 1024
 
-_MARKDOWN_HELPER = """<script>
-// Shared inline-markdown renderer. Prompts are markdown (docs/architecture.md),
-// so a template that drops them into textContent shows literal ** and backticks.
-// Escapes HTML first, then renders a deliberately small subset: fenced/inline
-// code, bold, italic, links, and paragraphs. window.ETUDE_MD(value) -> HTML.
+_MARKDOWN_HELPER = r"""<script>
+// Shared safe markdown renderer for atom prompts. The source is untrusted:
+// preserve useful LeetCode inline HTML through a narrow allowlist, strip unsafe
+// document markup, then render the Markdown structure ourselves.
 (() => {
   'use strict';
+  const tokens = [];
+  const stash = html => `\uE000${tokens.push(html) - 1}\uE001`;
+  const restore = html => html.replace(/\uE000(\d+)\uE001/g, (_, index) => tokens[Number(index)] || '');
   const escapeHtml = value => String(value ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const inline = text => text
-    .replace(/`([^`\\n]+)`/g, '<code>$1</code>')
-    .replace(/\\*\\*([^*\\n]+)\\*\\*/g, '<strong>$1</strong>')
-    .replace(/(^|[\\s(])\\*([^*\\n]+)\\*(?=[\\s).,;:!?]|$)/g, '$1<em>$2</em>')
-    .replace(/\\[([^\\]\\n]+)\\]\\((https?:\\/\\/[^)\\s]+)\\)/g,
-      '<a href="$1" rel="noreferrer noopener" target="_blank">$1</a>'.replace('href="$1"', 'href="$2"'));
-  window.ETUDE_MD = value => escapeHtml(value)
-    .split(/```([\\s\\S]*?)```/g)
-    .map((part, index) => index % 2
-      ? `<pre>${part.replace(/^[a-zA-Z0-9_+-]*\\n/, '').replace(/^\\n|\\n$/g, '')}</pre>`
-      : part.split(/\\n{2,}/).filter(Boolean)
-          .map(block => `<p>${inline(block).replace(/\\n/g, '<br>')}</p>`).join(''))
-    .join('');
-  // Convenience: render markdown into a node without touching innerHTML at
-  // each call site.
-  window.ETUDE_MD_INTO = (node, value) => { if (node) node.innerHTML = window.ETUDE_MD(value); };
+  const escapeAttr = value => escapeHtml(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const attribute = (tag, name) => {
+    const match = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, 'i').exec(tag);
+    return match ? (match[1] ?? match[2] ?? '') : '';
+  };
+  const safeUrl = value => /^https?:\/\/[^\s"'<>]+$/i.test(value) ? value : '';
+
+  function cleanSource(value) {
+    let source = String(value ?? '').replace(/\r\n?/g, '\n');
+    // Executable/embedded blocks disappear with their contents. Generic type
+    // literals such as <Node> remain text because they are not HTML tag names
+    // in this list and will be escaped below.
+    source = source.replace(
+      /<\s*(script|style|iframe|object|embed|form)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi,
+      ''
+    );
+    source = source.replace(/<br\s*\/?\s*>/gi, '\n');
+    source = source.replace(/<img\b[^>]*>/gi, tag => {
+      const src = safeUrl(attribute(tag, 'src'));
+      if (!src) return '';
+      const alt = attribute(tag, 'alt');
+      return stash(`<img class="prompt-image" src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" loading="lazy">`);
+    });
+    source = source.replace(/<a\b[^>]*>/gi, tag => {
+      const href = safeUrl(attribute(tag, 'href'));
+      return href
+        ? stash(`<a href="${escapeAttr(href)}" rel="noreferrer noopener" target="_blank">`)
+        : '';
+    });
+    source = source.replace(/<\/a\s*>/gi, () => stash('</a>'));
+    source = source.replace(/<(\/?)\s*(sup|sub|strong)\s*>/gi,
+      (_, closing, tag) => stash(`<${closing ? '/' : ''}${tag.toLowerCase()}>`));
+    // LeetCode's presentational wrappers carry no meaning after Markdown
+    // conversion. Remove the wrappers but preserve their contents.
+    source = source.replace(/<\/?(?:div|span)\b[^>]*>/gi, '');
+    // Strip remaining real HTML tags. Unknown angle-bracket type literals stay
+    // untouched and are escaped into visible text later.
+    source = source.replace(
+      /<\/?(?:abbr|address|article|aside|audio|b|blockquote|body|button|canvas|caption|cite|code|dd|details|dl|dt|em|figcaption|figure|footer|h[1-6]|head|header|hr|html|i|input|kbd|label|li|link|main|meta|nav|ol|option|p|picture|pre|section|select|small|source|table|tbody|td|textarea|tfoot|th|thead|title|tr|u|ul|video)\b[^>]*>/gi,
+      ''
+    );
+    return source;
+  }
+
+  function inline(value) {
+    let html = escapeHtml(value);
+    html = html
+      .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+      // CommonMark permits emphasis nested inside strong emphasis, which Pandoc
+      // emits for LeetCode phrases such as ***exactly* one solution**.
+      .replace(/\*\*\*([^*\n]+)\*([^*\n]+)\*\*/g, '<strong><em>$1</em>$2</strong>')
+      .replace(/\*\*\*([^*\n]+)\*\*\*/g, '<strong><em>$1</em></strong>')
+      .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>')
+      .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g,
+        (_, label, href) => `<a href="${href}" rel="noreferrer noopener" target="_blank">${label}</a>`);
+    html = restore(html)
+      .replace(/<code>([^<]*)<\/code><sup><code>([^<]*)<\/code><\/sup>/g,
+        '<code>$1<sup>$2</sup></code>')
+      .replace(/<code>([^<]*)<\/code><sub><code>([^<]*)<\/code><\/sub>/g,
+        '<code>$1<sub>$2</sub></code>');
+    // Pandoc can split one mathematical code span around multiple sup/sub tags.
+    while (html.includes('</code><code>')) html = html.replace(/<\/code><code>/g, '');
+    return html;
+  }
+
+  const blockStart = line =>
+    /^ {0,3}(?:#{1,6}\s+|```|[-+*]\s+|\d+[.)]\s+|>\s?)/.test(line) || /^ {4}\S/.test(line);
+
+  function renderBlocks(value) {
+    const lines = cleanSource(value).split('\n');
+    const out = [];
+    for (let index = 0; index < lines.length;) {
+      const line = lines[index];
+      if (!line.trim()) { index += 1; continue; }
+
+      const fence = /^ {0,3}```([^\s`]*)\s*$/.exec(line);
+      if (fence) {
+        const code = [];
+        index += 1;
+        while (index < lines.length && !/^ {0,3}```\s*$/.test(lines[index])) code.push(lines[index++]);
+        if (index < lines.length) index += 1;
+        const language = fence[1] ? ` class="language-${escapeAttr(fence[1])}"` : '';
+        out.push(`<pre><code${language}>${escapeHtml(code.join('\n'))}</code></pre>`);
+        continue;
+      }
+
+      const heading = /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+      if (heading) {
+        const level = heading[1].length;
+        out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+        index += 1;
+        continue;
+      }
+
+      if (/^ {4}\S|^\t\S/.test(line)) {
+        const code = [];
+        while (index < lines.length && (/^ {4}/.test(lines[index]) || /^\t/.test(lines[index]) || !lines[index].trim())) {
+          code.push(lines[index].replace(/^ {4}|^\t/, ''));
+          index += 1;
+        }
+        while (code.length && !code[code.length - 1].trim()) code.pop();
+        out.push(`<pre><code>${escapeHtml(code.join('\n'))}</code></pre>`);
+        continue;
+      }
+
+      const unordered = /^ {0,3}[-+*]\s+(.+)$/.exec(line);
+      if (unordered) {
+        const items = [];
+        while (index < lines.length) {
+          const item = /^ {0,3}[-+*]\s+(.+)$/.exec(lines[index]);
+          if (!item) break;
+          items.push(`<li>${inline(item[1])}</li>`);
+          index += 1;
+        }
+        out.push(`<ul>${items.join('')}</ul>`);
+        continue;
+      }
+
+      const ordered = /^ {0,3}\d+[.)]\s+(.+)$/.exec(line);
+      if (ordered) {
+        const items = [];
+        while (index < lines.length) {
+          const item = /^ {0,3}\d+[.)]\s+(.+)$/.exec(lines[index]);
+          if (!item) break;
+          items.push(`<li>${inline(item[1])}</li>`);
+          index += 1;
+        }
+        out.push(`<ol>${items.join('')}</ol>`);
+        continue;
+      }
+
+      if (/^ {0,3}>\s?/.test(line)) {
+        const quote = [];
+        while (index < lines.length && /^ {0,3}>\s?/.test(lines[index])) {
+          quote.push(lines[index].replace(/^ {0,3}>\s?/, ''));
+          index += 1;
+        }
+        out.push(`<blockquote>${inline(quote.join('<br>'))}</blockquote>`);
+        continue;
+      }
+
+      const paragraph = [line];
+      index += 1;
+      while (index < lines.length && lines[index].trim() && !blockStart(lines[index])) {
+        paragraph.push(lines[index++]);
+      }
+      out.push(`<p>${inline(paragraph.join('<br>'))}</p>`);
+    }
+    return out.join('');
+  }
+
+  window.ETUDE_MD = renderBlocks;
+  window.ETUDE_MD_HAS_LEADING_HEADING = value => /^ {0,3}#{1,6}\s+\S/.test(String(value ?? ''));
+  window.ETUDE_MD_INTO = (node, value) => { if (node) node.innerHTML = renderBlocks(value); };
 })();
 </script>"""
 
@@ -962,6 +1103,107 @@ class EtudeHandler(BaseHTTPRequestHandler):
                 },
             }
 
+        if template_name == "multiple-choice":
+            # One surface, two grading modes. A deterministic item is graded by
+            # the program, so `expected` travels with the payload and the widget
+            # marks the options after submitting; an agent-assisted item files
+            # the selection in the inbox and reveals nothing.
+            atom_id = query.get("atom", [None])[0]
+            requested_queue_id = query.get("queue", [None])[0]
+            if not atom_id or atom_id not in db.get("atoms", {}):
+                raise APIError(400, "atom must name an existing atom")
+            atom = db["atoms"][atom_id]
+            widget_data = atom.get("widget_data", atom.get("applet_data"))
+            widget_data = deepcopy(dict(widget_data)) if isinstance(widget_data, Mapping) else {}
+            queue = _resolved_queue(db, atom_id, requested_queue_id)
+            queue_id = ""
+            for candidate_id, candidate in db.get("queues", {}).items():
+                if candidate is queue:
+                    queue_id = candidate_id
+                    break
+            assisted = scheduler.resolve_agent_assisted(atom, queue)
+            result = {
+                **base,
+                "queue": queue_id,
+                "assisted": assisted,
+                "atom": {
+                    "id": atom_id,
+                    "user_prompt": atom.get("user_prompt", ""),
+                    "topic": atom.get("topic", ""),
+                    "tags": [tag for tag in atom.get("tags", []) if isinstance(tag, str)],
+                    "widget_data": widget_data,
+                },
+            }
+            if not assisted:
+                result["expected"] = atom.get("expected")
+            return result
+
+        if template_name in {"chess-board", "midi-rhythm"}:
+            atom_id = query.get("atom", [None])[0]
+            requested_queue_id = query.get("queue", [None])[0]
+            # `?queue=` alone means "serve the next item to play": without this a
+            # bare queue request slid down to the generic drill fallback and
+            # failed with a misleading "queue must name an existing queue".
+            if not atom_id and template_name == "midi-rhythm" and requested_queue_id:
+                if requested_queue_id not in db.get("queues", {}):
+                    raise APIError(400, f"unknown queue: {requested_queue_id}")
+                ordered_ids = algorithms.order(db, requested_queue_id, _now_iso())
+                atom_id = next(
+                    (
+                        candidate for candidate in ordered_ids
+                        if isinstance(db["atoms"].get(candidate), Mapping)
+                        and (db["atoms"][candidate].get("widget_data")
+                             or db["atoms"][candidate].get("applet_data"))
+                    ),
+                    None,
+                )
+                if not atom_id:
+                    raise APIError(400, f"queue {requested_queue_id} has no playable item")
+            if not atom_id or atom_id not in db.get("atoms", {}):
+                raise APIError(400, "atom must name an existing atom")
+            atom = db["atoms"][atom_id]
+            widget_data = atom.get("widget_data", atom.get("applet_data"))
+            widget_data = deepcopy(dict(widget_data)) if isinstance(widget_data, Mapping) else {}
+            queue = _resolved_queue(db, atom_id, requested_queue_id)
+            queue_id = ""
+            for candidate_id, candidate in db.get("queues", {}).items():
+                if candidate is queue:
+                    queue_id = candidate_id
+                    break
+            result = {
+                **base,
+                # The attempt is deterministic and belongs to a queue, so the
+                # widget posts the queue id and lets the server grade it.
+                "queue": queue_id,
+                "atom": {
+                    "id": atom_id,
+                    "user_prompt": atom.get("user_prompt", ""),
+                    "topic": atom.get("topic", ""),
+                    "tags": [tag for tag in atom.get("tags", []) if isinstance(tag, str)],
+                    "widget_data": widget_data,
+                },
+            }
+            # Deterministic atoms follow the drill convention: the accepted move
+            # travels with the payload so the board can reveal it after submit.
+            # agent_prompt (engine evidence, explanation) never leaves the server.
+            if not scheduler.resolve_agent_assisted(atom, queue):
+                result["expected"] = atom.get("expected")
+            if template_name == "midi-rhythm":
+                # Web MIDI is permissions-policy gated: a chat host that frames the
+                # widget without allow="midi" blocks it. The widget shows this URL
+                # so the learner can open the same drill top-level in a browser.
+                suffix = f"&queue={quote(queue_id)}" if queue_id else ""
+                # A song carries both hands in one atom, and `?hand=` picks which
+                # one is graded. The template cannot read the query itself — it
+                # runs inside a sandboxed frame — so the choice travels in the
+                # payload and back out through self_url.
+                hand = query.get("hand", [None])[0]
+                if hand in {"both", "right", "left"}:
+                    result["hand"] = hand
+                    suffix += f"&hand={quote(hand)}"
+                result["self_url"] = f"{api}/widgets/midi-rhythm?atom={quote(atom_id)}{suffix}"
+            return result
+
         if template_name == "map-select":
             atom_id = query.get("atom", [None])[0]
             if not atom_id or atom_id not in db.get("atoms", {}):
@@ -982,6 +1224,71 @@ class EtudeHandler(BaseHTTPRequestHandler):
                 # make the user hunt across the whole world.
                 "region": region if isinstance(region, str) else "",
             }
+
+        if template_name == "catalog":
+            # A free-play instrument, not a drill: it opens with no atom at all.
+            # `?atom=` is optional and only reloads saved material (a sound preset
+            # or a recording); `?queue=` names where new material is filed.
+            atom_id = query.get("atom", [None])[0]
+            queue_id = query.get("queue", [None])[0] or ""
+            if queue_id and queue_id not in db.get("queues", {}):
+                raise APIError(400, f"unknown queue: {queue_id}")
+            result: dict[str, Any] = {**base, "queue": queue_id, "atom": None}
+            if atom_id:
+                if atom_id not in db.get("atoms", {}):
+                    raise APIError(400, "atom must name an existing atom")
+                atom = db["atoms"][atom_id]
+                widget_data = atom.get("widget_data", atom.get("applet_data"))
+                widget_data = deepcopy(dict(widget_data)) if isinstance(widget_data, Mapping) else {}
+                result["atom"] = {
+                    "id": atom_id,
+                    "user_prompt": atom.get("user_prompt", ""),
+                    "topic": atom.get("topic", ""),
+                    "tags": [tag for tag in atom.get("tags", []) if isinstance(tag, str)],
+                    "widget_data": widget_data,
+                }
+            # Saved material in the same queue, so the instrument can list and
+            # reload presets and recordings without a round trip to the agent.
+            library = []
+            member_ids = db.get("queues", {}).get(queue_id, {}).get("members", []) if queue_id else []
+            for member_id in member_ids if isinstance(member_ids, list) else []:
+                member = db.get("atoms", {}).get(member_id)
+                if not isinstance(member, Mapping) or member.get("archived"):
+                    continue
+                member_data = member.get("widget_data", member.get("applet_data"))
+                member_data = member_data if isinstance(member_data, Mapping) else {}
+                kind = member_data.get("kind")
+                if kind not in {"preset", "recording"}:
+                    continue
+                library.append({
+                    "id": member_id,
+                    "name": member.get("topic") or member.get("user_prompt", "") or member_id,
+                    "kind": kind,
+                })
+            result["library"] = library
+            # New material has no atom of its own yet, but POST /api/inbox requires
+            # an existing atom_id. The queue's anchor atom is that mailbox: saves
+            # attach to it and the agent files the payload as a fresh CAT-NN atom.
+            anchor = ""
+            for member_id in member_ids if isinstance(member_ids, list) else []:
+                member = db.get("atoms", {}).get(member_id)
+                if not isinstance(member, Mapping):
+                    continue
+                member_data = member.get("widget_data", member.get("applet_data"))
+                member_data = member_data if isinstance(member_data, Mapping) else {}
+                # The anchor is the member that is not itself saved material.
+                if member_data.get("kind") not in {"preset", "recording"}:
+                    anchor = member_id
+                    break
+            result["anchor"] = anchor or (atom_id or "")
+            # Web MIDI is permissions-policy gated exactly as in midi-rhythm: a
+            # host that frames the widget without allow="midi" blocks it, so the
+            # widget offers this URL to open the instrument top-level instead.
+            suffix = f"?queue={quote(queue_id)}" if queue_id else ""
+            if atom_id:
+                suffix = f"?atom={quote(atom_id)}" + (f"&queue={quote(queue_id)}" if queue_id else "")
+            result["self_url"] = f"{api}/widgets/catalog{suffix}"
+            return result
 
         if template_name in ("markdown-canvas", "coding-canvas"):
             atom_id = query.get("atom", [None])[0]

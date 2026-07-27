@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · Multiple choice</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+html, body { overflow-y: hidden; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 14px; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.prompt { margin: 14px 0 0; font-size: 14.5px; line-height: 1.6; overflow-wrap: anywhere; }
+.prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
+.prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
+.hint { margin-top: 12px; color: var(--text-secondary); font-size: 12.5px; line-height: 1.5; }
+
+/* The options are the answer, so they are the one carded surface. */
+.choices { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; padding: 12px; }
+.choice { display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 48px; padding: 10px 14px 10px 12px;
+  text-align: left; color: var(--text-primary); background: var(--surface-1);
+  border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); cursor: pointer;
+  font: inherit; transition: border-color .12s ease, background .12s ease, color .12s ease; }
+.choice:hover:not(:disabled) { color: var(--foreground); border-color: var(--border-strong); background: var(--surface-2); }
+.choice[aria-checked="true"], .choice[aria-pressed="true"] {
+  background: var(--surface-2); border-color: var(--ring); outline: 1.5px solid var(--ring); outline-offset: -1.5px; }
+.choice:disabled { cursor: default; }
+/* Marks carry a shape and a letter as well as a color, so a color-blind read
+   still separates the picked option from the correct one. */
+.choice[data-mark="correct"] { border-color: var(--green); }
+.choice[data-mark="wrong"] { border-color: var(--red); }
+.choice[data-mark="missed"] { border-style: dashed; border-color: var(--green); }
+.key { flex: 0 0 auto; width: 26px; height: 26px; margin-top: 1px; display: grid; place-items: center;
+  color: var(--text-secondary); background: var(--surface-2); border: 0.5px solid var(--border);
+  border-radius: 8px; font: 500 12.5px/1 var(--mono); }
+.choice[aria-checked="true"] .key, .choice[aria-pressed="true"] .key { color: var(--text-primary); border-color: var(--border-strong); }
+.choiceBody { flex: 1 1 auto; min-width: 0; }
+.choiceLabel { font-size: 14.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.choiceDesc { margin-top: 2px; color: var(--text-secondary); font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.mark { flex: 0 0 auto; margin-top: 2px; font: 500 12.5px/1.4 var(--mono); }
+.mark[data-tone="good"] { color: var(--green-text); }
+.mark[data-tone="bad"] { color: var(--red-text); }
+/* Selection must survive a color-blind reading, so a picked option also shows
+   a check glyph rather than relying on fill and border alone. */
+.mark[data-tone="picked"] { color: var(--text-primary); font-size: 14px; }
+
+.tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.spacer { flex: 1 1 auto; }
+button { font: inherit; }
+button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.status:not(:empty) { margin-top: 10px; color: var(--text-secondary); font: 12.5px/1.5 var(--mono); }
+.status[data-tone="error"] { color: var(--red-text); }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.result { margin-top: 14px; padding: 16px 18px; background: var(--surface-1);
+  border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); }
+.result[data-tone="good"] { border-color: var(--green); }
+.result[data-tone="bad"] { border-color: var(--red); }
+.result h2 { margin: 0 0 6px; font-size: 15.5px; font-weight: 500; }
+.result p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
+.notice { margin-top: 14px; padding: 16px 18px; background: var(--surface-1); border: 0.5px solid var(--border);
+  border-radius: var(--radius-card, 12px); color: var(--text-secondary); font-size: 13.5px; line-height: 1.55; }
+.notice h2 { margin: 0 0 6px; color: var(--text-primary); font-size: 15px; font-weight: 500; }
+.hidden { display: none; }
+@media (max-width: 420px) {
+  .wrap { padding: 18px 16px 12px; }
+  .choiceDesc { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap">
+  <div class="label" id="label">Etude · Multiple choice</div>
+  <h1 class="title" id="title">Choose an answer</h1>
+  <div class="prompt" id="prompt"></div>
+
+  <p class="hint" id="hint"></p>
+  <div class="choices ui-card" id="choices" role="radiogroup"></div>
+
+  <div class="notice hidden" id="configError">
+    <h2 id="configErrorTitle">No options yet</h2>
+    <p id="configErrorBody"></p>
+  </div>
+
+  <div class="tools" id="tools">
+    <span class="spacer"></span>
+    <button class="ui-button ui-button--outline ui-button--sm" id="clear" type="button">Clear</button>
+    <button class="ui-button ui-button--sm" id="submit" type="button">Submit</button>
+  </div>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+  <div class="sr-only" id="announce" role="status" aria-live="polite"></div>
+  <div class="result hidden" id="result">
+    <h2 id="resultTitle"></h2>
+    <p id="resultBody"></p>
+  </div>
+  <div class="tools hidden" id="afterTools">
+    <span class="spacer"></span>
+    <button class="ui-button ui-button--outline ui-button--sm" id="again" type="button">Try again</button>
+  </div>
+</div>
+<script>
+const ETUDE = /*__DATA__*/null;
+(() => {
+  'use strict';
+  const data = ETUDE && typeof ETUDE === 'object' ? ETUDE : {};
+  const atom = data.atom && typeof data.atom === 'object' ? data.atom : {};
+  const config = atom.widget_data && typeof atom.widget_data === 'object' ? atom.widget_data : {};
+  const $ = id => document.getElementById(id);
+  const text = value => (typeof value === 'string' ? value : '');
+  const plain = value => String(value || '').replace(/`{1,3}|\*{1,2}|[_#>]/g, '').replace(/\s+/g, ' ').trim();
+  const api = String(data.api || '').replace(/\/$/, '');
+  // Deterministic items grade in the program: `expected` travels with the
+  // payload so the widget can mark the board. Agent-assisted items file the
+  // selection in the inbox and the agent grades it.
+  const assisted = data.assisted !== false;
+  const KEYS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+  const portuguese = /[áàãâéêíóôõúç]|\b(qual|quais|escolha|selecione|alternativa|assinale|correta)\b/i
+    .test(`${text(atom.user_prompt)} ${text(atom.topic)}`);
+  const ui = portuguese
+    ? { title: 'Escolha uma resposta', label: 'Etude · Múltipla escolha', submit: 'Responder',
+        clear: 'Limpar', again: 'Tentar de novo', sending: 'Enviando…',
+        hintOne: 'Escolha uma alternativa. As teclas A–Z também selecionam.',
+        hintMany: 'Escolha todas as alternativas corretas. As teclas A–Z também selecionam.',
+        pickOne: 'Selecione uma alternativa antes de responder.',
+        selected: (label, at) => `${label} selecionada, opção ${at}.`,
+        cleared: 'Seleção limpa.',
+        failed: 'Não foi possível alcançar o Etude. Sua escolha continua aqui — tente de novo.',
+        errorTitle: 'Nada para escolher', errorBody: 'Este item não traz alternativas. Peça ao seu agente para adicioná-las e abra de novo.',
+        rightTitle: 'Correto', rightBody: 'Registrado no Etude.',
+        wrongTitle: 'Incorreto', wrongBody: answer => `A resposta certa é ${answer}.`,
+        sentTitle: 'Enviado ao agente', sentBody: 'Sua escolha está aguardando no Etude. Avise o agente que terminou para receber o feedback.',
+        markCorrect: 'certa', markWrong: 'sua escolha', markMissed: 'faltou',
+        lotus: (atomId, list) => `Respondi ${atomId} escolhendo: ${list}. Leia da inbox do Etude, corrija, registre a tentativa e limpe o item da inbox.` }
+    : { title: 'Choose an answer', label: 'Etude · Multiple choice', submit: 'Submit',
+        clear: 'Clear', again: 'Try again', sending: 'Sending…',
+        hintOne: 'Pick one option. The A–Z keys select too.',
+        hintMany: 'Pick every correct option. The A–Z keys select too.',
+        pickOne: 'Select an option before submitting.',
+        selected: (label, at) => `${label} selected, option ${at}.`,
+        cleared: 'Selection cleared.',
+        failed: 'Could not reach Etude. Your choice is still here — try again.',
+        errorTitle: 'No options yet', errorBody: 'This item carries no options. Ask your agent to add them and open it again.',
+        rightTitle: 'Correct', rightBody: 'Recorded in Etude.',
+        wrongTitle: 'Not quite', wrongBody: answer => `The correct answer is ${answer}.`,
+        sentTitle: 'Sent to your agent', sentBody: 'Your choice is waiting in Etude. Tell your agent you are done so they can review it.',
+        markCorrect: 'correct', markWrong: 'your pick', markMissed: 'missed',
+        lotus: (atomId, list) => `I answered ${atomId} by choosing: ${list}. Read it from the Etude inbox, grade it, record the attempt, and clear the inbox item.` };
+
+  if (portuguese) document.documentElement.lang = 'pt-BR';
+  $('label').textContent = text(atom.id) ? `${ui.label} · ${text(atom.id)}` : ui.label;
+  $('title').textContent = plain(atom.topic) || ui.title;
+  const promptText = text(atom.user_prompt) || ui.title;
+  $('title').hidden = window.ETUDE_MD_HAS_LEADING_HEADING(promptText);
+  window.ETUDE_MD_INTO($('prompt'), promptText);
+  $('submit').textContent = ui.submit;
+  $('clear').textContent = ui.clear;
+  $('again').textContent = ui.again;
+  $('configErrorTitle').textContent = ui.errorTitle;
+  $('configErrorBody').textContent = ui.errorBody;
+
+  // Accept both shapes: bare strings for quick decks, objects when an option
+  // needs a stable id or a second line. A malformed atom explains itself
+  // instead of throwing and leaving the host with an empty frame.
+  const raw = Array.isArray(config.choices) ? config.choices : [];
+  const choices = [];
+  const seen = new Set();
+  for (const entry of raw) {
+    let id = '';
+    let label = '';
+    let description = '';
+    if (typeof entry === 'string' || typeof entry === 'number') {
+      id = label = String(entry);
+    } else if (entry && typeof entry === 'object') {
+      label = text(entry.label) || (typeof entry.label === 'number' ? String(entry.label) : '');
+      id = text(entry.id) || (typeof entry.id === 'number' ? String(entry.id) : '') || label;
+      description = text(entry.description);
+      label = label || id;
+    }
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    choices.push({ id, label, description });
+  }
+
+  const multiple = config.multiple === true;
+  $('hint').textContent = multiple ? ui.hintMany : ui.hintOne;
+  const box = $('choices');
+  box.setAttribute('role', multiple ? 'group' : 'radiogroup');
+  box.setAttribute('aria-label', plain(atom.user_prompt) || ui.title);
+
+  if (!choices.length) {
+    $('configError').classList.remove('hidden');
+    $('hint').classList.add('hidden');
+    $('tools').classList.add('hidden');
+    box.classList.add('hidden');
+    return;
+  }
+
+  // The presentation order is stable per render; the answer string always uses
+  // the configured order so a graded answer never depends on the shuffle.
+  const order = choices.map((choice, index) => index);
+  if (config.shuffle === true) {
+    for (let index = order.length - 1; index > 0; index -= 1) {
+      const swap = Math.floor(Math.random() * (index + 1));
+      [order[index], order[swap]] = [order[swap], order[index]];
+    }
+  }
+
+  const selected = new Set();
+  const nodes = new Map();
+  let sent = false;
+  let resolved = false;
+
+  function build() {
+    box.replaceChildren();
+    nodes.clear();
+    order.forEach((choiceIndex, position) => {
+      const choice = choices[choiceIndex];
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'choice';
+      button.dataset.id = choice.id;
+      button.setAttribute('role', multiple ? 'checkbox' : 'radio');
+      button.setAttribute('aria-checked', 'false');
+
+      const key = document.createElement('span');
+      key.className = 'key';
+      key.setAttribute('aria-hidden', 'true');
+      key.textContent = KEYS[position] || String(position + 1);
+      button.append(key);
+
+      const body = document.createElement('div');
+      body.className = 'choiceBody';
+      const label = document.createElement('div');
+      label.className = 'choiceLabel';
+      label.textContent = choice.label;
+      body.append(label);
+      if (choice.description) {
+        const desc = document.createElement('div');
+        desc.className = 'choiceDesc';
+        desc.textContent = choice.description;
+        body.append(desc);
+      }
+      button.append(body);
+
+      const mark = document.createElement('span');
+      mark.className = 'mark';
+      button.append(mark);
+
+      button.addEventListener('click', () => toggle(choice.id, position));
+      box.append(button);
+      nodes.set(choice.id, { button, mark });
+    });
+    refresh();
+  }
+
+  function toggle(id, position) {
+    if (sent) return;
+    if (multiple) {
+      if (selected.has(id)) selected.delete(id); else selected.add(id);
+    } else {
+      selected.clear();
+      selected.add(id);
+    }
+    refresh();
+    const choice = choices.find(entry => entry.id === id);
+    if (selected.has(id)) announce(ui.selected(choice.label, position + 1));
+  }
+
+  function refresh() {
+    for (const [id, entry] of nodes) {
+      const picked = selected.has(id);
+      entry.button.setAttribute('aria-checked', picked ? 'true' : 'false');
+      entry.button.disabled = sent;
+      if (!resolved) {
+        entry.mark.textContent = picked ? '✓' : '';
+        if (picked) entry.mark.dataset.tone = 'picked'; else delete entry.mark.dataset.tone;
+      }
+    }
+    $('submit').disabled = sent || selected.size === 0;
+    $('clear').disabled = sent || selected.size === 0;
+  }
+
+  function announce(message) {
+    $('announce').textContent = message;
+  }
+
+  function setStatus(message, tone) {
+    const node = $('status');
+    node.textContent = message;
+    if (tone) node.dataset.tone = tone; else delete node.dataset.tone;
+  }
+
+  // The answer string uses configured order, not click order, so the same set
+  // of options always produces the same string for `expected` to match.
+  function answerString() {
+    return choices.filter(choice => selected.has(choice.id)).map(choice => choice.id).join(', ');
+  }
+
+  function acceptedSets() {
+    const expected = data.expected;
+    const list = Array.isArray(expected) ? expected : [expected];
+    return list
+      .filter(entry => typeof entry === 'string')
+      .map(entry => entry.split(',').map(part => part.trim()).filter(Boolean));
+  }
+
+  function reveal(correct) {
+    resolved = true;
+    const sets = acceptedSets();
+    const answer = sets[0] || [];
+    for (const [id, entry] of nodes) {
+      const isAnswer = answer.some(part => part.toLowerCase() === id.toLowerCase());
+      const picked = selected.has(id);
+      if (isAnswer && picked) { entry.button.dataset.mark = 'correct'; entry.mark.dataset.tone = 'good'; entry.mark.textContent = ui.markCorrect; }
+      else if (isAnswer) { entry.button.dataset.mark = 'missed'; entry.mark.dataset.tone = 'good'; entry.mark.textContent = ui.markMissed; }
+      else if (picked) { entry.button.dataset.mark = 'wrong'; entry.mark.dataset.tone = 'bad'; entry.mark.textContent = ui.markWrong; }
+    }
+    const labels = answer
+      .map(part => choices.find(choice => choice.id.toLowerCase() === part.toLowerCase()))
+      .filter(Boolean)
+      .map(choice => choice.label);
+    const panel = $('result');
+    panel.classList.remove('hidden');
+    panel.dataset.tone = correct ? 'good' : 'bad';
+    $('resultTitle').textContent = correct ? ui.rightTitle : ui.wrongTitle;
+    $('resultBody').textContent = correct ? ui.rightBody : ui.wrongBody(labels.join(', ') || answer.join(', '));
+    $('afterTools').classList.remove('hidden');
+    $('again').focus();
+  }
+
+  function restart() {
+    sent = false;
+    resolved = false;
+    selected.clear();
+    $('result').classList.add('hidden');
+    $('afterTools').classList.add('hidden');
+    setStatus('');
+    for (const entry of nodes.values()) {
+      delete entry.button.dataset.mark;
+      delete entry.mark.dataset.tone;
+      entry.mark.textContent = '';
+    }
+    refresh();
+    box.querySelector('.choice')?.focus();
+  }
+
+  async function submit() {
+    if (sent) return;
+    const atomId = text(atom.id);
+    if (!selected.size) { setStatus(ui.pickOne, 'error'); return; }
+    if (!atomId || !api) { setStatus(ui.failed, 'error'); return; }
+
+    $('submit').disabled = true;
+    setStatus(ui.sending);
+    const answer = answerString();
+    const labels = choices.filter(choice => selected.has(choice.id)).map(choice => choice.label);
+    const body = assisted
+      ? { atom_id: atomId, payload: { kind: 'multiple-choice', selected: choices.filter(c => selected.has(c.id)).map(c => c.id), labels, multiple }, ts: new Date().toISOString() }
+      : { atom_id: atomId, answer, via: 'widget', mode: 'widget' };
+    if (!assisted && data.queue) body.queue = data.queue;
+    try {
+      const response = await fetch(`${api}${assisted ? '/api/inbox' : '/api/attempts'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error(String(response.status));
+      sent = true;
+      refresh();
+      setStatus('');
+      if (assisted) {
+        const panel = $('result');
+        panel.classList.remove('hidden');
+        delete panel.dataset.tone;
+        $('resultTitle').textContent = ui.sentTitle;
+        $('resultBody').textContent = ui.sentBody;
+        window.parent.postMessage({ lotus: 1, type: 'submit', text: ui.lotus(atomId, labels.join(', ')) }, '*');
+      } else {
+        const result = await response.json();
+        reveal(result && result.attempt ? result.attempt.rating >= 2 : false);
+      }
+    } catch {
+      // Keep the selection: a failed POST must be retryable.
+      $('submit').disabled = false;
+      setStatus(ui.failed, 'error');
+    }
+  }
+
+  $('submit').addEventListener('click', submit);
+  $('clear').addEventListener('click', () => {
+    if (sent) return;
+    selected.clear();
+    refresh();
+    announce(ui.cleared);
+  });
+  $('again').addEventListener('click', restart);
+
+  // Roving arrow keys through the options, letter keys to select directly.
+  document.addEventListener('keydown', event => {
+    if (sent || event.metaKey || event.ctrlKey || event.altKey) return;
+    const buttons = [...box.querySelectorAll('.choice')];
+    if (!buttons.length) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      const current = buttons.indexOf(document.activeElement);
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      const next = buttons[(Math.max(current, 0) + step + buttons.length) % buttons.length];
+      if (next) { event.preventDefault(); next.focus(); }
+      return;
+    }
+    if (event.key === 'Enter' && !$('submit').disabled && document.activeElement !== $('clear')) {
+      event.preventDefault();
+      submit();
+      return;
+    }
+    if (event.key.length === 1) {
+      const index = KEYS.indexOf(event.key.toUpperCase());
+      if (index >= 0 && index < buttons.length) { event.preventDefault(); buttons[index].click(); }
+    }
+  });
+
+  build();
+})();
+</script>
+</body>
+</html>

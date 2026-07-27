@@ -13,7 +13,7 @@ body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
 .wrap { display: flex; flex-direction: column; padding: 22px 26px 14px; }
 .label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
 h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
-.prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.prompt { margin: 14px 0 0; font-size: 14.5px; line-height: 1.6; overflow-wrap: anywhere; }
 .prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
 .prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
 
@@ -32,7 +32,8 @@ h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3;
 .op-desc { margin: 9px 0 0; color: var(--text-secondary); font-size: 13.5px; line-height: 1.55; }
 
 /* Editable state, grouped the way the atom groups it. */
-.sections { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.answer-card { margin-top: 12px; padding: 12px; }
+.sections { display: flex; flex-direction: column; gap: 12px; }
 .section { padding: 13px 16px 15px; background: var(--surface-1);
   border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); }
 .section-label { color: var(--text-secondary); font: 500 12px/1.4 var(--sans); }
@@ -72,7 +73,7 @@ button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 </style>
 </head>
 <body data-fit-content>
-<div class="wrap ui-card">
+<div class="wrap">
   <div class="label" id="label">Etude · State tracer</div>
   <h1 class="title" id="title">Trace the state</h1>
   <div class="prompt" id="prompt"></div>
@@ -91,9 +92,10 @@ button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
     <p class="op-desc hidden" id="opDesc"></p>
   </div>
 
-  <div class="sections" id="sections"></div>
-
-  <div class="snapshots" id="snapshots"></div>
+  <div class="answer-card ui-card">
+    <div class="sections" id="sections"></div>
+    <div class="snapshots" id="snapshots"></div>
+  </div>
   <div class="hint hidden" id="hint"></div>
 
   <div class="tools">
@@ -160,7 +162,9 @@ const ETUDE = /*__DATA__*/null;
   if (portuguese) document.documentElement.lang = 'pt-BR';
   $('label').textContent = atomId ? `${ui.label} · ${atomId}` : ui.label;
   $('title').textContent = plain(atom.topic) || ui.title;
-  window.ETUDE_MD_INTO($('prompt'), text(atom.user_prompt) || ui.title);
+  const promptText = text(atom.user_prompt) || ui.title;
+  $('title').hidden = window.ETUDE_MD_HAS_LEADING_HEADING(promptText);
+  window.ETUDE_MD_INTO($('prompt'), promptText);
   $('capture').textContent = ui.capture;
   $('undo').textContent = ui.undo;
   $('reset').textContent = ui.reset;

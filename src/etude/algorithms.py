@@ -20,13 +20,41 @@ def _attempt_count(atom: Mapping[str, Any]) -> int:
     return len(attempts) if isinstance(attempts, list) else 0
 
 
-def _key_value(atom_id: str, atom: Mapping[str, Any], key: str) -> Any:
+def _ready(atom: Mapping[str, Any], now_iso: str) -> int:
+    """1 when the atom is waiting for work right now: never seen, or due.
+
+    Ranked-tag ordering uses this first so a preferred group whose items are all
+    scheduled into the future cannot block the groups behind it.
+    """
+    if atom.get("state") == "new":
+        return 1
+    due = atom.get("due")
+    return 1 if isinstance(due, str) and due and due <= now_iso else 0
+
+
+def _tag_rank(atom: Mapping[str, Any], ranking: list[str]) -> int:
+    """Position of the atom's first ranked tag; unranked atoms sort last."""
+    tags = [tag for tag in atom.get("tags", []) if isinstance(tag, str)]
+    positions = [ranking.index(tag) for tag in tags if tag in ranking]
+    return min(positions) if positions else len(ranking)
+
+
+def _key_value(
+    atom_id: str,
+    atom: Mapping[str, Any],
+    key: str,
+    context: Mapping[str, Any] | None = None,
+) -> Any:
     if key == "id":
         return atom_id
     if key == "attempts":
         return _attempt_count(atom)
     if key == "mastery":
         return _mastery(atom)
+    if key == "ready":
+        return _ready(atom, str((context or {}).get("now_iso", "")))
+    if key == "tag_rank":
+        return _tag_rank(atom, list((context or {}).get("tag_rank", [])))
     return atom.get(key)
 
 
@@ -45,13 +73,15 @@ def _compare_values(left: Any, right: Any, direction: str) -> int:
 
 
 def _multi_sort(
-    items: list[tuple[str, Mapping[str, Any]]], specs: list[Mapping[str, Any]]
+    items: list[tuple[str, Mapping[str, Any]]],
+    specs: list[Mapping[str, Any]],
+    context: Mapping[str, Any] | None = None,
 ) -> list[str]:
     def compare(left: tuple[str, Mapping[str, Any]], right: tuple[str, Mapping[str, Any]]) -> int:
         for spec in specs:
             result = _compare_values(
-                _key_value(left[0], left[1], str(spec["key"])),
-                _key_value(right[0], right[1], str(spec["key"])),
+                _key_value(left[0], left[1], str(spec["key"]), context),
+                _key_value(right[0], right[1], str(spec["key"]), context),
                 str(spec["dir"]),
             )
             if result:
@@ -153,4 +183,9 @@ def order(db: Mapping[str, Any], queue_id: str, now_iso: str) -> list[str]:
     specs = algorithm.get("order")
     if not isinstance(specs, list) or not specs:
         return sorted(atom_id for atom_id, _ in items)
-    return _multi_sort(items, specs)
+    ranking = algorithm.get("tag_rank")
+    context = {
+        "now_iso": now_iso,
+        "tag_rank": [tag for tag in ranking if isinstance(tag, str)] if isinstance(ranking, list) else [],
+    }
+    return _multi_sort(items, specs, context)

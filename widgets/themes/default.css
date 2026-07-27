@@ -45,6 +45,33 @@
   --status-warning: #f2c400;
   --status-severe: #e9865b;
   --status-critical: #ef4444;
+
+  /* Chess board. The two square shades and the two piece colours are game
+     semantics, not surface semantics: White must read as white on every theme,
+     so these are stated rather than derived from --foreground. */
+  --board-light: #ebecd0;
+  --board-dark: #739552;
+  --board-piece-white: #fafafa;
+  --board-piece-black: #2e2b28;
+  --board-piece-edge: #14120f;
+
+  /* Piano roll. Like the board above, "white key" and "black key" are domain
+     semantics that must survive a theme inversion, so they are stated. */
+  --piano-roll-bg: #131313;
+  --piano-roll-lane: #1d1d1d;
+  --piano-roll-grid: #262626;
+  --piano-roll-grid-bar: #3a3a3a;
+  --piano-roll-note-next: #ffd968;
+  --piano-roll-note-accomp: #6aa9ff;
+  --piano-roll-note: #f2c94c;
+  --piano-roll-note-hit: #4ade80;
+  --piano-roll-note-miss: #ef4444;
+  --piano-roll-line: #6b6b6b;
+  --piano-key-white: #fafafa;
+  --piano-key-black: #1a1a1a;
+  --piano-key-edge: #6b6b6b;
+  --piano-key-active: #f2c94c;
+
   --mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   --sans: Inter, Geist, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
 

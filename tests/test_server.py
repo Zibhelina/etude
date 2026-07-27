@@ -4,8 +4,11 @@ import base64
 import http.client
 import json
 import re
+import shutil
+import subprocess
 import sys
 import threading
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import urlencode
@@ -18,6 +21,48 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 from etude import server as server_module
 from etude import store
 from etude.server import make_server
+
+
+_VOID_HTML_ELEMENTS = frozenset({
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta",
+    "param", "source", "track", "wbr",
+})
+
+
+class _TemplateStructure(HTMLParser):
+    """Enough of the template tree to assert visual containment contracts."""
+
+    def __init__(self):
+        super().__init__()
+        self.stack = []
+        self.by_id = {}
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        node = {"tag": tag, "attrs": attributes, "parent": self.stack[-1] if self.stack else None}
+        if attributes.get("id"):
+            self.by_id[attributes["id"]] = node
+        if tag not in _VOID_HTML_ELEMENTS:
+            self.stack.append(node)
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if tag not in _VOID_HTML_ELEMENTS:
+            self.stack.pop()
+
+    def handle_endtag(self, tag):
+        for index in range(len(self.stack) - 1, -1, -1):
+            if self.stack[index]["tag"] == tag:
+                del self.stack[index:]
+                return
+
+    def has_card_ancestor(self, element_id):
+        node = self.by_id[element_id]
+        while node:
+            if "ui-card" in node["attrs"].get("class", "").split():
+                return True
+            node = node["parent"]
+        return False
 
 
 def _atom(*, prompt="Question?", assisted=True, expected=None, tags=None, **extra):
@@ -565,6 +610,46 @@ def test_widgets_receive_a_shared_markdown_renderer(running_server):
     assert "replace(/&/g, '&amp;')" in html
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is required for the renderer smoke test")
+def test_shared_markdown_renderer_handles_leetcode_markdown_and_safe_html():
+    helper = server_module._MARKDOWN_HELPER.removeprefix("<script>").removesuffix("</script>")
+    source = """# 1. Two Sum
+
+You may assume that each input has ***exactly* one solution**.
+
+- `2 <= nums.length <= 10`<sup>`4`</sup>
+- See <a href="https://example.com" onclick="bad()">the reference</a>.
+
+<img src="https://example.com/diagram.png" style="width: 900px" onerror="bad()" />
+<script>bad()</script>
+Use <Node> as a type literal.
+"""
+    program = (
+        "global.window = {};\n"
+        + helper
+        + "\nconsole.log(JSON.stringify(window.ETUDE_MD("
+        + json.dumps(source)
+        + ")));"
+    )
+    node = shutil.which("node")
+    assert node is not None
+    completed = subprocess.run(
+        [node, "-e", program], capture_output=True, text=True, check=True
+    )
+    rendered = json.loads(completed.stdout)
+
+    assert "<h1>1. Two Sum</h1>" in rendered
+    assert "<strong><em>exactly</em> one solution</strong>" in rendered
+    assert "<ul>" in rendered and "<li>" in rendered
+    assert "<code>2 &lt;= nums.length &lt;= 10<sup>4</sup></code>" in rendered
+    assert '<a href="https://example.com" rel="noreferrer noopener" target="_blank">' in rendered
+    assert 'src="https://example.com/diagram.png"' in rendered
+    assert "onclick" not in rendered and "onerror" not in rendered
+    assert "<script" not in rendered and "bad()" not in rendered
+    assert "&lt;Node&gt;" in rendered
+    assert "&lt;sup&gt;" not in rendered
+
+
 def test_templates_never_show_raw_markdown_markers_for_prompts():
     """Every template that displays a prompt either renders it as markdown
     (block context) or strips the markers (single-line cells and clamped
@@ -577,6 +662,21 @@ def test_templates_never_show_raw_markdown_markers_for_prompts():
             assert re.search(r"\b(plain|firstLine|stripMarkdown)\s*\(", expression), (
                 f"{template_path.name} shows a raw prompt: {expression.strip()}"
             )
+
+
+def test_interactive_templates_use_the_shared_safe_prompt_renderer():
+    prompt_ids = {
+        "coding-canvas": "prompt", "markdown-canvas": "prompt", "drawing-canvas": "prompt",
+        "matching-pairs": "instructions", "map-select": "prompt", "hotspot-select": "prompt",
+        "sequence-board": "prompt", "state-tracer": "prompt", "tree-explorer": "prompt",
+        "coordinate-plane": "prompt", "flashcard-drill": "prompt", "multiple-choice": "prompt",
+    }
+
+    for name, prompt_id in prompt_ids.items():
+        template = (WIDGET_TEMPLATE_DIR / f"{name}.html").read_text()
+        assert f"ETUDE_MD_INTO($('{prompt_id}')" in template, (
+            f"{name} bypasses the shared safe Markdown renderer"
+        )
 
 
 def test_vendored_libraries_are_opt_in_per_template(running_server):
@@ -621,6 +721,66 @@ def test_coding_canvas_takes_starter_code_and_language_from_widget_data(running_
     # An explicit query parameter wins over the stored default.
     _, _, overridden = request(base, "/widgets/coding-canvas?atom=AG-2&language=python")
     assert _injected_payload(overridden)["language"] == "python"
+
+
+def test_interactive_templates_card_the_answer_but_not_the_prompt_or_toolbar():
+    contracts = {
+        "coding-canvas": ("title", "prompt", "editor", ("language", "vim", "reset", "submit")),
+        "markdown-canvas": ("title", "prompt", "editor", ("clear", "submit")),
+        "drawing-canvas": ("title", "prompt", "pad", ("undo", "clear", "width", "submit")),
+        "matching-pairs": ("title", "instructions", "leftColumn", ("submit",)),
+        "map-select": ("title", "prompt", "map", ("search", "clear", "submit")),
+        "hotspot-select": ("title", "prompt", "diagram", ("clear", "submit")),
+        "sequence-board": ("title", "prompt", "board", ("reset", "submit")),
+        "state-tracer": ("title", "prompt", "sections", ("undo", "reset", "capture", "submit")),
+        "tree-explorer": ("title", "prompt", "graph", ("undo", "reset", "submit")),
+        "coordinate-plane": ("title", "prompt", "plane", ("clear", "submit")),
+        # The options are the answer, so the choice list is the carded surface.
+        "multiple-choice": ("title", "prompt", "choices", ("clear", "submit", "again")),
+        # In a deterministic flashcard the controls are the answer itself, not toolbar chrome.
+        "flashcard-drill": ("topic", "prompt", "controls", ()),
+    }
+
+    for name, (title_id, prompt_id, answer_id, toolbar_ids) in contracts.items():
+        template = (WIDGET_TEMPLATE_DIR / f"{name}.html").read_text()
+        structure = _TemplateStructure()
+        structure.feed(template)
+
+        assert not structure.has_card_ancestor(title_id), f"{name} cards its title"
+        assert not structure.has_card_ancestor(prompt_id), f"{name} cards its prompt"
+        assert structure.has_card_ancestor(answer_id), f"{name} leaves its answer surface uncarded"
+        for element_id in toolbar_ids:
+            assert not structure.has_card_ancestor(element_id), f"{name} cards toolbar control #{element_id}"
+
+        if prompt_id == "prompt":
+            prompt_rule = re.search(r"\.prompt\s*\{([^}]*)\}", template)
+            assert prompt_rule, f"{name} has no prompt rule"
+            assert not re.search(r"\b(?:background|border)\s*:", prompt_rule.group(1)), (
+                f"{name} paints the prompt as a card"
+            )
+
+
+def test_interactive_templates_use_a_leading_markdown_heading_instead_of_repeating_topic():
+    templates = (
+        "coding-canvas", "markdown-canvas", "drawing-canvas", "map-select", "hotspot-select",
+        "sequence-board", "state-tracer", "tree-explorer", "coordinate-plane", "multiple-choice",
+    )
+
+    for name in templates:
+        template = (WIDGET_TEMPLATE_DIR / f"{name}.html").read_text()
+        assert "const promptText =" in template
+        assert "$('title').hidden = window.ETUDE_MD_HAS_LEADING_HEADING(promptText)" in template
+
+
+def test_prompt_code_blocks_wrap_instead_of_creating_nested_horizontal_scrollbars():
+    styles = (WIDGET_TEMPLATE_DIR.parent / "shadcn.css").read_text()
+    match = re.search(r"\.prompt pre\s*\{([^}]*)\}", styles, re.S)
+
+    assert match is not None
+    rule = match.group(1)
+    assert "white-space: pre-wrap" in rule
+    assert "overflow-wrap: anywhere" in rule
+    assert "overflow-x: hidden !important" in rule
 
 
 def test_map_select_injects_world_geometry_and_narrows_by_region(running_server):
@@ -835,6 +995,23 @@ def test_theme_text_tokens_meet_wcag_contrast_on_every_surface():
             assert contrast(values[foreground], values[background]) >= 4.5, (
                 theme_path.name, foreground, background,
             )
+
+
+def test_every_button_variant_a_template_uses_actually_exists():
+    """`docs/widget-design.md` promises `ui-button-secondary` / `-outline` /
+    `-ghost`, and templates are written to that contract. When only the
+    double-hyphen forms existed in shadcn.css every variant silently fell back to
+    the solid primary fill, so widgets rendered as a wall of white buttons with
+    no hierarchy. A missing variant fails silently in CSS — hence this test."""
+    components = (WIDGET_TEMPLATE_DIR.parent / "shadcn.css").read_text()
+    used = set()
+    for template_path in WIDGET_TEMPLATE_DIR.glob("*.html"):
+        used.update(re.findall(r"ui-button-[a-z]+", template_path.read_text()))
+    for variant in sorted(used):
+        assert f".{variant}" in components, (
+            f"templates use .{variant} but shadcn.css never defines it, "
+            "so it renders as the default solid button"
+        )
 
 
 def test_widget_templates_follow_the_visual_design_contract():

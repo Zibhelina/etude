@@ -195,6 +195,8 @@ The UTF-8 file must contain a valid declarative algorithm JSON object. `-` reads
 ```console
 $ etude --db /tmp/etude-doc/db.json algorithms add by-id --spec-file algorithm.json
 {"name":"by-id","algorithm":{"label":"By ID","order":[{"key":"id","dir":"asc"}]}}
+
+Sort keys: `created`, `last_seen`, `due`, `streak`, `lapses`, `last_rating`, `attempts`, `mastery`, `id`, plus the computed `ready` (1 for new or due atoms) and `tag_rank` (position of the atom's first tag in the algorithm's own `tag_rank` list, unranked last). A ranked-tag algorithm looks like `{"label":"Chess phase priority","tag_rank":["opening","middlegame","endgame"],"order":[{"key":"ready","dir":"desc"},{"key":"tag_rank","dir":"asc"},{"key":"due","dir":"asc"},{"key":"mastery","dir":"asc"},{"key":"id","dir":"asc"}]}`.
 ```
 
 ### `stats`

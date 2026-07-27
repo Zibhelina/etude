@@ -1,0 +1,1829 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Etude · MIDI Rhythm</title>
+<style>
+/*__THEME__*/
+* { box-sizing: border-box; }
+html, body { overflow-y: hidden; }
+body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
+/* One measure for the whole widget: capping only the stage left the prose
+   flush-left while the roll floated centred, which read as two columns.
+   The widget fills its host — an 88-key piece needs every pixel of a wide chat
+   canvas — while the prose keeps its own readable measure below. */
+.wrap { display: flex; flex-direction: column; padding: 22px 26px 14px;
+  width: 100%; margin: 0 auto; }
+.label, h1.title, .prompt, .notice { max-width: 812px; }
+.label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
+h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
+.prompt { margin: 10px 0 0; font-size: 14.5px; line-height: 1.6; overflow-wrap: anywhere; }
+.prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
+
+/* The roll + keyboard are the answer surface, so they sit in one card; the
+   transport, device picker and submission actions stay outside it. */
+.card { margin-top: 14px; display: flex; flex-direction: column; gap: 12px; }
+/* --- control strips -------------------------------------------------------
+   Every control is one of three weights, and only ONE thing on screen is solid
+   at a time:
+     primary  solid fill   the single action to take next
+     quiet    bordered     secondary actions and choices
+     bare     no chrome    read-only facts
+   Before this, eight filled pills competed above the roll and the buttons below
+   it were a different height again, so nothing led the eye. `--ctl-h` puts every
+   strip on one height. */
+:root { --ctl-h: 30px; }
+
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* Tempo and hit window are facts, not buttons: no fill, no border. */
+.meta .ui-badge {
+  height: var(--ctl-h); display: inline-flex; align-items: center;
+  padding: 0 4px; border: 0; background: none; border-radius: 0;
+  color: var(--text-muted); font-size: 12.5px; font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.meta .metaSep { width: 1px; height: 16px; background: var(--border); margin: 0 6px; }
+
+/* Hand selector: one segmented control. The chosen segment is filled; the rest
+   recede to bordered, so the row carries a single emphasis. */
+.handCtl { display: inline-flex; }
+.handCtl .ui-button { height: var(--ctl-h); min-height: var(--ctl-h);
+  padding: 0 12px; font-size: 12.5px; border-radius: 0; margin-left: -1px; }
+.handCtl .ui-button:first-child { border-radius: 999px 0 0 999px; margin-left: 0; }
+.handCtl .ui-button:last-child { border-radius: 0 999px 999px 0; }
+.handCtl .ui-button[aria-pressed="true"] { position: relative; z-index: 1; }
+
+.speedCtl { display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--text-muted); }
+.speedCtl .ui-select { height: var(--ctl-h); min-height: var(--ctl-h);
+  padding: 0 24px 0 10px; font-size: 12.5px; border-radius: 999px;
+  width: auto; min-width: 76px; }
+.meta .spacer { flex: 1 1 auto; }
+/* The row under the roll matches the strips above it, so the widget reads as
+   one instrument rather than two unrelated toolbars. Only the primary action
+   is filled. */
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.actions .ui-button { height: var(--ctl-h); min-height: var(--ctl-h);
+  padding: 0 16px; font-size: 12.5px; border-radius: 999px; }
+/* A disabled primary is not the action to take next, so it should not keep the
+   solid fill: at 50% opacity a white pill still outshouts everything around it.
+   It recedes to the same bordered weight as the secondary controls. */
+.actions .ui-button:disabled { background: transparent; color: var(--text-muted);
+  border-color: var(--border); opacity: 1; }
+.hidden { display: none !important; }
+
+/* Roll and keyboard share one width so a falling note always lands on the key
+   you must press; the widget's own max-width keeps a wide chat canvas from
+   stretching the octave into fat, unreadable slabs. Roll height is fixed in px
+   rather than an aspect ratio: the note geometry is time-based (pixels per
+   second), so a width-derived height would silently change the scroll speed. */
+/* The stage fills the host. A piano roll is a falling surface, so width buys
+   key legibility and height buys reading-ahead time; on a full-size keyboard
+   the extra width is what makes 40+ keys distinguishable at all. The roll grows
+   taller alongside it (see .roll) so the runway does not shrink. */
+/* No gap between the roll and the keyboard: the strike line sits on the bottom
+   edge of the roll, so any space there would separate a note from the key it
+   lands on. The progress rule keeps its own margin below. */
+.stage { width: 100%; display: flex; flex-direction: column; gap: 0; }
+.stage .progressWrap { margin-top: 6px; }
+/* Square bottom corners so the roll meets the keyboard flush; a rounded edge
+   there left light wedges either side of the strike line. */
+.rollWrap { position: relative; width: 100%; border: 0.5px solid var(--border);
+  border-bottom: 0;
+  border-radius: calc(var(--radius) * .5) calc(var(--radius) * .5) 0 0;
+  overflow: hidden; background: var(--roll-bg);
+  container-type: inline-size; }
+.roll { display: block; width: 100%; height: 400px; touch-action: none; }
+@media (min-width: 900px) { .roll { height: 480px; } }
+@media (min-width: 1300px) { .roll { height: 560px; } }
+@media (max-width: 480px) { .roll { height: 320px; } }
+
+/* The hit line is where a note must be struck. Drawn in the canvas as well, but
+   the DOM rule keeps its colour under theme control via the token below. */
+.keys { position: relative; display: block; width: 100%; height: 84px; }
+@media (min-width: 900px) { .keys { height: 100px; } }
+@media (min-width: 1300px) { .keys { height: 116px; } }
+@media (max-width: 480px) { .keys { height: 66px; } }
+
+.status { margin: 0; font-size: 14px; min-height: 1.7em; }
+.verdict { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* Run tallies read as a metric row, not a sentence of loose numbers. */
+.counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
+  gap: 8px; margin-top: 12px; }
+.counts .cell { border: 0.5px solid var(--border); border-radius: calc(var(--radius) * .5);
+  padding: 8px 10px; background: var(--surface-1); }
+.counts .k { display: block; color: var(--text-muted); font-size: 11.5px;
+  letter-spacing: .02em; margin-bottom: 2px; }
+.counts .v { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums;
+  line-height: 1.2; }
+
+/* Progress through the snippet, so the learner can see how far a run got. */
+/* A thin rule under the keyboard. At the shared component's full height a
+   completed run reads as a solid white slab rather than as progress. */
+.progressWrap { width: 100%; }
+.progressWrap .ui-progress { height: 3px; }
+
+/* Device row: one control height across the whole strip. The select, the status
+   badge and the sound toggle are peers annotating the same thing, so letting
+   each take its component's natural size made the row look assembled from
+   scraps — the select in particular dwarfed everything beside it. */
+.deviceRow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.deviceRow label { font-size: 13px; color: var(--text-muted); }
+.deviceRow .ui-select,
+.deviceRow .ui-badge,
+.deviceRow .ui-button {
+  height: var(--ctl-h); min-height: var(--ctl-h); padding: 0 12px; font-size: 12.5px;
+  border-radius: 999px; display: inline-flex; align-items: center;
+}
+.deviceRow .ui-select { width: auto; min-width: 130px; max-width: 190px; padding-right: 26px; }
+/* Connection state is a status, not an action: text only. */
+.deviceRow .ui-badge { border: 0; background: none; padding: 0 2px;
+  color: var(--text-muted); font-weight: 400; }
+
+/* Listening transport: one row, controls then elapsed / scrubber / duration.
+   The scrubber takes the slack so the times stay pinned to the ends. */
+.player { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+/* Pill buttons rather than fixed circles: "Pausar"/"Continuar" are words, and a
+   34px circle clipped them. The skip buttons stay narrow because "−10" fits. */
+.player .ui-button { height: var(--ctl-h); min-height: var(--ctl-h); padding: 0 12px; width: auto;
+  border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12.5px; line-height: 1; white-space: nowrap; }
+.player #playPause { min-width: 86px; }
+.player .time { font-size: 12px; color: var(--text-muted);
+  font-variant-numeric: tabular-nums; min-width: 34px; }
+.player .time:last-child { text-align: right; }
+.player #scrub { flex: 1 1 auto; min-width: 0; margin: 0; accent-color: var(--foreground); }
+.player #scrub:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+
+.notice { margin: 0; font-size: 13.5px; line-height: 1.6; }
+.notice code { font-family: var(--mono); font-size: 12.5px;
+  background: var(--surface-1); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.notice a { color: inherit; }
+
+.sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Roll colours are their own tokens: "upcoming note", "white key", "black key"
+   and "hit line" are semantics of a piano roll, not of body text. Falling back
+   to generic surface tokens keeps the template readable on older themes. */
+:root {
+  /* Mixed rather than taken straight from --muted/--card: on a light theme
+     those sit within a couple of percent of the host page, so the roll and the
+     keyboard washed out into one white rectangle. Mixing toward --foreground
+     darkens them on a light theme and lightens them on a dark one. */
+  --roll-bg: var(--piano-roll-bg, color-mix(in oklab, var(--foreground) 6%, var(--muted)));
+  --roll-lane: var(--piano-roll-lane, color-mix(in oklab, var(--foreground) 12%, var(--accent)));
+  --roll-grid: var(--piano-roll-grid, var(--border));
+  --roll-grid-bar: var(--piano-roll-grid-bar, var(--muted-foreground));
+  --roll-note: var(--piano-roll-note, var(--chart-1));
+  --roll-note-next: var(--piano-roll-note-next, var(--chart-1));
+  --roll-note-accomp: var(--piano-roll-note-accomp, var(--chart-3));
+  --roll-note-hit: var(--piano-roll-note-hit, var(--green, var(--chart-2)));
+  --roll-note-miss: var(--piano-roll-note-miss, var(--destructive));
+  /* Neutral, not --destructive: the strike line marks where a note lands, which
+     is not an error condition. */
+  --roll-line: var(--piano-roll-line, color-mix(in oklab, var(--foreground) 45%, var(--muted)));
+  --key-white: var(--piano-key-white, color-mix(in oklab, var(--background) 22%, var(--card)));
+  --key-black: var(--piano-key-black, color-mix(in oklab, var(--foreground) 82%, var(--card)));
+  --key-edge: var(--piano-key-edge, var(--border));
+  --key-active: var(--piano-key-active, var(--chart-1));
+}
+
+@media (max-width: 400px) { .wrap { padding: 16px 14px 12px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body data-fit-content>
+<div class="wrap">
+  <div class="label" id="kindLabel"></div>
+  <h1 class="title" id="topic">MIDI</h1>
+  <div class="prompt" id="prompt"></div>
+
+  <div class="deviceRow" id="deviceRow">
+    <label for="device" id="deviceLabel"></label>
+    <select class="ui-select" id="device"></select>
+    <span class="ui-badge" id="deviceBadge"></span>
+    <button type="button" class="ui-button ui-button-ghost" id="sound" aria-pressed="true"></button>
+  </div>
+
+  <p class="notice ui-muted hidden" id="midiNotice"></p>
+
+  <section class="card" id="card">
+    <div class="meta">
+      <span class="ui-badge" id="tempoBadge"></span>
+      <span class="ui-badge" id="windowBadge"></span>
+      <span class="metaSep" aria-hidden="true"></span>
+      <div class="handCtl hidden" id="handCtl" role="group">
+        <button type="button" class="ui-button" data-hand="both" id="handBoth"></button>
+        <button type="button" class="ui-button ui-button-outline" data-hand="right" id="handRight"></button>
+        <button type="button" class="ui-button ui-button-outline" data-hand="left" id="handLeft"></button>
+      </div>
+      <label class="speedCtl">
+        <span id="speedLabel"></span>
+        <select class="ui-select" id="speed">
+          <option value="0.5">50%</option>
+          <option value="0.65">65%</option>
+          <option value="0.8">80%</option>
+          <option value="1" selected>100%</option>
+          <option value="1.25">125%</option>
+          <option value="1.5">150%</option>
+          <option value="2">200%</option>
+        </select>
+      </label>
+      <span class="spacer"></span>
+      <span class="ui-muted" id="progressText"></span>
+    </div>
+
+    <div class="stage">
+      <div class="rollWrap">
+        <canvas class="roll" id="roll" aria-hidden="true"></canvas>
+      </div>
+      <canvas class="keys" id="keys" aria-hidden="true"></canvas>
+      <div class="progressWrap">
+        <div class="ui-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+             aria-valuenow="0" id="progressBar"><span id="progressFill"></span></div>
+      </div>
+    </div>
+    <p class="sr" id="srState" aria-live="polite"></p>
+
+    <p class="status" id="status" aria-live="polite"></p>
+  </section>
+
+  <div class="actions">
+    <button type="button" class="ui-button" id="start"></button>
+    <button type="button" class="ui-button ui-button-ghost" id="listen"></button>
+    <button type="button" class="ui-button ui-button-outline hidden" id="stop"></button>
+    <button type="button" class="ui-button ui-button-secondary hidden" id="retry"></button>
+  </div>
+
+  <!-- Transport for listening mode. Hidden until playback starts, because a
+       scrubber with nothing playing is just clutter. -->
+  <div class="player hidden" id="player">
+    <button type="button" class="ui-button ui-button-outline" id="back10"></button>
+    <button type="button" class="ui-button ui-button-outline" id="playPause"></button>
+    <button type="button" class="ui-button ui-button-outline" id="fwd10"></button>
+    <span class="time" id="elapsed">0:00</span>
+    <input type="range" id="scrub" min="0" max="1000" value="0" step="100">
+    <span class="time" id="duration">0:00</span>
+  </div>
+
+  <div class="counts hidden" id="counts"></div>
+
+  <div class="ui-card card hidden" id="configError">
+    <div class="ui-card-title" id="configErrorTitle"></div>
+    <div class="ui-card-description" id="configErrorBody"></div>
+  </div>
+</div>
+
+<script>const ETUDE = /*__DATA__*/null;</script>
+<script>
+(() => {
+  'use strict';
+  const data = ETUDE || {};
+  const atom = data.atom || {};
+  const widgetData = atom.widget_data || {};
+  const $ = id => document.getElementById(id);
+
+  /* ---------------------------------------------------------------- i18n */
+  function isPortuguese() {
+    const text = `${atom.user_prompt || ''} ${atom.topic || ''}`;
+    return /[áàãâéêíóôõúç]/i.test(text) || /\b(toque|ritmo|teclado|musica|música|compasso)\b/i.test(text);
+  }
+  const ui = isPortuguese() ? {
+    kind: 'Ritmo no teclado',
+    device: 'Entrada MIDI',
+    noDevice: 'nenhum dispositivo',
+    connected: 'conectado',
+    waiting: 'aguardando dispositivo',
+    start: 'Começar',
+    stop: 'Parar',
+    soundOn: 'Som ligado',
+    listen: 'Ouvir',
+    stopListen: 'Parar de ouvir',
+    speed: 'Velocidade',
+    handBoth: 'Duas mãos',
+    handRight: 'Direita',
+    handLeft: 'Esquerda',
+    speedChanged: 'Velocidade alterada — recomeçando.',
+    pause: 'Pausar',
+    resume: 'Continuar',
+    back10: 'Voltar 10 segundos',
+    fwd10: 'Avancar 10 segundos',
+    listening: 'Tocando a música — só ouça.',
+    readyNoDevice: 'Conecte o teclado para praticar, ou clique em Ouvir.',
+    soundOff: 'Som desligado',
+    retry: 'Reenviar',
+    again: 'Tentar de novo',
+    countIn: n => `Preparar… ${n}`,
+    ready: 'Conecte o teclado e clique em Começar.',
+    playing: 'Toque junto com as notas.',
+    restart: 'Errou — recomeçando do início.',
+    restartSection: label => label ? `Errou — voltando para “${label}”.` : 'Errou — voltando ao início da seção.',
+    passed: '✓ Tocou a sequência inteira em sincronia.',
+    sent: 'Tentativa registrada.',
+    sendFailed: 'Falha ao enviar. Clique em Reenviar.',
+    stopped: 'Parado.',
+    hit: 'Acertos',
+    missed: 'Erros',
+    attempts: 'Tentativas',
+    accuracy: 'Precisão',
+    noNotes: 'Este item não tem notas.',
+    noNotesBody: 'Adicione widget_data.notes com {pitch, time, duration} para tocar.',
+    midiBlocked: 'MIDI indisponível',
+    midiBlockedBody: 'Este navegador ou moldura bloqueou o acesso MIDI. Abra o widget direto no Chrome:',
+    midiDenied: 'Permissão MIDI negada. Autorize o acesso e recarregue.',
+    tempo: bpm => `${bpm} BPM`,
+    window: ms => `janela ±${ms} ms`,
+    progress: (a, b) => `nota ${a} de ${b}`,
+  } : {
+    kind: 'Keyboard rhythm',
+    device: 'MIDI input',
+    noDevice: 'no device',
+    connected: 'connected',
+    waiting: 'waiting for device',
+    start: 'Start',
+    stop: 'Stop',
+    soundOn: 'Sound on',
+    listen: 'Listen',
+    stopListen: 'Stop listening',
+    speed: 'Speed',
+    handBoth: 'Both hands',
+    handRight: 'Right',
+    handLeft: 'Left',
+    speedChanged: 'Speed changed — restarting.',
+    pause: 'Pause',
+    resume: 'Resume',
+    back10: 'Back 10 seconds',
+    fwd10: 'Forward 10 seconds',
+    listening: 'Playing the piece — just listen.',
+    readyNoDevice: 'Connect your keyboard to practise, or press Listen.',
+    soundOff: 'Sound off',
+    retry: 'Retry send',
+    again: 'Try again',
+    countIn: n => `Get ready… ${n}`,
+    ready: 'Connect your keyboard and press Start.',
+    playing: 'Play along with the notes.',
+    restart: 'Missed — restarting from the top.',
+    restartSection: label => label ? `Missed — back to “${label}”.` : 'Missed — back to the start of the section.',
+    passed: '✓ Played the whole sequence in time.',
+    sent: 'Attempt recorded.',
+    sendFailed: 'Send failed. Press Retry send.',
+    stopped: 'Stopped.',
+    hit: 'Hits',
+    missed: 'Misses',
+    attempts: 'Runs',
+    accuracy: 'Accuracy',
+    noNotes: 'This item has no notes.',
+    noNotesBody: 'Add widget_data.notes with {pitch, time, duration} entries to play.',
+    midiBlocked: 'MIDI unavailable',
+    midiBlockedBody: 'This browser or frame blocked MIDI access. Open the widget directly in Chrome:',
+    midiDenied: 'MIDI permission denied. Allow access and reload.',
+    tempo: bpm => `${bpm} BPM`,
+    window: ms => `±${ms} ms window`,
+    progress: (a, b) => `note ${a} of ${b}`,
+  };
+
+  /* ------------------------------------------------------------- note data
+     Notes are {pitch, time, duration} with time/duration in beats by default
+     (unit: "beats"), or in seconds when widget_data.unit is "seconds". Beats
+     are the authoring-friendly unit and tempo stays a separate knob, so the
+     same snippet can be practised slower without rewriting every timestamp. */
+  const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const BLACK = new Set([1, 3, 6, 8, 10]);
+
+  function pitchOf(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) return Math.round(value);
+    if (typeof value !== 'string') return null;
+    // Accept scientific pitch names ("C4", "F#3", "Bb5") beside raw MIDI numbers.
+    const text = value.trim();
+    if (/^\d+$/.test(text)) return Number(text);
+    const match = /^([A-Ga-g])([#b]?)(-?\d+)$/.exec(text);
+    if (!match) return null;
+    const base = {c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11}[match[1].toLowerCase()];
+    const accidental = match[2] === '#' ? 1 : (match[2] === 'b' ? -1 : 0);
+    return (Number(match[3]) + 1) * 12 + base + accidental;
+  }
+
+  function noteLabel(pitch) {
+    return `${NOTE_NAMES[((pitch % 12) + 12) % 12]}${Math.floor(pitch / 12) - 1}`;
+  }
+
+  /* One atom per song. `widget_data.hands` = {right, left} holds the two parts
+     once, and the learner picks which one is graded; the other becomes the
+     automatic accompaniment. Splitting a song into three atoms instead made
+     three separate scheduler histories for what is one piece of music.
+
+     `?hand=` (or the remembered choice) selects the part. The older shape —
+     `notes` graded plus `accompaniment` automatic — still renders untouched, so
+     existing pieces keep working. */
+  const hands = (widgetData.hands && typeof widgetData.hands === 'object')
+    ? widgetData.hands : null;
+  const HAND_KEY = `etude:hand:${atom.id || 'x'}`;
+  function initialHand() {
+    // The server resolves `?hand=` and passes it in the payload: this template
+    // runs in a sandboxed frame and cannot read the host page's query string.
+    const asked = data.hand;
+    if (asked && ['both', 'right', 'left'].includes(asked)) return asked;
+    try {
+      const saved = localStorage.getItem(HAND_KEY);
+      if (saved && ['both', 'right', 'left'].includes(saved)) return saved;
+    } catch (_) { /* storage may be blocked in a sandbox */ }
+    return 'both';
+  }
+  let hand = hands ? initialHand() : 'both';
+
+  // Which notes are graded, and which the widget plays, for the chosen hand.
+  function partsFor(which) {
+    if (!hands) {
+      return {graded: widgetData.notes || [], auto: widgetData.accompaniment || []};
+    }
+    const right = Array.isArray(hands.right) ? hands.right : [];
+    const left = Array.isArray(hands.left) ? hands.left : [];
+    if (which === 'right') return {graded: right, auto: left};
+    if (which === 'left') return {graded: left, auto: right};
+    return {graded: right.concat(left), auto: []};
+  }
+
+  const chosen = partsFor(hand);
+  const rawNotes = Array.isArray(chosen.graded) ? chosen.graded : [];
+  const tempo = Number.isFinite(widgetData.tempo) && widgetData.tempo > 0 ? Number(widgetData.tempo) : 90;
+  const unit = widgetData.unit === 'seconds' ? 'seconds' : 'beats';
+  /* Practice speed. Note times are computed once at the written tempo; playing
+     slower or faster is a change of *clock rate*, not of the score. So the
+     timeline stays fixed and `speed` divides wherever song-seconds meet
+     wall-clock seconds — one factor, applied at the boundary. 1 is as written.
+     The hit window is deliberately NOT scaled: the tolerance measures the
+     learner's accuracy, and stretching it at slow speed would flatter them. */
+  let speed = 1;
+  const beat = 60 / tempo;
+  const toSeconds = value => (unit === 'seconds' ? value : value * beat);
+  // Clamped so a bad authoring value cannot make the test unpassable or trivial.
+  const hitWindow = Math.min(1000, Math.max(40,
+    Number.isFinite(widgetData.tolerance_ms) ? Number(widgetData.tolerance_ms) : 150));
+
+  const notes = rawNotes.map(entry => {
+    if (!entry || typeof entry !== 'object') return null;
+    const pitch = pitchOf(entry.pitch);
+    const time = Number(entry.time);
+    if (pitch === null || !Number.isFinite(time)) return null;
+    const duration = Number.isFinite(entry.duration) && entry.duration > 0 ? Number(entry.duration) : 0.5;
+    return {pitch, at: toSeconds(time), len: toSeconds(duration)};
+  }).filter(Boolean).sort((a, b) => a.at - b.at || a.pitch - b.pitch);
+
+  /* Accompaniment: the part the learner is NOT playing, sounded by the widget
+     in time with them. Practising one hand alone is musically bleak — you lose
+     the harmony that tells you whether you are in the right place. With the
+     other hand filling in, a right-hand drill still sounds like the piece, and
+     the timing reference is the music itself rather than a metronome.
+     These notes are never graded and never appear as steps; they only sound. */
+  const accompaniment = (Array.isArray(chosen.auto) ? chosen.auto : [])
+    .map(entry => {
+      if (!entry || typeof entry !== 'object') return null;
+      const pitch = pitchOf(entry.pitch);
+      const time = Number(entry.time);
+      if (pitch === null || !Number.isFinite(time)) return null;
+      const duration = Number.isFinite(entry.duration) && entry.duration > 0 ? Number(entry.duration) : 0.5;
+      return {pitch, at: toSeconds(time), len: toSeconds(duration)};
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.at - b.at || a.pitch - b.pitch);
+
+  if (!notes.length) {
+    $('card').classList.add('hidden');
+    $('deviceRow').classList.add('hidden');
+    $('start').classList.add('hidden');
+    $('configErrorTitle').textContent = ui.noNotes;
+    $('configErrorBody').textContent = ui.noNotesBody;
+    $('configError').classList.remove('hidden');
+  }
+
+  /* A key cannot be held and re-struck at the same instant. Source arrangements
+     voice one pitch across two parts often enough that this has to be repaired
+     here rather than trusted: left alone it draws two blocks stacked on one
+     lane and asks for a note nobody can play. The earlier note is shortened to
+     stop just before the next attack on that key. */
+  const RELEASE_GAP = 0.05;
+  for (let i = 0; i < notes.length; i += 1) {
+    const note = notes[i];
+    for (let j = i + 1; j < notes.length; j += 1) {
+      const later = notes[j];
+      if (later.at >= note.at + note.len - 1e-6) break;
+      if (later.pitch === note.pitch) {
+        note.len = Math.max(0.05, later.at - note.at - RELEASE_GAP);
+        break;
+      }
+    }
+  }
+
+  /* Chords: notes sharing a start time must be struck together, so they are
+     grouped into one step. A step passes only when every pitch in it is played
+     inside the window — otherwise a two-note chord could be half-played. */
+  const GROUP_EPSILON = 0.012;
+  const steps = [];
+  for (const note of notes) {
+    const last = steps[steps.length - 1];
+    if (last && Math.abs(note.at - last.at) <= GROUP_EPSILON) last.notes.push(note);
+    else steps.push({at: note.at, notes: [note]});
+  }
+
+  /* Sections. A whole piece is too long for restart-from-the-top: one slip in
+     the last bar would throw away three minutes of clean playing, which trains
+     frustration rather than the music. `widget_data.sections` is a list of
+     {label, time} marks (same unit as note times); a miss rewinds to the start
+     of the section being played instead of to the beginning. With no sections
+     declared the piece is one section and the original behaviour stands. */
+  const rawSections = Array.isArray(widgetData.sections) ? widgetData.sections : [];
+  const sections = rawSections
+    .map(entry => {
+      if (!entry || typeof entry !== 'object') return null;
+      const time = Number(entry.time);
+      if (!Number.isFinite(time)) return null;
+      return {at: toSeconds(time), label: typeof entry.label === 'string' ? entry.label : ''};
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.at - b.at);
+  // A leading section at time 0 is implied, so a piece never starts mid-section.
+  if (!sections.length || sections[0].at > 0) sections.unshift({at: 0, label: ''});
+  // Map each step to its section, and each section to the step it resumes from.
+  const sectionOfStep = steps.map(step => {
+    let index = 0;
+    for (let i = 0; i < sections.length; i += 1) if (step.at >= sections[i].at - 1e-6) index = i;
+    return index;
+  });
+  const firstStepOfSection = sections.map((_, index) => {
+    const found = sectionOfStep.indexOf(index);
+    return found === -1 ? steps.length : found;
+  });
+
+  const sounding = notes.concat(accompaniment);
+  const lastEnd = sounding.reduce((max, note) => Math.max(max, note.at + note.len), 0);
+
+  // Two ranges, because the keyboard answers two different questions.
+  //
+  // `playLow`/`playHigh` is what the learner must physically play — the graded
+  // part alone. Those keys are drawn full-strength and are what the hit line
+  // refers to.
+  //
+  // `rangeLow`/`rangeHigh` is what is *drawn*, and it covers the accompaniment
+  // too. Clipping the keyboard to the graded part meant the automatic hand was
+  // playing notes with nowhere to land: in Sweden, 119 of 133 backing notes
+  // fell outside the drawn keys and vanished, so the learner could hear a part
+  // they could not see. Showing both, with the backing part in its own colour
+  // over dimmed keys, is what makes the accompaniment legible.
+  const playLow = notes.reduce((min, note) => Math.min(min, note.pitch), 127);
+  const playHigh = notes.reduce((max, note) => Math.max(max, note.pitch), 0);
+  const spanLow = sounding.reduce((min, note) => Math.min(min, note.pitch), 127);
+  const spanHigh = sounding.reduce((max, note) => Math.max(max, note.pitch), 0);
+  // Snap to whole octaves so the keyboard never starts or ends mid-octave, and
+  // cap the drawn span: a stray pedal note four octaves down would otherwise
+  // squeeze the melody into a few pixels. Beyond the cap the extreme
+  // accompaniment still sounds, as it did before.
+  // The graded part is inviolable: every note the learner must play needs a key
+  // to land on, so it always sets the floor for what is drawn. The
+  // accompaniment may widen that, but only up to a cap — a stray pedal note
+  // four octaves down would otherwise squeeze the melody into a few pixels.
+  // Past the cap the extreme backing notes still sound, as they always did.
+  const MAX_DRAWN_KEYS = 61;                       // five octaves, still readable
+  const mustLow = Math.max(0, Math.floor(playLow / 12) * 12);
+  const mustHigh = Math.min(127, playHigh % 12 === 0
+    ? playHigh
+    : Math.ceil((playHigh + 1) / 12) * 12 - 1);
+  // How much room the accompaniment may add, split between the two sides.
+  const budget = Math.max(0, MAX_DRAWN_KEYS - (mustHigh - mustLow + 1));
+  const wantLow = Math.max(0, Math.floor(Math.min(playLow, spanLow) / 12) * 12);
+  const wantHigh = Math.min(127, (() => {
+    const top = Math.max(playHigh, spanHigh);
+    return top % 12 === 0 ? top : Math.ceil((top + 1) / 12) * 12 - 1;
+  })());
+  const rangeLow = Math.max(wantLow, mustLow - Math.floor(budget / 12) * 12);
+  const rangeHigh = Math.min(wantHigh, mustHigh + Math.floor(budget / 12) * 12);
+
+  const LEAD_IN = 2.0;      // seconds of runway before the first note reaches the line
+  const COUNT_IN = 3;       // spoken count before the run starts
+  // Scroll speed. Paired with the roll's height: this shows roughly the next
+  // three seconds of music, enough runway to read ahead without the notes
+  // becoming a sparse drizzle on a tall canvas.
+  const PIXELS_PER_SEC = 120;
+
+  /* ------------------------------------------------------------ key layout
+     White keys tile the width; black keys are drawn on top at 62% width. The
+     same layout maps a pitch to an x range for both the keyboard and the roll,
+     so a falling note always lands on the key you must press. */
+  const whitePitches = [];
+  for (let pitch = rangeLow; pitch <= rangeHigh; pitch += 1) {
+    if (!BLACK.has(((pitch % 12) + 12) % 12)) whitePitches.push(pitch);
+  }
+  const whiteIndex = new Map(whitePitches.map((pitch, index) => [pitch, index]));
+
+  function laneOf(pitch, width) {
+    // Outside the drawn keyboard there is no key to point at. Without this a
+    // black key just above the top note still resolved, because it is placed
+    // from the white key *below* it — drawing a stray sharp hanging off the end.
+    if (pitch < rangeLow || pitch > rangeHigh) return null;
+    const whiteWidth = width / Math.max(1, whitePitches.length);
+    if (!BLACK.has(((pitch % 12) + 12) % 12)) {
+      const index = whiteIndex.get(pitch);
+      if (index === undefined) return null;
+      return {x: index * whiteWidth, w: whiteWidth, black: false};
+    }
+    // A black key sits between its neighbouring white keys.
+    const below = whiteIndex.get(pitch - 1);
+    if (below === undefined) return null;
+    const blackWidth = whiteWidth * 0.62;
+    return {x: (below + 1) * whiteWidth - blackWidth / 2, w: blackWidth, black: true};
+  }
+
+  /* -------------------------------------------------------------- drawing */
+  const rollCanvas = $('roll');
+  const keysCanvas = $('keys');
+  const rollCtx = rollCanvas.getContext('2d');
+  const keysCtx = keysCanvas.getContext('2d');
+  const held = new Set();          // pitches the learner is holding
+  // Pitches the automatic hand is sounding right now. Kept apart from `held` so
+  // the backing part lights its own keys in its own colour and never counts as
+  // something the learner played.
+  const accompHeld = new Set();
+  let stepState = [];              // 'pending' | 'hit' per step, for note colouring
+
+  /* Dimming marks keys the learner's controller does not have. That is only
+     meaningful on a 25-key controller: on an 88-key piano every drawn key is
+     reachable, so dimming half the keyboard is just noise. `widget_data.keys`
+     (or the full-piece tag) opts a piece out of dimming entirely. */
+  const fullKeyboard = widgetData.keys === 88 || widgetData.keys === 'full'
+    || (Array.isArray(atom.tags) && atom.tags.includes('full'));
+
+  // Is this key part of what the learner must actually play?
+  function inPlayRange(pitch) {
+    if (fullKeyboard) return true;
+    return pitch >= playLow && pitch <= playHigh;
+  }
+
+  function readVar(name, fallback) {
+    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback;
+  }
+
+  function sizeCanvas(canvas, context) {
+    const ratio = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(1, Math.round(rect.width));
+    const height = Math.max(1, Math.round(rect.height));
+    if (canvas.width !== width * ratio || canvas.height !== height * ratio) {
+      canvas.width = width * ratio;
+      canvas.height = height * ratio;
+    }
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    return {width, height};
+  }
+
+  function drawKeys() {
+    const {width, height} = sizeCanvas(keysCanvas, keysCtx);
+    keysCtx.clearRect(0, 0, width, height);
+    const white = readVar('--key-white', '#ffffff');
+    const black = readVar('--key-black', '#111111');
+    const edge = readVar('--key-edge', '#888888');
+    const active = readVar('--key-active', '#d4d4d4');
+    // The automatic hand lights keys in the same colour its notes fall in, so
+    // the roll and the keyboard tell one story.
+    const accompColor = readVar('--roll-note-accomp', readVar('--roll-note', '#8a8a8a'));
+
+    for (const pitch of whitePitches) {
+      const lane = laneOf(pitch, width);
+      if (!lane) continue;
+      // Keys outside the graded part belong to the automatic hand. Dimming them
+      // keeps the keyboard honest about what the learner is responsible for
+      // while still showing where the backing notes land.
+      keysCtx.globalAlpha = inPlayRange(pitch) ? 1 : 0.45;
+      keysCtx.fillStyle = held.has(pitch) ? active
+        : (accompHeld.has(pitch) ? accompColor : white);
+      keysCtx.fillRect(lane.x, 0, lane.w, height);
+      keysCtx.strokeStyle = edge;
+      keysCtx.lineWidth = 1;
+      keysCtx.strokeRect(lane.x + 0.5, 0.5, lane.w - 1, height - 1);
+      keysCtx.globalAlpha = 1;
+      // Octave anchor: label every C so the range is readable at a glance.
+      if (((pitch % 12) + 12) % 12 === 0 && lane.w > 13) {
+        keysCtx.fillStyle = edge;
+        keysCtx.font = '10px system-ui, sans-serif';
+        keysCtx.textAlign = 'center';
+        keysCtx.fillText(noteLabel(pitch), lane.x + lane.w / 2, height - 6);
+      }
+    }
+    for (let pitch = rangeLow; pitch <= rangeHigh; pitch += 1) {
+      if (!BLACK.has(((pitch % 12) + 12) % 12)) continue;
+      const lane = laneOf(pitch, width);
+      if (!lane) continue;
+      keysCtx.globalAlpha = inPlayRange(pitch) ? 1 : 0.45;
+      keysCtx.fillStyle = held.has(pitch) ? active
+        : (accompHeld.has(pitch) ? accompColor : black);
+      keysCtx.fillRect(lane.x, 0, lane.w, height * 0.62);
+      keysCtx.strokeStyle = edge;
+      keysCtx.lineWidth = 1;
+      keysCtx.strokeRect(lane.x + 0.5, 0.5, lane.w - 1, height * 0.62);
+      keysCtx.globalAlpha = 1;
+    }
+  }
+
+  function drawRoll(now) {
+    const {width, height} = sizeCanvas(rollCanvas, rollCtx);
+    rollCtx.clearRect(0, 0, width, height);
+    // Flush with the bottom of the roll, which sits directly on the keyboard:
+    // the note visually arrives *at the key* it must be played on. Floating the
+    // line 10px up left a dead strip under it and broke that reading.
+    const lineY = height - 1;
+
+    const laneColor = readVar('--roll-lane', '#222222');
+    rollCtx.fillStyle = laneColor;
+    for (let pitch = rangeLow; pitch <= rangeHigh; pitch += 1) {
+      if (!BLACK.has(((pitch % 12) + 12) % 12)) continue;
+      const lane = laneOf(pitch, width);
+      if (lane) rollCtx.fillRect(lane.x, 0, lane.w, lineY);
+    }
+
+    // Beat grid: without a pulse to read against, the roll gives no cue for
+    // *when* to play — only for what. Bar lines are brighter than beat lines.
+    const gridColor = readVar('--roll-grid', '#2a2a2a');
+    const barColor = readVar('--roll-grid-bar', '#3d3d3d');
+    const beatsPerBar = 4;
+    const firstBeat = Math.floor(now / beat) - 1;
+    const lastBeat = Math.ceil((now + lineY / PIXELS_PER_SEC) / beat) + 1;
+    for (let b = firstBeat; b <= lastBeat; b += 1) {
+      const y = lineY - (b * beat - now) * PIXELS_PER_SEC;
+      if (y < 0 || y > lineY) continue;
+      const isBar = ((b % beatsPerBar) + beatsPerBar) % beatsPerBar === 0;
+      rollCtx.strokeStyle = isBar ? barColor : gridColor;
+      rollCtx.lineWidth = isBar ? 1.5 : 1;
+      rollCtx.beginPath();
+      rollCtx.moveTo(0, y + 0.5);
+      rollCtx.lineTo(width, y + 0.5);
+      rollCtx.stroke();
+    }
+
+    // Section marks: the checkpoints a miss rewinds to. Drawn brighter than a
+    // bar line and named, so the learner can see the unit they are being asked
+    // to play cleanly.
+    if (sections.length > 1) {
+      const markColor = readVar('--foreground', '#ffffff');
+      for (const section of sections) {
+        if (section.at <= 0) continue;
+        const y = lineY - (section.at - now) * PIXELS_PER_SEC;
+        if (y < 0 || y > lineY) continue;
+        rollCtx.save();
+        rollCtx.strokeStyle = markColor;
+        rollCtx.globalAlpha = 0.55;
+        rollCtx.lineWidth = 1.5;
+        rollCtx.setLineDash([5, 4]);
+        rollCtx.beginPath();
+        rollCtx.moveTo(0, y + 0.5);
+        rollCtx.lineTo(width, y + 0.5);
+        rollCtx.stroke();
+        rollCtx.setLineDash([]);
+        if (section.label) {
+          rollCtx.globalAlpha = 0.8;
+          rollCtx.fillStyle = markColor;
+          rollCtx.font = '600 10px system-ui, sans-serif';
+          rollCtx.textAlign = 'left';
+          rollCtx.textBaseline = 'bottom';
+          rollCtx.fillText(section.label, 5, y - 3);
+        }
+        rollCtx.restore();
+      }
+    }
+
+    // Accompaniment blocks are drawn first, dim and outlined: they show what the
+    // widget is filling in, and must never be mistaken for a note to play.
+    if (accompaniment.length) {
+      const ghost = readVar('--roll-note-accomp', readVar('--roll-note', '#d4d4d4'));
+      for (const note of accompaniment) {
+        const lane = laneOf(note.pitch, width);
+        if (!lane) continue;
+        const y = lineY - (note.at - now) * PIXELS_PER_SEC;
+        const h = Math.max(8, note.len * PIXELS_PER_SEC);
+        const top = y - h;
+        if (y < -40 || top > height) continue;
+        rollCtx.save();
+        rollCtx.beginPath();
+        rollCtx.roundRect(lane.x + 1, top, Math.max(2, lane.w - 2), h,
+          Math.min(4, lane.w / 3, h / 3));
+        // Filled at low opacity but outlined at full: the shape stays legible
+        // as "the other part" rather than reading as a shadow of your own.
+        rollCtx.globalAlpha = 0.30;
+        rollCtx.fillStyle = ghost;
+        rollCtx.fill();
+        rollCtx.globalAlpha = 0.85;
+        rollCtx.strokeStyle = ghost;
+        rollCtx.lineWidth = 1.5;
+        rollCtx.stroke();
+        rollCtx.restore();
+      }
+    }
+
+    const noteColor = readVar('--roll-note', '#d4d4d4');
+    const hitColor = readVar('--roll-note-hit', '#4ade80');
+    const missColor = readVar('--roll-note-miss', '#ef4444');
+    const nextColor = readVar('--roll-note-next', noteColor);
+
+    steps.forEach((step, index) => {
+      for (const note of step.notes) {
+        const lane = laneOf(note.pitch, width);
+        if (!lane) continue;
+        // y is the note's leading edge: it reaches the hit line exactly at `at`.
+        const y = lineY - (note.at - now) * PIXELS_PER_SEC;
+        const noteHeight = Math.max(10, note.len * PIXELS_PER_SEC);
+        const top = y - noteHeight;
+        if (y < -40 || top > height) continue;
+        const state = stepState[index];
+        const isNext = running && index === cursor && state === 'pending';
+        rollCtx.fillStyle = state === 'hit' ? hitColor
+          : (state === 'miss' ? missColor : (isNext ? nextColor : noteColor));
+        const radius = Math.min(5, lane.w / 2.6, noteHeight / 2.6);
+        rollCtx.beginPath();
+        rollCtx.roundRect(lane.x + 1, top, Math.max(2, lane.w - 2), noteHeight, radius);
+        rollCtx.fill();
+        // The note due now carries an outline as well as a colour, so the cue
+        // survives for anyone who cannot separate the two fills.
+        if (isNext) {
+          rollCtx.strokeStyle = readVar('--foreground', '#ffffff');
+          rollCtx.lineWidth = 2;
+          rollCtx.stroke();
+        }
+        // Name the note on the block itself, like the reference roll.
+        if (lane.w > 15 && noteHeight > 16) {
+          rollCtx.fillStyle = readVar('--roll-bg', '#111111');
+          rollCtx.font = '600 11px system-ui, sans-serif';
+          rollCtx.textAlign = 'center';
+          rollCtx.textBaseline = 'middle';
+          rollCtx.fillText(noteLabel(note.pitch).replace(/-?\d+$/, ''),
+            lane.x + lane.w / 2, top + noteHeight - 10);
+        }
+      }
+    });
+
+    // The strike point still needs marking — without it there is no cue for
+    // *when* a note counts — but a red rule across the roll read as an error
+    // state. A quiet hairline in the theme's own foreground does the same job
+    // without shouting.
+    rollCtx.strokeStyle = readVar('--roll-line', readVar('--border', '#3d3d3d'));
+    rollCtx.lineWidth = 1;
+    rollCtx.beginPath();
+    rollCtx.moveTo(0, lineY + 0.5);
+    rollCtx.lineTo(width, lineY + 0.5);
+    rollCtx.stroke();
+  }
+
+  /* ------------------------------------------------------------ run state */
+  let running = false;
+  let startedAt = 0;          // performance.now() when song-time 0 occurs
+  let cursor = 0;             // index of the next step to satisfy
+  let frame = 0;
+  let runs = 0;
+  let hits = 0;
+  let misses = 0;
+  let sent = false;
+  let unsent = null;
+  let pendingPitches = new Set();  // pitches already struck for the current step
+
+  function songTime() {
+    // Wall-clock seconds scaled into song seconds: at speed 2 the clock runs
+    // twice as fast, so the same wall second covers two song seconds.
+    return ((performance.now() - startedAt) / 1000) * speed;
+  }
+
+  // Resume point for the current attempt: 0 for a fresh run, or the first step
+  // of the section that was being played when a miss happened.
+  let resumeStep = 0;
+
+  function resetRun(fromStep) {
+    resumeStep = Math.max(0, Math.min(steps.length - 1, fromStep || 0));
+    cursor = resumeStep;
+    pendingPitches = new Set();
+    // Steps before the resume point stay marked as played, so the roll shows
+    // what has already been cleared rather than blanking the whole piece.
+    stepState = steps.map((_, index) => (index < resumeStep ? 'hit' : 'pending'));
+  }
+
+  // Song time the current attempt starts from, so a section resume does not
+  // replay the earlier bars.
+  function resumeAt() {
+    return steps.length && resumeStep > 0 ? steps[resumeStep].at : 0;
+  }
+
+  function setStatus(text) {
+    $('status').textContent = text;
+    $('srState').textContent = text;
+  }
+
+  function updateProgress() {
+    $('progressText').textContent = ui.progress(Math.min(cursor + 1, steps.length), steps.length);
+    const pct = steps.length ? Math.round((cursor / steps.length) * 100) : 0;
+    $('progressFill').style.width = `${pct}%`;
+    $('progressBar').setAttribute('aria-valuenow', String(pct));
+  }
+
+  function renderCounts() {
+    const total = hits + misses;
+    const accuracy = total ? Math.round((hits / total) * 100) : 0;
+    const box = $('counts');
+    box.replaceChildren();
+    for (const [key, value] of [
+      [ui.attempts, String(runs)],
+      [ui.hit, String(hits)],
+      [ui.missed, String(misses)],
+      [ui.accuracy, `${accuracy}%`],
+    ]) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const k = document.createElement('span'); k.className = 'k'; k.textContent = key;
+      const v = document.createElement('span'); v.className = 'v'; v.textContent = value;
+      cell.append(k, v);
+      box.append(cell);
+    }
+    box.classList.toggle('hidden', runs === 0);
+  }
+
+  /* A miss restarts the run from the top, which is the whole point of the
+     drill: the sequence has to be played through in one clean pass. */
+  function fail(reason) {
+    stopAccompaniment();
+    misses += 1;
+    if (cursor < stepState.length) stepState[cursor] = 'miss';
+    runs += 1;
+    renderCounts();
+    silenceAll();
+    // Rewind to the top of the section being played, not to the top of the
+    // piece: on a full-length song the latter discards minutes of clean work
+    // for one slip.
+    const section = sectionOfStep[cursor] ?? 0;
+    const target = firstStepOfSection[section] ?? 0;
+    const label = sections[section] && sections[section].label;
+    setStatus(reason || (target > 0 ? ui.restartSection(label) : ui.restart));
+    // Restart after a beat so the learner sees which note went red.
+    running = false;
+    window.setTimeout(() => {
+      if (!midiReady()) return;
+      resetRun(target);
+      beginRun();
+    }, 700);
+  }
+
+  function succeed() {
+    running = false;
+    stopAccompaniment();
+    silenceAll();
+    runs += 1;
+    renderCounts();
+    // Redraw at song-time 0 rather than at the end: scrolling past the last
+    // note leaves an empty black rectangle, which is the least useful thing the
+    // widget could show at the moment the learner wants to see what they played.
+    drawRoll(0);
+    drawKeys();
+    setStatus(ui.passed);
+    $('stop').classList.add('hidden');
+    $('start').classList.remove('hidden');
+    $('start').textContent = ui.again;
+    submit(true);
+  }
+
+  function tick() {
+    if (!running) return;
+    const now = songTime();
+    drawRoll(now);
+    drawKeys();
+    // A step whose window has fully passed without being satisfied is a miss.
+    if (cursor < steps.length && now > steps[cursor].at + hitWindow / 1000) {
+      fail();
+      return;
+    }
+    if (cursor >= steps.length && now > lastEnd + 0.2) {
+      succeed();
+      return;
+    }
+    frame = requestAnimationFrame(tick);
+  }
+
+  /* The accompaniment is scheduled against wall-clock time, not the animation
+     frame, so it stays in tempo even if painting stutters. Timers are tracked
+     so a restart can cancel the notes that were queued for the run it replaces
+     — otherwise the previous attempt keeps playing over the new one. */
+  let accompTimers = [];
+
+  function stopAccompaniment() {
+    for (const timer of accompTimers) window.clearTimeout(timer);
+    accompTimers = [];
+    for (const note of accompaniment) stopVoice(note.pitch);
+    // Cancelled timers never run their release, so the lit keys must be cleared
+    // here or the backing part leaves keys glowing after the run stops.
+    accompHeld.clear();
+  }
+
+  function scheduleAccompaniment(fromSongTime) {
+    stopAccompaniment();
+    if (!accompaniment.length || !audioOn) return;
+    for (const note of accompaniment) {
+      if (note.at < fromSongTime - 1e-6) continue;
+      const delayMs = (note.at - fromSongTime + LEAD_IN + COUNT_IN) * 1000 / speed;
+      accompTimers.push(window.setTimeout(() => {
+        if (!running) return;
+        const token = startVoice(note.pitch);
+        accompHeld.add(note.pitch);
+        // Release only this instance: a repeated bass note must not be cut
+        // short by the previous one's timer.
+        accompTimers.push(window.setTimeout(() => {
+          stopVoice(note.pitch, token);
+          accompHeld.delete(note.pitch);
+        }, Math.max(120, note.len * 1000 / speed)));
+      }, Math.max(0, delayMs)));
+    }
+  }
+
+  function beginRun() {
+    running = true;
+    sent = false;
+    // Song time is offset by the resume point so a section restart begins at
+    // that section's bar rather than replaying everything before it.
+    startedAt = performance.now() + (LEAD_IN + COUNT_IN) * 1000 / speed
+      - resumeAt() * 1000 / speed;
+    setStatus(ui.playing);
+    updateProgress();
+    // Count-in ticks are purely informational; song time already accounts for
+    // them. Compared against the resume point rather than 0, so the count still
+    // reads correctly when a section restart starts mid-piece.
+    for (let n = COUNT_IN; n >= 1; n -= 1) {
+      window.setTimeout(() => {
+        if (running && songTime() < resumeAt()) setStatus(ui.countIn(n));
+      }, (COUNT_IN - n) * 1000);
+    }
+    window.setTimeout(() => { if (running) setStatus(ui.playing); }, COUNT_IN * 1000);
+    scheduleAccompaniment(resumeAt());
+    if (frame) cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(tick);
+  }
+
+  /* ---------------------------------------------------------------- audio
+     A MIDI controller sends messages but makes no sound, so without this the
+     learner plays in silence. One oscillator per held note through a shared
+     gain, built on demand: browsers refuse to start an AudioContext before a
+     gesture, so it is created on the first Start click. */
+  let audio = null;
+  let audioOn = true;
+  const voices = new Map();
+
+  // Where voices connect: the dry bus, plus a reverb send when the piece wants
+  // one. Built once with the context.
+  let dryBus = null;
+  let wetSend = null;
+
+  /* A convolution reverb needs an impulse response, and the sandbox cannot
+     fetch one, so the impulse is synthesised: exponentially decaying noise,
+     lightly low-passed by shaping later samples more steeply. That is the
+     standard cheap approximation of a room and is enough to place the piano in
+     a space instead of leaving it flat against the listener. */
+  function buildImpulse(context, seconds, decayPower) {
+    const rate = context.sampleRate;
+    const length = Math.max(1, Math.floor(rate * seconds));
+    const impulse = context.createBuffer(2, length, rate);
+    for (let channel = 0; channel < 2; channel += 1) {
+      const data = impulse.getChannelData(channel);
+      for (let i = 0; i < length; i += 1) {
+        const t = i / length;
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decayPower);
+      }
+    }
+    return impulse;
+  }
+
+  function ensureAudio() {
+    if (audio) return audio;
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) return null;
+    try {
+      audio = new Ctor();
+    } catch (_) {
+      return null;
+    }
+    dryBus = audio.createGain();
+    dryBus.gain.value = 1;
+    dryBus.connect(audio.destination);
+
+    if (reverbAmount > 0 && typeof audio.createConvolver === 'function') {
+      try {
+        const convolver = audio.createConvolver();
+        // A longer tail for a wetter setting: an ambient piece wants a hall,
+        // a percussive one only wants a room.
+        convolver.buffer = buildImpulse(audio, 1.4 + reverbAmount * 2.6, 2.2);
+        // Roll off the top of the tail so the reverb sits behind the note
+        // rather than hissing over it.
+        const damp = audio.createBiquadFilter();
+        damp.type = 'lowpass';
+        damp.frequency.value = 3200;
+        wetSend = audio.createGain();
+        wetSend.gain.value = reverbAmount;
+        wetSend.connect(convolver).connect(damp).connect(audio.destination);
+        // Pull the dry signal back as the wet rises, so a reverberant setting
+        // changes the space rather than just getting louder.
+        dryBus.gain.value = 1 - reverbAmount * 0.35;
+      } catch (_) {
+        wetSend = null;
+      }
+    }
+    return audio;
+  }
+
+  function frequencyOf(pitch) {
+    return 440 * Math.pow(2, (pitch - 69) / 12);
+  }
+
+  /* A struck string is not one tone. Three things make a plain oscillator read
+     as synthetic, and each is modelled below:
+       1. a real piano's partials are slightly sharp of the harmonic series
+          (string stiffness), so exact multiples sound lifeless — see `INHARMONIC`;
+       2. the note decays continuously to silence and never holds a sustain
+          level, and high partials die faster than the fundamental;
+       3. the hammer makes a brief noise transient at onset.
+     Partial amplitudes fall off ~1/n, and higher notes get shorter decays the
+     way short strings do. */
+  /* Timbre presets. The same notes carry a different piece depending on the
+     voice they are played in, so `widget_data.timbre` picks one per song.
+     Each knob is physical rather than decorative:
+       partials  — how many overtones; more is brighter and more metallic
+       tilt      — how fast overtone level falls with n; higher is darker
+       inharmonic— string stiffness, i.e. how sharp the upper partials sit
+       decay     — seconds the fundamental takes to die at the low end
+       hammer    — level of the attack noise transient
+       tone      — hammer noise centre, as a multiple of the fundamental
+       tremolo   — optional slow amplitude wobble, for celeste/music-box colour
+       gain      — overall level, so a bright voice does not shout */
+  const TIMBRES = {
+    // Round, dark, slow to die: a felt-muted upright. Suits ambient pieces.
+    soft:      {partials: 5, tilt: 1.7, inharmonic: 0.0002, decay: 7.0, hammer: 0.05, tone: 2, gain: 0.34},
+    // The default: a normal acoustic piano.
+    piano:     {partials: 6, tilt: 1.35, inharmonic: 0.0004, decay: 5.5, hammer: 0.09, tone: 3, gain: 0.34},
+    // Bright and percussive, closer to a grand played hard.
+    bright:    {partials: 8, tilt: 1.1, inharmonic: 0.0006, decay: 4.5, hammer: 0.14, tone: 4, gain: 0.30},
+    // Few, pure, fast-decaying partials with a wobble — glass and clockwork.
+    musicBox:  {partials: 3, tilt: 2.2, inharmonic: 0.0016, decay: 2.2, hammer: 0.07, tone: 6,
+                tremolo: {rate: 5.2, depth: 0.16}, gain: 0.30},
+    // Bell-like, long and shimmering.
+    celeste:   {partials: 4, tilt: 1.9, inharmonic: 0.0011, decay: 4.0, hammer: 0.05, tone: 5,
+                tremolo: {rate: 3.4, depth: 0.10}, gain: 0.30},
+    // Nearly sine, very long: a pad rather than a struck string.
+    warm:      {partials: 3, tilt: 2.0, inharmonic: 0.0001, decay: 9.0, hammer: 0.02, tone: 2, gain: 0.32},
+  };
+  // Default reverb per voice. A dry piano sounds like a sample; the space around
+  // the note is much of what makes a piece recognisable — Sweden in particular
+  // lives in its room. `widget_data.reverb` (0..1) overrides per song.
+  const REVERB = {soft: 0.55, piano: 0.25, bright: 0.2, musicBox: 0.4, celeste: 0.6, warm: 0.65};
+
+  const timbre = {
+    ...TIMBRES.piano,
+    ...(TIMBRES[String(widgetData.timbre || '').trim()] || {}),
+  };
+  const PARTIALS = Array.from({length: Math.max(1, Math.round(timbre.partials))}, (_, i) => i + 1);
+  const INHARMONIC = timbre.inharmonic;
+  // Explicit widget_data.reverb wins; otherwise the voice's own default.
+  const reverbAmount = Math.min(1, Math.max(0,
+    Number.isFinite(widgetData.reverb)
+      ? Number(widgetData.reverb)
+      : (REVERB[String(widgetData.timbre || '').trim()] ?? REVERB.piano)));
+
+  // Monotonic id per struck note, so a release can tell "the F I started" from
+  // "the F that replaced it". See stopVoice.
+  let voiceToken = 0;
+
+  function startVoice(pitch) {
+    if (!audioOn || !ensureAudio()) return 0;
+    // Retrigger: cut the previous instance of this pitch immediately rather
+    // than letting its 0.18 s release ride over the new attack, which smears a
+    // repeated note into one long blur.
+    stopVoice(pitch);
+    const now = audio.currentTime;
+    const root = frequencyOf(pitch);
+    // Bass notes ring far longer than treble ones on a real instrument.
+    const decay = Math.max(0.6, timbre.decay * Math.pow(2, -(pitch - 36) / 26));
+    const out = audio.createGain();
+    out.gain.value = timbre.gain;
+    out.connect(dryBus || audio.destination);
+    if (wetSend) out.connect(wetSend);
+
+    // Optional tremolo: the slow amplitude wobble that gives a music box or
+    // celeste its shimmer. Modulating the voice's own output keeps every
+    // partial in phase with the same wobble.
+    let lfo = null;
+    if (timbre.tremolo) {
+      lfo = audio.createOscillator();
+      const depth = audio.createGain();
+      lfo.frequency.value = timbre.tremolo.rate;
+      depth.gain.value = timbre.gain * timbre.tremolo.depth;
+      lfo.connect(depth).connect(out.gain);
+      lfo.start(now);
+    }
+
+    const parts = [];
+    for (const n of PARTIALS) {
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.type = 'sine';
+      // Stretched partial: f_n = n*f0*sqrt(1 + B*n^2)
+      osc.frequency.value = root * n * Math.sqrt(1 + INHARMONIC * n * n);
+      const peak = 0.5 / Math.pow(n, timbre.tilt);
+      const life = decay / Math.pow(n, 0.55);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(peak, now + 0.004);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + life);
+      osc.connect(gain).connect(out);
+      osc.start(now);
+      osc.stop(now + life + 0.1);
+      parts.push({osc, gain});
+    }
+
+    // Hammer transient: a few milliseconds of filtered noise gives the attack
+    // its percussive edge. Without it every note sounds like it fades in.
+    const noiseLength = Math.floor(audio.sampleRate * 0.03);
+    const buffer = audio.createBuffer(1, noiseLength, audio.sampleRate);
+    const channel = buffer.getChannelData(0);
+    for (let i = 0; i < noiseLength; i += 1) {
+      channel[i] = (Math.random() * 2 - 1) * (1 - i / noiseLength);
+    }
+    const noise = audio.createBufferSource();
+    noise.buffer = buffer;
+    const noiseFilter = audio.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.value = Math.min(18000, root * timbre.tone);
+    noiseFilter.Q.value = 0.8;
+    const noiseGain = audio.createGain();
+    noiseGain.gain.setValueAtTime(timbre.hammer, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+    noise.connect(noiseFilter).connect(noiseGain).connect(out);
+    noise.start(now);
+    noise.stop(now + 0.06);
+
+    voiceToken += 1;
+    voices.set(pitch, {parts, out, noise, lfo, token: voiceToken});
+    return voiceToken;
+  }
+
+  /* Stop a voice, but only if it is still the one the caller started.
+     `voices` is keyed by pitch, so a repeated note reuses the key: when a piece
+     writes F for one beat and F again immediately after, the first note's
+     release timer fires *after* the second has begun and would silence it —
+     the repeat is swallowed and the learner hears one note instead of two.
+     Passing the token the caller got from startVoice makes a stale release a
+     no-op, so only the note that is actually sounding can be stopped. */
+  function stopVoice(pitch, token) {
+    const voice = voices.get(pitch);
+    if (!voice || !audio) return;
+    if (token !== undefined && voice.token !== token) return;
+    voices.delete(pitch);
+    const now = audio.currentTime;
+    // Releasing a key damps the string; the note does not cut dead, so this is
+    // a quick fade rather than an abrupt stop. Notes already decayed to silence
+    // are unaffected.
+    try {
+      voice.out.gain.cancelScheduledValues(now);
+      voice.out.gain.setValueAtTime(Math.max(voice.out.gain.value, 0.0001), now);
+      voice.out.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+    } catch (_) { /* context may be closing */ }
+    for (const part of voice.parts) {
+      try { part.osc.stop(now + 0.2); } catch (_) { /* already stopped */ }
+    }
+    // A tremolo LFO is not tied to any partial's lifetime, so it has to be
+    // stopped explicitly or it runs for the life of the page.
+    if (voice.lfo) {
+      try { voice.lfo.stop(now + 0.2); } catch (_) { /* already stopped */ }
+    }
+  }
+
+  function silenceAll() {
+    for (const pitch of [...voices.keys()]) stopVoice(pitch);
+    accompHeld.clear();
+  }
+
+  /* --------------------------------------------------------- note matching */
+  function onNoteOn(pitch) {
+    held.add(pitch);
+    startVoice(pitch);
+    if (!running) { drawKeys(); return; }
+    const now = songTime();
+    // Still counting in; ignore warm-up taps. Measured against the resume point
+    // so a mid-piece section restart has the same grace period as a fresh run.
+    if (now < resumeAt() - 0.5) return;
+    const step = steps[cursor];
+    if (!step) return;
+    const delta = now - step.at;
+    if (Math.abs(delta) > hitWindow / 1000) { fail(); return; }
+    const wanted = new Set(step.notes.map(note => note.pitch));
+    if (!wanted.has(pitch)) { fail(); return; }
+    pendingPitches.add(pitch);
+    if (pendingPitches.size >= wanted.size) {
+      stepState[cursor] = 'hit';
+      hits += 1;
+      cursor += 1;
+      pendingPitches = new Set();
+      updateProgress();
+    }
+  }
+
+  function onNoteOff(pitch) {
+    held.delete(pitch);
+    stopVoice(pitch);
+    if (!running) drawKeys();
+  }
+
+  /* ------------------------------------------------------------ Web MIDI */
+  let access = null;
+  let boundInput = null;
+
+  function midiReady() {
+    return Boolean(boundInput);
+  }
+
+  function handleMessage(event) {
+    const [statusByte, pitch, velocity] = event.data;
+    const command = statusByte & 0xf0;
+    if (command === 0x90 && velocity > 0) onNoteOn(pitch);
+    else if (command === 0x80 || (command === 0x90 && velocity === 0)) onNoteOff(pitch);
+  }
+
+  function bindInput(id) {
+    if (boundInput) boundInput.onmidimessage = null;
+    boundInput = null;
+    if (!access) return;
+    for (const input of access.inputs.values()) {
+      if (!id || input.id === id) { boundInput = input; break; }
+    }
+    if (boundInput) {
+      boundInput.onmidimessage = handleMessage;
+      $('deviceBadge').textContent = ui.connected;
+      // Never re-enable practice underneath a running demo.
+      if (!demoing) { $('start').disabled = false; setStatus(ui.ready); }
+    } else {
+      $('deviceBadge').textContent = ui.noDevice;
+      $('start').disabled = true;
+    }
+  }
+
+  function refreshDevices() {
+    const select = $('device');
+    const previous = select.value;
+    select.replaceChildren();
+    const inputs = access ? [...access.inputs.values()] : [];
+    if (!inputs.length) {
+      const option = document.createElement('option');
+      option.textContent = ui.noDevice;
+      option.value = '';
+      select.append(option);
+      $('deviceBadge').textContent = ui.waiting;
+      $('start').disabled = true;
+      boundInput = null;
+      return;
+    }
+    for (const input of inputs) {
+      const option = document.createElement('option');
+      option.value = input.id;
+      option.textContent = input.name || input.id;
+      select.append(option);
+    }
+    // Prefer the previously chosen device, else the first that looks like a
+    // keyboard controller rather than a through-port.
+    const keep = inputs.some(input => input.id === previous) ? previous : inputs[0].id;
+    select.value = keep;
+    bindInput(keep);
+  }
+
+  function showMidiNotice(message) {
+    const notice = $('midiNotice');
+    notice.replaceChildren();
+    const text = document.createElement('span');
+    text.textContent = `${message} `;
+    notice.append(text);
+    if (data.self_url) {
+      const code = document.createElement('code');
+      code.textContent = data.self_url;
+      notice.append(code);
+    }
+    notice.classList.remove('hidden');
+    // Listening needs no MIDI device, so only practice is blocked.
+    $('start').disabled = true;
+    $('deviceBadge').textContent = ui.noDevice;
+  }
+
+  async function initMidi() {
+    if (!notes.length) return;
+    if (!navigator.requestMIDIAccess) {
+      // The API is absent entirely: the frame's permissions policy stripped it,
+      // which is a different failure from a permission denial below.
+      console.error('[etude/midi] navigator.requestMIDIAccess is undefined — frame policy blocked the feature');
+      showMidiNotice(`${ui.midiBlocked}. ${ui.midiBlockedBody}`);
+      return;
+    }
+    try {
+      access = await navigator.requestMIDIAccess({sysex: false});
+    } catch (error) {
+      // A blocked permissions-policy and a user denial both land here; the
+      // actionable advice is the same, so one notice covers both. The real
+      // reason goes to the console so a host-side block can be told apart from
+      // a denial without guessing.
+      console.error('[etude/midi] requestMIDIAccess rejected:',
+        error && error.name, error && error.message);
+      showMidiNotice(`${ui.midiBlocked}. ${ui.midiBlockedBody}`);
+      return;
+    }
+    access.onstatechange = refreshDevices;
+    refreshDevices();
+  }
+
+  /* ------------------------------------------------------------ submission
+     The atom is deterministic: the widget reports whether the run was clean and
+     lets the server grade it against `expected`, exactly like chess-board. */
+  function attemptBody(passed) {
+    const body = {
+      atom_id: atom.id,
+      answer: passed ? 'pass' : 'fail',
+      via: 'widget',
+      // Which hand was played is part of what happened: one atom now carries all
+      // three parts, so a bare "pass" would not say whether the whole piece or a
+      // single hand was played. The speed goes in for the same reason — passing
+      // at 60% is not the same achievement as passing as written.
+      mode: hands ? `widget:${hand}@${Math.round(speed * 100)}%` : 'widget',
+    };
+    if (data.queue) body.queue = data.queue;
+    return body;
+  }
+
+  async function postAttempt(body) {
+    if (!data.api) { unsent = body; return false; }
+    try {
+      const response = await fetch(`${String(data.api).replace(/\/$/, '')}/api/attempts`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      unsent = null;
+      return true;
+    } catch (_) {
+      unsent = body;
+      return false;
+    }
+  }
+
+  async function submit(passed) {
+    if (sent) return;
+    const ok = await postAttempt(attemptBody(passed));
+    if (!ok) {
+      setStatus(ui.sendFailed);
+      $('retry').classList.remove('hidden');
+      return;
+    }
+    sent = true;
+    $('retry').classList.add('hidden');
+    setStatus(`${ui.passed} ${ui.sent}`);
+  }
+
+  /* ------------------------------------------------------------- demo mode
+     Plays the piece back so the learner can hear what they are aiming for.
+     Nothing is graded and no attempt is posted: this is listening, not a run.
+     It reuses the same synth and the same roll, so what you hear lines up with
+     what you will have to play. */
+  let demoing = false;
+  let demoTimers = [];
+  let demoFrame = 0;
+  // Transport state. `demoAt` is the song position playback resumes from, so a
+  // pause or a scrub is just "stop the timers, remember where we were, restart
+  // scheduling from there" — the whole player is built on that one idea.
+  let demoAt = 0;
+  let demoPaused = false;
+  let demoBegin = 0;          // performance.now() corresponding to song time 0
+  // Set while the user drags the scrubber, so the paint loop stops overwriting
+  // the slider position under their finger.
+  let scrubbing = false;
+
+  function demoPosition() {
+    if (!demoing) return demoAt;
+    if (demoPaused) return demoAt;
+    return Math.min(lastEnd, ((performance.now() - demoBegin) / 1000) * speed);
+  }
+
+  function clearDemoTimers() {
+    for (const timer of demoTimers) window.clearTimeout(timer);
+    demoTimers = [];
+    if (demoFrame) cancelAnimationFrame(demoFrame);
+    demoFrame = 0;
+  }
+
+  function stopDemo() {
+    demoing = false;
+    demoPaused = false;
+    demoAt = 0;
+    clearDemoTimers();
+    silenceAll();
+    held.clear();
+    accompHeld.clear();
+    $('listen').textContent = ui.listen;
+    $('start').disabled = !midiReady();
+    stepState = steps.map(() => 'pending');
+    $('player').classList.add('hidden');
+    drawRoll(0);
+    drawKeys();
+    setStatus(midiReady() ? ui.ready : ui.readyNoDevice);
+  }
+
+  function formatTime(seconds) {
+    const total = Math.max(0, Math.round(seconds));
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+  }
+
+  function updateTransport() {
+    const at = demoPosition();
+    const scrub = $('scrub');
+    if (document.activeElement !== scrub && !scrubbing) {
+      scrub.value = String(Math.round(at * 1000));
+    }
+    $('elapsed').textContent = formatTime(at);
+    $('duration').textContent = formatTime(lastEnd);
+    $('playPause').textContent = demoPaused ? ui.resume : ui.pause;
+    $('playPause').setAttribute('aria-label', demoPaused ? ui.resume : ui.pause);
+  }
+
+  /* Schedule every note that still lies ahead of `from`, relative to now.
+     Called on play, on resume and after every seek, which is what makes the
+     transport possible: nothing is scheduled further ahead than the piece
+     itself, so cancelling and re-scheduling is always safe. */
+  function scheduleDemoFrom(from) {
+    clearDemoTimers();
+    silenceAll();
+    demoBegin = performance.now() - (from * 1000) / speed;
+
+    for (const note of accompaniment) {
+      if (note.at + note.len <= from) continue;
+      const delay = Math.max(0, (note.at - from) * 1000 / speed);
+      demoTimers.push(window.setTimeout(() => {
+        if (!demoing || demoPaused) return;
+        const token = startVoice(note.pitch);
+        accompHeld.add(note.pitch);
+        demoTimers.push(window.setTimeout(() => {
+          stopVoice(note.pitch, token);
+          accompHeld.delete(note.pitch);
+        }, Math.max(120, note.len * 1000 / speed)));
+      }, delay));
+    }
+
+    steps.forEach((step, index) => {
+      // Steps already behind the playhead are marked done rather than replayed,
+      // so scrubbing forward does not leave the roll looking untouched.
+      if (step.at < from) { stepState[index] = 'hit'; return; }
+      stepState[index] = 'pending';
+      demoTimers.push(window.setTimeout(() => {
+        if (!demoing || demoPaused) return;
+        stepState[index] = 'hit';
+        for (const note of step.notes) {
+          held.add(note.pitch);
+          const token = startVoice(note.pitch);
+          // Release each note after its own written length, and only if this
+          // instance is still the one sounding.
+          demoTimers.push(window.setTimeout(() => {
+            held.delete(note.pitch);
+            stopVoice(note.pitch, token);
+          }, Math.max(120, note.len * 1000 / speed)));
+        }
+      }, Math.max(0, (step.at - from) * 1000 / speed)));
+    });
+
+    demoTimers.push(window.setTimeout(() => { if (demoing) stopDemo(); },
+      Math.max(0, (lastEnd - from + 1.2) * 1000 / speed)));
+
+    const paint = () => {
+      if (!demoing) return;
+      drawRoll(demoPosition());
+      drawKeys();
+      updateTransport();
+      demoFrame = requestAnimationFrame(paint);
+    };
+    demoFrame = requestAnimationFrame(paint);
+  }
+
+  function seekDemo(to) {
+    demoAt = Math.min(lastEnd, Math.max(0, to));
+    if (!demoing) return;
+    if (demoPaused) {
+      // Paused: repaint at the new spot but sound nothing until resume.
+      clearDemoTimers();
+      silenceAll();
+      stepState = steps.map((step) => (step.at < demoAt ? 'hit' : 'pending'));
+      drawRoll(demoAt);
+      drawKeys();
+      updateTransport();
+      return;
+    }
+    scheduleDemoFrom(demoAt);
+  }
+
+  function togglePause() {
+    if (!demoing) return;
+    if (demoPaused) {
+      demoPaused = false;
+      scheduleDemoFrom(demoAt);
+    } else {
+      demoAt = demoPosition();
+      demoPaused = true;
+      clearDemoTimers();
+      silenceAll();
+      // Keep the roll on screen at the paused position.
+      drawRoll(demoAt);
+      drawKeys();
+    }
+    updateTransport();
+  }
+
+  function playDemo() {
+    const context = ensureAudio();
+    if (context && context.state === 'suspended') context.resume();
+    demoing = true;
+    demoPaused = false;
+    demoAt = -LEAD_IN;              // a little runway before the first note
+    $('listen').textContent = ui.stopListen;
+    // Start disabled while listening: a run started underneath the playback
+    // would be judged against notes the widget itself is sounding.
+    $('start').disabled = true;
+    setStatus(ui.listening);
+    stepState = steps.map(() => 'pending');
+    const scrub = $('scrub');
+    scrub.min = '0';
+    scrub.max = String(Math.round(lastEnd * 1000));
+    scrub.value = '0';
+    $('player').classList.remove('hidden');
+    scheduleDemoFrom(demoAt);
+    updateTransport();
+  }
+
+  /* -------------------------------------------------------------- controls */
+  $('start').addEventListener('click', () => {
+    if (!midiReady() || running) return;
+    // Autoplay policy: the context may only be created/resumed from a gesture,
+    // and this click is the only reliable one before the learner starts playing.
+    const context = ensureAudio();
+    if (context && context.state === 'suspended') context.resume();
+    $('start').classList.add('hidden');
+    $('stop').classList.remove('hidden');
+    resetRun();
+    renderCounts();
+    beginRun();
+  });
+
+  $('stop').addEventListener('click', () => {
+    running = false;
+    stopAccompaniment();
+    silenceAll();
+    if (frame) cancelAnimationFrame(frame);
+    $('stop').classList.add('hidden');
+    $('start').classList.remove('hidden');
+    setStatus(ui.stopped);
+    drawRoll(0);
+    drawKeys();
+  });
+
+  $('retry').addEventListener('click', async () => {
+    if (!unsent) return;
+    $('retry').disabled = true;
+    const ok = await postAttempt(unsent);
+    $('retry').disabled = false;
+    if (!ok) { setStatus(ui.sendFailed); return; }
+    sent = true;
+    $('retry').classList.add('hidden');
+    setStatus(ui.sent);
+  });
+
+  $('listen').addEventListener('click', () => {
+    if (running) return;
+    if (demoing) stopDemo();
+    else playDemo();
+  });
+
+  /* Transport. Scrubbing while playing must not fight the animation frame that
+     is also writing the slider, hence the `scrubbing` latch declared above. */
+  $('playPause').addEventListener('click', togglePause);
+  $('back10').addEventListener('click', () => seekDemo(demoPosition() - 10));
+  $('fwd10').addEventListener('click', () => seekDemo(demoPosition() + 10));
+  $('scrub').addEventListener('pointerdown', () => { scrubbing = true; });
+  $('scrub').addEventListener('input', () => {
+    scrubbing = true;
+    // Silence immediately so dragging does not smear held notes across the seek.
+    silenceAll();
+    $('elapsed').textContent = formatTime(Number($('scrub').value) / 1000);
+  });
+  $('scrub').addEventListener('change', () => {
+    seekDemo(Number($('scrub').value) / 1000);
+    scrubbing = false;
+  });
+  // Keyboard scrubbing fires input+change without a pointer, so release there too.
+  $('scrub').addEventListener('keyup', () => { scrubbing = false; });
+
+  /* Hand selection. Changing hands changes which notes are graded, which
+     rebuilds the steps, the keyboard range and the roll — so rather than
+     surgically rewiring live state, the widget reloads with the new choice.
+     The pick is remembered per atom, so returning to a piece keeps the hand you
+     were working on. */
+  function selectHand(which) {
+    if (!hands || which === hand) return;
+    try { localStorage.setItem(HAND_KEY, which); } catch (_) { /* blocked */ }
+    // Reload from the server with the new hand. self_url is the widget's own
+    // address as the server knows it, which is what works inside a frame.
+    const base = data.self_url || location.href;
+    const url = new URL(base, location.href);
+    url.searchParams.set('hand', which);
+    location.replace(url.toString());
+  }
+
+  // The `typeof` guard keeps this working under the headless test harness,
+  // whose element stubs have no querySelectorAll.
+  if (hands && $('handCtl') && typeof $('handCtl').querySelectorAll === 'function') {
+    $('handCtl').classList.remove('hidden');
+    for (const button of $('handCtl').querySelectorAll('[data-hand]')) {
+      const which = button.dataset.hand;
+      button.textContent = which === 'both' ? ui.handBoth
+        : which === 'right' ? ui.handRight : ui.handLeft;
+      const active = which === hand;
+      button.classList.toggle('ui-button-outline', !active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      button.addEventListener('click', () => selectHand(which));
+    }
+  }
+
+  /* Changing speed mid-flight: song position is preserved and the clock is
+     re-anchored around it, so the piece continues from where it was rather than
+     jumping. A practice run is stopped instead — silently changing the tempo
+     under a graded attempt would make the recorded result meaningless. */
+  $('speed').addEventListener('change', () => {
+    const next = Number($('speed').value);
+    if (!Number.isFinite(next) || next <= 0) return;
+    if (running) { fail(ui.speedChanged); speed = next; return; }
+    const wasPlaying = demoing && !demoPaused;
+    const at = demoing ? demoPosition() : 0;
+    speed = next;
+    if (demoing) {
+      demoAt = at;
+      if (wasPlaying) scheduleDemoFrom(at);
+      else { drawRoll(at); drawKeys(); }
+      updateTransport();
+    }
+  });
+
+  $('device').addEventListener('change', event => bindInput(event.target.value));
+
+  $('sound').addEventListener('click', () => {
+    audioOn = !audioOn;
+    if (!audioOn) silenceAll();
+    $('sound').textContent = audioOn ? ui.soundOn : ui.soundOff;
+    $('sound').setAttribute('aria-pressed', String(audioOn));
+  });
+
+  window.addEventListener('resize', () => { drawRoll(running ? songTime() : 0); drawKeys(); });
+
+  /* ------------------------------------------------------------------ init */
+  // Transport glyphs: text, not icons, so they carry their own meaning to a
+  // screen reader and need no icon font.
+  $('playPause').textContent = ui.pause;
+  $('back10').textContent = '−10';
+  $('back10').setAttribute('aria-label', ui.back10);
+  $('fwd10').textContent = '+10';
+  $('fwd10').setAttribute('aria-label', ui.fwd10);
+  $('scrub').setAttribute('aria-label', ui.listen);
+  $('kindLabel').textContent = ui.kind;
+  $('topic').textContent = atom.topic || 'MIDI';
+  $('deviceLabel').textContent = ui.device;
+  $('start').textContent = ui.start;
+  $('stop').textContent = ui.stop;
+  $('sound').textContent = ui.soundOn;
+  $('listen').textContent = ui.listen;
+  $('retry').textContent = ui.retry;
+  $('speedLabel').textContent = ui.speed;
+  $('tempoBadge').textContent = ui.tempo(tempo);
+  $('windowBadge').textContent = ui.window(hitWindow);
+  $('start').disabled = true;
+  if (typeof window.ETUDE_MD_INTO === 'function') window.ETUDE_MD_INTO($('prompt'), atom.user_prompt || '');
+  else $('prompt').textContent = atom.user_prompt || '';
+  if (notes.length) {
+    setStatus(ui.readyNoDevice);
+    updateProgress();
+    resetRun();
+    drawRoll(0);
+    drawKeys();
+    initMidi();
+  }
+
+  window.etudeMidiRhythm = {
+    pitchOf, noteLabel, steps, notes, hitWindow, laneOf,
+    sections, sectionOfStep, firstStepOfSection, timbre, accompaniment,
+    // Range split, so tests can tell "keys the learner must play" from "keys
+    // drawn so the automatic hand is visible".
+    playLow, playHigh, rangeLow, rangeHigh, inPlayRange,
+    // Speed is a clock-rate change, so tests need to read it and the conversion
+    // it drives rather than infer either from wall-clock behaviour.
+    getSpeed: () => speed,
+    songSecondsFor: wallSeconds => wallSeconds * speed,
+  };
+})();
+</script>
+</body>
+</html>

@@ -13,7 +13,7 @@ body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
 .wrap { display: flex; flex-direction: column; padding: 22px 26px 14px; }
 .label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
 h1 { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
-.prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 15px; line-height: 1.55; overflow-wrap: anywhere; }
+.prompt { margin: 14px 0 0; font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
 .prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
 .prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13.5px/1.4 var(--mono); }
 .prompt pre { margin: 8px 0 0; padding: 10px 12px; background: var(--surface-2); border-radius: 8px; overflow-x: auto; font: 13px/1.5 var(--mono); }
@@ -41,11 +41,11 @@ button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 </style>
 </head>
 <body data-fit-content>
-<div class="wrap ui-card">
+<div class="wrap">
   <div class="label" id="label">Etude · Handwriting</div>
   <h1 id="title">Draw your answer</h1>
   <div class="prompt" id="prompt"></div>
-  <div class="stage">
+  <div class="stage ui-card">
     <canvas id="pad" aria-label="Drawing area. Use the buttons below to undo or clear."></canvas>
     <div class="guide" id="guide" hidden><span class="v"></span><span class="h"></span></div>
     <div class="hint" id="hint">Draw here</div>
@@ -94,7 +94,9 @@ const ETUDE = /*__DATA__*/null;
   if (portuguese) document.documentElement.lang = 'pt-BR';
   $('label').textContent = text(atom.id) ? `${ui.label} · ${text(atom.id)}` : ui.label;
   $('title').textContent = plain(atom.topic) || ui.title;
-  window.ETUDE_MD_INTO($('prompt'), text(atom.user_prompt) || ui.title);
+  const promptText = text(atom.user_prompt) || ui.title;
+  $('title').hidden = window.ETUDE_MD_HAS_LEADING_HEADING(promptText);
+  window.ETUDE_MD_INTO($('prompt'), promptText);
   $('hint').textContent = ui.draw;
   $('undo').textContent = ui.undo;
   $('clear').textContent = ui.clear;

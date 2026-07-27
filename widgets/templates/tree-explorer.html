@@ -13,7 +13,7 @@ body { margin: 0; color: var(--text-primary); font: 16px/1.7 var(--sans); }
 .wrap { display: flex; flex-direction: column; padding: 22px 26px 14px; }
 .label { color: var(--text-muted); font: 500 13px/1.3 var(--sans); letter-spacing: .01em; }
 h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; }
-.prompt { margin: 12px 0 0; padding: 13px 16px; background: var(--surface-1); border: 0.5px solid var(--border); border-radius: var(--radius-card, 12px); font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.prompt { margin: 14px 0 0; font-size: 14.5px; line-height: 1.6; overflow-wrap: anywhere; }
 .prompt p { margin: 0 0 8px; } .prompt p:last-child { margin-bottom: 0; }
 .prompt code { padding: 1px 5px; background: var(--surface-2); border-radius: 4px; font: 13px/1.4 var(--mono); }
 
@@ -21,8 +21,8 @@ h1.title { margin: 2px 0 0; font-size: 19px; font-weight: 500; line-height: 1.3;
 .spacer { flex: 1 1 auto; }
 .count { color: var(--text-muted); font: 500 11.5px/1.5 var(--mono); white-space: nowrap; }
 
-.stage { position: relative; margin-top: 12px; border: 0.5px solid var(--border);
-  border-radius: var(--radius-card, 12px); background: var(--surface-1); overflow: hidden; }
+.answer-card { margin-top: 12px; padding: 12px; }
+.stage { position: relative; border: 0; border-radius: 8px; background: var(--surface-1); overflow: hidden; }
 svg { display: block; width: 100%; height: auto; }
 
 /* Edges sit under nodes; the halo keeps a cost label legible where it crosses a line. */
@@ -83,7 +83,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--ring); out
 </style>
 </head>
 <body data-fit-content>
-<div class="wrap ui-card">
+<div class="wrap">
   <div class="label" id="label">Etude · Tree</div>
   <h1 class="title" id="title">Explore the graph</h1>
   <div class="prompt" id="prompt"></div>
@@ -93,18 +93,20 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--ring); out
     <span class="count" id="count"></span>
   </div>
 
-  <div class="stage" id="stage">
-    <svg id="graph" role="img" preserveAspectRatio="xMidYMid meet"></svg>
-  </div>
-  <p class="sr" id="graphText"></p>
-  <div class="legend" id="legend"></div>
+  <div class="answer-card ui-card">
+    <div class="stage" id="stage">
+      <svg id="graph" role="img" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <p class="sr" id="graphText"></p>
+    <div class="legend" id="legend"></div>
 
-  <div class="order" id="order"></div>
-  <div class="empty hidden" id="emptyHint"></div>
+    <div class="order" id="order"></div>
+    <div class="empty hidden" id="emptyHint"></div>
 
-  <div class="goalPick hidden" id="goalPick">
-    <label for="goalSelect" id="goalLabel">Goal reached</label>
-    <select class="ui-select" id="goalSelect"></select>
+    <div class="goalPick hidden" id="goalPick">
+      <label for="goalSelect" id="goalLabel">Goal reached</label>
+      <select class="ui-select" id="goalSelect"></select>
+    </div>
   </div>
 
   <div class="tools">
@@ -166,7 +168,9 @@ const ETUDE = /*__DATA__*/null;
   if (portuguese) document.documentElement.lang = 'pt-BR';
   $('label').textContent = text(atom.id) ? `${ui.label} · ${text(atom.id)}` : ui.label;
   $('title').textContent = plain(atom.topic) || ui.title;
-  window.ETUDE_MD_INTO($('prompt'), text(atom.user_prompt) || ui.title);
+  const promptText = text(atom.user_prompt) || ui.title;
+  $('title').hidden = window.ETUDE_MD_HAS_LEADING_HEADING(promptText);
+  window.ETUDE_MD_INTO($('prompt'), promptText);
   $('undo').textContent = ui.undo;
   $('reset').textContent = ui.reset;
   $('submit').textContent = ui.send;

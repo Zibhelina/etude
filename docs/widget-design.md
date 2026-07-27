@@ -10,6 +10,9 @@ Use the shared classes before writing widget-local CSS:
 
 - `ui-card`, `ui-card-title`, `ui-card-description`
 - `ui-button` plus `ui-button-secondary`, `ui-button-outline`, or `ui-button-ghost`
+  (both the single- and double-hyphen forms resolve; a variant that is missing from
+  `shadcn.css` fails silently as the solid primary, so `test_server.py` asserts every
+  variant a template uses actually exists)
 - `ui-icon-button`
 - `ui-input`, `ui-textarea`, `ui-select`
 - `ui-badge`, `ui-separator`, `ui-progress`
@@ -107,6 +110,10 @@ Set `data-fit-content` on every `<body>`: without it the bridge falls back to `s
 
 Template bodies stay transparent. The widget is embedded in a host surface (the Lotus chat canvas) whose background is not `--background`; painting an opaque body draws a visible block around the card. Style the card, not the page. Design from 320 px upward. Content should fit without a nested scrollbar during normal use.
 
+Interactive practice templates use three visual layers: the task label, title, and prompt sit directly on the transparent host canvas; the learner's answer surface sits in one card; toolbars, mode selectors, reset controls, diagnostics, and submission actions sit outside that card. In `coding-canvas`, only the code editor is carded. Deterministic choice controls count as the answer surface and may stay inside the answer card. Never wrap the whole practice item in one card.
+
+Render `user_prompt` through the server's shared safe Markdown helper, not `textContent` or template-specific regexes. The helper supports headings, lists, block quotes, fenced and indented code, nested emphasis, links, images, and the narrow safe inline-HTML allowlist used by imported material (`sup`, `sub`, `strong`, safe `a`, and safe `img`). Unknown type-like tags remain visible as text; unsafe document tags and attributes never execute. Prompt code blocks wrap at narrow widths instead of creating nested horizontal scrollbars.
+
 ## Type, spacing, and geometry
 
 - Font stack: Inter or Geist when available, then the system sans stack.
@@ -124,6 +131,12 @@ Template bodies stay transparent. The widget is embedded in a host surface (the 
 - Touch targets are at least 40 px, preferably 44 px, where the user must act.
 - Honor `prefers-reduced-motion`.
 - Status always includes text and an icon or shape, never color alone.
+- **One filled control at a time.** Every control is one of three weights: solid fill for
+  the single action to take next, bordered for secondary actions and choices, and no chrome
+  at all for read-only facts. A row of filled pills has no hierarchy and nothing leads the
+  eye. A disabled primary recedes to bordered rather than keeping a dimmed fill. Keep every
+  control strip on one height (a `--ctl-h` custom property) so toolbars above and below a
+  canvas read as one instrument.
 - Charts use `role="img"`, an accurate `aria-label`, and a text equivalent. Progress uses `role="progressbar"` with min, max, current value, and readable value text.
 - Round every displayed number to meaningful precision.
 - Preserve unsent work on network failure. Do not submit on every click unless the interaction itself requires it.
@@ -149,3 +162,13 @@ Template bodies stay transparent. The widget is embedded in a host surface (the 
 - Does it size to full natural content in Lotus?
 - Did the focused tests and full suite pass?
 - Was the rendered result inspected at desktop and narrow widths?
+
+## Board and position widgets
+
+`chess-board` is the reference for a widget whose answer is a *move on a rendered position*:
+
+- The position is the prompt. Draw it from one public field (`widget_data.fen`), never from an answer field, and label the side to move and the phase in text, not by color.
+- Squares are real `<button>`s inside a `role="grid"`. The same two-step selection (piece, then destination) serves click, drag, and the arrow-key roving focus; a pointer-only board is not acceptable.
+- Square shading, selection, and reveal marks derive from `color-mix()` over `--foreground`, `--primary`, and `--card`, so both themes stay in the theme's hands. Every marked square also carries a shape (inset ring, dashed ring, dot), because selection must survive a color-blind reading.
+- Pieces use the outline glyphs for White and the solid glyphs for Black, both painted in `--foreground`. That is the print convention and it needs no second palette.
+- Nothing about grading is visible before submit. The reveal redraws the same start position with the expected move applied and states both moves in text.

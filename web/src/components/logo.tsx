@@ -4,8 +4,8 @@ export const EPSILON_PATH = "M428 393Q428 378 416.0 367.0Q404 356 391 356Q382 35
 export function Logo({ className, tile = false }: { className?: string; tile?: boolean }) {
   return tile ? (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <rect width="24" height="24" rx="6" className="fill-highlight" />
-      <path d={EPSILON_PATH} className="fill-background" transform="translate(5.809 18.532) scale(0.03038 -0.03038)" />
+      <rect width="24" height="24" rx="6" fill="#000000" />
+      <path d={EPSILON_PATH} className="fill-highlight" transform="translate(5.809 18.532) scale(0.03038 -0.03038)" />
     </svg>
   ) : (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">

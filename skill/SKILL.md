@@ -77,6 +77,8 @@ etude card due --query 'tag:http is:due' --in 1d # push to tomorrow without faki
 etude card suspend --query 'deck:"CMPT 371" prop:lapses>=4'
 ```
 
+**Themes.** `etude theme list`, then `etude theme set paper`. Make one with `etude theme create sea --from midnight --var highlight="oklch(0.7 0.12 210)" --use`, and change it later with `theme edit` (variables, scheme, `--css-file`). `theme export`/`import` move themes between collections.
+
 ## Quizzing a user in chat
 
 Use this when the user wants to practise with you instead of in the app. Every rating you record is a real review that changes their schedule.

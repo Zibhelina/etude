@@ -206,7 +206,7 @@ function KeysBlock({ ai, saved }: { ai: AiSettings; saved: SettingsResponse }) {
         </>
       }
     >
-      <pre className="overflow-x-auto rounded-md bg-black/40 px-3.5 py-3 font-mono text-[13px] leading-relaxed text-foreground/80">
+      <pre className="overflow-x-auto rounded-md bg-background/70 px-3.5 py-3 ring-1 ring-border font-mono text-[13px] leading-relaxed text-foreground/80">
         {(vars.length ? vars.map((v) => `${v.name}=...`) : ["OPENROUTER_API_KEY=..."]).join("\n")}
       </pre>
       {vars.length > 0 ? (

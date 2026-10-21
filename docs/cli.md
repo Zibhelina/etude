@@ -295,6 +295,15 @@ These work on every command, before or after the command words.
   - [`settings set`](#settings-set) Change settings with dotted key=value pairs (JSON values when they parse).
   - [`settings unset`](#settings-unset) Reset dotted keys to their defaults.
   - [`settings test-ai`](#settings-test-ai) Grade a fixed sample answer with the configured providers, to check keys and models. Costs a fraction of a cent.
+- **theme**: Themes: pick the app's colors, or make your own with CSS variables and extra CSS (`etude theme` alone runs `list`)
+  - [`theme list`](#theme-list) Every theme, built-in first, with which one is selected.
+  - [`theme show`](#theme-show) A theme's variables and extra CSS. Without an id, the selected theme.
+  - [`theme set`](#theme-set) Use a theme in the app (every device; open pages pick it up on their next load).
+  - [`theme create`](#theme-create) Make a custom theme from an existing one, changing variables and adding CSS.
+  - [`theme edit`](#theme-edit) Change a custom theme: name, scheme, variables or extra CSS.
+  - [`theme delete`](#theme-delete) Delete a custom theme. If it was selected, the app goes back to Midnight.
+  - [`theme export`](#theme-export) Write a theme as JSON to share or back up.
+  - [`theme import`](#theme-import) Add a theme from a JSON file made by `theme export` (or the app's Export).
 - **pack**: Packs: JSON files with decks, presets, tags, types and items (import, export, check, scaffold)
   - [`pack import`](#pack-import) Add or update everything in one or more packs. Idempotent: items match by id and keep their scheduling.
   - [`pack export`](#pack-export) Write a pack of the items in a scope, with their decks, presets, tag instructions and custom types. Scheduling is not included.
@@ -2462,6 +2471,237 @@ etude settings test-ai
 *read-only*
 
 Output: { verdict?, verdictError?, feedback?, feedbackError? }
+
+## theme
+
+Themes: pick the app's colors, or make your own with CSS variables and extra CSS.
+
+### etude theme list
+
+<a id="theme-list"></a>
+
+Every theme, built-in first, with which one is selected.
+
+```
+etude theme list
+```
+
+*read-only*
+
+Output: array of { id, name, scheme, builtin, selected, accent, background, css (length of extra CSS) }
+
+### etude theme show
+
+<a id="theme-show"></a>
+
+A theme's variables and extra CSS. Without an id, the selected theme.
+
+```
+etude theme show [id] [flags]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `id` (optional) | Theme id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--css` | boolean | Print the compiled stylesheet as text instead of JSON. |
+
+Output: { id, name, scheme, vars, css?, base?, builtin, selected }, or CSS text with --css
+
+```sh
+etude theme show
+etude theme show paper
+etude theme show my-theme --css
+```
+
+### etude theme set
+
+<a id="theme-set"></a>
+
+Use a theme in the app (every device; open pages pick it up on their next load).
+
+```
+etude theme set <id> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Theme id (see `etude theme list`). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { selected, theme: { id, name, scheme } }
+
+```sh
+etude theme set paper
+etude theme set midnight
+```
+
+### etude theme create
+
+<a id="theme-create"></a>
+
+Make a custom theme from an existing one, changing variables and adding CSS.
+
+Starts from --from (default: the selected theme) and applies --var pairs and --css on top. Variables: --background, --card, --popover, --muted, --secondary, --accent, --foreground, --card-foreground, --popover-foreground, --muted-foreground, --secondary-foreground, --accent-foreground, --primary, --primary-foreground, --border, --input, --ring, --destructive, --highlight, --success, --warning, --danger, --again, --hard, --good, --easy, --new, --learn, --review, --chart-1, --chart-2, --chart-3, --chart-4, --chart-5, --sidebar, --sidebar-foreground, --sidebar-accent, --sidebar-accent-foreground, --sidebar-border, --sidebar-primary, --sidebar-primary-foreground, --sidebar-ring, --radius, --font-sans, --font-mono. Any other --name is accepted too and can be used from the extra CSS.
+
+```
+etude theme create [id] [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `id` (optional) | Lowercase slug for the new theme. Omit to derive one from --name. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--name <VALUE>` | string | Display name. Defaults to the id. |
+| `--from <THEME>` | string | Theme to copy. Default: the selected theme. |
+| `--var <NAME=VALUE> (repeatable)` | string | Set a CSS variable, name=value (e.g. highlight=oklch(0.7 0.15 200)). The leading -- is optional. |
+| `--css <CSS>` | string | Extra CSS rules for the app (`-` reads stdin). Remote @import and url() are removed. |
+| `--css-file <PATH>` | string | Read the extra CSS from a file. |
+| `--scheme <dark\|light>` | string | Light or dark (sets the browser's color-scheme for form controls and scrollbars). |
+| `--use` | boolean | Also select the new theme. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { theme, removed (CSS that was stripped), selected }
+
+```sh
+etude theme create ocean --name "Ocean" --from midnight --var highlight="oklch(0.75 0.12 210)" --use
+etude theme create big-cards --css-file big.css
+```
+
+### etude theme edit
+
+<a id="theme-edit"></a>
+
+Change a custom theme: name, scheme, variables or extra CSS.
+
+```
+etude theme edit <id> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Custom theme id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--name <VALUE>` | string | New display name. |
+| `--var <NAME=VALUE> (repeatable)` | string | Set a CSS variable, name=value (e.g. highlight=oklch(0.7 0.15 200)). The leading -- is optional. |
+| `--css <CSS>` | string | Extra CSS rules for the app (`-` reads stdin). Remote @import and url() are removed. |
+| `--css-file <PATH>` | string | Read the extra CSS from a file. |
+| `--scheme <dark\|light>` | string | Light or dark (sets the browser's color-scheme for form controls and scrollbars). |
+| `--unset-var <NAME> (repeatable)` | string | Reset a variable to the value of the theme it was made from. |
+| `--rename <ID>` | string | Change the id (keeps it selected if it was). |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { theme, removed, changed: [variable names and fields] }
+
+```sh
+etude theme edit ocean --var radius=0.5rem --var "--good=oklch(0.8 0.15 160)"
+etude theme edit ocean --css-file ocean.css
+etude theme edit ocean --rename deep-ocean
+```
+
+### etude theme delete
+
+<a id="theme-delete"></a>
+
+Delete a custom theme. If it was selected, the app goes back to Midnight.
+
+```
+etude theme delete <id> [flags]
+```
+
+*writes · `--dry-run` · needs `--yes`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Custom theme id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { deleted, selected }
+
+```sh
+etude theme delete ocean --yes
+```
+
+### etude theme export
+
+<a id="theme-export"></a>
+
+Write a theme as JSON to share or back up.
+
+```
+etude theme export [id] [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `id` (optional) | Theme id. Default: the selected theme. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-o, --out <FILE>` | string | Write to this file instead of stdout. |
+| `--force` | boolean | Overwrite an existing --out file. |
+
+Output: { etudeTheme: 1, id, name, scheme, vars, css? }, or { written, id } with --out
+
+```sh
+etude theme export ocean -o ocean.theme.json
+etude theme export > current.theme.json
+```
+
+### etude theme import
+
+<a id="theme-import"></a>
+
+Add a theme from a JSON file made by `theme export` (or the app's Export).
+
+A theme whose id is taken gets a new id unless --replace is given. Missing variables are filled from Midnight or Daylight, matching the scheme. Remote @import and url() in its CSS are removed.
+
+```
+etude theme import <file> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `file` | Theme file (`-` for stdin). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id <VALUE>` | string | Store it under this id. |
+| `--replace` | boolean | Overwrite a custom theme with the same id. |
+| `--use` | boolean | Also select it. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { theme, removed, created, selected }
+
+```sh
+etude theme import ocean.theme.json --use
+cat t.json | etude theme import -
+```
 
 ## pack
 

@@ -1,6 +1,10 @@
 // Static checks for pack files: structure per built-in type, ids, and every generator over many seeds.
 // Runs without a database; `etude pack check` and scripts/check-pack.ts both use it.
-import { validateType } from "../core/types.ts";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { loadBuiltinTypes, validateType } from "../core/types.ts";
+import { runScript } from "../core/sandbox.ts";
+import math from "../../runtime/mathexpr.js";
 
 type Json = any;
 
@@ -48,7 +52,8 @@ function makeRng(seed: number) {
 const isStr = (v: unknown) => typeof v === "string" && v.trim().length > 0;
 const isNum = (v: unknown) => typeof v === "number" && Number.isFinite(v);
 
-export const BUILTIN_TYPE_IDS = ["basic", "typed", "numeric", "mcq", "order", "match", "cloze", "free", "draw"];
+const BUILTIN_TYPES = loadBuiltinTypes(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "types"));
+export const BUILTIN_TYPE_IDS = BUILTIN_TYPES.map((t) => t.id);
 
 function checkFields(err: (m: string) => void, warn: (m: string) => void, type: string, f: Json, customTypes: Map<string, Json>, knownTypes: Set<string>) {
   const need = (k: string, ok: (v: unknown) => boolean, what: string) => {
@@ -106,7 +111,54 @@ function checkFields(err: (m: string) => void, warn: (m: string) => void, type: 
       need("prompt", isStr, "markdown");
       need("reference", isStr, "markdown");
       break;
+    case "math":
+      need("prompt", isStr, "markdown");
+      if (!Array.isArray(f.answers) || !f.answers.length || !f.answers.every(isStr)) err(`"answers" must be a non-empty string array`);
+      else
+        for (const a of f.answers) {
+          try {
+            math.parse(a);
+          } catch (e) {
+            err(`answer ${JSON.stringify(a)} can't be read: ${(e as Error).message}`);
+          }
+        }
+      if (f.form !== undefined && !["any", "exact", "same"].includes(f.form)) err(`"form" must be any, exact or same`);
+      break;
+    case "code": {
+      need("prompt", isStr, "markdown");
+      if (f.tests === undefined) {
+        if (!isStr(f.rubric) && !isStr(f.reference)) warn("code item without tests needs a reference or rubric for the AI grader");
+        break;
+      }
+      if (!Array.isArray(f.tests) || !f.tests.length || !f.tests.every((t: Json) => Array.isArray(t) && t.length === 2 && isStr(t[0]))) {
+        err(`"tests" must be [["expression", expected], ...]`);
+        break;
+      }
+      const lang = String(f.language ?? "python").toLowerCase();
+      if (!["js", "javascript", "node", "mjs", "ecmascript"].includes(lang)) warn(`tests only run for JavaScript; this ${lang} item will be graded by AI`);
+      else if (isStr(f.reference)) {
+        // The reference solution has to pass its own tests.
+        const def = BUILTIN_TYPES.find((t) => t.id === "code")!;
+        try {
+          const out = runScript<{ score?: number; feedback?: string }>((def.grader as { code: string }).code, {
+            params: ["answer", "view", "key", "fields"],
+            args: { answer: f.reference, view: { language: f.language }, key: { tests: f.tests }, fields: f },
+            where: "code/grade",
+            timeoutMs: 2000,
+          });
+          if (out?.score !== 1) err(`the reference fails its tests: ${out?.feedback ?? "no result"}`);
+        } catch (e) {
+          err(`the reference couldn't be tested: ${(e as Error).message}`);
+        }
+      } else warn("add a reference solution so the tests can be checked against it");
+      break;
+    }
     default: {
+      const builtin = BUILTIN_TYPES.find((t) => t.id === type);
+      if (builtin) {
+        for (const spec of builtin.fields) if (spec.required && (f[spec.name] === undefined || f[spec.name] === null || f[spec.name] === "")) err(`missing field "${spec.name}"`);
+        break;
+      }
       const def = customTypes.get(type);
       if (def) {
         for (const spec of def.fields ?? []) if (spec.required && (f[spec.name] === undefined || f[spec.name] === null || f[spec.name] === "")) err(`missing field "${spec.name}"`);

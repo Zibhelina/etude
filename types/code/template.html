@@ -1,0 +1,12 @@
+<div class="prose">{{md:prompt}}</div>
+<div class="e-editor code-box">
+  <div class="e-editor-head"><span class="code-lang">{{language}}</span><span class="code-hint only-answer"><kbd>Tab</kbd> indents · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> submits</span></div>
+  <div class="code-host"><pre class="e-editor-loading">{{starter}}</pre></div>
+</div>
+<template data-on="result">
+  <div class="e-reveal">
+    <div class="code-tests"></div>
+    {{#reference}}<div><div class="e-section-title">Reference solution</div><pre class="code-ref"><code></code></pre></div>{{/reference}}
+    {{#explanation}}<div class="prose">{{md:explanation}}</div>{{/explanation}}
+  </div>
+</template>

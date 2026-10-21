@@ -1,6 +1,6 @@
 // Shows a card as the learner sees it, with a toggle to reveal its answer. Used by Browse and the type editor.
 import { useEffect, useRef, useState } from "react";
-import { Dices, Eye, EyeOff, Play } from "lucide-react";
+import { Check, Dices, Eye, EyeOff, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CardFrame, type CardFrameHandle, type CardResult } from "@/components/card-frame";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -21,6 +21,7 @@ export function CardPreview({
   generated,
   grade,
   onTry,
+  onError,
 }: {
   /** Served frame URL, or raw frame HTML for unsaved types. */
   src?: string;
@@ -33,6 +34,8 @@ export function CardPreview({
   /** Optional: grade a test answer (script graders only). */
   grade?(answer: unknown, data: PreviewData): Promise<Grade | null>;
   onTry?(): void;
+  /** Errors thrown by the card's own script. */
+  onError?(message: string): void;
 }) {
   const [seed, setSeed] = useState(1);
   const [face, setFace] = useState(faces?.[0] ?? "main");
@@ -80,6 +83,11 @@ export function CardPreview({
           </Button>
         )}
         <div className="flex-1" />
+        {grade && !result && data && !error && (
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => frame.current?.collect()} title="Grade a test answer (Ctrl Enter)">
+            <Check className="size-4" /> Check answer
+          </Button>
+        )}
         {onTry && (
           <Button variant="ghost" size="sm" className="gap-1.5" onClick={onTry}><Play className="size-4" /> Study this card</Button>
         )}
@@ -96,6 +104,10 @@ export function CardPreview({
             mode={result ? "result" : "answer"}
             result={result}
             answer={tested?.answer}
+            onError={onError}
+            onKey={(k) => {
+              if (k === "Mod+Enter" && grade && !result) frame.current?.collect();
+            }}
             onSubmit={async (answer) => {
               if (!grade) return;
               const g = await grade(answer, data);

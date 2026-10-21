@@ -165,12 +165,33 @@ export class Etude {
   }
   private builtinDir = BUILTIN_TYPES_DIR;
 
+  /**
+   * Every stored type. `shipped`: a type with this id ships in the built-in types directory.
+   * `edited`: shipped, but the user saved their own version (builtin = 0), so it can be reset.
+   */
   listTypes() {
+    let shipped: Set<string>;
+    try {
+      shipped = new Set(loadBuiltinTypes(this.builtinDir).map((t) => t.id));
+    } catch {
+      shipped = new Set();
+    }
     return this.db
       .all("SELECT t.id, t.def, t.builtin, t.updated, (SELECT COUNT(*) FROM items i WHERE i.type = t.id AND i.archived = 0) AS items FROM types t ORDER BY t.builtin DESC, t.id")
       .map((r) => {
         const def = parse<CardTypeDef>(r.def, {} as CardTypeDef);
-        return { id: r.id, name: def.name, description: def.description ?? "", builtin: !!r.builtin, edited: false, updated: r.updated, items: r.items, grader: def.grader?.kind };
+        const isShipped = shipped.has(r.id);
+        return {
+          id: r.id,
+          name: def.name,
+          description: def.description ?? "",
+          builtin: !!r.builtin,
+          shipped: isShipped,
+          edited: isShipped && !r.builtin,
+          updated: r.updated,
+          items: r.items,
+          grader: def.grader?.kind,
+        };
       });
   }
 

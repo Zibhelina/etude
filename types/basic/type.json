@@ -1,0 +1,11 @@
+{
+  "id": "basic",
+  "name": "Basic",
+  "description": "Front and back. Reveal the back, then rate how well you recalled it.",
+  "fields": [
+    { "name": "front", "kind": "markdown", "required": true },
+    { "name": "back", "kind": "markdown", "required": true, "private": true },
+    { "name": "extra", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "self" }
+}

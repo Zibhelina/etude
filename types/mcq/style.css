@@ -1,0 +1,5 @@
+.hint:empty { display: none; }
+.hint { font-size: 0.85rem; margin-top: -0.6rem; }
+.e-option .body { flex: 1; display: flex; flex-direction: column; }
+.e-option:disabled { cursor: default; }
+.e-option.dim { opacity: 0.55; }

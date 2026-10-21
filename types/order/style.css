@@ -1,0 +1,22 @@
+.blocks, .solution { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.block {
+  display: flex; align-items: flex-start; gap: 0.7rem;
+  border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px);
+  padding: 0.65rem 0.85rem; background: var(--card);
+  cursor: grab; user-select: none; touch-action: none;
+  transition: transform 0.15s ease, border-color 0.15s, background 0.15s;
+}
+.block:hover { border-color: var(--ring); }
+.block:focus-visible { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 25%, transparent); }
+.block.dragging { transition: none; cursor: grabbing; z-index: 2; position: relative; border-color: var(--foreground); box-shadow: 0 8px 24px rgb(0 0 0 / 0.35); }
+.block .grip { color: var(--muted-foreground); letter-spacing: -0.2em; font-size: 0.85rem; padding-top: 0.15rem; }
+.block .num { flex: none; width: 1.4rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; font-size: 0.9rem; padding-top: 0.1rem; }
+.block .prose { flex: 1; font-size: 1rem; }
+.block .prose p { margin: 0; }
+[data-mode="result"] .block { cursor: default; }
+.block.near { border-color: color-mix(in oklab, var(--warning) 60%, transparent); }
+.solution { counter-reset: s; }
+.solution li { counter-increment: s; display: flex; gap: 0.6rem; font-size: 0.95rem; }
+.solution li::before { content: counter(s) "."; color: var(--muted-foreground); min-width: 1.4rem; }
+.solution li p { margin: 0; }
+.help { font-size: 0.82rem; margin: -0.4rem 0 0; }

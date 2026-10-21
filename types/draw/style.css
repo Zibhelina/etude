@@ -1,0 +1,11 @@
+.pad { display: flex; flex-direction: column; gap: 0.6rem; }
+.tools { display: flex; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.tool-group { gap: 0.35rem; }
+.tools .e-btn { height: 2rem; padding: 0 0.7rem; font-size: 0.8rem; }
+.tools .e-btn.is-on { background: var(--accent); border-color: var(--ring); }
+.sep { width: 1px; height: 1.25rem; background: var(--border); margin: 0 0.25rem; }
+.swatches { display: inline-flex; gap: 0.35rem; }
+.swatch { width: 1.4rem; height: 1.4rem; border-radius: 999px; border: 2px solid transparent; background: var(--c); cursor: pointer; padding: 0; outline: 1px solid var(--border); }
+.swatch.is-on { border-color: var(--background); outline: 2px solid var(--c); }
+.canvas { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in oklab, var(--muted) 35%, transparent); touch-action: none; cursor: crosshair; display: block; }
+.canvas.locked { cursor: default; }

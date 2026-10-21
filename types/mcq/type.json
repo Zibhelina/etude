@@ -1,0 +1,13 @@
+{
+  "id": "mcq",
+  "name": "Multiple choice",
+  "description": "Pick the right option, or every right option. Options are shuffled each time.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "required": true },
+    { "name": "options", "kind": "json", "required": true, "private": true, "description": "[{ text, correct, why }]" },
+    { "name": "multiple", "kind": "boolean", "description": "Select all that apply. Default: true when more than one option is correct." },
+    { "name": "shuffle", "kind": "boolean", "default": true },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

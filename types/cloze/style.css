@@ -1,0 +1,5 @@
+.cloze { line-height: 2.1; }
+.blank { display: inline-flex; align-items: baseline; gap: 0.35rem; vertical-align: baseline; }
+.blank .e-input { width: auto; display: inline-block; padding: 0.15rem 0.45rem; font-size: 0.95rem; line-height: 1.4; }
+.blank .fix { font: 0.9rem var(--font-mono); color: var(--success); }
+.blank .fix:empty { display: none; }

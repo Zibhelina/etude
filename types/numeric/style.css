@@ -1,0 +1,9 @@
+.parts { display: flex; flex-direction: column; gap: 0.9rem; }
+.part { display: flex; flex-direction: column; gap: 0.4rem; }
+.part-label { font-size: 0.95rem; color: var(--muted-foreground); }
+.part-label p { margin: 0; }
+.part-input { flex-wrap: nowrap; max-width: 22rem; }
+.part-input .e-input { flex: 1; }
+.expected { font-size: 0.9rem; color: var(--muted-foreground); }
+.expected:empty { display: none; }
+.expected code { font: 0.9rem var(--font-mono); color: var(--foreground); }

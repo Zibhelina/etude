@@ -1,0 +1,123 @@
+/* Base styles for every card frame. Types can rely on these tokens and components,
+   or ignore them. Colors come from the app's theme, posted into the frame on load. */
+
+:root {
+  color-scheme: dark;
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  --card: #141414;
+  --muted: #1f1f1f;
+  --muted-foreground: #a1a1a1;
+  --border: #2a2a2a;
+  --input: #2a2a2a;
+  --primary: #fafafa;
+  --primary-foreground: #111;
+  --accent: #262626;
+  --ring: #737373;
+  --success: #4ade80;
+  --warning: #facc15;
+  --danger: #f87171;
+  --highlight: #f472b6;
+  --radius: 0.75rem;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: transparent; }
+body {
+  color: var(--foreground);
+  font: 400 16px/1.6 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  padding: 2px;
+}
+#card { display: flex; flex-direction: column; gap: 1.25rem; }
+.e-error { color: var(--danger); white-space: pre-wrap; font: 12px/1.4 var(--font-mono); }
+
+/* Markdown prose */
+.prose { font-size: 1.05rem; }
+.prose > :first-child { margin-top: 0; }
+.prose > :last-child { margin-bottom: 0; }
+.prose p { margin: 0.6em 0; }
+.prose h1, .prose h2, .prose h3 { line-height: 1.3; margin: 1em 0 0.5em; font-weight: 600; }
+.prose ul, .prose ol { padding-left: 1.4em; margin: 0.5em 0; }
+.prose li { margin: 0.2em 0; }
+.prose code { font: 0.9em var(--font-mono); background: var(--muted); padding: 0.1em 0.35em; border-radius: 0.35em; }
+.prose pre { background: var(--muted); border: 1px solid var(--border); padding: 0.85em 1em; border-radius: var(--radius); overflow-x: auto; }
+.prose pre code { background: none; padding: 0; font-size: 0.88em; line-height: 1.5; }
+.prose table { border-collapse: collapse; margin: 0.75em 0; font-size: 0.95em; }
+.prose th, .prose td { border: 1px solid var(--border); padding: 0.35em 0.7em; text-align: left; }
+.prose th { background: var(--muted); font-weight: 600; }
+.prose img { max-width: 100%; border-radius: calc(var(--radius) - 4px); }
+.prose blockquote { margin: 0.75em 0; padding-left: 1em; border-left: 2px solid var(--border); color: var(--muted-foreground); }
+.prose a { color: inherit; text-decoration-color: var(--muted-foreground); }
+.prose .katex-display { margin: 0.75em 0; overflow-x: auto; overflow-y: hidden; }
+.prose strong { font-weight: 600; }
+
+.e-muted { color: var(--muted-foreground); }
+.e-label { font-size: 0.8rem; font-weight: 500; color: var(--muted-foreground); letter-spacing: 0.01em; }
+.e-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.e-stack { display: flex; flex-direction: column; gap: 0.6rem; }
+
+/* Inputs */
+.e-input, .e-textarea {
+  width: 100%;
+  background: transparent;
+  color: var(--foreground);
+  border: 1px solid var(--input);
+  border-radius: calc(var(--radius) - 2px);
+  padding: 0.6rem 0.8rem;
+  font: inherit;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.e-textarea { min-height: 7rem; resize: vertical; line-height: 1.5; }
+.e-textarea.mono, .e-input.mono { font-family: var(--font-mono); font-size: 0.92rem; }
+.e-input:focus, .e-textarea:focus { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 25%, transparent); }
+.e-input:disabled, .e-textarea:disabled { opacity: 1; color: var(--foreground); }
+.e-unit { color: var(--muted-foreground); font-size: 0.95rem; white-space: nowrap; }
+
+/* Choice-like surfaces: options, blocks, chips */
+.e-option {
+  display: flex; align-items: flex-start; gap: 0.75rem;
+  width: 100%; text-align: left;
+  background: transparent; color: var(--foreground);
+  border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px);
+  padding: 0.7rem 0.9rem; font: inherit; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.e-option:hover { background: var(--accent); }
+.e-option:focus-visible { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 25%, transparent); }
+.e-option[aria-pressed="true"], .e-option.is-selected { border-color: var(--foreground); background: var(--accent); }
+.e-option .e-key {
+  flex: none; width: 1.5rem; height: 1.5rem; border-radius: 0.4rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); font-size: 0.75rem; color: var(--muted-foreground); margin-top: 0.1rem;
+}
+.e-option .prose { font-size: 1rem; flex: 1; }
+.e-option .prose p { margin: 0; }
+
+/* Marks after grading */
+.is-correct { border-color: color-mix(in oklab, var(--success) 70%, transparent) !important; background: color-mix(in oklab, var(--success) 10%, transparent) !important; }
+.is-wrong { border-color: color-mix(in oklab, var(--danger) 70%, transparent) !important; background: color-mix(in oklab, var(--danger) 10%, transparent) !important; }
+.is-missed { border-style: dashed !important; border-color: color-mix(in oklab, var(--success) 70%, transparent) !important; }
+.e-why { font-size: 0.9rem; color: var(--muted-foreground); margin-top: 0.3rem; }
+.e-why p { margin: 0.2em 0; }
+
+/* Revealed material */
+.e-reveal { border-top: 1px solid var(--border); padding-top: 1.1rem; display: flex; flex-direction: column; gap: 0.9rem; }
+.e-answer { border: 1px solid var(--border); border-radius: var(--radius); padding: 0.85rem 1rem; background: color-mix(in oklab, var(--muted) 60%, transparent); }
+.e-section-title { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-foreground); margin-bottom: 0.35rem; }
+[data-mode="answer"] .only-result { display: none !important; }
+[data-mode="result"] .only-answer { display: none !important; }
+
+kbd { font: 0.75rem var(--font-mono); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 0.3rem; padding: 0.05rem 0.35rem; color: var(--muted-foreground); }
+
+.e-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  height: 2.25rem; padding: 0 0.9rem; border-radius: calc(var(--radius) - 2px);
+  border: 1px solid var(--border); background: transparent; color: var(--foreground);
+  font: 500 0.875rem var(--font-sans); cursor: pointer;
+}
+.e-btn:hover { background: var(--accent); }
+.e-btn.primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }

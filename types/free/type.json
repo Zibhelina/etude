@@ -1,0 +1,14 @@
+{
+  "id": "free",
+  "name": "Free answer",
+  "description": "Answer in your own words. A decision model grades it against a reference and rubric, and a language model writes feedback.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "required": true },
+    { "name": "reference", "kind": "markdown", "required": true, "private": true },
+    { "name": "rubric", "kind": "markdown", "private": true },
+    { "name": "input", "kind": "text", "default": "long", "description": "text | long | code" },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "ai" },
+  "instructions": "Judge whether the answer shows the understanding the reference and rubric describe. Wording, order and length do not matter; missing or wrong concepts do. A correct idea stated in different words is correct. An answer that contains the right idea next to a clear factual error is partially correct."
+}

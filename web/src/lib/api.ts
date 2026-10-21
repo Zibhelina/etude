@@ -86,6 +86,7 @@ export interface FieldSpec {
   required?: boolean;
   private?: boolean;
   default?: unknown;
+  editor?: "choices" | "pairs" | "parts";
 }
 
 export interface CardType {
@@ -191,7 +192,7 @@ export interface Scope {
 
 export const api = {
   decks: () => call<DeckNode[]>("GET", "/api/decks"),
-  deck: (name: string) => call<DeckNode & { resolved: PresetConfig }>("GET", `/api/deck${qs({ name })}`),
+  deck: (name: string) => call<DeckNode & { resolved: PresetConfig; inherited: PresetConfig; presetBase: PresetConfig }>("GET", `/api/deck${qs({ name })}`),
   createDeck: (name: string) => call("POST", "/api/decks", { name }),
   updateDeck: (name: string, patch: Partial<{ name: string; presetId: string | null; config: Partial<PresetConfig>; description: string; instructions: string; archived: boolean }>) =>
     call<DeckNode & { resolved: PresetConfig }>("PATCH", `/api/deck${qs({ name })}`, patch),
@@ -234,6 +235,8 @@ export const api = {
   importPack: (pack: unknown, dryRun = false) => call<any>("POST", `/api/import${dryRun ? "?dryRun=1" : ""}`, pack),
   exportUrl: (s: Scope) => `/api/export${qs({ deck: s.deck, q: s.q })}`,
   settings: () => call<any>("GET", "/api/settings"),
+  defaults: () => call<PresetConfig>("GET", "/api/defaults"),
+  testAi: () => call<any>("POST", "/api/ai/test", {}),
   saveSettings: (patch: unknown) => call<any>("PATCH", "/api/settings", patch),
 };
 

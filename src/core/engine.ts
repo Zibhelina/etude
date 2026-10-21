@@ -95,18 +95,20 @@ function hashString(s: string): number {
 export class Etude {
   readonly db: Db;
   readonly mediaDir: string;
+  readonly path: string;
   private typeCache = new Map<string, CardTypeDef>();
 
-  private constructor(db: Db, mediaDir: string) {
+  private constructor(db: Db, mediaDir: string, path: string) {
     this.db = db;
     this.mediaDir = mediaDir;
+    this.path = path;
   }
 
   static async open(path: string, opts: { builtinTypesDir?: string } = {}): Promise<Etude> {
     await initSandbox();
     const db = new Db(path);
     const media = path === ":memory:" ? join(process.env.TMPDIR ?? "/tmp", `etude-media-${process.pid}`) : join(dirname(path), "media");
-    const e = new Etude(db, media);
+    const e = new Etude(db, media, path);
     e.syncBuiltinTypes(opts.builtinTypesDir ?? BUILTIN_TYPES_DIR);
     return e;
   }
@@ -258,9 +260,16 @@ export class Etude {
     return row;
   }
 
-  deck(nameOrId: string | number): Deck & { resolved: PresetConfig } {
+  deck(nameOrId: string | number): Deck & { resolved: PresetConfig; inherited: PresetConfig; presetBase: PresetConfig } {
     const r = this.deckRow(nameOrId);
-    return { ...this.deckFromRow(r), resolved: this.configFor(r.name) };
+    return {
+      ...this.deckFromRow(r),
+      resolved: this.configFor(r.name),
+      /** What applies before this deck's own overrides (parents and its preset). */
+      inherited: this.configFor(r.name, { excludeOwn: true }),
+      /** What applies before this deck's preset (parents only). */
+      presetBase: this.configFor(r.name, { excludeOwn: true, excludePreset: true }),
+    };
   }
 
   private deckFromRow(r: Row): Deck {
@@ -344,17 +353,18 @@ export class Etude {
   }
 
   /** Settings for a deck: defaults, then each ancestor's preset and own overrides, root first. */
-  configFor(deckName: string): PresetConfig {
+  configFor(deckName: string, opts: { excludeOwn?: boolean; excludePreset?: boolean } = {}): PresetConfig {
     const parts = deckParts(deckName);
     const layers: Partial<PresetConfig>[] = [];
     for (let i = 1; i <= parts.length; i++) {
       const r = this.db.get("SELECT preset_id, config FROM decks WHERE name = ?", parts.slice(0, i).join("::"));
       if (!r) continue;
-      if (r.preset_id) {
+      const own = i === parts.length;
+      if (r.preset_id && !(own && opts.excludePreset)) {
         const p = this.db.get("SELECT config FROM presets WHERE id = ?", r.preset_id);
         if (p) layers.push(parse(p.config, {}));
       }
-      layers.push(parse(r.config, {}));
+      if (!(own && opts.excludeOwn)) layers.push(parse(r.config, {}));
     }
     return sched.resolveConfig(...layers);
   }
@@ -480,6 +490,13 @@ export class Etude {
   setArchived(ids: string[], archived: boolean) {
     this.db.tx(() => {
       for (const id of ids) this.db.run("UPDATE items SET archived = ?, updated = ? WHERE id = ?", Number(archived), iso(), id);
+    });
+  }
+
+  /** Permanently deletes items with their cards and history. Prefer archiving for real content. */
+  deleteItems(ids: string[]) {
+    this.db.tx(() => {
+      for (const id of ids) this.db.run("DELETE FROM items WHERE id = ?", id);
     });
   }
 
@@ -969,6 +986,35 @@ export class Etude {
     grade.grader = { ...grade.grader, model: grade.grader.model ? `${grade.grader.model} + ${out.model}` : out.model, cost: (grade.grader.cost ?? 0) + (out.cost ?? 0) };
     this.db.run("UPDATE attempts SET grade = ? WHERE id = ?", json(grade), attemptId);
     return { feedback: out.feedback, model: out.model, ms: out.ms, cost: out.cost };
+  }
+
+  /** Grades a fixed sample answer with the configured providers, to check keys and models. */
+  async testAi() {
+    const ctx: GradingContext = {
+      card: [
+        { label: "prompt", text: "What does HTTP stand for?" },
+        { label: "reference (hidden from the student)", text: "HyperText Transfer Protocol" },
+      ],
+      instructions: [],
+      answerText: "hypertext transfer protocol",
+      answerImage: null,
+    };
+    const ai = this.settings().ai;
+    const out: Record<string, unknown> = {};
+    try {
+      const v = await aiVerdict(ai, ctx);
+      out.verdict = v;
+      ctx.verdict = v.verdict;
+      ctx.score = v.score;
+    } catch (e) {
+      out.verdictError = (e as Error).message;
+    }
+    try {
+      out.feedback = await aiFeedback(ai, ctx);
+    } catch (e) {
+      out.feedbackError = (e as Error).message;
+    }
+    return out;
   }
 
   /** Records a rating and reschedules the card. Practice ratings are logged but don't move the schedule. */

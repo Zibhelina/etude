@@ -88,6 +88,8 @@ export interface FieldSpec {
   private?: boolean;
   default?: unknown;
   editor?: "choices" | "pairs" | "parts";
+  /** For `code` fields: the language to highlight, or `field:<name>` to read it from another field. */
+  language?: string;
 }
 
 export interface CardType {

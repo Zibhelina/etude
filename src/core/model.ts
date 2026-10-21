@@ -13,6 +13,8 @@ export interface FieldSpec {
   default?: unknown;
   /** Hint for editors: a structured form for common JSON shapes. */
   editor?: "choices" | "pairs" | "parts";
+  /** For `code` fields: the language to highlight, or `field:<name>` to read it from another field. */
+  language?: string;
 }
 
 export interface Template {

@@ -1,1 +1,1 @@
-.answer-box textarea { overflow: hidden; }
+.answer-box .lang { font-weight: 600; color: var(--foreground); }

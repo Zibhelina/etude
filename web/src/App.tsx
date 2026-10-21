@@ -1,6 +1,8 @@
 import { BarChart3, Blocks, Layers, Library, Settings } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { SidebarIcon } from "@/components/sidebar-icon";
 import { navigate, useLocation } from "@/lib/router";
 import { Wordmark } from "@/components/logo";
 import { cn } from "@/lib/utils";
@@ -21,8 +23,28 @@ const NAV = [
   { to: "/settings", label: "Settings", icon: Settings, match: (p: string) => p === "/settings" },
 ];
 
+const COLLAPSED_KEY = "etude.sidebar.collapsed";
+const toggleKey = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘B" : "Ctrl+B";
+
+function useSidebarCollapsed() {
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSED_KEY) === "1");
+  useEffect(() => localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0"), [collapsed]);
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        setCollapsed((c) => !c);
+      }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+  return [collapsed, setCollapsed] as const;
+}
+
 export function App() {
   const { path, params } = useLocation();
+  const [collapsed, setCollapsed] = useSidebarCollapsed();
   const studying = path === "/study";
   if (path === "/embed") {
     const deck = params.get("deck") ?? undefined;
@@ -54,23 +76,59 @@ export function App() {
         page
       ) : (
         <div className="flex min-h-dvh">
-          <aside className="sticky top-0 hidden h-dvh w-52 shrink-0 flex-col gap-1 border-r bg-sidebar px-3 py-4 md:flex">
-            <button onClick={() => navigate("/")} className="mb-6 px-2 text-left">
-              <Wordmark className="text-[1.45rem] leading-none" />
-            </button>
-            {NAV.map((n) => (
-              <button
-                key={n.to}
-                onClick={() => navigate(n.to)}
-                className={cn(
-                  "flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground",
-                  n.match(path) && "bg-sidebar-accent text-foreground",
-                )}
-              >
-                <n.icon className="size-4 shrink-0" />
-                <span>{n.label}</span>
-              </button>
-            ))}
+          <aside
+            className={cn(
+              "sticky top-0 hidden h-dvh shrink-0 flex-col gap-1 overflow-hidden bg-sidebar py-4 transition-[width] duration-200 ease-out md:flex",
+              collapsed ? "w-14 px-2" : "w-52 px-3",
+            )}
+          >
+            <div className={cn("mb-6 flex h-8 items-center", collapsed ? "justify-center" : "justify-between pl-2")}>
+              {!collapsed && (
+                <button onClick={() => navigate("/")} className="text-left">
+                  <Wordmark className="text-[1.45rem] leading-none" />
+                </button>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setCollapsed((c) => !c)}
+                    aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                    aria-expanded={!collapsed}
+                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+                  >
+                    <SidebarIcon className="size-[18px]" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {collapsed ? "Expand" : "Collapse"} <span className="opacity-60">{toggleKey}</span>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            {NAV.map((n) => {
+              const btn = (
+                <button
+                  key={n.to}
+                  onClick={() => navigate(n.to)}
+                  aria-label={n.label}
+                  className={cn(
+                    "flex items-center gap-2.5 rounded-md py-1.5 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground",
+                    collapsed ? "justify-center px-0" : "px-2",
+                    n.match(path) && "bg-sidebar-accent text-foreground",
+                  )}
+                >
+                  <n.icon className="size-4 shrink-0" />
+                  {!collapsed && <span className="whitespace-nowrap">{n.label}</span>}
+                </button>
+              );
+              return collapsed ? (
+                <Tooltip key={n.to}>
+                  <TooltipTrigger asChild>{btn}</TooltipTrigger>
+                  <TooltipContent side="right">{n.label}</TooltipContent>
+                </Tooltip>
+              ) : (
+                btn
+              );
+            })}
           </aside>
           <main className="min-w-0 flex-1 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">{page}</main>
           <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden">

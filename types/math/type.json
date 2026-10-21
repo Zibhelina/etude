@@ -1,0 +1,14 @@
+{
+  "id": "math",
+  "name": "Math answer",
+  "description": "Type a mathematical answer in LaTeX or plain notation and see it rendered as you type. Graded by checking equivalence, so any correct form is accepted: x(x+1) and x^2+x, or 1/2 and \\frac{1}{2}.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "required": true },
+    { "name": "answers", "kind": "list", "required": true, "private": true, "description": "Accepted answers in LaTeX or plain notation. Any one is enough. A list like \\{2, 3\\} or 2, 3 is compared as a set." },
+    { "name": "form", "kind": "text", "default": "any", "description": "any (every equivalent form) | exact (no decimals) | same (also the same form, up to the order of terms and factors, e.g. for 'factor this')" },
+    { "name": "ordered", "kind": "boolean", "default": false, "description": "Compare lists in order instead of as sets." },
+    { "name": "placeholder", "kind": "text" },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

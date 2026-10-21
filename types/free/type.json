@@ -1,14 +1,43 @@
 {
   "id": "free",
   "name": "Free answer",
-  "description": "Answer in your own words. A decision model grades it against a reference and rubric, and a language model writes feedback.",
+  "description": "Answer in your own words, with markdown and math that render as you type, or in a code editor. A decision model grades it against a reference and rubric, and a language model writes feedback.",
   "fields": [
-    { "name": "prompt", "kind": "markdown", "required": true },
-    { "name": "reference", "kind": "markdown", "required": true, "private": true },
-    { "name": "rubric", "kind": "markdown", "private": true },
-    { "name": "input", "kind": "text", "default": "long", "description": "text | long | code" },
-    { "name": "explanation", "kind": "markdown", "private": true }
+    {
+      "name": "prompt",
+      "kind": "markdown",
+      "required": true
+    },
+    {
+      "name": "reference",
+      "kind": "markdown",
+      "required": true,
+      "private": true
+    },
+    {
+      "name": "rubric",
+      "kind": "markdown",
+      "private": true
+    },
+    {
+      "name": "input",
+      "kind": "text",
+      "default": "long",
+      "description": "long (markdown with live math, the default) | text (one line) | code (code editor) | plain (bare textarea)"
+    },
+    {
+      "name": "language",
+      "kind": "text",
+      "description": "For input: code. Any language name or extension (python, c, rust, sql, ...)."
+    },
+    {
+      "name": "explanation",
+      "kind": "markdown",
+      "private": true
+    }
   ],
-  "grader": { "kind": "ai" },
+  "grader": {
+    "kind": "ai"
+  },
   "instructions": "Judge whether the answer shows the understanding the reference and rubric describe. Wording, order and length do not matter; missing or wrong concepts do. A correct idea stated in different words is correct. An answer that contains the right idea next to a clear factual error is partially correct."
 }

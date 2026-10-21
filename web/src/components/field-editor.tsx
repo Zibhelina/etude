@@ -8,10 +8,20 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { CodeEditor } from "@/components/code-editor";
+import { AnyCodeEditor, LiveMarkdown } from "@/components/live-editor";
 import type { FieldSpec } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type Fields = Record<string, unknown>;
+
+/** A code field's language: fixed (`"python"`), or read from another field (`"field:language"`). */
+function codeLanguage(spec: FieldSpec, fields: Fields, specs: FieldSpec[]): string {
+  const l = spec.language ?? "js";
+  if (!l.startsWith("field:")) return l;
+  const name = l.slice(6);
+  const v = fields[name] ?? specs.find((f) => f.name === name)?.default;
+  return typeof v === "string" ? v : "";
+}
 
 export function FieldEditor({ fields: specs, value, onChange }: { fields: FieldSpec[]; value: Fields; onChange(v: Fields): void }) {
   const set = (name: string, v: unknown) => {
@@ -25,7 +35,7 @@ export function FieldEditor({ fields: specs, value, onChange }: { fields: FieldS
     <div className="flex flex-col gap-5">
       {specs.map((f) => (
         <FieldRow key={f.name} spec={f}>
-          <FieldInput spec={f} value={value[f.name]} onChange={(v) => set(f.name, v)} />
+          <FieldInput spec={f} value={value[f.name]} language={f.kind === "code" ? codeLanguage(f, value, specs) : undefined} onChange={(v) => set(f.name, v)} />
         </FieldRow>
       ))}
       <FieldRow spec={{ name: "generator", kind: "code", label: "Generator", description: "Optional. The body of a function that receives rng and returns field overrides, so each review shows a new variant." }}>
@@ -62,15 +72,15 @@ function FieldRow({ spec, children }: { spec: FieldSpec; children: React.ReactNo
   );
 }
 
-function FieldInput({ spec, value, onChange }: { spec: FieldSpec; value: unknown; onChange(v: unknown): void }) {
+function FieldInput({ spec, value, onChange, language }: { spec: FieldSpec; value: unknown; onChange(v: unknown): void; language?: string }) {
   if (spec.editor === "choices") return <ChoicesEditor value={(value as any[]) ?? []} onChange={onChange} />;
   if (spec.editor === "pairs") return <PairsEditor value={(value as any[]) ?? []} onChange={onChange} />;
   if (spec.editor === "parts") return <PartsEditor value={value as any[] | undefined} onChange={onChange} />;
   switch (spec.kind) {
     case "markdown":
-      return <AutoTextarea value={String(value ?? "")} onChange={(v) => onChange(v)} mono={false} placeholder={spec.default !== undefined ? String(spec.default) : ""} />;
+      return <LiveMarkdown value={String(value ?? "")} onChange={(v) => onChange(v)} placeholder={spec.default !== undefined ? String(spec.default) : "Markdown, $math$ and ```code``` render as you type"} />;
     case "code":
-      return <CodeEditor lang="js" value={String(value ?? "")} onChange={onChange} />;
+      return <AnyCodeEditor language={language ?? "js"} value={String(value ?? "")} onChange={onChange} minLines={4} />;
     case "text":
       return <Input value={String(value ?? "")} placeholder={spec.default !== undefined ? `default: ${spec.default}` : ""} onChange={(e) => onChange(e.target.value)} />;
     case "number":
@@ -212,7 +222,7 @@ function ChoicesEditor({ value, onChange }: { value: { text: string; correct?: b
             >
               {o.correct && <Check className="size-3.5" />}
             </button>
-            <AutoTextarea className="min-h-9 border-0 bg-transparent px-1 py-1 shadow-none focus-visible:ring-0" value={o.text} onChange={(t) => set({ ...o, text: t })} placeholder="Option text (markdown)" />
+            <LiveMarkdown className="min-w-0 flex-1 border-0 shadow-none focus-within:shadow-none" minLines={1} value={o.text} onChange={(t) => set({ ...o, text: t })} placeholder="Option text (markdown and $math$)" />
           </div>
           <Input className="h-8 border-dashed text-sm" value={o.why ?? ""} onChange={(e) => set({ ...o, why: e.target.value || undefined })} placeholder="Why (shown after answering, optional)" />
         </div>
@@ -230,8 +240,8 @@ function PairsEditor({ value, onChange }: { value: [string, string][]; onChange(
       add="Add pair"
       render={(p, set) => (
         <div className="grid gap-1.5 rounded-md border p-1.5 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:border-0 sm:p-0">
-          <AutoTextarea className="min-h-9 resize-none py-1.5" value={p[0]} onChange={(v) => set([v, p[1]])} placeholder="Left" />
-          <AutoTextarea className="min-h-9 resize-none py-1.5" value={p[1]} onChange={(v) => set([p[0], v])} placeholder="Right" />
+          <LiveMarkdown minLines={1} value={p[0]} onChange={(v) => set([v, p[1]])} placeholder="Left" />
+          <LiveMarkdown minLines={1} value={p[1]} onChange={(v) => set([p[0], v])} placeholder="Right" />
         </div>
       )}
     />

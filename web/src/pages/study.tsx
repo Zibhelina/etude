@@ -194,8 +194,8 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const total = counts ? counts.new + counts.learning + counts.review : 0;
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-5 pb-40 sm:px-8">
-      <header className="sticky top-0 z-10 -mx-5 flex items-center gap-3 bg-background/85 px-5 py-4 backdrop-blur sm:-mx-8 sm:px-8">
+    <div className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 pb-44 sm:px-8">
+      <header className="sticky top-0 z-10 -mx-4 flex items-center gap-2 bg-background/90 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur sm:-mx-8 sm:gap-3 sm:px-8 sm:py-4">
         <Button variant="ghost" size="icon" className="-ml-2" onClick={() => navigate("/")} aria-label="Back to decks">
           <ArrowLeft />
         </Button>
@@ -281,7 +281,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
                     <RotateCcw className="size-4" /> Try another variant
                   </Button>
                 )}
-                {card.source && <span className="ml-auto text-xs text-muted-foreground">Source: {card.source}</span>}
+                {card.source && <span className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto">Source: {card.source}</span>}
               </div>
             </section>
           )}
@@ -289,11 +289,11 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       )}
 
       {card && (phase === "answer" || phase === "grading" || phase === "result") && (
-        <footer className="fixed inset-x-0 bottom-0 z-10 border-t bg-background">
-          <div className="mx-auto flex max-w-3xl items-center justify-center gap-2 px-5 py-4 sm:px-8">
+        <footer className="fixed inset-x-0 bottom-0 z-10 border-t bg-background pb-[env(safe-area-inset-bottom)]">
+          <div className="mx-auto flex max-w-3xl items-center justify-center gap-2 px-3 py-3 sm:px-8 sm:py-4">
             {phase !== "result" ? (
-              <Button size="lg" className="min-w-48 gap-2" disabled={phase === "grading" || (!ready && card.grader !== "self")} onClick={reveal}>
-                {phase === "grading" ? <><Loader2 className="size-4 animate-spin" /> Grading…</> : card.grader === "self" ? <>Show answer <kbd className="text-xs opacity-60">Space</kbd></> : <>Check <span className="flex items-center gap-0.5 text-xs opacity-60"><kbd>Ctrl</kbd><CornerDownLeft className="size-3" /></span></>}
+              <Button size="lg" className="h-12 w-full gap-2 sm:h-10 sm:w-auto sm:min-w-48" disabled={phase === "grading" || (!ready && card.grader !== "self")} onClick={reveal}>
+                {phase === "grading" ? <><Loader2 className="size-4 animate-spin" /> Grading…</> : card.grader === "self" ? <>Show answer <kbd className="hidden text-xs opacity-60 sm:inline">Space</kbd></> : <>Check <span className="hidden items-center gap-0.5 text-xs opacity-60 sm:flex"><kbd>Ctrl</kbd><CornerDownLeft className="size-3" /></span></>}
               </Button>
             ) : (
               ([1, 2, 3, 4] as Rating[]).map((r) => (
@@ -301,7 +301,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
                   key={r}
                   onClick={() => rate(r)}
                   className={cn(
-                    "flex min-w-20 flex-1 flex-col items-center gap-0.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors sm:max-w-36",
+                    "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg border px-2 py-2.5 text-sm font-medium transition-colors sm:max-w-36 sm:px-3 sm:py-2",
                     RATING_STYLE[r],
                     suggested === r && "ring-2 ring-current/60",
                   )}
@@ -313,7 +313,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
             )}
           </div>
           {phase === "result" && (
-            <div className="pb-3 text-center text-xs text-muted-foreground">
+            <div className="hidden pb-3 text-center text-xs text-muted-foreground sm:block">
               <kbd>1</kbd>–<kbd>4</kbd> to rate{suggested ? <>, <kbd>Space</kbd> for {RATING_LABEL[suggested]}</> : null}
             </div>
           )}

@@ -43,15 +43,15 @@ export function DecksPage() {
   const due = (decks ?? []).filter((d) => d.depth === 0).reduce((a, d) => a + d.new + d.learning + d.review, 0);
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-5 py-10 sm:px-8">
-      <div className="mb-8 flex items-end justify-between gap-4">
+    <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-8 sm:py-10">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4 sm:mb-8">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Decks</h1>
           <p className="mt-1 text-sm text-muted-foreground">{decks ? (due ? `${due} cards to study today` : "Nothing due right now") : " "}</p>
         </div>
         <div className="flex gap-2">
           <ImportButton onDone={reload} />
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" />New deck</Button>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" /><span className="hidden sm:inline">New deck</span><span className="sm:hidden">New</span></Button>
         </div>
       </div>
 
@@ -63,10 +63,10 @@ export function DecksPage() {
 
       {visible.length > 0 && (
         <div className="overflow-hidden rounded-xl border bg-card/40">
-          <div className="grid grid-cols-[1fr_repeat(3,3.5rem)_6.5rem] items-center gap-2 border-b px-4 py-2.5 text-xs font-medium text-muted-foreground">
+          <div className="grid grid-cols-[1fr_repeat(3,1.75rem)_2.25rem] items-center gap-1 border-b px-3 py-2.5 text-[11px] font-medium sm:text-xs sm:grid-cols-[1fr_repeat(3,3.5rem)_6.5rem] sm:gap-2 sm:px-4 text-muted-foreground">
             <span>Deck</span>
             <span className="text-right">New</span>
-            <span className="text-right">Learn</span>
+            <span className="text-right"><span className="sm:hidden">Lrn</span><span className="hidden sm:inline">Learn</span></span>
             <span className="text-right">Due</span>
             <span />
           </div>
@@ -76,9 +76,9 @@ export function DecksPage() {
             return (
               <div
                 key={d.id}
-                className="group grid grid-cols-[1fr_repeat(3,3.5rem)_6.5rem] items-center gap-2 border-b px-4 py-2.5 last:border-b-0 hover:bg-accent/40"
+                className="group grid grid-cols-[1fr_repeat(3,1.75rem)_2.25rem] items-center gap-1 border-b px-3 py-2 last:border-b-0 hover:bg-accent/40 sm:grid-cols-[1fr_repeat(3,3.5rem)_6.5rem] sm:gap-2 sm:px-4 sm:py-2.5"
               >
-                <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: d.depth * 20 }}>
+                <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: d.depth * 14 }}>
                   <button
                     className={cn("flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground", !d.hasChildren && "invisible")}
                     onClick={() => toggle(d.name)}
@@ -86,19 +86,19 @@ export function DecksPage() {
                   >
                     <ChevronRight className={cn("size-4 transition-transform", !collapsed.has(d.name) && "rotate-90")} />
                   </button>
-                  <button className="min-w-0 truncate text-left text-[0.95rem] hover:underline" onClick={() => navigate(`/deck?name=${encodeURIComponent(d.name)}`)}>
+                  <button className="min-w-0 py-1 text-left text-[0.95rem] leading-snug hover:underline sm:truncate" onClick={() => navigate(`/deck?name=${encodeURIComponent(d.name)}`)}>
                     {name}
+                    {d.depth === 0 && d.deadline && new Date(d.deadline) > new Date() && (
+                      <span className="ml-2 inline-flex shrink-0 items-center gap-1 align-middle text-xs text-highlight"><CalendarClock className="size-3.5" />{relative(d.deadline)}</span>
+                    )}
                   </button>
-                  {d.depth === 0 && d.deadline && new Date(d.deadline) > new Date() && (
-                    <span className="ml-2 flex shrink-0 items-center gap-1 text-xs text-highlight"><CalendarClock className="size-3.5" />{relative(d.deadline)}</span>
-                  )}
                 </div>
                 <span className={cn("tabular text-right text-sm", d.new ? "text-new" : "text-muted-foreground/40")}>{d.new}</span>
                 <span className={cn("tabular text-right text-sm", d.learning ? "text-learn" : "text-muted-foreground/40")}>{d.learning}</span>
                 <span className={cn("tabular text-right text-sm", d.review ? "text-review" : "text-muted-foreground/40")}>{d.review}</span>
                 <div className="flex justify-end">
-                  <Button size="sm" variant={work ? "default" : "ghost"} className="h-7 gap-1 px-3" disabled={!work} onClick={() => navigate(`/study?deck=${encodeURIComponent(d.name)}`)}>
-                    <Play className="size-3.5" /> Study
+                  <Button size="sm" variant={work ? "default" : "ghost"} className="size-9 gap-1 justify-self-end px-0 sm:h-7 sm:w-auto sm:px-3" disabled={!work} onClick={() => navigate(`/study?deck=${encodeURIComponent(d.name)}`)} aria-label={`Study ${name}`}>
+                    <Play className="size-3.5" /> <span className="hidden sm:inline">Study</span>
                   </Button>
                 </div>
               </div>

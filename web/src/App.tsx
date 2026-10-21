@@ -41,10 +41,10 @@ export function App() {
         page
       ) : (
         <div className="flex min-h-dvh">
-          <aside className="sticky top-0 flex h-dvh w-14 shrink-0 flex-col items-center gap-1 border-r bg-sidebar py-4 md:w-52 md:items-stretch md:px-3">
+          <aside className="sticky top-0 hidden h-dvh w-52 shrink-0 flex-col gap-1 border-r bg-sidebar px-3 py-4 md:flex">
             <button onClick={() => navigate("/")} className="mb-6 flex items-center gap-2 px-2 text-left">
               <span className="flex size-7 items-center justify-center rounded-lg bg-highlight/15 text-sm font-semibold text-highlight">é</span>
-              <span className="hidden text-[0.95rem] font-semibold tracking-tight md:block">Étude</span>
+              <span className="text-[0.95rem] font-semibold tracking-tight">Étude</span>
             </button>
             {NAV.map((n) => (
               <button
@@ -54,17 +54,28 @@ export function App() {
                   "flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground",
                   n.match(path) && "bg-sidebar-accent text-foreground",
                 )}
-                title={n.label}
               >
                 <n.icon className="size-4 shrink-0" />
-                <span className="hidden md:block">{n.label}</span>
+                <span>{n.label}</span>
               </button>
             ))}
           </aside>
-          <main className="min-w-0 flex-1">{page}</main>
+          <main className="min-w-0 flex-1 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">{page}</main>
+          <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden">
+            {NAV.map((n) => (
+              <button
+                key={n.to}
+                onClick={() => navigate(n.to)}
+                className={cn("flex h-16 flex-1 flex-col items-center justify-center gap-1 text-[11px] text-muted-foreground", n.match(path) && "text-foreground")}
+              >
+                <n.icon className={cn("size-5", n.match(path) && "text-highlight")} />
+                <span>{n.label === "Card types" ? "Types" : n.label}</span>
+              </button>
+            ))}
+          </nav>
         </div>
       )}
-      <Toaster position="bottom-right" />
+      <Toaster position="top-center" />
     </TooltipProvider>
   );
 }

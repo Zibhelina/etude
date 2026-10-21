@@ -163,7 +163,7 @@ function Rows<T>({ items, onChange, render, empty, add }: { items: T[]; onChange
       {items.map((it, i) => (
         <div key={i} className="group flex items-start gap-2">
           <div className="min-w-0 flex-1">{render(it, (v) => onChange(items.map((x, k) => (k === i ? v : x))), i)}</div>
-          <div className="flex shrink-0 gap-0.5 pt-1 opacity-40 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+          <div className="flex shrink-0 flex-col gap-0.5 pt-1 opacity-60 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:flex-row sm:opacity-40">
             <Button variant="ghost" size="icon" className="size-7" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up"><ArrowUp className="size-3.5" /></Button>
             <Button variant="ghost" size="icon" className="size-7" onClick={() => move(i, 1)} disabled={i === items.length - 1} aria-label="Move down"><ArrowDown className="size-3.5" /></Button>
             <Button variant="ghost" size="icon" className="size-7" onClick={() => onChange(items.filter((_, k) => k !== i))} aria-label="Remove"><Trash2 className="size-3.5" /></Button>
@@ -239,7 +239,7 @@ function PartsEditor({ value, onChange }: { value: { label: string; answer: numb
       empty={{ label: "", answer: 0 }}
       add="Add part"
       render={(p, set) => (
-        <div className="grid grid-cols-[1fr_7rem_5rem_5rem] gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_7rem_5rem_5rem]">
           <Input value={p.label} onChange={(e) => set({ ...p, label: e.target.value })} placeholder="Label (markdown)" />
           <NumberInput value={p.answer} onChange={(v) => set({ ...p, answer: v ?? 0 })} placeholder="Answer" />
           <Input value={p.unit ?? ""} onChange={(e) => set({ ...p, unit: e.target.value || undefined })} placeholder="Unit" />

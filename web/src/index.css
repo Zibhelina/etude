@@ -133,3 +133,8 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
 
 /* Embedded in another app: no page background, the host's surface shows through. */
 html.embed, html.embed body { background: transparent; }
+
+/* iOS zooms into any focused field under 16px; keep phone inputs at 16px. */
+@media (max-width: 640px) {
+  input, textarea, select, .cm-content { font-size: 16px !important; }
+}

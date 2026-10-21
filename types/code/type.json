@@ -1,0 +1,16 @@
+{
+  "id": "code",
+  "name": "Code",
+  "description": "Write code in any language in a real editor with syntax highlighting. JavaScript answers can run against hidden tests in a sandbox; anything else is judged by AI against a reference and rubric.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "required": true },
+    { "name": "language", "kind": "text", "default": "python", "description": "Any language name or file extension: python, js, c++, rust, sql, haskell, ..." },
+    { "name": "starter", "kind": "code", "language": "field:language", "description": "Code the editor starts with." },
+    { "name": "reference", "kind": "code", "language": "field:language", "private": true, "description": "A correct solution, shown after answering." },
+    { "name": "tests", "kind": "json", "private": true, "description": "JavaScript only: [[\"expression\", expected], ...]. Every expression runs with the answer's code in scope; all passing is full credit." },
+    { "name": "rubric", "kind": "markdown", "private": true, "description": "What the AI grader should check when there are no tests." },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "hybrid" },
+  "instructions": "Judge whether the code solves the problem correctly, using the reference and rubric. A different correct approach is correct. Syntax errors that a careful programmer would fix in seconds make it partially correct; wrong logic, missing cases the rubric asks for, or ignoring a stated constraint make it incorrect or partial. Do not grade style unless the rubric asks."
+}

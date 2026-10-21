@@ -1,0 +1,14 @@
+.code-lang { text-transform: none; font-weight: 600; color: var(--foreground); }
+.code-hint { display: flex; gap: 0.25rem; align-items: center; }
+@media (max-width: 480px) { .code-hint { display: none; } }
+.code-host { min-height: 7rem; }
+.code-ref { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; background: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.85em 1em; overflow-x: auto; font: 0.86rem/1.6 var(--font-mono); }
+.code-tests { display: flex; flex-direction: column; gap: 0.35rem; }
+.code-tests:empty { display: none; }
+.code-test { display: grid; grid-template-columns: 1.1rem 1fr; gap: 0.5rem; align-items: baseline; font: 0.84rem/1.5 var(--font-mono); }
+.code-test .mark { font-family: var(--font-sans); font-weight: 700; }
+.code-test.pass .mark { color: var(--success); }
+.code-test.fail .mark { color: var(--danger); }
+.code-test .got { color: var(--muted-foreground); }
+.code-test .got b { color: var(--danger); font-weight: 500; }
+.code-test code { white-space: pre-wrap; word-break: break-word; }

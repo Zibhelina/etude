@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "../../runtime/code.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -129,7 +130,7 @@
 .prose-etude p { margin: 0.5em 0; }
 .prose-etude ul, .prose-etude ol { padding-left: 1.3em; margin: 0.4em 0; list-style: revert; }
 .prose-etude code { font-family: var(--font-mono); font-size: 0.88em; background: var(--muted); padding: 0.1em 0.35em; border-radius: 0.35em; }
-.prose-etude pre { background: var(--muted); padding: 0.75em 1em; border-radius: var(--radius); overflow-x: auto; }
+.prose-etude pre { background: var(--muted); padding: 0.75em 1em; border-radius: var(--radius); overflow-x: auto; line-height: 1.55; }
 .prose-etude pre code { background: none; padding: 0; }
 .prose-etude strong { font-weight: 600; }
 .prose-etude a { text-decoration: underline; text-underline-offset: 2px; }
@@ -143,3 +144,7 @@ html.embed, html.embed body { background: transparent; }
 @media (max-width: 640px) {
   input, textarea, select, .cm-content { font-size: 16px !important; }
 }
+
+/* Live markdown fields sit where textareas used to: same box, theme font. */
+.live-md .cm-content { font-size: 0.875rem; }
+.live-md { background: color-mix(in oklab, var(--input) 30%, transparent); }

@@ -51,10 +51,13 @@ export interface AppOptions {
   token?: string;
   /** Serve the built web app from here; omit in dev (Vite serves it). */
   webDist?: string | null;
+  /** The card editor kit (default: `kit/` inside the web build, else web/dist/kit in the repo). */
+  kitDir?: string | null;
 }
 
 export function createApp(etude: Etude, opts: AppOptions = {}) {
   const app = new Hono();
+  opts = { ...opts, kitDir: opts.kitDir ?? [opts.webDist && join(opts.webDist, "kit"), join(ROOT, "web", "dist", "kit")].find((d) => d && existsSync(join(d, "kit.js"))) ?? null };
 
   app.onError((err, c) => {
     if (err instanceof EtudeError) return c.json({ error: err.message }, err.status as 400);
@@ -240,6 +243,12 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const name = c.req.path.slice("/runtime/vendor/".length);
     const p = vendorPath(name);
     return p ? sendFile(c, p, { cors: true, cache: "public, max-age=86400" }) : c.text("not found", 404);
+  });
+  // The editor kit is built with the web app (web/dist/kit) and loaded by card frames on demand.
+  app.get("/runtime/kit/:file", (c) => {
+    const f = c.req.param("file");
+    if (!/^[\w.-]+\.js$/.test(f) || !opts.kitDir) return c.text("not found", 404);
+    return sendFile(c, join(opts.kitDir, f), { cors: true, cache: f === "kit.js" ? "no-cache" : "public, max-age=31536000, immutable" });
   });
   app.get("/runtime/:file", (c) => {
     const f = c.req.param("file");

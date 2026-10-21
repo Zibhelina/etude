@@ -2,6 +2,11 @@
 // The frame has an opaque origin: it can only talk to the app through postMessage.
 import { marked } from "./vendor/marked.js";
 import katex from "./vendor/katex.js";
+import math from "./mathexpr.js";
+
+// Editors and syntax highlighting live in a separate kit, loaded the first time a card needs them.
+let kitPromise = null;
+const kit = () => (kitPromise ??= import(new URL("./kit/kit.js", import.meta.url).href));
 
 const parent = window.parent;
 const send = (type, data = {}) => parent.postMessage({ etude: 1, type, ...data }, "*");
@@ -19,9 +24,14 @@ function renderMath(src, display) {
 }
 
 /** Markdown to HTML. Math is cut out before markdown runs so underscores and stars inside it survive. */
+// Code spans and fenced blocks keep their dollar signs: they are set aside before math is found.
+const CODE = /(^|\n)(`{3,}|~{3,})[^\n]*\n[\s\S]*?(\n\2[ \t]*(?=\n|$)|$)|(?<!`)(`+)(?!`)[^\n]*?(?<!`)\4(?!`)/g;
+
 function md(text, { inline = false } = {}) {
   const stash = [];
-  const src = String(text ?? "").replace(MATH, (m) => {
+  const code = [];
+  const guarded = String(text ?? "").replace(CODE, (m) => `\u0001${code.push(m) - 1}\u0001`);
+  const src = guarded.replace(MATH, (m) => {
     let display = false;
     let body = m;
     if (m.startsWith("$$")) (display = true), (body = m.slice(2, -2));
@@ -31,7 +41,8 @@ function md(text, { inline = false } = {}) {
     stash.push(renderMath(body.trim(), display));
     return `\u0000${stash.length - 1}\u0000`;
   });
-  const html = inline ? marked.parseInline(src, { gfm: true }) : marked.parse(src, { gfm: true, breaks: false });
+  const restored = src.replace(/\u0001(\d+)\u0001/g, (_, i) => code[Number(i)]);
+  const html = inline ? marked.parseInline(restored, { gfm: true }) : marked.parse(restored, { gfm: true, breaks: false });
   return html.replace(/\u0000(\d+)\u0000/g, (_, i) => stash[Number(i)]);
 }
 
@@ -67,7 +78,27 @@ function createApi(init) {
     root: document.getElementById("card"),
     md,
     mdInline: (s) => md(s, { inline: true }),
+    /** LaTeX to HTML. */
+    tex: (src, display = false) => renderMath(String(src ?? ""), display),
     escape: escapeHtml,
+    /** Math answers: parse, print as LaTeX, check equivalence (same as `std.math` in server scripts). */
+    math,
+    /** Syntax-highlighted HTML for any language CodeMirror knows. */
+    async highlight(code, language) {
+      return (await kit()).highlight(String(code ?? ""), String(language ?? ""));
+    },
+    /** Display name of a language id ("py" → "Python"). */
+    async languageName(language) {
+      return (await kit()).languageName(String(language ?? ""));
+    },
+    /** A code editor in `el`: `{ value, language, placeholder, readOnly, minLines, onChange }`. */
+    async codeEditor(el, opts = {}) {
+      return (await kit()).createCodeEditor(el, opts);
+    },
+    /** A markdown editor with live preview (math, code, formatting) in `el`, like Obsidian's. */
+    async markdownEditor(el, opts = {}) {
+      return (await kit()).createMarkdownEditor(el, { katex, ...opts });
+    },
     /** Tell the app how to read the current answer when the learner presses Submit. */
     getAnswer(fn) {
       getter = fn;
@@ -112,6 +143,23 @@ function createApi(init) {
   return api;
 }
 
+// ---------- code blocks ----------
+
+/** Highlights fenced code blocks (`pre > code.language-*`) wherever they appear in the card, now or later. */
+function watchCodeBlocks(root) {
+  let queued = false;
+  const run = () => {
+    queued = false;
+    if (!root.querySelector("pre > code[class*='language-']:not([data-hl])")) return;
+    kit().then((k) => k.highlightBlocks(root)).catch(() => {});
+  };
+  const schedule = () => {
+    if (!queued) (queued = true), queueMicrotask(run);
+  };
+  new MutationObserver(schedule).observe(root, { childList: true, subtree: true });
+  schedule();
+}
+
 // ---------- boot ----------
 
 function applyTheme(theme) {
@@ -142,7 +190,15 @@ function forwardKeys() {
       return;
     }
     if (e.key === "Escape") {
-      send("key", { key: "Escape" });
+      // Escape in a field or editor only leaves the field, so a long answer isn't lost by accident.
+      if (typing) {
+        e.target.blur();
+        return;
+      }
+      // A popup inside the card may use Escape; forward it only when nothing did.
+      setTimeout(() => {
+        if (!e.defaultPrevented) send("key", { key: "Escape" });
+      }, 0);
       return;
     }
     if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -187,6 +243,7 @@ export function boot(main, templateHtml) {
       blocks = split.blocks;
       api = createApi(msg);
       api.root.innerHTML = expand(split.html, api.view);
+      watchCodeBlocks(api.root);
       const showResult = api._result;
       api._result = (result) => {
         if (result?.preview) document.body.dataset.preview = "1";

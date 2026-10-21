@@ -1,0 +1,55 @@
+/* Syntax highlighting (tok-* classes from the editor kit) and editor containers, shared by card
+   frames and the app. Colors come from the theme, so they follow light and dark themes. */
+:root {
+  --code-keyword: color-mix(in oklab, var(--highlight) 82%, var(--foreground));
+  --code-string: var(--success);
+  --code-number: var(--warning);
+  --code-function: var(--easy);
+  --code-type: var(--hard);
+  --code-comment: color-mix(in oklab, var(--muted-foreground) 85%, transparent);
+  --code-punct: color-mix(in oklab, var(--foreground) 62%, transparent);
+}
+.tok-keyword, .tok-modifier, .tok-controlKeyword, .tok-moduleKeyword, .tok-operatorKeyword, .tok-definitionKeyword { color: var(--code-keyword); }
+.tok-string, .tok-string2, .tok-character, .tok-inserted, .tok-regexp { color: var(--code-string); }
+.tok-number, .tok-bool, .tok-atom, .tok-literal, .tok-escape, .tok-unit { color: var(--code-number); }
+.tok-variableName.tok-definition, .tok-function, .tok-propertyName.tok-definition, .tok-macroName, .tok-labelName { color: var(--code-function); }
+.tok-typeName, .tok-className, .tok-namespace, .tok-tagName, .tok-attributeName { color: var(--code-type); }
+.tok-comment, .tok-meta, .tok-lineComment, .tok-blockComment, .tok-docComment { color: var(--code-comment); font-style: italic; }
+.tok-operator, .tok-punctuation, .tok-bracket { color: var(--code-punct); }
+.tok-variableName2, .tok-self { color: var(--code-keyword); }
+.tok-heading { font-weight: 650; }
+.tok-strong { font-weight: 650; }
+.tok-emphasis { font-style: italic; }
+.tok-link, .tok-url { color: var(--code-function); text-decoration: underline; text-underline-offset: 2px; }
+.tok-deleted { color: var(--danger); }
+.tok-invalid { color: var(--danger); text-decoration: underline wavy; }
+.tok-processingInstruction { color: var(--muted-foreground); }
+
+/* Language label on highlighted code blocks */
+pre[data-lang] { position: relative; }
+pre[data-lang]::before {
+  content: attr(data-lang); position: absolute; top: 0.35rem; right: 0.6rem;
+  font: 500 0.68rem var(--font-sans); letter-spacing: 0.02em; color: var(--muted-foreground); opacity: 0.8; pointer-events: none;
+}
+
+/* An editor (code or markdown) in a field-like box */
+.e-editor {
+  border: 1px solid var(--input); border-radius: calc(var(--radius) - 2px);
+  background: transparent; overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.e-editor:focus-within { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 25%, transparent); }
+.e-editor.is-readonly { border-color: var(--border); background: color-mix(in oklab, var(--muted) 45%, transparent); }
+.e-editor.is-readonly:focus-within { box-shadow: none; border-color: var(--border); }
+.e-editor .cm-editor { max-width: 100%; }
+.e-editor .cm-scroller { overflow-x: auto; }
+.e-editor-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.35rem 0.75rem; border-bottom: 1px solid var(--border);
+  font: 500 0.75rem var(--font-sans); color: var(--muted-foreground);
+  background: color-mix(in oklab, var(--foreground) 3%, transparent);
+}
+.e-editor-loading { padding: 0.75rem 0.85rem; color: var(--muted-foreground); font: 0.85rem var(--font-mono); white-space: pre-wrap; }
+
+/* iOS zooms into focused text under 16px. */
+@media (max-width: 640px) { .cm-content { font-size: 16px !important; } }

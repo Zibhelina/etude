@@ -15,6 +15,7 @@ export function cardFrame(def: CardTypeDef, base: string): string {
 <base href="${base}">
 <link rel="stylesheet" href="${base}runtime/vendor/katex.css">
 <link rel="stylesheet" href="${base}runtime/card.css">
+<link rel="stylesheet" href="${base}runtime/code.css">
 <style id="etude-theme"></style>
 <style>${esc(def.template.css ?? "")}</style>
 </head>

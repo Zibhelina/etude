@@ -98,7 +98,7 @@ export interface CardType {
   fields: FieldSpec[];
   prepare?: string;
   template: { html: string; css?: string; js?: string };
-  grader: { kind: "self" } | { kind: "script"; code: string } | { kind: "ai"; vision?: boolean; instructions?: string } | { kind: "hybrid"; code: string; vision?: boolean };
+  grader: { kind: "self" } | { kind: "script"; code: string } | { kind: "ai"; vision?: boolean; instructions?: string } | { kind: "hybrid"; code: string; vision?: boolean; instructions?: string };
   instructions?: string;
   updated?: string;
   builtin?: boolean;
@@ -109,6 +109,10 @@ export interface TypeSummary {
   name: string;
   description: string;
   builtin: boolean;
+  /** A type with this id ships with Etude. */
+  shipped: boolean;
+  /** Shipped, but replaced by the user's own version (can be reset). */
+  edited: boolean;
   updated: string;
   items: number;
   grader: string;
@@ -152,11 +156,30 @@ export interface ItemDetail {
 
 export interface Stats {
   cards: { total: number; new: number; learning: number; review: number; mature: number };
+  /** Pass rate on review-state cards over the requested window. */
   retention: number | null;
+  /** Pass rate on review-state cards over the last 30 days. */
+  trueRetention: { days: number; reviewed: number; passed: number; rate: number | null };
   recall: number | null;
   days: { day: string; reviews: number; again: number; ms: number }[];
   forecast: { day: string; due: number }[];
+  overdue: number;
   tags: { tag: string; cards: number; recall: number }[];
+  /** Every tag with its ancestors; recall is over seen cards, null when none are seen. */
+  tagTree: { tag: string; depth: number; direct: boolean; cards: number; seen: number; recall: number | null }[];
+  today: { day: string; reviews: number; again: number; ms: number; new: number };
+  ratings: { again: number; hard: number; good: number; easy: number };
+  verdicts: { correct: number; partial: number; incorrect: number; ungraded: number };
+  streak: number;
+  window: { days: number; from: string; to: string };
+  deadline: string | null;
+  deadlineMargin: number;
+}
+
+export interface Preset {
+  id: string;
+  name: string;
+  config: Partial<PresetConfig>;
 }
 
 export class ApiError extends Error {
@@ -208,16 +231,18 @@ export const api = {
   createDeck: (name: string) => call("POST", "/api/decks", { name }),
   updateDeck: (name: string, patch: Partial<{ name: string; presetId: string | null; config: Partial<PresetConfig>; description: string; instructions: string; archived: boolean }>) =>
     call<DeckNode & { resolved: PresetConfig }>("PATCH", `/api/deck${qs({ name })}`, patch),
-  deleteDeck: (name: string) => call("DELETE", `/api/deck${qs({ name })}`),
+  // Mutations must be JSON (the server refuses anything else), so body-less deletes send {}.
+  deleteDeck: (name: string) => call("DELETE", `/api/deck${qs({ name })}`, {}),
   presets: () => call<{ id: string; name: string; config: Partial<PresetConfig> }[]>("GET", "/api/presets"),
-  savePreset: (id: string, name: string, config: Partial<PresetConfig>) => call("PUT", `/api/presets/${encodeURIComponent(id)}`, { name, config }),
+  savePreset: (id: string, name: string, config: Partial<PresetConfig>) => call<Preset>("PUT", `/api/presets/${encodeURIComponent(id)}`, { name, config }),
+  deletePreset: (id: string) => call<{ ok: true }>("DELETE", `/api/presets/${encodeURIComponent(id)}`, {}),
 
   types: () => call<TypeSummary[]>("GET", "/api/types"),
   type: (id: string) => call<CardType>("GET", `/api/types/${encodeURIComponent(id)}`),
   saveType: (def: CardType) => call<CardType>("PUT", `/api/types/${encodeURIComponent(def.id)}`, def),
   deleteType: (id: string) => call("DELETE", `/api/types/${encodeURIComponent(id)}`),
   resetType: (id: string) => call<CardType>("POST", `/api/types/${encodeURIComponent(id)}/reset`, {}),
-  previewType: (def: CardType, fields: Record<string, unknown>, opts: { seed?: number; answer?: unknown } = {}) =>
+  previewType: (def: CardType, fields: Record<string, unknown>, opts: { seed?: number; face?: string; answer?: unknown } = {}) =>
     call<{ errors: string[]; view?: Record<string, unknown>; key?: Record<string, unknown>; grade?: Grade | null; seed?: number }>("POST", "/api/types-preview", { def, fields, ...opts }),
   frameHtml: (def: CardType) => call<{ html: string }>("POST", "/api/frame", { def }),
 

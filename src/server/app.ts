@@ -4,12 +4,13 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { Etude, EtudeError, type StudyScope } from "../core/engine.ts";
+import { DEFAULT_SETTINGS, Etude, EtudeError, type StudyScope } from "../core/engine.ts";
 import { DEFAULT_PRESET, type Rating } from "../core/model.ts";
 import { cardFrame } from "./frame.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const require = createRequire(import.meta.url);
+const VERSION: string = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
 
 const MIME: Record<string, string> = {
   ".js": "text/javascript; charset=utf-8",
@@ -202,7 +203,14 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.get("/api/settings", (c) => {
     const s = etude.settings();
     const keys = [s.ai.decision?.apiKeyEnv, s.ai.feedback?.apiKeyEnv, s.ai.vision?.apiKeyEnv].filter(Boolean) as string[];
-    return c.json({ ...s, keyStatus: Object.fromEntries(keys.map((k) => [k, !!process.env[k]])), dbPath: etude.path, mediaDir: etude.mediaDir });
+    return c.json({
+      ...s,
+      keyStatus: Object.fromEntries(keys.map((k) => [k, !!process.env[k]])),
+      dbPath: etude.path,
+      mediaDir: etude.mediaDir,
+      version: VERSION,
+      defaults: DEFAULT_SETTINGS,
+    });
   });
   app.get("/api/defaults", (c) => c.json(DEFAULT_PRESET));
   app.post("/api/ai/test", async (c) => c.json(await etude.testAi()));

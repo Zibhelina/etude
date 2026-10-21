@@ -1,11 +1,225 @@
-import { navigate } from "@/lib/router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Loader2, RotateCcw, Save } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { AiSection } from "@/components/settings-ai";
+import { DataSection } from "@/components/settings-data";
+import { ShortcutsSection } from "@/components/settings-shortcuts";
+import { Block, NumberField, Section } from "@/components/settings-ui";
+import { draftOf, normalize, validate, type SettingsDraft, type SettingsResponse } from "@/components/settings-model";
 
-export function SettingsPage(_props: {}) {
+const NAV = [
+  { id: "ai", label: "AI grading" },
+  { id: "study", label: "Study" },
+  { id: "data", label: "Data" },
+  { id: "keys", label: "Keyboard" },
+  { id: "about", label: "About" },
+];
+
+export function SettingsPage() {
+  const [saved, setSaved] = useState<SettingsResponse | null>(null);
+  const [draft, setDraft] = useState<SettingsDraft | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [active, setActive] = useState(NAV[0].id);
+  const navRef = useRef<HTMLElement>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const s = (await api.settings()) as SettingsResponse;
+      setSaved(s);
+      setDraft(draftOf(s));
+      setLoadError(null);
+    } catch (e) {
+      setLoadError((e as Error).message);
+    }
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const errors = useMemo(() => (draft ? validate(draft) : {}), [draft]);
+  const dirty = !!saved && !!draft && JSON.stringify(normalize(draft)) !== JSON.stringify(normalize(draftOf(saved)));
+  const invalid = Object.keys(errors).length > 0;
+
+  const save = useCallback(async () => {
+    if (!draft || !dirty) return;
+    if (invalid) {
+      toast.error("Fix the highlighted fields first");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.saveSettings(normalize(draft));
+      // Reload so key status covers any new variable names.
+      const s = (await api.settings()) as SettingsResponse;
+      setSaved(s);
+      setDraft(draftOf(s));
+      toast.success("Settings saved");
+    } catch (e) {
+      toast.error("Couldn't save", { description: (e as Error).message });
+    } finally {
+      setSaving(false);
+    }
+  }, [draft, dirty, invalid]);
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        save();
+      }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [save]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const h = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [dirty]);
+
+  // Highlight the section under the sticky nav.
+  useEffect(() => {
+    if (!saved) return;
+    const onScroll = () => {
+      const top = (navRef.current?.getBoundingClientRect().bottom ?? 0) + 120;
+      let cur = NAV[0].id;
+      for (const n of NAV) {
+        const el = document.getElementById(n.id);
+        if (el && el.getBoundingClientRect().top <= top) cur = n.id;
+      }
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) cur = NAV[NAV.length - 1].id;
+      setActive(cur);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [saved]);
+
+  useEffect(() => {
+    navRef.current?.querySelector(`[data-id="${active}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active]);
+
+  // Saved settings can't be invalid, so errors only show once something was edited.
+  const shown = dirty ? errors : {};
+
   return (
     <div className="mx-auto w-full max-w-4xl px-5 py-10 sm:px-8">
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-      <p className="mt-2 text-sm text-muted-foreground">Coming next.</p>
-      <button className="mt-6 text-sm underline" onClick={() => navigate("/")}>Back to decks</button>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        <p className="mt-1 text-sm text-muted-foreground">For the whole collection. Scheduling options live on each deck.</p>
+      </div>
+
+      {loadError && (
+        <div className="rounded-xl border border-destructive/40 p-6 text-sm">
+          <p className="text-destructive">Couldn't load settings: {loadError}</p>
+          <Button variant="outline" size="sm" className="mt-4" onClick={load}>Try again</Button>
+        </div>
+      )}
+
+      {!saved && !loadError && (
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-9 w-80 max-w-full rounded-full" />
+          <Skeleton className="h-80 w-full rounded-xl" />
+          <Skeleton className="h-40 w-full rounded-xl" />
+        </div>
+      )}
+
+      {saved && draft && (
+        <>
+          <nav
+            ref={navRef}
+            className="sticky top-0 z-10 -mx-5 mb-8 flex gap-1.5 overflow-x-auto border-b bg-background px-5 py-3 [mask-image:linear-gradient(to_right,#000_85%,transparent)] [scrollbar-width:none] sm:-mx-8 sm:px-8 sm:[mask-image:none]"
+            aria-label="Sections"
+          >
+            {NAV.map((n) => (
+              <a
+                key={n.id}
+                data-id={n.id}
+                href={`#${n.id}`}
+                aria-current={active === n.id ? "true" : undefined}
+                onClick={(e) => {
+                  e.preventDefault();
+                  document.getElementById(n.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className={cn(
+                  "flex h-10 shrink-0 items-center rounded-full border border-transparent px-4 text-sm text-muted-foreground transition-colors hover:text-foreground md:h-8 md:px-3.5",
+                  active === n.id && "border-border bg-accent text-foreground",
+                )}
+              >
+                {n.label}
+              </a>
+            ))}
+          </nav>
+
+          <div className="flex flex-col gap-12">
+            <AiSection ai={draft.ai} saved={saved} errors={shown} onChange={(ai) => setDraft({ ...draft, ai })} />
+
+            <Section id="study" title="Study">
+              <Block>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <NumberField
+                    label="Next day starts at"
+                    suffix="h"
+                    value={draft.dayStartHour}
+                    error={shown.dayStartHour}
+                    hint="Hour, 0–23. Reviews before this count toward the previous day."
+                    onChange={(v) => setDraft({ ...draft, dayStartHour: v })}
+                  />
+                  <NumberField
+                    label="Learn-ahead limit"
+                    suffix="min"
+                    value={draft.learnAheadMinutes}
+                    error={shown.learnAheadMinutes}
+                    hint="When nothing else is due, learning cards due this soon are shown early."
+                    onChange={(v) => setDraft({ ...draft, learnAheadMinutes: v })}
+                  />
+                </div>
+              </Block>
+            </Section>
+
+            <DataSection dbPath={saved.dbPath} mediaDir={saved.mediaDir} />
+
+            <ShortcutsSection />
+
+            <Section id="about" title="About">
+              <Block>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+                  <dt className="text-muted-foreground">Version</dt>
+                  <dd className="font-mono text-[13px]">{saved.version ?? "unknown"}</dd>
+                  <dt className="text-muted-foreground">Scheduler</dt>
+                  <dd>FSRS-6</dd>
+                  <dt className="text-muted-foreground">License</dt>
+                  <dd>MIT</dd>
+                </dl>
+              </Block>
+            </Section>
+          </div>
+
+          <div
+            className={cn(
+              "sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 -mx-5 mt-10 flex items-center gap-2 border-t bg-background/95 px-5 py-3 backdrop-blur transition-opacity sm:-mx-8 sm:px-8 md:bottom-0",
+              dirty ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
+            aria-hidden={!dirty}
+          >
+            <span className="min-w-0 truncate text-sm">{invalid ? <span className="text-destructive">Some fields need fixing</span> : <span className="text-muted-foreground">Unsaved changes</span>}</span>
+            <div className="flex-1" />
+            <Button variant="ghost" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => setDraft(draftOf(saved))} tabIndex={dirty ? 0 : -1}>
+              <RotateCcw className="size-4" />Discard
+            </Button>
+            <Button size="sm" className="h-10 gap-1.5 md:h-8" onClick={save} disabled={saving || invalid} tabIndex={dirty ? 0 : -1}>
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Save <kbd className="hidden text-[10px] opacity-60 sm:inline">Ctrl S</kbd>
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

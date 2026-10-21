@@ -11,7 +11,7 @@ const HELP = `etude: spaced-repetition practice with programmable card types
 
 Usage: etude <command> [options]
 
-  serve [--port 4610] [--host 127.0.0.1] [--token T]   run the app and API
+  serve [--port 4610] [--host 127.0.0.1] [--token T]   run the app and API (--web DIR serves another build)
   import <pack.json>... [--dry-run]                    add or update items from packs (idempotent)
   export [--deck D] [--q QUERY] [-o file.json]          write a pack
   decks                                                deck tree with due counts
@@ -46,6 +46,7 @@ async function main(argv: string[]) {
       limit: { type: "string" },
       "dry-run": { type: "boolean" },
       dev: { type: "boolean" },
+      web: { type: "string" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -70,7 +71,7 @@ async function main(argv: string[]) {
       const host = o.host ?? process.env.ETUDE_HOST ?? "127.0.0.1";
       const token = o.token ?? process.env.ETUDE_TOKEN;
       if (host !== "127.0.0.1" && host !== "localhost" && !token) throw new EtudeError("refusing to listen beyond localhost without --token");
-      const dist = join(ROOT, "web", "dist");
+      const dist = o.web ? resolve(o.web) : join(ROOT, "web", "dist");
       const app = createApp(etude, { token, webDist: o.dev ? null : existsSync(dist) ? dist : null });
       serve({ fetch: app.fetch, port, hostname: host }, (info) => {
         console.error(`etude ${o.dev ? "api (dev) " : ""}on http://${host}:${info.port}  db ${dbPath}`);

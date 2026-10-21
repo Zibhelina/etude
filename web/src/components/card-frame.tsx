@@ -8,6 +8,8 @@ export interface CardResult {
   grade: Grade;
   key: Record<string, unknown>;
   answer: unknown;
+  /** Showing the key for inspection, not grading a real answer. */
+  preview?: boolean;
 }
 
 export interface CardFrameHandle {

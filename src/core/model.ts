@@ -11,6 +11,8 @@ export interface FieldSpec {
   /** Private fields never reach the card before an answer is graded. */
   private?: boolean;
   default?: unknown;
+  /** Hint for editors: a structured form for common JSON shapes. */
+  editor?: "choices" | "pairs" | "parts";
 }
 
 export interface Template {

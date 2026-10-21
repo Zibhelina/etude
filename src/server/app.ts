@@ -5,7 +5,7 @@ import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { Etude, EtudeError, type StudyScope } from "../core/engine.ts";
-import type { Rating } from "../core/model.ts";
+import { DEFAULT_PRESET, type Rating } from "../core/model.ts";
 import { cardFrame } from "./frame.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -151,6 +151,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
       case "unarchive": etude.setArchived(ids, false); break;
       case "move": etude.moveItems(ids, String(b.deck)); break;
       case "tag": etude.tagItems(ids, b.add ?? [], b.remove ?? []); break;
+      case "delete": etude.deleteItems(ids); break;
       default: throw new EtudeError(`unknown action ${b.action}`);
     }
     return c.json({ ok: true, count: ids.length });
@@ -201,8 +202,10 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.get("/api/settings", (c) => {
     const s = etude.settings();
     const keys = [s.ai.decision?.apiKeyEnv, s.ai.feedback?.apiKeyEnv, s.ai.vision?.apiKeyEnv].filter(Boolean) as string[];
-    return c.json({ ...s, keyStatus: Object.fromEntries(keys.map((k) => [k, !!process.env[k]])) });
+    return c.json({ ...s, keyStatus: Object.fromEntries(keys.map((k) => [k, !!process.env[k]])), dbPath: etude.path, mediaDir: etude.mediaDir });
   });
+  app.get("/api/defaults", (c) => c.json(DEFAULT_PRESET));
+  app.post("/api/ai/test", async (c) => c.json(await etude.testAi()));
   app.patch("/api/settings", async (c) => c.json(etude.updateSettings(await body(c))));
 
   // --------------------------------------------- card frames and runtime

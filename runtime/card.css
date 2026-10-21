@@ -121,3 +121,6 @@ kbd { font: 0.75rem var(--font-mono); border: 1px solid var(--border); border-bo
 }
 .e-btn:hover { background: var(--accent); }
 .e-btn.primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }
+
+/* Answer previews (browsing, editing): show the key without marking anything wrong. */
+[data-preview="1"] .is-wrong { border-color: var(--border) !important; background: transparent !important; }

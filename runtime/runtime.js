@@ -188,9 +188,11 @@ export function boot(main, templateHtml) {
       api.root.innerHTML = expand(split.html, api.view);
       const showResult = api._result;
       api._result = (result) => {
+        if (result?.preview) document.body.dataset.preview = "1";
         fillResultSlots({ ...api.view, ...(result?.key ?? {}), grade: result?.grade });
         showResult(result);
       };
+      if (msg.result?.preview) document.body.dataset.preview = "1";
       if (msg.result) fillResultSlots({ ...api.view, ...(msg.result.key ?? {}), grade: msg.result.grade });
       try {
         await main(api);

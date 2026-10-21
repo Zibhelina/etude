@@ -2,6 +2,7 @@ import { BarChart3, Blocks, Layers, Library, Settings } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { navigate, useLocation } from "@/lib/router";
+import { Wordmark } from "@/components/logo";
 import { cn } from "@/lib/utils";
 import { DecksPage } from "@/pages/decks";
 import { StudyPage } from "@/pages/study";
@@ -54,9 +55,8 @@ export function App() {
       ) : (
         <div className="flex min-h-dvh">
           <aside className="sticky top-0 hidden h-dvh w-52 shrink-0 flex-col gap-1 border-r bg-sidebar px-3 py-4 md:flex">
-            <button onClick={() => navigate("/")} className="mb-6 flex items-center gap-2 px-2 text-left">
-              <span className="flex size-7 items-center justify-center rounded-lg bg-highlight/15 text-sm font-semibold text-highlight">é</span>
-              <span className="text-[0.95rem] font-semibold tracking-tight">Étude</span>
+            <button onClick={() => navigate("/")} className="mb-6 px-2 text-left">
+              <Wordmark className="text-[1.45rem] leading-none" />
             </button>
             {NAV.map((n) => (
               <button

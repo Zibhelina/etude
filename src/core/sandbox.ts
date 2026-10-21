@@ -1,6 +1,9 @@
 // Runs user-authored JavaScript (generators, prepare and grade scripts) in QuickJS,
 // with no host access, a memory cap and a time limit. Only JSON crosses the boundary.
 import { getQuickJS, shouldInterruptAfterDeadline, type QuickJSWASMModule } from "quickjs-emscripten";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 let quickjs: QuickJSWASMModule | null = null;
 
@@ -91,6 +94,19 @@ const std = {
 };
 `;
 
+/**
+ * `std.math` is the same module the card runtime uses (runtime/mathexpr.js), so a card's live
+ * preview and its grader agree. It is only compiled into scripts that mention it.
+ */
+const MATH_PRELUDE = (() => {
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "runtime", "mathexpr.js"), "utf8");
+  return src
+    .replace(/^export default .*$/m, "")
+    .replace(/^export const math =/m, "const __math =")
+    .replace(/^export (class|function|const) /gm, "$1 ");
+})();
+const usesMath = (body: string) => /\bstd\.math\b|\bstd\[["']math["']\]/.test(body);
+
 export interface RunOptions {
   /** Function parameter names, bound in order to `args`. `rng` is created from `seed` when listed. */
   params: string[];
@@ -112,7 +128,7 @@ export function runScript<T = unknown>(body: string, opts: RunOptions): T {
     const bindings = opts.params
       .map((p) => (p === "rng" ? `__makeRng(${Number(opts.seed ?? 1) >>> 0})` : `__args[${JSON.stringify(p)}]`))
       .join(", ");
-    const source = `${PRELUDE}
+    const source = `${PRELUDE}${usesMath(body) ? `\n{\n${MATH_PRELUDE}\nstd.math = __math;\n}\n` : ""}
 const __args = ${JSON.stringify(opts.args ?? {})};
 const __fn = function (${opts.params.join(", ")}) {
 ${body}

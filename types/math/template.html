@@ -1,0 +1,13 @@
+<div class="prose">{{md:prompt}}</div>
+<div class="mx">
+  <input class="e-input mono mx-input" id="answer" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="{{placeholder}}" autofocus>
+  <div class="mx-preview" aria-live="polite"><span class="mx-empty">Your answer renders here</span></div>
+  <div class="mx-note"></div>
+</div>
+<div class="mx-help e-muted only-answer">LaTeX or plain: <code>\frac{1}{2}</code> or <code>1/2</code>, <code>\sqrt{3}</code> or <code>sqrt(3)</code>, <code>x^2</code>, <code>\pi</code>, <code>\sin x</code>, lists <code>2, 3</code>.</div>
+<template data-on="result">
+  <div class="e-reveal">
+    <div><div class="e-section-title">Accepted</div><div class="mx-accepted"></div></div>
+    {{#explanation}}<div class="prose">{{md:explanation}}</div>{{/explanation}}
+  </div>
+</template>

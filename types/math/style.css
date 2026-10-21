@@ -1,0 +1,20 @@
+.mx { display: flex; flex-direction: column; gap: 0.5rem; }
+.mx-input { font-size: 1rem; }
+.mx-preview {
+  min-height: 3.6rem; display: flex; align-items: center; justify-content: center;
+  padding: 0.6rem 1rem; border-radius: var(--radius);
+  background: color-mix(in oklab, var(--foreground) 4%, transparent);
+  font-size: 1.3rem; overflow-x: auto; overflow-y: hidden;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.mx-preview .katex-display { margin: 0; }
+.mx-empty { font-size: 0.9rem; color: var(--muted-foreground); }
+.mx-preview.is-unread { opacity: 0.55; }
+.mx-note { font-size: 0.82rem; color: var(--muted-foreground); min-height: 1.2em; margin-top: -0.15rem; text-align: center; }
+.mx-note.is-error { color: var(--warning); }
+.mx-help { font-size: 0.82rem; line-height: 1.7; }
+.mx-help code { font: 0.78rem var(--font-mono); background: var(--muted); padding: 0.05rem 0.3rem; border-radius: 0.3rem; }
+.mx-preview.is-correct { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--success) 60%, transparent); background: color-mix(in oklab, var(--success) 9%, transparent); }
+.mx-preview.is-wrong { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--danger) 60%, transparent); background: color-mix(in oklab, var(--danger) 9%, transparent); }
+.mx-preview.is-partial { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--warning) 60%, transparent); background: color-mix(in oklab, var(--warning) 9%, transparent); }
+.mx-accepted { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center; font-size: 1.15rem; }

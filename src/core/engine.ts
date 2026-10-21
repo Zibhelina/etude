@@ -22,6 +22,7 @@ import { fieldDefaults, loadBuiltinTypes, validateFields, validateType, TYPE_ID 
 import * as sched from "./scheduler.ts";
 import { compile, QueryError } from "./query.ts";
 import { aiFeedback, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type GradingContext } from "./ai.ts";
+import { BUILTIN_THEMES, DEFAULT_THEME, MAX_CUSTOM_THEMES, ThemeError, builtinTheme, normalizeTheme, type Theme } from "./themes.ts";
 
 export class EtudeError extends Error {
   status: number;
@@ -56,9 +57,13 @@ export interface Settings {
   dayStartHour: number;
   /** Learning cards due within this many minutes are shown when nothing else is left. */
   learnAheadMinutes: number;
+  /** Selected theme id: a built-in (see src/core/themes.ts) or one of `themes`. */
+  theme: string;
+  /** Custom themes. */
+  themes: Theme[];
 }
 
-export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20 };
+export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [] };
 
 export interface StudyScope {
   deck?: string;
@@ -130,8 +135,88 @@ export class Etude {
     const cur = this.settings();
     const next: Settings = { ...cur, ...patch, ai: { ...cur.ai, ...(patch.ai ?? {}) } };
     if (!(next.dayStartHour >= 0 && next.dayStartHour < 24)) throw new EtudeError("dayStartHour must be 0 to 23");
+    if (patch.themes !== undefined) next.themes = this.checkThemes(patch.themes);
+    if (patch.theme !== undefined || patch.themes !== undefined) {
+      if (typeof next.theme !== "string" || !this.findTheme(next.theme, next.themes)) throw new EtudeError(`unknown theme "${next.theme}"`, 404);
+    }
     this.db.setSetting("settings", next);
     return next;
+  }
+
+  // ------------------------------------------------------------------ themes
+
+  private findTheme(id: string, custom: Theme[]): Theme | undefined {
+    return builtinTheme(id) ?? custom.find((t) => t.id === id);
+  }
+
+  private checkThemes(list: unknown): Theme[] {
+    if (!Array.isArray(list)) throw new EtudeError("themes must be a list");
+    if (list.length > MAX_CUSTOM_THEMES) throw new EtudeError(`at most ${MAX_CUSTOM_THEMES} custom themes`);
+    const seen = new Set<string>();
+    return list.map((raw) => {
+      let t: Theme;
+      try {
+        t = normalizeTheme(raw).theme;
+      } catch (e) {
+        throw new EtudeError(e instanceof ThemeError ? e.message : String(e));
+      }
+      if (builtinTheme(t.id)) throw new EtudeError(`"${t.id}" is a built-in theme id; pick another`, 409);
+      if (seen.has(t.id)) throw new EtudeError(`two themes share the id "${t.id}"`, 409);
+      seen.add(t.id);
+      return t;
+    });
+  }
+
+  /** Built-in themes first, then custom ones. */
+  listThemes(): (Theme & { builtin: boolean; selected: boolean })[] {
+    const s = this.settings();
+    return [...BUILTIN_THEMES.map((t) => ({ ...t, builtin: true })), ...s.themes.map((t) => ({ ...t, builtin: false }))].map((t) => ({ ...t, selected: t.id === s.theme }));
+  }
+
+  theme(id: string): Theme & { builtin: boolean } {
+    const b = builtinTheme(id);
+    if (b) return { ...structuredClone(b), builtin: true };
+    const t = this.settings().themes.find((x) => x.id === id);
+    if (!t) throw new EtudeError(`unknown theme "${id}"`, 404);
+    return { ...t, builtin: false };
+  }
+
+  /** The theme the app should use: the selected one, or the default when it was deleted elsewhere. */
+  currentTheme(): Theme {
+    const s = this.settings();
+    return this.findTheme(s.theme, s.themes) ?? builtinTheme(DEFAULT_THEME)!;
+  }
+
+  selectTheme(id: string): Theme {
+    this.updateSettings({ theme: id });
+    return this.currentTheme();
+  }
+
+  /** Creates or replaces a custom theme. Returns it as stored, with any CSS that was stripped. */
+  saveTheme(input: unknown, opts: { create?: boolean } = {}): { theme: Theme; removed: string[]; created: boolean } {
+    let res: { theme: Theme; removed: string[] };
+    try {
+      res = normalizeTheme(input);
+    } catch (e) {
+      throw new EtudeError(e instanceof ThemeError ? e.message : String(e));
+    }
+    if (builtinTheme(res.theme.id)) throw new EtudeError(`"${res.theme.id}" is a built-in theme; save a copy under another id`, 409);
+    const list = this.settings().themes;
+    const i = list.findIndex((t) => t.id === res.theme.id);
+    if (i >= 0 && opts.create) throw new EtudeError(`theme "${res.theme.id}" already exists`, 409);
+    const next = i >= 0 ? list.map((t, j) => (j === i ? res.theme : t)) : [...list, res.theme];
+    this.updateSettings({ themes: next });
+    return { ...res, created: i < 0 };
+  }
+
+  /** Removes a custom theme; the app falls back to the default if it was selected. */
+  deleteTheme(id: string): { deleted: string; selected: string } {
+    if (builtinTheme(id)) throw new EtudeError(`"${id}" is built in and can't be deleted`, 409);
+    const s = this.settings();
+    if (!s.themes.some((t) => t.id === id)) throw new EtudeError(`unknown theme "${id}"`, 404);
+    const selected = s.theme === id ? DEFAULT_THEME : s.theme;
+    this.updateSettings({ themes: s.themes.filter((t) => t.id !== id), theme: selected });
+    return { deleted: id, selected };
   }
 
   /** Start of the current study day, in local time. */

@@ -113,7 +113,7 @@ A small `std.normalize(s)` is also in scope in card scripts. The full `std` (bel
 
 ### Theme and ready-made styles
 
-The app posts its theme into the frame. Use the CSS variables `--background`, `--foreground`, `--card`, `--muted`, `--muted-foreground`, `--border`, `--input`, `--primary`, `--primary-foreground`, `--accent`, `--ring`, `--success`, `--warning`, `--danger`, `--highlight`, `--radius`, `--font-sans` and `--font-mono`.
+The app posts its theme into the frame, and posts it again when the user switches themes. Use the CSS variables `--background`, `--foreground`, `--card`, `--card-foreground`, `--popover`, `--popover-foreground`, `--muted`, `--muted-foreground`, `--secondary`, `--secondary-foreground`, `--border`, `--input`, `--primary`, `--primary-foreground`, `--accent`, `--accent-foreground`, `--ring`, `--destructive`, `--success`, `--warning`, `--danger`, `--highlight`, the rating colors `--again`, `--hard`, `--good`, `--easy`, the state colors `--new`, `--learn`, `--review`, `--radius`, `--font-sans` and `--font-mono`. Themes can be light or dark (the frame's `color-scheme` follows), so derive tints from these variables (`color-mix(in oklab, var(--foreground) 8%, transparent)`) instead of hard-coding white or black.
 
 `runtime/card.css` provides:
 

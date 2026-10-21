@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { AiSection } from "@/components/settings-ai";
+import { AppearanceSection } from "@/components/settings-appearance";
 import { DataSection } from "@/components/settings-data";
 import { ShortcutsSection } from "@/components/settings-shortcuts";
 import { Block, NumberField, Section } from "@/components/settings-ui";
@@ -13,6 +14,7 @@ import { draftOf, normalize, validate, type SettingsDraft, type SettingsResponse
 
 const NAV = [
   { id: "ai", label: "AI grading" },
+  { id: "appearance", label: "Appearance" },
   { id: "study", label: "Study" },
   { id: "data", label: "Data" },
   { id: "keys", label: "Keyboard" },
@@ -160,6 +162,8 @@ export function SettingsPage() {
 
           <div className="flex flex-col gap-12">
             <AiSection ai={draft.ai} saved={saved} errors={shown} onChange={(ai) => setDraft({ ...draft, ai })} />
+
+            <AppearanceSection />
 
             <Section id="study" title="Study">
               <Block>

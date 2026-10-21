@@ -7,6 +7,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { EditorView } from "@codemirror/view";
 import { cn } from "@/lib/utils";
+import { useScheme } from "@/lib/theme";
 
 const LANGS = { js: javascript, html, css, json, markdown };
 
@@ -38,12 +39,13 @@ export function CodeEditor({
   lineNumbers?: boolean;
   placeholder?: string;
 }) {
+  const scheme = useScheme();
   return (
     <div className={cn("overflow-hidden rounded-md border bg-background/40 focus-within:border-ring", className)}>
       <CodeMirror
         value={value}
         onChange={onChange}
-        theme={oneDark}
+        theme={scheme === "light" ? "light" : oneDark}
         extensions={[LANGS[lang](), theme, EditorView.lineWrapping]}
         basicSetup={{ lineNumbers, foldGutter: false, highlightActiveLine: true, autocompletion: lang !== "markdown" }}
         minHeight={`${minHeight}px`}

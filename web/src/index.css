@@ -3,7 +3,8 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Etude: a near-black, quiet dark theme with one accent. */
+/* Etude's default theme, Midnight: near-black, quiet, one accent. Other themes (src/core/themes.ts)
+   override these from a <style id="etude-theme"> with html:root, which wins over :root. */
 :root {
   --radius: 0.75rem;
   --background: oklch(0.13 0 0);
@@ -52,9 +53,13 @@
   --review: oklch(0.78 0.15 150);
 }
 
-@theme inline {
+/* Fonts are theme variables: not inlined, so utilities and the page font follow a theme's --font-sans/--font-mono. */
+@theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+
+@theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -112,7 +117,7 @@
   }
   ::selection { background: color-mix(in oklab, var(--highlight) 35%, transparent); }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-thumb { background: oklch(1 0 0 / 10%); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--foreground) 14%, transparent); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
   ::-webkit-scrollbar-track { background: transparent; }
 }
 

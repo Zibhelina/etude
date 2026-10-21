@@ -142,7 +142,7 @@ export function CopyValue({ label, value }: { label: string; value: string }) {
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <button
         onClick={copy}
-        className="group flex min-h-10 w-full items-center gap-3 rounded-md bg-black/40 px-3.5 py-2.5 text-left font-mono text-[13px] text-foreground/85 transition-colors hover:bg-black/60"
+        className="group flex min-h-10 w-full items-center gap-3 rounded-md bg-background/70 px-3.5 py-2.5 text-left font-mono text-[13px] text-foreground/85 ring-1 ring-border transition-colors hover:bg-accent"
         title="Copy"
       >
         <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">

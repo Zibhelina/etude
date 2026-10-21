@@ -219,6 +219,10 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.get("/api/defaults", (c) => c.json(DEFAULT_PRESET));
   app.post("/api/ai/test", async (c) => c.json(await etude.testAi()));
   app.patch("/api/settings", async (c) => c.json(etude.updateSettings(await body(c))));
+  app.get("/api/themes", (c) => c.json({ selected: etude.currentTheme().id, themes: etude.listThemes() }));
+  app.put("/api/themes/:id", async (c) => c.json(etude.saveTheme({ ...(await body(c)), id: c.req.param("id") })));
+  app.delete("/api/themes/:id", (c) => c.json(etude.deleteTheme(c.req.param("id"))));
+  app.put("/api/theme", async (c) => c.json(etude.selectTheme(String((await body(c)).id ?? ""))));
 
   // --------------------------------------------- card frames and runtime
   app.get("/frame/:type", (c) => {

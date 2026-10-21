@@ -3,6 +3,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { Grade } from "@/lib/api";
+import { pageScheme, THEME_EVENT, useScheme } from "@/lib/theme";
 
 export interface CardResult {
   grade: Grade;
@@ -40,8 +41,10 @@ interface Props {
 }
 
 const THEME_VARS = [
-  "--background", "--foreground", "--card", "--muted", "--muted-foreground", "--border", "--input", "--primary",
-  "--primary-foreground", "--accent", "--ring", "--success", "--warning", "--danger", "--highlight", "--radius",
+  "--background", "--foreground", "--card", "--card-foreground", "--popover", "--popover-foreground", "--muted",
+  "--muted-foreground", "--secondary", "--secondary-foreground", "--border", "--input", "--primary", "--primary-foreground",
+  "--accent", "--accent-foreground", "--ring", "--destructive", "--success", "--warning", "--danger", "--highlight",
+  "--again", "--hard", "--good", "--easy", "--new", "--learn", "--review", "--radius", "--font-sans", "--font-mono",
 ];
 
 function theme() {
@@ -52,7 +55,7 @@ function theme() {
     if (val) vars[v] = val;
   }
   vars["--danger"] ||= cs.getPropertyValue("--destructive").trim();
-  return { scheme: "dark", vars };
+  return { scheme: pageScheme(), vars };
 }
 
 export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(props, ref) {
@@ -114,6 +117,14 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
     return () => window.removeEventListener("message", onMessage);
   }, [props.frameKey, post]);
 
+  // A theme change (or a live preview in Settings) restyles cards already on screen.
+  const scheme = useScheme();
+  useEffect(() => {
+    const onTheme = () => post({ type: "theme", theme: theme() });
+    window.addEventListener(THEME_EVENT, onTheme);
+    return () => window.removeEventListener(THEME_EVENT, onTheme);
+  }, [post]);
+
   return (
     <iframe
       key={props.frameKey}
@@ -123,7 +134,7 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
       src={props.html ? undefined : props.src}
       srcDoc={props.html}
       className={cn("block w-full border-0 bg-transparent transition-opacity duration-150", loaded ? "opacity-100" : "opacity-0", props.className)}
-      style={{ height, colorScheme: "dark" }}
+      style={{ height, colorScheme: scheme }}
     />
   );
 });

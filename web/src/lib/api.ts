@@ -275,7 +275,21 @@ export const api = {
   defaults: () => call<PresetConfig>("GET", "/api/defaults"),
   testAi: () => call<any>("POST", "/api/ai/test", {}),
   saveSettings: (patch: unknown) => call<any>("PATCH", "/api/settings", patch),
+  themes: () => call<{ selected: string; themes: (ThemeData & { builtin: boolean; selected: boolean })[] }>("GET", "/api/themes"),
+  saveTheme: (t: ThemeData) => call<{ theme: ThemeData; removed: string[]; created: boolean }>("PUT", `/api/themes/${encodeURIComponent(t.id)}`, t),
+  deleteTheme: (id: string) => call<{ deleted: string; selected: string }>("DELETE", `/api/themes/${encodeURIComponent(id)}`),
+  selectTheme: (id: string) => call<ThemeData>("PUT", "/api/theme", { id }),
 };
+
+/** A theme as the server stores it (see src/core/themes.ts). */
+export interface ThemeData {
+  id: string;
+  name: string;
+  scheme: "dark" | "light";
+  vars: Record<string, string>;
+  css?: string;
+  base?: string;
+}
 
 export const STATE_NAMES = ["New", "Learning", "Review", "Relearning"];
 export const RATING_LABEL: Record<Rating, string> = { 1: "Again", 2: "Hard", 3: "Good", 4: "Easy" };

@@ -124,8 +124,9 @@ export class Db {
 
   constructor(path: string) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-    this.sql = new DatabaseSync(path);
-    this.sql.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
+    // The timeout lets the CLI and the server write at the same time: one waits instead of failing.
+    this.sql = new DatabaseSync(path, { timeout: 5000 });
+    this.sql.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
     this.sql.exec(SCHEMA);
     const v = this.get("SELECT value FROM meta WHERE key = 'schema_version'");
     if (!v) this.run("INSERT INTO meta (key, value) VALUES ('schema_version', ?)", String(SCHEMA_VERSION));

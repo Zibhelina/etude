@@ -354,6 +354,14 @@ export class Etude {
     return this.preset(p.id);
   }
 
+  /** Deletes a preset nobody uses. Decks (archived ones too) must be moved off it first. */
+  deletePreset(id: string) {
+    this.preset(id);
+    const used = this.db.all("SELECT name FROM decks WHERE preset_id = ? ORDER BY name", id);
+    if (used.length) throw new EtudeError(`preset "${id}" is used by ${used.length} deck(s): ${used.slice(0, 5).map((d) => d.name).join(", ")}${used.length > 5 ? ", …" : ""}`, 409);
+    this.db.run("DELETE FROM presets WHERE id = ?", id);
+  }
+
   /** Settings for a deck: defaults, then each ancestor's preset and own overrides, root first. */
   configFor(deckName: string, opts: { excludeOwn?: boolean; excludePreset?: boolean } = {}): PresetConfig {
     const parts = deckParts(deckName);
@@ -1130,65 +1138,159 @@ export class Etude {
     });
   }
 
+  /**
+   * Overview numbers for a deck or search. `days` sets the activity window (heatmap, ratings,
+   * verdicts); true retention always looks at the last 30 days; the forecast covers 30 days.
+   */
   stats(scope: StudyScope = {}, days = 30) {
+    days = Math.max(1, Math.min(3660, Math.floor(Number(days) || 30)));
     const { where, params, cfg } = this.scopeWhere(scope);
     const from = "FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
     const t = now();
+    const today = this.dayStart(t);
     const states = this.db.get(
       `SELECT COUNT(*) AS total, SUM(c.state = 0) AS new, SUM(c.state IN (1, 3)) AS learning, SUM(c.state = 2) AS review, SUM(c.state = 2 AND c.stability >= 21) AS mature ${from} WHERE ${where}`,
       ...params,
     )!;
-    const since = new Date(this.dayStart(t).getTime() - (days - 1) * 86400_000);
-    const rv = this.db.all(`SELECT r.ts, r.rating, r.state, r.duration_ms, r.score FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.ts >= ? AND r.practice = 0 AND ${where}`, iso(since), ...params);
-    const byDay = new Map<string, { reviews: number; again: number; ms: number }>();
-    const dayKey = (ts: string) => {
-      const d = new Date(ts);
-      const ds = this.dayStart(d);
+    const dayKey = (ts: string | Date) => {
+      const ds = this.dayStart(new Date(ts));
       return `${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, "0")}-${String(ds.getDate()).padStart(2, "0")}`;
     };
-    let reviewed = 0, passed = 0;
+    // Calendar days can be 23 or 25 hours long, so step by date, not by 24 h.
+    const dayAt = (offset: number) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() + offset);
+      return d;
+    };
+    const since = dayAt(-(days - 1));
+    const since30 = dayAt(-29);
+    const rvFrom = `FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id`;
+    const windowStart = since < since30 ? since : since30;
+    const rv = this.db.all(`SELECT r.ts, r.rating, r.state, r.duration_ms ${rvFrom} WHERE r.ts >= ? AND r.practice = 0 AND ${where}`, iso(windowStart), ...params);
+    const byDay = new Map<string, { reviews: number; again: number; ms: number }>();
+    const ratings = { again: 0, hard: 0, good: 0, easy: 0 };
+    const RN = ["", "again", "hard", "good", "easy"] as const;
+    const todayStats = { reviews: 0, again: 0, ms: 0, new: 0 };
+    let reviewed = 0, passed = 0, reviewed30 = 0, passed30 = 0;
+    const sinceIso = iso(since), since30Iso = iso(since30), todayIso = iso(today);
     for (const r of rv) {
+      if (r.ts >= since30Iso && r.state === 2) {
+        reviewed30++;
+        if (r.rating > 1) passed30++;
+      }
+      if (r.ts >= todayIso) {
+        todayStats.reviews++;
+        if (r.rating === 1) todayStats.again++;
+        if (r.state === 0) todayStats.new++;
+        todayStats.ms += r.duration_ms ?? 0;
+      }
+      if (r.ts < sinceIso) continue;
       const k = dayKey(r.ts);
       const e = byDay.get(k) ?? { reviews: 0, again: 0, ms: 0 };
       e.reviews++;
       if (r.rating === 1) e.again++;
       e.ms += r.duration_ms ?? 0;
       byDay.set(k, e);
+      if (r.rating >= 1 && r.rating <= 4) ratings[RN[r.rating] as keyof typeof ratings]++;
       if (r.state === 2) {
         reviewed++;
         if (r.rating > 1) passed++;
       }
     }
+    // Consecutive study days ending today (or yesterday, if today has nothing yet).
+    let streak = 0;
+    for (let i = byDay.has(dayKey(today)) ? 0 : -1; byDay.has(dayKey(dayAt(i))); i--) streak++;
+
+    // Grading verdicts from answered attempts (practice included: a verdict is a verdict).
+    const verdicts = { correct: 0, partial: 0, incorrect: 0, ungraded: 0 };
+    const at = this.db.all(`SELECT a.grade FROM attempts a JOIN cards c ON c.id = a.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE a.ts >= ? AND ${where}`, sinceIso, ...params);
+    for (const a of at) {
+      const v = parse<Grade>(a.grade, {} as Grade).verdict;
+      if (v && v in verdicts) verdicts[v as keyof typeof verdicts]++;
+    }
+
+    // Forecast: overdue cards land on today.
     const forecast: { day: string; due: number }[] = [];
     const dueRows = this.db.all(`SELECT c.due ${from} WHERE ${where} AND c.state != 0`, ...params);
-    const start = this.dayStart(t).getTime();
+    const bounds = Array.from({ length: 31 }, (_, i) => dayAt(i).getTime());
     const buckets = new Array(30).fill(0);
+    let overdue = 0;
+    const nowMs = t.getTime();
     for (const r of dueRows) {
-      const idx = Math.max(0, Math.floor((new Date(r.due).getTime() - start) / 86400_000));
-      if (idx < 30) buckets[idx]++;
+      const ms = new Date(r.due).getTime();
+      if (ms <= nowMs) overdue++;
+      if (ms < bounds[1]) buckets[0]++;
+      else for (let i = 1; i < 30; i++) if (ms < bounds[i + 1]) { buckets[i]++; break; }
     }
-    for (let i = 0; i < 30; i++) forecast.push({ day: dayKey(new Date(start + i * 86400_000 + 3600_000).toISOString()), due: buckets[i] });
-    // Mean predicted recall across seen cards, per tag and overall.
-    const seen = this.db.all<CardRow & { deck: string; tags: string }>(`SELECT c.*, d.name AS deck, i.tags ${from} WHERE ${where} AND c.state != 0`, ...params);
+    for (let i = 0; i < 30; i++) forecast.push({ day: dayKey(dayAt(i)), due: buckets[i] });
+
+    // Predicted recall now, with each card's own deck settings (weights can differ per deck).
+    const cfgs = new Map<string, PresetConfig>();
+    const cfgOf = (deck: string) => {
+      if (!cfgs.has(deck)) cfgs.set(deck, this.configFor(deck));
+      return cfgs.get(deck)!;
+    };
+    const all = this.db.all<CardRow & { deck: string; tags: string }>(`SELECT c.*, d.name AS deck, i.tags ${from} WHERE ${where}`, ...params);
     const byTag = new Map<string, { n: number; r: number }>();
-    let rSum = 0;
-    for (const c of seen) {
-      const r = sched.retrievability(c, t, cfg) ?? 0;
-      rSum += r;
-      for (const tag of parse<string[]>(c.tags, [])) {
-        const e = byTag.get(tag) ?? { n: 0, r: 0 };
-        e.n++;
-        e.r += r;
-        byTag.set(tag, e);
+    const tree = new Map<string, { cards: number; seen: number; r: number; direct: boolean }>();
+    let rSum = 0, seenN = 0;
+    for (const c of all) {
+      const r = c.state === 0 ? null : (sched.retrievability(c, t, cfgOf(c.deck)) ?? 0);
+      if (r != null) {
+        rSum += r;
+        seenN++;
+      }
+      const tags = parse<string[]>(c.tags, []);
+      const credited = new Set<string>();
+      for (const tag of tags) {
+        if (r != null) {
+          const e = byTag.get(tag) ?? { n: 0, r: 0 };
+          e.n++;
+          e.r += r;
+          byTag.set(tag, e);
+        }
+        const parts = tag.split("::");
+        for (let i = 1; i <= parts.length; i++) {
+          const key = parts.slice(0, i).join("::");
+          const node = tree.get(key) ?? { cards: 0, seen: 0, r: 0, direct: false };
+          if (i === parts.length) node.direct = true;
+          // A card tagged a::b and a::c counts once under a.
+          if (!credited.has(key)) {
+            credited.add(key);
+            node.cards++;
+            if (r != null) {
+              node.seen++;
+              node.r += r;
+            }
+          }
+          tree.set(key, node);
+        }
       }
     }
+    const tagTree = [...tree.entries()]
+      .map(([tag, v]) => ({ tag, depth: tag.split("::").length - 1, direct: v.direct, cards: v.cards, seen: v.seen, recall: v.seen ? v.r / v.seen : null }))
+      .sort((a, b) => a.tag.localeCompare(b.tag));
+
     return {
       cards: { total: Number(states.total ?? 0), new: Number(states.new ?? 0), learning: Number(states.learning ?? 0), review: Number(states.review ?? 0), mature: Number(states.mature ?? 0) },
+      /** Pass rate on review-state cards over the whole window. */
       retention: reviewed ? passed / reviewed : null,
-      recall: seen.length ? rSum / seen.length : null,
+      /** Pass rate on review-state cards over the last 30 days. */
+      trueRetention: { days: 30, reviewed: reviewed30, passed: passed30, rate: reviewed30 ? passed30 / reviewed30 : null },
+      recall: seenN ? rSum / seenN : null,
       days: [...byDay.entries()].sort().map(([day, v]) => ({ day, ...v })),
       forecast,
+      overdue,
       tags: [...byTag.entries()].map(([tag, v]) => ({ tag, cards: v.n, recall: v.r / v.n })).sort((a, b) => a.tag.localeCompare(b.tag)),
+      /** Every tag with its ancestors: a card under a::b also counts toward a. */
+      tagTree,
+      today: { ...todayStats, day: dayKey(today) },
+      ratings,
+      verdicts,
+      streak,
+      window: { days, from: dayKey(since), to: dayKey(today) },
+      deadline: scope.deck ? (cfg.deadline ?? null) : null,
+      deadlineMargin: cfg.deadlineMargin,
     };
   }
 

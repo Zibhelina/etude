@@ -112,6 +112,10 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   // ----------------------------------------------------------- presets
   app.get("/api/presets", (c) => c.json(etude.listPresets()));
   app.put("/api/presets/:id", async (c) => c.json(etude.savePreset({ ...(await body(c)), id: c.req.param("id") })));
+  app.delete("/api/presets/:id", (c) => {
+    etude.deletePreset(c.req.param("id"));
+    return c.json({ ok: true });
+  });
 
   // ------------------------------------------------------------- types
   app.get("/api/types", (c) => c.json(etude.listTypes()));
@@ -186,7 +190,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.post("/api/reschedule", async (c) => c.json(etude.reschedule(await body(c))));
 
   // ------------------------------------------------- stats, tags, packs
-  app.get("/api/stats", (c) => c.json(etude.stats(scopeOf(c), Number(c.req.query("days") ?? 30))));
+  app.get("/api/stats", (c) => c.json(etude.stats(scopeOf(c), Number(c.req.query("days") ?? 30) || 30)));
   app.get("/api/tags", (c) => c.json(etude.listTags()));
   app.put("/api/tags", async (c) => {
     const b = await body(c);

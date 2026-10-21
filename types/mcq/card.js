@@ -1,5 +1,6 @@
 const { view } = etude;
 const box = etude.$(".options");
+if (/select all|all that apply|choose all/i.test(view.prompt ?? "")) etude.$(".hint").textContent = "";
 const keys = "123456789abcdefgh";
 box.innerHTML = view.options.map((o, i) => `
   <button type="button" class="e-option" data-id="${o.id}" aria-pressed="false">

@@ -2,7 +2,7 @@ const blanks = [];
 const text = String(fields.text).replace(/\{\{([\s\S]+?)\}\}/g, (_, inner) => {
   const [ans, hint] = inner.split("::");
   const i = blanks.length;
-  blanks.push({ answers: ans.split("|").map((s) => s.trim()), hint: hint?.trim() ?? "" });
+  blanks.push({ answers: ans.split("|").map((s) => s.trim()).filter(Boolean), hint: hint?.trim() ?? "" });
   return `⟦${i}⟧`;
 });
 return {

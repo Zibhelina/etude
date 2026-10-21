@@ -84,7 +84,7 @@ export function CardPreview({
           <Button variant="ghost" size="sm" className="gap-1.5" onClick={onTry}><Play className="size-4" /> Study this card</Button>
         )}
       </div>
-      <div className="rounded-xl border bg-background p-5">
+      <div className="rounded-xl border bg-background p-3 sm:p-5">
         {error && <pre className="whitespace-pre-wrap text-sm text-destructive">{error}</pre>}
         {data && !error && (
           <CardFrame

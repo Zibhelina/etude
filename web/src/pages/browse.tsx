@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, ArchiveRestore, Check, Copy, Dices, FolderInput, Loader2, MoreHorizontal, Pause, Play, Plus, RotateCcw, Save, Search, Tag, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, Check, Copy, Dices, FolderInput, Loader2, MoreHorizontal, Pause, Play, Plus, RotateCcw, Save, Search, Tag, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -116,8 +116,8 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
   const allChecked = items.length > 0 && items.every((r) => checked.has(r.itemId));
 
   return (
-    <div className="flex h-dvh min-w-0">
-      <section className="flex w-[24rem] shrink-0 flex-col border-r xl:w-[28rem]">
+    <div className="flex h-[calc(100dvh-4rem-env(safe-area-inset-bottom))] min-w-0 md:h-dvh">
+      <section className={cn("min-w-0 flex-col border-r md:flex md:w-[20rem] md:shrink-0 lg:w-[24rem] xl:w-[28rem]", selected ? "hidden" : "flex w-full")}>
         <div className="flex flex-col gap-2 border-b p-3">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
@@ -213,11 +213,12 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
         </div>
       </section>
 
-      <section className="min-w-0 flex-1 overflow-y-auto">
+      <section className={cn("min-w-0 flex-1 overflow-y-auto", selected ? "block" : "hidden md:block")}>
         {selected ? (
           <ItemEditor
             key={selected}
             id={selected}
+            onBack={() => setSelected(null)}
             decks={decks}
             tags={tags}
             onSaved={() => { run(); reloadMeta(); }}
@@ -265,7 +266,7 @@ function SearchHints({ onPick }: { onPick(s: string): void }) {
 type Draft = { deck: string; fields: Record<string, unknown>; tags: string[]; source: string; notes: string };
 const draftOf = (it: ItemDetail): Draft => ({ deck: it.deck, fields: it.fields, tags: it.tags, source: it.source, notes: it.notes });
 
-function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate }: { id: string; decks: string[]; tags: string[]; onSaved(): void; onDeleted(): void; onDuplicate(id: string): void }) {
+function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, onBack }: { id: string; decks: string[]; tags: string[]; onSaved(): void; onDeleted(): void; onDuplicate(id: string): void; onBack(): void }) {
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [type, setType] = useState<CardType | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -350,9 +351,10 @@ function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate }: { id: 
   const allSuspended = item.cards.every((c) => c.suspended);
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 pt-6 xl:px-10">
-      <div className="flex items-start gap-3">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 pt-4 sm:px-6 sm:pt-6 xl:px-10">
+      <div className="flex items-start gap-2 sm:gap-3">
+        <Button size="icon" variant="ghost" className="-ml-2 size-9 md:hidden" onClick={onBack} aria-label="Back to list"><ArrowLeft className="size-4" /></Button>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 pt-1.5 md:pt-0">
           <Badge variant="outline" className="font-normal">{type.name}</Badge>
           {item.archived && <Badge variant="outline" className="font-normal text-muted-foreground">archived</Badge>}
           {allSuspended && <Badge variant="outline" className="font-normal text-muted-foreground">suspended</Badge>}
@@ -437,11 +439,11 @@ function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate }: { id: 
         </TabsContent>
       </Tabs>
 
-      <div className={cn("sticky bottom-0 -mx-6 mt-2 flex items-center gap-2 border-t bg-background px-6 py-3 transition-opacity xl:-mx-10 xl:px-10", dirty ? "opacity-100" : "pointer-events-none opacity-0")}>
+      <div className={cn("sticky bottom-0 -mx-4 mt-2 flex items-center gap-2 border-t bg-background px-4 py-3 transition-opacity sm:-mx-6 sm:px-6 xl:-mx-10 xl:px-10", dirty ? "opacity-100" : "pointer-events-none opacity-0")}>
         <span className="text-sm text-muted-foreground">Unsaved changes</span>
         <div className="flex-1" />
         <Button variant="ghost" size="sm" onClick={() => setDraft(draftOf(item))}>Discard</Button>
-        <Button size="sm" className="gap-1.5" onClick={save} disabled={saving}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Save <kbd className="text-[10px] opacity-60">Ctrl S</kbd></Button>
+        <Button size="sm" className="gap-1.5" onClick={save} disabled={saving}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Save <kbd className="hidden text-[10px] opacity-60 sm:inline">Ctrl S</kbd></Button>
       </div>
     </div>
   );
@@ -469,7 +471,7 @@ function History({ item }: { item: ItemDetail }) {
       {events.map((e, i) =>
         e.kind === "review" ? (
           <div key={i} className="flex items-center gap-3 px-1 text-sm">
-            <span className="w-32 shrink-0 text-xs tabular text-muted-foreground">{fmtTs(e.ts)}</span>
+            <span className="w-24 shrink-0 text-xs tabular text-muted-foreground sm:w-32">{fmtTs(e.ts)}</span>
             <span className={cn("font-medium", ["", "text-again", "text-hard", "text-good", "text-easy"][e.r.rating])}>{RATING_LABEL[e.r.rating as 1]}</span>
             {e.r.practice ? <span className="text-xs text-muted-foreground">practice</span> : <span className="text-xs text-muted-foreground">next in {humanInterval(e.r.due_after, new Date(e.ts))}</span>}
             {e.r.duration_ms != null && <span className="ml-auto text-xs tabular text-muted-foreground">{Math.round(e.r.duration_ms / 1000)}s</span>}

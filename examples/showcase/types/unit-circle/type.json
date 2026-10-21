@@ -1,0 +1,39 @@
+{
+  "id": "unit-circle",
+  "name": "Unit circle",
+  "description": "Place an angle on the unit circle by dragging or tapping. A new angle every review, in radians, degrees or both, sometimes negative or past a full turn. Partial credit one step off.",
+  "fields": [
+    {
+      "name": "prompt",
+      "kind": "markdown",
+      "default": "Place the angle on the unit circle.",
+      "description": "Shown above the angle."
+    },
+    {
+      "name": "units",
+      "kind": "text",
+      "default": "mixed",
+      "description": "radians | degrees | mixed"
+    },
+    {
+      "name": "wrap",
+      "kind": "boolean",
+      "default": true,
+      "label": "Negative and large angles",
+      "description": "Sometimes ask for angles below 0 or past a full turn."
+    },
+    {
+      "name": "angle",
+      "kind": "number",
+      "description": "Optional fixed angle in degrees (a multiple of 15). Leave empty for a new angle every review."
+    },
+    {
+      "name": "explanation",
+      "kind": "markdown",
+      "private": true
+    }
+  ],
+  "grader": {
+    "kind": "script"
+  }
+}

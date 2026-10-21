@@ -1,0 +1,17 @@
+{
+  "etude": "pack/1",
+  "name": "Etude Showcase",
+  "description": "One card per idea, each showing something a normal flashcard app can't do: cards you play, drag, hear, draw, code and derive in, graded by scripts that actually check the work, with fresh variants every review.",
+  "presets": [
+    { "id": "showcase", "name": "Showcase (no limits)", "config": { "newPerDay": 9999, "reviewsPerDay": 9999, "newOrder": "deck" } }
+  ],
+  "decks": [
+    { "name": "Etude Showcase", "preset": "showcase", "description": "A tour of what Etude cards can be. Every card is a different exhibit.", "instructions": "This is a demo deck. Grade fairly: right ideas in different words are correct." },
+    { "name": "Etude Showcase::1 Answer anything", "description": "Code that runs, math checked for equivalence, proofs in live LaTeX, drawings read by a vision model." },
+    { "name": "Etude Showcase::2 Math and science", "description": "Drag, fit and tune: geometry and functions you manipulate directly." },
+    { "name": "Etude Showcase::3 Computing", "description": "Regexes run against tests, traces, traversals and bugs you point at." },
+    { "name": "Etude Showcase::4 Music and senses", "description": "Cards you hear and play." },
+    { "name": "Etude Showcase::5 Games", "description": "Boards, clocks and quick reflexes." }
+  ],
+  "order": ["showcase.code.", "showcase.math.", "showcase.free.", "showcase.draw."]
+}

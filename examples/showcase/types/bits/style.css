@@ -1,0 +1,61 @@
+.sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }
+.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }
+
+/* Code should read literally: no fused glyphs from ligature fonts. */
+#card, #card * { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+
+.bt-ask { font-size: 1.1rem; line-height: 1.5; }
+.bt-ask .num { font: 600 2.2rem/1.1 var(--font-mono); letter-spacing: -0.02em; display: block; margin-top: 0.2rem; }
+.bt-ask .sub { color: var(--muted-foreground); font-size: 0.92rem; }
+
+.bt-board { display: flex; flex-direction: column; align-items: center; gap: 0.8rem; }
+.bt-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.7rem; }
+.bt-nib { display: flex; gap: 0.25rem; }
+.bt-bit {
+  width: 2.7rem; min-width: 40px; padding: 0.35rem 0 0.45rem;
+  display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
+  border: 1px solid var(--border); border-radius: calc(var(--radius) - 3px);
+  background: transparent; color: var(--foreground); font: inherit; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.08s;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.bt-bit:active { transform: scale(0.95); }
+.bt-bit:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 35%, transparent); }
+.bt-bit .pv { font: 0.72rem/1 var(--font-mono); color: var(--muted-foreground); white-space: nowrap; }
+.bt-bit .v { font: 600 1.45rem/1 var(--font-mono); color: color-mix(in oklab, var(--foreground) 35%, transparent); }
+.bt-bit .led { width: 1.4rem; height: 0.32rem; border-radius: 999px; background: color-mix(in oklab, var(--foreground) 12%, transparent); transition: background 0.15s, box-shadow 0.15s; }
+.bt-bit[aria-pressed="true"] { border-color: color-mix(in oklab, var(--highlight) 60%, var(--border)); background: color-mix(in oklab, var(--highlight) 10%, transparent); }
+.bt-bit[aria-pressed="true"] .v { color: var(--foreground); }
+.bt-bit[aria-pressed="true"] .led { background: var(--highlight); box-shadow: 0 0 10px color-mix(in oklab, var(--highlight) 60%, transparent); }
+.bt-bit.neg .pv { color: color-mix(in oklab, var(--warning) 70%, var(--foreground)); font-weight: 600; }
+.bt-bit:disabled { cursor: default; transform: none; }
+.bt-bit.off-by { border-color: var(--danger) !important; background: color-mix(in oklab, var(--danger) 14%, transparent) !important; }
+.bt-bit.off-by .v { color: var(--danger) !important; }
+.bt-bit.off-by .pv { color: var(--danger); }
+.bt-truth .bt-bit { cursor: default; }
+.bt-truth .bt-bit[aria-pressed="true"] { border-color: color-mix(in oklab, var(--success) 60%, var(--border)); background: color-mix(in oklab, var(--success) 10%, transparent); }
+.bt-truth .bt-bit[aria-pressed="true"] .led { background: var(--success); box-shadow: 0 0 10px color-mix(in oklab, var(--success) 55%, transparent); }
+
+.bt-total { font: 0.95rem var(--font-mono); color: var(--muted-foreground); min-height: 1.5em; text-align: center; }
+.bt-total b { color: var(--foreground); font-weight: 600; }
+.bt-total .u { white-space: nowrap; display: inline-block; }
+.bt-total div.u { display: block; white-space: normal; }
+.bt-total .t { color: var(--muted-foreground); }
+.bt-total .neg { color: color-mix(in oklab, var(--warning) 70%, var(--foreground)); }
+.bt-total.right b { color: var(--success); }
+.bt-total.wrong b { color: var(--danger); }
+.bt-sum { font: 0.95rem/1.7 var(--font-mono); overflow-wrap: anywhere; text-align: center; }
+.bt-nib-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
+.bt-hexdigit { font: 600 0.9rem var(--font-mono); color: var(--foreground); border-top: 1px solid var(--border); padding-top: 0.15rem; align-self: stretch; text-align: center; }
+.bt-truth-wrap .e-section-title { text-align: center; }
+.bt-sum .t { color: var(--muted-foreground); }
+.bt-sum .neg { color: color-mix(in oklab, var(--warning) 70%, var(--foreground)); }
+.bt-sum .hex { margin-top: 0.15rem; }
+.bt-sum .hex b, .bt-sum .eq b { color: var(--foreground); font-weight: 600; }
+.bt-help { font-size: 0.82rem; margin: -0.5rem 0 0; text-align: center; }
+.bt-attempt.all-right .bt-bit[aria-pressed="true"] { border-color: color-mix(in oklab, var(--success) 60%, var(--border)); background: color-mix(in oklab, var(--success) 10%, transparent); }
+.bt-attempt.all-right .bt-bit[aria-pressed="true"] .led { background: var(--success); box-shadow: 0 0 10px color-mix(in oklab, var(--success) 55%, transparent); }
+.bt-board[hidden] { display: none; }
+.bt-note { font-size: 0.92rem; margin-top: -0.75rem; }
+.bt-truth[hidden] { display: none; }
+.bt-hexdigit { margin-top: 0.15rem; }

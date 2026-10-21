@@ -42,6 +42,8 @@ This is the JSON that `PUT /api/types/:id` accepts and the editor exports:
   - A `private` field is hidden until the answer is graded.
   - `default` is merged in when an item leaves the field empty.
   - `editor` asks for a structured form: `choices` (`[{ text, correct, why }]`), `pairs` (`[[left, right]]`) or `parts` (`[{ label, answer, unit, tolerance }]`).
+  - `language` (for `code` fields) is the language the editor highlights: a name (`"python"`) or `"field:<name>"` to follow another field, like the `code` type's `language`.
+  - In the item editor, `markdown` fields are live markdown editors and `code` fields are code editors.
 - `template.html` is required; `css` and `js` may be empty.
 
 Saving validates all of this. Script bodies (`prepare`, `grader.code`) are compiled in the sandbox and `template.js` is compiled as a function, so syntax errors come back from the save as messages like `true-or-false/grade: SyntaxError: ...`.
@@ -90,7 +92,13 @@ The body gets `data-mode="answer"` or `data-mode="result"`, so `.only-answer` an
 | `etude.answer` | a previous answer when the card is re-shown, else `null` |
 | `etude.result` | `{ grade, key, answer }` once graded, else `null` |
 | `etude.root` | the `#card` element |
-| `etude.md(s)`, `etude.mdInline(s)` | render markdown and math to HTML |
+| `etude.md(s)`, `etude.mdInline(s)` | render markdown and math to HTML (fenced code blocks are highlighted automatically) |
+| `etude.tex(src, display?)` | render LaTeX to HTML |
+| `etude.math` | math answers: `parse`, `toLatex`, `evaluate`, `equivalent`, `check` (the same module as `std.math`, so a live preview and the grader agree) |
+| `await etude.highlight(code, language)` | syntax-highlighted HTML for any language CodeMirror knows (about 140; `python`, `js`, `c++`, `rust`, `sql`, ...) |
+| `await etude.languageName(id)` | display name of a language id (`"py"` → `"Python"`) |
+| `await etude.codeEditor(el, opts)` | a code editor in `el`; `opts`: `value`, `language`, `placeholder`, `readOnly`, `minLines`, `wrap`, `autofocus`, `onChange(v)`. Returns `{ value(), set(v), focus(), setReadOnly(b), destroy() }` |
+| `await etude.markdownEditor(el, opts)` | a markdown editor with live preview, like Obsidian: formatting, `$math$`, `$$display$$` and code render in place and the markup comes back where the cursor is. Same options and handle as `codeEditor` |
 | `etude.escape(s)` | HTML-escape text |
 | `etude.html\`...\`` | tagged template that escapes interpolated values |
 | `etude.$(sel)`, `etude.$$(sel)` | `querySelector` / `querySelectorAll` (as an array) inside the card |
@@ -110,6 +118,10 @@ A small `std.normalize(s)` is also in scope in card scripts. The full `std` (bel
 - In answer mode, Space and Enter go to the app only when the card's own handler didn't call `preventDefault()` and focus isn't in an input. In result mode, 1–4, Space, Enter and `u` are forwarded the same way, for rating.
 - On mount, the first `[autofocus]` element (or input or textarea) gets focus.
 - The frame resizes to the card's height automatically. Don't use fixed heights or internal scrolling for the whole card.
+
+### Editors and code
+
+The editor kit loads the first time a card asks for it, and each language loads only when it's needed. `runtime/code.css` colors highlighted code from the theme (`--code-keyword`, `--code-string`, `--code-number`, `--code-function`, `--code-type`, `--code-comment`, `--code-punct`, all derived from the theme's colors), and `.e-editor` gives an editor the same box as `.e-input` (`.is-readonly` after grading). The built-in `code`, `math` and `free` types are short examples of all three.
 
 ### Theme and ready-made styles
 
@@ -182,6 +194,7 @@ Every script gets `std`:
 - `std.within(value, target, tolerance = 0.01)`: relative tolerance, with a 1e-12 floor near zero.
 - `std.lis(seq)`: longest increasing subsequence length, used for order partial credit.
 - `std.round(x, digits = 3)`: rounds to significant digits.
+- `std.math`: math answers in LaTeX or plain notation. `std.math.check(answer, accepted, { form, ordered, tolerance })` returns `{ score, feedback, latex }` (see the `math` type in [packs.md](packs.md)); also `parse`, `evaluate(tree, vars)`, `toLatex`, `equivalent(a, b)`. It is only loaded into scripts that mention `std.math`.
 
 When a script takes `rng`, it provides:
 
@@ -225,7 +238,7 @@ There is no prepare script, so `answer` and `explanation`, both private, go to `
 
 ## Example 2: two-way vocabulary (prepare and faces)
 
-This is the `vocab` type from `examples/sampler.pack.json`. It was duplicated as `vocabulary-portuguese` and saved through the Card types page. Each item makes two cards, and `prepare` builds a different view and key for each face:
+This is a vocabulary type (in the format of the types in `examples/showcase/types/`). It was duplicated as `vocabulary-portuguese` and saved through the Card types page. Each item makes two cards, and `prepare` builds a different view and key for each face:
 
 ```json
 {

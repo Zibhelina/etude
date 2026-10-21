@@ -10,7 +10,8 @@ Etude is a spaced-repetition app in which every card type is a small program. A 
 
 ## Features
 
-- **Programmable card types.** Nine built-in types (basic, typed, numeric, multiple choice, order, match, cloze, free answer, drawing) ship as editable files. Custom types are written the same way and edited in the app.
+- **Programmable card types.** Eleven built-in types (basic, typed, numeric, multiple choice, order, match, cloze, free answer, drawing, math, code) ship as editable files. Custom types are written the same way and edited in the app.
+- **Write math and code the way you would on paper.** Markdown fields and long answers are live editors, like Obsidian: `$math$`, code blocks and formatting render as you type, so a derivation or a proof can be the answer. Math answers are graded by equivalence (`x(x+1)` matches `x^2+x`, `0.5` matches `\frac12`). Code answers get a real editor with highlighting for about 140 languages, and JavaScript runs against hidden tests in a sandbox.
 - **Generated items.** An item can carry a generator script, so one item produces endless variants of the same exercise. The seed is stored with each review, so any variant can be reproduced.
 - **AI grading.** Free answers go to a decision model (`liquid/d1-ultra` through OpenRouter by default) for a calibrated verdict, then to a chat model for two to four sentences of feedback. Drawings go to a vision model. Any OpenAI-compatible endpoint works, including a local llama.cpp or Ollama server. Grading instructions cascade from the item's rubric through its tags, decks and type.
 - **FSRS-6 scheduling** with learning steps, fuzz, per-deck daily limits, new/review ordering, sibling burying, a suggested rating from the grade, undo, and replaying history after a settings change.
@@ -30,10 +31,10 @@ npm run build        # builds the web app into web/dist
 npm start            # same as: node src/cli/main.ts serve
 ```
 
-Open http://127.0.0.1:4610. The collection lives in `~/.etude/etude.db`. To try every card type, import the sampler:
+Open http://127.0.0.1:4610. The collection lives in `~/.etude/etude.db`. To see what cards can be, import the showcase, where every card is a different kind of exercise (code that runs against tests, proofs, equivalence-checked math, a unit circle, chemical equations, regexes, graph traversals, ear training, chess and more):
 
 ```sh
-node src/cli/main.ts import examples/sampler.pack.json
+node src/cli/main.ts import examples/showcase.pack.json
 ```
 
 The `etude` command (`bin/etude.js`) runs the same CLI. After `npm link` or a global install, `etude serve` and `etude import pack.json` work from anywhere.
@@ -155,7 +156,7 @@ src/cli/      the etude command
 runtime/      runtime.js and card.css, loaded inside every card frame
 types/        the built-in card types, one folder each
 web/          React, Tailwind and shadcn/ui app (Vite)
-examples/     sampler.pack.json with every card type
+examples/     showcase.pack.json (built from examples/showcase/ with `node examples/showcase/build.ts`)
 scripts/      check-pack.ts
 test/         node:test suites
 ```

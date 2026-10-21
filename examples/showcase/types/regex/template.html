@@ -1,0 +1,24 @@
+<div class="sc-eyebrow">Regex</div>
+<div class="prose">{{md:prompt}}</div>
+<div class="rx-entry">
+  <label class="rx-field">
+    <span class="rx-slash" aria-hidden="true">/</span>
+    <textarea class="rx-pattern" rows="1" aria-label="Pattern" placeholder="pattern" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done" autofocus></textarea>
+    <span class="rx-slash" aria-hidden="true">/</span>
+    <input class="rx-flags" aria-label="Flags (i, m, s, u)" placeholder="flags" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="4">
+  </label>
+  <div class="rx-status" aria-live="polite"></div>
+</div>
+<div class="rx-tests">
+  <div><div class="e-section-title">Should match</div><ul class="rx-list" data-kind="match"></ul></div>
+  <div><div class="e-section-title">Should not match</div><ul class="rx-list" data-kind="reject"></ul></div>
+</div>
+{{#hiddenCount}}<p class="e-muted rx-note only-answer">Plus {{hiddenCount}} hidden tests, checked when you submit.</p>{{/hiddenCount}}
+<template data-on="result">
+  <div class="e-reveal">
+    <div class="rx-hidden-results"></div>
+    {{#solution}}<div><div class="e-section-title">One solution</div><code class="rx-solution">/{{solution}}/</code></div>{{/solution}}
+    {{#explanation}}<div class="prose">{{md:explanation}}</div>{{/explanation}}
+    <p class="sc-how">Your pattern ran against every visible test as you typed, and against the hidden ones in a sandbox when you submitted. A normal flashcard could only compare your text to one stored answer.</p>
+  </div>
+</template>

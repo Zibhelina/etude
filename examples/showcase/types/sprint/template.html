@@ -1,0 +1,23 @@
+<div class="sc-eyebrow">Sprint</div>
+<div class="sp-intro only-answer">
+  <div class="sp-title">Answer as many as you can in <b>{{seconds}} seconds</b>.</div>
+  <div class="e-muted sp-sub">Type the answer and press <kbd>Enter</kbd> to move on. No feedback until the end. {{target}} right gets full marks.</div>
+  {{#note}}<div class="prose e-muted">{{md:note}}</div>{{/note}}
+</div>
+<div class="sp-stage only-answer">
+  <div class="sp-bar" aria-hidden="true"><div class="sp-fill"></div></div>
+  <div class="sp-meta"><span class="sp-time"></span><span class="sp-count"></span></div>
+  <div class="sp-q" aria-live="polite"></div>
+  <div class="sp-form">
+    <input class="e-input sp-input" inputmode="numeric" enterkeyhint="next" aria-label="Answer" autocomplete="off" disabled>
+  </div>
+  <button type="button" class="e-btn primary sp-start">Start</button>
+</div>
+<template data-on="result">
+  <div class="sp-score">
+    <div class="big"><span class="n"></span><span class="of"></span></div>
+    <div class="e-muted sp-line"></div>
+  </div>
+  <div class="sp-table"></div>
+  <p class="sc-how">The problems are generated fresh for every round, and the card keeps its own clock: when time runs out it hands your answers to the grader by itself.</p>
+</template>

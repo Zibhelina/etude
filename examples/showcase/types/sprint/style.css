@@ -1,0 +1,44 @@
+.sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }
+.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }
+
+/* Code should read literally: no fused glyphs from ligature fonts. */
+#card, #card * { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+
+.sp-intro { display: flex; flex-direction: column; gap: 0.35rem; }
+.sp-title { font-size: 1.15rem; }
+.sp-title b { font-weight: 600; }
+.sp-sub { font-size: 0.9rem; }
+.sp-stage { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; padding: 0.25rem 0 0.5rem; }
+.sp-bar { width: 100%; height: 6px; border-radius: 999px; background: color-mix(in oklab, var(--foreground) 10%, transparent); overflow: hidden; }
+.sp-fill { height: 100%; width: 100%; background: var(--highlight); border-radius: inherit; transform-origin: left center; }
+.sp-fill.low { background: var(--danger); }
+.sp-meta { width: 100%; display: flex; justify-content: space-between; font: 0.85rem var(--font-mono); color: var(--muted-foreground); margin-top: -0.4rem; }
+.sp-q { font: 600 2.6rem/1.15 var(--font-mono); letter-spacing: -0.02em; min-height: 1.15em; text-align: center; font-variant-numeric: tabular-nums; }
+.sp-q.idle { color: color-mix(in oklab, var(--foreground) 25%, transparent); }
+.sp-q.pop { animation: sp-pop 0.18s ease-out; }
+@keyframes sp-pop { from { opacity: 0.2; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.sp-form { width: 100%; max-width: 14rem; margin: 0; }
+.sp-input { text-align: center; font: 600 1.4rem var(--font-mono) !important; height: 3rem; }
+.sp-start { height: 2.75rem; min-width: 9rem; font-size: 1rem; }
+.sp-start[hidden] { display: none; }
+[data-mode="result"] .sp-stage { display: none; }
+
+.sp-score { display: flex; flex-direction: column; gap: 0.15rem; }
+.sp-score .big { font: 600 2.4rem/1.1 var(--font-mono); }
+.sp-score .of { font-size: 1.1rem; color: var(--muted-foreground); margin-left: 0.4rem; }
+.sp-line { font-size: 0.92rem; }
+.sp-table { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.4rem; }
+.sp-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem;
+  border: 1px solid var(--border); border-radius: calc(var(--radius) - 4px);
+  padding: 0.35rem 0.6rem; font: 0.88rem/1.4 var(--font-mono);
+}
+.sp-row .q { white-space: nowrap; }
+.sp-row .a { white-space: nowrap; text-align: right; }
+.sp-row .want { color: var(--success); font-weight: 600; }
+.sp-row.ok .a { color: var(--success); }
+.sp-row.bad { border-color: color-mix(in oklab, var(--danger) 45%, var(--border)); background: color-mix(in oklab, var(--danger) 7%, transparent); }
+.sp-row.bad .a s { color: var(--danger); text-decoration-thickness: 1.5px; }
+.sp-row.skip .a s { color: var(--muted-foreground); }
+.sp-row.ok .a, .sp-row .want { font-weight: 600; }
+.sp-empty { color: var(--muted-foreground); font-size: 0.92rem; }

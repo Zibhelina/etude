@@ -1,0 +1,33 @@
+{
+  "id": "sprint",
+  "name": "Beat the clock",
+  "description": "A 30-second mental arithmetic sprint. Problems are generated each review; the card submits itself when time runs out. Score = correct ÷ target.",
+  "fields": [
+    {
+      "name": "note",
+      "kind": "markdown",
+      "description": "Optional line shown under the prompt (also the card's title in lists)."
+    },
+    {
+      "name": "mode",
+      "kind": "text",
+      "default": "mixed",
+      "description": "\"sums\" (two-digit addition and subtraction), \"times\" (times tables to 12), \"percent\" (simple percentages) or \"mixed\"."
+    },
+    {
+      "name": "seconds",
+      "kind": "number",
+      "default": 30,
+      "description": "Length of the round, 10 to 120 seconds."
+    },
+    {
+      "name": "target",
+      "kind": "number",
+      "default": 12,
+      "description": "Correct answers needed for full credit."
+    }
+  ],
+  "grader": {
+    "kind": "script"
+  }
+}

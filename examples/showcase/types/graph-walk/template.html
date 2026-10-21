@@ -1,0 +1,15 @@
+<div class="sc-eyebrow">Graph traversal</div>
+<div class="prose gw-prompt"></div>
+<div class="gw-stage">
+  <svg class="gw-svg" viewBox="0 0 372 300" role="group" aria-label="Graph"></svg>
+</div>
+<div class="gw-seq-wrap"><div class="e-section-title only-result">Your order</div><div class="gw-seq" aria-live="polite"></div></div>
+<p class="e-muted gw-help only-answer">Tap nodes in visiting order; tap the last one again to undo. Keyboard: type a node's letter, <kbd>Backspace</kbd> to undo.</p>
+<template data-on="result">
+  <div class="e-reveal">
+    <div><div class="e-section-title">Visiting order</div><div class="gw-truth"></div></div>
+    <div class="e-row"><button type="button" class="e-btn gw-replay">Replay</button></div>
+    {{#explanation}}<div class="prose">{{md:explanation}}</div>{{/explanation}}
+    <p class="sc-how">This graph was generated for this review, and the grader ran the real traversal on it to find where your order went off. Next time it'll be a different graph.</p>
+  </div>
+</template>

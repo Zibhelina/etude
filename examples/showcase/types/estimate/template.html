@@ -1,0 +1,19 @@
+<div class="sc-eyebrow">Estimate it</div>
+<div class="prose">{{md:prompt}}</div>
+<div class="es">
+  <output class="es-value" aria-live="polite"></output>
+  <div class="es-track">
+    <input type="range" class="es-slider" min="0" max="1000" step="1" aria-label="Your estimate" autofocus>
+    <div class="es-marks"></div>
+  </div>
+  <div class="es-ends"><span class="lo"></span><span class="hi"></span></div>
+</div>
+<p class="e-muted es-hint only-answer"></p>
+<template data-on="result">
+  <div class="e-reveal">
+    <div class="es-verdict"></div>
+    {{#explanation}}<div class="prose">{{md:explanation}}</div>{{/explanation}}
+    {{#isLog}}<p class="sc-how">The slider and the grader both work in orders of magnitude, so being off by a factor of two costs the same whether the answer is a thousand or a billion. A normal flashcard can only say right or wrong.</p>{{/isLog}}
+    {{#isLinear}}<p class="sc-how">Your guess was scored by how far it landed from the true value, with full credit nearby and partial credit further out. A normal flashcard can only say right or wrong.</p>{{/isLinear}}
+  </div>
+</template>

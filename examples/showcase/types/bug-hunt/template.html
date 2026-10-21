@@ -1,0 +1,14 @@
+<div class="sc-eyebrow">Bug hunt</div>
+<div class="prose">{{md:prompt}}</div>
+<div class="bh-head e-row">
+  <span class="bh-ask"></span>
+  <span class="bh-lang">{{language}}</span>
+</div>
+<div class="bh-listing" role="listbox" aria-label="Code listing"><div class="bh-lines"></div></div>
+<p class="e-muted bh-help only-answer">Tap a line to mark it, again to unmark. Keyboard: <kbd>↑</kbd> <kbd>↓</kbd> to move, <kbd>Space</kbd> to mark.</p>
+<template data-on="result">
+  <div class="e-reveal">
+    {{#explanation}}<div class="prose">{{md:explanation}}</div>{{/explanation}}
+    <p class="sc-how">You pointed at code instead of recalling a sentence, and the grader checked the exact lines you picked. The fix is shown in place, where the bug lives.</p>
+  </div>
+</template>

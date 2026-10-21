@@ -155,7 +155,7 @@ command({
   description: "Works on stored types or, with --from, on an unsaved directory. Placeholder values fill fields you don't give. Nothing is stored.",
   args: [{ name: "id", description: "Type id (ignored with --from).", required: false }],
   flags: PREVIEW_FLAGS,
-  examples: ['etude type preview numeric --fields \'{"prompt":"2+2?","answer":4}\'', "etude type preview --from ./vocab --item sampler.vocab.saudade"],
+  examples: ['etude type preview numeric --fields \'{"prompt":"2+2?","answer":4}\'', "etude type preview --from ./unit-circle --item showcase.unit-circle.mixed"],
   output: "{ errors, view, key, seed }",
   async run(ctx) {
     if (!ctx.flags.from && !ctx.args.id) throw new CliError("give a type id or --from <dir>");
@@ -176,7 +176,7 @@ command({
     { name: "answer", type: "string", description: "The answer (`-` reads stdin).", placeholder: "VALUE" },
     { name: "answer-file", type: "string", description: "Read the answer from a file.", placeholder: "PATH" },
   ],
-  examples: ['etude type test-grade typed --fields \'{"prompt":"Capital of France?","answers":["Paris"]}\' --answer paris', "etude type test-grade --item sampler.free.seasons --answer \"The axis is tilted.\""],
+  examples: ['etude type test-grade typed --fields \'{"prompt":"Capital of France?","answers":["Paris"]}\' --answer paris', "etude type test-grade --item showcase.math.factor --answer \"(x-2)(x-3)\""],
   output: "{ grade: { score, verdict, details, feedback }, key }",
   async run(ctx) {
     const raw = textInput(ctx, ctx.flags.answer, ctx.flags["answer-file"]);

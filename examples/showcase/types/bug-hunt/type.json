@@ -1,0 +1,15 @@
+{
+  "id": "bug-hunt",
+  "name": "Find the bug",
+  "description": "Tap the buggy line (or lines) in a short listing. Graded by the exact line set, with partial credit; the fix and the reason appear afterwards.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "required": true, "description": "What the code is supposed to do." },
+    { "name": "code", "kind": "code", "required": true, "description": "The listing, 8 to 18 lines." },
+    { "name": "language", "kind": "text", "default": "python", "description": "For highlighting: python, c, javascript…" },
+    { "name": "count", "kind": "number", "default": 1, "description": "How many lines the learner should pick." },
+    { "name": "bugs", "kind": "json", "required": true, "private": true, "description": "Line numbers (1-based) of the bug, e.g. [8]." },
+    { "name": "fix", "kind": "json", "private": true, "description": "Fixed lines: { \"8\": \"    for i in range(k, len(xs)):\" }." },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

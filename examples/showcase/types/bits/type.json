@@ -1,0 +1,43 @@
+{
+  "id": "bits",
+  "name": "Flip the bits",
+  "description": "Set binary switches to make a number, unsigned or two's complement. A fresh target every review; graded exactly.",
+  "fields": [
+    {
+      "name": "note",
+      "kind": "markdown",
+      "description": "Optional line shown under the number (also the card's title in lists)."
+    },
+    {
+      "name": "width",
+      "kind": "number",
+      "default": 8,
+      "description": "Number of bits, 4 to 12."
+    },
+    {
+      "name": "signed",
+      "kind": "boolean",
+      "default": false,
+      "description": "Ask for two's-complement negative numbers."
+    },
+    {
+      "name": "target",
+      "kind": "number",
+      "description": "A fixed target. Empty: a new one every review."
+    },
+    {
+      "name": "showTotal",
+      "kind": "boolean",
+      "default": false,
+      "description": "Show the running decimal and hex while flipping (easier)."
+    },
+    {
+      "name": "explanation",
+      "kind": "markdown",
+      "private": true
+    }
+  ],
+  "grader": {
+    "kind": "script"
+  }
+}

@@ -1,0 +1,20 @@
+<div class="sc-eyebrow">Binary</div>
+<div class="bt-ask"></div>
+{{#note}}<div class="prose e-muted bt-note">{{md:note}}</div>{{/note}}
+<div class="bt-board">
+  <div class="e-section-title only-result">Your bits</div>
+  <div class="bt-row bt-attempt" role="group" aria-label="Bits"></div>
+  <div class="bt-total" aria-live="polite"></div>
+</div>
+<p class="e-muted bt-help only-answer">Tap a switch to flip it. Keyboard: <kbd>←</kbd> <kbd>→</kbd> to move, <kbd>Space</kbd> or <kbd>0</kbd>/<kbd>1</kbd> to set.</p>
+<template data-on="result">
+  <div class="e-reveal">
+    <div class="bt-truth-wrap">
+      <div class="e-section-title">Correct pattern</div>
+      <div class="bt-row bt-truth"></div>
+    </div>
+    <div class="bt-sum"></div>
+    {{#explanation}}<div class="prose">{{md:explanation}}</div>{{/explanation}}
+    <p class="sc-how">The number was picked for this review, so you can't memorise the pattern; you have to rebuild it from place values each time.</p>
+  </div>
+</template>

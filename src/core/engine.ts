@@ -628,6 +628,47 @@ export class Etude {
     return { view, key, seed, fields };
   }
 
+  /**
+   * Runs a type definition that may not be saved yet against sample fields: what the type editor
+   * uses for its live preview. Nothing is stored.
+   */
+  async previewType(def: CardTypeDef, fields: Record<string, unknown>, opts: { seed?: number; face?: string; answer?: unknown } = {}) {
+    const errors = validateType(def);
+    if (errors.length) return { errors };
+    const seed = opts.seed ?? 1;
+    const face = opts.face ?? def.faces?.[0] ?? "main";
+    let merged: Record<string, unknown>;
+    let view: Record<string, unknown> = {}, key: Record<string, unknown> = {};
+    try {
+      merged = this.generate({ ...fieldDefaults(def), ...fields }, seed, "preview");
+      if (def.prepare) {
+        const out = runScript<any>(def.prepare, { params: ["fields", "face", "rng"], args: { fields: merged, face }, seed: hashString(`${seed}:preview:${face}`), where: `${def.id}/prepare` });
+        view = out?.view ?? {};
+        key = out?.key ?? {};
+      } else {
+        const priv = new Set(def.fields.filter((f) => f.private).map((f) => f.name));
+        for (const [k, v] of Object.entries(merged)) (priv.has(k) ? key : view)[k] = v;
+      }
+    } catch (e) {
+      return { errors: [(e as Error).message] };
+    }
+    const fieldErrors = validateFields(def, merged);
+    let grade: Grade | null = null;
+    if (opts.answer !== undefined) {
+      const g = def.grader;
+      if (g.kind === "script" || g.kind === "hybrid") {
+        try {
+          const out = runScript<any>((g as { code: string }).code, { params: ["answer", "view", "key", "fields"], args: { answer: opts.answer, view, key, fields: merged }, where: `${def.id}/grade`, timeoutMs: 1000 });
+          const score = out?.score == null ? null : Math.max(0, Math.min(1, Number(out.score)));
+          grade = { score, verdict: this.verdictOf(score), details: out?.details, feedback: out?.feedback, suggested: null, grader: { kind: "script" } };
+        } catch (e) {
+          return { errors: [(e as Error).message], view, key };
+        }
+      } else grade = { score: null, verdict: "ungraded", suggested: null, grader: { kind: g.kind } };
+    }
+    return { errors: fieldErrors, view, key, grade, seed };
+  }
+
   // ----------------------------------------------------------------- study
 
   private scopeWhere(scope: StudyScope): { where: string; params: any[]; cfg: PresetConfig } {

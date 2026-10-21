@@ -1,7 +1,7 @@
 // Card runtime. Loaded inside every card's sandboxed frame; gives the type's script the `etude` API.
 // The frame has an opaque origin: it can only talk to the app through postMessage.
-import { marked } from "./vendor/marked.esm.js";
-import katex from "./vendor/katex.mjs";
+import { marked } from "./vendor/marked.js";
+import katex from "./vendor/katex.js";
 
 const parent = window.parent;
 const send = (type, data = {}) => parent.postMessage({ etude: 1, type, ...data }, "*");
@@ -146,8 +146,25 @@ function forwardKeys() {
   });
 }
 
-export function boot(main) {
+/** Splits `<template data-on="result">` blocks out of the source so they render only once the key is known. */
+function splitResultBlocks(src) {
+  const blocks = [];
+  const html = src.replace(/<template\s+data-on=["']result["']\s*>([\s\S]*?)<\/template>/g, (_, body) => {
+    blocks.push(body);
+    return `<div data-result-slot="${blocks.length - 1}"></div>`;
+  });
+  return { html, blocks };
+}
+
+export function boot(main, templateHtml) {
   let api = null;
+  let blocks = [];
+  const fillResultSlots = (data) => {
+    for (const slot of api.root.querySelectorAll("[data-result-slot]")) {
+      const i = Number(slot.dataset.resultSlot);
+      slot.outerHTML = expand(blocks[i] ?? "", data);
+    }
+  };
   window.addEventListener("message", async (e) => {
     if (e.source !== parent) return;
     const msg = e.data;
@@ -155,9 +172,16 @@ export function boot(main) {
     if (msg.type === "init") {
       applyTheme(msg.theme);
       document.body.dataset.mode = msg.mode ?? "answer";
-      const tpl = document.getElementById("etude-template").innerHTML;
+      const split = splitResultBlocks(templateHtml);
+      blocks = split.blocks;
       api = createApi(msg);
-      api.root.innerHTML = expand(tpl, { ...api.view, ...(msg.result?.key ?? {}) });
+      api.root.innerHTML = expand(split.html, api.view);
+      const showResult = api._result;
+      api._result = (result) => {
+        fillResultSlots({ ...api.view, ...(result?.key ?? {}), grade: result?.grade });
+        showResult(result);
+      };
+      if (msg.result) fillResultSlots({ ...api.view, ...(msg.result.key ?? {}), grade: msg.result.grade });
       try {
         await main(api);
       } catch (err) {
@@ -166,6 +190,7 @@ export function boot(main) {
       }
       observeSize();
       send("mounted");
+      if (msg.mode !== "result") (api.root.querySelector("[autofocus]") ?? api.root.querySelector("input, textarea"))?.focus?.();
     } else if (msg.type === "collect") api?._collect();
     else if (msg.type === "result") api?._result(msg.result);
     else if (msg.type === "theme") applyTheme(msg.theme);

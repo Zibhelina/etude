@@ -31,6 +31,8 @@ interface Props {
   result?: CardResult | null;
   className?: string;
   minHeight?: number;
+  /** Focus the card when it mounts. Off for embeds that shouldn't steal focus from their host. */
+  autoFocus?: boolean;
   onSubmit?(answer: unknown): void;
   onReady?(ready: boolean): void;
   onKey?(key: string): void;
@@ -86,7 +88,7 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
           break;
         case "mounted":
           setLoaded(true);
-          if ((p.mode ?? "answer") === "answer") {
+          if ((p.mode ?? "answer") === "answer" && p.autoFocus !== false) {
             iframe.current?.focus();
             post({ type: "focus" });
           }

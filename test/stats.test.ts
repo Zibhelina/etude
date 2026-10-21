@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Etude } from "../src/core/engine.ts";
+import { DEFAULT_SETTINGS, Etude } from "../src/core/engine.ts";
 
 const pack = {
   etude: "pack/1",
@@ -23,12 +23,22 @@ async function setup() {
 }
 
 const cardOf = (e: Etude, item: string) => e.db.get("SELECT id FROM cards WHERE item_id = ?", item)!.id as number;
-const daysAgo = (n: number, hour = 12) => {
+// Study days start at dayStartHour (4 am by default), not midnight, so "n days ago" is counted from
+// the current study day; at 1 am, yesterday noon is still today.
+const studyDay = () => {
   const d = new Date();
-  d.setDate(d.getDate() - n);
-  d.setHours(hour, 0, 0, 0);
+  d.setHours(DEFAULT_SETTINGS.dayStartHour, 0, 0, 0);
+  if (d > new Date()) d.setDate(d.getDate() - 1);
   return d;
 };
+const daysAgo = (n: number, hours = 8) => {
+  const d = studyDay();
+  d.setDate(d.getDate() - n);
+  d.setHours(d.getHours() + hours);
+  return d;
+};
+/** A moment shortly before now that is still inside today's study day. */
+const justNow = (ms: number) => new Date(Math.max(Date.now() - ms, studyDay().getTime() + 1000));
 
 test("stats on an empty scope are zeros and nulls, not errors", async () => {
   const e = await setup();
@@ -59,8 +69,8 @@ test("ratings, today, streak and the activity window", async () => {
   e.rate(a, 3, { at: daysAgo(20), durationMs: 4000 });
   e.rate(a, 1, { at: daysAgo(2), durationMs: 5000 });
   e.rate(b, 3, { at: daysAgo(1), durationMs: 6000 });
-  e.rate(c, 4, { at: new Date(Date.now() - 60_000), durationMs: 2000 });
-  e.rate(b, 2, { at: new Date(Date.now() - 30_000), durationMs: 1000, practice: true });
+  e.rate(c, 4, { at: justNow(60_000), durationMs: 2000 });
+  e.rate(b, 2, { at: justNow(30_000), durationMs: 1000, practice: true });
 
   const s = e.stats({ deck: "Net" }, 7);
   assert.equal(s.window.days, 7);

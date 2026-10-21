@@ -10,6 +10,7 @@ import { BrowsePage } from "@/pages/browse";
 import { TypesPage } from "@/pages/types";
 import { StatsPage } from "@/pages/stats";
 import { SettingsPage } from "@/pages/settings";
+import { EmbedStudy } from "@/pages/embed";
 
 const NAV = [
   { to: "/", label: "Decks", icon: Layers, match: (p: string) => p === "/" || p === "/deck" },
@@ -22,6 +23,17 @@ const NAV = [
 export function App() {
   const { path, params } = useLocation();
   const studying = path === "/study";
+  if (path === "/embed") {
+    const deck = params.get("deck") ?? undefined;
+    const q = params.get("q") ?? undefined;
+    const card = params.get("card") ? Number(params.get("card")) : undefined;
+    const title = params.get("title") ?? (deck ? deck.split("::").pop()! : q ? q : "Etude");
+    return (
+      <TooltipProvider delayDuration={300}>
+        <EmbedStudy scope={{ deck, q }} limit={Math.max(1, Number(params.get("n") ?? 10))} cardId={card} title={title} />
+      </TooltipProvider>
+    );
+  }
   let page: React.ReactNode;
   if (studying) {
     const deck = params.get("deck") ?? undefined;

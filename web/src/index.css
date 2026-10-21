@@ -130,3 +130,6 @@
 .prose-etude a { text-decoration: underline; text-underline-offset: 2px; }
 .prose-etude .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; }
 kbd { font-family: var(--font-mono); font-size: 0.72rem; }
+
+/* Embedded in another app: no page background, the host's surface shows through. */
+html.embed, html.embed body { background: transparent; }

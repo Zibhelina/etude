@@ -76,6 +76,7 @@ export interface StudyCard {
   intervals: Record<Rating, string>;
   grader: string;
   generated: boolean;
+  title: string;
 }
 
 export interface FieldSpec {

@@ -48,6 +48,10 @@ const GROUPS: { title: string; description?: string; rows: Row[] }[] = [
     title: "Settings",
     rows: [{ keys: [`${mod}+S`], what: "Save" }],
   },
+  {
+    title: "Anywhere",
+    rows: [{ keys: [`${mod}+B`], what: "Collapse or expand the sidebar" }],
+  },
 ];
 
 function Combo({ combo }: { combo: string }) {

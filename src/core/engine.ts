@@ -147,8 +147,14 @@ export class Etude {
 
   private syncBuiltinTypes(dir: string) {
     const ts = iso();
-    this.db.tx(() => {
-      for (const def of loadBuiltinTypes(dir)) {
+    const defs = loadBuiltinTypes(dir);
+    // Most opens change nothing; skip the write lock then.
+    const stale = defs.filter((def) => {
+      const row = this.db.get("SELECT def, builtin FROM types WHERE id = ?", def.id);
+      return !row || (row.builtin !== 0 && row.def !== json(def));
+    });
+    if (stale.length) this.db.tx(() => {
+      for (const def of stale) {
         const row = this.db.get("SELECT builtin FROM types WHERE id = ?", def.id);
         // A built-in the user has edited (builtin = 0) is theirs now; leave it alone.
         if (row && row.builtin === 0) continue;
@@ -572,6 +578,105 @@ export class Etude {
     });
   }
 
+  /** Moves cards' due date without recording a review. New cards stay new and wait until then. */
+  setDue(cardIds: number[], due: Date) {
+    if (Number.isNaN(due.getTime())) throw new EtudeError("invalid due date");
+    const ts = iso(due);
+    this.db.tx(() => {
+      for (const id of cardIds) {
+        const c = this.db.get<CardRow>("SELECT * FROM cards WHERE id = ?", id);
+        if (!c) throw new EtudeError(`unknown card ${id}`, 404);
+        // Keep stability and difficulty; only the planned interval changes.
+        const scheduled = c.last_review ? Math.max(0, Math.round((due.getTime() - new Date(c.last_review).getTime()) / 86400_000)) : c.scheduled_days;
+        this.db.run("UPDATE cards SET due = ?, scheduled_days = ?, buried_until = NULL WHERE id = ?", ts, scheduled, id);
+      }
+    });
+  }
+
+  /** Hides cards from study until `until` (default: the next study day). `null` unburies. */
+  setBuried(cardIds: number[], until: Date | null = new Date(this.dayStart().getTime() + 86400_000)) {
+    this.db.tx(() => {
+      for (const id of cardIds) this.db.run("UPDATE cards SET buried_until = ? WHERE id = ?", until ? iso(until) : null, id);
+    });
+  }
+
+  /** A card's scheduling right now, with what each rating would do. */
+  cardSchedule(cardId: number) {
+    const c = this.cardWithDeck(cardId);
+    const cfg = this.configFor(c.deck);
+    const t = now();
+    const row: CardRow = { ...c };
+    return {
+      cardId: c.id,
+      itemId: c.item_id,
+      face: c.face,
+      deck: c.deck,
+      state: c.state,
+      due: c.due,
+      stability: c.stability,
+      difficulty: c.difficulty,
+      reps: c.reps,
+      lapses: c.lapses,
+      lastReview: c.last_review,
+      suspended: !!c.suspended,
+      buriedUntil: c.buried_until && c.buried_until > iso(t) ? c.buried_until : null,
+      retrievability: sched.retrievability(row, t, cfg),
+      intervals: sched.preview(row, t, cfg),
+      deadline: cfg.deadline ?? null,
+    };
+  }
+
+  /** Items (not cards) matching a search, in collection order. */
+  searchItems(query: string, opts: { limit?: number; offset?: number; order?: string } = {}) {
+    let c;
+    try {
+      c = compile(query);
+    } catch (e) {
+      if (e instanceof QueryError) throw new EtudeError(`search: ${e.message}`);
+      throw e;
+    }
+    const from = "FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
+    const total = this.db.get(`SELECT COUNT(DISTINCT i.id) AS n ${from} WHERE ${c.where}`, ...c.params)!.n;
+    const rows = this.db.all(
+      `SELECT i.id, i.type, i.fields, i.tags, i.source, i.archived, i.updated, d.name AS deck, COUNT(c.id) AS cards, SUM(c.suspended) AS suspended ${from} WHERE ${c.where} GROUP BY i.id ORDER BY ${({ deck: "d.name, i.ord", updated: "i.updated DESC", created: "i.created DESC", due: "MIN(CASE WHEN c.state = 0 THEN '9999' ELSE c.due END), i.ord", lapses: "MAX(c.lapses) DESC, i.ord", id: "i.id" } as Record<string, string>)[opts.order ?? ""] ?? "i.ord"} LIMIT ? OFFSET ?`,
+      ...c.params,
+      opts.limit ?? 100,
+      opts.offset ?? 0,
+    );
+    return {
+      total,
+      rows: rows.map((r) => {
+        const fields = parse<Record<string, unknown>>(r.fields, {});
+        return {
+          id: r.id,
+          type: r.type,
+          deck: r.deck,
+          tags: parse<string[]>(r.tags, []),
+          title: this.titleOf(r.type, fields),
+          source: r.source,
+          cards: r.cards,
+          suspended: Number(r.suspended ?? 0),
+          archived: !!r.archived,
+          generated: typeof fields.generator === "string",
+          updated: r.updated,
+        };
+      }),
+    };
+  }
+
+  /** Copies an item's content (not its scheduling) under a new id. */
+  duplicateItem(id: string, newId?: string): string {
+    const it = this.item(id);
+    let target = newId;
+    if (!target) {
+      let n = 2;
+      while (this.db.get("SELECT 1 FROM items WHERE id = ?", `${id}-${n}`)) n++;
+      target = `${id}-${n}`;
+    } else if (this.db.get("SELECT 1 FROM items WHERE id = ?", target)) throw new EtudeError(`item "${target}" already exists`, 409);
+    this.upsertItem({ id: target, type: it.type, deck: it.deck, fields: it.fields, tags: it.tags, source: it.source, notes: it.notes });
+    return target;
+  }
+
   /** Browse: cards matching a search, with their item. */
   search(query: string, opts: { limit?: number; offset?: number; order?: string } = {}) {
     let c;
@@ -783,7 +888,8 @@ export class Etude {
     } else reviews.sort((a, b) => a.due.localeCompare(b.due));
     reviews = reviews.slice(0, Math.max(0, cfg.reviewsPerDay - doneRev));
 
-    let news = rows.filter((c) => c.state === 0);
+    // A new card given a later due date (setDue) waits until then.
+    let news = rows.filter((c) => c.state === 0 && c.due <= nowIso);
     if (cfg.newOrder === "random") {
       const day = dayStart.slice(0, 10);
       news.sort((a, b) => hashString(day + a.id) - hashString(day + b.id));
@@ -792,7 +898,7 @@ export class Etude {
     news = news.slice(0, Math.max(0, cfg.newPerDay - doneNew));
 
     const nextLater = rows
-      .filter((c) => c.state !== 0 && c.due > aheadIso)
+      .filter((c) => (c.state !== 0 && c.due > aheadIso) || (c.state === 0 && c.due > nowIso))
       .reduce<string | null>((m, c) => (!m || c.due < m ? c.due : m), null);
     return { learning, reviews, news, doneNew, doneRev, cfg, nowIso, nextLater };
   }
@@ -926,6 +1032,18 @@ export class Etude {
 
   /** Grades an answer and stores the attempt. Scheduling waits for `rate`. */
   async submit(cardId: number, seed: number, answer: unknown, opts: { practice?: boolean } = {}) {
+    const { grade, prep } = await this.grade(cardId, seed, answer);
+    const stored = this.storeAnswer(answer, cardId);
+    const id = Number(
+      this.db.run("INSERT INTO attempts (card_id, ts, seed, view, answer, grade, practice) VALUES (?, ?, ?, ?, ?, ?, ?)", cardId, iso(), seed, json(prep.view), json(stored), json(grade), Number(!!opts.practice))
+        .lastInsertRowid,
+    );
+    const wantsFeedback = !grade.feedback && grade.grader.kind === "ai" && !grade.grader.error && this.settings().ai.autoFeedback !== "never";
+    return { attemptId: id, grade, key: prep.key, wantsFeedback: wantsFeedback || (this.settings().ai.autoFeedback === "always" && !grade.feedback) };
+  }
+
+  /** Grades an answer against a card variant without storing anything. */
+  async grade(cardId: number, seed: number, answer: unknown): Promise<{ grade: Grade; prep: Prepared & { fields: Record<string, unknown> } }> {
     const c = this.cardWithDeck(cardId);
     const def = this.type(c.type);
     const cfg = this.configFor(c.deck);
@@ -970,13 +1088,7 @@ export class Etude {
       const out = scripted();
       return out.defer === true || out.score == null;
     }
-    const stored = this.storeAnswer(answer, cardId);
-    const id = Number(
-      this.db.run("INSERT INTO attempts (card_id, ts, seed, view, answer, grade, practice) VALUES (?, ?, ?, ?, ?, ?, ?)", cardId, iso(), seed, json(prep.view), json(stored), json(grade), Number(!!opts.practice))
-        .lastInsertRowid,
-    );
-    const wantsFeedback = !grade.feedback && grade.grader.kind === "ai" && !grade.grader.error && this.settings().ai.autoFeedback !== "never";
-    return { attemptId: id, grade, key: prep.key, wantsFeedback: wantsFeedback || (this.settings().ai.autoFeedback === "always" && !grade.feedback) };
+    return { grade, prep };
   }
 
   /** Drawings go to disk next to the database, not into it. */

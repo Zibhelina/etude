@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Archive, BarChart3, CalendarClock, Check, ChevronDown, ChevronRight, Download, Library, Pencil, Play, Search, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Archive, BarChart3, CalendarClock, Check, ChevronDown, ChevronRight, Download, Library, Pencil, Play, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,8 +9,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Markdown } from "@/components/markdown";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { BulkBar, CheckBox, groupItems, ItemEditor, ItemRow, NewItemDialog, OrderSelect, SearchHints } from "@/components/item-editor";
 import { DeckOptions, formatDeadline, type DeckFull } from "@/components/deck-options";
-import { api, type DeckNode, type Preset } from "@/lib/api";
+import { api, type DeckNode, type Preset, type SearchRow, type TypeSummary } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +24,23 @@ export function DeckPage({ name }: { name: string }) {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState(() => new URLSearchParams(location.search).get("tab") ?? "overview");
+
+  // Keep the open tab in the URL so reloads and links land on it.
+  const switchTab = (t: string) => {
+    setTab(t);
+    const p = new URLSearchParams(location.search);
+    if (t === "overview") p.delete("tab");
+    else p.set("tab", t);
+    if (t !== "cards") p.delete("item");
+    history.replaceState(null, "", `/deck?${p}`);
+  };
+
+  const loadTags = () =>
+    api
+      .search(`deck:"${name}"`, { limit: 1000 })
+      .then((r) => setTags([...new Set(r.rows.flatMap((x) => x.tags))].sort()))
+      .catch(() => {});
 
   const reload = async () => {
     try {
@@ -37,10 +56,7 @@ export function DeckPage({ name }: { name: string }) {
   useEffect(() => {
     reload();
     // Only tags used inside this deck are useful for custom study.
-    api
-      .search(`deck:"${name}"`, { limit: 1000 })
-      .then((r) => setTags([...new Set(r.rows.flatMap((x) => x.tags))].sort()))
-      .catch(() => {});
+    loadTags();
     const onFocus = () => reload();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
@@ -73,11 +89,12 @@ export function DeckPage({ name }: { name: string }) {
   return (
     <div className="mx-auto w-full max-w-4xl px-5 py-8 sm:px-8 sm:py-10">
       <Breadcrumb parts={parts} />
-      <Header deck={deck} node={node} work={work} tags={tags} onRenamed={(to) => navigate(`/deck?name=${enc(to)}`, { replace: true })} />
+      <Header deck={deck} node={node} work={work} tags={tags} onRenamed={(to) => navigate(`/deck?name=${enc(to)}`, { replace: true })} onAddCards={() => switchTab("cards")} />
 
-      <Tabs defaultValue="overview" className="mt-8">
+      <Tabs value={tab} onValueChange={switchTab} className="mt-8">
         <TabsList className="h-11 w-full sm:w-auto">
           <TabsTrigger value="overview" className="px-4">Overview</TabsTrigger>
+          <TabsTrigger value="cards" className="px-4">Cards</TabsTrigger>
           <TabsTrigger value="options" className="px-4">Options</TabsTrigger>
           <TabsTrigger value="manage" className="px-4">Manage</TabsTrigger>
         </TabsList>
@@ -111,6 +128,18 @@ export function DeckPage({ name }: { name: string }) {
           />
         </TabsContent>
 
+        <TabsContent value="cards" className="mt-6">
+          <DeckCards
+            deck={deck.name}
+            hasChildren={children.length > 0}
+            active={tab === "cards"}
+            onChanged={() => {
+              reload();
+              loadTags();
+            }}
+          />
+        </TabsContent>
+
         <TabsContent value="options" className="mt-6">
           <DeckOptions deck={deck} decks={decks} presets={presets} onChanged={reload} />
         </TabsContent>
@@ -119,6 +148,199 @@ export function DeckPage({ name }: { name: string }) {
           <DangerZone deck={deck} hasChildren={children.length > 0} cards={node?.cards ?? 0} />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+const CARDS_PAGE = 200;
+
+/** Every card in the deck and its subdecks, with the same rows, filters and editor as Browse. */
+function DeckCards({ deck, hasChildren, active, onChanged }: { deck: string; hasChildren: boolean; active: boolean; onChanged(): void }) {
+  const [query, setQuery] = useState("");
+  const [order, setOrder] = useState("added");
+  const [limit, setLimit] = useState(CARDS_PAGE);
+  const [rows, setRows] = useState<SearchRow[]>([]);
+  const [total, setTotal] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(() => new URLSearchParams(location.search).get("item"));
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [creating, setCreating] = useState(false);
+  const [decks, setDecks] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
+  const [types, setTypes] = useState<TypeSummary[]>([]);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const scoped = query.trim() ? `deck:"${deck}" (${query.trim()})` : `deck:"${deck}"`;
+  const run = useCallback(async () => {
+    try {
+      const r = await api.search(scoped, { limit, order });
+      setRows(r.rows);
+      setTotal(r.total);
+      setError(null);
+    } catch (e) {
+      setError((e as Error).message.replace(/^search: /, ""));
+    }
+  }, [scoped, limit, order]);
+
+  useEffect(() => {
+    const t = setTimeout(run, 180);
+    return () => clearTimeout(t);
+  }, [run]);
+  useEffect(() => setLimit(CARDS_PAGE), [query, order]);
+  // A selection made under another search would act on cards that are no longer listed.
+  useEffect(() => setChecked(new Set()), [query]);
+
+  const reloadMeta = () => {
+    api.decks().then((d) => setDecks(d.map((x) => x.name)));
+    api.tags().then((t) => setTags(t.map((x) => x.tag)));
+    api.types().then(setTypes);
+  };
+  useEffect(reloadMeta, []);
+
+  const open = (id: string | null) => {
+    setSelected(id);
+    const p = new URLSearchParams(location.search);
+    if (id) p.set("item", id);
+    else p.delete("item");
+    history.replaceState(null, "", `/deck?${p}`);
+  };
+
+  useEffect(() => {
+    if (!active) return;
+    const h = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k" && !selected) {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [active, selected]);
+
+  const changed = () => {
+    run();
+    reloadMeta();
+    onChanged();
+  };
+
+  const items = useMemo(() => groupItems(rows), [rows]);
+  const allChecked = items.length > 0 && items.every((r) => checked.has(r.itemId));
+  const emptyDeck = total === 0 && !query.trim();
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2.5">
+        <div className="flex gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground" />
+            <Input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search this deck"
+              aria-label="Search this deck"
+              className="h-10 pl-9 font-mono text-[13px]"
+            />
+            {query && (
+              <button className="absolute right-1 top-1 flex size-8 items-center justify-center rounded text-muted-foreground hover:text-foreground" onClick={() => setQuery("")} aria-label="Clear search">
+                <X className="size-4" />
+              </button>
+            )}
+          </div>
+          <Button variant="outline" className="h-10 gap-1.5 px-3" onClick={() => setCreating(true)}><Plus className="size-4" /><span className="hidden min-[420px]:inline">Add</span></Button>
+        </div>
+        <SearchHints onPick={(h) => setQuery((q) => (q ? `${q} ${h}` : h))} />
+      </div>
+
+      {!emptyDeck && (
+        <div className="overflow-hidden rounded-xl border bg-card/40">
+          <div className="flex min-h-11 items-center gap-2.5 border-b px-3 text-xs text-muted-foreground">
+            <CheckBox checked={allChecked} label="Select all" onClick={() => setChecked(allChecked ? new Set() : new Set(items.map((r) => r.itemId)))} />
+            <span className="tabular min-w-0 truncate">
+              {error ? <span className="text-destructive">{error}</span> : total == null ? "Loading…" : `${total} card${total === 1 ? "" : "s"}${total > rows.length ? `, showing ${rows.length}` : ""}`}
+            </span>
+            <div className="flex-1" />
+            <OrderSelect value={order} onChange={setOrder} className="h-9" />
+          </div>
+          <BulkBar
+            checked={checked}
+            rows={rows}
+            decks={decks}
+            tags={tags}
+            onClear={() => setChecked(new Set())}
+            onDone={changed}
+            onDeleted={(ids) => selected && ids.includes(selected) && open(null)}
+          />
+          {items.map((r) => (
+            <ItemRow
+              key={r.itemId}
+              row={r}
+              active={selected === r.itemId}
+              checked={checked.has(r.itemId)}
+              hideDeck={!hasChildren}
+              className="min-h-14 py-3 last:border-b-0"
+              onOpen={() => open(r.itemId)}
+              onToggle={() =>
+                setChecked((prev) => {
+                  const n = new Set(prev);
+                  n.has(r.itemId) ? n.delete(r.itemId) : n.add(r.itemId);
+                  return n;
+                })
+              }
+            />
+          ))}
+          {total != null && !items.length && !error && (
+            <div className="flex flex-col items-center gap-3 px-4 py-10 text-center text-sm text-muted-foreground">
+              No cards in this deck match that search.
+              <Button variant="outline" className="h-10" onClick={() => setQuery("")}>Clear search</Button>
+            </div>
+          )}
+          {total != null && total > rows.length && (
+            <button className="flex h-12 w-full items-center justify-center border-t text-sm text-muted-foreground hover:bg-accent/40 hover:text-foreground" onClick={() => setLimit((l) => Math.min(l + CARDS_PAGE, 1000))}>
+              Show {Math.min(CARDS_PAGE, total - rows.length)} more
+            </button>
+          )}
+        </div>
+      )}
+
+      {emptyDeck && (
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-12 text-center">
+          <div className="text-sm font-medium">No cards in this deck yet</div>
+          <p className="max-w-sm text-[13px] text-muted-foreground">Add one here, or import a pack from the Decks page.</p>
+          <Button className="mt-1 h-10 gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" />Add a card</Button>
+        </div>
+      )}
+
+      <Sheet open={!!selected} onOpenChange={(o) => !o && open(null)}>
+        <SheetContent side="right" showCloseButton={false} className="w-full gap-0 overflow-y-auto p-0 sm:max-w-none lg:w-[min(56rem,calc(100vw-8rem))]">
+          <SheetTitle className="sr-only">Edit card</SheetTitle>
+          <SheetDescription className="sr-only">Preview, edit and reschedule this card.</SheetDescription>
+          {selected && (
+            <div className="pb-[env(safe-area-inset-bottom)]">
+              <ItemEditor
+                key={selected}
+                id={selected}
+                closeAlways
+                onBack={() => open(null)}
+                decks={decks}
+                tags={tags}
+                onSaved={changed}
+                onDeleted={() => {
+                  open(null);
+                  changed();
+                }}
+                onDuplicate={(newId) => {
+                  open(newId);
+                  changed();
+                }}
+              />
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      <NewItemDialog open={creating} onOpenChange={setCreating} decks={decks} types={types} defaultDeck={deck} onCreated={(id) => { open(id); changed(); }} />
     </div>
   );
 }
@@ -137,7 +359,7 @@ function Breadcrumb({ parts }: { parts: string[] }) {
   );
 }
 
-function Header({ deck, node, work, tags, onRenamed }: { deck: DeckFull; node?: DeckNode; work: number; tags: string[]; onRenamed(to: string): void }) {
+function Header({ deck, node, work, tags, onRenamed, onAddCards }: { deck: DeckFull; node?: DeckNode; work: number; tags: string[]; onRenamed(to: string): void; onAddCards(): void }) {
   const [editing, setEditing] = useState(false);
   const leaf = deck.name.split("::").at(-1)!;
   const parent = deck.name.split("::").slice(0, -1).join("::");
@@ -214,9 +436,9 @@ function Header({ deck, node, work, tags, onRenamed }: { deck: DeckFull; node?: 
         <div className="mt-6 flex flex-col gap-3 rounded-xl border bg-card/60 px-4 py-4 sm:flex-row sm:items-center">
           <div className="min-w-0 flex-1 text-sm">
             <div className="font-medium">No cards yet</div>
-            <div className="text-muted-foreground">Add cards in Browse, or import a pack from the Decks page.</div>
+            <div className="text-muted-foreground">Add cards in the Cards tab, or import a pack from the Decks page.</div>
           </div>
-          <Button className="h-10" onClick={() => navigate(`/browse?q=${enc(`deck:"${deck.name}"`)}`)}>Add cards</Button>
+          <Button className="h-10" onClick={onAddCards}>Add cards</Button>
         </div>
       )}
       {!work && node && node.cards > 0 && (

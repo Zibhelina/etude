@@ -58,6 +58,7 @@ function createApi(init) {
   let getter = null;
   let resultHandlers = [];
   let submitted = false;
+  let ready = true;
   const api = {
     view: init.view ?? {},
     mode: init.mode ?? "answer", // "answer" | "result" | "preview"
@@ -79,8 +80,9 @@ function createApi(init) {
       send("submit", { answer });
     },
     /** Enable or disable the app's Submit button (e.g. until every blank is filled). */
-    setReady(ready) {
-      send("ready-state", { ready: !!ready });
+    setReady(value) {
+      ready = !!value;
+      send("ready-state", { ready });
     },
     /** Called with `{ grade, key, answer }` once the answer has been graded. */
     onResult(fn) {
@@ -98,7 +100,9 @@ function createApi(init) {
       return strings.reduce((out, s, i) => out + s + (i < values.length ? escapeHtml(values[i]) : ""), "");
     },
   };
-  api._collect = () => api.submit();
+  api._collect = () => {
+    if (ready) api.submit();
+  };
   api._result = (result) => {
     api.mode = "result";
     api.result = result;
@@ -132,17 +136,23 @@ function forwardKeys() {
       send("key", { key: "Mod+Enter" });
       return;
     }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && document.body.dataset.mode === "result") {
+      e.preventDefault();
+      send("key", { key: "Undo" });
+      return;
+    }
     if (e.key === "Escape") {
       send("key", { key: "Escape" });
       return;
     }
-    if (typing && !e.defaultPrevented) return;
-    if (document.body.dataset.mode === "result" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      if (["1", "2", "3", "4", " ", "Enter", "e", "u"].includes(e.key)) {
-        e.preventDefault();
-        send("key", { key: e.key });
-      }
-    }
+    if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+    const result = document.body.dataset.mode === "result";
+    const keys = result ? ["1", "2", "3", "4", " ", "Enter", "u"] : [" ", "Enter"];
+    if (!keys.includes(e.key)) return;
+    // Let the card's own handlers run first; forward only keys the card didn't use.
+    setTimeout(() => {
+      if (!e.defaultPrevented) send("key", { key: e.key });
+    }, 0);
   });
 }
 

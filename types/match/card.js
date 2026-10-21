@@ -18,8 +18,10 @@ function draw(marks) {
   for (const [l, r] of links) {
     const a = el(l).getBoundingClientRect(), b = el(r).getBoundingClientRect();
     const y1 = a.top + a.height / 2 - sb.top, y2 = b.top + b.height / 2 - sb.top, w = sb.width;
-    const stroke = marks ? (marks[l] ? "var(--success)" : "var(--danger)") : colorOf(l);
-    paths += `<path d="M0 ${y1} C ${w / 2} ${y1}, ${w / 2} ${y2}, ${w} ${y2}" stroke="${stroke}" stroke-width="2" fill="none" stroke-linecap="round"/>`;
+    const wrong = marks && !marks[l];
+    const stroke = wrong ? "var(--danger)" : colorOf(l);
+    paths += `<path d="M0 ${y1} C ${w / 2} ${y1}, ${w / 2} ${y2}, ${w} ${y2}" stroke="${stroke}" stroke-width="2" fill="none" stroke-linecap="round"${wrong ? ' stroke-dasharray="4 4"' : ""}/>`;
+    paths += `<circle cx="1.5" cy="${y1}" r="3" fill="${stroke}"/><circle cx="${w - 1.5}" cy="${y2}" r="3" fill="${stroke}"/>`;
   }
   svg.innerHTML = paths;
   board.querySelectorAll(".chip").forEach((c) => {
@@ -62,6 +64,8 @@ etude.onResult(({ grade, key }) => {
   board.querySelectorAll(".chip").forEach((c) => (c.disabled = true));
   for (const [l, ok] of Object.entries(marks)) {
     el(l).classList.add(ok ? "is-correct" : "is-wrong");
+    const linked = links.get(l);
+    if (linked) el(linked).classList.add(ok ? "is-correct" : "is-wrong");
     if (!ok) {
       const fix = document.createElement("span");
       fix.className = "e-why fix";

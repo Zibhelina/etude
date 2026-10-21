@@ -90,6 +90,35 @@ export interface StudyCard {
   title: string;
 }
 
+const TEX_SYMBOLS: Record<string, string> = { times: "×", cdot: "·", div: "÷", pm: "±", le: "≤", leq: "≤", ge: "≥", geq: "≥", ne: "≠", neq: "≠", approx: "≈", equiv: "≡", to: "→", rightarrow: "→", Rightarrow: "⇒", iff: "⇔", infty: "∞", partial: "∂", nabla: "∇", in: "∈", forall: "∀", exists: "∃", cup: "∪", cap: "∩", sum: "Σ", prod: "Π", int: "∫", sqrt: "√", ldots: "…", dots: "…", cdots: "⋯", circ: "°", deg: "°", flat: "♭", sharp: "♯", natural: "♮" };
+const TEX_WORDS = new Set(["sin", "cos", "tan", "sec", "csc", "cot", "arcsin", "arccos", "arctan", "sinh", "cosh", "tanh", "ln", "log", "exp", "lim", "max", "min", "det", "gcd", "mod"]);
+const GREEK_LETTERS: Record<string, string> = { alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ε", varepsilon: "ε", zeta: "ζ", eta: "η", theta: "θ", iota: "ι", kappa: "κ", lambda: "λ", mu: "μ", nu: "ν", xi: "ξ", pi: "π", rho: "ρ", sigma: "σ", tau: "τ", phi: "φ", varphi: "φ", chi: "χ", psi: "ψ", omega: "ω", Gamma: "Γ", Delta: "Δ", Theta: "Θ", Lambda: "Λ", Pi: "Π", Sigma: "Σ", Phi: "Φ", Psi: "Ψ", Omega: "Ω" };
+const SUP: Record<string, string> = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", "+": "⁺", "-": "⁻", "n": "ⁿ", "i": "ⁱ" };
+const SUB: Record<string, string> = { "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉", "+": "₊", "-": "₋" };
+const script = (s: string, map: Record<string, string>, mark: string) => ([...s].every((c) => map[c]) ? [...s].map((c) => map[c]).join("") : mark === "_" ? `_${s}` : `^${s.length > 1 ? `(${s})` : s}`);
+
+/** One-line plain text from markdown with math: $x^3 \sin x$ reads x³ sin x, cloze blanks show their answer. */
+export function plainLabel(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, " [code] ")
+    .replace(/\{\{([^}|:]+)[^}]*\}\}/g, "[$1]")
+    .replace(/\\(?:text|mathrm|mathbf|operatorname|mathit)\{([^}]*)\}/g, "$1")
+    .replace(/\\[dt]?frac\{((?:[^{}]|\{[^{}]*\})*)\}\{((?:[^{}]|\{[^{}]*\})*)\}/g, (_, a, b) => `${/^[\w\\]+$/.test(a) ? a : `(${a})`}/${/^[\w\\]+$/.test(b) ? b : `(${b})`}`)
+    .replace(/\\sqrt\{([^{}]*)\}/g, (_, a) => `√${a.length > 1 ? `(${a})` : a}`)
+    .replace(/\\(left|right|big|Big)\b/g, "")
+    .replace(/\\(sum|prod|int)(_\{[^{}]*\}|_\w)?(\^\{[^{}]*\}|\^\w)?/g, (_, n) => TEX_SYMBOLS[n])
+    .replace(/\\([a-zA-Z]+)/g, (_, n) => (TEX_WORDS.has(n) ? `${n} ` : GREEK_LETTERS[n] ?? TEX_SYMBOLS[n] ?? ""))
+    .replace(/\^\{([^{}]*)\}|\^(\w)/g, (_, a, b) => script((a ?? b).trim(), SUP, "^"))
+    .replace(/_\{([^{}]*)\}|_(\w)(?=\W|$)/g, (_, a, b) => script((a ?? b).trim(), SUB, "_"))
+    .replace(/\\[,;! ]/g, " ")
+    .replace(/[{}$]/g, "")
+    .replace(/[*`#>|]/g, "")
+    .replace(/\s+([,.;:?!)])/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
+}
+
 function hashString(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
@@ -826,21 +855,7 @@ export class Etude {
     } catch {}
     const name = def?.fields.find((f) => f.kind === "markdown" && !f.private && typeof fields[f.name] === "string")?.name;
     const text = String((name ? fields[name] : Object.values(fields).find((v) => typeof v === "string")) ?? "");
-    // Plain-text label: cloze blanks become [answer], math loses its markup.
-    const TEX: Record<string, string> = { times: "×", cdot: "·", div: "÷", le: "≤", leq: "≤", ge: "≥", geq: "≥", ne: "≠", neq: "≠", approx: "≈", to: "→", rightarrow: "→", infty: "∞", pi: "π", mu: "µ", alpha: "α", beta: "β", lambda: "λ", sum: "Σ", sqrt: "√", ldots: "…", dots: "…" };
-    return text
-      .replace(/```[\s\S]*?```/g, " [code] ")
-      .replace(/\{\{([^}|:]+)[^}]*\}\}/g, "[$1]")
-      .replace(/\\(?:text|mathrm|mathbf|operatorname)\{([^}]*)\}/g, "$1")
-      .replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, "$1/$2")
-      .replace(/\\([a-zA-Z]+)/g, (m, n) => TEX[n] ?? "")
-      .replace(/[_^]\{([^}]*)\}/g, "$1")
-      .replace(/\\[,;! ]/g, " ")
-      .replace(/[{}$]/g, "")
-      .replace(/[*_`#>|]/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 160);
+    return plainLabel(text);
   }
 
   // ------------------------------------------------------------ preparation

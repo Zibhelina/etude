@@ -1,0 +1,13 @@
+{
+  "id": "typed",
+  "name": "Typed answer",
+  "description": "Type a short exact answer. Checked by script against a list of accepted answers.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "required": true },
+    { "name": "answers", "kind": "list", "required": true, "private": true, "description": "Any one is accepted." },
+    { "name": "match", "kind": "text", "default": "loose", "description": "loose | exact | regex" },
+    { "name": "placeholder", "kind": "text" },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

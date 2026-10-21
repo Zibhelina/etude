@@ -1,0 +1,11 @@
+{
+  "id": "match",
+  "name": "Match",
+  "description": "Connect each item on the left with its partner on the right.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "required": true },
+    { "name": "pairs", "kind": "json", "required": true, "private": true, "description": "[[left, right], ...]" },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

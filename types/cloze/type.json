@@ -1,0 +1,10 @@
+{
+  "id": "cloze",
+  "name": "Cloze",
+  "description": "Fill the blanks. Write {{answer}}, {{80|eighty}} for alternatives, {{answer::hint}} for a hint.",
+  "fields": [
+    { "name": "text", "kind": "markdown", "required": true },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

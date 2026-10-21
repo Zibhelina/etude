@@ -1,0 +1,2 @@
+.accepted { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.accepted code { font: 0.9rem var(--font-mono); background: var(--muted); padding: 0.15rem 0.45rem; border-radius: 0.4rem; }

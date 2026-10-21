@@ -1,0 +1,12 @@
+.board { display: grid; grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr); align-items: start; }
+.col { display: flex; flex-direction: column; gap: 8px; }
+.wires { width: 100%; overflow: visible; pointer-events: none; }
+.chip { padding: 0.55rem 0.75rem; align-items: center; }
+.chip .prose { font-size: 0.95rem; }
+.chip.linked { border-color: var(--wire); }
+.chip.linked .e-key { border-color: var(--wire); color: var(--foreground); }
+.chip.is-selected { border-color: var(--foreground); background: var(--accent); }
+.chip:disabled { cursor: default; }
+.fix { display: block; margin-top: 0.25rem; }
+.help { font-size: 0.82rem; margin: -0.4rem 0 0; }
+@media (max-width: 520px) { .board { grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr); } }

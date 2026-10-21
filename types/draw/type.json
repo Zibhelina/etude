@@ -1,0 +1,13 @@
+{
+  "id": "draw",
+  "name": "Drawing",
+  "description": "Draw the answer: a diagram, a timeline, an equation. Graded by a vision model, or rated by you.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "required": true },
+    { "name": "reference", "kind": "markdown", "required": true, "private": true },
+    { "name": "rubric", "kind": "markdown", "private": true },
+    { "name": "background", "kind": "text", "default": "grid", "description": "blank | grid | lines" }
+  ],
+  "grader": { "kind": "ai", "vision": true },
+  "instructions": "The answer is a hand drawing made with a mouse or pen, so lines are rough and handwriting is messy. Judge the content: the structure, labels, order and relationships the reference describes. Ignore neatness. Read handwriting generously; if a label is truly illegible, treat it as missing."
+}

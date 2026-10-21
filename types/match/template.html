@@ -1,0 +1,10 @@
+<div class="prose">{{md:prompt}}</div>
+<div class="board">
+  <div class="col left"></div>
+  <svg class="wires" aria-hidden="true"></svg>
+  <div class="col right"></div>
+</div>
+<p class="e-muted help only-answer">Pick a left item, then its partner. Click a connected item to undo.</p>
+<template data-on="result">
+  {{#explanation}}<div class="e-reveal"><div class="prose">{{md:explanation}}</div></div>{{/explanation}}
+</template>

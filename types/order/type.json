@@ -1,0 +1,11 @@
+{
+  "id": "order",
+  "name": "Order",
+  "description": "Drag the blocks into the right order. Partial credit for the longest run already in order.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "required": true },
+    { "name": "steps", "kind": "list", "required": true, "private": true, "description": "In the correct order; shown shuffled." },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

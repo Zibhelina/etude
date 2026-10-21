@@ -1,0 +1,14 @@
+{
+  "id": "numeric",
+  "name": "Numeric",
+  "description": "Calculate a number, or several. Checked with a relative tolerance; accepts fractions and simple arithmetic.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "required": true },
+    { "name": "answer", "kind": "number", "private": true, "description": "Single-part answer." },
+    { "name": "unit", "kind": "text" },
+    { "name": "tolerance", "kind": "number", "default": 0.01, "description": "Relative, 0.01 = 1%." },
+    { "name": "parts", "kind": "json", "description": "[{ label, answer, unit, tolerance }] for multi-part questions." },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

@@ -1,4 +1,4 @@
-.board { display: grid; grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr); align-items: start; }
+.board { display: grid; grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr); align-items: start; }
 .col { display: flex; flex-direction: column; gap: 8px; }
 .wires { width: 100%; overflow: visible; pointer-events: none; }
 .chip { padding: 0.55rem 0.75rem; align-items: center; }

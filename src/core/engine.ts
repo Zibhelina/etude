@@ -78,6 +78,9 @@ export interface StudyCard {
   seed: number;
   view: Record<string, unknown>;
   intervals: Record<Rating, string>;
+  /** How this card is graded: "self" cards show a reveal button instead of Submit. */
+  grader: string;
+  generated: boolean;
 }
 
 function hashString(s: string): number {
@@ -809,6 +812,8 @@ export class Etude {
       seed: s,
       view: p.view,
       intervals: sched.preview(c, now(), this.configFor(c.deck)),
+      grader: def.grader.kind,
+      generated: typeof parse<Record<string, unknown>>(this.db.get("SELECT fields FROM items WHERE id = ?", c.item_id)!.fields, {}).generator === "string",
     };
   }
 

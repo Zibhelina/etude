@@ -14,6 +14,7 @@
 .block .prose { flex: 1; font-size: 1rem; }
 .block .prose p { margin: 0; }
 [data-mode="result"] .block { cursor: default; }
+[data-mode="result"] .block .grip { visibility: hidden; }
 .block.near { border-color: color-mix(in oklab, var(--warning) 60%, transparent); }
 .solution { counter-reset: s; }
 .solution li { counter-increment: s; display: flex; gap: 0.6rem; font-size: 0.95rem; }

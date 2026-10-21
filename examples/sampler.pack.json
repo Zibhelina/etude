@@ -1,0 +1,688 @@
+{
+ "etude": "pack/1",
+ "name": "Etude Sampler",
+ "description": "A few random cards of every built-in type, plus two custom types (two-way vocabulary and a slider estimate), for trying the app out.",
+ "presets": [
+  {
+   "id": "sampler",
+   "name": "Sampler (no limits)",
+   "config": {
+    "newPerDay": 9999,
+    "reviewsPerDay": 9999,
+    "newOrder": "deck"
+   }
+  }
+ ],
+ "decks": [
+  {
+   "name": "Etude Sampler",
+   "preset": "sampler",
+   "description": "Try every card type.",
+   "instructions": "This is a demo deck. Grade fairly: right ideas in different words are correct."
+  }
+ ],
+ "types": [
+  {
+   "id": "vocab",
+   "name": "Vocabulary (two-way)",
+   "description": "A word and its meaning. Makes two cards: term to meaning and meaning to term. Example of a custom type with faces.",
+   "faces": [
+    "forward",
+    "reverse"
+   ],
+   "fields": [
+    {
+     "name": "term",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "name": "meaning",
+     "kind": "text",
+     "required": true
+    },
+    {
+     "name": "alternatives",
+     "kind": "list",
+     "private": true,
+     "description": "Other accepted meanings."
+    },
+    {
+     "name": "example",
+     "kind": "markdown",
+     "private": true
+    }
+   ],
+   "prepare": "const fwd = face === \"forward\";\nreturn {\n  view: { cue: fwd ? fields.term : fields.meaning, direction: fwd ? \"What does it mean?\" : \"What's the word?\" },\n  key: { answers: fwd ? [fields.meaning, ...(fields.alternatives ?? [])] : [fields.term], shown: fwd ? fields.meaning : fields.term, example: fields.example ?? \"\" },\n};",
+   "template": {
+    "html": "<div class=\"e-label\">{{direction}}</div>\n<div class=\"cue\">{{cue}}</div>\n<input class=\"e-input\" id=\"a\" autocomplete=\"off\" spellcheck=\"false\" placeholder=\"Type it\" autofocus>\n<template data-on=\"result\">\n  <div class=\"e-reveal\">\n    <div class=\"e-answer big\">{{shown}}</div>\n    {{#example}}<div class=\"prose e-muted\">{{md:example}}</div>{{/example}}\n  </div>\n</template>",
+    "css": ".cue { font-size: 2rem; font-weight: 600; letter-spacing: -0.01em; margin: -0.5rem 0 0.25rem; }\n.big { font-size: 1.25rem; }",
+    "js": "const input = etude.$(\"#a\");\netude.getAnswer(() => input.value);\ninput.addEventListener(\"input\", () => etude.setReady(input.value.trim().length > 0));\netude.setReady(false);\ninput.addEventListener(\"keydown\", (e) => { if (e.key === \"Enter\") { e.preventDefault(); etude.submit(); } });\netude.onResult(({ grade }) => { input.disabled = true; input.classList.add(grade.score >= 1 ? \"is-correct\" : \"is-wrong\"); });"
+   },
+   "grader": {
+    "kind": "script",
+    "code": "return { score: key.answers.some((a) => std.looseEqual(answer, a)) ? 1 : 0 };"
+   }
+  },
+  {
+   "id": "estimate",
+   "name": "Estimate",
+   "description": "Guess a quantity with a slider. Full credit inside the tolerance, partial credit up to three times it. Example of a custom type with its own UI.",
+   "fields": [
+    {
+     "name": "prompt",
+     "kind": "markdown",
+     "required": true
+    },
+    {
+     "name": "answer",
+     "kind": "number",
+     "required": true,
+     "private": true
+    },
+    {
+     "name": "min",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "max",
+     "kind": "number",
+     "required": true
+    },
+    {
+     "name": "step",
+     "kind": "number",
+     "default": 1
+    },
+    {
+     "name": "unit",
+     "kind": "text"
+    },
+    {
+     "name": "tolerance",
+     "kind": "number",
+     "default": 0.05,
+     "description": "Fraction of the slider's range."
+    },
+    {
+     "name": "explanation",
+     "kind": "markdown",
+     "private": true
+    }
+   ],
+   "prepare": "return {\n  view: { prompt: fields.prompt, min: fields.min, max: fields.max, step: fields.step ?? 1, unit: fields.unit ?? \"\" },\n  key: { answer: fields.answer, tolerance: fields.tolerance ?? 0.05, explanation: fields.explanation ?? \"\" },\n};",
+   "template": {
+    "html": "<div class=\"prose\">{{md:prompt}}</div>\n<div class=\"est\">\n  <output class=\"value\"></output>\n  <input type=\"range\" class=\"slider\" min=\"{{min}}\" max=\"{{max}}\" step=\"{{step}}\" autofocus>\n  <div class=\"ends\"><span>{{min}} {{unit}}</span><span>{{max}} {{unit}}</span></div>\n</div>\n<template data-on=\"result\">\n  {{#explanation}}<div class=\"e-reveal\"><div class=\"prose\">{{md:explanation}}</div></div>{{/explanation}}\n</template>",
+    "css": ".est { display: flex; flex-direction: column; gap: 0.6rem; padding: 0.5rem 0; position: relative; }\n.value { font-size: 2.25rem; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; }\n.slider { width: 100%; accent-color: var(--highlight); height: 1.5rem; }\n.ends { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--muted-foreground); }\n.truth { position: absolute; top: 3.35rem; width: 2px; height: 2.2rem; background: var(--success); transform: translateX(-1px); }\n.truth::after { content: attr(data-label); position: absolute; top: 2.3rem; left: 50%; transform: translateX(-50%); font-size: 0.8rem; color: var(--success); white-space: nowrap; }",
+    "js": "const { view } = etude;\nconst slider = etude.$(\".slider\"), out = etude.$(\".value\");\nconst fmt = (v) => `${Number(v).toLocaleString()}${view.unit ? \" \" + view.unit : \"\"}`;\nslider.value = String((Number(view.min) + Number(view.max)) / 2);\nconst show = () => (out.textContent = fmt(slider.value));\nslider.addEventListener(\"input\", show);\nshow();\netude.getAnswer(() => Number(slider.value));\netude.onResult(({ key, grade }) => {\n  slider.disabled = true;\n  out.style.color = grade.score >= 1 ? \"var(--success)\" : grade.score > 0 ? \"var(--warning)\" : \"var(--danger)\";\n  const mark = document.createElement(\"div\");\n  mark.className = \"truth\";\n  mark.dataset.label = \"actual: \" + fmt(key.answer);\n  const pct = (key.answer - view.min) / (view.max - view.min);\n  mark.style.left = `calc(${pct * 100}% )`;\n  etude.$(\".est\").append(mark);\n});"
+   },
+   "grader": {
+    "kind": "script",
+    "code": "const range = view.max - view.min;\nconst err = Math.abs(Number(answer) - key.answer) / range;\nconst t = key.tolerance;\nconst score = err <= t ? 1 : err >= 3 * t ? 0 : 1 - (err - t) / (2 * t);\nreturn { score: Math.round(score * 100) / 100, details: { error: err } };"
+   }
+  }
+ ],
+ "items": [
+  {
+   "id": "sampler.basic.light",
+   "type": "basic",
+   "deck": "Etude Sampler::Basic",
+   "tags": [
+    "sampler",
+    "topic::science"
+   ],
+   "fields": {
+    "front": "How long does light from the Sun take to reach Earth?",
+    "back": "About **8 minutes 20 seconds** (≈ 499 s).",
+    "extra": "$t = d/c = 1.496\\times10^{11}\\text{ m} \\,/\\, 3\\times10^8\\text{ m/s} \\approx 499\\text{ s}$"
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.basic.git",
+   "type": "basic",
+   "deck": "Etude Sampler::Basic",
+   "tags": [
+    "sampler",
+    "topic::programming"
+   ],
+   "fields": {
+    "front": "What does this command do?\n\n```sh\ngit reset --soft HEAD~1\n```",
+    "back": "Undoes the last commit but keeps its changes **staged**.",
+    "extra": "`--mixed` (the default) would unstage them; `--hard` would throw them away."
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.typed.capital",
+   "type": "typed",
+   "deck": "Etude Sampler::Typed",
+   "tags": [
+    "sampler",
+    "topic::geography"
+   ],
+   "fields": {
+    "prompt": "What is the capital of **Australia**?",
+    "answers": [
+     "Canberra"
+    ],
+    "explanation": "Not Sydney. Canberra was built as a compromise between Sydney and Melbourne."
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.typed.symbol",
+   "type": "typed",
+   "deck": "Etude Sampler::Typed",
+   "tags": [
+    "sampler",
+    "topic::science"
+   ],
+   "fields": {
+    "prompt": "Chemical symbol for **gold**? (case matters)",
+    "answers": [
+     "Au"
+    ],
+    "match": "exact",
+    "placeholder": "e.g. Fe",
+    "explanation": "From Latin *aurum*."
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.typed.regex",
+   "type": "typed",
+   "deck": "Etude Sampler::Typed",
+   "tags": [
+    "sampler",
+    "topic::math"
+   ],
+   "fields": {
+    "prompt": "Write any **prime number between 20 and 40**.",
+    "answers": [
+     "23|29|31|37"
+    ],
+    "match": "regex",
+    "explanation": "The primes in that range are 23, 29, 31 and 37."
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.numeric.static",
+   "type": "numeric",
+   "deck": "Etude Sampler::Numeric",
+   "tags": [
+    "sampler",
+    "topic::physics"
+   ],
+   "fields": {
+    "prompt": "A car travels $150$ km in $1.5$ hours. Average speed?",
+    "answer": 100,
+    "unit": "km/h",
+    "explanation": "$v = d/t = 150 / 1.5 = 100$ km/h"
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.numeric.parts",
+   "type": "numeric",
+   "deck": "Etude Sampler::Numeric",
+   "tags": [
+    "sampler",
+    "topic::math"
+   ],
+   "fields": {
+    "prompt": "A rectangle is $3$ cm by $4$ cm.",
+    "parts": [
+     {
+      "label": "Area",
+      "answer": 12,
+      "unit": "cm²"
+     },
+     {
+      "label": "Perimeter",
+      "answer": 14,
+      "unit": "cm"
+     },
+     {
+      "label": "Diagonal",
+      "answer": 5,
+      "unit": "cm"
+     }
+    ],
+    "explanation": "Area $=3\\cdot4=12$, perimeter $=2(3+4)=14$, diagonal $=\\sqrt{3^2+4^2}=5$."
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.numeric.generated",
+   "type": "numeric",
+   "deck": "Etude Sampler::Numeric",
+   "tags": [
+    "sampler",
+    "topic::math",
+    "generated"
+   ],
+   "fields": {
+    "prompt": "What is $12 \\times 7$?",
+    "answer": 84,
+    "generator": "const a = rng.int(11, 29), b = rng.int(3, 9);\nreturn { prompt: `What is $${a} \\\\times ${b}$?`, answer: a * b, explanation: `$${a} \\\\times ${b} = ${a * b}$. Trick: $${a} \\\\times ${b} = ${a - a % 10} \\\\times ${b} + ${a % 10} \\\\times ${b} = ${(a - a % 10) * b} + ${(a % 10) * b}$.` };"
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.numeric.percent",
+   "type": "numeric",
+   "deck": "Etude Sampler::Numeric",
+   "tags": [
+    "sampler",
+    "topic::math",
+    "generated"
+   ],
+   "fields": {
+    "prompt": "A $40 shirt is 25% off. Price?",
+    "answer": 30,
+    "unit": "$",
+    "generator": "const p = rng.pick([20, 40, 60, 80, 120]), d = rng.pick([10, 15, 25, 30, 40]);\nconst v = p * (1 - d / 100);\nreturn { prompt: `A $${p} jacket is ${d}% off. What do you pay?`, answer: v, explanation: `$${p} \\\\times (1 - ${d / 100}) = ${v}$` };"
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.mcq.single",
+   "type": "mcq",
+   "deck": "Etude Sampler::Multiple choice",
+   "tags": [
+    "sampler",
+    "topic::science"
+   ],
+   "fields": {
+    "prompt": "Which planet has the **shortest day**?",
+    "options": [
+     {
+      "text": "Jupiter",
+      "correct": true,
+      "why": "About 9 h 56 min."
+     },
+     {
+      "text": "Mercury",
+      "why": "Its solar day is about 176 Earth days."
+     },
+     {
+      "text": "Earth"
+     },
+     {
+      "text": "Saturn",
+      "why": "Close: about 10 h 33 min."
+     }
+    ]
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.mcq.multi",
+   "type": "mcq",
+   "deck": "Etude Sampler::Multiple choice",
+   "tags": [
+    "sampler",
+    "topic::math"
+   ],
+   "fields": {
+    "prompt": "Which of these are **prime**?",
+    "options": [
+     {
+      "text": "$2$",
+      "correct": true,
+      "why": "The only even prime."
+     },
+     {
+      "text": "$51$",
+      "why": "$51 = 3 \\times 17$"
+     },
+     {
+      "text": "$53$",
+      "correct": true
+     },
+     {
+      "text": "$91$",
+      "why": "$91 = 7 \\times 13$, a classic trap."
+     },
+     {
+      "text": "$97$",
+      "correct": true
+     }
+    ]
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.mcq.code",
+   "type": "mcq",
+   "deck": "Etude Sampler::Multiple choice",
+   "tags": [
+    "sampler",
+    "topic::programming"
+   ],
+   "fields": {
+    "prompt": "What does this print?\n\n```python\nx = [1, 2, 3]\ny = x\ny.append(4)\nprint(len(x))\n```",
+    "options": [
+     {
+      "text": "`4`",
+      "correct": true,
+      "why": "`y = x` doesn't copy; both names point to the same list."
+     },
+     {
+      "text": "`3`",
+      "why": "That would need `y = x.copy()` or `x[:]`."
+     },
+     {
+      "text": "An error"
+     }
+    ],
+    "explanation": "Assignment binds a name to an object. Mutating through one name is visible through the other."
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.order.planets",
+   "type": "order",
+   "deck": "Etude Sampler::Order",
+   "tags": [
+    "sampler",
+    "topic::science"
+   ],
+   "fields": {
+    "prompt": "Order the planets from the **Sun outward**.",
+    "steps": [
+     "Mercury",
+     "Venus",
+     "Earth",
+     "Mars",
+     "Jupiter",
+     "Saturn",
+     "Uranus",
+     "Neptune"
+    ],
+    "explanation": "*My Very Educated Mother Just Served Us Noodles.*"
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.order.sdlc",
+   "type": "order",
+   "deck": "Etude Sampler::Order",
+   "tags": [
+    "sampler",
+    "topic::programming"
+   ],
+   "fields": {
+    "prompt": "Put the steps of making a pull request in order.",
+    "steps": [
+     "Create a branch",
+     "Commit your changes",
+     "Push the branch",
+     "Open the pull request",
+     "Address review comments",
+     "Merge"
+    ]
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.match.countries",
+   "type": "match",
+   "deck": "Etude Sampler::Match",
+   "tags": [
+    "sampler",
+    "topic::geography"
+   ],
+   "fields": {
+    "prompt": "Match each country to its capital.",
+    "pairs": [
+     [
+      "Canada",
+      "Ottawa"
+     ],
+     [
+      "Brazil",
+      "Brasília"
+     ],
+     [
+      "Japan",
+      "Tokyo"
+     ],
+     [
+      "Turkey",
+      "Ankara"
+     ],
+     [
+      "New Zealand",
+      "Wellington"
+     ]
+    ]
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.match.complexity",
+   "type": "match",
+   "deck": "Etude Sampler::Match",
+   "tags": [
+    "sampler",
+    "topic::programming"
+   ],
+   "fields": {
+    "prompt": "Match each operation to its time complexity.",
+    "pairs": [
+     [
+      "Binary search",
+      "$O(\\log n)$"
+     ],
+     [
+      "Merge sort",
+      "$O(n \\log n)$"
+     ],
+     [
+      "Hash table lookup (average)",
+      "$O(1)$"
+     ],
+     [
+      "Linear scan",
+      "$O(n)$"
+     ],
+     [
+      "Naive matrix multiply",
+      "$O(n^3)$"
+     ]
+    ]
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.cloze.water",
+   "type": "cloze",
+   "deck": "Etude Sampler::Cloze",
+   "tags": [
+    "sampler",
+    "topic::science"
+   ],
+   "fields": {
+    "text": "Water boils at {{100}} °C at sea level, and its chemical formula is {{H2O|H₂O}}.",
+    "explanation": "At higher altitudes the boiling point drops (about 95 °C in Denver)."
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.cloze.math",
+   "type": "cloze",
+   "deck": "Etude Sampler::Cloze",
+   "tags": [
+    "sampler",
+    "topic::math"
+   ],
+   "fields": {
+    "text": "The derivative of $\\sin x$ is {{cos x|cosx|cos(x)::a trig function}}, and the integral of $\\frac{1}{x}$ is {{ln x|ln(x)|ln abs x::natural log}} $+\\,C$.",
+    "explanation": "$\\frac{d}{dx}\\sin x = \\cos x$, and $\\int \\frac{1}{x}\\,dx = \\ln|x| + C$."
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.free.seasons",
+   "type": "free",
+   "deck": "Etude Sampler::Free answer",
+   "tags": [
+    "sampler",
+    "topic::science"
+   ],
+   "fields": {
+    "prompt": "Why does Earth have **seasons**?",
+    "reference": "Earth's rotation axis is tilted about 23.5° relative to its orbit. As Earth orbits, each hemisphere is tilted toward the Sun for part of the year (sunlight hits more directly and days are longer: summer) and away from it for the other part (winter). It is not caused by Earth's distance from the Sun.",
+    "rubric": "Must mention the axial tilt and that it changes how directly sunlight hits / day length in each hemisphere over the year. An answer saying seasons come from being closer to or farther from the Sun is incorrect. Mentioning the 23.5° number is not required."
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.free.recursion",
+   "type": "free",
+   "deck": "Etude Sampler::Free answer",
+   "tags": [
+    "sampler",
+    "topic::programming"
+   ],
+   "fields": {
+    "prompt": "In one sentence: what is **recursion**?",
+    "input": "text",
+    "reference": "A function that solves a problem by calling itself on smaller instances of the same problem, until it reaches a base case it can answer directly.",
+    "rubric": "Must say the function calls itself on a smaller/simpler version of the problem. Mentioning a base case makes it fully correct; without it, partially correct."
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.free.code",
+   "type": "free",
+   "deck": "Etude Sampler::Free answer",
+   "tags": [
+    "sampler",
+    "topic::programming"
+   ],
+   "fields": {
+    "prompt": "Write a Python function `second_largest(xs)` that returns the second largest **distinct** value in a list, without sorting.",
+    "input": "code",
+    "reference": "```python\ndef second_largest(xs):\n    first = second = None\n    for x in xs:\n        if first is None or x > first:\n            first, second = x, first\n        elif x != first and (second is None or x > second):\n            second = x\n    return second\n```",
+    "rubric": "Correct single pass keeping the top two distinct values. Must handle duplicates of the maximum (e.g. [5, 5, 3] returns 3). Using sorted() or .sort() goes against the prompt: partially correct at most. Minor syntax slips are fine if the logic is right. Handling lists with fewer than two distinct values is a bonus, not required."
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.draw.triangle",
+   "type": "draw",
+   "deck": "Etude Sampler::Drawing",
+   "tags": [
+    "sampler",
+    "topic::math"
+   ],
+   "fields": {
+    "prompt": "Draw a **right triangle**, mark the right angle, and label the sides $a$, $b$ and the hypotenuse $c$. Write the Pythagorean theorem under it.",
+    "reference": "A triangle with one 90° angle marked (small square). The two sides forming the right angle are labelled a and b; the side opposite the right angle (the longest) is labelled c. Below it: a² + b² = c².",
+    "rubric": "c must be the side opposite the right angle. The equation must be a² + b² = c². Neatness doesn't matter.",
+    "background": "grid"
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.draw.parabola",
+   "type": "draw",
+   "deck": "Etude Sampler::Drawing",
+   "tags": [
+    "sampler",
+    "topic::math"
+   ],
+   "fields": {
+    "prompt": "Sketch $y = x^2 - 1$ on axes. Mark where it crosses the $x$-axis and its lowest point.",
+    "reference": "Labelled x and y axes. An upward-opening parabola with its vertex (lowest point) at (0, -1), crossing the x-axis at x = -1 and x = 1.",
+    "rubric": "Must open upward, vertex at (0, -1) marked, x-intercepts at -1 and 1 marked. Exact scale doesn't matter.",
+    "background": "blank"
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.vocab.saudade",
+   "type": "vocab",
+   "deck": "Etude Sampler::Custom: vocabulary",
+   "tags": [
+    "sampler",
+    "topic::language"
+   ],
+   "fields": {
+    "term": "saudade",
+    "meaning": "longing",
+    "alternatives": [
+     "nostalgia",
+     "missing someone",
+     "yearning"
+    ],
+    "example": "*Estou com saudade de você* (I miss you). Portuguese, famously hard to translate."
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.vocab.gezellig",
+   "type": "vocab",
+   "deck": "Etude Sampler::Custom: vocabulary",
+   "tags": [
+    "sampler",
+    "topic::language"
+   ],
+   "fields": {
+    "term": "gezellig",
+    "meaning": "cozy",
+    "alternatives": [
+     "snug",
+     "convivial"
+    ],
+    "example": "Dutch: the warm feeling of being somewhere pleasant with good company."
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.estimate.everest",
+   "type": "estimate",
+   "deck": "Etude Sampler::Custom: estimate",
+   "tags": [
+    "sampler",
+    "topic::geography"
+   ],
+   "fields": {
+    "prompt": "How tall is **Mount Everest**?",
+    "answer": 8849,
+    "min": 4000,
+    "max": 12000,
+    "step": 50,
+    "unit": "m",
+    "tolerance": 0.04,
+    "explanation": "8,849 m, measured by the 2020 China–Nepal survey."
+   },
+   "source": ""
+  },
+  {
+   "id": "sampler.estimate.moon",
+   "type": "estimate",
+   "deck": "Etude Sampler::Custom: estimate",
+   "tags": [
+    "sampler",
+    "topic::science"
+   ],
+   "fields": {
+    "prompt": "Average distance from Earth to the **Moon**?",
+    "answer": 384400,
+    "min": 100000,
+    "max": 800000,
+    "step": 1000,
+    "unit": "km",
+    "tolerance": 0.04,
+    "explanation": "About 384,400 km, roughly 30 Earth diameters."
+   },
+   "source": ""
+  }
+ ]
+}

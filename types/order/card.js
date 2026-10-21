@@ -21,6 +21,7 @@ const move = (from, to) => {
   blocks.splice(to, 0, b);
   render();
 };
+const focusBlock = (id) => list.querySelector(`[data-id="${id}"]`)?.focus();
 
 list.addEventListener("keydown", (e) => {
   const li = e.target.closest(".block");
@@ -30,7 +31,7 @@ list.addEventListener("keydown", (e) => {
     e.preventDefault();
     const j = e.key === "ArrowUp" ? i - 1 : i + 1;
     move(i, j);
-    list.querySelector(`[data-id="${li.dataset.id}"]`)?.focus();
+    focusBlock(li.dataset.id);
   } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
     e.preventDefault();
     list.children[e.key === "ArrowUp" ? i - 1 : i + 1]?.focus();
@@ -68,20 +69,21 @@ list.addEventListener("pointermove", (e) => {
 });
 const end = () => {
   if (!drag) return;
-  const { from, to } = drag;
+  const { from, to, id } = drag;
   drag = null;
-  if (to != null) move(from, to);
+  if (to != null && to !== from) move(from, to);
   else render();
+  // Keep keyboard focus on the block that was clicked or dragged.
+  focusBlock(id);
 };
 list.addEventListener("pointerup", end);
 list.addEventListener("pointercancel", end);
 
-etude.onResult(({ grade, key }) => {
+etude.onResult(({ key }) => {
   const pos = Object.fromEntries(key.order.map((id, i) => [id, i]));
-  const inRun = new Set(grade.details?.inOrder ?? []);
   list.querySelectorAll(".block").forEach((li, i) => {
     li.removeAttribute("tabindex");
-    li.classList.add(pos[li.dataset.id] === i ? "is-correct" : inRun.has(li.dataset.id) ? "near" : "is-wrong");
+    li.classList.add(pos[li.dataset.id] === i ? "is-correct" : "is-wrong");
   });
   etude.$(".solution").innerHTML = key.steps.map((s) => `<li class="prose">${etude.md(s)}</li>`).join("");
 });

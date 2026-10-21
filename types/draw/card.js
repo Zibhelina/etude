@@ -14,7 +14,8 @@ etude.$(".swatches").innerHTML = COLORS.map((c, i) => `<button type="button" cla
 function fit() {
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.clientWidth;
-  const h = Math.round(Math.min(Math.max(w * 0.62, 320), 560));
+  // Phones get a near-square canvas: there is room vertically and fingers need it.
+  const h = Math.round(w < 520 ? Math.min(Math.max(w * 1.05, 340), 520) : Math.min(Math.max(w * 0.62, 320), 560));
   canvas.style.height = h + "px";
   canvas.width = Math.round(w * dpr);
   canvas.height = Math.round(h * dpr);

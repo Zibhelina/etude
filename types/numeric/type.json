@@ -27,7 +27,7 @@
     {
       "name": "parts",
       "kind": "json",
-      "description": "[{ label, answer, unit, tolerance }] for multi-part questions.",
+      "description": "Optional: several answers in one card. Replaces the single answer.",
       "editor": "parts"
     },
     {

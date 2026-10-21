@@ -1,0 +1,13 @@
+{
+  "id": "staff",
+  "name": "Read the note",
+  "description": "A note on a treble or bass staff, ledger lines included; answer on a piano keyboard or with the letter keys. A new note every review.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "default": "Name this note.", "description": "Shown above the staff (also the card's title in lists)." },
+    { "name": "clef", "kind": "text", "default": "treble", "description": "treble | bass | both" },
+    { "name": "ledger", "kind": "number", "default": 2, "description": "How many ledger lines a note may need, 0 to 3." },
+    { "name": "accidentals", "kind": "boolean", "default": false, "description": "Sometimes add a sharp or flat." },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

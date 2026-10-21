@@ -1,0 +1,17 @@
+<div class="sc-eyebrow">Ear training</div>
+<div class="prose iv-prompt">{{md:prompt}}</div>
+<div class="iv-play">
+  <button type="button" class="play-btn iv-btn"><span class="ic"></span><span class="lbl">Play</span></button>
+  <span class="e-muted iv-dir"></span>
+</div>
+<div class="iv-grid" role="group" aria-label="Intervals"></div>
+<p class="e-muted iv-help only-answer">Press <kbd>P</kbd> to play again, or a number key to pick.</p>
+<template data-on="result">
+  <div class="e-reveal">
+    <div class="iv-notes"></div>
+    <div class="iv-kb"></div>
+    <div class="iv-again"><button type="button" class="play-btn small iv-ans"><span class="ic"></span><span>Hear it again</span></button></div>
+    {{#explanation}}<div class="prose">{{md:explanation}}</div>{{/explanation}}
+    <p class="sc-how">The two notes were picked for this review and played live, so you can't learn the card by its picture; you have to hear the distance.</p>
+  </div>
+</template>

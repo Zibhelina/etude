@@ -1,0 +1,67 @@
+.sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }
+.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }
+
+.tl-prompt { font-size: 1.05rem; }
+.tl-tray { display: flex; flex-wrap: wrap; gap: 0.45rem; min-height: 2.9rem; padding: 0.5rem; border: 1px dashed var(--border); border-radius: calc(var(--radius) - 2px); }
+.tl-tray.empty { border-color: transparent; min-height: 0; padding: 0; }
+body[data-mode="result"] .tl-tray.empty { display: none; }
+.tl-wrap { padding: 0 2.2rem; }
+.tl { position: relative; height: calc(var(--lanes, 1) * 2.75rem + 4.6rem); --lane: 0; box-sizing: content-box; }
+.tl-axis { position: absolute; left: 0; right: 0; bottom: 2.6rem; height: 2px; background: var(--foreground); opacity: 0.7; border-radius: 2px; }
+.tl-tick { position: absolute; bottom: 2.6rem; width: 0; }
+.tl-tick::before { content: ""; position: absolute; left: -0.5px; top: -5px; width: 1px; height: 10px; background: var(--muted-foreground); }
+.tl-tick span { position: absolute; top: 9px; transform: translateX(-50%); font: 0.72rem var(--font-mono); color: var(--muted-foreground); white-space: nowrap; }
+.tl-anchor { position: absolute; bottom: 2.6rem; width: 0; }
+.tl-anchor i { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--muted-foreground); }
+.tl-anchor span { position: absolute; top: 1.55rem; transform: translateX(-50%); font-size: 0.7rem; color: var(--muted-foreground); white-space: nowrap; display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
+.tl-anchor b { font: 0.66rem var(--font-mono); font-weight: 400; opacity: 0.8; }
+.tl-chip { display: inline-flex; flex-direction: column; align-items: center; gap: 0.05rem; padding: 0.35rem 0.7rem; min-height: 40px; justify-content: center; border-radius: 999px; border: 1px solid color-mix(in oklab, var(--highlight) 55%, var(--border)); background: linear-gradient(color-mix(in oklab, var(--highlight) 12%, transparent), color-mix(in oklab, var(--highlight) 12%, transparent)), var(--background); color: var(--foreground); font: 500 0.86rem var(--font-sans); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; white-space: nowrap; }
+.tl-chip .yr { font: 0.68rem var(--font-mono); color: var(--muted-foreground); }
+.tl-chip .yr:empty { display: none; }
+.tl-chip:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 35%, transparent); }
+.tl-chip { --tx: 0px; --ty: 0px; transform: translate(var(--tx), var(--ty)); }
+.tl-chip.dragging { cursor: grabbing; z-index: 30 !important; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); transition: none; }
+.tl-guide { position: absolute; top: 0; bottom: 2.6rem; width: 0; border-left: 1px dashed var(--highlight); pointer-events: none; }
+.tl-guide::after { content: attr(data-y); position: absolute; bottom: -1.6rem; transform: translateX(-50%); font: 600 0.72rem var(--font-mono); color: var(--highlight); background: var(--background); padding: 0 0.25rem; }
+.tl-tray.drop { border-color: var(--highlight); background: color-mix(in oklab, var(--highlight) 8%, transparent); }
+.tl-pins .tl-chip { position: absolute; bottom: calc(3.4rem + var(--lane) * 2.75rem); transform: translate(calc(-50% + var(--tx)), var(--ty)); padding: 0.2rem 0.6rem; min-height: 36px; z-index: calc(20 - var(--lane)); --dx: 0px; }
+.tl-stems { position: absolute; inset: 0; pointer-events: none; }
+.tl-stems i { position: absolute; bottom: 2.6rem; width: 2px; margin-left: -1px; height: calc(0.8rem + var(--lane) * 2.75rem); background: color-mix(in oklab, var(--highlight) 80%, var(--foreground)); }
+.tl-stems i.is-correct { background: var(--success); }
+.tl-stems i.is-wrong { background: var(--danger); }
+.tl.has-arcs .tl-stems i { bottom: 4.1rem; }
+.tl-prompt, .tl-tray, .tl-wrap, .tl-help { user-select: none; -webkit-user-select: none; }
+
+.tl-chip:disabled { cursor: default; }
+.tl-chip.is-correct { border-color: var(--success); background: linear-gradient(color-mix(in oklab, var(--success) 14%, transparent), color-mix(in oklab, var(--success) 14%, transparent)), var(--background); }
+.tl-chip.is-wrong { border-color: var(--danger); background: linear-gradient(color-mix(in oklab, var(--danger) 12%, transparent), color-mix(in oklab, var(--danger) 12%, transparent)), var(--background); }
+.tl-chip.is-missed { border-style: dashed; opacity: 0.7; }
+.tl-marks { position: absolute; left: 0; right: 0; bottom: 2.6rem; height: 0; pointer-events: none; }
+.tl-true { position: absolute; width: 0; }
+.tl-true i { position: absolute; left: -5.5px; top: -5.5px; width: 11px; height: 11px; transform: rotate(45deg); background: var(--warning); border: 1.5px solid var(--background); }
+.tl-true.good i { background: var(--success); }
+.tl-arcs { position: absolute; left: 0; top: 0; width: 100%; height: 1.5rem; overflow: visible; }
+.tl-arcs path { fill: none; stroke: color-mix(in oklab, var(--danger) 80%, transparent); stroke-width: 1.7; }
+/* With arcs under the line, the year labels move down to make room. */
+.tl.has-arcs { padding-bottom: 1.5rem; }
+.tl.has-arcs .tl-tick span { top: calc(9px + 1.5rem); }
+.tl.has-arcs .tl-anchor span { top: calc(1.55rem + 1.5rem); }
+.tl.has-arcs .tl-axis, .tl.has-arcs .tl-tick, .tl.has-arcs .tl-anchor, .tl.has-arcs .tl-marks { bottom: 4.1rem; }
+.tl.has-arcs .tl-pins .tl-chip { bottom: calc(4.9rem + var(--lane) * 2.75rem); }
+.tl-help { font-size: 0.82rem; margin: -0.5rem 0 0; }
+.tl-list { display: flex; flex-direction: column; gap: 0.55rem; }
+.tl-row { display: grid; grid-template-columns: 3.4rem 1fr auto; gap: 0.7rem; align-items: baseline; font-size: 0.93rem; }
+.tl-row b { font: 600 0.9rem var(--font-mono); }
+.tl-row .lbl { display: flex; flex-direction: column; }
+.tl-row .nt { font-size: 0.82rem; color: var(--muted-foreground); }
+.tl-row .st { font-size: 0.82rem; white-space: nowrap; }
+.tl-row .st.ok { color: var(--success); }
+.tl-row .st.bad { color: var(--danger); }
+.tl-row .st.miss { color: var(--warning); }
+@media (max-width: 480px) {
+  .tl-wrap { padding: 0 1.6rem; }
+  .tl-chip { font-size: 0.8rem; padding: 0.3rem 0.55rem; }
+  .tl-anchor span { font-size: 0.62rem; }
+  .tl-row { grid-template-columns: 3rem 1fr; row-gap: 0.05rem; }
+  .tl-row .st { grid-column: 2; }
+}

@@ -1,0 +1,19 @@
+<div class="sc-eyebrow">Chords</div>
+<div class="prose cd-prompt">{{md:prompt}}</div>
+<div class="cd-chord"><span class="cd-sym"></span><span class="cd-name">{{name}}</span></div>
+<div class="cd-kb"></div>
+<div class="cd-bar only-answer">
+  <button type="button" class="play-btn small cd-play"><span class="ic"></span><span>Play selection</span></button>
+  <button type="button" class="e-btn cd-clear">Clear</button>
+  <span class="e-muted cd-count"></span>
+</div>
+<p class="e-muted cd-help only-answer">Tap keys to toggle them. Any voicing or inversion counts.</p>
+<template data-on="result">
+  <div class="e-reveal">
+    <div class="cd-tones"></div>
+    <div class="cd-legend e-muted"><span><i class="sw ok"></i>in the chord</span><span><i class="sw bad"></i>not in it</span><span><i class="sw miss"></i>missing</span></div>
+    <div><button type="button" class="play-btn small cd-ans"><span class="ic"></span><span>Hear the chord</span></button></div>
+    {{#explanation}}<div class="prose">{{md:explanation}}</div>{{/explanation}}
+    <p class="sc-how">The root and quality were drawn for this review, and the grader compared pitch classes, so any octave, voicing or inversion of the right notes counts.</p>
+  </div>
+</template>

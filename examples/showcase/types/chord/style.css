@@ -1,0 +1,58 @@
+.sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }
+.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }
+
+/* Piano keyboard (shared by the music types). Keys keep piano colors in every theme: it's an object, not a surface. */
+/* Octaves sit side by side as one keyboard; on phones a two-octave keyboard stacks so keys stay tappable. */
+.kb { display: flex; flex-wrap: nowrap; justify-content: center; gap: 0; width: 100%; }
+.kb-oct { flex: 1 1 0; min-width: 0; max-width: 20rem; height: auto; display: block; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+@media (max-width: 520px) { .kb:not(.kb-nowrap) { flex-wrap: wrap; gap: 0.6rem; } .kb:not(.kb-nowrap) .kb-oct { flex-basis: 100%; max-width: 22rem; } }
+.key path { stroke: rgba(0, 0, 0, 0.5); stroke-width: 1; transition: fill 0.12s; cursor: pointer; }
+.kb.static .key path { cursor: default; }
+.key.white path { fill: #f4f1ea; }
+.key.black path { fill: #252321; stroke: #0e0d0c; }
+.key .kl { font: 600 7px var(--font-sans); text-anchor: middle; fill: #6d6862; pointer-events: none; }
+.key.black .kl { fill: #f1ece4; font-size: 5.5px; }
+.key.down path { filter: brightness(0.85); }
+.key.white.sel path { fill: color-mix(in oklab, var(--highlight) 55%, #f4f1ea); }
+.key.black.sel path { fill: color-mix(in oklab, var(--highlight) 75%, #252321); }
+.key.white.ok path { fill: color-mix(in oklab, var(--success) 55%, #f4f1ea); }
+.key.black.ok path { fill: color-mix(in oklab, var(--success) 88%, #252321); }
+.key.white.bad path { fill: color-mix(in oklab, var(--danger) 68%, #f4f1ea); }
+.key.black.bad path { fill: color-mix(in oklab, var(--danger) 88%, #252321); }
+.key.white.miss path { fill: color-mix(in oklab, var(--warning) 50%, #f4f1ea); }
+.key.black.miss path { fill: color-mix(in oklab, var(--warning) 70%, #252321); }
+.key.ok .kl, .key.bad .kl, .key.sel .kl, .key.miss .kl { fill: #1b1a19; font-size: 8px; }
+.key.black.ok .kl, .key.black.bad .kl, .key.black.sel .kl, .key.black.miss .kl { fill: #fff; font-size: 6.5px; }
+
+/* Round play button. */
+.play-btn { display: inline-flex; align-items: center; gap: 0.55rem; padding: 0.7rem 1.3rem 0.7rem 1rem; min-height: 48px; border-radius: 999px; border: 1px solid color-mix(in oklab, var(--highlight) 55%, var(--border)); background: color-mix(in oklab, var(--highlight) 12%, transparent); color: var(--foreground); font: 600 1rem var(--font-sans); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; transition: background 0.15s, transform 0.08s; }
+.play-btn:hover { background: color-mix(in oklab, var(--highlight) 20%, transparent); }
+.play-btn:active { transform: scale(0.97); }
+.play-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 35%, transparent); }
+.play-btn .ic { width: 1.3rem; height: 1.3rem; display: inline-flex; color: var(--highlight); }
+.play-btn .ic svg { width: 100%; height: 100%; }
+.play-btn.on .ic { animation: pulse 0.6s ease-in-out infinite alternate; }
+.play-btn.small { padding: 0.45rem 0.95rem 0.45rem 0.75rem; min-height: 40px; font-size: 0.9rem; }
+.play-btn.small .ic { width: 1rem; height: 1rem; }
+@keyframes pulse { from { opacity: 1; } to { opacity: 0.35; } }
+
+.cd-prompt { font-size: 1.05rem; }
+.cd-chord { display: flex; align-items: baseline; gap: 0.9rem; flex-wrap: wrap; margin-top: -0.4rem; }
+.cd-sym { font-size: 2.4rem; line-height: 1.1; }
+.cd-name { color: var(--muted-foreground); font-size: 0.95rem; }
+.cd-bar { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.cd-bar .e-btn { min-height: 40px; }
+.cd-count { font-size: 0.88rem; }
+.cd-help { font-size: 0.82rem; margin: -0.5rem 0 0; }
+.cd-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.cd-tone { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; min-width: 3.4rem; padding: 0.45rem 0.6rem; border-radius: calc(var(--radius) - 3px); border: 1px solid var(--border); }
+.cd-tone .deg { font: 600 0.78rem var(--font-mono); color: var(--muted-foreground); }
+.cd-tone .nm { font-size: 1.2rem; }
+.cd-tone.ok { border-color: color-mix(in oklab, var(--success) 55%, var(--border)); background: color-mix(in oklab, var(--success) 10%, transparent); }
+.cd-tone.miss { border-color: color-mix(in oklab, var(--warning) 70%, var(--border)); background: color-mix(in oklab, var(--warning) 12%, transparent); }
+.cd-legend { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.82rem; }
+.cd-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.cd-legend .sw { width: 0.85rem; height: 0.85rem; border-radius: 3px; display: inline-block; }
+.cd-legend .sw.ok { background: color-mix(in oklab, var(--success) 70%, #252321); }
+.cd-legend .sw.bad { background: color-mix(in oklab, var(--danger) 60%, #f4f1ea); }
+.cd-legend .sw.miss { background: color-mix(in oklab, var(--warning) 60%, #f4f1ea); }

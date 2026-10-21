@@ -1,0 +1,12 @@
+{
+  "id": "interval",
+  "name": "Name the interval",
+  "description": "Ear training: two notes are played and you name the interval between them. New notes every review, melodic up, down or together.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "default": "Listen, then name the interval.", "description": "Shown above the play button (also the card's title in lists)." },
+    { "name": "set", "kind": "text", "default": "basic", "description": "basic (M2, m3, M3, P4, P5, M6, P8) | all (every interval up to an octave)" },
+    { "name": "direction", "kind": "text", "default": "mixed", "description": "up | down | harmonic | mixed" },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

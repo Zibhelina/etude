@@ -1,0 +1,13 @@
+{
+  "id": "chess",
+  "name": "Mate in one",
+  "description": "Find the checkmating move on a real board: tap a piece and a square, or drag. Every answer is checked against the engine-verified list of mates.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "default": "Find the move that checkmates.", "description": "Shown above the board (also the card's title in lists)." },
+    { "name": "fen", "kind": "text", "required": true, "description": "The position in FEN. The side to move is the one solving." },
+    { "name": "answers", "kind": "list", "required": true, "private": true, "description": "Every mating move in UCI form (e.g. g5f7). Check them with an engine." },
+    { "name": "san", "kind": "text", "private": true, "description": "The mating move in algebraic notation, for the result (e.g. Nf7#)." },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

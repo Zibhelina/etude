@@ -1,0 +1,30 @@
+.sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }
+.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }
+
+.ch-prompt { font-size: 1.05rem; }
+.ch-turn { display: flex; align-items: center; gap: 0.5rem; font-size: 0.92rem; color: var(--muted-foreground); margin-top: -0.6rem; }
+.ch-turn .dot { width: 0.85rem; height: 0.85rem; border-radius: 50%; border: 1.5px solid var(--foreground); }
+.ch-turn .dot.w { background: #f4f1ea; }
+.ch-turn .dot.b { background: #1d1b19; }
+.ch-board svg { width: 100%; max-width: 28rem; height: auto; display: block; margin: 0 auto; border-radius: calc(var(--radius) - 2px); touch-action: none; user-select: none; -webkit-user-select: none; cursor: pointer; }
+/* The board keeps its own colors in every theme, like a real board. */
+.sq.lt { fill: #dcd6cc; }
+.sq.dk { fill: #8f8579; }
+.co { font: 700 19px var(--font-sans); pointer-events: none; }
+.co.on-lt { fill: #776d62; }
+.co.on-dk { fill: #ece7df; }
+.pc .fill { fill: #1d1b19; }
+.pc.w .fill { fill: #f7f4ee; }
+.pc.w .line { fill: #1d1b19; }
+.pc { pointer-events: none; }
+.pc.lifted { opacity: 0.35; }
+.ghost { opacity: 0.9; }
+.marks .sel { fill: color-mix(in oklab, var(--highlight) 55%, transparent); }
+.marks .last { fill: rgba(231, 196, 76, 0.45); }
+.marks .last.ok { fill: color-mix(in oklab, var(--success) 50%, transparent); }
+.marks .mated { fill: none; stroke: var(--danger); stroke-width: 6; animation: ring 0.4s ease-out; }
+@keyframes ring { from { r: 20; opacity: 0; } }
+.arrow.bad { stroke: var(--danger); stroke-width: 11; stroke-linecap: round; opacity: 0.85; }
+.ahb { fill: var(--danger); }
+.ch-help { font-size: 0.82rem; margin: -0.5rem 0 0; text-align: center; }
+.ch-answer p { margin: 0; font-size: 1.05rem; }

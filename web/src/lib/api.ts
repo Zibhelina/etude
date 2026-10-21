@@ -167,10 +167,21 @@ export class ApiError extends Error {
   }
 }
 
+// A server started with --token needs it on every API call. Opening the app once with ?token=…
+// stores it for this browser.
+const TOKEN = (() => {
+  const fromUrl = new URLSearchParams(location.search).get("token");
+  if (fromUrl) localStorage.setItem("etude.token", fromUrl);
+  return fromUrl ?? localStorage.getItem("etude.token");
+})();
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
   const res = await fetch(path, {
     method,
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();

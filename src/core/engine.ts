@@ -607,11 +607,18 @@ export class Etude {
     } catch {}
     const name = def?.fields.find((f) => f.kind === "markdown" && !f.private && typeof fields[f.name] === "string")?.name;
     const text = String((name ? fields[name] : Object.values(fields).find((v) => typeof v === "string")) ?? "");
+    // Plain-text label: cloze blanks become [answer], math loses its markup.
+    const TEX: Record<string, string> = { times: "×", cdot: "·", div: "÷", le: "≤", leq: "≤", ge: "≥", geq: "≥", ne: "≠", neq: "≠", approx: "≈", to: "→", rightarrow: "→", infty: "∞", pi: "π", mu: "µ", alpha: "α", beta: "β", lambda: "λ", sum: "Σ", sqrt: "√", ldots: "…", dots: "…" };
     return text
       .replace(/```[\s\S]*?```/g, " [code] ")
-      .replace(/\$\$([\s\S]*?)\$\$/g, "$1")
-      .replace(/[*_`#>|]/g, "")
       .replace(/\{\{([^}|:]+)[^}]*\}\}/g, "[$1]")
+      .replace(/\\(?:text|mathrm|mathbf|operatorname)\{([^}]*)\}/g, "$1")
+      .replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, "$1/$2")
+      .replace(/\\([a-zA-Z]+)/g, (m, n) => TEX[n] ?? "")
+      .replace(/[_^]\{([^}]*)\}/g, "$1")
+      .replace(/\\[,;! ]/g, " ")
+      .replace(/[{}$]/g, "")
+      .replace(/[*_`#>|]/g, "")
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 160);

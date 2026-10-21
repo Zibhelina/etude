@@ -1,0 +1,1205 @@
+{
+  "etude": "pack/1",
+  "name": "Etude Showcase",
+  "description": "One card per idea, each showing something a normal flashcard app can't do: cards you play, drag, hear, draw, code and derive in, graded by scripts that actually check the work, with fresh variants every review.",
+  "presets": [
+    {
+      "id": "showcase",
+      "name": "Showcase (no limits)",
+      "config": {
+        "newPerDay": 9999,
+        "reviewsPerDay": 9999,
+        "newOrder": "deck"
+      }
+    }
+  ],
+  "decks": [
+    {
+      "name": "Etude Showcase",
+      "preset": "showcase",
+      "description": "A tour of what Etude cards can be. Every card is a different exhibit.",
+      "instructions": "This is a demo deck. Grade fairly: right ideas in different words are correct."
+    },
+    {
+      "name": "Etude Showcase::1 Answer anything",
+      "description": "Code that runs, math checked for equivalence, proofs in live LaTeX, drawings read by a vision model."
+    },
+    {
+      "name": "Etude Showcase::2 Math and science",
+      "description": "Drag, fit and tune: geometry and functions you manipulate directly."
+    },
+    {
+      "name": "Etude Showcase::3 Computing",
+      "description": "Regexes run against tests, traces, traversals and bugs you point at."
+    },
+    {
+      "name": "Etude Showcase::4 Music and senses",
+      "description": "Cards you hear and play."
+    },
+    {
+      "name": "Etude Showcase::5 Games",
+      "description": "Boards, clocks and quick reflexes."
+    }
+  ],
+  "types": [
+    {
+      "id": "balance",
+      "name": "Balance the equation",
+      "description": "Balance a chemical equation with coefficient steppers and a live atom tally. The grader parses the formulas itself: smallest whole numbers is full credit, balanced but not reduced is partial.",
+      "fields": [
+        {
+          "name": "reactants",
+          "kind": "list",
+          "required": true,
+          "description": "Formulas on the left, e.g. C3H8, O2. Parentheses are fine: Ca(OH)2, Al2(SO4)3."
+        },
+        {
+          "name": "products",
+          "kind": "list",
+          "required": true,
+          "description": "Formulas on the right."
+        },
+        {
+          "name": "prompt",
+          "kind": "markdown",
+          "description": "Optional context shown above the equation."
+        },
+        {
+          "name": "max",
+          "kind": "number",
+          "default": 12,
+          "description": "Largest coefficient the steppers allow."
+        },
+        {
+          "name": "explanation",
+          "kind": "markdown",
+          "private": true
+        }
+      ],
+      "grader": {
+        "kind": "script",
+        "code": "// Parses the formulas and recounts every element; it doesn't just compare with the stored solution.\nfunction parse(f) {\n  let i = 0;\n  const s = String(f).replace(/\\s+/g, \"\");\n  const num = () => {\n    let n = \"\";\n    while (i < s.length && /\\d/.test(s[i])) n += s[i++];\n    return n ? Number(n) : 1;\n  };\n  function group() {\n    const out = {};\n    while (i < s.length && s[i] !== \")\") {\n      let part;\n      if (s[i] === \"(\") { i++; part = group(); i++; }\n      else {\n        const m = /^[A-Z][a-z]?/.exec(s.slice(i));\n        if (!m) throw new Error(\"can't read \" + f);\n        i += m[0].length;\n        part = { [m[0]]: 1 };\n      }\n      const k = num();\n      for (const [e, c] of Object.entries(part)) out[e] = (out[e] ?? 0) + c * k;\n    }\n    return out;\n  }\n  return group();\n}\nconst species = [...view.reactants, ...view.products];\nconst atoms = species.map(parse);\nconst nl = view.reactants.length;\nconst elements = [];\nfor (const a of atoms) for (const e of Object.keys(a)) if (!elements.includes(e)) elements.push(e);\n\nconst c = Array.isArray(answer) ? answer.map(Number) : [];\nif (c.length !== species.length || !c.every((x) => Number.isInteger(x) && x >= 1))\n  return { score: 0, feedback: \"Every species needs a whole-number coefficient of at least 1.\", details: { tally: [] } };\n\nconst tally = elements.map((e) => {\n  let left = 0, right = 0;\n  atoms.forEach((a, k) => (k < nl ? (left += (a[e] ?? 0) * c[k]) : (right += (a[e] ?? 0) * c[k])));\n  return { element: e, left, right };\n});\nconst off = tally.filter((t) => t.left !== t.right);\nconst gcd = (a, b) => (b ? gcd(b, a % b) : a);\nconst g = c.reduce((a, b) => gcd(a, b));\nif (off.length) {\n  return {\n    score: 0,\n    feedback: `Not balanced: ${off.map((t) => `${t.element} is ${t.left} on the left, ${t.right} on the right`).join(\"; \")}.`,\n    details: { tally, balanced: false },\n  };\n}\nif (g > 1) {\n  return {\n    score: 0.75,\n    feedback: `Balanced, but every coefficient divides by ${g}. The convention is the smallest whole numbers: ${c.map((x) => x / g).join(\", \")}.`,\n    details: { tally, balanced: true, reduced: false, divisor: g },\n  };\n}\nreturn { score: 1, details: { tally, balanced: true, reduced: true } };\n"
+      },
+      "prepare": "// Parses every formula into atom counts (public: the species are the question) and solves the\n// balanced coefficients exactly, by Gaussian elimination over fractions. The solution stays in the key.\nfunction parse(f) {\n  let i = 0;\n  const s = String(f).replace(/\\s+/g, \"\");\n  const num = () => {\n    let n = \"\";\n    while (i < s.length && /\\d/.test(s[i])) n += s[i++];\n    return n ? Number(n) : 1;\n  };\n  function group() {\n    const out = {};\n    while (i < s.length && s[i] !== \")\") {\n      let part;\n      if (s[i] === \"(\") {\n        i++;\n        part = group();\n        if (s[i] !== \")\") throw new Error(\"unclosed ( in \" + f);\n        i++;\n      } else {\n        const m = /^[A-Z][a-z]?/.exec(s.slice(i));\n        if (!m) throw new Error(\"can't read \" + f + \" at \" + s.slice(i));\n        i += m[0].length;\n        part = { [m[0]]: 1 };\n      }\n      const k = num();\n      for (const [e, c] of Object.entries(part)) out[e] = (out[e] ?? 0) + c * k;\n    }\n    return out;\n  }\n  const r = group();\n  if (i < s.length) throw new Error(\"stray ) in \" + f);\n  return r;\n}\n\nconst species = [...fields.reactants, ...fields.products];\nconst atoms = species.map(parse);\nconst nl = fields.reactants.length;\nconst elements = [];\nfor (const c of atoms) for (const e of Object.keys(c)) if (!elements.includes(e)) elements.push(e);\n\n// Fractions as [num, den] with small integers.\nconst gcd = (a, b) => (b ? gcd(b, a % b) : Math.abs(a));\nconst fr = (n, d = 1) => { const g = gcd(n, d) || 1; return d < 0 ? [-n / g, -d / g] : [n / g, d / g]; };\nconst sub = (a, b) => fr(a[0] * b[1] - b[0] * a[1], a[1] * b[1]);\nconst mul = (a, b) => fr(a[0] * b[0], a[1] * b[1]);\nconst div = (a, b) => fr(a[0] * b[1], a[1] * b[0]);\n\n// Rows: elements. Columns: species, products negated. Solve M c = 0.\nconst n = species.length;\nconst M = elements.map((e) => atoms.map((c, k) => fr((c[e] ?? 0) * (k < nl ? 1 : -1))));\nconst pivots = [];\nlet row = 0;\nfor (let col = 0; col < n && row < M.length; col++) {\n  const p = M.findIndex((r, i) => i >= row && r[col][0] !== 0);\n  if (p < 0) continue;\n  [M[row], M[p]] = [M[p], M[row]];\n  const pv = M[row][col];\n  M[row] = M[row].map((x) => div(x, pv));\n  for (let i = 0; i < M.length; i++) {\n    if (i === row || M[i][col][0] === 0) continue;\n    const f = M[i][col];\n    M[i] = M[i].map((x, j) => sub(x, mul(f, M[row][j])));\n  }\n  pivots.push(col);\n  row++;\n}\nlet solution = null;\nconst free = [...Array(n).keys()].filter((c) => !pivots.includes(c));\nif (free.length === 1) {\n  const fc = free[0];\n  const c = new Array(n).fill(null);\n  c[fc] = fr(1);\n  pivots.forEach((pc, r) => (c[pc] = fr(-M[r][fc][0], M[r][fc][1])));\n  const lcm = c.reduce((l, x) => (l * x[1]) / gcd(l, x[1]), 1);\n  let ints = c.map((x) => (x[0] * lcm) / x[1]);\n  const g = ints.reduce((a, b) => gcd(a, b));\n  ints = ints.map((x) => x / g);\n  if (ints.every((x) => x < 0)) ints = ints.map((x) => -x);\n  if (ints.every((x) => x > 0)) solution = ints;\n}\nif (!solution) throw new Error(\"this equation has no single balanced form; check the formulas\");\n\nconst max = Math.max(Math.max(...solution), Math.min(30, Number(fields.max) || 12));\nreturn {\n  view: {\n    prompt: fields.prompt ?? \"\",\n    reactants: fields.reactants,\n    products: fields.products,\n    atoms,\n    elements,\n    max,\n  },\n  key: { solution, explanation: fields.explanation ?? \"\" },\n};\n",
+      "template": {
+        "html": "<div class=\"sc-eyebrow\">Balance the equation</div>\n{{#prompt}}<div class=\"prose\">{{md:prompt}}</div>{{/prompt}}\n<div class=\"bl-eq\" role=\"group\" aria-label=\"Equation\"></div>\n<div class=\"bl-tally\" aria-live=\"polite\"></div>\n<p class=\"e-muted bl-hint only-answer\">Tap <b>+</b> and <b>−</b>, or focus a coefficient and use <kbd>↑</kbd> <kbd>↓</kbd> (or type a number). <kbd>←</kbd> <kbd>→</kbd> move between species.</p>\n<template data-on=\"result\">\n  <div class=\"e-reveal\">\n    <div class=\"bl-answer\"></div>\n    {{#explanation}}<div class=\"prose\">{{md:explanation}}</div>{{/explanation}}\n    <p class=\"sc-how\">The grader parsed every formula, parentheses included, and counted the atoms on each side with your coefficients, so any balanced answer is recognised and an unreduced one gets partial credit.</p>\n  </div>\n</template>\n",
+        "css": ".sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }\n.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }\n\n.bl-eq { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5rem 0.35rem; padding: 0.4rem 0; }\n.bl-op { font-size: 1.25rem; color: var(--muted-foreground); padding: 0 0.1rem; }\n.bl-op.arrow { padding: 0 0.3rem; }\n.bl-term { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.3rem 0.35rem; background: color-mix(in oklab, var(--foreground) 3%, transparent); transition: border-color 0.15s; }\n.bl-term:focus-within { border-color: color-mix(in oklab, var(--highlight) 60%, transparent); }\n.bl-mid { display: flex; align-items: baseline; gap: 0.15rem; padding: 0 0.25rem; }\n.bl-coef { width: 1.7em; font: 600 1.3rem var(--font-sans); font-variant-numeric: tabular-nums; text-align: right; color: var(--highlight); background: transparent; border: none; outline: none; padding: 0; border-radius: 0.3rem; }\n.bl-coef:focus { background: color-mix(in oklab, var(--highlight) 12%, transparent); }\n.bl-coef:disabled { color: var(--highlight); opacity: 1; }\n.bl-term.is-one .bl-coef { color: color-mix(in oklab, var(--foreground) 35%, transparent); }\n.bl-formula { font-size: 1.25rem; white-space: nowrap; }\n.bl-step { width: 100%; min-width: 2.75rem; height: 2.5rem; border: none; border-radius: calc(var(--radius) - 4px); background: transparent; color: var(--muted-foreground); font: 500 1.2rem var(--font-sans); cursor: pointer; touch-action: manipulation; }\n.bl-step:hover:not(:disabled) { background: var(--accent); color: var(--foreground); }\n.bl-step:disabled { opacity: 0.3; cursor: default; }\n[data-mode=\"result\"] .bl-step { visibility: hidden; height: 0.4rem; }\n.bl-eq.right .bl-term { border-color: color-mix(in oklab, var(--success) 70%, transparent); }\n.bl-eq.near .bl-term { border-color: color-mix(in oklab, var(--warning) 70%, transparent); }\n.bl-eq.wrong .bl-term { border-color: color-mix(in oklab, var(--danger) 60%, transparent); }\n\n.bl-tally { display: flex; flex-direction: column; gap: 0.5rem; align-items: center; }\n.bl-tally-head { font-size: 0.8rem; color: var(--muted-foreground); }\n.bl-tally.all-ok .bl-tally-head { color: var(--success); font-weight: 500; }\n.bl-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; }\n.bl-chip { display: grid; grid-template-columns: 2rem auto 2rem; align-items: center; border: 1px solid var(--border); border-radius: 999px; padding: 0.3rem 0.4rem; font-variant-numeric: tabular-nums; transition: border-color 0.15s, background 0.15s; }\n.bl-chip .n { text-align: center; font-weight: 600; font-size: 0.95rem; color: var(--danger); }\n.bl-chip .el { position: relative; text-align: center; padding: 0 0.35rem 0.35rem; font-size: 1rem; }\n.bl-chip .beam { position: absolute; left: 0; right: 0; bottom: 0.05rem; height: 2px; border-radius: 1px; background: color-mix(in oklab, var(--danger) 70%, transparent); transform: rotate(calc(var(--tilt) * 14deg)); transition: transform 0.25s, background 0.15s; }\n.bl-chip.ok { border-color: color-mix(in oklab, var(--success) 60%, transparent); background: color-mix(in oklab, var(--success) 10%, transparent); }\n.bl-chip.ok .n { color: var(--success); }\n.bl-chip.ok .beam { background: var(--success); }\n.bl-hint { font-size: 0.85rem; text-align: center; margin-top: -0.4rem; }\n.bl-final { font-size: 1.05rem; overflow-x: auto; }\n.bl-final .katex-display { margin: 0.25rem 0; }\n",
+        "js": "const { view } = etude;\nconst nl = view.reactants.length;\nconst species = [...view.reactants, ...view.products];\nconst max = view.max;\n// Digits after an element or a closing bracket are subscripts: Al2(SO4)3 → \\mathrm{Al_2(SO_4)_3}.\nconst formulaTex = (f) => \"\\\\mathrm{\" + String(f).replace(/([A-Za-z)])(\\d+)/g, \"$1_{$2}\") + \"}\";\nconst tex = (s) => etude.mdInline(\"$\" + s + \"$\");\n\nlet coef = Array.isArray(etude.answer) && etude.answer.length === species.length ? etude.answer.map((x) => Math.max(1, Math.min(max, Number(x) || 1))) : species.map(() => 1);\n\nconst eq = etude.$(\".bl-eq\");\nconst parts = [];\nspecies.forEach((f, k) => {\n  if (k === nl) parts.push(`<span class=\"bl-op arrow\">${tex(\"\\\\longrightarrow\")}</span>`);\n  else if (k > 0) parts.push(`<span class=\"bl-op\">${tex(\"+\")}</span>`);\n  parts.push(`\n    <div class=\"bl-term\" data-k=\"${k}\">\n      <button type=\"button\" class=\"bl-step up\" data-d=\"1\" aria-label=\"More ${etude.escape(f)}\">+</button>\n      <div class=\"bl-mid\">\n        <input class=\"bl-coef\" inputmode=\"numeric\" aria-label=\"Coefficient of ${etude.escape(f)}\" value=\"${coef[k]}\" autocomplete=\"off\">\n        <span class=\"bl-formula\">${tex(formulaTex(f))}</span>\n      </div>\n      <button type=\"button\" class=\"bl-step down\" data-d=\"-1\" aria-label=\"Fewer ${etude.escape(f)}\">\\u2212</button>\n    </div>`);\n});\neq.innerHTML = parts.join(\"\");\nconst inputs = etude.$$(\".bl-coef\");\n\nconst tallyBox = etude.$(\".bl-tally\");\nconst count = () =>\n  view.elements.map((e) => {\n    let left = 0, right = 0;\n    view.atoms.forEach((a, k) => (k < nl ? (left += (a[e] ?? 0) * coef[k]) : (right += (a[e] ?? 0) * coef[k])));\n    return { e, left, right };\n  });\nconst render = () => {\n  inputs.forEach((el, k) => {\n    if (document.activeElement !== el || el.value !== \"\") el.value = String(coef[k]);\n    el.closest(\".bl-term\").classList.toggle(\"is-one\", coef[k] === 1);\n    el.closest(\".bl-term\").querySelector(\".down\").disabled = etude.mode !== \"answer\" || coef[k] <= 1;\n    el.closest(\".bl-term\").querySelector(\".up\").disabled = etude.mode !== \"answer\" || coef[k] >= max;\n  });\n  const t = count();\n  const done = t.every((x) => x.left === x.right);\n  tallyBox.innerHTML =\n    `<div class=\"bl-tally-head\"><span>${done ? \"Every element balances\" : \"Atoms, left vs right\"}</span></div>` +\n    `<div class=\"bl-chips\">${t\n      .map((x) => {\n        const cls = x.left === x.right ? \"ok\" : \"\";\n        const tilt = Math.max(-1, Math.min(1, (x.right - x.left) / Math.max(x.left, x.right, 1)));\n        return `<div class=\"bl-chip ${cls}\" style=\"--tilt:${tilt}\">\n          <span class=\"n\">${x.left}</span>\n          <span class=\"el\">${tex(\"\\\\mathrm{\" + x.e + \"}\")}<i class=\"beam\"></i></span>\n          <span class=\"n\">${x.right}</span>\n        </div>`;\n      })\n      .join(\"\")}</div>`;\n  tallyBox.classList.toggle(\"all-ok\", done);\n};\nconst set = (k, v) => {\n  if (etude.mode !== \"answer\") return;\n  coef[k] = Math.max(1, Math.min(max, Math.round(v) || 1));\n  render();\n};\n\neq.addEventListener(\"click\", (e) => {\n  const b = e.target.closest(\".bl-step\");\n  if (!b || b.disabled) return;\n  const k = Number(b.closest(\".bl-term\").dataset.k);\n  set(k, coef[k] + Number(b.dataset.d));\n});\ninputs.forEach((el, k) => {\n  el.addEventListener(\"input\", () => {\n    const v = el.value.replace(/\\D/g, \"\").slice(0, 2);\n    el.value = v;\n    if (v) set(k, Number(v));\n  });\n  el.addEventListener(\"blur\", render);\n  el.addEventListener(\"focus\", () => el.select());\n  el.addEventListener(\"keydown\", (e) => {\n    if (e.key === \"ArrowUp\" || e.key === \"ArrowDown\") {\n      e.preventDefault();\n      set(k, coef[k] + (e.key === \"ArrowUp\" ? 1 : -1));\n      el.select();\n    } else if (e.key === \"ArrowRight\" && el.selectionStart === el.value.length) {\n      e.preventDefault();\n      inputs[(k + 1) % inputs.length].focus();\n    } else if (e.key === \"ArrowLeft\" && el.selectionStart === 0) {\n      e.preventDefault();\n      inputs[(k - 1 + inputs.length) % inputs.length].focus();\n    } else if (e.key === \"Enter\") {\n      e.preventDefault();\n      etude.submit();\n    }\n  });\n});\n\nrender();\netude.getAnswer(() => coef.slice());\n\netude.onResult(({ grade, key, answer }) => {\n  if (Array.isArray(answer) && answer.length === species.length) coef = answer.map(Number);\n  inputs.forEach((el) => (el.disabled = true));\n  render();\n  const preview = document.body.dataset.preview === \"1\";\n  const sol = key.solution;\n  if (!preview) {\n    const d = grade?.details ?? {};\n    eq.classList.add(grade?.score >= 1 ? \"right\" : d.balanced ? \"near\" : \"wrong\");\n  }\n  const show = sol.map((c, k) => (c === 1 ? \"\" : c + \"\\\\,\") + formulaTex(species[k]));\n  const left = show.slice(0, nl).join(\" + \"), right = show.slice(nl).join(\" + \");\n  const same = !preview && grade?.score >= 1;\n  etude.$(\".bl-answer\").innerHTML =\n    `<div class=\"e-section-title\">${same ? \"Balanced\" : \"Balanced with the smallest whole numbers\"}</div>` +\n    `<div class=\"bl-final\">${etude.md(\"$$\" + left + \" \\\\longrightarrow \" + right + \"$$\")}</div>`;\n});\n"
+      }
+    },
+    {
+      "id": "bits",
+      "name": "Flip the bits",
+      "description": "Set binary switches to make a number, unsigned or two's complement. A fresh target every review; graded exactly.",
+      "fields": [
+        {
+          "name": "note",
+          "kind": "markdown",
+          "description": "Optional line shown under the number (also the card's title in lists)."
+        },
+        {
+          "name": "width",
+          "kind": "number",
+          "default": 8,
+          "description": "Number of bits, 4 to 12."
+        },
+        {
+          "name": "signed",
+          "kind": "boolean",
+          "default": false,
+          "description": "Ask for two's-complement negative numbers."
+        },
+        {
+          "name": "target",
+          "kind": "number",
+          "description": "A fixed target. Empty: a new one every review."
+        },
+        {
+          "name": "showTotal",
+          "kind": "boolean",
+          "default": false,
+          "description": "Show the running decimal and hex while flipping (easier)."
+        },
+        {
+          "name": "explanation",
+          "kind": "markdown",
+          "private": true
+        }
+      ],
+      "grader": {
+        "kind": "script",
+        "code": "const given = typeof answer === \"string\" && /^[01]+$/.test(answer) && answer.length === view.width ? answer : \"\";\nconst w = view.width;\nconst value = given ? (view.signed && given[0] === \"1\" ? parseInt(given, 2) - 2 ** w : parseInt(given, 2)) : null;\nconst ok = given === key.pattern;\nconst wrongBits = given ? [...given].map((b, i) => (b !== key.pattern[i] ? i : -1)).filter((i) => i >= 0) : [];\nlet feedback;\nconst fmt = (v) => (v < 0 ? \"−\" + -v : String(v));\nif (!ok) feedback = value === null ? \"No bit pattern.\" : `Your bits make ${fmt(value)}, not ${fmt(view.target)}. ${wrongBits.length} bit${wrongBits.length === 1 ? \" is\" : \"s are\"} off.`;\nreturn { score: ok ? 1 : 0, feedback, details: { value, wrongBits } };\n"
+      },
+      "prepare": "const w = Math.min(12, Math.max(4, Math.round(Number(fields.width) || 8)));\nconst signed = fields.signed === true;\nconst lo = signed ? -(2 ** (w - 1)) : 0;\nconst hi = signed ? 2 ** (w - 1) - 1 : 2 ** w - 1;\nlet target = Number(fields.target);\nif (!Number.isInteger(target) || target < lo || target > hi) {\n  // Unsigned: avoid trivial targets with only one or two bits set. Signed: always negative.\n  if (signed) target = -rng.int(2, 2 ** (w - 1));\n  else {\n    const ones = (v) => v.toString(2).split(\"\").filter((c) => c === \"1\").length;\n    do target = rng.int(Math.ceil(hi / 8), hi - 1); while (ones(target) < 3);\n  }\n}\nconst pattern = ((target + 2 ** w) % 2 ** w).toString(2).padStart(w, \"0\");\nreturn {\n  view: { width: w, signed, target, showTotal: fields.showTotal === true, note: fields.note ?? \"\" },\n  key: { pattern, explanation: fields.explanation ?? \"\" },\n};\n",
+      "template": {
+        "html": "<div class=\"sc-eyebrow\">Binary</div>\n<div class=\"bt-ask\"></div>\n{{#note}}<div class=\"prose e-muted bt-note\">{{md:note}}</div>{{/note}}\n<div class=\"bt-board\">\n  <div class=\"e-section-title only-result\">Your bits</div>\n  <div class=\"bt-row bt-attempt\" role=\"group\" aria-label=\"Bits\"></div>\n  <div class=\"bt-total\" aria-live=\"polite\"></div>\n</div>\n<p class=\"e-muted bt-help only-answer\">Tap a switch to flip it. Keyboard: <kbd>←</kbd> <kbd>→</kbd> to move, <kbd>Space</kbd> or <kbd>0</kbd>/<kbd>1</kbd> to set.</p>\n<template data-on=\"result\">\n  <div class=\"e-reveal\">\n    <div class=\"bt-truth-wrap\">\n      <div class=\"e-section-title\">Correct pattern</div>\n      <div class=\"bt-row bt-truth\"></div>\n    </div>\n    <div class=\"bt-sum\"></div>\n    {{#explanation}}<div class=\"prose\">{{md:explanation}}</div>{{/explanation}}\n    <p class=\"sc-how\">The number was picked for this review, so you can't memorise the pattern; you have to rebuild it from place values each time.</p>\n  </div>\n</template>\n",
+        "css": ".sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }\n.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }\n\n/* Code should read literally: no fused glyphs from ligature fonts. */\n#card, #card * { font-variant-ligatures: none; font-feature-settings: \"liga\" 0, \"calt\" 0; }\n\n.bt-ask { font-size: 1.1rem; line-height: 1.5; }\n.bt-ask .num { font: 600 2.2rem/1.1 var(--font-mono); letter-spacing: -0.02em; display: block; margin-top: 0.2rem; }\n.bt-ask .sub { color: var(--muted-foreground); font-size: 0.92rem; }\n\n.bt-board { display: flex; flex-direction: column; align-items: center; gap: 0.8rem; }\n.bt-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.7rem; }\n.bt-nib { display: flex; gap: 0.25rem; }\n.bt-bit {\n  width: 2.7rem; min-width: 40px; padding: 0.35rem 0 0.45rem;\n  display: flex; flex-direction: column; align-items: center; gap: 0.3rem;\n  border: 1px solid var(--border); border-radius: calc(var(--radius) - 3px);\n  background: transparent; color: var(--foreground); font: inherit; cursor: pointer;\n  transition: background 0.15s, border-color 0.15s, transform 0.08s;\n  -webkit-tap-highlight-color: transparent; touch-action: manipulation;\n}\n.bt-bit:active { transform: scale(0.95); }\n.bt-bit:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 35%, transparent); }\n.bt-bit .pv { font: 0.72rem/1 var(--font-mono); color: var(--muted-foreground); white-space: nowrap; }\n.bt-bit .v { font: 600 1.45rem/1 var(--font-mono); color: color-mix(in oklab, var(--foreground) 35%, transparent); }\n.bt-bit .led { width: 1.4rem; height: 0.32rem; border-radius: 999px; background: color-mix(in oklab, var(--foreground) 12%, transparent); transition: background 0.15s, box-shadow 0.15s; }\n.bt-bit[aria-pressed=\"true\"] { border-color: color-mix(in oklab, var(--highlight) 60%, var(--border)); background: color-mix(in oklab, var(--highlight) 10%, transparent); }\n.bt-bit[aria-pressed=\"true\"] .v { color: var(--foreground); }\n.bt-bit[aria-pressed=\"true\"] .led { background: var(--highlight); box-shadow: 0 0 10px color-mix(in oklab, var(--highlight) 60%, transparent); }\n.bt-bit.neg .pv { color: color-mix(in oklab, var(--warning) 70%, var(--foreground)); font-weight: 600; }\n.bt-bit:disabled { cursor: default; transform: none; }\n.bt-bit.off-by { border-color: var(--danger) !important; background: color-mix(in oklab, var(--danger) 14%, transparent) !important; }\n.bt-bit.off-by .v { color: var(--danger) !important; }\n.bt-bit.off-by .pv { color: var(--danger); }\n.bt-truth .bt-bit { cursor: default; }\n.bt-truth .bt-bit[aria-pressed=\"true\"] { border-color: color-mix(in oklab, var(--success) 60%, var(--border)); background: color-mix(in oklab, var(--success) 10%, transparent); }\n.bt-truth .bt-bit[aria-pressed=\"true\"] .led { background: var(--success); box-shadow: 0 0 10px color-mix(in oklab, var(--success) 55%, transparent); }\n\n.bt-total { font: 0.95rem var(--font-mono); color: var(--muted-foreground); min-height: 1.5em; text-align: center; }\n.bt-total b { color: var(--foreground); font-weight: 600; }\n.bt-total .u { white-space: nowrap; display: inline-block; }\n.bt-total div.u { display: block; white-space: normal; }\n.bt-total .t { color: var(--muted-foreground); }\n.bt-total .neg { color: color-mix(in oklab, var(--warning) 70%, var(--foreground)); }\n.bt-total.right b { color: var(--success); }\n.bt-total.wrong b { color: var(--danger); }\n.bt-sum { font: 0.95rem/1.7 var(--font-mono); overflow-wrap: anywhere; text-align: center; }\n.bt-nib-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }\n.bt-hexdigit { font: 600 0.9rem var(--font-mono); color: var(--foreground); border-top: 1px solid var(--border); padding-top: 0.15rem; align-self: stretch; text-align: center; }\n.bt-truth-wrap .e-section-title { text-align: center; }\n.bt-sum .t { color: var(--muted-foreground); }\n.bt-sum .neg { color: color-mix(in oklab, var(--warning) 70%, var(--foreground)); }\n.bt-sum .hex { margin-top: 0.15rem; }\n.bt-sum .hex b, .bt-sum .eq b { color: var(--foreground); font-weight: 600; }\n.bt-help { font-size: 0.82rem; margin: -0.5rem 0 0; text-align: center; }\n.bt-attempt.all-right .bt-bit[aria-pressed=\"true\"] { border-color: color-mix(in oklab, var(--success) 60%, var(--border)); background: color-mix(in oklab, var(--success) 10%, transparent); }\n.bt-attempt.all-right .bt-bit[aria-pressed=\"true\"] .led { background: var(--success); box-shadow: 0 0 10px color-mix(in oklab, var(--success) 55%, transparent); }\n.bt-board[hidden] { display: none; }\n.bt-note { font-size: 0.92rem; margin-top: -0.75rem; }\n.bt-truth[hidden] { display: none; }\n.bt-hexdigit { margin-top: 0.15rem; }\n",
+        "js": "const { view } = etude;\nconst w = view.width;\nconst place = (i) => {\n  // i counts from the left (most significant). In two's complement the top bit is worth -2^(w-1).\n  const p = 2 ** (w - 1 - i);\n  return view.signed && i === 0 ? -p : p;\n};\nconst valueOf = (bits) => bits.reduce((s, b, i) => s + (b ? place(i) : 0), 0);\nconst hexOf = (bits) => \"0x\" + parseInt(bits.map(Number).join(\"\"), 2).toString(16).toUpperCase().padStart(Math.ceil(w / 4), \"0\");\nconst fmtPlace = (v) => (v < 0 ? \"−\" + Math.abs(v) : String(v));\n\netude.$(\".bt-ask\").innerHTML = view.signed\n  ? `Make this number in ${w}-bit two's complement:<span class=\"num\">${fmtPlace(view.target)}</span><span class=\"sub\">The top bit is worth ${fmtPlace(place(0))}.</span>`\n  : `Set the switches to make<span class=\"num\">${view.target}</span><span class=\"sub\">${w} bits, unsigned.</span>`;\n\nconst build = (row, bits, interactive, hex = false) => {\n  const groups = [];\n  // Nibbles from the right, so 12 bits read 4-4-4 and 6 bits read 2-4.\n  let i = w;\n  while (i > 0) { groups.unshift([Math.max(0, i - 4), i]); i -= 4; }\n  // With hex on, each nibble gets its hex digit underneath: that's the whole trick of hex.\n  const digit = ([a, b]) => parseInt(bits.slice(a, b).map(Number).join(\"\"), 2).toString(16).toUpperCase();\n  row.innerHTML = groups.map(([a, b]) => `${hex ? '<div class=\"bt-nib-wrap\">' : \"\"}<div class=\"bt-nib\">${Array.from({ length: b - a }, (_, k) => {\n    const j = a + k;\n    return `<button type=\"button\" class=\"bt-bit${place(j) < 0 ? \" neg\" : \"\"}\" data-i=\"${j}\" aria-pressed=\"${bits[j]}\" aria-label=\"Bit worth ${fmtPlace(place(j))}\" ${interactive ? \"\" : 'tabindex=\"-1\"'}>\n      <span class=\"pv\">${fmtPlace(place(j))}</span><span class=\"v\">${bits[j] ? 1 : 0}</span><span class=\"led\"></span></button>`;\n  }).join(\"\")}</div>${hex ? `<span class=\"bt-hexdigit\">${digit([a, b])}</span></div>` : \"\"}`).join(\"\");\n  return [...row.querySelectorAll(\".bt-bit\")];\n};\n\nlet bits = Array(w).fill(false);\nif (typeof etude.answer === \"string\" && etude.answer.length === w) bits = [...etude.answer].map((c) => c === \"1\");\nconst row = etude.$(\".bt-attempt\");\nconst btns = build(row, bits, true);\nconst total = etude.$(\".bt-total\");\nlet touched = bits.some(Boolean);\n\nconst paint = () => {\n  btns.forEach((b, i) => { b.setAttribute(\"aria-pressed\", String(bits[i])); b.querySelector(\".v\").textContent = bits[i] ? \"1\" : \"0\"; });\n  if (view.showTotal || etude.mode !== \"answer\") total.innerHTML = `<span class=\"u\">= <b>${fmtPlace(valueOf(bits))}</b></span> <span class=\"u\"><span class=\"t\">hex</span> ${hexOf(bits)}</span>`;\n  else total.textContent = \"\";\n  etude.setReady(etude.mode === \"answer\" && touched);\n};\nconst set = (i, v) => {\n  if (etude.mode !== \"answer\") return;\n  bits[i] = v;\n  touched = true;\n  paint();\n};\nrow.addEventListener(\"click\", (e) => {\n  const b = e.target.closest(\".bt-bit\");\n  if (b) set(Number(b.dataset.i), !bits[Number(b.dataset.i)]);\n});\nrow.addEventListener(\"keydown\", (e) => {\n  const b = e.target.closest(\".bt-bit\");\n  // Ctrl/Cmd+Enter belongs to the app (submit); don't let it toggle the focused bit.\n  if (!b || etude.mode !== \"answer\" || e.ctrlKey || e.metaKey || e.altKey) return;\n  const i = Number(b.dataset.i);\n  if (e.key === \"ArrowRight\") { e.preventDefault(); btns[i + 1]?.focus(); }\n  else if (e.key === \"ArrowLeft\") { e.preventDefault(); btns[i - 1]?.focus(); }\n  else if (e.key === \"0\" || e.key === \"1\") { e.preventDefault(); set(i, e.key === \"1\"); btns[i + 1]?.focus(); }\n  else if (e.key === \" \" || e.key === \"Enter\") { e.preventDefault(); set(i, !bits[i]); }\n});\npaint();\netude.getAnswer(() => bits.map(Number).join(\"\"));\n\netude.onResult(({ key, answer }) => {\n  const attempted = typeof answer === \"string\" && answer.length === w;\n  if (attempted) bits = [...answer].map((c) => c === \"1\");\n  const truth = [...key.pattern].map((c) => c === \"1\");\n  // Previews (Browse, the type editor) have no attempt: show only the answer.\n  if (!attempted) {\n    row.closest(\".bt-board\").hidden = true;\n  }\n  btns.forEach((b, i) => { b.disabled = true; b.classList.toggle(\"off-by\", attempted && bits[i] !== truth[i]); });\n  paint();\n  const right = bits.every((v, i) => v === truth[i]);\n  total.classList.add(right ? \"right\" : \"wrong\");\n  row.classList.toggle(\"all-right\", right);\n  // A wrong attempt shows its own sum, so the missing or extra term is easy to spot.\n  if (!right) {\n    const mine = bits.map((v, i) => (v ? place(i) : null)).filter((v) => v !== null);\n    const terms = mine.map((v, k) => (v < 0 ? `<span class=\"neg\">${fmtPlace(v)}</span>` : k === 0 ? v : ` + ${v}`)).join(\"\") || \"0\";\n    total.innerHTML = `<div class=\"u\">${terms} = <b>${fmtPlace(valueOf(bits))}</b></div><div class=\"u\"><span class=\"t\">hex</span> ${hexOf(bits)}</div>`;\n  }\n  if (attempted && right) {\n    // Nothing to compare: the attempt row gets the hex digits and the second row goes.\n    build(row, bits, false, true).forEach((b) => (b.disabled = true));\n    etude.$(\".bt-truth\").hidden = true;\n    etude.$(\".bt-truth-wrap .e-section-title\").textContent = \"Why it works\";\n  } else build(etude.$(\".bt-truth\"), truth, false, true).forEach((b) => (b.disabled = true));\n  const terms = truth.map((v, i) => (v ? place(i) : null)).filter((v) => v !== null);\n  const sum = terms.map((v, k) => (v < 0 ? `<span class=\"neg\">${fmtPlace(v)}</span>` : k === 0 ? v : ` + ${v}`)).join(\"\");\n  etude.$(\".bt-sum\").innerHTML =\n    `<div class=\"eq\">${sum || \"0\"} = <b>${fmtPlace(view.target)}</b></div>` +\n    (attempted && right ? \"\" : `<div class=\"hex\"><span class=\"t\">hex</span> <b>${hexOf(truth)}</b></div>`);\n});\n"
+      }
+    },
+    {
+      "id": "bug-hunt",
+      "name": "Find the bug",
+      "description": "Tap the buggy line (or lines) in a short listing. Graded by the exact line set, with partial credit; the fix and the reason appear afterwards.",
+      "fields": [
+        {
+          "name": "prompt",
+          "kind": "markdown",
+          "required": true,
+          "description": "What the code is supposed to do."
+        },
+        {
+          "name": "code",
+          "kind": "code",
+          "required": true,
+          "description": "The listing, 8 to 18 lines."
+        },
+        {
+          "name": "language",
+          "kind": "text",
+          "default": "python",
+          "description": "For highlighting: python, c, javascript…"
+        },
+        {
+          "name": "count",
+          "kind": "number",
+          "default": 1,
+          "description": "How many lines the learner should pick."
+        },
+        {
+          "name": "bugs",
+          "kind": "json",
+          "required": true,
+          "private": true,
+          "description": "Line numbers (1-based) of the bug, e.g. [8]."
+        },
+        {
+          "name": "fix",
+          "kind": "json",
+          "private": true,
+          "description": "Fixed lines: { \"8\": \"    for i in range(k, len(xs)):\" }."
+        },
+        {
+          "name": "explanation",
+          "kind": "markdown",
+          "private": true
+        }
+      ],
+      "grader": {
+        "kind": "script",
+        "code": "const given = [...new Set((Array.isArray(answer) ? answer : []).map(Number))].sort((a, b) => a - b);\nconst bugs = new Set(key.bugs);\nconst right = given.filter((n) => bugs.has(n));\nconst wrong = given.filter((n) => !bugs.has(n));\nconst missed = key.bugs.filter((n) => !given.includes(n));\nconst score = right.length / Math.max(key.bugs.length, given.length, 1);\nconst lines = (xs) => (xs.length === 1 ? `line ${xs[0]}` : `lines ${xs.join(\", \")}`);\nlet feedback;\nif (!given.length) feedback = \"No line picked.\";\nelse if (score < 1) {\n  const parts = [];\n  if (right.length) parts.push(`${lines(right)} ${right.length === 1 ? \"is\" : \"are\"} right`);\n  if (wrong.length) parts.push(`${lines(wrong)} ${wrong.length === 1 ? \"is\" : \"are\"} fine as written`);\n  if (missed.length) parts.push(`the bug is on ${lines(missed)}`);\n  feedback = parts.join(\"; \") + \".\";\n  feedback = feedback[0].toUpperCase() + feedback.slice(1);\n}\nreturn { score, feedback, details: { right, wrong, missed } };\n"
+      },
+      "prepare": "const code = String(fields.code ?? \"\").replace(/\\r\\n?/g, \"\\n\").replace(/\\n+$/, \"\");\nconst bugs = (Array.isArray(fields.bugs) ? fields.bugs : [fields.bugs]).map(Number).filter((n) => Number.isInteger(n) && n > 0);\nconst fix = fields.fix && typeof fields.fix === \"object\" && !Array.isArray(fields.fix) ? fields.fix : {};\nconst count = Math.max(1, Math.round(Number(fields.count) || bugs.length || 1));\nreturn {\n  view: { prompt: fields.prompt, code, language: String(fields.language || \"text\").toLowerCase(), count, lines: code.split(\"\\n\").length },\n  key: { bugs: [...new Set(bugs)].sort((a, b) => a - b), fix, explanation: fields.explanation ?? \"\" },\n};\n",
+      "template": {
+        "html": "<div class=\"sc-eyebrow\">Bug hunt</div>\n<div class=\"prose\">{{md:prompt}}</div>\n<div class=\"bh-head e-row\">\n  <span class=\"bh-ask\"></span>\n  <span class=\"bh-lang\">{{language}}</span>\n</div>\n<div class=\"bh-listing\" role=\"listbox\" aria-label=\"Code listing\"><div class=\"bh-lines\"></div></div>\n<p class=\"e-muted bh-help only-answer\">Tap a line to mark it, again to unmark. Keyboard: <kbd>↑</kbd> <kbd>↓</kbd> to move, <kbd>Space</kbd> to mark.</p>\n<template data-on=\"result\">\n  <div class=\"e-reveal\">\n    {{#explanation}}<div class=\"prose\">{{md:explanation}}</div>{{/explanation}}\n    <p class=\"sc-how\">You pointed at code instead of recalling a sentence, and the grader checked the exact lines you picked. The fix is shown in place, where the bug lives.</p>\n  </div>\n</template>\n",
+        "css": ".sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }\n.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }\n\n/* Code should read literally: no fused glyphs from ligature fonts. */\n#card, #card * { font-variant-ligatures: none; font-feature-settings: \"liga\" 0, \"calt\" 0; }\n\n.bh-head { justify-content: space-between; margin-bottom: -0.75rem; font-size: 0.9rem; }\n.bh-ask { color: var(--muted-foreground); }\n.bh-ask b { color: var(--foreground); font-weight: 600; }\n.bh-lang { font: 0.72rem var(--font-mono); color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 999px; padding: 0.05rem 0.55rem; }\n\n.bh-listing {\n  border: 1px solid var(--border); border-radius: var(--radius);\n  background: color-mix(in oklab, var(--muted) 70%, transparent);\n  overflow-x: auto; padding: 0.4rem 0;\n  -webkit-overflow-scrolling: touch;\n  scrollbar-width: thin;\n  scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent;\n}\n.bh-listing::-webkit-scrollbar { height: 6px; }\n.bh-listing::-webkit-scrollbar-button { display: none; }\n.bh-listing::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--foreground) 22%, transparent); border-radius: 3px; }\n.bh-listing::-webkit-scrollbar-track { background: transparent; }\n.bh-lines { display: flex; flex-direction: column; width: max-content; min-width: 100%; }\n.bh-line {\n  display: flex; align-items: center; min-height: 2rem;\n  font: 0.86rem/1.5 var(--font-mono); cursor: pointer; outline: none;\n  border-left: 3px solid transparent; padding-right: 1rem;\n  transition: background 0.12s, border-color 0.12s;\n  -webkit-tap-highlight-color: transparent;\n}\n@media (pointer: coarse) { .bh-line { min-height: 2.5rem; } }\n.bh-line .ln {\n  flex: none; width: 2.6rem; padding-right: 0.9rem; text-align: right;\n  color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);\n  font-variant-numeric: tabular-nums; user-select: none;\n}\n.bh-line .src { white-space: pre; tab-size: 4; }\n.bh-line:hover { background: color-mix(in oklab, var(--foreground) 5%, transparent); }\n.bh-line:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--ring) 60%, transparent); }\n.bh-line.picked { background: color-mix(in oklab, var(--highlight) 13%, transparent); border-left-color: var(--highlight); }\n.bh-line.picked .ln { color: var(--highlight); }\n[data-mode=\"result\"] .bh-line { cursor: default; }\n[data-mode=\"result\"] .bh-line:hover { background: none; }\n.bh-line.r-right { background: color-mix(in oklab, var(--success) 13%, transparent) !important; border-left-color: var(--success); }\n.bh-line.r-wrong { background: color-mix(in oklab, var(--danger) 12%, transparent) !important; border-left-color: var(--danger); }\n.bh-line.r-missed { background: color-mix(in oklab, var(--warning) 12%, transparent) !important; border-left-color: var(--warning); }\n.bh-line.r-right .ln, .bh-line.r-wrong .ln, .bh-line.r-missed .ln { color: var(--foreground); }\n.bh-line.r-bug .txt { text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--danger) 80%, transparent); text-decoration-thickness: 1.5px; }\n.bh-line.fixline { cursor: default; background: color-mix(in oklab, var(--success) 9%, transparent) !important; border-left-color: var(--success); }\n.bh-line.fixline .ln { color: var(--success); font-weight: 700; }\n.bh-line.fixline:hover { background: color-mix(in oklab, var(--success) 9%, transparent); }\n.bh-help { font-size: 0.82rem; margin: -0.5rem 0 0; }\n",
+        "js": "const { view } = etude;\nconst box = etude.$(\".bh-lines\");\nconst raw = view.code.split(\"\\n\");\nconst need = view.count;\netude.$(\".bh-ask\").innerHTML = need === 1 ? \"Pick <b>the line</b> with the bug.\" : `Pick <b>${need} lines</b>: the bug spans more than one.`;\n\n// Split highlighted HTML into lines, reopening any span that crosses a newline.\nconst splitHtml = (html) => {\n  const out = [];\n  let open = [];\n  for (const line of html.split(\"\\n\")) {\n    let s = open.join(\"\");\n    for (const m of line.matchAll(/<\\/?span\\b[^>]*>/g)) {\n      if (m[0].startsWith(\"</\")) open.pop();\n      else open.push(m[0]);\n    }\n    s += line + \"</span>\".repeat(open.length);\n    out.push(s);\n  }\n  return out;\n};\nlet lineHtml = raw.map((l) => etude.escape(l));\nif (typeof etude.highlight === \"function\") {\n  try {\n    const html = await etude.highlight(view.code, view.language);\n    const split = splitHtml(String(html));\n    if (split.length === raw.length) lineHtml = split;\n  } catch { /* keep plain text */ }\n}\n// Leading indentation sits in its own span, so a strike-through only covers the code itself.\nconst body = (html) => {\n  const m = String(html).match(/^[ \\t]*/)[0];\n  return `<span class=\"ind\">${m}</span><span class=\"txt\">${String(html).slice(m.length) || \" \"}</span>`;\n};\nconst row = (n, html, cls = \"\") => `<div class=\"bh-line ${cls}\" data-n=\"${n}\" role=\"option\" aria-selected=\"false\" tabindex=\"-1\"><span class=\"ln\">${n}</span><span class=\"src\">${body(html)}</span></div>`;\nbox.innerHTML = lineHtml.map((h, i) => row(i + 1, h)).join(\"\");\nconst lines = etude.$$(\".bh-line\");\nlines[0].tabIndex = 0;\n\nconst picked = new Set(Array.isArray(etude.answer) ? etude.answer.map(Number) : []);\nconst paint = () => {\n  for (const el of lines) {\n    const on = picked.has(Number(el.dataset.n));\n    el.classList.toggle(\"picked\", on);\n    el.setAttribute(\"aria-selected\", String(on));\n  }\n  etude.setReady(etude.mode === \"answer\" && picked.size > 0);\n};\nconst toggle = (n) => {\n  if (etude.mode !== \"answer\") return;\n  if (picked.has(n)) picked.delete(n);\n  else {\n    // Picking past the limit replaces the oldest choice.\n    if (picked.size >= need) picked.delete(picked.values().next().value);\n    picked.add(n);\n  }\n  paint();\n};\nbox.addEventListener(\"click\", (e) => {\n  const el = e.target.closest(\".bh-line\");\n  if (el && !el.classList.contains(\"fixline\")) toggle(Number(el.dataset.n));\n});\nbox.addEventListener(\"keydown\", (e) => {\n  const el = e.target.closest(\".bh-line\");\n  if (!el || etude.mode !== \"answer\" || e.ctrlKey || e.metaKey || e.altKey) return;\n  const i = lines.indexOf(el);\n  const go = (j) => { if (lines[j]) { el.tabIndex = -1; lines[j].tabIndex = 0; lines[j].focus(); } };\n  if (e.key === \"ArrowDown\") { e.preventDefault(); go(i + 1); }\n  else if (e.key === \"ArrowUp\") { e.preventDefault(); go(i - 1); }\n  else if (e.key === \" \" || (e.key === \"Enter\" && !picked.size)) { e.preventDefault(); toggle(Number(el.dataset.n)); }\n});\npaint();\netude.getAnswer(() => [...picked].sort((a, b) => a - b));\n\netude.onResult(async ({ key, answer }) => {\n  if (Array.isArray(answer)) { picked.clear(); answer.forEach((n) => picked.add(Number(n))); }\n  const bugs = new Set(key.bugs);\n  for (const el of lines) {\n    const n = Number(el.dataset.n);\n    el.removeAttribute(\"tabindex\");\n    el.classList.remove(\"picked\");\n    if (bugs.has(n) && picked.has(n)) el.classList.add(\"r-right\");\n    else if (picked.has(n)) el.classList.add(\"r-wrong\");\n    else if (bugs.has(n)) el.classList.add(\"r-missed\");\n    if (bugs.has(n) && key.fix?.[n] != null) el.classList.add(\"r-bug\");\n  }\n  // The fixed version goes right under each bug line.\n  for (const n of key.bugs) {\n    const fix = key.fix?.[n];\n    if (fix == null) continue;\n    let html = etude.escape(fix);\n    if (typeof etude.highlight === \"function\") {\n      try { html = splitHtml(String(await etude.highlight(String(fix), view.language)))[0] ?? html; } catch { /* plain */ }\n    }\n    const el = lines[n - 1];\n    el?.insertAdjacentHTML(\"afterend\", row(\"+\", html, \"fixline\").replace('tabindex=\"-1\"', \"\").replace('role=\"option\" aria-selected=\"false\"', 'aria-label=\"Fixed line\"'));\n  }\n});\n"
+      }
+    },
+    {
+      "id": "color",
+      "name": "Make this color",
+      "description": "Read a hex code and build the color with hue, saturation and lightness sliders. Graded by perceptual distance in OKLab; a new color every review.",
+      "fields": [
+        {
+          "name": "prompt",
+          "kind": "markdown",
+          "default": "Build this color."
+        },
+        {
+          "name": "hex",
+          "kind": "text",
+          "private": true,
+          "description": "Optional fixed target like #3B82F6. Leave empty for a new color every review."
+        },
+        {
+          "name": "explanation",
+          "kind": "markdown",
+          "private": true
+        }
+      ],
+      "grader": {
+        "kind": "script",
+        "code": "function hslToRgb(h, s, l) {\n  s /= 100; l /= 100;\n  const k = (n) => (n + h / 30) % 12;\n  const a = s * Math.min(l, 1 - l);\n  const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));\n  return [f(0), f(8), f(4)].map((v) => Math.round(v * 255));\n}\n// sRGB 0..255 to OKLab (Björn Ottosson's matrices).\nfunction oklab(rgb) {\n  const [r, g, b] = rgb.map((v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });\n  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);\n  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);\n  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);\n  return [\n    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,\n    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,\n    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,\n  ];\n}\nif (!answer || ![answer.h, answer.s, answer.l].every(Number.isFinite)) return { score: 0, feedback: \"No color made.\", details: {} };\nconst mine = hslToRgb(answer.h, answer.s, answer.l);\nconst A = oklab(mine), B = oklab(key.rgb);\nconst dE = Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]);\n\n// About 0.02 is a just-noticeable difference side by side; matching from a hex code by eye is harder.\nconst FULL = 0.05, ZERO = 0.22;\nconst score = dE <= FULL ? 1 : dE >= ZERO ? 0 : 1 - (dE - FULL) / (ZERO - FULL);\n\n// Describe the difference in the terms of the sliders.\nconst [th, ts, tl] = key.hsl;\nconst notes = [];\nconst hueName = (h) => {\n  h = ((h % 360) + 360) % 360;\n  return h < 15 ? \"red\" : h < 45 ? \"orange\" : h < 70 ? \"yellow\" : h < 160 ? \"green\" : h < 195 ? \"cyan\" : h < 255 ? \"blue\" : h < 290 ? \"purple\" : h < 345 ? \"pink\" : \"red\";\n};\nconst dh = ((answer.h - th + 540) % 360) - 180;\nif (ts > 12 && tl > 8 && tl < 92 && Math.abs(dh) >= 8) {\n  const toward = hueName(th + Math.sign(dh) * 40);\n  notes.push(`hue ${Math.round(Math.abs(dh))}° off, toward ${toward === hueName(th) ? hueName(th + Math.sign(dh) * 80) : toward}`);\n}\nconst ds = answer.s - ts;\nif (Math.abs(ds) >= 10) notes.push(ds > 0 ? `${Math.abs(Math.round(ds))}% too saturated` : `${Math.abs(Math.round(ds))}% too grey`);\nconst dl = answer.l - tl;\nif (Math.abs(dl) >= 6) notes.push(dl > 0 ? `${Math.abs(Math.round(dl))}% too light` : `${Math.abs(Math.round(dl))}% too dark`);\nconst verdict = dE <= 0.025 ? \"Spot on\" : dE <= FULL ? \"Very close\" : dE <= 0.12 ? \"Close\" : dE <= ZERO ? \"In the neighbourhood\" : \"Far off\";\nreturn {\n  score: Math.round(score * 100) / 100,\n  feedback: score < 1 && notes.length ? `${verdict}: ${notes.join(\", \")}.` : undefined,\n  details: { dE: Math.round(dE * 1000) / 1000, verdict, notes, dh: Math.round(dh), ds: Math.round(ds), dl: Math.round(dl) },\n};\n"
+      },
+      "prepare": "// The hex code is the question, so it's in the view; its HSL breakdown stays in the key.\nfunction hslToRgb(h, s, l) {\n  s /= 100; l /= 100;\n  const k = (n) => (n + h / 30) % 12;\n  const a = s * Math.min(l, 1 - l);\n  const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));\n  return [f(0), f(8), f(4)].map((v) => Math.round(v * 255));\n}\nfunction rgbToHsl([r, g, b]) {\n  r /= 255; g /= 255; b /= 255;\n  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;\n  const l = (max + min) / 2;\n  let h = 0, s = 0;\n  if (d) {\n    s = d / (1 - Math.abs(2 * l - 1));\n    h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;\n    h = (h * 60 + 360) % 360;\n  }\n  return [Math.round(h), Math.round(s * 100), Math.round(l * 100)];\n}\nconst hex = (rgb) => \"#\" + rgb.map((v) => v.toString(16).padStart(2, \"0\")).join(\"\").toUpperCase();\n\nlet rgb;\nconst fixed = typeof fields.hex === \"string\" && /^#?[0-9a-f]{6}$/i.test(fields.hex.trim()) ? fields.hex.trim().replace(\"#\", \"\") : null;\nif (fixed) rgb = [0, 2, 4].map((i) => parseInt(fixed.slice(i, i + 2), 16));\nelse rgb = hslToRgb(rng.int(0, 359), rng.int(35, 95), rng.int(28, 72));\n\nreturn {\n  view: { prompt: fields.prompt || \"Build this color.\", hex: hex(rgb) },\n  key: { rgb, hsl: rgbToHsl(rgb), explanation: fields.explanation ?? \"\" },\n};\n",
+      "template": {
+        "html": "<div class=\"sc-eyebrow\">Make this color</div>\n<div class=\"prose\">{{md:prompt}}</div>\n<div class=\"co-target\"><span class=\"co-hex\">{{hex}}</span></div>\n<div class=\"co-swatches\">\n  <div class=\"co-swatch mine\"><span class=\"co-cap\">Yours</span></div>\n  <div class=\"co-swatch target only-result\"><span class=\"co-cap\">{{hex}}</span></div>\n</div>\n<div class=\"co-sliders\">\n  <label class=\"co-slider\" data-k=\"h\">\n    <span class=\"co-name\">Hue</span>\n    <input type=\"range\" min=\"0\" max=\"359\" step=\"1\" aria-label=\"Hue\">\n  </label>\n  <label class=\"co-slider\" data-k=\"s\">\n    <span class=\"co-name\">Saturation</span>\n    <input type=\"range\" min=\"0\" max=\"100\" step=\"1\" aria-label=\"Saturation\">\n  </label>\n  <label class=\"co-slider\" data-k=\"l\">\n    <span class=\"co-name\">Lightness</span>\n    <input type=\"range\" min=\"0\" max=\"100\" step=\"1\" aria-label=\"Lightness\">\n  </label>\n</div>\n<p class=\"e-muted co-hint only-answer\">Hex is red, green, blue in pairs: <code>00</code> is none, <code>FF</code> is full. Arrow keys nudge a focused slider; hold <kbd>Shift</kbd> for bigger steps.</p>\n<template data-on=\"result\">\n  <div class=\"e-reveal\">\n    <div class=\"co-verdict\"></div>\n    <div class=\"co-compare\"></div>\n    {{#explanation}}<div class=\"prose\">{{md:explanation}}</div>{{/explanation}}\n    <p class=\"sc-how\">Your color and the target were compared in OKLab, a color space built so equal distances look equally different, and the gap was turned back into slider words. The hex code was generated fresh for this review.</p>\n  </div>\n</template>\n",
+        "css": ".sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }\n.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }\n\n.co-target { text-align: center; margin: -0.25rem 0 -0.5rem; }\n.co-hex { font: 600 2.2rem var(--font-mono); letter-spacing: 0.04em; }\n.co-swatches { display: grid; grid-template-columns: 1fr; gap: 0.6rem; max-width: 30rem; width: 100%; margin: 0 auto; }\n.co-swatches.both { grid-template-columns: 1fr 1fr; }\n.co-swatch { position: relative; height: 8rem; border-radius: var(--radius); border: 1px solid var(--border); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 6%, transparent); transition: background 0.05s; }\n.co-cap { position: absolute; left: 0.5rem; bottom: 0.5rem; font: 500 0.75rem var(--font-mono); padding: 0.15rem 0.45rem; border-radius: 0.4rem; background: color-mix(in oklab, var(--background, #000) 75%, transparent); color: var(--foreground); }\n\n.co-sliders { display: flex; flex-direction: column; gap: 0.9rem; max-width: 30rem; width: 100%; margin: 0 auto; }\n.co-slider { position: relative; display: flex; flex-direction: column; gap: 0.35rem; }\n.co-name { font-size: 0.8rem; color: var(--muted-foreground); }\n.co-slider input { -webkit-appearance: none; appearance: none; width: 100%; height: 2.75rem; margin: 0; background: transparent; cursor: pointer; touch-action: pan-y; }\n.co-slider input:disabled { cursor: default; }\n.co-slider input::-webkit-slider-runnable-track { height: 1.1rem; border-radius: 999px; background: var(--track); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 12%, transparent); }\n.co-slider input::-moz-range-track { height: 1.1rem; border-radius: 999px; background: var(--track); }\n.co-slider input::-webkit-slider-thumb { -webkit-appearance: none; width: 1.4rem; height: 1.4rem; margin-top: -0.15rem; border-radius: 50%; background: var(--thumb); border: 3px solid var(--foreground); box-shadow: 0 1px 4px rgb(0 0 0 / 35%); }\n.co-slider input::-moz-range-thumb { width: 1.4rem; height: 1.4rem; border-radius: 50%; background: var(--thumb); border: 3px solid var(--foreground); box-sizing: border-box; }\n.co-slider input:focus-visible { outline: none; }\n.co-slider input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in oklab, var(--ring) 45%, transparent); }\n.co-tick { position: absolute; bottom: 0.35rem; width: 3px; height: 2rem; margin-left: -1.5px; border-radius: 2px; background: var(--foreground); box-shadow: 0 0 0 1.5px var(--background, #000); pointer-events: none; }\n.co-tick::after { content: \"target\"; position: absolute; top: -1.15rem; left: 50%; transform: translateX(-50%); font-size: 0.65rem; color: var(--muted-foreground); }\n.co-hint { font-size: 0.85rem; text-align: center; margin-top: -0.4rem; }\n.co-hint code { font: 0.85em var(--font-mono); background: var(--muted); padding: 0.05em 0.3em; border-radius: 0.3em; }\n\n.co-verdict { display: flex; flex-direction: column; gap: 0.15rem; }\n.co-big { font-size: 1.35rem; font-weight: 600; }\n.co-big.good { color: var(--success); }\n.co-big.near { color: var(--warning); }\n.co-big.far { color: var(--danger); }\n.co-compare table { margin: 0 0 0.5rem; }\n.co-compare:empty { display: none; }\n",
+        "js": "const sliders = Object.fromEntries(etude.$$(\".co-slider\").map((el) => [el.dataset.k, el.querySelector(\"input\")]));\nconst mine = etude.$(\".co-swatch.mine\");\nconst start = etude.answer && [etude.answer.h, etude.answer.s, etude.answer.l].every(Number.isFinite) ? etude.answer : { h: 180, s: 0, l: 50 };\nsliders.h.value = start.h;\nsliders.s.value = start.s;\nsliders.l.value = start.l;\nlet touched = !!etude.answer;\n\nconst val = () => ({ h: Number(sliders.h.value), s: Number(sliders.s.value), l: Number(sliders.l.value) });\nconst css = ({ h, s, l }) => `hsl(${h} ${s}% ${l}%)`;\n// Track gradients show where each slider would take the color, given the other two.\nconst paint = () => {\n  const v = val();\n  mine.style.background = css(v);\n  const hues = [0, 60, 120, 180, 240, 300, 360].map((h) => css({ h, s: Math.max(v.s, 25), l: Math.min(Math.max(v.l, 30), 70) })).join(\", \");\n  sliders.h.style.setProperty(\"--track\", `linear-gradient(90deg, ${hues})`);\n  sliders.s.style.setProperty(\"--track\", `linear-gradient(90deg, ${css({ ...v, s: 0 })}, ${css({ ...v, s: 100 })})`);\n  sliders.l.style.setProperty(\"--track\", `linear-gradient(90deg, #000, ${css({ ...v, l: 50 })}, #fff)`);\n  for (const [k, el] of Object.entries(sliders)) el.style.setProperty(\"--thumb\", css(v));\n};\nfor (const el of Object.values(sliders)) {\n  el.addEventListener(\"input\", () => {\n    touched = true;\n    paint();\n    etude.setReady(true);\n  });\n  el.addEventListener(\"keydown\", (e) => {\n    if (!e.shiftKey || ![\"ArrowLeft\", \"ArrowRight\", \"ArrowUp\", \"ArrowDown\"].includes(e.key)) return;\n    e.preventDefault();\n    const d = e.key === \"ArrowRight\" || e.key === \"ArrowUp\" ? 10 : -10;\n    el.value = String(Math.max(Number(el.min), Math.min(Number(el.max), Number(el.value) + d)));\n    el.dispatchEvent(new Event(\"input\"));\n  });\n}\npaint();\netude.setReady(touched);\netude.getAnswer(() => val());\n\nfunction hslToRgb(h, s, l) {\n  s /= 100; l /= 100;\n  const k = (n) => (n + h / 30) % 12;\n  const a = s * Math.min(l, 1 - l);\n  const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));\n  return [f(0), f(8), f(4)].map((v) => Math.round(v * 255));\n}\nconst hex = (rgb) => \"#\" + rgb.map((v) => v.toString(16).padStart(2, \"0\")).join(\"\").toUpperCase();\n\netude.onResult(({ grade, key, answer }) => {\n  const a = answer && Number.isFinite(answer.h) ? answer : val();\n  sliders.h.value = a.h; sliders.s.value = a.s; sliders.l.value = a.l;\n  paint();\n  for (const el of Object.values(sliders)) el.disabled = true;\n  const [th, ts, tl] = key.hsl;\n  const target = etude.$(\".co-swatch.target\");\n  target.style.background = `rgb(${key.rgb.join(\" \")})`;\n  etude.$(\".co-swatches\").classList.add(\"both\");\n  const preview = document.body.dataset.preview === \"1\";\n  const myHex = hex(hslToRgb(a.h, a.s, a.l));\n\n  // Target positions on each slider, as small ticks.\n  for (const [k, v, max] of [[\"h\", th, 359], [\"s\", ts, 100], [\"l\", tl, 100]]) {\n    const wrap = etude.$(`.co-slider[data-k=\"${k}\"]`);\n    const tick = document.createElement(\"i\");\n    tick.className = \"co-tick\";\n    tick.style.left = `calc(${(v / max) * 100}% + ${(0.5 - v / max) * 1.4}rem)`;\n    wrap.querySelector(\"input\").after(tick);\n  }\n\n  if (preview) {\n    mine.style.background = `rgb(${key.rgb.join(\" \")})`;\n    mine.querySelector(\".co-cap\").textContent = \"Target\";\n    target.remove();\n    etude.$(\".co-swatches\").classList.remove(\"both\");\n  } else mine.querySelector(\".co-cap\").textContent = \"Yours · \" + myHex;\n\n  const d = grade?.details ?? {};\n  const v = etude.$(\".co-verdict\");\n  if (preview) v.innerHTML = etude.md(`$\\\\mathrm{hsl}(${th}^\\\\circ,\\\\ ${ts}\\\\%,\\\\ ${tl}\\\\%)$`);\n  else {\n    const tone = grade.score >= 1 ? \"good\" : grade.score > 0 ? \"near\" : \"far\";\n    const words = d.notes?.length ? d.notes.join(\", \") : grade.score >= 1 ? \"nothing a quick glance would notice\" : \"\";\n    v.innerHTML = `<div class=\"co-big ${tone}\">${etude.escape(d.verdict ?? \"\")}</div><div class=\"e-muted\">${etude.escape(words.charAt(0).toUpperCase() + words.slice(1))}${words ? \".\" : \"\"}</div>`;\n    etude.$(\".co-compare\").innerHTML = etude.md(\n      `| | hue | saturation | lightness |\\n|---|---|---|---|\\n| target | $${th}^\\\\circ$ | $${ts}\\\\%$ | $${tl}\\\\%$ |\\n| yours | $${a.h}^\\\\circ$ | $${a.s}\\\\%$ | $${a.l}\\\\%$ |\\n\\nDistance in OKLab: $\\\\Delta E = ${d.dE}$ (full credit up to $0.05$, nothing past $0.22$).`,\n    );\n    etude.$(\".co-compare\").classList.add(\"prose\");\n  }\n});\n"
+      }
+    },
+    {
+      "id": "estimate",
+      "name": "Estimate it",
+      "description": "Guess a quantity with a slider. Linear for everyday ranges, logarithmic for Fermi questions spanning orders of magnitude. Full credit close to the answer, partial credit further out.",
+      "fields": [
+        {
+          "name": "prompt",
+          "kind": "markdown",
+          "required": true
+        },
+        {
+          "name": "answer",
+          "kind": "number",
+          "required": true,
+          "private": true
+        },
+        {
+          "name": "min",
+          "kind": "number",
+          "required": true
+        },
+        {
+          "name": "max",
+          "kind": "number",
+          "required": true
+        },
+        {
+          "name": "scale",
+          "kind": "text",
+          "default": "linear",
+          "description": "linear | log"
+        },
+        {
+          "name": "step",
+          "kind": "number",
+          "description": "Linear only: slider step. Default: about a thousandth of the range."
+        },
+        {
+          "name": "unit",
+          "kind": "text"
+        },
+        {
+          "name": "tolerance",
+          "kind": "number",
+          "description": "Full-credit band. Linear: fraction of the range (default 0.04). Log: orders of magnitude (default 0.1)."
+        },
+        {
+          "name": "explanation",
+          "kind": "markdown",
+          "private": true
+        }
+      ],
+      "grader": {
+        "kind": "script",
+        "code": "// Full credit inside the tolerance, falling linearly to zero at five times it.\nconst g = Number(answer);\nif (!Number.isFinite(g)) return { score: 0, feedback: \"No estimate given.\", details: {} };\nconst t = key.tolerance;\nlet err, words;\nif (view.scale === \"log\") {\n  if (g <= 0) return { score: 0, details: { error: Infinity } };\n  err = Math.abs(Math.log10(g / key.answer));\n  const ratio = g > key.answer ? g / key.answer : key.answer / g;\n  const r = ratio < 10 ? Math.round(ratio * 10) / 10 : Math.round(ratio);\n  words = ratio < 1.05 ? \"essentially exact\" : `${g > key.answer ? \"too high\" : \"too low\"} by a factor of ${r}` + (err >= 1.15 ? ` (${Math.round(err * 10) / 10} ${Math.round(err * 10) === 10 ? \"order\" : \"orders\"} of magnitude)` : \"\");\n} else {\n  err = Math.abs(g - key.answer) / (view.max - view.min);\n  const pct = Math.round((Math.abs(g - key.answer) / Math.abs(key.answer)) * 1000) / 10;\n  words = pct < 0.5 ? \"essentially exact\" : `${pct}% ${g > key.answer ? \"too high\" : \"too low\"}`;\n}\nconst zero = 5 * t;\nconst score = err <= t ? 1 : err >= zero ? 0 : 1 - (err - t) / (zero - t);\nreturn { score: Math.round(score * 100) / 100, feedback: score < 1 ? words.charAt(0).toUpperCase() + words.slice(1) + \".\" : undefined, details: { error: err, words } };\n"
+      },
+      "prepare": "const log = fields.scale === \"log\";\nconst min = Number(fields.min), max = Number(fields.max);\nif (!(max > min)) throw new Error(\"max must be greater than min\");\nif (log && !(min > 0)) throw new Error(\"a log scale needs min > 0\");\nconst tol = Number.isFinite(fields.tolerance) && fields.tolerance > 0 ? fields.tolerance : log ? 0.1 : 0.04;\nreturn {\n  view: {\n    prompt: fields.prompt,\n    min,\n    max,\n    scale: log ? \"log\" : \"linear\",\n    isLog: log,\n    isLinear: !log,\n    step: Number.isFinite(fields.step) && fields.step > 0 ? fields.step : 0,\n    unit: fields.unit ?? \"\",\n  },\n  key: { answer: Number(fields.answer), tolerance: tol, explanation: fields.explanation ?? \"\" },\n};\n",
+      "template": {
+        "html": "<div class=\"sc-eyebrow\">Estimate it</div>\n<div class=\"prose\">{{md:prompt}}</div>\n<div class=\"es\">\n  <output class=\"es-value\" aria-live=\"polite\"></output>\n  <div class=\"es-track\">\n    <input type=\"range\" class=\"es-slider\" min=\"0\" max=\"1000\" step=\"1\" aria-label=\"Your estimate\" autofocus>\n    <div class=\"es-marks\"></div>\n  </div>\n  <div class=\"es-ends\"><span class=\"lo\"></span><span class=\"hi\"></span></div>\n</div>\n<p class=\"e-muted es-hint only-answer\"></p>\n<template data-on=\"result\">\n  <div class=\"e-reveal\">\n    <div class=\"es-verdict\"></div>\n    {{#explanation}}<div class=\"prose\">{{md:explanation}}</div>{{/explanation}}\n    {{#isLog}}<p class=\"sc-how\">The slider and the grader both work in orders of magnitude, so being off by a factor of two costs the same whether the answer is a thousand or a billion. A normal flashcard can only say right or wrong.</p>{{/isLog}}\n    {{#isLinear}}<p class=\"sc-how\">Your guess was scored by how far it landed from the true value, with full credit nearby and partial credit further out. A normal flashcard can only say right or wrong.</p>{{/isLinear}}\n  </div>\n</template>\n",
+        "css": ".sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }\n.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }\n\n.es { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.25rem 0; }\n.es-value { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 0.1rem 0.4rem; min-height: 3rem; text-align: center; font-variant-numeric: tabular-nums; }\n.es-value .num { font-size: 2.4rem; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }\n.es-value .unit { font-size: 1.1rem; color: var(--muted-foreground); }\n.es-value .sci { flex-basis: 100%; font-size: 0.9rem; color: var(--muted-foreground); }\n.es-value.good .num { color: var(--success); }\n.es-value.near .num { color: var(--warning); }\n.es-value.far .num { color: var(--danger); }\n\n.es-track { position: relative; }\n.es.is-log .es-track { padding-bottom: 1.6rem; }\n.es-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 2.75rem; margin: 0; background: transparent; cursor: pointer; position: relative; z-index: 2; touch-action: pan-y; }\n.es-slider:disabled { cursor: default; }\n.es-slider::-webkit-slider-runnable-track { height: 0.4rem; border-radius: 999px; background: color-mix(in oklab, var(--foreground) 14%, transparent); }\n.es-slider::-moz-range-track { height: 0.4rem; border-radius: 999px; background: color-mix(in oklab, var(--foreground) 14%, transparent); }\n.es-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 1.5rem; height: 1.5rem; margin-top: -0.55rem; border-radius: 50%; background: var(--highlight); border: 3px solid var(--background, #000); box-shadow: 0 0 0 1px var(--highlight); }\n.es-slider::-moz-range-thumb { width: 1.5rem; height: 1.5rem; border-radius: 50%; background: var(--highlight); border: 3px solid var(--background, #000); box-sizing: border-box; }\n.es-slider:focus-visible { outline: none; }\n.es-slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in oklab, var(--highlight) 35%, transparent); }\n.es-slider.hide-thumb::-webkit-slider-thumb { opacity: 0; }\n.es-slider.hide-thumb::-moz-range-thumb { opacity: 0; }\n\n.es-marks { position: absolute; inset: 0; pointer-events: none; }\n.es-decade { position: absolute; top: 1.85rem; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }\n.es-decade i { width: 1px; height: 0.4rem; background: color-mix(in oklab, var(--foreground) 35%, transparent); }\n.es-decade b { font-weight: 400; font-size: 0.72rem; color: var(--muted-foreground); }\n.es-band { position: absolute; top: 50%; height: 0.85rem; transform: translateY(-50%); border-radius: 999px; background: color-mix(in oklab, var(--success) 30%, transparent); z-index: 1; }\n.es.is-log .es-band, .es.is-log .es-truth { top: calc(50% - 0.8rem); }\n.es-truth { position: absolute; top: 50%; width: 3px; height: 2rem; transform: translate(-50%, -50%); border-radius: 2px; background: var(--success); z-index: 3; }\n\n.es-ends { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.8rem; color: var(--muted-foreground); }\n.es-hint { font-size: 0.85rem; text-align: center; margin-top: -0.6rem; }\n.es-actual { font-size: 1.4rem; font-weight: 600; color: var(--success); }\n.es-actual .e-muted { font-size: 0.95rem; font-weight: 400; margin-left: 0.35rem; }\n.es-words { font-size: 0.95rem; margin-top: 0.2rem; }\n.es-words.near { color: var(--warning); }\n.es-words.far { color: var(--danger); }\n.es-words.good { color: var(--success); }\n",
+        "js": "const { view } = etude;\nconst log = view.scale === \"log\";\nconst slider = etude.$(\".es-slider\");\nconst out = etude.$(\".es-value\");\nconst N = 1000;\nconst lmin = log ? Math.log10(view.min) : 0, lmax = log ? Math.log10(view.max) : 0;\n\n// A step of 1, 2 or 5 times a power of ten, about a thousandth of the range.\nconst niceStep = (span) => {\n  const raw = span / N, p = Math.pow(10, Math.floor(Math.log10(raw)));\n  return [1, 2, 5, 10].map((m) => m * p).find((s) => s >= raw);\n};\nconst step = view.step || niceStep(view.max - view.min);\nconst sig = (x, d) => (x === 0 ? 0 : Number(x.toPrecision(d)));\nconst toValue = (p) => {\n  const t = p / N;\n  if (log) return sig(Math.pow(10, lmin + (lmax - lmin) * t), 2);\n  return Math.round((view.min + (view.max - view.min) * t) / step) * step;\n};\nconst toPos = (v) => {\n  const t = log ? (Math.log10(v) - lmin) / (lmax - lmin) : (v - view.min) / (view.max - view.min);\n  return Math.max(0, Math.min(1, t));\n};\n\n// \"3.2 million\", \"8,850\", \"0.004\".\nconst WORDS = [[1e12, \"trillion\"], [1e9, \"billion\"], [1e6, \"million\"]];\nconst fmt = (v) => {\n  const a = Math.abs(v);\n  for (const [n, w] of WORDS) if (a >= n) return `${sig(v / n, a / n >= 100 ? 3 : 2).toLocaleString(\"en\")} ${w}`;\n  if (a >= 1) return sig(v, log ? 2 : 6).toLocaleString(\"en\");\n  return String(sig(v, 2));\n};\nconst sci = (v) => {\n  const e = Math.floor(Math.log10(Math.abs(v)));\n  const m = sig(v / Math.pow(10, e), 2);\n  return m === 1 ? `10^{${e}}` : `${m} \\\\times 10^{${e}}`;\n};\nconst unit = view.unit ? \" \" + view.unit : \"\";\n\nconst show = () => {\n  const v = toValue(Number(slider.value));\n  out.innerHTML = `<span class=\"num\">${etude.escape(fmt(v))}</span><span class=\"unit\">${etude.escape(unit)}</span>` +\n    (log && Math.abs(v) >= 1e4 ? `<span class=\"sci\">${etude.mdInline(\"$\" + sci(v) + \"$\")}</span>` : \"\");\n  slider.setAttribute(\"aria-valuetext\", fmt(v) + unit);\n};\n\n// Ends, and powers of ten along a log track.\netude.$(\".es-ends .lo\").textContent = fmt(view.min) + unit;\netude.$(\".es-ends .hi\").textContent = fmt(view.max) + unit;\nconst marks = etude.$(\".es-marks\");\nconst at = (t) => `calc(${t * 100}% + ${(0.5 - t) * 1.5}rem)`;\nif (log) {\n  const decades = Math.floor(lmax) - Math.ceil(lmin);\n  const every = decades > 8 ? 2 : 1;\n  for (let e = Math.ceil(lmin); e <= Math.floor(lmax); e++) {\n    if ((e - Math.ceil(lmin)) % every) continue;\n    const t = (e - lmin) / (lmax - lmin);\n    const m = document.createElement(\"span\");\n    m.className = \"es-decade\";\n    m.style.left = at(t);\n    m.innerHTML = `<i></i><b>${etude.mdInline(`$10^{${e}}$`)}</b>`;\n    marks.append(m);\n  }\n  etude.$(\".es-hint\").textContent = \"Each tick is ten times the last. Arrow keys nudge the slider.\";\n} else etude.$(\".es-hint\").textContent = \"Drag the slider, or use the arrow keys.\";\netude.$(\".es\").classList.toggle(\"is-log\", log);\n\nlet touched = false;\nconst startPos = Number.isFinite(Number(etude.answer)) && etude.answer !== null ? Math.round(toPos(Number(etude.answer)) * N) : N / 2;\nslider.value = String(startPos);\nslider.addEventListener(\"input\", () => {\n  touched = true;\n  show();\n  etude.setReady(true);\n});\nshow();\netude.setReady(etude.answer !== null);\netude.getAnswer(() => toValue(Number(slider.value)));\n\netude.onResult(({ grade, key, answer }) => {\n  slider.disabled = true;\n  const preview = document.body.dataset.preview === \"1\";\n  const truth = key.answer;\n  const guess = Number.isFinite(Number(answer)) && answer !== null ? Number(answer) : toValue(Number(slider.value));\n  if (Number.isFinite(guess)) slider.value = String(Math.round(toPos(guess) * N));\n  show();\n\n  // The full-credit band and the true value on the track.\n  const t = key.tolerance;\n  const [a, b] = log\n    ? [toPos(truth / Math.pow(10, t)), toPos(truth * Math.pow(10, t))]\n    : [toPos(truth - t * (view.max - view.min)), toPos(truth + t * (view.max - view.min))];\n  const band = document.createElement(\"span\");\n  band.className = \"es-band\";\n  band.style.left = at(a);\n  band.style.width = `calc(${(b - a) * 100}% - ${(b - a) * 1.5}rem)`;\n  marks.append(band);\n  const tm = document.createElement(\"span\");\n  tm.className = \"es-truth\";\n  tm.style.left = at(toPos(truth));\n  marks.append(tm);\n\n  const tone = preview ? \"\" : grade.score >= 1 ? \"good\" : grade.score > 0 ? \"near\" : \"far\";\n  if (tone) out.classList.add(tone);\n  if (preview) slider.classList.add(\"hide-thumb\");\n  const words = grade?.details?.words;\n  const truthTex = log && Math.abs(truth) >= 1e4 ? ` <span class=\"e-muted\">${etude.mdInline(\"$\" + sci(truth) + \"$\")}</span>` : \"\";\n  etude.$(\".es-verdict\").innerHTML =\n    `<div class=\"e-section-title\">Actual</div><div class=\"es-actual\">${etude.escape(fmt(truth) + unit)}${truthTex}</div>` +\n    (!preview && words ? `<div class=\"es-words ${tone}\">You said ${etude.escape(fmt(guess) + unit)}: ${etude.escape(words)}.</div>` : \"\");\n});\n"
+      }
+    },
+    {
+      "id": "graph-walk",
+      "name": "Visit the nodes",
+      "description": "Tap the nodes of a generated graph in the order BFS or DFS visits them. Graded by the longest correct prefix; the real traversal animates afterwards.",
+      "fields": [
+        {
+          "name": "note",
+          "kind": "markdown",
+          "description": "Optional line shown under the prompt (also the card's title in lists)."
+        },
+        {
+          "name": "algorithm",
+          "kind": "text",
+          "default": "bfs",
+          "description": "\"bfs\", \"dfs\" or \"either\" (picked at random each review)."
+        },
+        {
+          "name": "size",
+          "kind": "number",
+          "description": "Number of nodes, 6 to 9. Empty: random each review."
+        },
+        {
+          "name": "explanation",
+          "kind": "markdown",
+          "private": true
+        }
+      ],
+      "grader": {
+        "kind": "script",
+        "code": "const given = Array.isArray(answer) ? answer.map(String) : [];\nconst order = key.order;\nlet k = 0;\nwhile (k < order.length && given[k] === order[k]) k++;\n// The start node is placed for the learner, so it doesn't earn credit.\nconst score = order.length > 1 ? Math.max(0, k - 1) / (order.length - 1) : 1;\nlet feedback;\nconst name = view.algorithm === \"bfs\" ? \"BFS\" : \"DFS\";\nif (k < order.length) {\n  if (k >= given.length) feedback = `Correct for the first ${k} nodes, then the order stopped. ${name} visits ${order[k]} next.`;\n  else feedback = `Correct for the first ${k} node${k === 1 ? \"\" : \"s\"}. Step ${k + 1} is ${order[k]}, not ${given[k]}. (${Math.max(0, k - 1)} of ${order.length - 1} moves after the start.)`;\n}\nreturn { score, feedback, details: { prefix: k, given } };\n"
+      },
+      "prepare": "// A connected graph on a jittered 3×3 grid. Edges only join neighbouring cells (and at most one\n// diagonal per square), so no edge crosses a node or another edge.\nconst W = 3, H = 3;\nconst want = Number(fields.size);\nconst n = want >= 6 && want <= 9 ? Math.round(want) : rng.int(6, 9);\nconst cell = (c, r) => r * W + c;\nconst neigh = (i) => {\n  const c = i % W, r = Math.floor(i / W), out = [];\n  for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {\n    const cc = c + dc, rr = r + dr;\n    if (cc >= 0 && cc < W && rr >= 0 && rr < H) out.push(cell(cc, rr));\n  }\n  return out;\n};\n// Grow a connected set of n cells from a random one.\nconst cells = [rng.int(0, W * H - 1)];\nwhile (cells.length < n) {\n  const frontier = [...new Set(cells.flatMap(neigh))].filter((x) => !cells.includes(x));\n  cells.push(rng.pick(frontier));\n}\nconst used = new Set(cells);\nconst cand = [];\nfor (const a of cells) {\n  const c = a % W, r = Math.floor(a / W);\n  if (c + 1 < W && used.has(cell(c + 1, r))) cand.push([a, cell(c + 1, r)]);\n  if (r + 1 < H && used.has(cell(c, r + 1))) cand.push([a, cell(c, r + 1)]);\n  // One diagonal per square at most.\n  if (c + 1 < W && r + 1 < H) {\n    const d1 = [a, cell(c + 1, r + 1)], d2 = [cell(c + 1, r), cell(c, r + 1)];\n    const ok1 = used.has(d1[1]), ok2 = used.has(d2[0]) && used.has(d2[1]);\n    if (ok1 && ok2) cand.push(rng.bool() ? d1 : d2);\n    else if (ok1) cand.push(d1);\n    else if (ok2) cand.push(d2);\n  }\n}\n// Random spanning tree over the candidates (Kruskal on a shuffle), then a few extra edges.\nconst parent = {};\nconst find = (x) => (parent[x] === undefined || parent[x] === x ? x : (parent[x] = find(parent[x])));\nconst edges = [], extra = [];\nfor (const e of rng.shuffle(cand)) {\n  const a = find(e[0]), b = find(e[1]);\n  if (a !== b) { parent[a] = b; edges.push(e); } else extra.push(e);\n}\nconst extras = Math.min(extra.length, rng.int(1, 3));\nedges.push(...extra.slice(0, extras));\n\n// Letters are assigned at random so alphabetical order isn't left-to-right.\nconst letters = rng.shuffle(\"ABCDEFGHI\".slice(0, n).split(\"\"));\nconst label = Object.fromEntries(cells.map((c, i) => [c, letters[i]]));\nconst nodes = cells.map((c) => ({\n  id: label[c],\n  x: 66 + (c % W) * 120 + rng.int(-14, 14),\n  y: 48 + Math.floor(c / W) * 102 + rng.int(-12, 12),\n})).sort((a, b) => a.id.localeCompare(b.id));\nconst edgeList = edges.map(([a, b]) => [label[a], label[b]].sort()).sort((p, q) => (p[0] + p[1]).localeCompare(q[0] + q[1]));\n\nconst adj = Object.fromEntries(nodes.map((v) => [v.id, []]));\nfor (const [a, b] of edgeList) { adj[a].push(b); adj[b].push(a); }\nfor (const k in adj) adj[k].sort();\n\nlet algo = String(fields.algorithm ?? \"bfs\").toLowerCase();\nif (algo !== \"bfs\" && algo !== \"dfs\") algo = rng.pick([\"bfs\", \"dfs\"]);\nconst start = rng.pick(nodes).id;\nconst order = [], tree = [], seen = new Set([start]);\nif (algo === \"bfs\") {\n  const q = [start];\n  while (q.length) {\n    const v = q.shift();\n    order.push(v);\n    for (const w of adj[v]) if (!seen.has(w)) { seen.add(w); tree.push([v, w]); q.push(w); }\n  }\n} else {\n  const visit = (v) => {\n    order.push(v);\n    for (const w of adj[v]) if (!seen.has(w)) { seen.add(w); tree.push([v, w]); visit(w); }\n  };\n  visit(start);\n}\nreturn {\n  view: { algorithm: algo, start, nodes, edges: edgeList, note: fields.note ?? \"\" },\n  key: { order, tree, explanation: fields.explanation ?? \"\" },\n};\n",
+      "template": {
+        "html": "<div class=\"sc-eyebrow\">Graph traversal</div>\n<div class=\"prose gw-prompt\"></div>\n<div class=\"gw-stage\">\n  <svg class=\"gw-svg\" viewBox=\"0 0 372 300\" role=\"group\" aria-label=\"Graph\"></svg>\n</div>\n<div class=\"gw-seq-wrap\"><div class=\"e-section-title only-result\">Your order</div><div class=\"gw-seq\" aria-live=\"polite\"></div></div>\n<p class=\"e-muted gw-help only-answer\">Tap nodes in visiting order; tap the last one again to undo. Keyboard: type a node's letter, <kbd>Backspace</kbd> to undo.</p>\n<template data-on=\"result\">\n  <div class=\"e-reveal\">\n    <div><div class=\"e-section-title\">Visiting order</div><div class=\"gw-truth\"></div></div>\n    <div class=\"e-row\"><button type=\"button\" class=\"e-btn gw-replay\">Replay</button></div>\n    {{#explanation}}<div class=\"prose\">{{md:explanation}}</div>{{/explanation}}\n    <p class=\"sc-how\">This graph was generated for this review, and the grader ran the real traversal on it to find where your order went off. Next time it'll be a different graph.</p>\n  </div>\n</template>\n",
+        "css": ".sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }\n.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }\n\n/* Code should read literally: no fused glyphs from ligature fonts. */\n#card, #card * { font-variant-ligatures: none; font-feature-settings: \"liga\" 0, \"calt\" 0; }\n\n.gw-prompt .rule { color: var(--muted-foreground); font-size: 0.95rem; }\n.gw-stage { display: flex; justify-content: center; }\n.gw-svg { width: 100%; max-width: 440px; height: auto; display: block; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }\n\n.gw-edge { stroke: color-mix(in oklab, var(--foreground) 40%, transparent); stroke-width: 2.25; stroke-linecap: round; transition: stroke 0.3s, stroke-width 0.3s; }\n.gw-edge.tree { stroke: var(--highlight); stroke-width: 3.5; }\n\n.gw-node { cursor: pointer; outline: none; }\n.gw-node .hit { fill: transparent; }\n.gw-node .disc { fill: var(--background); stroke: color-mix(in oklab, var(--foreground) 45%, transparent); stroke-width: 2; transition: fill 0.2s, stroke 0.2s; }\n.gw-node .lbl { fill: var(--foreground); font: 600 17px var(--font-sans); text-anchor: middle; dominant-baseline: central; pointer-events: none; }\n.gw-node .num { fill: var(--background); font: 700 11px var(--font-sans); text-anchor: middle; dominant-baseline: central; pointer-events: none; }\n.gw-node .badge { fill: var(--highlight); stroke: var(--background); stroke-width: 2.5; opacity: 0; transition: opacity 0.15s; }\n.gw-node.picked .badge, .gw-node.picked .num { opacity: 1; }\n.gw-node .num { opacity: 0; }\n.gw-node.picked .disc { stroke: var(--highlight); fill: color-mix(in oklab, var(--highlight) 14%, var(--background)); }\n.gw-node.start .disc { stroke: var(--foreground); stroke-width: 3; }\n.gw-node.last .disc { stroke-dasharray: 4 3; }\n.gw-node:hover .disc { stroke: var(--foreground); }\n.gw-node:focus-visible .disc { stroke: var(--ring); stroke-width: 4; }\n[data-mode=\"result\"] .gw-node { cursor: default; }\n.gw-node.ok .badge { fill: var(--success); }\n.gw-node.bad .badge { fill: var(--danger); }\n.gw-node.after .badge { fill: var(--muted-foreground); }\n.gw-node.lit .disc { fill: color-mix(in oklab, var(--highlight) 30%, var(--background)); stroke: var(--highlight); stroke-width: 3; }\n.gw-node.lit .lbl { fill: var(--foreground); }\n.gw-node.lit-now .disc { stroke-width: 5; }\n\n.hop { display: inline-flex; align-items: center; gap: 0.35rem; }\n.gw-seq { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; min-height: 2rem; font-family: var(--font-mono); font-size: 0.95rem; }\n.gw-seq .step, .gw-truth .step { display: inline-flex; align-items: center; justify-content: center; min-width: 1.9rem; height: 1.9rem; padding: 0 0.4rem; border: 1px solid var(--border); border-radius: 0.45rem; }\n.gw-seq .arrow, .gw-truth .arrow { color: var(--muted-foreground); font: 0.85rem/1 var(--font-sans); }\n.gw-seq .step.ok { border-color: color-mix(in oklab, var(--success) 70%, transparent); background: color-mix(in oklab, var(--success) 10%, transparent); }\n.gw-seq .step.after { color: var(--muted-foreground); border-style: dashed; }\n.gw-seq .step.bad { border-color: color-mix(in oklab, var(--danger) 70%, transparent); background: color-mix(in oklab, var(--danger) 10%, transparent); }\n.gw-seq .empty { color: var(--muted-foreground); font-family: var(--font-sans); font-size: 0.9rem; }\n.gw-truth { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; font-family: var(--font-mono); }\n.gw-truth .step { transition: background 0.2s, border-color 0.2s; }\n.gw-truth .step.lit { border-color: color-mix(in oklab, var(--foreground) 55%, transparent); background: color-mix(in oklab, var(--foreground) 7%, transparent); }\n.gw-seq-wrap { margin-top: -0.25rem; }\n.gw-help { font-size: 0.82rem; margin: -0.5rem 0 0; }\n",
+        "js": "const { view } = etude;\nconst NS = \"http://www.w3.org/2000/svg\";\nconst svg = etude.$(\".gw-svg\");\nconst seqEl = etude.$(\".gw-seq\");\nconst name = view.algorithm === \"bfs\" ? \"breadth-first search (BFS)\" : \"depth-first search (DFS)\";\netude.$(\".gw-prompt\").innerHTML =\n  etude.md(`Tap the nodes in the order **${name}** visits them, starting from **${view.start}**.`) +\n  `<p class=\"rule\">When a node has several unvisited neighbours, take them in alphabetical order.</p>` +\n  (view.note ? etude.md(view.note) : \"\");\n\nconst pos = Object.fromEntries(view.nodes.map((n) => [n.id, n]));\nconst nb = Object.fromEntries(view.nodes.map((n) => [n.id, []]));\nfor (const [a, b] of view.edges) { nb[a].push(b); nb[b].push(a); }\nfor (const k in nb) nb[k].sort();\nconst el = (tag, attrs, parent) => {\n  const e = document.createElementNS(NS, tag);\n  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);\n  parent?.appendChild(e);\n  return e;\n};\nconst edgeEls = {};\nconst edgesG = el(\"g\", {}, svg);\nfor (const [a, b] of view.edges) {\n  edgeEls[[a, b].sort().join(\"\")] = el(\"line\", { class: \"gw-edge\", x1: pos[a].x, y1: pos[a].y, x2: pos[b].x, y2: pos[b].y }, edgesG);\n}\nconst nodeEls = {};\nfor (const n of view.nodes) {\n  const g = el(\"g\", { class: \"gw-node\", tabindex: \"0\", role: \"button\", \"aria-label\": `Node ${n.id}`, \"data-id\": n.id }, svg);\n  el(\"circle\", { class: \"hit\", cx: n.x, cy: n.y, r: 30 }, g);\n  el(\"circle\", { class: \"disc\", cx: n.x, cy: n.y, r: 20 }, g);\n  el(\"text\", { class: \"lbl\", x: n.x, y: n.y }, g).textContent = n.id;\n  // The order badge goes in the diagonal corner farthest from this node's edges.\n  const angles = nb[n.id].map((m) => Math.atan2(pos[m].y - n.y, pos[m].x - n.x));\n  const gap = (a) => Math.min(...angles.map((b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)))), Math.PI);\n  const corner = [-Math.PI / 4, -3 * Math.PI / 4, Math.PI / 4, 3 * Math.PI / 4].reduce((best, a) => (gap(a) > gap(best) + 0.01 ? a : best));\n  const bx = n.x + 27 * Math.cos(corner), by = n.y + 27 * Math.sin(corner);\n  el(\"circle\", { class: \"badge\", cx: bx, cy: by, r: 10 }, g);\n  el(\"text\", { class: \"num\", x: bx, y: by + 0.5 }, g);\n  nodeEls[n.id] = g;\n}\n\n// The start node is given: the order always begins there.\nlet seq = [view.start];\nif (Array.isArray(etude.answer) && etude.answer[0] === view.start) seq = etude.answer.filter((id) => pos[id]);\n\nconst paint = (marks) => {\n  for (const [id, g] of Object.entries(nodeEls)) {\n    const i = seq.indexOf(id);\n    g.classList.toggle(\"picked\", i >= 0);\n    g.classList.toggle(\"start\", id === view.start);\n    g.classList.toggle(\"last\", etude.mode === \"answer\" && i >= 1 && i === seq.length - 1);\n    g.querySelector(\".num\").textContent = i >= 0 ? String(i + 1) : \"\";\n    g.setAttribute(\"aria-label\", `Node ${id}${i >= 0 ? `, visited ${i + 1}` : \"\"}; neighbours ${nb[id].join(\" \")}`);\n    if (marks) { g.classList.toggle(\"ok\", marks[id] === \"ok\"); g.classList.toggle(\"bad\", marks[id] === \"bad\"); g.classList.toggle(\"after\", marks[id] === \"after\"); }\n  }\n  // Each arrow travels with the step after it, so a wrapped row never ends on an arrow.\n  seqEl.innerHTML = seq.map((id, i) => {\n    const cls = marks ? marks[id] ?? \"\" : \"\";\n    return `<span class=\"hop\">${i ? `<span class=\"arrow\">→</span>` : \"\"}<span class=\"step ${cls}\">${id}</span></span>`;\n  }).join(\"\") + (seq.length === 1 && etude.mode === \"answer\" ? `<span class=\"arrow\">→</span><span class=\"empty\">tap the next node</span>` : \"\");\n  etude.setReady(etude.mode === \"answer\" && seq.length > 1);\n};\nconst tap = (id) => {\n  if (etude.mode !== \"answer\") return;\n  const i = seq.indexOf(id);\n  if (i < 0) seq.push(id);\n  else if (i === seq.length - 1 && i > 0) seq.pop();\n  else return;\n  paint();\n};\nsvg.addEventListener(\"click\", (e) => {\n  const g = e.target.closest(\".gw-node\");\n  if (g) tap(g.dataset.id);\n});\nwindow.addEventListener(\"keydown\", (e) => {\n  if (etude.mode !== \"answer\" || e.ctrlKey || e.metaKey || e.altKey) return;\n  const k = e.key.toUpperCase();\n  if (k.length === 1 && pos[k]) { e.preventDefault(); tap(k); }\n  else if (e.key === \"Backspace\" && seq.length > 1) { e.preventDefault(); tap(seq[seq.length - 1]); }\n  else if ((e.key === \"Enter\" || e.key === \" \") && e.target.closest?.(\".gw-node\")) { e.preventDefault(); tap(e.target.closest(\".gw-node\").dataset.id); }\n});\npaint();\netude.getAnswer(() => seq.slice());\n\n// After grading: mark the attempt, then walk the real order and grow its traversal tree.\nlet playing = 0;\nconst play = async (key) => {\n  const run = ++playing;\n  const truth = etude.$(\".gw-truth\");\n  truth.innerHTML = key.order.map((id, i) => `<span class=\"hop\">${i ? `<span class=\"arrow\">→</span>` : \"\"}<span class=\"step\" data-id=\"${id}\">${id}</span></span>`).join(\"\");\n  Object.values(edgeEls).forEach((l) => l.classList.remove(\"tree\"));\n  Object.values(nodeEls).forEach((g) => g.classList.remove(\"lit\", \"lit-now\"));\n  const parentOf = Object.fromEntries(key.tree.map(([p, c]) => [c, p]));\n  const reduce = window.matchMedia?.(\"(prefers-reduced-motion: reduce)\").matches;\n  for (const id of key.order) {\n    if (run !== playing) return;\n    if (parentOf[id]) edgeEls[[parentOf[id], id].sort().join(\"\")]?.classList.add(\"tree\");\n    Object.values(nodeEls).forEach((g) => g.classList.remove(\"lit-now\"));\n    nodeEls[id].classList.add(\"lit\", \"lit-now\");\n    truth.querySelector(`[data-id=\"${id}\"]`)?.classList.add(\"lit\");\n    if (!reduce) await new Promise((r) => setTimeout(r, 520));\n  }\n  nodeEls[key.order[key.order.length - 1]].classList.remove(\"lit-now\");\n};\netude.onResult(({ key, answer, grade }) => {\n  if (Array.isArray(answer)) seq = answer.filter((id) => pos[id]);\n  const prefix = grade?.details?.prefix ?? 0;\n  // Right up to the first mistake, the mistake itself, then the rest left unjudged.\n  const marks = {};\n  seq.forEach((id, i) => (marks[id] = i < prefix ? \"ok\" : i === prefix ? \"bad\" : \"after\"));\n  for (const g of Object.values(nodeEls)) g.removeAttribute(\"tabindex\");\n  paint(grade?.details ? marks : null);\n  etude.$(\".gw-replay\")?.addEventListener(\"click\", () => play(key));\n  play(key);\n});\n"
+      }
+    },
+    {
+      "id": "plot",
+      "name": "Mark the points",
+      "description": "Tap points onto a coordinate grid: roots, vertices, intersections. Graded by matching your points to the expected ones; extra points cost credit. Can generate a new curve every review.",
+      "fields": [
+        {
+          "name": "prompt",
+          "kind": "markdown",
+          "required": true
+        },
+        {
+          "name": "points",
+          "kind": "json",
+          "required": true,
+          "private": true,
+          "description": "Expected points, a list of [x, y]."
+        },
+        {
+          "name": "labels",
+          "kind": "list",
+          "private": true,
+          "description": "Optional names for the expected points, in the same order (markdown, e.g. \"vertex\")."
+        },
+        {
+          "name": "tolerance",
+          "kind": "number",
+          "default": 0.25,
+          "description": "How far a point may be from the expected one, in grid units."
+        },
+        {
+          "name": "range",
+          "kind": "json",
+          "default": [
+            -5,
+            5,
+            -5,
+            5
+          ],
+          "description": "[xmin, xmax, ymin, ymax], integers."
+        },
+        {
+          "name": "snap",
+          "kind": "number",
+          "default": 0.5,
+          "description": "Grid snapping for placed points, in grid units (0 for none)."
+        },
+        {
+          "name": "curve",
+          "kind": "text",
+          "private": true,
+          "description": "Optional JavaScript expression in x drawn after grading, e.g. x*x - 2*x - 3."
+        },
+        {
+          "name": "explanation",
+          "kind": "markdown",
+          "private": true
+        }
+      ],
+      "grader": {
+        "kind": "script",
+        "code": "// Best one-to-one matching of placed points to expected points (brute force; a handful of points).\nconst placed = (Array.isArray(answer) ? answer : []).filter((p) => Array.isArray(p) && p.every(Number.isFinite)).slice(0, 12);\nconst want = key.points;\nconst tol = key.tolerance;\nconst dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);\n\nlet best = { hits: -1, total: Infinity, pairs: [] };\nfunction search(i, used, pairs, hits, total) {\n  if (i === want.length) {\n    if (hits > best.hits || (hits === best.hits && total < best.total)) best = { hits, total, pairs: pairs.slice() };\n    return;\n  }\n  // leave expected point i unmatched\n  pairs.push(-1);\n  search(i + 1, used, pairs, hits, total);\n  pairs.pop();\n  for (let j = 0; j < placed.length; j++) {\n    if (used & (1 << j)) continue;\n    const d = dist(want[i], placed[j]);\n    if (d > tol + 1e-9) continue;\n    pairs.push(j);\n    search(i + 1, used | (1 << j), pairs, hits + 1, total + d);\n    pairs.pop();\n  }\n}\nsearch(0, 0, [], 0, 0);\n\nconst hits = best.hits;\nconst matched = new Set(best.pairs.filter((j) => j >= 0));\nconst extras = placed.map((_, j) => j).filter((j) => !matched.has(j));\nconst score = want.length ? Math.max(0, (hits - 0.5 * extras.length) / want.length) : extras.length ? 0 : 1;\nlet feedback;\nconst missed = want.length - hits;\nif (score < 1) {\n  const bits = [];\n  if (hits) bits.push(`${hits} of ${want.length} right`);\n  if (missed) bits.push(`${missed} missed`);\n  if (extras.length) bits.push(`${extras.length} extra (each costs half a point)`);\n  feedback = bits.join(\", \") + \".\";\n}\nreturn {\n  score: Math.round(score * 100) / 100,\n  feedback,\n  details: { placed, match: best.pairs, extras },\n};\n"
+      },
+      "prepare": "const points = (Array.isArray(fields.points) ? fields.points : []).map((p) => [Number(p[0]), Number(p[1])]);\nconst r = Array.isArray(fields.range) && fields.range.length === 4 ? fields.range.map(Number) : [-5, 5, -5, 5];\nreturn {\n  view: {\n    prompt: fields.prompt,\n    count: points.length,\n    range: r,\n    snap: typeof fields.snap === \"number\" ? fields.snap : 0.5,\n  },\n  key: {\n    points,\n    labels: Array.isArray(fields.labels) ? fields.labels : [],\n    tolerance: typeof fields.tolerance === \"number\" ? fields.tolerance : 0.25,\n    curve: fields.curve ?? \"\",\n    explanation: fields.explanation ?? \"\",\n  },\n};\n",
+      "template": {
+        "html": "<div class=\"sc-eyebrow\">Mark the points</div>\n<div class=\"prose\">{{md:prompt}}</div>\n<div class=\"pl-bar\">\n  <span class=\"pl-count\" aria-live=\"polite\"></span>\n  <button type=\"button\" class=\"e-btn pl-clear only-answer\">Clear</button>\n</div>\n<div class=\"pl-stage\">\n  <svg class=\"pl-svg\" role=\"application\" tabindex=\"0\" aria-label=\"Coordinate grid. Tap to place a point, tap a point to remove it. Arrow keys move the cursor, Enter places or removes a point.\">\n    <g class=\"pl-grid\"></g>\n    <g class=\"pl-curves\"></g>\n    <g class=\"pl-expected\"></g>\n    <g class=\"pl-placed\"></g>\n    <g class=\"pl-cursor\"><circle r=\"0.12\"></circle></g>\n  </svg>\n  <div class=\"pl-tags\"></div>\n</div>\n<p class=\"e-muted pl-hint only-answer\">Tap to place a point, drag to move it, tap it again to remove it. Points snap to the nearest {{snap}}. Keyboard: arrows move, <kbd>Enter</kbd> places.</p>\n<template data-on=\"result\">\n  <div class=\"e-reveal\">\n    <div class=\"pl-score\"></div>\n    <div class=\"pl-legend\"></div>\n    <div class=\"pl-list prose\"></div>\n    {{#explanation}}<div class=\"prose\">{{md:explanation}}</div>{{/explanation}}\n    <p class=\"sc-how\">Your points were matched to the expected ones by distance, so order doesn't matter and stray points cost credit. Every review draws a new curve, so you can't memorise the picture.</p>\n  </div>\n</template>\n",
+        "css": ".sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }\n.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }\n\n.pl-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: -0.6rem; }\n.pl-count { font-size: 0.9rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }\n.pl-count b { color: var(--foreground); font-weight: 600; }\n.pl-count.full b { color: var(--highlight); }\n.pl-count.over b { color: var(--warning); }\n.pl-clear { height: 2.5rem; }\n[data-mode=\"result\"] .pl-bar { display: none; }\n\n.pl-stage { position: relative; width: 100%; max-width: 480px; margin: 0 auto; }\n.pl-svg { display: block; width: 100%; height: auto; touch-action: none; cursor: crosshair; user-select: none; -webkit-user-select: none; }\n.pl-svg.done { cursor: default; }\n.pl-svg:focus { outline: none; }\n.pl-svg:focus-visible { border-radius: calc(var(--radius) - 4px); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 35%, transparent); }\n.pl-grid line { stroke: color-mix(in oklab, var(--foreground) 10%, transparent); stroke-width: 0.025; }\n.pl-grid line.axis { stroke: color-mix(in oklab, var(--foreground) 60%, transparent); stroke-width: 0.045; }\n.pl-grid .arrow { fill: color-mix(in oklab, var(--foreground) 60%, transparent); }\n\n.pl-tags { position: absolute; inset: 0; pointer-events: none; }\n.pl-tick, .pl-var, .pl-tag { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; line-height: 1; }\n.pl-tick { font-size: 0.72rem; color: var(--muted-foreground); }\n.pl-tick, .pl-var, .pl-tag { text-shadow: 0 0 2px var(--background, transparent), 0 0 3px var(--background, transparent), 0 0 4px var(--background, transparent), 0 0 4px var(--background, transparent), 0 0 5px var(--background, transparent); }\n.pl-tick.left { transform: translate(-100%, -50%); }\n.pl-var { font-size: 0.95rem; color: var(--muted-foreground); }\n.pl-tag { font-size: 0.85rem; color: var(--success); padding: 0.1rem 0.2rem; }\n\n.pl-cursor circle { fill: none; stroke: color-mix(in oklab, var(--highlight) 70%, transparent); stroke-width: 0.04; stroke-dasharray: 0.08 0.06; pointer-events: none; }\n.pl-placed .pt { fill: var(--highlight); stroke: var(--background, transparent); stroke-width: 0.05; transition: r 0.1s; }\n.pl-svg.dragging .pl-placed .pt { r: 0.2; }\n.pl-placed .pt.good { fill: var(--success); }\n.pl-placed .pt.extra { fill: var(--danger); }\n\n.pl-curves .curve { fill: none; stroke: color-mix(in oklab, var(--highlight) 75%, transparent); stroke-width: 0.06; stroke-linecap: round; stroke-linejoin: round; }\n.pl-expected .zone { fill: color-mix(in oklab, var(--success) 12%, transparent); stroke: none; }\n.pl-expected .want { fill: none; stroke: var(--success); stroke-width: 0.06; }\n.pl-expected .want.hit { stroke: color-mix(in oklab, var(--success) 70%, transparent); }\n.pl-expected .want.miss { stroke: var(--warning); stroke-width: 0.07; stroke-dasharray: 0.12 0.08; fill: color-mix(in oklab, var(--background, transparent) 70%, transparent); }\n.pl-tag.missed { color: var(--warning); }\n[data-preview=\"1\"] .pl-expected .want { fill: var(--success); }\n\n.pl-hint { font-size: 0.85rem; text-align: center; margin-top: -0.6rem; }\n.pl-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; font-size: 0.85rem; color: var(--muted-foreground); }\n.pl-legend:empty { display: none; }\n.pl-legend span { display: inline-flex; align-items: center; gap: 0.4rem; }\n.pl-legend .dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; display: inline-block; }\n.pl-legend .dot.hit { background: var(--success); }\n.pl-legend .dot.miss { border: 2px dashed var(--warning); }\n.pl-legend .dot.extra { background: var(--danger); }\n.pl-legend .line { width: 1.1rem; height: 3px; border-radius: 2px; background: color-mix(in oklab, var(--highlight) 75%, transparent); display: inline-block; }\n.pl-list ul { margin: 0; }\n.pl-list li.ok::marker { color: var(--success); }\n.pl-list li.bad::marker { color: var(--danger); }\n.pl-list li.miss::marker { color: var(--warning); }\n.pl-score { font-size: 1.15rem; font-weight: 600; }\n.pl-score:empty { display: none; }\n.pl-score.good { color: var(--success); }\n.pl-score.near { color: var(--warning); }\n.pl-score.far { color: var(--danger); }\n",
+        "js": "const { view } = etude;\nconst NS = \"http://www.w3.org/2000/svg\";\nconst el = (tag, attrs = {}, text) => {\n  const n = document.createElementNS(NS, tag);\n  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);\n  if (text != null) n.textContent = text;\n  return n;\n};\nconst [x0, x1, y0, y1] = view.range;\nconst PAD = 0.7;\nconst svg = etude.$(\".pl-svg\");\n// One SVG unit is one grid unit; y is flipped with a transform on each element instead of the viewBox.\nsvg.setAttribute(\"viewBox\", `${x0 - PAD} ${-(y1 + PAD)} ${x1 - x0 + 2 * PAD} ${y1 - y0 + 2 * PAD}`);\nconst Y = (y) => -y;\nconst snap = view.snap > 0 ? view.snap : 0;\nconst fmt = (v) => (v < 0 ? \"\\u2212\" : \"\") + String(Math.abs(Math.round(v * 100) / 100));\n\n// Grid, axes and tick labels.\nconst grid = etude.$(\".pl-grid\");\nfor (let x = Math.ceil(x0); x <= x1; x++) grid.append(el(\"line\", { x1: x, y1: Y(y0), x2: x, y2: Y(y1), class: x === 0 ? \"axis\" : \"\" }));\nfor (let y = Math.ceil(y0); y <= y1; y++) grid.append(el(\"line\", { x1: x0, y1: Y(y), x2: x1, y2: Y(y), class: y === 0 ? \"axis\" : \"\" }));\nconst ax = Math.max(x0, Math.min(x1, 0)), ay = Math.max(y0, Math.min(y1, 0));\ngrid.append(el(\"path\", { d: `M${x1 + 0.45},${Y(ay)} l-0.2,-0.1 v0.2 Z`, class: \"arrow\" }));\ngrid.append(el(\"path\", { d: `M${ax},${Y(y1 + 0.45)} l-0.1,0.2 h0.2 Z`, class: \"arrow\" }));\ngrid.append(el(\"line\", { x1: x1, y1: Y(ay), x2: x1 + 0.3, y2: Y(ay), class: \"axis\" }));\ngrid.append(el(\"line\", { x1: ax, y1: Y(y1), x2: ax, y2: Y(y1 + 0.3), class: \"axis\" }));\n// Labels are HTML over the SVG so they render in KaTeX.\nconst tags = etude.$(\".pl-tags\");\nconst VW = x1 - x0 + 2 * PAD, VH = y1 - y0 + 2 * PAD;\nconst label = (x, y, texSrc, cls) => {\n  const s = document.createElement(\"span\");\n  s.className = cls;\n  s.style.left = ((x - x0 + PAD) / VW) * 100 + \"%\";\n  s.style.top = ((y1 + PAD - y) / VH) * 100 + \"%\";\n  s.innerHTML = etude.mdInline(\"$\" + texSrc + \"$\");\n  tags.append(s);\n  return s;\n};\nconst every = x1 - x0 > 14 ? 2 : 1;\nfor (let x = Math.ceil(x0); x <= x1; x++) if (x !== 0 && x % every === 0) label(x, ay - 0.36, String(x), \"pl-tick\");\nfor (let y = Math.ceil(y0); y <= y1; y++) if (y !== 0 && y % every === 0) label(ax - 0.3, y, String(y), \"pl-tick left\");\nlabel(ax - 0.28, ay - 0.36, \"0\", \"pl-tick\");\nlabel(x1 + 0.35, ay + 0.3, \"x\", \"pl-var\");\nlabel(ax + 0.32, y1 + 0.35, \"y\", \"pl-var\");\n\n// Placed points.\nlet pts = Array.isArray(etude.answer) ? etude.answer.map((p) => [Number(p[0]), Number(p[1])]) : [];\nconst placedG = etude.$(\".pl-placed\");\nconst count = etude.$(\".pl-count\");\nconst draw = () => {\n  placedG.replaceChildren(...pts.map((p, i) => el(\"circle\", { cx: p[0], cy: Y(p[1]), r: 0.17, class: \"pt\", \"data-i\": i })));\n  const n = pts.length, want = view.count;\n  count.innerHTML = `<b>${n}</b> of ${want} point${want === 1 ? \"\" : \"s\"}`;\n  count.classList.toggle(\"over\", n > want);\n  count.classList.toggle(\"full\", n === want);\n  if (etude.mode === \"answer\") etude.setReady(n > 0);\n};\n\nconst toWorld = (e) => {\n  const pt = svg.createSVGPoint();\n  pt.x = e.clientX;\n  pt.y = e.clientY;\n  const p = pt.matrixTransform(svg.getScreenCTM().inverse());\n  return [p.x, -p.y];\n};\nconst snapTo = ([x, y]) => {\n  const s = (v) => (snap ? Math.round(v / snap) * snap : Math.round(v * 100) / 100);\n  return [Math.max(x0, Math.min(x1, s(x))), Math.max(y0, Math.min(y1, s(y)))];\n};\n// Hit radius of about 22 CSS px, whatever the grid's size on screen.\nconst unitPx = () => svg.getBoundingClientRect().width / (x1 - x0 + 2 * PAD);\nconst hit = (w) => {\n  const r = 22 / unitPx();\n  let best = -1, bd = Infinity;\n  pts.forEach((p, i) => {\n    const d = Math.hypot(p[0] - w[0], p[1] - w[1]);\n    if (d < r && d < bd) (best = i), (bd = d);\n  });\n  return best;\n};\n\nconst cursor = etude.$(\".pl-cursor\");\nlet drag = null;\nsvg.addEventListener(\"pointerdown\", (e) => {\n  if (etude.mode !== \"answer\") return;\n  e.preventDefault();\n  const w = toWorld(e);\n  const i = hit(w);\n  svg.setPointerCapture(e.pointerId);\n  if (i >= 0) drag = { i, moved: false, sx: e.clientX, sy: e.clientY, fresh: false };\n  else {\n    const p = snapTo(w);\n    if (p[0] < x0 - 1e-9 || p[0] > x1 + 1e-9) return;\n    pts.push(p);\n    drag = { i: pts.length - 1, moved: true, sx: e.clientX, sy: e.clientY, fresh: true };\n    draw();\n  }\n  svg.classList.add(\"dragging\");\n});\nsvg.addEventListener(\"pointermove\", (e) => {\n  if (etude.mode !== \"answer\") return;\n  const w = toWorld(e);\n  if (e.pointerType === \"mouse\" && !drag) {\n    const p = snapTo(w);\n    cursor.style.display = hit(w) >= 0 ? \"none\" : \"\";\n    cursor.firstElementChild.setAttribute(\"cx\", p[0]);\n    cursor.firstElementChild.setAttribute(\"cy\", Y(p[1]));\n  }\n  if (!drag) return;\n  if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 6) drag.moved = true;\n  if (drag.moved) {\n    pts[drag.i] = snapTo(w);\n    draw();\n  }\n});\nconst end = () => {\n  if (!drag) return;\n  if (!drag.moved && !drag.fresh) pts.splice(drag.i, 1);\n  // Two points on the same spot are one point.\n  pts = pts.filter((p, i) => pts.findIndex((q) => q[0] === p[0] && q[1] === p[1]) === i);\n  drag = null;\n  svg.classList.remove(\"dragging\");\n  draw();\n};\nsvg.addEventListener(\"pointerup\", end);\nsvg.addEventListener(\"pointercancel\", end);\nsvg.addEventListener(\"pointerleave\", () => (cursor.style.display = \"none\"));\netude.$(\".pl-clear\").addEventListener(\"click\", () => {\n  pts = [];\n  draw();\n});\n// Keyboard: a cursor that arrows move by one snap step; Enter or Space places or removes a point there.\nlet kc = null;\nconst step = snap || 0.5;\nconst showKey = () => {\n  cursor.style.display = kc ? \"\" : \"none\";\n  if (!kc) return;\n  cursor.firstElementChild.setAttribute(\"cx\", kc[0]);\n  cursor.firstElementChild.setAttribute(\"cy\", Y(kc[1]));\n  svg.setAttribute(\"aria-valuetext\", `cursor at ${kc[0]}, ${kc[1]}`);\n};\nsvg.addEventListener(\"keydown\", (e) => {\n  if (etude.mode !== \"answer\" || e.ctrlKey || e.metaKey || e.altKey) return;\n  const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];\n  if (d) {\n    e.preventDefault();\n    kc = kc ?? [Math.max(x0, Math.min(x1, 0)), Math.max(y0, Math.min(y1, 0))];\n    const m = e.shiftKey ? 1 / step : 1;\n    kc = snapTo([kc[0] + d[0] * step * m, kc[1] + d[1] * step * m]);\n    showKey();\n  } else if ((e.key === \"Enter\" || e.key === \" \") && kc) {\n    e.preventDefault();\n    const i = pts.findIndex((p) => p[0] === kc[0] && p[1] === kc[1]);\n    if (i >= 0) pts.splice(i, 1);\n    else pts.push(kc.slice());\n    draw();\n  } else if (e.key === \"Backspace\" && pts.length) {\n    e.preventDefault();\n    pts.pop();\n    draw();\n  }\n});\nsvg.addEventListener(\"blur\", () => { kc = null; showKey(); });\ncursor.style.display = \"none\";\ndraw();\netude.getAnswer(() => pts);\n\nconst texPt = (p) => `$\\\\left(${p.map((v) => String(Math.round(v * 100) / 100)).join(\", \")}\\\\right)$`;\n\netude.onResult(({ grade, key }) => {\n  svg.classList.add(\"done\");\n  cursor.remove();\n  const preview = document.body.dataset.preview === \"1\";\n  const d = grade?.details ?? {};\n  const placed = Array.isArray(d.placed) ? d.placed : pts;\n  const match = Array.isArray(d.match) ? d.match : [];\n  const extras = new Set(Array.isArray(d.extras) ? d.extras : []);\n  pts = placed;\n\n  // The curve(s), sampled densely and broken where they leave the grid. Samples are kept for label placement.\n  const samples = [];\n  if (key.curve) {\n    const g = etude.$(\".pl-curves\");\n    for (const expr of String(key.curve).split(\";\").map((s) => s.trim()).filter(Boolean)) {\n      let f;\n      try { f = new Function(\"x\", `with (Math) { return (${expr}); }`); } catch { continue; }\n      let path = \"\", pen = false;\n      const N = 400;\n      for (let k = 0; k <= N; k++) {\n        const x = x0 + ((x1 - x0) * k) / N;\n        let y;\n        try { y = Number(f(x)); } catch { y = NaN; }\n        const ok = Number.isFinite(y) && y >= y0 - 0.5 && y <= y1 + 0.5;\n        if (ok) path += `${pen ? \"L\" : \"M\"}${x.toFixed(3)},${Y(y).toFixed(3)} `;\n        if (ok && y >= y0 && y <= y1) samples.push([x, y]);\n        pen = ok;\n      }\n      if (path) g.append(el(\"path\", { d: path, class: \"curve\" }));\n    }\n    svg.append(el(\"clipPath\", { id: \"pl-clip\" }, null));\n    svg.lastChild.append(el(\"rect\", { x: x0, y: Y(y1), width: x1 - x0, height: y1 - y0 }));\n    g.setAttribute(\"clip-path\", \"url(#pl-clip)\");\n  }\n\n  // Expected points: solid when you got them, dashed rings when missed.\n  const exp = etude.$(\".pl-expected\");\n  key.points.forEach((p, i) => {\n    const got = match[i] >= 0 && match[i] !== undefined;\n    exp.append(el(\"circle\", { cx: p[0], cy: Y(p[1]), r: key.tolerance > 0.2 ? key.tolerance : 0.22, class: \"zone\" }));\n    exp.append(el(\"circle\", { cx: p[0], cy: Y(p[1]), r: got || preview ? 0.16 : 0.24, class: preview ? \"want\" : got ? \"want hit\" : \"want miss\" }));\n  });\n  draw();\n  placedG.querySelectorAll(\".pt\").forEach((c, i) => {\n    if (preview) return;\n    c.classList.add(extras.has(i) ? \"extra\" : \"good\");\n  });\n  if (preview) placedG.replaceChildren();\n\n  // Coordinates beside each expected point: try spots around it and keep the one that crosses the least\n  // (curve, axes and tick labels, other points, labels already placed).\n  const tagEls = key.points.map((p, i) => label(p[0], p[1], `\\\\left(${p.map((v) => String(Math.round(v * 100) / 100)).join(\", \")}\\\\right)`, \"pl-tag\" + (!preview && !(match[i] >= 0) ? \" missed\" : \"\")));\n  const placeTags = () => {\n    const unit = svg.getBoundingClientRect().width / VW; // px per grid unit\n    if (!unit) return;\n    const taken = [];\n    const dots = [...key.points, ...placed];\n    const hits = (bx) => {\n      let c = 0;\n      const m = 0.15; // the stroke has width\n      for (const [sx, sy] of samples) if (sx > bx[0] - m && sx < bx[2] + m && sy > bx[1] - m && sy < bx[3] + m) c += 3;\n      for (const [px, py] of dots) if (px > bx[0] - 0.2 && px < bx[2] + 0.2 && py > bx[1] - 0.2 && py < bx[3] + 0.2) c += 40;\n      // the x-axis tick row and the y-axis tick column\n      if (bx[1] < ay + 0.1 && bx[3] > ay - 0.6) c += 25;\n      if (bx[0] < ax + 0.1 && bx[2] > ax - 0.7) c += 25;\n      for (const t of taken) if (bx[0] < t[2] && bx[2] > t[0] && bx[1] < t[3] && bx[3] > t[1]) c += 60;\n      if (bx[0] < x0 - PAD + 0.05 || bx[2] > x1 + PAD - 0.05 || bx[1] < y0 - PAD + 0.05 || bx[3] > y1 + PAD - 0.05) c += 200;\n      return c;\n    };\n    key.points.forEach((p, i) => {\n      const elT = tagEls[i];\n      const w = elT.offsetWidth / unit, h = elT.offsetHeight / unit;\n      let best = null;\n      for (const r of [0.45, 0.8, 1.2]) {\n        for (let k = 0; k < 16; k++) {\n          const ang = (k / 16) * 2 * Math.PI;\n          // centre such that the box edge is r away from the point in this direction\n          const cx = p[0] + Math.cos(ang) * (r + w / 2 * Math.abs(Math.cos(ang))) ;\n          const cy = p[1] + Math.sin(ang) * (r + h / 2 * Math.abs(Math.sin(ang)));\n          const bx = [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2];\n          // A tag should sit nearer its own point than any other, or it reads as someone else's.\n          const near = (q) => Math.hypot(Math.max(bx[0], Math.min(q[0], bx[2])) - q[0], Math.max(bx[1], Math.min(q[1], bx[3])) - q[1]);\n          const own = near(p);\n          const confusing = dots.some((q) => (q[0] !== p[0] || q[1] !== p[1]) && near(q) < own + 0.25) ? 30 : 0;\n          const cost = hits(bx) + confusing + r * 3 + (Math.sin(ang) < -0.3 ? 0.5 : 0);\n          if (!best || cost < best.cost) best = { cost, cx, cy, bx };\n        }\n      }\n      taken.push(best.bx);\n      elT.style.left = ((best.cx - x0 + PAD) / VW) * 100 + \"%\";\n      elT.style.top = ((y1 + PAD - best.cy) / VH) * 100 + \"%\";\n    });\n  };\n  placeTags();\n  new ResizeObserver(placeTags).observe(svg);\n\n  const legend = [];\n  if (!preview) {\n    legend.push(`<span><i class=\"dot hit\"></i>found</span>`);\n    if (match.some((m) => !(m >= 0))) legend.push(`<span><i class=\"dot miss\"></i>missed</span>`);\n    if (extras.size) legend.push(`<span><i class=\"dot extra\"></i>extra</span>`);\n  }\n  if (key.curve) legend.push(`<span><i class=\"line\"></i>the curve</span>`);\n  etude.$(\".pl-legend\").innerHTML = legend.join(\"\");\n  const fmtPt = (p) => `\\\\left(${p.map((v) => String(Math.round(v * 100) / 100)).join(\", \")}\\\\right)`;\n  const rows = key.points.map((p, i) => {\n    const name = key.labels[i] ? key.labels[i] + \": \" : \"\";\n    const mark = preview ? \"\" : match[i] >= 0 ? \" ✓\" : \" ✗ missed\";\n    return `- ${name}$${fmtPt(p)}$${mark}`;\n  });\n  if (!preview) for (const j of extras) rows.push(`- extra: $${fmtPt(placed[j])}$ ✗ costs half a point`);\n  etude.$(\".pl-list\").innerHTML = etude.md(rows.join(\"\\n\"));\n  if (!preview) {\n    const hits = match.filter((m) => m >= 0).length;\n    const sc = etude.$(\".pl-score\");\n    sc.innerHTML = `${hits} of ${key.points.length} found${extras.size ? `, ${extras.size} extra` : \"\"}`;\n    sc.classList.add(grade.score >= 1 ? \"good\" : grade.score > 0 ? \"near\" : \"far\");\n  }\n  etude.$$(\".pl-list li\").forEach((li) => {\n    if (/✓/.test(li.textContent)) li.classList.add(\"ok\");\n    else if (/missed/.test(li.textContent)) li.classList.add(\"miss\");\n    else if (/✗/.test(li.textContent)) li.classList.add(\"bad\");\n  });\n});\n"
+      }
+    },
+    {
+      "id": "regex",
+      "name": "Write the regex",
+      "description": "Write a regular expression. Visible tests light up as you type; hidden tests are checked by the grader. Partial credit by the share of tests right.",
+      "fields": [
+        {
+          "name": "prompt",
+          "kind": "markdown",
+          "required": true,
+          "description": "What the pattern should match."
+        },
+        {
+          "name": "match",
+          "kind": "list",
+          "required": true,
+          "label": "Should match",
+          "description": "Visible strings the pattern must match."
+        },
+        {
+          "name": "reject",
+          "kind": "list",
+          "required": true,
+          "label": "Should not match",
+          "description": "Visible strings the pattern must not match."
+        },
+        {
+          "name": "hidden",
+          "kind": "json",
+          "private": true,
+          "default": {
+            "match": [],
+            "reject": []
+          },
+          "description": "Hidden tests: { \"match\": [...], \"reject\": [...] }, checked only when grading."
+        },
+        {
+          "name": "mode",
+          "kind": "text",
+          "default": "full",
+          "description": "\"full\": the whole string must match (the pattern is wrapped in ^(?:…)$). \"find\": a match anywhere counts."
+        },
+        {
+          "name": "flags",
+          "kind": "text",
+          "default": "",
+          "description": "Starting flags (any of i, m, s, u). The learner can change them."
+        },
+        {
+          "name": "solution",
+          "kind": "text",
+          "private": true,
+          "description": "One correct pattern, shown after grading."
+        },
+        {
+          "name": "explanation",
+          "kind": "markdown",
+          "private": true
+        }
+      ],
+      "grader": {
+        "kind": "script",
+        "code": "const a = answer && typeof answer === \"object\" ? answer : { pattern: answer == null ? \"\" : String(answer), flags: \"\" };\nconst pattern = String(a.pattern ?? \"\");\nconst flags = [...new Set(String(a.flags ?? \"\").replace(/[^imsu]/g, \"\"))].join(\"\");\nconst tests = [\n  ...view.match.map((s) => ({ s, want: true, hidden: false })),\n  ...view.reject.map((s) => ({ s, want: false, hidden: false })),\n  ...key.hidden.match.map((s) => ({ s, want: true, hidden: true })),\n  ...key.hidden.reject.map((s) => ({ s, want: false, hidden: true })),\n];\nconst fail = (feedback, error) => ({ score: 0, feedback, details: { error, tests: tests.map((t) => ({ ...t, got: null })) } });\nif (!pattern) return fail(\"No pattern.\");\nlet re;\ntry {\n  re = new RegExp(view.mode === \"find\" ? pattern : `^(?:${pattern})$`, flags);\n} catch (e) {\n  const why = String(e.message).replace(/^Invalid regular expression: \\/[\\s\\S]*\\/[a-z]*: /, \"\");\n  return fail(`The pattern doesn't compile: ${why}.`, why);\n}\nconst out = tests.map((t) => ({ ...t, got: re.test(t.s) }));\nconst right = out.filter((t) => t.got === t.want).length;\nconst show = (t) => (t.s === \"\" ? \"the empty string\" : `\\`${t.s}\\``);\nlet feedback;\nif (right < out.length) {\n  const wrong = out.filter((t) => t.got !== t.want);\n  const list = wrong.slice(0, 4).map((t) => `${show(t)}${t.hidden ? \" (hidden)\" : \"\"} should ${t.want ? \"\" : \"not \"}match`);\n  if (wrong.length > 4) list.push(`${wrong.length - 4} more`);\n  feedback = `${right} of ${out.length} tests pass. Still wrong: ${list.join(\"; \")}.`;\n}\nreturn { score: right / out.length, feedback, details: { tests: out, right, total: out.length } };\n"
+      },
+      "prepare": "const hidden = fields.hidden && typeof fields.hidden === \"object\" ? fields.hidden : {};\nconst list = (v) => (Array.isArray(v) ? v.map(String) : []);\nconst h = { match: list(hidden.match), reject: list(hidden.reject) };\nreturn {\n  view: {\n    prompt: fields.prompt,\n    match: list(fields.match),\n    reject: list(fields.reject),\n    mode: fields.mode === \"find\" ? \"find\" : \"full\",\n    flags: String(fields.flags ?? \"\").replace(/[^imsu]/g, \"\"),\n    hiddenCount: h.match.length + h.reject.length,\n  },\n  key: { hidden: h, solution: fields.solution ?? \"\", explanation: fields.explanation ?? \"\" },\n};\n",
+      "template": {
+        "html": "<div class=\"sc-eyebrow\">Regex</div>\n<div class=\"prose\">{{md:prompt}}</div>\n<div class=\"rx-entry\">\n  <label class=\"rx-field\">\n    <span class=\"rx-slash\" aria-hidden=\"true\">/</span>\n    <textarea class=\"rx-pattern\" rows=\"1\" aria-label=\"Pattern\" placeholder=\"pattern\" autocomplete=\"off\" autocapitalize=\"off\" autocorrect=\"off\" spellcheck=\"false\" enterkeyhint=\"done\" autofocus></textarea>\n    <span class=\"rx-slash\" aria-hidden=\"true\">/</span>\n    <input class=\"rx-flags\" aria-label=\"Flags (i, m, s, u)\" placeholder=\"flags\" autocomplete=\"off\" autocapitalize=\"off\" autocorrect=\"off\" spellcheck=\"false\" maxlength=\"4\">\n  </label>\n  <div class=\"rx-status\" aria-live=\"polite\"></div>\n</div>\n<div class=\"rx-tests\">\n  <div><div class=\"e-section-title\">Should match</div><ul class=\"rx-list\" data-kind=\"match\"></ul></div>\n  <div><div class=\"e-section-title\">Should not match</div><ul class=\"rx-list\" data-kind=\"reject\"></ul></div>\n</div>\n{{#hiddenCount}}<p class=\"e-muted rx-note only-answer\">Plus {{hiddenCount}} hidden tests, checked when you submit.</p>{{/hiddenCount}}\n<template data-on=\"result\">\n  <div class=\"e-reveal\">\n    <div class=\"rx-hidden-results\"></div>\n    {{#solution}}<div><div class=\"e-section-title\">One solution</div><code class=\"rx-solution\">/{{solution}}/</code></div>{{/solution}}\n    {{#explanation}}<div class=\"prose\">{{md:explanation}}</div>{{/explanation}}\n    <p class=\"sc-how\">Your pattern ran against every visible test as you typed, and against the hidden ones in a sandbox when you submitted. A normal flashcard could only compare your text to one stored answer.</p>\n  </div>\n</template>\n",
+        "css": ".sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }\n.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }\n\n/* Code should read literally: no fused glyphs from ligature fonts. */\n#card, #card * { font-variant-ligatures: none; font-feature-settings: \"liga\" 0, \"calt\" 0; }\n\n.rx-entry { display: flex; flex-direction: column; gap: 0.4rem; }\n.rx-field {\n  display: flex; align-items: flex-start; gap: 0.1rem;\n  border: 1px solid var(--input); border-radius: calc(var(--radius) - 2px);\n  padding: 0 0.7rem; font-family: var(--font-mono);\n  transition: border-color 0.15s, box-shadow 0.15s;\n}\n.rx-field:focus-within { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 25%, transparent); }\n.rx-field.bad { border-color: color-mix(in oklab, var(--danger) 70%, transparent); }\n.rx-slash { color: var(--muted-foreground); font: 1.1rem/1.5rem var(--font-mono); padding: 0.62rem 0; user-select: none; }\n.rx-field input, .rx-field textarea {\n  background: transparent; border: 0; outline: 0; color: var(--foreground);\n  font: 1rem/1.5rem var(--font-mono); padding: 0.62rem 0.2rem; min-width: 0; margin: 0;\n}\n.rx-field input:disabled, .rx-field textarea:disabled { opacity: 1; color: var(--foreground); -webkit-text-fill-color: var(--foreground); }\n.rx-pattern { flex: 1; resize: none; overflow: hidden; height: 2.75rem; word-break: break-all; white-space: pre-wrap; }\n.rx-flags { flex: none; width: 3.6rem; color: var(--highlight) !important; -webkit-text-fill-color: var(--highlight) !important; }\n/* When the pattern wraps, the closing slash and flags sit on its last line. */\n.rx-field > .rx-slash:nth-of-type(2), .rx-flags { align-self: flex-end; }\n.rx-status { font-size: 0.85rem; color: var(--muted-foreground); min-height: 1.4em; }\n.rx-status .err { color: var(--danger); font-family: var(--font-mono); font-size: 0.8rem; }\n.rx-status .all { color: var(--success); }\n.rx-status .rule { color: color-mix(in oklab, var(--muted-foreground) 80%, transparent); }\n\n.rx-tests { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }\n.rx-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }\n.rx-test {\n  display: flex; align-items: center; gap: 0.5rem; min-height: 2.25rem;\n  padding: 0.3rem 0.55rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 4px);\n  font: 0.86rem/1.35 var(--font-mono); transition: border-color 0.15s, background 0.15s;\n}\n.rx-test code { font: inherit; white-space: pre-wrap; word-break: break-all; min-width: 0; }\n.rx-mark {\n  flex: none; width: 1.05rem; height: 1.05rem; border-radius: 50%;\n  border: 1.5px solid color-mix(in oklab, var(--foreground) 22%, transparent);\n  display: grid; place-items: center; font: 700 0.62rem/1 var(--font-sans);\n  transition: background 0.15s, border-color 0.15s;\n}\n.rx-test.pass { border-color: color-mix(in oklab, var(--success) 45%, var(--border)); background: color-mix(in oklab, var(--success) 7%, transparent); }\n.rx-test.pass .rx-mark { background: var(--success); border-color: var(--success); color: var(--background); }\n.rx-test.pass .rx-mark::after { content: \"✓\"; }\n.rx-test.fail { border-color: color-mix(in oklab, var(--danger) 45%, var(--border)); background: color-mix(in oklab, var(--danger) 7%, transparent); }\n.rx-test.fail .rx-mark { background: var(--danger); border-color: var(--danger); color: var(--background); }\n.rx-test.fail .rx-mark::after { content: \"✕\"; }\n.rx-test mark.hit { background: color-mix(in oklab, var(--highlight) 26%, transparent); color: inherit; border-radius: 2px; box-shadow: inset 0 -2px 0 var(--highlight); }\n.rx-test .sp { color: var(--muted-foreground); }\n.rx-test .rx-empty { color: var(--muted-foreground); font-style: italic; font-family: var(--font-sans); }\n.rx-note { font-size: 0.82rem; margin: -0.6rem 0 0; }\n.rx-hidden-results:empty { display: none; }\n.rx-hidden-results .rx-tests { margin-top: 0.25rem; }\n.rx-hidden-results .sub { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: color-mix(in oklab, var(--muted-foreground) 75%, transparent); margin-bottom: 0.35rem; }\n.rx-solution { font: 0.95rem var(--font-mono); background: var(--muted); padding: 0.2em 0.5em; border-radius: 0.35em; word-break: break-all; }\n",
+        "js": "const { view } = etude;\nconst pat = etude.$(\".rx-pattern\");\nconst flg = etude.$(\".rx-flags\");\nconst field = etude.$(\".rx-field\");\nconst status = etude.$(\".rx-status\");\nflg.value = view.flags ?? \"\";\n\nconst tests = [\n  ...view.match.map((s) => ({ s, want: true })),\n  ...view.reject.map((s) => ({ s, want: false })),\n];\n\n// Show the string with spaces made visible and the matched span marked.\nconst strHtml = (s, span) => {\n  if (s === \"\") return `<span class=\"rx-empty\">empty string</span>`;\n  const esc = (t) => etude.escape(t).replace(/ /g, `<span class=\"sp\">·</span>`);\n  if (!span || span[1] <= span[0]) return esc(s);\n  return esc(s.slice(0, span[0])) + `<mark class=\"hit\">${esc(s.slice(span[0], span[1]))}</mark>` + esc(s.slice(span[1]));\n};\nconst row = (t, i) => `<li class=\"rx-test\" data-i=\"${i}\"><span class=\"rx-mark\" aria-hidden=\"true\"></span><code>${strHtml(t.s)}</code></li>`;\nfor (const kind of [\"match\", \"reject\"]) {\n  etude.$(`.rx-list[data-kind=\"${kind}\"]`).innerHTML = tests.map((t, i) => ((t.want === (kind === \"match\")) ? row(t, i) : \"\")).join(\"\");\n}\nconst rowEls = etude.$$(\".rx-tests .rx-test\");\nconst byIndex = Object.fromEntries(rowEls.map((li) => [li.dataset.i, li]));\n\nconst paint = (results) => {\n  for (const [i, t] of tests.entries()) {\n    const li = byIndex[i];\n    li.classList.remove(\"pass\", \"fail\");\n    const r = results?.[i];\n    li.querySelector(\"code\").innerHTML = strHtml(t.s, view.mode === \"find\" && r?.got ? r.span : null);\n    if (!r) continue;\n    li.classList.add(r.got === t.want ? \"pass\" : \"fail\");\n  }\n};\n\n// Matching runs in a worker so a pattern with catastrophic backtracking can't freeze the card.\nconst workerSrc = `onmessage = (e) => {\n  const { id, pattern, flags, mode, strings } = e.data;\n  let re;\n  try { re = new RegExp(mode === \"find\" ? pattern : \"^(?:\" + pattern + \")$\", flags); }\n  catch (err) { postMessage({ id, error: String(err.message) }); return; }\n  postMessage({ id, results: strings.map((s) => { re.lastIndex = 0; const m = re.exec(s); return { got: !!m, span: m ? [m.index, m.index + m[0].length] : null }; }) });\n};`;\nlet worker = null;\nconst spawn = () => {\n  try {\n    worker = new Worker(URL.createObjectURL(new Blob([workerSrc], { type: \"text/javascript\" })));\n  } catch {\n    worker = null;\n  }\n};\nspawn();\nconst runInline = (pattern, flags) => {\n  let re;\n  try { re = new RegExp(view.mode === \"find\" ? pattern : `^(?:${pattern})$`, flags); }\n  catch (err) { return { error: String(err.message) }; }\n  return { results: tests.map((t) => { const m = re.exec(t.s); return { got: !!m, span: m ? [m.index, m.index + m[0].length] : null }; }) };\n};\n\nconst ruleText = view.mode === \"find\" ? \"A match anywhere in the string counts.\" : \"The whole string has to match (no need for ^ and $).\";\nlet seq = 0;\nlet timer = null;\nconst cleanFlags = () => [...new Set(flg.value.replace(/[^imsu]/g, \"\"))].join(\"\");\n// Engine messages repeat the pattern (\"Invalid regular expression: /x/: Unterminated group\"); keep the reason.\nconst reason = (m) => String(m).replace(/^Invalid regular expression: \\/[\\s\\S]*\\/[a-z]*: /, \"\").replace(/^Invalid regular expression: /, \"\");\nconst show = (res) => {\n  if (res.error) {\n    field.classList.add(\"bad\");\n    status.innerHTML = `<span class=\"err\">${etude.escape(reason(res.error))}</span>`;\n    paint(null);\n    return;\n  }\n  field.classList.remove(\"bad\");\n  paint(res.results);\n  const ok = res.results.filter((r, i) => r.got === tests[i].want).length;\n  status.innerHTML = (ok === tests.length\n    ? `<span class=\"all\">All ${tests.length} visible tests pass.</span>`\n    : `${ok} of ${tests.length} visible tests pass.`) + ` <span class=\"rule\">${ruleText}</span>`;\n};\n// The pattern box grows with its content, so a long pattern stays fully visible.\nconst fit = () => { pat.style.height = \"auto\"; pat.style.height = `${pat.scrollHeight}px`; };\nconst evaluate = () => {\n  // A pasted newline would make the pattern unreadable; keep it on one logical line.\n  if (pat.value.includes(\"\\n\")) pat.value = pat.value.replace(/\\n/g, \"\");\n  fit();\n  const pattern = pat.value;\n  etude.setReady(pattern.length > 0 && etude.mode === \"answer\");\n  if (!pattern) {\n    field.classList.remove(\"bad\");\n    paint(null);\n    status.innerHTML = `<span class=\"rule\">${ruleText}</span>`;\n    return;\n  }\n  const flags = cleanFlags();\n  if (!worker) return show(runInline(pattern, flags));\n  const id = ++seq;\n  clearTimeout(timer);\n  timer = setTimeout(() => {\n    if (id !== seq) return;\n    worker.terminate();\n    spawn();\n    field.classList.add(\"bad\");\n    status.innerHTML = `<span class=\"err\">Took too long: this pattern backtracks catastrophically.</span>`;\n    paint(null);\n  }, 400);\n  worker.onmessage = (e) => {\n    if (e.data.id !== seq) return;\n    clearTimeout(timer);\n    show(e.data);\n  };\n  worker.postMessage({ id, pattern, flags, mode: view.mode, strings: tests.map((t) => t.s) });\n};\n\nif (etude.answer && typeof etude.answer === \"object\") {\n  pat.value = etude.answer.pattern ?? \"\";\n  flg.value = etude.answer.flags ?? flg.value;\n}\npat.addEventListener(\"input\", evaluate);\nflg.addEventListener(\"input\", () => { flg.value = cleanFlags(); evaluate(); });\nfor (const el of [pat, flg]) el.addEventListener(\"keydown\", (e) => {\n  if (e.key === \"Enter\" && !e.ctrlKey && !e.metaKey) { e.preventDefault(); if (pat.value) etude.submit(); }\n});\nevaluate();\netude.getAnswer(() => ({ pattern: pat.value, flags: cleanFlags() }));\n\netude.onResult(({ grade, key, answer }) => {\n  pat.disabled = flg.disabled = true;\n  if (answer && typeof answer === \"object\") { pat.value = answer.pattern ?? \"\"; flg.value = answer.flags ?? \"\"; }\n  fit();\n  const details = grade?.details;\n  if (details?.tests) {\n    paint(details.tests.slice(0, tests.length).map((t) => ({ got: t.got, span: null })));\n    if (details.error) {\n      field.classList.add(\"bad\");\n      status.innerHTML = `<span class=\"err\">${etude.escape(reason(details.error))}</span>`;\n    } else {\n      status.textContent = `${details.right} of ${details.total} tests pass, hidden ones included.`;\n    }\n  } else if (!pat.value) status.textContent = \"\";\n  const hidden = details?.tests ? details.tests.slice(tests.length) : [\n    ...key.hidden.match.map((s) => ({ s, want: true, got: null })),\n    ...key.hidden.reject.map((s) => ({ s, want: false, got: null })),\n  ];\n  if (!hidden.length) return;\n  const li = (t) => `<li class=\"rx-test ${t.got == null ? \"\" : t.got === t.want ? \"pass\" : \"fail\"}\"><span class=\"rx-mark\" aria-hidden=\"true\"></span><code>${strHtml(t.s)}</code></li>`;\n  const col = (want, title) => {\n    const items = hidden.filter((t) => t.want === want);\n    return items.length ? `<div><div class=\"sub\">${title}</div><ul class=\"rx-list\">${items.map(li).join(\"\")}</ul></div>` : \"<div></div>\";\n  };\n  etude.$(\".rx-hidden-results\").innerHTML = `<div class=\"e-section-title\">Hidden tests</div><div class=\"rx-tests\">${col(true, \"Should match\")}${col(false, \"Should not match\")}</div>`;\n});\n"
+      }
+    },
+    {
+      "id": "sprint",
+      "name": "Beat the clock",
+      "description": "A 30-second mental arithmetic sprint. Problems are generated each review; the card submits itself when time runs out. Score = correct ÷ target.",
+      "fields": [
+        {
+          "name": "note",
+          "kind": "markdown",
+          "description": "Optional line shown under the prompt (also the card's title in lists)."
+        },
+        {
+          "name": "mode",
+          "kind": "text",
+          "default": "mixed",
+          "description": "\"sums\" (two-digit addition and subtraction), \"times\" (times tables to 12), \"percent\" (simple percentages) or \"mixed\"."
+        },
+        {
+          "name": "seconds",
+          "kind": "number",
+          "default": 30,
+          "description": "Length of the round, 10 to 120 seconds."
+        },
+        {
+          "name": "target",
+          "kind": "number",
+          "default": 12,
+          "description": "Correct answers needed for full credit."
+        }
+      ],
+      "grader": {
+        "kind": "script",
+        "code": "const given = Array.isArray(answer?.answers) ? answer.answers : [];\nconst rows = given.map((g, i) => {\n  const text = String(g ?? \"\").trim();\n  const n = text === \"\" ? NaN : Number(text.replace(/[−–]/g, \"-\").replace(/,/g, \"\"));\n  return { q: view.problems[i], given: text, want: key.answers[i], ok: n === key.answers[i] };\n}).filter((r) => r.q !== undefined);\nconst correct = rows.filter((r) => r.ok).length;\nconst answered = rows.filter((r) => r.given !== \"\").length;\nconst score = Math.min(1, correct / view.target);\n// The card already shows the tally; feedback only says what stood between this round and the target.\nconst misses = rows.filter((r) => !r.ok && r.given !== \"\").length;\nlet feedback;\nif (correct < view.target) {\n  const short = view.target - correct;\n  feedback = misses\n    ? `${short} short of the target. ${misses} of your ${answered} answers were wrong: accuracy matters as much as speed.`\n    : `${short} short of the target: every answer was right, so it's speed that needs work.`;\n}\nreturn { score, feedback, details: { rows, correct, answered } };\n"
+      },
+      "prepare": "const seconds = Math.min(120, Math.max(10, Math.round(Number(fields.seconds) || 30)));\nconst target = Math.max(1, Math.round(Number(fields.target) || 12));\nconst mode = [\"sums\", \"times\", \"percent\", \"mixed\"].includes(fields.mode) ? fields.mode : \"mixed\";\nconst make = {\n  sums() {\n    if (rng.bool(0.6)) { const a = rng.int(12, 89), b = rng.int(11, 99 - a > 11 ? 99 - a : 11); return [`${a} + ${b}`, a + b]; }\n    const a = rng.int(31, 99), b = rng.int(11, a - 5); return [`${a} − ${b}`, a - b];\n  },\n  times() { const a = rng.int(3, 12), b = rng.int(3, 12); return [`${a} × ${b}`, a * b]; },\n  percent() {\n    const p = rng.pick([10, 20, 25, 50, 75, 5, 30, 40]);\n    // Bases that keep the answer a whole number.\n    const step = { 10: 10, 20: 5, 25: 4, 50: 2, 75: 4, 5: 20, 30: 10, 40: 5 }[p];\n    const n = step * rng.int(2, Math.floor(400 / step));\n    return [`${p}% of ${n}`, (p * n) / 100];\n  },\n};\n// Enough problems that nobody runs out: about one per second.\nconst count = seconds + 10;\nconst problems = [], answers = [];\n// No repeats inside a round (times tables only have so many, so give up after enough tries).\nconst seen = new Set();\nlet tries = 0;\nwhile (problems.length < count) {\n  const kind = mode === \"mixed\" ? rng.pick([\"sums\", \"sums\", \"times\", \"times\", \"percent\"]) : mode;\n  const [q, a] = make[kind]();\n  if (seen.has(q) && tries++ < 400) continue;\n  seen.add(q);\n  problems.push(q);\n  answers.push(a);\n}\nreturn {\n  view: { seconds, target, mode, problems, note: fields.note ?? \"\" },\n  key: { answers },\n};\n",
+      "template": {
+        "html": "<div class=\"sc-eyebrow\">Sprint</div>\n<div class=\"sp-intro only-answer\">\n  <div class=\"sp-title\">Answer as many as you can in <b>{{seconds}} seconds</b>.</div>\n  <div class=\"e-muted sp-sub\">Type the answer and press <kbd>Enter</kbd> to move on. No feedback until the end. {{target}} right gets full marks.</div>\n  {{#note}}<div class=\"prose e-muted\">{{md:note}}</div>{{/note}}\n</div>\n<div class=\"sp-stage only-answer\">\n  <div class=\"sp-bar\" aria-hidden=\"true\"><div class=\"sp-fill\"></div></div>\n  <div class=\"sp-meta\"><span class=\"sp-time\"></span><span class=\"sp-count\"></span></div>\n  <div class=\"sp-q\" aria-live=\"polite\"></div>\n  <div class=\"sp-form\">\n    <input class=\"e-input sp-input\" inputmode=\"numeric\" enterkeyhint=\"next\" aria-label=\"Answer\" autocomplete=\"off\" disabled>\n  </div>\n  <button type=\"button\" class=\"e-btn primary sp-start\">Start</button>\n</div>\n<template data-on=\"result\">\n  <div class=\"sp-score\">\n    <div class=\"big\"><span class=\"n\"></span><span class=\"of\"></span></div>\n    <div class=\"e-muted sp-line\"></div>\n  </div>\n  <div class=\"sp-table\"></div>\n  <p class=\"sc-how\">The problems are generated fresh for every round, and the card keeps its own clock: when time runs out it hands your answers to the grader by itself.</p>\n</template>\n",
+        "css": ".sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }\n.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }\n\n/* Code should read literally: no fused glyphs from ligature fonts. */\n#card, #card * { font-variant-ligatures: none; font-feature-settings: \"liga\" 0, \"calt\" 0; }\n\n.sp-intro { display: flex; flex-direction: column; gap: 0.35rem; }\n.sp-title { font-size: 1.15rem; }\n.sp-title b { font-weight: 600; }\n.sp-sub { font-size: 0.9rem; }\n.sp-stage { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; padding: 0.25rem 0 0.5rem; }\n.sp-bar { width: 100%; height: 6px; border-radius: 999px; background: color-mix(in oklab, var(--foreground) 10%, transparent); overflow: hidden; }\n.sp-fill { height: 100%; width: 100%; background: var(--highlight); border-radius: inherit; transform-origin: left center; }\n.sp-fill.low { background: var(--danger); }\n.sp-meta { width: 100%; display: flex; justify-content: space-between; font: 0.85rem var(--font-mono); color: var(--muted-foreground); margin-top: -0.4rem; }\n.sp-q { font: 600 2.6rem/1.15 var(--font-mono); letter-spacing: -0.02em; min-height: 1.15em; text-align: center; font-variant-numeric: tabular-nums; }\n.sp-q.idle { color: color-mix(in oklab, var(--foreground) 25%, transparent); }\n.sp-q.pop { animation: sp-pop 0.18s ease-out; }\n@keyframes sp-pop { from { opacity: 0.2; transform: translateY(6px); } to { opacity: 1; transform: none; } }\n.sp-form { width: 100%; max-width: 14rem; margin: 0; }\n.sp-input { text-align: center; font: 600 1.4rem var(--font-mono) !important; height: 3rem; }\n.sp-start { height: 2.75rem; min-width: 9rem; font-size: 1rem; }\n.sp-start[hidden] { display: none; }\n[data-mode=\"result\"] .sp-stage { display: none; }\n\n.sp-score { display: flex; flex-direction: column; gap: 0.15rem; }\n.sp-score .big { font: 600 2.4rem/1.1 var(--font-mono); }\n.sp-score .of { font-size: 1.1rem; color: var(--muted-foreground); margin-left: 0.4rem; }\n.sp-line { font-size: 0.92rem; }\n.sp-table { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.4rem; }\n.sp-row {\n  display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem;\n  border: 1px solid var(--border); border-radius: calc(var(--radius) - 4px);\n  padding: 0.35rem 0.6rem; font: 0.88rem/1.4 var(--font-mono);\n}\n.sp-row .q { white-space: nowrap; }\n.sp-row .a { white-space: nowrap; text-align: right; }\n.sp-row .want { color: var(--success); font-weight: 600; }\n.sp-row.ok .a { color: var(--success); }\n.sp-row.bad { border-color: color-mix(in oklab, var(--danger) 45%, var(--border)); background: color-mix(in oklab, var(--danger) 7%, transparent); }\n.sp-row.bad .a s { color: var(--danger); text-decoration-thickness: 1.5px; }\n.sp-row.skip .a s { color: var(--muted-foreground); }\n.sp-row.ok .a, .sp-row .want { font-weight: 600; }\n.sp-empty { color: var(--muted-foreground); font-size: 0.92rem; }\n",
+        "js": "const { view } = etude;\nconst q = etude.$(\".sp-q\");\nconst input = etude.$(\".sp-input\");\nconst startBtn = etude.$(\".sp-start\");\nconst fill = etude.$(\".sp-fill\");\nconst timeEl = etude.$(\".sp-time\");\nconst countEl = etude.$(\".sp-count\");\nconst total = view.seconds * 1000;\n\nconst answers = [];\nlet i = 0, t0 = 0, running = false, finished = false, raf = 0, endTimer = 0;\nq.textContent = \"ready?\";\nq.classList.add(\"idle\");\ntimeEl.textContent = `${view.seconds.toFixed(1)} s`;\ncountEl.textContent = `0 answered`;\netude.setReady(false);\n\nconst show = () => {\n  q.classList.remove(\"idle\", \"pop\");\n  void q.offsetWidth;\n  q.textContent = `${view.problems[i]} =`;\n  q.classList.add(\"pop\");\n};\nconst tick = () => {\n  const left = Math.max(0, total - (performance.now() - t0));\n  fill.style.transform = `scaleX(${left / total})`;\n  fill.classList.toggle(\"low\", left < 5000);\n  timeEl.textContent = `${(left / 1000).toFixed(1)} s`;\n  if (left <= 0) return finish();\n  raf = requestAnimationFrame(tick);\n};\nconst finish = () => {\n  if (finished) return;\n  finished = true;\n  running = false;\n  cancelAnimationFrame(raf);\n  clearTimeout(endTimer);\n  // A half-typed answer when the clock runs out still counts.\n  if (input.value.trim()) answers.push(input.value.trim());\n  input.disabled = true;\n  fill.style.transform = \"scaleX(0)\";\n  timeEl.textContent = \"0.0 s\";\n  q.textContent = \"time!\";\n  quietUntil = performance.now() + 1500;\n  etude.submit({ answers: answers.slice() });\n};\nconst start = () => {\n  if (running || finished || etude.mode !== \"answer\") return;\n  running = true;\n  startBtn.hidden = true;\n  input.disabled = false;\n  input.focus();\n  t0 = performance.now();\n  show();\n  raf = requestAnimationFrame(tick);\n  // Backup for when animation frames pause (hidden tab).\n  endTimer = setTimeout(finish, total + 50);\n};\nstartBtn.addEventListener(\"click\", start);\n// The card frame is sandboxed without forms, so Enter is handled on the input itself.\nconst next = () => {\n  if (!running) return;\n  const v = input.value.trim();\n  if (!v) return;\n  answers.push(v);\n  input.value = \"\";\n  countEl.textContent = `${answers.length} answered`;\n  i++;\n  if (i >= view.problems.length) return finish();\n  show();\n};\ninput.addEventListener(\"keydown\", (e) => {\n  if (e.key === \"Enter\" && !e.ctrlKey && !e.metaKey) { e.preventDefault(); next(); }\n});\n// Enter or Space starts the round; while it runs, Enter belongs to the input.\n// Right after the buzzer, Enter and Space are swallowed for a moment: someone mid-answer\n// would otherwise rate the card before seeing their results.\nlet quietUntil = 0;\nwindow.addEventListener(\"keydown\", (e) => {\n  if (e.ctrlKey || e.metaKey || e.altKey) return;\n  if ((e.key === \"Enter\" || e.key === \" \") && (performance.now() < quietUntil || (finished && etude.mode === \"answer\"))) { e.preventDefault(); return; }\n  if (etude.mode !== \"answer\") return;\n  if (!running && !finished && (e.key === \"Enter\" || e.key === \" \")) { e.preventDefault(); start(); }\n});\netude.getAnswer(() => ({ answers: [...answers, ...(running && input.value.trim() ? [input.value.trim()] : [])] }));\n\netude.onResult(({ grade, key, answer }) => {\n  if (finished) quietUntil = Math.max(quietUntil, performance.now() + 1200);\n  running = false;\n  finished = true;\n  cancelAnimationFrame(raf);\n  clearTimeout(endTimer);\n  const d = grade?.details;\n  const given = Array.isArray(answer?.answers) ? answer.answers : [];\n  const rows = d?.rows ?? given.map((g, k) => ({ q: view.problems[k], given: String(g), want: key.answers[k], ok: null }));\n  const correct = d?.correct ?? rows.filter((r) => r.ok).length;\n  if (d) {\n    etude.$(\".sp-score .n\").textContent = `${correct} right`;\n    etude.$(\".sp-score .of\").textContent = `target ${view.target}`;\n    const acc = d.answered ? Math.round((100 * correct) / d.answered) : 0;\n    etude.$(\".sp-line\").textContent = `${d.answered} answered in ${view.seconds} seconds, ${acc}% accurate.`;\n  } else {\n    // Previews have no attempt: show what a round looks like.\n    etude.$(\".sp-score .n\").textContent = `${view.seconds}s`;\n    etude.$(\".sp-score .of\").textContent = `target ${view.target}`;\n    etude.$(\".sp-line\").textContent = \"The first problems of this round, with their answers.\";\n  }\n  // Show what was attempted, plus the first unanswered problem so the round has an end.\n  const shown = rows.length ? rows : view.problems.slice(0, 6).map((p, k) => ({ q: p, given: \"\", want: key.answers[k], ok: null }));\n  etude.$(\".sp-table\").innerHTML = shown.length\n    ? shown.map((r) => {\n        const cls = r.ok === true ? \"ok\" : r.given === \"\" ? \"skip\" : r.ok === false ? \"bad\" : \"\";\n        const a = r.ok ? etude.escape(r.given) : `${r.given ? `<s>${etude.escape(r.given)}</s> ` : \"\"}<span class=\"want\">${r.want}</span>`;\n        return `<div class=\"sp-row ${cls}\"><span class=\"q\">${etude.escape(r.q)}</span><span class=\"a\">${a}</span></div>`;\n      }).join(\"\")\n    : `<div class=\"sp-empty\">No answers this round.</div>`;\n});\n"
+      }
+    },
+    {
+      "id": "unit-circle",
+      "name": "Unit circle",
+      "description": "Place an angle on the unit circle by dragging or tapping. A new angle every review, in radians, degrees or both, sometimes negative or past a full turn. Partial credit one step off.",
+      "fields": [
+        {
+          "name": "prompt",
+          "kind": "markdown",
+          "default": "Place the angle on the unit circle.",
+          "description": "Shown above the angle."
+        },
+        {
+          "name": "units",
+          "kind": "text",
+          "default": "mixed",
+          "description": "radians | degrees | mixed"
+        },
+        {
+          "name": "wrap",
+          "kind": "boolean",
+          "default": true,
+          "label": "Negative and large angles",
+          "description": "Sometimes ask for angles below 0 or past a full turn."
+        },
+        {
+          "name": "angle",
+          "kind": "number",
+          "description": "Optional fixed angle in degrees (a multiple of 15). Leave empty for a new angle every review."
+        },
+        {
+          "name": "explanation",
+          "kind": "markdown",
+          "private": true
+        }
+      ],
+      "grader": {
+        "kind": "script",
+        "code": "const given = answer && Number.isFinite(Number(answer.deg)) ? ((Math.round(Number(answer.deg) / 15) * 15) % 360 + 360) % 360 : null;\nif (given === null) return { score: 0, feedback: \"No angle placed.\", details: { given: null, off: null } };\nconst d = Math.abs(given - key.target) % 360;\nconst off = Math.min(d, 360 - d);\nconst steps = off / 15;\nconst score = steps === 0 ? 1 : steps === 1 ? 0.5 : 0;\nlet feedback;\nif (steps === 1) feedback = \"One 15° step off.\";\nelse if (steps > 1) feedback = `Off by ${off}°.`;\nreturn { score, feedback, details: { given, off } };\n"
+      },
+      "prepare": "// Picks the angle (in 15° steps) and works out its exact coordinates.\nconst gcd = (a, b) => (b ? gcd(b, a % b) : Math.abs(a));\n\nlet D;\nif (typeof fields.angle === \"number\" && Number.isFinite(fields.angle)) D = Math.round(fields.angle / 15) * 15;\nelse {\n  const r = fields.wrap === false ? 1 : rng.next();\n  if (r < 0.2) D = -rng.int(1, 23) * 15;\n  else if (r < 0.32) D = 360 + rng.int(1, 23) * 15;\n  else D = rng.int(0, 23) * 15;\n}\n\nconst units = fields.units === \"radians\" || fields.units === \"degrees\" ? fields.units : rng.bool(0.65) ? \"radians\" : \"degrees\";\n\nfunction radTex(deg) {\n  const k = deg / 15;\n  if (k === 0) return \"0\";\n  const g = gcd(Math.abs(k), 12);\n  const num = k / g, den = 12 / g;\n  const sign = num < 0 ? \"-\" : \"\";\n  const n = Math.abs(num);\n  const top = n === 1 ? \"\\\\pi\" : n + \"\\\\pi\";\n  return den === 1 ? sign + top : sign + \"\\\\frac{\" + top + \"}{\" + den + \"}\";\n}\nconst degTex = (deg) => deg + \"^\\\\circ\";\n\n// sin of the reference angles 0, 15, ..., 90.\nconst SIN = [\"0\", \"\\\\frac{\\\\sqrt6-\\\\sqrt2}{4}\", \"\\\\frac12\", \"\\\\frac{\\\\sqrt2}{2}\", \"\\\\frac{\\\\sqrt3}{2}\", \"\\\\frac{\\\\sqrt6+\\\\sqrt2}{4}\", \"1\"];\nconst norm = ((D % 360) + 360) % 360;\nlet ref = norm % 180;\nif (ref > 90) ref = 180 - ref;\nconst sign = (v) => (Math.abs(v) < 1e-9 ? \"\" : v < 0 ? \"-\" : \"\");\nconst rad = (norm * Math.PI) / 180;\nconst cosTex = sign(Math.cos(rad)) + SIN[(90 - ref) / 15];\nconst sinTex = sign(Math.sin(rad)) + SIN[ref / 15];\nconst big = (t) => (t.includes(\"\\\\frac\") ? \"\\\\left(\" : \"(\");\nconst close = (t) => (t.includes(\"\\\\frac\") ? \"\\\\right)\" : \")\");\nconst pair = cosTex + \", \" + sinTex;\n\nreturn {\n  view: { prompt: fields.prompt || \"Place the angle on the unit circle.\", thetaTex: units === \"radians\" ? radTex(D) : degTex(D), units },\n  key: {\n    degrees: D,\n    target: norm,\n    targetTex: degTex(norm),\n    radTex: radTex(D),\n    coordsTex: big(pair) + pair + close(pair),\n    cosTex,\n    sinTex,\n    explanation: fields.explanation ?? \"\",\n  },\n};\n",
+      "template": {
+        "html": "<div class=\"sc-eyebrow\">Unit circle</div>\n<div class=\"uc-prompt\">\n  <div class=\"prose uc-ask\">{{md:prompt}}</div>\n  <span class=\"uc-theta\"></span>\n</div>\n<div class=\"uc-stage\">\n  <svg class=\"uc-svg\" viewBox=\"-1.4 -1.4 2.8 2.8\" role=\"slider\" tabindex=\"0\" aria-label=\"Angle on the unit circle\" aria-valuemin=\"0\" aria-valuemax=\"345\">\n    <g class=\"uc-grid\">\n      <line x1=\"-1.3\" y1=\"0\" x2=\"1.3\" y2=\"0\" />\n      <line x1=\"0\" y1=\"-1.3\" x2=\"0\" y2=\"1.3\" />\n    </g>\n    <circle class=\"uc-circle\" cx=\"0\" cy=\"0\" r=\"1\" />\n    <g class=\"uc-ticks\"></g>\n    <g class=\"uc-truth\"></g>\n    <g class=\"uc-mine\">\n      <line class=\"uc-ray\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\" />\n      <circle class=\"uc-knob-halo\" r=\"0.13\" />\n      <circle class=\"uc-knob\" r=\"0.065\" />\n    </g>\n    <circle class=\"uc-origin\" r=\"0.025\" />\n  </svg>\n  <div class=\"uc-labels\"></div>\n</div>\n<p class=\"e-muted uc-hint only-answer\">Drag or tap the circle. It snaps to 15° steps; arrow keys rotate.</p>\n<template data-on=\"result\">\n  <div class=\"e-reveal\">\n    <div class=\"uc-facts prose\"></div>\n    {{#explanation}}<div class=\"prose\">{{md:explanation}}</div>{{/explanation}}\n    <p class=\"sc-how\">The card generated a fresh angle and graded where you put it on the circle by angular distance, so one step off still earns half. A normal flashcard can only show the same picture every time.</p>\n  </div>\n</template>\n",
+        "css": ".sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }\n.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }\n\n.uc-prompt { display: flex; flex-direction: column; gap: 0.15rem; }\n.uc-ask { color: var(--muted-foreground); font-size: 0.95rem; }\n.uc-theta { font-size: 1.9rem; line-height: 1.3; }\n.uc-stage { position: relative; width: 100%; max-width: 420px; margin: 0 auto; }\n.uc-svg { display: block; width: 100%; height: auto; touch-action: none; cursor: crosshair; color: var(--foreground); outline: none; user-select: none; -webkit-user-select: none; }\n.uc-svg:focus-visible { border-radius: 50%; box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 35%, transparent); }\n.uc-svg.done { cursor: default; }\n.uc-grid line { stroke: color-mix(in oklab, var(--foreground) 22%, transparent); stroke-width: 0.008; }\n.uc-circle { fill: color-mix(in oklab, var(--foreground) 3%, transparent); stroke: color-mix(in oklab, var(--foreground) 55%, transparent); stroke-width: 0.012; }\n.uc-ticks line { stroke: color-mix(in oklab, var(--foreground) 40%, transparent); stroke-width: 0.008; }\n.uc-ticks line.major { stroke: color-mix(in oklab, var(--foreground) 65%, transparent); stroke-width: 0.012; }\n.uc-origin { fill: var(--foreground); }\n\n.uc-ray { stroke: var(--highlight); stroke-width: 0.022; stroke-linecap: round; }\n.uc-knob { fill: var(--highlight); }\n.uc-knob-halo { fill: color-mix(in oklab, var(--highlight) 22%, transparent); transition: r 0.12s; }\n.uc-svg.dragging .uc-knob-halo { r: 0.17; }\n.uc-mine.right .uc-ray { stroke: var(--success); }\n.uc-mine.near .uc-ray { stroke: var(--warning); }\n.uc-mine.wrong .uc-ray { stroke: var(--danger); }\n.uc-mine.right .uc-knob { fill: var(--success); }\n.uc-mine.near .uc-knob, .uc-mine.wrong .uc-knob { r: 0.05; }\n.uc-mine.near .uc-knob { fill: var(--warning); }\n.uc-mine.wrong .uc-knob { fill: var(--danger); }\n.uc-mine.right .uc-knob-halo, .uc-mine.near .uc-knob-halo, .uc-mine.wrong .uc-knob-halo { display: none; }\n.uc-mine.wrong .uc-ray, .uc-mine.near .uc-ray { stroke-dasharray: 0.05 0.04; }\n\n.uc-arc { fill: none; stroke: color-mix(in oklab, var(--success) 55%, var(--foreground)); stroke-opacity: 0.75; stroke-width: 0.016; stroke-linecap: round; stroke-linejoin: round; }\n.uc-arrow { fill: color-mix(in oklab, var(--success) 55%, var(--foreground)); fill-opacity: 0.85; }\n.uc-truth-ray { stroke: var(--success); stroke-width: 0.022; stroke-linecap: round; }\n.uc-truth-dot { fill: var(--success); }\n.uc-truth, .uc-mine { pointer-events: none; }\n.uc-drop { stroke: color-mix(in oklab, var(--success) 60%, transparent); stroke-width: 0.009; stroke-dasharray: 0.03 0.025; }\n\n.uc-labels { position: absolute; inset: 0; pointer-events: none; }\n.uc-label { position: absolute; transform: translate(-50%, -50%); font-size: 1rem; color: var(--muted-foreground); white-space: nowrap; }\n.uc-label.small { font-size: 0.85rem; }\n.uc-label.coords { color: var(--success); font-size: 1.15rem; padding: 0.05rem 0.2rem; }\n.uc-stage { container-type: inline-size; }\n@container (max-width: 380px) { .uc-label.coords { font-size: 0.95rem; } }\n.uc-leader { stroke: color-mix(in oklab, var(--success) 45%, transparent); stroke-width: 0.008; stroke-dasharray: 0.02 0.02; }\n.uc-hint { font-size: 0.85rem; text-align: center; margin-top: -0.6rem; }\n.uc-facts { font-size: 1rem; }\n.uc-facts .katex { font-size: 1.1em; }\n",
+        "js": "const { view } = etude;\nconst svg = etude.$(\".uc-svg\");\nconst NS = \"http://www.w3.org/2000/svg\";\nconst el = (tag, attrs) => {\n  const n = document.createElementNS(NS, tag);\n  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);\n  return n;\n};\nconst tex = (s) => etude.mdInline(\"$\" + s + \"$\");\n\netude.$(\".uc-theta\").innerHTML = tex(\"\\\\theta = \" + view.thetaTex);\n\n// Tick marks every 15°, longer on the axes and the 30°/45° families.\nconst ticks = etude.$(\".uc-ticks\");\nfor (let d = 0; d < 360; d += 15) {\n  const a = (d * Math.PI) / 180;\n  const len = d % 90 === 0 ? 0.09 : d % 45 === 0 || d % 30 === 0 ? 0.06 : 0.035;\n  const c = Math.cos(a), s = -Math.sin(a);\n  ticks.append(el(\"line\", { x1: c * (1 - len), y1: s * (1 - len), x2: c * (1 + len), y2: s * (1 + len), class: d % 90 === 0 ? \"major\" : \"\" }));\n}\n\n// Axis labels as HTML so they get KaTeX.\nconst labels = etude.$(\".uc-labels\");\nconst place = (x, y, html, cls = \"\") => {\n  const span = document.createElement(\"span\");\n  span.className = \"uc-label \" + cls;\n  span.style.left = ((x + 1.4) / 2.8) * 100 + \"%\";\n  span.style.top = ((y + 1.4) / 2.8) * 100 + \"%\";\n  span.innerHTML = html;\n  labels.append(span);\n  return span;\n};\nplace(1.3, 0.12, tex(\"x\"));\nplace(-0.1, -1.3, tex(\"y\"));\nplace(1.08, 0.12, tex(\"1\"), \"small\");\n\nlet deg = null;\nconst mine = etude.$(\".uc-mine\");\nconst draw = () => {\n  mine.style.display = deg === null ? \"none\" : \"\";\n  if (deg === null) return;\n  const a = (deg * Math.PI) / 180;\n  const x = Math.cos(a), y = -Math.sin(a);\n  mine.querySelector(\".uc-ray\").setAttribute(\"x2\", x);\n  mine.querySelector(\".uc-ray\").setAttribute(\"y2\", y);\n  for (const c of mine.querySelectorAll(\"circle\")) c.setAttribute(\"cx\", x), c.setAttribute(\"cy\", y);\n  svg.setAttribute(\"aria-valuenow\", deg);\n  svg.setAttribute(\"aria-valuetext\", deg + \" degrees\");\n};\nconst set = (d) => {\n  if (etude.mode !== \"answer\") return;\n  deg = ((Math.round(d / 15) * 15) % 360 + 360) % 360;\n  draw();\n  etude.setReady(true);\n};\n\nconst angleAt = (e) => {\n  const pt = svg.createSVGPoint();\n  pt.x = e.clientX;\n  pt.y = e.clientY;\n  const p = pt.matrixTransform(svg.getScreenCTM().inverse());\n  if (Math.hypot(p.x, p.y) < 0.12) return null; // the centre has no direction\n  return (Math.atan2(-p.y, p.x) * 180) / Math.PI;\n};\nlet dragging = false;\nsvg.addEventListener(\"pointerdown\", (e) => {\n  if (etude.mode !== \"answer\") return;\n  const a = angleAt(e);\n  if (a === null) return;\n  dragging = true;\n  svg.setPointerCapture(e.pointerId);\n  svg.classList.add(\"dragging\");\n  set(a);\n  e.preventDefault();\n});\nsvg.addEventListener(\"pointermove\", (e) => {\n  if (!dragging) return;\n  const a = angleAt(e);\n  if (a !== null) set(a);\n});\nconst end = () => { dragging = false; svg.classList.remove(\"dragging\"); };\nsvg.addEventListener(\"pointerup\", end);\nsvg.addEventListener(\"pointercancel\", end);\n\nwindow.addEventListener(\"keydown\", (e) => {\n  if (etude.mode !== \"answer\" || e.ctrlKey || e.metaKey || e.altKey) return;\n  const step = { ArrowLeft: 15, ArrowUp: 15, ArrowRight: -15, ArrowDown: -15 }[e.key];\n  if (step === undefined) return;\n  e.preventDefault();\n  set((deg ?? 0) + (deg === null ? 0 : step));\n});\n\nif (etude.answer && Number.isFinite(Number(etude.answer.deg))) set(Number(etude.answer.deg));\nelse etude.setReady(false);\ndraw();\netude.getAnswer(() => (deg === null ? null : { deg }));\n\nconst gcd = (p, q) => (q ? gcd(q, p % q) : p);\nconst radOf = (d) => {\n  const k = d / 15;\n  if (!k) return \"0\";\n  const g = gcd(k, 12), n = k / g, m = 12 / g;\n  const top = n === 1 ? \"\\\\pi\" : n + \"\\\\pi\";\n  return m === 1 ? top : `\\\\frac{${top}}{${m}}`;\n};\n\netude.onResult(({ grade, key, answer }) => {\n  svg.classList.add(\"done\");\n  if (answer && Number.isFinite(Number(answer.deg))) {\n    deg = ((Math.round(Number(answer.deg) / 15) * 15) % 360 + 360) % 360;\n    draw();\n  }\n  const preview = document.body.dataset.preview === \"1\";\n  const score = grade?.score;\n  if (deg !== null && !preview) mine.classList.add(score >= 1 ? \"right\" : score > 0 ? \"near\" : \"wrong\");\n  if (score >= 1 || preview) mine.style.display = \"none\";\n\n  // The arc from 0 to θ, spiralling outward when θ goes past a full turn.\n  const truth = etude.$(\".uc-truth\");\n  const D = key.degrees;\n  const turns = Math.abs(D) / 360;\n  const pts = [];\n  const n = Math.max(2, Math.ceil(Math.abs(D) / 4));\n  for (let i = 0; i <= n; i++) {\n    const t = i / n;\n    const a = ((D * t) * Math.PI) / 180;\n    const r = 0.3 + (turns > 1 ? 0.13 * t * turns : 0);\n    pts.push([r * Math.cos(a), -r * Math.sin(a)]);\n  }\n  if (Math.abs(D) > 0) {\n    truth.append(el(\"polyline\", { points: pts.map((p) => p.join(\",\")).join(\" \"), class: \"uc-arc\" }));\n    const [ex, ey] = pts[pts.length - 1];\n    const [px, py] = pts[pts.length - 2];\n    // Aim the head along the last few samples so it follows the curve.\n    const [qx, qy] = pts[Math.max(0, pts.length - 4)];\n    const ang = Math.atan2(ey - qy, ex - qx);\n    const h = 0.1;\n    truth.append(el(\"path\", {\n      d: `M${ex},${ey} L${ex - h * Math.cos(ang - 0.5)},${ey - h * Math.sin(ang - 0.5)} L${ex - h * Math.cos(ang + 0.5)},${ey - h * Math.sin(ang + 0.5)} Z`,\n      class: \"uc-arrow\",\n    }));\n  }\n  const a = (key.target * Math.PI) / 180;\n  const x = Math.cos(a), y = -Math.sin(a);\n  truth.append(el(\"line\", { x1: x, y1: 0, x2: x, y2: y, class: \"uc-drop\" }));\n  truth.append(el(\"line\", { x1: 0, y1: 0, x2: x, y2: y, class: \"uc-truth-ray\" }));\n  truth.append(el(\"circle\", { cx: x, cy: y, r: 0.065, class: \"uc-truth-dot\" }));\n\n  // Your ray goes under the correct one.\n  svg.insertBefore(mine, truth);\n\n  // Coordinates near the point, in the nearest spot outside the circle that clears the axes and labels.\n  const lab = place(0, 0, tex(key.coordsTex), \"coords\");\n  const stage = etude.$(\".uc-stage\");\n  const leader = el(\"line\", { class: \"uc-leader\" });\n  truth.prepend(leader);\n  const fit = () => {\n    const W = stage.clientWidth;\n    const u = W / 2.8; // px per unit\n    const c = 1.4 * u; // centre, px\n    const px = c + x * u, py = c + y * u;\n    const w = lab.offsetWidth, h = lab.offsetHeight;\n    const busy = [...labels.querySelectorAll(\".uc-label:not(.coords)\")].map((n) => {\n      const r = n.getBoundingClientRect(), s = stage.getBoundingClientRect();\n      return [r.left - s.left - 4, r.top - s.top - 4, r.right - s.left + 4, r.bottom - s.top + 4];\n    });\n    const clear = (l, t) => {\n      const r = l + w, b = t + h;\n      if (l < 2 || t < 2 || r > W - 2 || b > W - 2) return false;\n      // nearest point of the box to the centre must be outside the circle\n      const nx = Math.max(l, Math.min(c, r)), ny = Math.max(t, Math.min(c, b));\n      if (Math.hypot(nx - c, ny - c) < u + 10) return false;\n      // axes run from -1.3 to 1.3\n      const ax = 1.3 * u;\n      if (t < c + 3 && b > c - 3 && r > c - ax && l < c + ax) return false;\n      if (l < c + 3 && r > c - 3 && b > c - ax && t < c + ax) return false;\n      return !busy.some(([bl, bt, br, bb]) => l < br && r > bl && t < bb && b > bt);\n    };\n    let best = null;\n    for (let t = 0; t <= W - h; t += 4)\n      for (let l = 0; l <= W - w; l += 4) {\n        if (!clear(l, t)) continue;\n        const nx = Math.max(l, Math.min(px, l + w)), ny = Math.max(t, Math.min(py, t + h));\n        const d = Math.hypot(nx - px, ny - py);\n        if (!best || d < best.d) best = { l, t, d, nx, ny };\n      }\n    if (!best) {\n      lab.style.display = \"none\";\n      leader.style.display = \"none\";\n      return;\n    }\n    lab.style.display = \"\";\n    lab.style.left = best.l + w / 2 + \"px\";\n    lab.style.top = best.t + h / 2 + \"px\";\n    const far = best.d > 0.3 * u;\n    leader.style.display = far ? \"\" : \"none\";\n    if (far) {\n      const toU = (v) => v / u - 1.4;\n      leader.setAttribute(\"x1\", x);\n      leader.setAttribute(\"y1\", y);\n      leader.setAttribute(\"x2\", toU(best.nx));\n      leader.setAttribute(\"y2\", toU(best.ny));\n    }\n  };\n  fit();\n  new ResizeObserver(fit).observe(stage);\n\n  const same = key.degrees === key.target;\n  const facts = [\n    `$\\\\theta = ${view.thetaTex}${view.units === \"radians\" ? \" = \" + key.degrees + \"^\\\\circ\" : \" = \" + key.radTex}$`,\n    same ? \"\" : `which lands in the same place as $${key.targetTex}$ (${key.degrees < 0 ? \"negative angles turn clockwise\" : \"one full turn is $360^\\\\circ$\"}).`,\n  ].filter(Boolean).join(\", \");\n  etude.$(\".uc-facts\").innerHTML = etude.md(\n    facts + `\\n\\n$(\\\\cos\\\\theta, \\\\sin\\\\theta) = ${key.coordsTex}$` +\n    (deg !== null && !preview && score < 1 ? `\\n\\nYou placed ${view.units === \"radians\" ? `$${radOf(deg)}$ ($${deg}^\\\\circ$)` : `$${deg}^\\\\circ$`}: ${score > 0 ? \"one $15^\\\\circ$ step off, half credit.\" : `$${grade.details?.off ?? \"\"}^\\\\circ$ off.`}` : \"\"),\n  );\n});\n"
+      }
+    }
+  ],
+  "items": [
+    {
+      "id": "showcase.code.roman",
+      "type": "code",
+      "deck": "Etude Showcase::1 Answer anything",
+      "tags": [
+        "showcase",
+        "topic::programming"
+      ],
+      "fields": {
+        "prompt": "Write `romanToInt(s)`, which turns a Roman numeral into a number.\n\n`\"LVIII\"` is $58$ and `\"MCMXCIV\"` is $1994$. A smaller numeral before a larger one is subtracted: `IV` is $4$, `CM` is $900$.",
+        "language": "javascript",
+        "starter": "function romanToInt(s) {\n  \n}\n",
+        "reference": "function romanToInt(s) {\n  const v = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };\n  let total = 0;\n  for (let i = 0; i < s.length; i++) {\n    const cur = v[s[i]], next = v[s[i + 1]] ?? 0;\n    total += cur < next ? -cur : cur;\n  }\n  return total;\n}\n",
+        "tests": [
+          [
+            "romanToInt(\"III\")",
+            3
+          ],
+          [
+            "romanToInt(\"IV\")",
+            4
+          ],
+          [
+            "romanToInt(\"IX\")",
+            9
+          ],
+          [
+            "romanToInt(\"LVIII\")",
+            58
+          ],
+          [
+            "romanToInt(\"XL\")",
+            40
+          ],
+          [
+            "romanToInt(\"CDXLIV\")",
+            444
+          ],
+          [
+            "romanToInt(\"MCMXCIV\")",
+            1994
+          ],
+          [
+            "romanToInt(\"MMMCMXCIX\")",
+            3999
+          ]
+        ],
+        "explanation": "Read left to right and subtract a symbol when the next one is bigger. One pass, $O(n)$."
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.code.fib",
+      "type": "code",
+      "deck": "Etude Showcase::1 Answer anything",
+      "tags": [
+        "showcase",
+        "topic::programming"
+      ],
+      "fields": {
+        "prompt": "Write a Python **generator** `fib()` that yields the Fibonacci numbers $0, 1, 1, 2, 3, 5, \\dots$ forever, using constant memory.",
+        "language": "python",
+        "starter": "def fib():\n    ",
+        "reference": "def fib():\n    a, b = 0, 1\n    while True:\n        yield a\n        a, b = b, a + b\n",
+        "rubric": "Must be a generator (uses `yield`), start at 0 then 1, never stop, and keep only the last two values (no growing list). Recursion or storing every value is incorrect for the memory requirement.",
+        "explanation": "`a, b = b, a + b` updates both at once, so no temporary is needed. Use it with `itertools.islice(fib(), 10)`."
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.math.derivative",
+      "type": "math",
+      "deck": "Etude Showcase::1 Answer anything",
+      "tags": [
+        "showcase",
+        "topic::calculus",
+        "generated"
+      ],
+      "fields": {
+        "prompt": "Differentiate $f(x) = x^{3} \\sin x$.",
+        "answers": [
+          "3x^{2} \\sin x + x^{3} \\cos x"
+        ],
+        "explanation": "Product rule: $(uv)' = u'v + uv'$, so $3x^{2}\\sin x + x^{3}\\cos x$. Any equivalent form is accepted, for example $x^{2}(3\\sin x + x\\cos x)$.",
+        "generator": "const n = rng.int(2, 4);\nconst [g, dg] = rng.pick([[\"\\\\sin x\", \"\\\\cos x\"], [\"\\\\cos x\", \"-\\\\sin x\"], [\"e^{x}\", \"e^{x}\"], [\"\\\\ln x\", \"\\\\frac{1}{x}\"]]);\nconst xn = `x^{${n}}`, xn1 = n - 1 === 1 ? \"x\" : `x^{${n - 1}}`;\nconst d = dg.startsWith(\"-\") ? `${n}${xn1} ${g} - ${xn} ${dg.slice(1)}` : `${n}${xn1} ${g} + ${xn} \\\\cdot ${dg}`;\nreturn {\n  prompt: `Differentiate $f(x) = ${xn} ${g}$.`,\n  answers: [d],\n  explanation: `Product rule, $(uv)' = u'v + uv'$ with $u = ${xn}$ and $v = ${g}$: $$f'(x) = ${d}$$ Any equivalent form is accepted.`,\n};"
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.math.line",
+      "type": "math",
+      "deck": "Etude Showcase::1 Answer anything",
+      "tags": [
+        "showcase",
+        "topic::algebra",
+        "generated"
+      ],
+      "fields": {
+        "prompt": "Write an equation of the line through $(1, 2)$ with slope $3$.",
+        "answers": [
+          "y = 3x - 1"
+        ],
+        "placeholder": "y = …",
+        "explanation": "Point-slope form $y - 2 = 3(x - 1)$ is the same line as $y = 3x - 1$. Any equation of this line counts, even $6x - 2y = 2$.",
+        "generator": "const sg = (k) => (k < 0 ? `- ${-k}` : `+ ${k}`);\nconst px = rng.int(-4, 4), py = rng.int(-4, 5), m = rng.pick([-3, -2, -1, 2, 3, 4]);\nconst b = py - m * px;\nconst ys = b === 0 ? `y = ${m}x` : `y = ${m}x ${sg(b)}`;\nreturn {\n  prompt: `Write an equation of the line through $(${px}, ${py})$ with slope $${m}$.`,\n  answers: [ys],\n  explanation: `Point-slope form $y ${sg(-py)} = ${m}(x ${sg(-px)})$ is the same line as $${ys}$. Any equation of this line is accepted.`,\n};"
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.math.factor",
+      "type": "math",
+      "deck": "Etude Showcase::1 Answer anything",
+      "tags": [
+        "showcase",
+        "topic::algebra",
+        "generated"
+      ],
+      "fields": {
+        "prompt": "Factor $x^{2} - 5x + 6$.",
+        "answers": [
+          "(x - 2)(x - 3)"
+        ],
+        "form": "same",
+        "explanation": "Two numbers that multiply to $6$ and add to $-5$: $-2$ and $-3$. Expanding back to $x^2 - 5x + 6$ is equivalent but isn't factored, so it only gets half credit.",
+        "generator": "const sg = (k) => (k < 0 ? `- ${-k}` : `+ ${k}`);\nlet a = 0, b = 0;\nwhile (a === 0 || b === 0 || a === b) { a = rng.int(-7, 7); b = rng.int(-7, 7); }\nconst p = -(a + b), q = a * b;\nconst poly = `x^{2}${p === 0 ? \"\" : ` ${p < 0 ? \"-\" : \"+\"} ${Math.abs(p) === 1 ? \"\" : Math.abs(p)}x`} ${sg(q)}`;\nconst f = `(x ${sg(-a)})(x ${sg(-b)})`;\nreturn {\n  prompt: `Factor $${poly}$.`,\n  answers: [f],\n  explanation: `Two numbers that multiply to $${q}$ and add to $${p}$: $${-a}$ and $${-b}$, so $${poly} = ${f}$. The expanded form is equivalent but isn't factored, so it only gets half credit.`,\n};"
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.math.roots",
+      "type": "math",
+      "deck": "Etude Showcase::1 Answer anything",
+      "tags": [
+        "showcase",
+        "topic::algebra",
+        "generated"
+      ],
+      "fields": {
+        "prompt": "Solve $x^{2} = 2x + 3$. Give every solution.",
+        "answers": [
+          "\\{3, -1\\}"
+        ],
+        "placeholder": "x = …, …",
+        "explanation": "$x^2 - 2x - 3 = (x - 3)(x + 1) = 0$, so $x = 3$ or $x = -1$. One of the two gets half credit.",
+        "generator": "const sg = (k) => (k < 0 ? `- ${-k}` : `+ ${k}`);\nlet a = 0, b = 0;\nwhile (a === b) { a = rng.int(-6, 7); b = rng.int(-6, 7); }\nconst s = a + b, c = -(a * b);\nconst rhs = s === 0 ? `${c}` : `${s === 1 ? \"\" : s === -1 ? \"-\" : s}x${c === 0 ? \"\" : ` ${sg(c)}`}`;\nreturn {\n  prompt: `Solve $x^{2} = ${rhs}$. Give every solution.`,\n  answers: [`\\\\{${a}, ${b}\\\\}`],\n  explanation: `Move everything to one side and factor: $(x ${sg(-a)})(x ${sg(-b)}) = 0$, so $x = ${a}$ or $x = ${b}$. Either order works; one of the two gets half credit.`,\n};"
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.math.exact",
+      "type": "math",
+      "deck": "Etude Showcase::1 Answer anything",
+      "tags": [
+        "showcase",
+        "topic::trigonometry",
+        "generated"
+      ],
+      "fields": {
+        "prompt": "Exact value of $\\cos \\frac{5\\pi}{6}$?",
+        "answers": [
+          "-\\frac{\\sqrt{3}}{2}"
+        ],
+        "form": "exact",
+        "explanation": "$\\frac{5\\pi}{6}$ is $150^\\circ$, in the second quadrant where cosine is negative, with reference angle $\\frac{\\pi}{6}$: $-\\frac{\\sqrt{3}}{2}$. A decimal like $-0.866$ is the right value but not exact, so it gets half credit.",
+        "generator": "const [t, f, v] = rng.pick([\n  [\"\\\\frac{5\\\\pi}{6}\", \"cos\", \"-\\\\frac{\\\\sqrt{3}}{2}\"],\n  [\"\\\\frac{2\\\\pi}{3}\", \"sin\", \"\\\\frac{\\\\sqrt{3}}{2}\"],\n  [\"\\\\frac{7\\\\pi}{4}\", \"cos\", \"\\\\frac{\\\\sqrt{2}}{2}\"],\n  [\"\\\\frac{4\\\\pi}{3}\", \"tan\", \"\\\\sqrt{3}\"],\n  [\"\\\\frac{11\\\\pi}{6}\", \"sin\", \"-\\\\frac{1}{2}\"],\n  [\"\\\\frac{3\\\\pi}{4}\", \"tan\", \"-1\"],\n]);\nreturn {\n  prompt: `Exact value of $\\\\${f} ${t}$?`,\n  answers: [v],\n  explanation: `Find the quadrant and the reference angle, then the sign: $\\\\${f} ${t} = ${v}$. A decimal is the right value but not exact, so it gets half credit.`,\n};"
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.free.induction",
+      "type": "free",
+      "deck": "Etude Showcase::1 Answer anything",
+      "tags": [
+        "showcase",
+        "topic::proofs"
+      ],
+      "fields": {
+        "prompt": "Prove by induction that for every integer $n \\ge 1$\n\n$$\\sum_{k=1}^{n} k = \\frac{n(n+1)}{2}.$$\n\nWrite it the way you would on paper: math in `$...$` renders as you type.",
+        "reference": "**Base case.** For $n = 1$ the sum is $1$ and $\\frac{1 \\cdot 2}{2} = 1$.\n\n**Inductive step.** Assume $\\sum_{k=1}^{n} k = \\frac{n(n+1)}{2}$ for some $n \\ge 1$. Then\n\n$$\\sum_{k=1}^{n+1} k = \\frac{n(n+1)}{2} + (n+1) = \\frac{(n+1)(n+2)}{2},$$\n\nwhich is the formula for $n+1$. By induction it holds for every $n \\ge 1$.",
+        "rubric": "Full credit needs: a base case that is actually checked; the inductive hypothesis stated; the step that adds $(n+1)$ and simplifies to $\\frac{(n+1)(n+2)}{2}$; a conclusion. Missing the base case, or assuming what is to be proved for $n+1$, is partial at best. A direct proof (Gauss's pairing) is a correct proof but not by induction: partial.",
+        "explanation": "The step is the whole idea: the sum up to $n+1$ is the sum up to $n$ plus one more term."
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.draw.parabola",
+      "type": "draw",
+      "deck": "Etude Showcase::1 Answer anything",
+      "tags": [
+        "showcase",
+        "topic::functions"
+      ],
+      "fields": {
+        "prompt": "Sketch $y = x^2 - 1$ on axes. Mark where it crosses the $x$-axis and its lowest point.",
+        "reference": "Labelled x and y axes. An upward-opening parabola with its vertex (lowest point) at (0, -1), crossing the x-axis at x = -1 and x = 1.",
+        "rubric": "Must open upward, vertex at (0, -1) marked, x-intercepts at -1 and 1 marked. Exact scale doesn't matter.",
+        "background": "grid"
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.unit-circle.mixed",
+      "type": "unit-circle",
+      "deck": "Etude Showcase::2 Math and science",
+      "tags": [
+        "showcase",
+        "topic::math"
+      ],
+      "fields": {
+        "prompt": "Place the angle on the unit circle.",
+        "units": "mixed",
+        "wrap": true,
+        "explanation": "Angles start on the positive $x$-axis and turn counter-clockwise; negative angles turn clockwise, and adding $2\\pi$ ($360^\\circ$) lands in the same place. The point on the circle is $(\\cos\\theta, \\sin\\theta)$."
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.unit-circle.radians",
+      "type": "unit-circle",
+      "deck": "Etude Showcase::2 Math and science",
+      "tags": [
+        "showcase",
+        "topic::math"
+      ],
+      "fields": {
+        "prompt": "Place the angle on the unit circle. Radians only.",
+        "units": "radians",
+        "wrap": false,
+        "explanation": "A full turn is $2\\pi$, so $\\frac{\\pi}{12}$ is one $15^\\circ$ step, $\\frac{\\pi}{6}$ is $30^\\circ$, $\\frac{\\pi}{4}$ is $45^\\circ$ and $\\frac{\\pi}{3}$ is $60^\\circ$. Count the steps from the positive $x$-axis."
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.plot.parabola",
+      "type": "plot",
+      "deck": "Etude Showcase::2 Math and science",
+      "tags": [
+        "showcase",
+        "topic::math"
+      ],
+      "fields": {
+        "prompt": "Mark both roots and the vertex of $y = x^2 - 2x - 3$.",
+        "points": [
+          [
+            -1,
+            0
+          ],
+          [
+            3,
+            0
+          ],
+          [
+            1,
+            -4
+          ]
+        ],
+        "labels": [
+          "root",
+          "root",
+          "vertex"
+        ],
+        "curve": "1*(x-(-1))*(x-(3))",
+        "explanation": "Factor it: $y = (x + 1)(x - 3)$, so the roots are $x = -1$ and $x = 3$. The vertex sits halfway between them, at $x = \\frac{-1 + 3}{2} = 1$, and $y(1) = -4$. It's a minimum, since the parabola opens upward ($a = 1$).",
+        "tolerance": 0.25,
+        "range": [
+          -5,
+          5,
+          -5,
+          5
+        ],
+        "snap": 0.5,
+        "generator": "  const a = rng.pick([1, 1, -1, -1, 2, -2]);\n  const gap = Math.abs(a) === 2 ? 2 : rng.pick([2, 4]);\n  const vx = rng.int(-4 + gap / 2, 4 - gap / 2);\n  const r1 = vx - gap / 2, r2 = vx + gap / 2;\n  const vy = -a * (gap / 2) * (gap / 2);\n  // y = a x^2 + b x + c\n  const b = -a * (r1 + r2), c = a * r1 * r2;\n  const term = (k, x, first) => {\n    if (k === 0) return \"\";\n    const sign = k < 0 ? \"-\" : first ? \"\" : \"+\";\n    const mag = Math.abs(k) === 1 && x ? \"\" : String(Math.abs(k));\n    return `${sign} ${mag}${x}`.trim();\n  };\n  const tex = [term(a, \"x^2\", true), term(b, \"x\", false), term(c, \"\", false)].filter(Boolean).join(\" \").replace(/\\s+/g, \" \").replace(/^- /, \"-\");\n  const factored = `${a === 1 ? \"\" : a === -1 ? \"-\" : a}(x ${r1 < 0 ? \"+\" : \"-\"} ${Math.abs(r1)})(x ${r2 < 0 ? \"+\" : \"-\"} ${Math.abs(r2)})`.replace(/\\(x - 0\\)/g, \"x\").replace(/\\(x \\+ 0\\)/g, \"x\");\n  return {\n    prompt: `Mark both roots and the vertex of $y = ${tex}$.`,\n    points: [[r1, 0], [r2, 0], [vx, vy]],\n    labels: [\"root\", \"root\", \"vertex\"],\n    curve: `${a}*(x-(${r1}))*(x-(${r2}))`,\n    explanation: `Factor it: $y = ${factored}$, so the roots are $x = ${r1}$ and $x = ${r2}$. The vertex sits halfway between them, at $x = \\\\frac{${r1} + ${r2 < 0 ? `(${r2})` : r2}}{2} = ${vx}$, and $y(${vx}) = ${vy}$. It's a ${a > 0 ? \"minimum, since the parabola opens upward\" : \"maximum, since the parabola opens downward\"} ($a = ${a}$).`,\n  };"
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.plot.lines",
+      "type": "plot",
+      "deck": "Etude Showcase::2 Math and science",
+      "tags": [
+        "showcase",
+        "topic::math"
+      ],
+      "fields": {
+        "prompt": "Mark where the lines $y = 2x - 1$ and $y = -x + 5$ meet, and where each one crosses the $x$-axis.",
+        "points": [
+          [
+            2,
+            3
+          ],
+          [
+            0.5,
+            0
+          ],
+          [
+            5,
+            0
+          ]
+        ],
+        "labels": [
+          "where they meet",
+          "$y = 2x - 1$ crosses",
+          "$y = -x + 5$ crosses"
+        ],
+        "curve": "2*x-1; -x+5",
+        "explanation": "They meet where $2x - 1 = -x + 5$, so $x = 2$ and $y = 3$. Each crosses the $x$-axis where $y = 0$: $x = \\tfrac{1}{2}$ and $x = 5$.",
+        "tolerance": 0.25,
+        "range": [
+          -5,
+          5,
+          -5,
+          5
+        ],
+        "snap": 0.5,
+        "generator": "  const slopes = [-2, -1, 1, 2];\n  for (;;) {\n    const px = rng.int(-3, 3), py = rng.pick([-3, -2, -1, 1, 2, 3]);\n    const [m1, m2] = rng.shuffle(slopes).slice(0, 2);\n    if (m1 === m2) continue;\n    const x1 = px - py / m1, x2 = px - py / m2;\n    if (Math.abs(x1) > 4.5 || Math.abs(x2) > 4.5) continue;\n    const b1 = py - m1 * px, b2 = py - m2 * px;\n    const line = (m, b) => {\n      const mx = m === 1 ? \"x\" : m === -1 ? \"-x\" : `${m}x`;\n      return b === 0 ? mx : `${mx} ${b < 0 ? \"-\" : \"+\"} ${Math.abs(b)}`;\n    };\n    const fr = (v) => (Number.isInteger(v) ? String(v) : (v < 0 ? \"-\" : \"\") + `\\\\tfrac{${Math.abs(v * 2)}}{2}`);\n    return {\n      prompt: `Mark where the lines $y = ${line(m1, b1)}$ and $y = ${line(m2, b2)}$ meet, and where each one crosses the $x$-axis.`,\n      points: [[px, py], [x1, 0], [x2, 0]],\n      labels: [\"where they meet\", `$y = ${line(m1, b1)}$ crosses`, `$y = ${line(m2, b2)}$ crosses`],\n      curve: `${m1}*x+(${b1}); ${m2}*x+(${b2})`,\n      explanation: `They meet where $${line(m1, b1)} = ${line(m2, b2)}$, so $x = ${px}$ and $y = ${py}$. Each crosses the $x$-axis where $y = 0$: $x = ${fr(x1)}$ and $x = ${fr(x2)}$.`,\n    };\n  }"
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.balance.rust",
+      "type": "balance",
+      "deck": "Etude Showcase::2 Math and science",
+      "tags": [
+        "showcase",
+        "topic::chemistry"
+      ],
+      "fields": {
+        "prompt": "Iron rusting: iron and oxygen make iron(III) oxide.",
+        "reactants": [
+          "Fe",
+          "O2"
+        ],
+        "products": [
+          "Fe2O3"
+        ],
+        "explanation": "Oxygen comes in pairs on the left and threes on the right, so the smallest common count is $6$: $3\\,\\mathrm{O_2}$ and $2\\,\\mathrm{Fe_2O_3}$. That puts $4$ irons on the right, so $4\\,\\mathrm{Fe}$."
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.balance.combustion",
+      "type": "balance",
+      "deck": "Etude Showcase::2 Math and science",
+      "tags": [
+        "showcase",
+        "topic::chemistry"
+      ],
+      "fields": {
+        "prompt": "Balance the complete combustion of **propane**.",
+        "reactants": [
+          "C3H8",
+          "O2"
+        ],
+        "products": [
+          "CO2",
+          "H2O"
+        ],
+        "explanation": "Carbon first: $3$ carbons make $3\\,\\mathrm{CO_2}$. Then hydrogen: $8$ hydrogens make $4\\,\\mathrm{H_2O}$. That's $6 + 4 = 10$ oxygen atoms on the right, so $5\\,\\mathrm{O_2}$.",
+        "generator": "  const NAMES = [\"methane\", \"ethane\", \"propane\", \"butane\", \"pentane\", \"hexane\"];\n  const n = rng.int(1, 6);\n  const f = `C${n === 1 ? \"\" : n}H${2 * n + 2}`;\n  return {\n    prompt: `Balance the complete combustion of **${NAMES[n - 1]}**.`,\n    reactants: [f, \"O2\"],\n    products: [\"CO2\", \"H2O\"],\n    explanation: `Carbon first: ${n === 1 ? \"$1$ carbon makes $1\\\\,\\\\mathrm{CO_2}$\" : `$${n}$ carbons make $${n}\\\\,\\\\mathrm{CO_2}$`}. Then hydrogen: $${2 * n + 2}$ hydrogens make $${n + 1}\\\\,\\\\mathrm{H_2O}$. That's $${2 * n} + ${n + 1} = ${3 * n + 1}$ oxygen atoms on the right, so ` +\n      ((3 * n + 1) % 2\n        ? `$\\\\frac{${3 * n + 1}}{2}\\\\,\\\\mathrm{O_2}$. Half a molecule isn't allowed, so double everything: $2\\\\,\\\\mathrm{${f.replace(/(\\d+)/g, \"_{$1}\")}} + ${3 * n + 1}\\\\,\\\\mathrm{O_2} \\\\to ${2 * n}\\\\,\\\\mathrm{CO_2} + ${2 * n + 2}\\\\,\\\\mathrm{H_2O}$.`\n        : `$${(3 * n + 1) / 2}\\\\,\\\\mathrm{O_2}$.`),\n  };"
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.balance.aluminium-acid",
+      "type": "balance",
+      "deck": "Etude Showcase::2 Math and science",
+      "tags": [
+        "showcase",
+        "topic::chemistry"
+      ],
+      "fields": {
+        "prompt": "Aluminium dissolves in sulfuric acid, giving aluminium sulfate and hydrogen gas.",
+        "reactants": [
+          "Al",
+          "H2SO4"
+        ],
+        "products": [
+          "Al2(SO4)3",
+          "H2"
+        ],
+        "explanation": "Treat $\\mathrm{SO_4}$ as one unit: it stays intact. $\\mathrm{Al_2(SO_4)_3}$ needs $3$ sulfates, so $3\\,\\mathrm{H_2SO_4}$, which frees $6$ hydrogens: $3\\,\\mathrm{H_2}$. Two aluminiums on the right means $2\\,\\mathrm{Al}$."
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.color.hex",
+      "type": "color",
+      "deck": "Etude Showcase::4 Music and senses",
+      "tags": [
+        "showcase",
+        "topic::color"
+      ],
+      "fields": {
+        "prompt": "Here's a hex code. Build the color it names.",
+        "explanation": "Read the pairs as red, green and blue. The biggest pair sets the hue family, the gap between the biggest and smallest sets the saturation, and their average sets the lightness."
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.estimate.everest",
+      "type": "estimate",
+      "deck": "Etude Showcase::2 Math and science",
+      "tags": [
+        "showcase",
+        "topic::estimation"
+      ],
+      "fields": {
+        "prompt": "How tall is **Mount Everest**, above sea level?",
+        "answer": 8849,
+        "min": 0,
+        "max": 15000,
+        "scale": "linear",
+        "step": 50,
+        "unit": "m",
+        "tolerance": 0.03,
+        "explanation": "$8{,}849$ m, from the 2020 China–Nepal survey. Airliners cruise at about $11{,}000$ m, so the summit is a little below cruising altitude."
+      },
+      "source": "2020 China–Nepal joint survey"
+    },
+    {
+      "id": "showcase.estimate.heartbeats",
+      "type": "estimate",
+      "deck": "Etude Showcase::2 Math and science",
+      "tags": [
+        "showcase",
+        "topic::estimation"
+      ],
+      "fields": {
+        "prompt": "Roughly how many times does a human heart beat in a lifetime?",
+        "answer": 2900000000,
+        "min": 100000,
+        "max": 10000000000000,
+        "scale": "log",
+        "unit": "beats",
+        "tolerance": 0.1,
+        "explanation": "Build it from pieces you know:\n\n$$\\underbrace{70}_{\\text{beats/min}} \\times \\underbrace{60 \\times 24 \\times 365}_{\\approx\\,5.3\\,\\times\\,10^{5}\\ \\text{min/year}} \\times \\underbrace{80}_{\\text{years}} \\approx 2.9 \\times 10^{9}$$\n\nAbout three billion. Getting within a factor of two counts as a good Fermi estimate."
+      },
+      "source": ""
+    },
+    {
+      "id": "showcase.regex.hex-color",
+      "type": "regex",
+      "deck": "Etude Showcase::3 Computing",
+      "tags": [
+        "showcase",
+        "topic::regex"
+      ],
+      "fields": {
+        "prompt": "Match a CSS hex color: a `#` followed by exactly **3 or 6** hex digits, in either case.",
+        "match": [
+          "#fff",
+          "#1A2b3C",
+          "#000000",
+          "#C0FFEE"
+        ],
+        "reject": [
+          "fff",
+          "#ffff",
+          "#12345g",
+          "#1234567",
+          "# fff"
+        ],
+        "hidden": {
+          "match": [
+            "#ABC",
+            "#9e9e9e",
+            "#a1B"
+          ],
+          "reject": [
+            "#ab",
+            "#fffff",
+            "#abcdef0",
+            "",
+            "##fff",
+            "#ff ff"
+          ]
+        },
+        "mode": "full",
+        "flags": "",
+        "solution": "#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})",
+        "explanation": "Two alternatives inside a group: exactly three digits or exactly six. `#[0-9a-f]{3,6}` is the usual trap: it also lets 4 and 5 digits through. Use the `i` flag or spell out both cases with `[0-9a-fA-F]`."
+      }
+    },
+    {
+      "id": "showcase.regex.iso-date",
+      "type": "regex",
+      "deck": "Etude Showcase::3 Computing",
+      "tags": [
+        "showcase",
+        "topic::regex"
+      ],
+      "fields": {
+        "prompt": "Find an ISO date `YYYY-MM-DD` **anywhere** in a line: month `01`–`12`, day `01`–`31`, two digits each. It must stand on its own, not be glued into a longer number.",
+        "match": [
+          "due 2026-10-23 at 16:30",
+          "2026-01-05",
+          "backup-2025-12-31.tar"
+        ],
+        "reject": [
+          "2026-13-01",
+          "2026-10-32",
+          "10/23/2026",
+          "2026-1-5",
+          "2026-10-233"
+        ],
+        "hidden": {
+          "match": [
+            "(1999-09-09)",
+            "on 2000-02-29."
+          ],
+          "reject": [
+            "12026-10-23",
+            "2026-00-10",
+            "2026-10-00",
+            "20261023"
+          ]
+        },
+        "mode": "find",
+        "flags": "",
+        "solution": "\\b\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])\\b",
+        "explanation": "Months are `0[1-9]|1[0-2]` and days `0[1-9]|[12]\\d|3[01]`. In find mode a bare `\\d{4}` happily matches inside `12026-10-23`, or stops before the extra digit in `2026-10-233`, so the word boundaries `\\b` at both ends do the real work. (It doesn't know February has no 31st; that's a job for code.)"
+      }
+    },
+    {
+      "id": "showcase.graph-walk.bfs",
+      "type": "graph-walk",
+      "deck": "Etude Showcase::3 Computing",
+      "tags": [
+        "showcase",
+        "topic::algorithms"
+      ],
+      "fields": {
+        "note": "BFS goes level by level, which is why it finds shortest paths in unweighted graphs.",
+        "algorithm": "bfs",
+        "explanation": "BFS uses a queue: it finishes every neighbour of a node before going a level deeper, so nodes come out in order of their distance from the start. The pink edges are the BFS tree, and following them from the start gives a shortest path to every node."
+      }
+    },
+    {
+      "id": "showcase.graph-walk.dfs",
+      "type": "graph-walk",
+      "deck": "Etude Showcase::3 Computing",
+      "tags": [
+        "showcase",
+        "topic::algorithms"
+      ],
+      "fields": {
+        "note": "DFS always goes deeper first: the walk behind maze solving, cycle detection and topological sort.",
+        "algorithm": "dfs",
+        "explanation": "DFS goes as deep as it can along the first unvisited neighbour, and only backs up when it's stuck. The pink edges are the DFS tree: each one is the move that first reached a node."
+      }
+    },
+    {
+      "id": "showcase.bug-hunt.moving-average",
+      "type": "bug-hunt",
+      "deck": "Etude Showcase::3 Computing",
+      "tags": [
+        "showcase",
+        "topic::python"
+      ],
+      "fields": {
+        "prompt": "`moving_average([1, 2, 3, 4, 5], 2)` should return `[1.5, 2.5, 3.5, 4.5]`. Which line is wrong?",
+        "code": "def moving_average(xs, k):\n    \"\"\"Mean of every run of k consecutive values.\"\"\"\n    if k <= 0 or k > len(xs):\n        return []\n    out = []\n    window = sum(xs[:k])\n    out.append(window / k)\n    for i in range(k, len(xs) - 1):\n        window += xs[i] - xs[i - k]\n        out.append(window / k)\n    return out",
+        "language": "python",
+        "count": 1,
+        "bugs": [
+          8
+        ],
+        "fix": {
+          "8": "    for i in range(k, len(xs)):"
+        },
+        "explanation": "`range` already stops before its end, so `len(xs) - 1` skips the last window: the call returns `[1.5, 2.5, 3.5]`. With `range(k, len(xs))` the loop slides the window onto every remaining value, giving `len(xs) - k + 1` averages."
+      }
+    },
+    {
+      "id": "showcase.bug-hunt.closure-retry",
+      "type": "bug-hunt",
+      "deck": "Etude Showcase::3 Computing",
+      "tags": [
+        "showcase",
+        "topic::javascript"
+      ],
+      "fields": {
+        "prompt": "The retries fire one second apart, as intended, but every one of them calls `upload(undefined)`. Which line would you change?",
+        "code": "// Retry each failed upload, one second apart.\nfunction retryAll(failed, upload) {\n  for (var i = 0; i < failed.length; i++) {\n    setTimeout(function () {\n      upload(failed[i]);\n    }, 1000 * (i + 1));\n  }\n}",
+        "language": "javascript",
+        "count": 1,
+        "bugs": [
+          3
+        ],
+        "fix": {
+          "3": "  for (let i = 0; i < failed.length; i++) {"
+        },
+        "explanation": "`var` gives the whole function one shared `i`. The delays are computed during the loop, so they're right, but the callbacks run later, after the loop has left `i` at `failed.length`, so `failed[i]` is `undefined`. `let` makes a fresh `i` for every iteration, and each callback keeps its own."
+      }
+    },
+    {
+      "id": "showcase.bits.unsigned",
+      "type": "bits",
+      "deck": "Etude Showcase::3 Computing",
+      "tags": [
+        "showcase",
+        "topic::binary"
+      ],
+      "fields": {
+        "note": "Unsigned binary: every switch adds its place value.",
+        "width": 8,
+        "signed": false,
+        "target": 173,
+        "generator": "// Skip easy targets with fewer than three bits set.\nlet t;\ndo t = rng.int(40, 254); while (t.toString(2).split(\"1\").length - 1 < 3);\nreturn { target: t };",
+        "explanation": "Work from the left: take the biggest place value that still fits, subtract it, and move right. Every 4 bits make one hex digit."
+      }
+    },
+    {
+      "id": "showcase.bits.twos-complement",
+      "type": "bits",
+      "deck": "Etude Showcase::3 Computing",
+      "tags": [
+        "showcase",
+        "topic::binary"
+      ],
+      "fields": {
+        "note": "Two's complement: how every CPU stores negative integers.",
+        "width": 8,
+        "signed": true,
+        "target": -45,
+        "generator": "return { target: -rng.int(3, 128) };",
+        "explanation": "Two quick routes to a negative: write the positive value, flip every bit and add 1; or start from the top bit (worth −128) and add the positive bits that bring you back up to the target."
+      }
+    },
+    {
+      "id": "showcase.sprint.mixed",
+      "type": "sprint",
+      "deck": "Etude Showcase::5 Games",
+      "tags": [
+        "showcase",
+        "topic::arithmetic"
+      ],
+      "fields": {
+        "note": "Two-digit sums, times tables to 12 and friendly percentages.",
+        "mode": "mixed",
+        "seconds": 30,
+        "target": 12
+      }
+    }
+  ]
+}

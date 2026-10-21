@@ -1,0 +1,17 @@
+{
+  "id": "estimate",
+  "name": "Estimate it",
+  "description": "Guess a quantity with a slider. Linear for everyday ranges, logarithmic for Fermi questions spanning orders of magnitude. Full credit close to the answer, partial credit further out.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "required": true },
+    { "name": "answer", "kind": "number", "required": true, "private": true },
+    { "name": "min", "kind": "number", "required": true },
+    { "name": "max", "kind": "number", "required": true },
+    { "name": "scale", "kind": "text", "default": "linear", "description": "linear | log" },
+    { "name": "step", "kind": "number", "description": "Linear only: slider step. Default: about a thousandth of the range." },
+    { "name": "unit", "kind": "text" },
+    { "name": "tolerance", "kind": "number", "description": "Full-credit band. Linear: fraction of the range (default 0.04). Log: orders of magnitude (default 0.1)." },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

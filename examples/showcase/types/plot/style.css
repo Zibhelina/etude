@@ -1,0 +1,60 @@
+.sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }
+.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }
+
+.pl-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: -0.6rem; }
+.pl-count { font-size: 0.9rem; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.pl-count b { color: var(--foreground); font-weight: 600; }
+.pl-count.full b { color: var(--highlight); }
+.pl-count.over b { color: var(--warning); }
+.pl-clear { height: 2.5rem; }
+[data-mode="result"] .pl-bar { display: none; }
+
+.pl-stage { position: relative; width: 100%; max-width: 480px; margin: 0 auto; }
+.pl-svg { display: block; width: 100%; height: auto; touch-action: none; cursor: crosshair; user-select: none; -webkit-user-select: none; }
+.pl-svg.done { cursor: default; }
+.pl-svg:focus { outline: none; }
+.pl-svg:focus-visible { border-radius: calc(var(--radius) - 4px); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 35%, transparent); }
+.pl-grid line { stroke: color-mix(in oklab, var(--foreground) 10%, transparent); stroke-width: 0.025; }
+.pl-grid line.axis { stroke: color-mix(in oklab, var(--foreground) 60%, transparent); stroke-width: 0.045; }
+.pl-grid .arrow { fill: color-mix(in oklab, var(--foreground) 60%, transparent); }
+
+.pl-tags { position: absolute; inset: 0; pointer-events: none; }
+.pl-tick, .pl-var, .pl-tag { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; line-height: 1; }
+.pl-tick { font-size: 0.72rem; color: var(--muted-foreground); }
+.pl-tick, .pl-var, .pl-tag { text-shadow: 0 0 2px var(--background, transparent), 0 0 3px var(--background, transparent), 0 0 4px var(--background, transparent), 0 0 4px var(--background, transparent), 0 0 5px var(--background, transparent); }
+.pl-tick.left { transform: translate(-100%, -50%); }
+.pl-var { font-size: 0.95rem; color: var(--muted-foreground); }
+.pl-tag { font-size: 0.85rem; color: var(--success); padding: 0.1rem 0.2rem; }
+
+.pl-cursor circle { fill: none; stroke: color-mix(in oklab, var(--highlight) 70%, transparent); stroke-width: 0.04; stroke-dasharray: 0.08 0.06; pointer-events: none; }
+.pl-placed .pt { fill: var(--highlight); stroke: var(--background, transparent); stroke-width: 0.05; transition: r 0.1s; }
+.pl-svg.dragging .pl-placed .pt { r: 0.2; }
+.pl-placed .pt.good { fill: var(--success); }
+.pl-placed .pt.extra { fill: var(--danger); }
+
+.pl-curves .curve { fill: none; stroke: color-mix(in oklab, var(--highlight) 75%, transparent); stroke-width: 0.06; stroke-linecap: round; stroke-linejoin: round; }
+.pl-expected .zone { fill: color-mix(in oklab, var(--success) 12%, transparent); stroke: none; }
+.pl-expected .want { fill: none; stroke: var(--success); stroke-width: 0.06; }
+.pl-expected .want.hit { stroke: color-mix(in oklab, var(--success) 70%, transparent); }
+.pl-expected .want.miss { stroke: var(--warning); stroke-width: 0.07; stroke-dasharray: 0.12 0.08; fill: color-mix(in oklab, var(--background, transparent) 70%, transparent); }
+.pl-tag.missed { color: var(--warning); }
+[data-preview="1"] .pl-expected .want { fill: var(--success); }
+
+.pl-hint { font-size: 0.85rem; text-align: center; margin-top: -0.6rem; }
+.pl-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; font-size: 0.85rem; color: var(--muted-foreground); }
+.pl-legend:empty { display: none; }
+.pl-legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.pl-legend .dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; display: inline-block; }
+.pl-legend .dot.hit { background: var(--success); }
+.pl-legend .dot.miss { border: 2px dashed var(--warning); }
+.pl-legend .dot.extra { background: var(--danger); }
+.pl-legend .line { width: 1.1rem; height: 3px; border-radius: 2px; background: color-mix(in oklab, var(--highlight) 75%, transparent); display: inline-block; }
+.pl-list ul { margin: 0; }
+.pl-list li.ok::marker { color: var(--success); }
+.pl-list li.bad::marker { color: var(--danger); }
+.pl-list li.miss::marker { color: var(--warning); }
+.pl-score { font-size: 1.15rem; font-weight: 600; }
+.pl-score:empty { display: none; }
+.pl-score.good { color: var(--success); }
+.pl-score.near { color: var(--warning); }
+.pl-score.far { color: var(--danger); }

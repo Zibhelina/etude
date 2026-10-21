@@ -1,0 +1,53 @@
+.sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }
+.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }
+
+/* Code should read literally: no fused glyphs from ligature fonts. */
+#card, #card * { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+
+.bh-head { justify-content: space-between; margin-bottom: -0.75rem; font-size: 0.9rem; }
+.bh-ask { color: var(--muted-foreground); }
+.bh-ask b { color: var(--foreground); font-weight: 600; }
+.bh-lang { font: 0.72rem var(--font-mono); color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 999px; padding: 0.05rem 0.55rem; }
+
+.bh-listing {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: color-mix(in oklab, var(--muted) 70%, transparent);
+  overflow-x: auto; padding: 0.4rem 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent;
+}
+.bh-listing::-webkit-scrollbar { height: 6px; }
+.bh-listing::-webkit-scrollbar-button { display: none; }
+.bh-listing::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--foreground) 22%, transparent); border-radius: 3px; }
+.bh-listing::-webkit-scrollbar-track { background: transparent; }
+.bh-lines { display: flex; flex-direction: column; width: max-content; min-width: 100%; }
+.bh-line {
+  display: flex; align-items: center; min-height: 2rem;
+  font: 0.86rem/1.5 var(--font-mono); cursor: pointer; outline: none;
+  border-left: 3px solid transparent; padding-right: 1rem;
+  transition: background 0.12s, border-color 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (pointer: coarse) { .bh-line { min-height: 2.5rem; } }
+.bh-line .ln {
+  flex: none; width: 2.6rem; padding-right: 0.9rem; text-align: right;
+  color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+  font-variant-numeric: tabular-nums; user-select: none;
+}
+.bh-line .src { white-space: pre; tab-size: 4; }
+.bh-line:hover { background: color-mix(in oklab, var(--foreground) 5%, transparent); }
+.bh-line:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--ring) 60%, transparent); }
+.bh-line.picked { background: color-mix(in oklab, var(--highlight) 13%, transparent); border-left-color: var(--highlight); }
+.bh-line.picked .ln { color: var(--highlight); }
+[data-mode="result"] .bh-line { cursor: default; }
+[data-mode="result"] .bh-line:hover { background: none; }
+.bh-line.r-right { background: color-mix(in oklab, var(--success) 13%, transparent) !important; border-left-color: var(--success); }
+.bh-line.r-wrong { background: color-mix(in oklab, var(--danger) 12%, transparent) !important; border-left-color: var(--danger); }
+.bh-line.r-missed { background: color-mix(in oklab, var(--warning) 12%, transparent) !important; border-left-color: var(--warning); }
+.bh-line.r-right .ln, .bh-line.r-wrong .ln, .bh-line.r-missed .ln { color: var(--foreground); }
+.bh-line.r-bug .txt { text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--danger) 80%, transparent); text-decoration-thickness: 1.5px; }
+.bh-line.fixline { cursor: default; background: color-mix(in oklab, var(--success) 9%, transparent) !important; border-left-color: var(--success); }
+.bh-line.fixline .ln { color: var(--success); font-weight: 700; }
+.bh-line.fixline:hover { background: color-mix(in oklab, var(--success) 9%, transparent); }
+.bh-help { font-size: 0.82rem; margin: -0.5rem 0 0; }

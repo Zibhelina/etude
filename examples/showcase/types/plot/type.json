@@ -1,0 +1,16 @@
+{
+  "id": "plot",
+  "name": "Mark the points",
+  "description": "Tap points onto a coordinate grid: roots, vertices, intersections. Graded by matching your points to the expected ones; extra points cost credit. Can generate a new curve every review.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "required": true },
+    { "name": "points", "kind": "json", "required": true, "private": true, "description": "Expected points, a list of [x, y]." },
+    { "name": "labels", "kind": "list", "private": true, "description": "Optional names for the expected points, in the same order (markdown, e.g. \"vertex\")." },
+    { "name": "tolerance", "kind": "number", "default": 0.25, "description": "How far a point may be from the expected one, in grid units." },
+    { "name": "range", "kind": "json", "default": [-5, 5, -5, 5], "description": "[xmin, xmax, ymin, ymax], integers." },
+    { "name": "snap", "kind": "number", "default": 0.5, "description": "Grid snapping for placed points, in grid units (0 for none)." },
+    { "name": "curve", "kind": "text", "private": true, "description": "Optional JavaScript expression in x drawn after grading, e.g. x*x - 2*x - 3." },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

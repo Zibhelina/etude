@@ -34,7 +34,7 @@ Every key except `etude` is optional. Decks named by items but not listed are cr
 - `type`: a built-in type id (below) or a type defined in the pack's `types`.
 - `deck`: full deck path; `::` separates levels.
 - `tags`: hierarchical with `::`. Searching `tag:cmpt371` matches every tag below it.
-- `fields`: the type's fields. Markdown fields support GitHub markdown, fenced code, tables, images and KaTeX math (`$inline$`, `$$display$$`).
+- `fields`: the type's fields. Markdown fields support GitHub markdown, fenced code (highlighted for any language named after the fence), tables, images and KaTeX math (`$inline$`, `$$display$$`).
 - `source`: where the content comes from (shown after answering).
 
 ### Generated items
@@ -128,10 +128,38 @@ Each blank is checked loosely; score is the fraction filled correctly.
 | `prompt` | md | |
 | `reference` | md *(private)* | a model answer |
 | `rubric` | md *(private)*, optional | what a correct answer must contain, what is acceptable, common mistakes |
-| `input` | `"text"` \| `"long"` (default) \| `"code"` | `code` is a monospace multiline box (transcripts, code) |
+| `input` | `"long"` (default) \| `"text"` \| `"code"` \| `"plain"` | `long` is a markdown editor with live preview: math, code and formatting render as you type, so derivations and proofs can be written the way they are on paper. `text` is one line, `code` a code editor, `plain` a bare textarea |
+| `language` | text, optional | for `input: "code"`: the language to highlight |
 | `explanation` | md *(private)*, optional | |
 
 A decision model returns the verdict (incorrect, partially correct, correct) and a language model writes feedback. The grader reads, from most to least specific: the item's `rubric`, instructions of the item's tags, the deck's `instructions` (and its parents'), and the type's own instructions.
+
+### `math`: a mathematical answer, checked for equivalence
+
+| field | | |
+|---|---|---|
+| `prompt` | md | |
+| `answers` | list *(private)* | accepted answers in LaTeX or plain notation (`\frac{\sqrt3}{2}`, `sqrt(3)/2`); any one is enough |
+| `form` | `"any"` (default) \| `"exact"` \| `"same"` | `exact`: a decimal of the right value gets half credit; `same`: the answer must also have the same form, up to the order and sign of factors (for "factor this" or "simplify") |
+| `ordered` | boolean, default `false` | compare lists in order instead of as sets |
+| `placeholder` | text, optional | |
+| `explanation` | md *(private)*, optional | |
+
+The learner types LaTeX or plain math and sees it typeset live; what renders is what gets graded. Grading is by equivalence, not by string: both sides are evaluated at many random points, so `x(x+1)`, `x^2+x` and `x + x^2` all match `x^{2} + x`, and `\sin^2 x + \cos^2 x` matches `1`. Equations match when one is a multiple of the other (`y = 3x - 1` and `6x - 2y = 2`), `x = 3` matches `3`, and lists like `\{2, -1\}` compare as sets with partial credit. A decimal rounded to the digits given (`-0.87` for $-\frac{\sqrt3}{2}$) gets half credit. Supported: arithmetic, powers and roots, `\frac`, `\sqrt[n]{}`, trig and inverse trig, `\ln`, `\log_b`, `e^x`, `|x|`, `n!`, Greek letters, subscripted variables, equations, lists and tuples.
+
+### `code`: write code in a real editor
+
+| field | | |
+|---|---|---|
+| `prompt` | md | |
+| `language` | text, default `"python"` | any language name or extension: `python`, `js`, `c++`, `rust`, `sql`, `haskell`, ... (about 140) |
+| `starter` | code, optional | what the editor starts with |
+| `reference` | code *(private)* | a correct solution, shown highlighted after answering |
+| `tests` | json *(private)*, optional | JavaScript only: `[["expression", expected], ...]` |
+| `rubric` | md *(private)*, optional | for the AI grader |
+| `explanation` | md *(private)*, optional | |
+
+The editor has syntax highlighting, line numbers, bracket matching and Tab to indent. JavaScript answers with `tests` run in the sandbox: each expression is evaluated with the answer's code in scope and compared (as JSON) with the expected value; the score is the fraction that pass and the result lists every test. Any other answer goes to the AI grader with the reference and rubric. `etude pack check` runs the reference solution against its own tests.
 
 ### `draw`: draw the answer, graded by a vision model or self-rated
 

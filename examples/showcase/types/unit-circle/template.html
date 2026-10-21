@@ -1,0 +1,31 @@
+<div class="sc-eyebrow">Unit circle</div>
+<div class="uc-prompt">
+  <div class="prose uc-ask">{{md:prompt}}</div>
+  <span class="uc-theta"></span>
+</div>
+<div class="uc-stage">
+  <svg class="uc-svg" viewBox="-1.4 -1.4 2.8 2.8" role="slider" tabindex="0" aria-label="Angle on the unit circle" aria-valuemin="0" aria-valuemax="345">
+    <g class="uc-grid">
+      <line x1="-1.3" y1="0" x2="1.3" y2="0" />
+      <line x1="0" y1="-1.3" x2="0" y2="1.3" />
+    </g>
+    <circle class="uc-circle" cx="0" cy="0" r="1" />
+    <g class="uc-ticks"></g>
+    <g class="uc-truth"></g>
+    <g class="uc-mine">
+      <line class="uc-ray" x1="0" y1="0" x2="1" y2="0" />
+      <circle class="uc-knob-halo" r="0.13" />
+      <circle class="uc-knob" r="0.065" />
+    </g>
+    <circle class="uc-origin" r="0.025" />
+  </svg>
+  <div class="uc-labels"></div>
+</div>
+<p class="e-muted uc-hint only-answer">Drag or tap the circle. It snaps to 15° steps; arrow keys rotate.</p>
+<template data-on="result">
+  <div class="e-reveal">
+    <div class="uc-facts prose"></div>
+    {{#explanation}}<div class="prose">{{md:explanation}}</div>{{/explanation}}
+    <p class="sc-how">The card generated a fresh angle and graded where you put it on the circle by angular distance, so one step off still earns half. A normal flashcard can only show the same picture every time.</p>
+  </div>
+</template>

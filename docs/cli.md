@@ -1884,7 +1884,7 @@ Output: { errors, view, key, seed }
 
 ```sh
 etude type preview numeric --fields '{"prompt":"2+2?","answer":4}'
-etude type preview --from ./vocab --item sampler.vocab.saudade
+etude type preview --from ./unit-circle --item showcase.unit-circle.mixed
 ```
 
 ### etude type test-grade
@@ -1920,7 +1920,7 @@ Output: { grade: { score, verdict, details, feedback }, key }
 
 ```sh
 etude type test-grade typed --fields '{"prompt":"Capital of France?","answers":["Paris"]}' --answer paris
-etude type test-grade --item sampler.free.seasons --answer "The axis is tilted."
+etude type test-grade --item showcase.math.factor --answer "(x-2)(x-3)"
 ```
 
 ### etude type reset

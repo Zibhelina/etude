@@ -1,0 +1,16 @@
+{
+  "id": "regex",
+  "name": "Write the regex",
+  "description": "Write a regular expression. Visible tests light up as you type; hidden tests are checked by the grader. Partial credit by the share of tests right.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "required": true, "description": "What the pattern should match." },
+    { "name": "match", "kind": "list", "required": true, "label": "Should match", "description": "Visible strings the pattern must match." },
+    { "name": "reject", "kind": "list", "required": true, "label": "Should not match", "description": "Visible strings the pattern must not match." },
+    { "name": "hidden", "kind": "json", "private": true, "default": { "match": [], "reject": [] }, "description": "Hidden tests: { \"match\": [...], \"reject\": [...] }, checked only when grading." },
+    { "name": "mode", "kind": "text", "default": "full", "description": "\"full\": the whole string must match (the pattern is wrapped in ^(?:…)$). \"find\": a match anywhere counts." },
+    { "name": "flags", "kind": "text", "default": "", "description": "Starting flags (any of i, m, s, u). The learner can change them." },
+    { "name": "solution", "kind": "text", "private": true, "description": "One correct pattern, shown after grading." },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

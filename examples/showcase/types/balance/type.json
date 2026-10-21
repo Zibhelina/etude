@@ -1,0 +1,13 @@
+{
+  "id": "balance",
+  "name": "Balance the equation",
+  "description": "Balance a chemical equation with coefficient steppers and a live atom tally. The grader parses the formulas itself: smallest whole numbers is full credit, balanced but not reduced is partial.",
+  "fields": [
+    { "name": "reactants", "kind": "list", "required": true, "description": "Formulas on the left, e.g. C3H8, O2. Parentheses are fine: Ca(OH)2, Al2(SO4)3." },
+    { "name": "products", "kind": "list", "required": true, "description": "Formulas on the right." },
+    { "name": "prompt", "kind": "markdown", "description": "Optional context shown above the equation." },
+    { "name": "max", "kind": "number", "default": 12, "description": "Largest coefficient the steppers allow." },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

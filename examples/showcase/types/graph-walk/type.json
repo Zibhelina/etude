@@ -1,0 +1,31 @@
+{
+  "id": "graph-walk",
+  "name": "Visit the nodes",
+  "description": "Tap the nodes of a generated graph in the order BFS or DFS visits them. Graded by the longest correct prefix; the real traversal animates afterwards.",
+  "fields": [
+    {
+      "name": "note",
+      "kind": "markdown",
+      "description": "Optional line shown under the prompt (also the card's title in lists)."
+    },
+    {
+      "name": "algorithm",
+      "kind": "text",
+      "default": "bfs",
+      "description": "\"bfs\", \"dfs\" or \"either\" (picked at random each review)."
+    },
+    {
+      "name": "size",
+      "kind": "number",
+      "description": "Number of nodes, 6 to 9. Empty: random each review."
+    },
+    {
+      "name": "explanation",
+      "kind": "markdown",
+      "private": true
+    }
+  ],
+  "grader": {
+    "kind": "script"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "id": "color",
+  "name": "Make this color",
+  "description": "Read a hex code and build the color with hue, saturation and lightness sliders. Graded by perceptual distance in OKLab; a new color every review.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "default": "Build this color." },
+    { "name": "hex", "kind": "text", "private": true, "description": "Optional fixed target like #3B82F6. Leave empty for a new color every review." },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

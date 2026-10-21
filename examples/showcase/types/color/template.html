@@ -1,0 +1,30 @@
+<div class="sc-eyebrow">Make this color</div>
+<div class="prose">{{md:prompt}}</div>
+<div class="co-target"><span class="co-hex">{{hex}}</span></div>
+<div class="co-swatches">
+  <div class="co-swatch mine"><span class="co-cap">Yours</span></div>
+  <div class="co-swatch target only-result"><span class="co-cap">{{hex}}</span></div>
+</div>
+<div class="co-sliders">
+  <label class="co-slider" data-k="h">
+    <span class="co-name">Hue</span>
+    <input type="range" min="0" max="359" step="1" aria-label="Hue">
+  </label>
+  <label class="co-slider" data-k="s">
+    <span class="co-name">Saturation</span>
+    <input type="range" min="0" max="100" step="1" aria-label="Saturation">
+  </label>
+  <label class="co-slider" data-k="l">
+    <span class="co-name">Lightness</span>
+    <input type="range" min="0" max="100" step="1" aria-label="Lightness">
+  </label>
+</div>
+<p class="e-muted co-hint only-answer">Hex is red, green, blue in pairs: <code>00</code> is none, <code>FF</code> is full. Arrow keys nudge a focused slider; hold <kbd>Shift</kbd> for bigger steps.</p>
+<template data-on="result">
+  <div class="e-reveal">
+    <div class="co-verdict"></div>
+    <div class="co-compare"></div>
+    {{#explanation}}<div class="prose">{{md:explanation}}</div>{{/explanation}}
+    <p class="sc-how">Your color and the target were compared in OKLab, a color space built so equal distances look equally different, and the gap was turned back into slider words. The hex code was generated fresh for this review.</p>
+  </div>
+</template>

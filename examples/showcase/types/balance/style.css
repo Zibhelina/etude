@@ -1,0 +1,36 @@
+.sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }
+.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }
+
+.bl-eq { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5rem 0.35rem; padding: 0.4rem 0; }
+.bl-op { font-size: 1.25rem; color: var(--muted-foreground); padding: 0 0.1rem; }
+.bl-op.arrow { padding: 0 0.3rem; }
+.bl-term { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.3rem 0.35rem; background: color-mix(in oklab, var(--foreground) 3%, transparent); transition: border-color 0.15s; }
+.bl-term:focus-within { border-color: color-mix(in oklab, var(--highlight) 60%, transparent); }
+.bl-mid { display: flex; align-items: baseline; gap: 0.15rem; padding: 0 0.25rem; }
+.bl-coef { width: 1.7em; font: 600 1.3rem var(--font-sans); font-variant-numeric: tabular-nums; text-align: right; color: var(--highlight); background: transparent; border: none; outline: none; padding: 0; border-radius: 0.3rem; }
+.bl-coef:focus { background: color-mix(in oklab, var(--highlight) 12%, transparent); }
+.bl-coef:disabled { color: var(--highlight); opacity: 1; }
+.bl-term.is-one .bl-coef { color: color-mix(in oklab, var(--foreground) 35%, transparent); }
+.bl-formula { font-size: 1.25rem; white-space: nowrap; }
+.bl-step { width: 100%; min-width: 2.75rem; height: 2.5rem; border: none; border-radius: calc(var(--radius) - 4px); background: transparent; color: var(--muted-foreground); font: 500 1.2rem var(--font-sans); cursor: pointer; touch-action: manipulation; }
+.bl-step:hover:not(:disabled) { background: var(--accent); color: var(--foreground); }
+.bl-step:disabled { opacity: 0.3; cursor: default; }
+[data-mode="result"] .bl-step { visibility: hidden; height: 0.4rem; }
+.bl-eq.right .bl-term { border-color: color-mix(in oklab, var(--success) 70%, transparent); }
+.bl-eq.near .bl-term { border-color: color-mix(in oklab, var(--warning) 70%, transparent); }
+.bl-eq.wrong .bl-term { border-color: color-mix(in oklab, var(--danger) 60%, transparent); }
+
+.bl-tally { display: flex; flex-direction: column; gap: 0.5rem; align-items: center; }
+.bl-tally-head { font-size: 0.8rem; color: var(--muted-foreground); }
+.bl-tally.all-ok .bl-tally-head { color: var(--success); font-weight: 500; }
+.bl-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; }
+.bl-chip { display: grid; grid-template-columns: 2rem auto 2rem; align-items: center; border: 1px solid var(--border); border-radius: 999px; padding: 0.3rem 0.4rem; font-variant-numeric: tabular-nums; transition: border-color 0.15s, background 0.15s; }
+.bl-chip .n { text-align: center; font-weight: 600; font-size: 0.95rem; color: var(--danger); }
+.bl-chip .el { position: relative; text-align: center; padding: 0 0.35rem 0.35rem; font-size: 1rem; }
+.bl-chip .beam { position: absolute; left: 0; right: 0; bottom: 0.05rem; height: 2px; border-radius: 1px; background: color-mix(in oklab, var(--danger) 70%, transparent); transform: rotate(calc(var(--tilt) * 14deg)); transition: transform 0.25s, background 0.15s; }
+.bl-chip.ok { border-color: color-mix(in oklab, var(--success) 60%, transparent); background: color-mix(in oklab, var(--success) 10%, transparent); }
+.bl-chip.ok .n { color: var(--success); }
+.bl-chip.ok .beam { background: var(--success); }
+.bl-hint { font-size: 0.85rem; text-align: center; margin-top: -0.4rem; }
+.bl-final { font-size: 1.05rem; overflow-x: auto; }
+.bl-final .katex-display { margin: 0.25rem 0; }

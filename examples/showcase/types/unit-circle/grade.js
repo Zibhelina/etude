@@ -1,0 +1,10 @@
+const given = answer && Number.isFinite(Number(answer.deg)) ? ((Math.round(Number(answer.deg) / 15) * 15) % 360 + 360) % 360 : null;
+if (given === null) return { score: 0, feedback: "No angle placed.", details: { given: null, off: null } };
+const d = Math.abs(given - key.target) % 360;
+const off = Math.min(d, 360 - d);
+const steps = off / 15;
+const score = steps === 0 ? 1 : steps === 1 ? 0.5 : 0;
+let feedback;
+if (steps === 1) feedback = "One 15° step off.";
+else if (steps > 1) feedback = `Off by ${off}°.`;
+return { score, feedback, details: { given, off } };

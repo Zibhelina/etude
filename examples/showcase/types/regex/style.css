@@ -1,0 +1,58 @@
+.sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }
+.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }
+
+/* Code should read literally: no fused glyphs from ligature fonts. */
+#card, #card * { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+
+.rx-entry { display: flex; flex-direction: column; gap: 0.4rem; }
+.rx-field {
+  display: flex; align-items: flex-start; gap: 0.1rem;
+  border: 1px solid var(--input); border-radius: calc(var(--radius) - 2px);
+  padding: 0 0.7rem; font-family: var(--font-mono);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.rx-field:focus-within { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 25%, transparent); }
+.rx-field.bad { border-color: color-mix(in oklab, var(--danger) 70%, transparent); }
+.rx-slash { color: var(--muted-foreground); font: 1.1rem/1.5rem var(--font-mono); padding: 0.62rem 0; user-select: none; }
+.rx-field input, .rx-field textarea {
+  background: transparent; border: 0; outline: 0; color: var(--foreground);
+  font: 1rem/1.5rem var(--font-mono); padding: 0.62rem 0.2rem; min-width: 0; margin: 0;
+}
+.rx-field input:disabled, .rx-field textarea:disabled { opacity: 1; color: var(--foreground); -webkit-text-fill-color: var(--foreground); }
+.rx-pattern { flex: 1; resize: none; overflow: hidden; height: 2.75rem; word-break: break-all; white-space: pre-wrap; }
+.rx-flags { flex: none; width: 3.6rem; color: var(--highlight) !important; -webkit-text-fill-color: var(--highlight) !important; }
+/* When the pattern wraps, the closing slash and flags sit on its last line. */
+.rx-field > .rx-slash:nth-of-type(2), .rx-flags { align-self: flex-end; }
+.rx-status { font-size: 0.85rem; color: var(--muted-foreground); min-height: 1.4em; }
+.rx-status .err { color: var(--danger); font-family: var(--font-mono); font-size: 0.8rem; }
+.rx-status .all { color: var(--success); }
+.rx-status .rule { color: color-mix(in oklab, var(--muted-foreground) 80%, transparent); }
+
+.rx-tests { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.rx-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.rx-test {
+  display: flex; align-items: center; gap: 0.5rem; min-height: 2.25rem;
+  padding: 0.3rem 0.55rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 4px);
+  font: 0.86rem/1.35 var(--font-mono); transition: border-color 0.15s, background 0.15s;
+}
+.rx-test code { font: inherit; white-space: pre-wrap; word-break: break-all; min-width: 0; }
+.rx-mark {
+  flex: none; width: 1.05rem; height: 1.05rem; border-radius: 50%;
+  border: 1.5px solid color-mix(in oklab, var(--foreground) 22%, transparent);
+  display: grid; place-items: center; font: 700 0.62rem/1 var(--font-sans);
+  transition: background 0.15s, border-color 0.15s;
+}
+.rx-test.pass { border-color: color-mix(in oklab, var(--success) 45%, var(--border)); background: color-mix(in oklab, var(--success) 7%, transparent); }
+.rx-test.pass .rx-mark { background: var(--success); border-color: var(--success); color: var(--background); }
+.rx-test.pass .rx-mark::after { content: "✓"; }
+.rx-test.fail { border-color: color-mix(in oklab, var(--danger) 45%, var(--border)); background: color-mix(in oklab, var(--danger) 7%, transparent); }
+.rx-test.fail .rx-mark { background: var(--danger); border-color: var(--danger); color: var(--background); }
+.rx-test.fail .rx-mark::after { content: "✕"; }
+.rx-test mark.hit { background: color-mix(in oklab, var(--highlight) 26%, transparent); color: inherit; border-radius: 2px; box-shadow: inset 0 -2px 0 var(--highlight); }
+.rx-test .sp { color: var(--muted-foreground); }
+.rx-test .rx-empty { color: var(--muted-foreground); font-style: italic; font-family: var(--font-sans); }
+.rx-note { font-size: 0.82rem; margin: -0.6rem 0 0; }
+.rx-hidden-results:empty { display: none; }
+.rx-hidden-results .rx-tests { margin-top: 0.25rem; }
+.rx-hidden-results .sub { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: color-mix(in oklab, var(--muted-foreground) 75%, transparent); margin-bottom: 0.35rem; }
+.rx-solution { font: 0.95rem var(--font-mono); background: var(--muted); padding: 0.2em 0.5em; border-radius: 0.35em; word-break: break-all; }

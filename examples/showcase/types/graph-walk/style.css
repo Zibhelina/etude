@@ -1,0 +1,47 @@
+.sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }
+.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }
+
+/* Code should read literally: no fused glyphs from ligature fonts. */
+#card, #card * { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+
+.gw-prompt .rule { color: var(--muted-foreground); font-size: 0.95rem; }
+.gw-stage { display: flex; justify-content: center; }
+.gw-svg { width: 100%; max-width: 440px; height: auto; display: block; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+
+.gw-edge { stroke: color-mix(in oklab, var(--foreground) 40%, transparent); stroke-width: 2.25; stroke-linecap: round; transition: stroke 0.3s, stroke-width 0.3s; }
+.gw-edge.tree { stroke: var(--highlight); stroke-width: 3.5; }
+
+.gw-node { cursor: pointer; outline: none; }
+.gw-node .hit { fill: transparent; }
+.gw-node .disc { fill: var(--background); stroke: color-mix(in oklab, var(--foreground) 45%, transparent); stroke-width: 2; transition: fill 0.2s, stroke 0.2s; }
+.gw-node .lbl { fill: var(--foreground); font: 600 17px var(--font-sans); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.gw-node .num { fill: var(--background); font: 700 11px var(--font-sans); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.gw-node .badge { fill: var(--highlight); stroke: var(--background); stroke-width: 2.5; opacity: 0; transition: opacity 0.15s; }
+.gw-node.picked .badge, .gw-node.picked .num { opacity: 1; }
+.gw-node .num { opacity: 0; }
+.gw-node.picked .disc { stroke: var(--highlight); fill: color-mix(in oklab, var(--highlight) 14%, var(--background)); }
+.gw-node.start .disc { stroke: var(--foreground); stroke-width: 3; }
+.gw-node.last .disc { stroke-dasharray: 4 3; }
+.gw-node:hover .disc { stroke: var(--foreground); }
+.gw-node:focus-visible .disc { stroke: var(--ring); stroke-width: 4; }
+[data-mode="result"] .gw-node { cursor: default; }
+.gw-node.ok .badge { fill: var(--success); }
+.gw-node.bad .badge { fill: var(--danger); }
+.gw-node.after .badge { fill: var(--muted-foreground); }
+.gw-node.lit .disc { fill: color-mix(in oklab, var(--highlight) 30%, var(--background)); stroke: var(--highlight); stroke-width: 3; }
+.gw-node.lit .lbl { fill: var(--foreground); }
+.gw-node.lit-now .disc { stroke-width: 5; }
+
+.hop { display: inline-flex; align-items: center; gap: 0.35rem; }
+.gw-seq { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; min-height: 2rem; font-family: var(--font-mono); font-size: 0.95rem; }
+.gw-seq .step, .gw-truth .step { display: inline-flex; align-items: center; justify-content: center; min-width: 1.9rem; height: 1.9rem; padding: 0 0.4rem; border: 1px solid var(--border); border-radius: 0.45rem; }
+.gw-seq .arrow, .gw-truth .arrow { color: var(--muted-foreground); font: 0.85rem/1 var(--font-sans); }
+.gw-seq .step.ok { border-color: color-mix(in oklab, var(--success) 70%, transparent); background: color-mix(in oklab, var(--success) 10%, transparent); }
+.gw-seq .step.after { color: var(--muted-foreground); border-style: dashed; }
+.gw-seq .step.bad { border-color: color-mix(in oklab, var(--danger) 70%, transparent); background: color-mix(in oklab, var(--danger) 10%, transparent); }
+.gw-seq .empty { color: var(--muted-foreground); font-family: var(--font-sans); font-size: 0.9rem; }
+.gw-truth { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; font-family: var(--font-mono); }
+.gw-truth .step { transition: background 0.2s, border-color 0.2s; }
+.gw-truth .step.lit { border-color: color-mix(in oklab, var(--foreground) 55%, transparent); background: color-mix(in oklab, var(--foreground) 7%, transparent); }
+.gw-seq-wrap { margin-top: -0.25rem; }
+.gw-help { font-size: 0.82rem; margin: -0.5rem 0 0; }

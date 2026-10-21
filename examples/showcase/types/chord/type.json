@@ -1,0 +1,11 @@
+{
+  "id": "chord",
+  "name": "Build the chord",
+  "description": "Play a chord on a two-octave piano. A new root and quality every review; any voicing or inversion counts, graded by pitch classes.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "default": "Build this chord on the keyboard.", "description": "Shown above the chord name (also the card's title in lists)." },
+    { "name": "qualities", "kind": "list", "default": ["maj", "min", "dim", "aug", "maj7", "7", "m7", "m7b5"], "description": "Chord qualities to draw from: maj, min, dim, aug, maj7, 7, m7, m7b5, dim7, sus4." },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

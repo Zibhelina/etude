@@ -1,0 +1,15 @@
+{
+  "id": "timeline",
+  "name": "Place it in time",
+  "description": "Drag events onto a timeline between fixed anchors. Graded by order and by how many years each one is off.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "default": "Drag each event to when it happened.", "description": "Shown above the timeline (also the card's title in lists)." },
+    { "name": "events", "kind": "json", "required": true, "private": true, "description": "[{ \"label\": \"ENIAC\", \"year\": 1945 }, ...]. The card shows a random 5 of them each review." },
+    { "name": "anchors", "kind": "json", "description": "Fixed events shown on the line: [{ \"label\": \"WWII ends\", \"year\": 1945 }]." },
+    { "name": "range", "kind": "json", "description": "[from, to] in years. Default: the events' span plus a margin." },
+    { "name": "count", "kind": "number", "default": 5, "description": "How many events to place, 3 to 6." },
+    { "name": "tolerance", "kind": "number", "default": 3, "description": "Years off that still count as right on." },
+    { "name": "explanation", "kind": "markdown", "private": true }
+  ],
+  "grader": { "kind": "script" }
+}

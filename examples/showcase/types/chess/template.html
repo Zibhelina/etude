@@ -1,0 +1,12 @@
+<div class="sc-eyebrow">Chess</div>
+<div class="prose ch-prompt">{{md:prompt}}</div>
+<div class="ch-turn"></div>
+<div class="ch-board"></div>
+<p class="e-muted ch-help only-answer">Tap a piece, then the square to move it to. Or drag it.</p>
+<template data-on="result">
+  <div class="e-reveal">
+    <div class="ch-answer"></div>
+    {{#explanation}}<div class="prose">{{md:explanation}}</div>{{/explanation}}
+    <p class="sc-how">You played the move on a real board, and it was checked against every mate in one in this position, as found by a chess engine.</p>
+  </div>
+</template>

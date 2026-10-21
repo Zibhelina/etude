@@ -1,0 +1,33 @@
+{
+  "name": "etude",
+  "version": "2.0.0-dev",
+  "description": "Spaced-repetition practice with programmable card types and AI grading.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "etude": "./bin/etude.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node --watch src/cli/main.ts serve --dev",
+    "dev:web": "vite --config web/vite.config.ts",
+    "build": "vite build --config web/vite.config.ts",
+    "start": "node src/cli/main.ts serve",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p web/tsconfig.json"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.5",
+    "hono": "^4.13.13",
+    "katex": "^0.19.0",
+    "marked": "^18.1.1",
+    "quickjs-emscripten": "^0.32.0",
+    "ts-fsrs": "^5.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
+  }
+}

@@ -25,6 +25,8 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: transparent; }
+html { overflow: hidden; }
+#card { overflow-wrap: break-word; hyphens: auto; }
 body {
   color: var(--foreground);
   font: 400 16px/1.6 var(--font-sans);

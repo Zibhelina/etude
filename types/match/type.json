@@ -13,7 +13,7 @@
       "kind": "json",
       "required": true,
       "private": true,
-      "description": "[[left, right], ...]",
+      "description": "Each left item with its partner. The right side is shuffled.",
       "editor": "pairs"
     },
     {

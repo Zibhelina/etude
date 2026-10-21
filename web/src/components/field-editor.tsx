@@ -1,7 +1,8 @@
 // Edits an item's fields from its type's schema. Common JSON shapes get real forms;
 // anything else falls back to a JSON editor, so every type stays editable.
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Check, EyeOff, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, EyeOff, MoreVertical, Plus, Trash2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -158,19 +159,31 @@ function Rows<T>({ items, onChange, render, empty, add }: { items: T[]; onChange
     [next[i], next[j]] = [next[j], next[i]];
     onChange(next);
   };
+  const remove = (i: number) => onChange(items.filter((_, k) => k !== i));
   return (
     <div className="flex flex-col gap-2">
       {items.map((it, i) => (
-        <div key={i} className="group flex items-start gap-2">
+        <div key={i} className="group flex items-start gap-1.5">
           <div className="min-w-0 flex-1">{render(it, (v) => onChange(items.map((x, k) => (k === i ? v : x))), i)}</div>
-          <div className="flex shrink-0 flex-col gap-0.5 pt-1 opacity-60 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:flex-row sm:opacity-40">
+          {/* Desktop: inline icons. Phone: one menu button, so rows stay one line tall. */}
+          <div className="hidden shrink-0 gap-0.5 pt-1 opacity-40 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 sm:flex">
             <Button variant="ghost" size="icon" className="size-7" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up"><ArrowUp className="size-3.5" /></Button>
             <Button variant="ghost" size="icon" className="size-7" onClick={() => move(i, 1)} disabled={i === items.length - 1} aria-label="Move down"><ArrowDown className="size-3.5" /></Button>
-            <Button variant="ghost" size="icon" className="size-7" onClick={() => onChange(items.filter((_, k) => k !== i))} aria-label="Remove"><Trash2 className="size-3.5" /></Button>
+            <Button variant="ghost" size="icon" className="size-7" onClick={() => remove(i)} aria-label="Remove"><Trash2 className="size-3.5" /></Button>
           </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-9 shrink-0 text-muted-foreground sm:hidden" aria-label="Row actions"><MoreVertical className="size-4" /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem disabled={i === 0} onClick={() => move(i, -1)}><ArrowUp />Move up</DropdownMenuItem>
+              <DropdownMenuItem disabled={i === items.length - 1} onClick={() => move(i, 1)}><ArrowDown />Move down</DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onClick={() => remove(i)}><Trash2 />Remove</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       ))}
-      <Button variant="outline" size="sm" className="self-start gap-1.5" onClick={() => onChange([...items, structuredClone(empty)])}>
+      <Button variant="outline" size="sm" className="h-10 self-start gap-1.5 sm:h-8" onClick={() => onChange([...items, structuredClone(empty)])}>
         <Plus className="size-4" /> {add}
       </Button>
     </div>
@@ -216,9 +229,9 @@ function PairsEditor({ value, onChange }: { value: [string, string][]; onChange(
       empty={["", ""] as [string, string]}
       add="Add pair"
       render={(p, set) => (
-        <div className="grid grid-cols-2 gap-2">
-          <Input value={p[0]} onChange={(e) => set([e.target.value, p[1]])} placeholder="Left" />
-          <Input value={p[1]} onChange={(e) => set([p[0], e.target.value])} placeholder="Right" />
+        <div className="grid gap-1.5 rounded-md border p-1.5 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] sm:border-0 sm:p-0">
+          <AutoTextarea className="min-h-9 resize-none py-1.5" value={p[0]} onChange={(v) => set([v, p[1]])} placeholder="Left" />
+          <AutoTextarea className="min-h-9 resize-none py-1.5" value={p[1]} onChange={(v) => set([p[0], v])} placeholder="Right" />
         </div>
       )}
     />
@@ -239,11 +252,11 @@ function PartsEditor({ value, onChange }: { value: { label: string; answer: numb
       empty={{ label: "", answer: 0 }}
       add="Add part"
       render={(p, set) => (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_7rem_5rem_5rem]">
-          <Input value={p.label} onChange={(e) => set({ ...p, label: e.target.value })} placeholder="Label (markdown)" />
+        <div className="grid grid-cols-3 gap-1.5 rounded-md border p-1.5 sm:grid-cols-[1fr_7rem_5rem_5rem] sm:gap-2 sm:border-0 sm:p-0">
+          <Input className="col-span-3 sm:col-span-1" value={p.label} onChange={(e) => set({ ...p, label: e.target.value })} placeholder="Label, e.g. Area" />
           <NumberInput value={p.answer} onChange={(v) => set({ ...p, answer: v ?? 0 })} placeholder="Answer" />
           <Input value={p.unit ?? ""} onChange={(e) => set({ ...p, unit: e.target.value || undefined })} placeholder="Unit" />
-          <NumberInput value={p.tolerance} onChange={(v) => set({ ...p, tolerance: v })} placeholder="Tol." />
+          <NumberInput value={p.tolerance} onChange={(v) => set({ ...p, tolerance: v })} placeholder="Tolerance" />
         </div>
       )}
     />

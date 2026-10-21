@@ -1,19 +1,19 @@
 <div class="prose">{{md:prompt}}</div>
 <div class="pad">
   <div class="tools only-answer">
-    <div class="e-row tool-group">
+    <div class="group">
       <button type="button" class="e-btn tool is-on" data-tool="pen" title="Pen (P)">Pen</button>
       <button type="button" class="e-btn tool" data-tool="eraser" title="Eraser (E)">Eraser</button>
-      <span class="sep"></span>
-      <span class="swatches"></span>
-      <span class="sep"></span>
+    </div>
+    <div class="group">
       <button type="button" class="e-btn size" data-size="2" title="Thin">S</button>
       <button type="button" class="e-btn size is-on" data-size="3.5" title="Medium">M</button>
       <button type="button" class="e-btn size" data-size="7" title="Thick">L</button>
     </div>
-    <div class="e-row">
-      <button type="button" class="e-btn" data-act="undo" title="Undo (Ctrl+Z)">Undo</button>
-      <button type="button" class="e-btn" data-act="redo" title="Redo (Ctrl+Shift+Z)">Redo</button>
+    <div class="group swatches"></div>
+    <div class="group end">
+      <button type="button" class="e-btn icon" data-act="undo" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+      <button type="button" class="e-btn icon" data-act="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
       <button type="button" class="e-btn" data-act="clear">Clear</button>
     </div>
   </div>

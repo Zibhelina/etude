@@ -167,6 +167,7 @@ function splitResultBlocks(src) {
 }
 
 export function boot(main, templateHtml) {
+  document.documentElement.lang ||= "en";
   let api = null;
   let blocks = [];
   const fillResultSlots = (data) => {

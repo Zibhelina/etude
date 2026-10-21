@@ -13,7 +13,7 @@
       "kind": "json",
       "required": true,
       "private": true,
-      "description": "[{ text, correct, why }]",
+      "description": "Tick the correct ones. \"Why\" is shown after answering.",
       "editor": "choices"
     },
     {

@@ -46,6 +46,16 @@ function sendFile(c: Context, path: string, opts: { cors?: boolean; cache?: stri
   return c.body(readFileSync(path), 200, headers);
 }
 
+/** The app's public root. Behind a TLS proxy (Tailscale serve) the request arrives as http, so trust X-Forwarded-Proto/Host or card frames load their runtime over http and get blocked as mixed content. */
+function publicBase(c: Context): string {
+  const u = new URL("/", c.req.url);
+  const proto = c.req.header("x-forwarded-proto")?.split(",")[0].trim();
+  const host = c.req.header("x-forwarded-host")?.split(",")[0].trim();
+  if (proto === "https" || proto === "http") u.protocol = proto + ":";
+  if (host) u.host = host;
+  return u.toString();
+}
+
 export interface AppOptions {
   /** Require this bearer token on every API call (for access from other devices). */
   token?: string;
@@ -230,13 +240,13 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   // --------------------------------------------- card frames and runtime
   app.get("/frame/:type", (c) => {
     const def = etude.type(c.req.param("type"));
-    const base = new URL("/", c.req.url).toString();
+    const base = publicBase(c);
     return c.body(cardFrame(def, base), 200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
   });
   // The type editor previews unsaved code: it posts the definition and gets a frame back.
   app.post("/api/frame", async (c) => {
     const b = await body(c);
-    const base = new URL("/", c.req.url).toString();
+    const base = publicBase(c);
     return c.json({ html: cardFrame(b.def, base) });
   });
   app.get("/runtime/vendor/*", (c) => {

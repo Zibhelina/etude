@@ -133,7 +133,8 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
       sandbox="allow-scripts"
       src={props.html ? undefined : props.src}
       srcDoc={props.html}
-      className={cn("block w-full border-0 bg-transparent transition-opacity duration-150", loaded ? "opacity-100" : "opacity-0", props.className)}
+      // No opacity fade: on macOS WebKit the faded-in card frame could stop painting.
+      className={cn("block w-full border-0 bg-transparent", props.className)}
       style={{ height, colorScheme: scheme }}
     />
   );

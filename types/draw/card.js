@@ -14,6 +14,8 @@ etude.$(".swatches").innerHTML = COLORS.map((c, i) => `<button type="button" cla
 function fit() {
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.clientWidth;
+  // A hidden frame (e.g. the type editor's Preview tab before it's shown) has no width yet; the ResizeObserver calls again once it does.
+  if (!w) return;
   // Phones get a near-square canvas: there is room vertically and fingers need it.
   const h = Math.round(w < 520 ? Math.min(Math.max(w * 1.05, 340), 520) : Math.min(Math.max(w * 0.62, 320), 560));
   canvas.style.height = h + "px";
@@ -58,6 +60,8 @@ function drawStroke(c, s, forExport) {
 const ink = document.createElement("canvas");
 const inkCtx = ink.getContext("2d");
 function paint() {
+  // WebKit throws InvalidStateError when drawImage gets a zero-sized canvas.
+  if (!canvas.width || !canvas.height) return;
   const dpr = window.devicePixelRatio || 1;
   ctx.clearRect(0, 0, W(), H());
   paintBackground(ctx, W(), H(), false);

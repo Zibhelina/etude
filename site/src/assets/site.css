@@ -766,3 +766,7 @@ h1, h2, h3 { margin: 0; font-family: var(--font-serif); font-weight: 400; letter
 .mac-term-toggle:hover { color: var(--foreground); }
 .mac-term-toggle svg { width: 0.95rem; height: 0.95rem; transition: rotate 0.25s var(--ease); }
 [data-panel].show-term .mac-term-toggle svg { rotate: 180deg; }
+
+.cta-support { text-wrap: balance; margin-top: 2rem; font-size: 0.9rem; color: var(--muted-foreground); }
+.cta-support a { color: var(--foreground); box-shadow: inset 0 -1px 0 var(--highlight); }
+.cta-support a:hover { color: var(--highlight); }

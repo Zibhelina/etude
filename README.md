@@ -289,6 +289,10 @@ The web app and the CLI are thin layers over one engine class, so they can't dri
 
 Card code runs in sandboxed iframes with an opaque origin, user scripts run in QuickJS on the server, and the server only listens on localhost unless you set a token. [SECURITY.md](SECURITY.md) explains the trust model, what AI grading sends and how to report a vulnerability.
 
+## Support
+
+Etude is free and made by one person in his free time. If it helps you study, you can [buy me a coffee on Ko-fi](https://ko-fi.com/jhca) or on [Buy Me a Coffee](https://buymeacoffee.com/jhca).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and new card types are very welcome.

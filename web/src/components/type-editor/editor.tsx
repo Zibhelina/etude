@@ -268,7 +268,9 @@ export function TypeEditor({ id }: { id: string }) {
   const [view, setView] = useState<"edit" | "preview">("edit");
   const [tab, setTab] = useState("info");
 
-  const back = () => (dirty ? setConfirmLeave(true) : navigate("/types"));
+  // Back to the folder the type lives in.
+  const home = summary?.folder ? `/types?folder=${encodeURIComponent(summary.folder)}` : "/types";
+  const back = () => (dirty ? setConfirmLeave(true) : navigate(home));
   const reset = async () => {
     try {
       const fresh = await api.resetType(id);
@@ -623,7 +625,7 @@ export function TypeEditor({ id }: { id: string }) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep editing</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { if (isNew) clearPending(id); navigate("/types"); }}>Leave</AlertDialogAction>
+            <AlertDialogAction onClick={() => { if (isNew) clearPending(id); navigate(home); }}>Leave</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -193,3 +193,30 @@ test("deletePreset refuses while decks use it", async () => {
   e.updateDeck("Net::A", { presetId: "p2", archived: true });
   assert.throws(() => e.deletePreset("p2"), /used by 1 deck/);
 });
+
+test("memory and habit stats: stability, curve, hours, weeks, best streak", async () => {
+  const e = await setup();
+  const a = cardOf(e, "a"), b = cardOf(e, "b");
+  e.rate(a, 3, { at: daysAgo(10) });
+  e.rate(a, 3, { at: daysAgo(9) });
+  e.rate(b, 3, { at: daysAgo(3) });
+  e.rate(b, 3, { at: daysAgo(2) });
+  const s = e.stats({ deck: "Net" }, 28);
+  assert.equal(s.stability.reduce((n, x) => n + x.cards, 0), 2);
+  assert.equal(s.stability[s.stability.length - 1].upTo, null);
+  assert.equal(s.recallBins.reduce((n, x) => n + x, 0), 2);
+  assert.equal(s.difficulty.reduce((n, x) => n + x, 0), 2);
+  // Recall only falls when nothing is reviewed.
+  assert.equal(s.curve[0].days, 0);
+  assert.ok(Math.abs(s.curve[0].recall - s.recall!) < 1e-9);
+  for (let i = 1; i < s.curve.length; i++) assert.ok(s.curve[i].recall <= s.curve[i - 1].recall);
+  assert.equal(s.desiredRetention, 0.9);
+  assert.equal(s.hours.length, 24);
+  assert.equal(s.hours.reduce((n, h) => n + h.reviews, 0), 4);
+  assert.equal(s.weeks.length, 4);
+  assert.equal(s.weeks.reduce((n, w) => n + w.reviews, 0), 4);
+  // The two newest reviews fall in the last week, the 9-10 day old ones in the week before.
+  assert.equal(s.weeks[3].reviews, 2);
+  assert.equal(s.weeks[2].reviews, 2);
+  assert.equal(s.bestStreak, 2);
+});

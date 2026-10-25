@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, FastForward, CornerDownLeft, Dices, EyeOff, Loader2, MessageSquareText, Pencil, RotateCcw, Sparkles, Undo2 } from "lucide-react";
+import { ArrowLeft, FastForward, CornerDownLeft, Dices, EyeOff, Loader2, MessageSquareText, Pencil, RotateCcw, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -327,7 +327,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
               )}
               {feedback?.text && (
                 <div className="rounded-lg border bg-card/60 px-4 py-3">
-                  <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><Sparkles className="size-3.5 text-highlight" />Feedback</div>
+                  <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">Feedback</div>
                   <Markdown className="text-[0.95rem]">{feedback.text}</Markdown>
                 </div>
               )}

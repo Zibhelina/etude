@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -57,7 +57,7 @@ export function ItemAiEdit({ id, fields, specs, onApply }: { id: string; fields:
 
   return (
     <>
-      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => changeOpen(true)}><Sparkles className="size-4" />Edit for me</Button>
+      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => changeOpen(true)}>Edit for me</Button>
       <Dialog open={open} onOpenChange={changeOpen}>
         <DialogContent className="sm:max-w-3xl" onKeyDown={(e) => {
           if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
@@ -102,7 +102,7 @@ export function ItemAiEdit({ id, fields, specs, onApply }: { id: string; fields:
           <DialogFooter>
             <Button variant="ghost" onClick={() => changeOpen(false)}>Cancel</Button>
             <Button variant={proposal?.changed.length ? "outline" : "default"} className="gap-1.5" disabled={busy || !instruction.trim()} onClick={generate}>
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+              {busy ? <Loader2 className="size-4 animate-spin" /> : null}
               {busy ? "Editing…" : proposal ? "Try again" : "Suggest changes"}
             </Button>
             {!!proposal?.changed.length && <Button disabled={stale} onClick={() => {

@@ -3,7 +3,7 @@
 // Nothing here is scheduled or stored. Trying a card yourself works too; AI-graded types then
 // show their reference instead of calling a model.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, ChevronLeft, Loader2, RotateCcw, Sparkles, Wand2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronLeft, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -197,7 +197,7 @@ export function WatchPage({ scope, title }: { scope: Scope; title: string }) {
         <main className="flex flex-1 flex-col gap-6 pt-6">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <Badge variant="outline" className="font-normal">{card.type}</Badge>
-            {ai && <Badge variant="outline" className="gap-1 font-normal"><Sparkles className="size-3" />AI-graded</Badge>}
+            {ai && <Badge variant="outline" className="gap-1 font-normal">AI-graded</Badge>}
             {card.generated && <Badge variant="outline" className="font-normal">new variant every time</Badge>}
             {phase === "result" && verdict ? (
               <span className={cn("ml-auto text-sm font-medium", verdict.cls)}>{by === "example" ? "Example: " : ""}{verdict.label}</span>
@@ -240,7 +240,7 @@ export function WatchPage({ scope, title }: { scope: Scope; title: string }) {
               </div>
               {result.grade.feedback && (
                 <div className="rounded-lg border bg-card/60 px-4 py-3">
-                  <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><Sparkles className="size-3.5 text-highlight" />Feedback</div>
+                  <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">Feedback</div>
                   <Markdown className="text-[0.95rem]">{result.grade.feedback}</Markdown>
                 </div>
               )}
@@ -268,7 +268,7 @@ export function WatchPage({ scope, title }: { scope: Scope; title: string }) {
                   {last ? "Finish" : "Skip"}
                 </Button>
                 <Button size="lg" className="h-12 flex-1 gap-2 sm:h-10 sm:min-w-48 sm:flex-none" onClick={showExample} disabled={phase === "grading"}>
-                  {phase === "grading" ? <><Loader2 className="size-4 animate-spin" />Answering…</> : <><Wand2 className="size-4" />Show an answer</>}
+                  {phase === "grading" ? <><Loader2 className="size-4 animate-spin" />Answering…</> : <>Show an answer</>}
                 </Button>
               </>
             )}

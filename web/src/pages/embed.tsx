@@ -2,7 +2,7 @@
 // No app chrome, transparent background, sizes itself to its content, and speaks the
 // widget protocol of hosts like Lotus: resize, theme and an optional summary sent back to the chat.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, MessageSquareText, RotateCcw, Send, Sparkles } from "lucide-react";
+import { Loader2, MessageSquareText, RotateCcw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CardFrame, type CardFrameHandle, type CardResult } from "@/components/card-frame";
 import { Markdown } from "@/components/markdown";
@@ -281,7 +281,7 @@ export function EmbedStudy({ scope, limit, cardId, title }: { scope: Scope; limi
               {feedback?.loading && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Writing feedback…</div>}
               {feedback?.text && (
                 <div className="rounded-lg border px-3.5 py-2.5">
-                  <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><Sparkles className="size-3.5 text-highlight" />Feedback</div>
+                  <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">Feedback</div>
                   <Markdown className="text-[0.93rem]">{feedback.text}</Markdown>
                 </div>
               )}

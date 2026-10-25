@@ -1,6 +1,6 @@
 // ChatGPT plan sign-in: start the OAuth flow, poll until the callback lands, show the account.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CircleAlert, CircleCheck, Loader2, LogOut, Sparkles } from "lucide-react";
+import { CircleAlert, CircleCheck, Loader2, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -172,7 +172,7 @@ export function ChatGptBlock({ provider, error, onChange }: { provider: ChatGptP
                 This sign-in doesn't include permission to use your plan for requests. Continue again and allow plan access.
               </p>
               <Button size="sm" variant="outline" className="h-8" onClick={start} disabled={busy !== null || !!waitingUrl}>
-                {busy === "login" || waitingUrl ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                {busy === "login" || waitingUrl ? <Loader2 className="size-4 animate-spin" /> : null}
                 Continue with ChatGPT
               </Button>
             </div>
@@ -222,7 +222,7 @@ export function ChatGptBlock({ provider, error, onChange }: { provider: ChatGptP
               onClick={start}
               disabled={busy !== null || !!waitingUrl}
             >
-              {busy === "login" || waitingUrl ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+              {busy === "login" || waitingUrl ? <Loader2 className="size-4 animate-spin" /> : null}
               Continue with ChatGPT
             </Button>
             {waitingUrl && (

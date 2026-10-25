@@ -176,6 +176,19 @@ function observeSize() {
   report();
 }
 
+function focusCard(root) {
+  if (!root) return;
+  for (const selector of ["[autofocus]", "input, textarea, [contenteditable]", "button"]) {
+    for (const el of root.querySelectorAll(selector)) {
+      if (el.matches(":disabled, [readonly]") || el.closest("[inert]") || !el.getClientRects().length || getComputedStyle(el).visibility !== "visible") continue;
+      if (el.hasAttribute("contenteditable") && !el.isContentEditable) continue;
+      if (selector !== "[autofocus]" && el instanceof HTMLInputElement && !["text", "number", "search", "tel", "url", "email", "password"].includes(el.type)) continue;
+      el.focus();
+      if (document.activeElement === el) return;
+    }
+  }
+}
+
 function forwardKeys() {
   window.addEventListener("keydown", (e) => {
     const typing = e.target instanceof HTMLElement && (e.target.matches("input, textarea, select, [contenteditable]") || e.target.isContentEditable);
@@ -261,11 +274,11 @@ export function boot(main, templateHtml) {
       }
       observeSize();
       send("mounted");
-      if (msg.mode !== "result") (api.root.querySelector("[autofocus]") ?? api.root.querySelector("input, textarea"))?.focus?.();
+      if (msg.mode !== "result") focusCard(api.root);
     } else if (msg.type === "collect") api?._collect();
     else if (msg.type === "result") api?._result(msg.result);
     else if (msg.type === "theme") applyTheme(msg.theme);
-    else if (msg.type === "focus") (api?.root.querySelector("[autofocus], input, textarea, button") ?? document.body).focus?.();
+    else if (msg.type === "focus") focusCard(api?.root);
   });
   forwardKeys();
   send("loaded");

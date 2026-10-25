@@ -1,13 +1,15 @@
 import { DEFAULT_SETTINGS, type Settings } from "../../core/engine.ts";
+import { chatGptStatus, chatGptLogout, listChatGptModels, openInBrowser, beginChatGptLogin, readChatGptHostId, importChatGptCredentials, ChatGptError } from "../../core/chatgpt.ts";
+import { chatProviderKeyEnv } from "../../core/ai.ts";
 import { command, group, CliError } from "../registry.ts";
 import { deepDelete, deepGet, deepSet, looseValue, splitPair } from "../input.ts";
 
-group({ name: "settings", summary: "App settings: AI providers and models, day start, learn-ahead", defaultVerb: "get" });
+group({ name: "settings", summary: "App settings: AI providers and models, day start, learn-ahead, ChatGPT sign-in", defaultVerb: "get" });
 
 /** Settings with the API key status (never the keys themselves). */
 function view(e: any) {
   const s: Settings = e.settings();
-  const envs = [s.ai.decision?.apiKeyEnv, s.ai.feedback?.apiKeyEnv, s.ai.vision?.apiKeyEnv].filter(Boolean) as string[];
+  const envs = [s.ai.decision?.apiKeyEnv, chatProviderKeyEnv(s.ai.feedback), chatProviderKeyEnv(s.ai.vision)].filter(Boolean) as string[];
   return { ...s, keyStatus: Object.fromEntries(envs.map((k) => [k, !!process.env[k]])), dbPath: e.path, mediaDir: e.mediaDir };
 }
 
@@ -86,4 +88,93 @@ command({
   summary: "Grade a fixed sample answer with the configured providers, to check keys and models. Costs a fraction of a cent.",
   output: "{ verdict?, verdictError?, feedback?, feedbackError? }",
   run: (ctx) => ctx.e.testAi(),
+});
+
+// --------------------------------------------------------- ChatGPT plan
+
+const statusView = (home: string) => ({ ...chatGptStatus(home), hostId: readChatGptHostId(home) });
+const chatgptError = (e: unknown) => (e instanceof ChatGptError ? new CliError(e.message, "external") : e);
+
+command({
+  name: "settings chatgpt login",
+  summary: "Sign in with ChatGPT, so grading uses the user's ChatGPT Plus or Pro plan instead of an API key.",
+  description:
+    "Opens OpenAI's sign-in page in the system browser and waits for the loopback callback on 127.0.0.1. The browser must run on this machine: a 127.0.0.1 callback never reaches a server on another host. Tokens are saved to $ETUDE_HOME/chatgpt.json with owner-only permissions.",
+  flags: [
+    { name: "no-open", type: "boolean", description: "Don't launch a browser; the URL is printed instead." },
+    { name: "timeout", type: "number", description: "Seconds to wait for the callback. Default 600." },
+  ],
+  noDb: true,
+  writes: true,
+  examples: ["etude settings chatgpt login", "etude settings chatgpt login --no-open"],
+  output: "{ signedIn, email, plan, clientId, hostId, credentialsPath, opened }",
+  async run(ctx) {
+    try {
+      const session = await beginChatGptLogin({ home: ctx.home, timeoutMs: (Number(ctx.flags.timeout) || 600) * 1000 });
+      ctx.note(`Open this URL to finish signing in:\n${session.url}`);
+      const opened = ctx.flags["no-open"] ? false : openInBrowser(session.url);
+      if (!opened) ctx.note("Couldn't open a browser; open the URL above on this machine.");
+      await session.wait;
+      return { ...statusView(ctx.home), opened };
+    } catch (e) {
+      throw chatgptError(e);
+    }
+  },
+});
+
+command({
+  name: "settings chatgpt status",
+  summary: "Whether this install is signed in with ChatGPT, for which account, and whether plan usage is granted.",
+  noDb: true,
+  examples: ["etude settings chatgpt status"],
+  output: "{ signedIn, email, plan, planType, expiresAt, needsReauth, usageUrl, credentialsPath, hostId }",
+  run: (ctx) => statusView(ctx.home),
+});
+
+command({
+  name: "settings chatgpt logout",
+  summary: "End the ChatGPT session and delete the saved tokens. The app registration is kept for a later sign-in.",
+  writes: true,
+  noDb: true,
+  examples: ["etude settings chatgpt logout"],
+  output: "{ signedIn: false, revoked, warning?, email, clientId, hostId, credentialsPath }",
+  async run(ctx) {
+    const out = await chatGptLogout(ctx.home).catch((e) => {
+      throw chatgptError(e);
+    });
+    return { ...out, ...statusView(ctx.home) };
+  },
+});
+
+command({
+  name: "settings chatgpt models",
+  summary: "The models the signed-in ChatGPT account offers for plan usage (slug and display name).",
+  noDb: true,
+  examples: ["etude settings chatgpt models"],
+  output: "{ models: [{ slug, displayName }] }",
+  async run(ctx) {
+    const models = await listChatGptModels(ctx.home).catch((e) => {
+      throw chatgptError(e);
+    });
+    return { models };
+  },
+});
+
+command({
+  name: "settings chatgpt import",
+  summary: "Adopt a chatgpt.json signed in on another machine (the self-hosted-VM path). This host gets its own host id.",
+  args: [{ name: "file", description: "The credential file copied from the other machine.", required: true }],
+  writes: true,
+  noDb: true,
+  examples: ["scp laptop:~/.etude/chatgpt.json /tmp/ && etude settings chatgpt import /tmp/chatgpt.json"],
+  output: "{ signedIn, email, hostId, credentialsPath, plan }",
+  run(ctx) {
+    try {
+      const imported = importChatGptCredentials(ctx.home, ctx.args.file);
+      return { ...imported, ...statusView(ctx.home) };
+    } catch (e) {
+      if (e instanceof ChatGptError) throw new CliError(e.message, "validation");
+      throw e;
+    }
+  },
 });

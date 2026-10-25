@@ -7,14 +7,19 @@ import { Markdown } from "@/components/markdown";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { BigSwitch, Block, Field, NumberField, Section, TextField } from "@/components/settings-ui";
+import { ChatGptBlock } from "@/components/settings-chatgpt";
 import {
+  isChatGpt,
+  isOpenAiChat,
   keyVars,
   matchPreset,
   presetAi,
   usesDecisionModel,
   type AiSettings,
+  type ChatGptProvider,
   type ChatProvider,
   type Errors,
+  type OpenAiChatProvider,
   type PresetId,
   type SettingsResponse,
   type TestResult,
@@ -23,6 +28,7 @@ import {
 const PRESETS: { id: PresetId; label: string; hint: string }[] = [
   { id: "openrouter", label: "OpenRouter", hint: "Decision model for verdicts, a chat model for feedback. One key." },
   { id: "openai", label: "OpenAI", hint: "OpenAI's chat API judges and writes feedback. Needs an OpenAI key." },
+  { id: "chatgpt", label: "ChatGPT", hint: "Grade with your ChatGPT Plus or Pro plan. No API key." },
   { id: "local", label: "Local", hint: "An OpenAI-compatible server on this machine (llama.cpp, Ollama, vLLM). No key." },
 ];
 
@@ -35,7 +41,10 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
   const decisionOn = usesDecisionModel(ai);
   const set = (patch: Partial<AiSettings>) => onChange({ ...ai, ...patch });
   const fb = ai.feedback;
-  const setFb = (patch: Partial<ChatProvider>) => set({ feedback: { ...(fb ?? { kind: "openai-chat", url: "", model: "" }), ...patch } });
+  const fbOpen = isOpenAiChat(fb) ? fb : null;
+  const fbGpt = isChatGpt(fb) ? fb : null;
+  const setFb = (patch: Partial<OpenAiChatProvider>) => set({ feedback: { ...(fbOpen ?? { kind: "openai-chat", url: "", model: "" }), ...patch } });
+  const visionOpen = isOpenAiChat(ai.vision) ? ai.vision : null;
   const visionTarget = ai.vision ?? (fb?.vision ? fb : null);
 
   return (
@@ -51,7 +60,7 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
       }
     >
       <Block title="Quick setup" description="Fills the provider fields below. Feedback timing and language stay as they are.">
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {PRESETS.map((p) => (
             <button
               key={p.id}
@@ -71,6 +80,14 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
           ))}
         </div>
       </Block>
+
+      {fbGpt && (
+        <ChatGptBlock
+          provider={fbGpt}
+          error={errors["feedback.model"]}
+          onChange={(patch: Partial<ChatGptProvider>) => set({ feedback: { ...fbGpt, ...patch } })}
+        />
+      )}
 
       <Block
         title="Decision model"
@@ -108,30 +125,43 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
         )}
       </Block>
 
-      <Block title="Feedback model" description="Any OpenAI-compatible chat completions endpoint.">
+      <Block
+        title="Feedback model"
+        description={fbGpt ? "Grading runs through your ChatGPT plan. The account and model are above." : "Any OpenAI-compatible chat completions endpoint."}
+      >
         {fb ? (
+          fbGpt ? (
+            <div className="flex items-center justify-between gap-4">
+              <label htmlFor="fb-vision" className="min-w-0">
+                <span className="block text-sm">Accepts images</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">On when the model can see, so drawings can be graded without a separate vision model.</span>
+              </label>
+              <BigSwitch id="fb-vision" checked={fbGpt.vision !== false} onCheckedChange={(v) => set({ feedback: { ...fbGpt, vision: v } })} />
+            </div>
+          ) : (
           <div className="grid gap-4 sm:grid-cols-2">
-            <TextField label="URL" mono className="sm:col-span-2" value={fb.url} error={errors["feedback.url"]} onChange={(v) => setFb({ url: v })} placeholder="https://openrouter.ai/api/v1/chat/completions" />
-            <TextField label="Model" mono value={fb.model} error={errors["feedback.model"]} onChange={(v) => setFb({ model: v })} placeholder={preset === "local" ? "the name your server reports" : ""} />
+            <TextField label="URL" mono className="sm:col-span-2" value={fbOpen?.url ?? ""} error={errors["feedback.url"]} onChange={(v) => setFb({ url: v })} placeholder="https://openrouter.ai/api/v1/chat/completions" />
+            <TextField label="Model" mono value={fbOpen?.model ?? ""} error={errors["feedback.model"]} onChange={(v) => setFb({ model: v })} placeholder={preset === "local" ? "the name your server reports" : ""} />
             <TextField
               label="API key variable"
               mono
-              value={fb.apiKeyEnv ?? ""}
+              value={fbOpen?.apiKeyEnv ?? ""}
               error={errors["feedback.apiKeyEnv"]}
-              hint={!fb.apiKeyEnv ? "Empty: no Authorization header is sent." : undefined}
+              hint={!fbOpen?.apiKeyEnv ? "Empty: no Authorization header is sent." : undefined}
               onChange={(v) => setFb({ apiKeyEnv: v })}
               placeholder="none"
             />
-            <NumberField label="Timeout" suffix="s" value={sec(fb.timeoutMs ?? 45000)} error={errors["feedback.timeoutMs"]} onChange={(v) => setFb({ timeoutMs: ms(v) })} />
-            <NumberField label="Temperature" step={0.1} value={fb.temperature ?? 0.3} error={errors["feedback.temperature"]} hint="0 to 2. Lower is steadier." onChange={(v) => setFb({ temperature: v })} />
+            <NumberField label="Timeout" suffix="s" value={sec(fbOpen?.timeoutMs ?? 45000)} error={errors["feedback.timeoutMs"]} onChange={(v) => setFb({ timeoutMs: ms(v) })} />
+            <NumberField label="Temperature" step={0.1} value={fbOpen?.temperature ?? 0.3} error={errors["feedback.temperature"]} hint="0 to 2. Lower is steadier." onChange={(v) => setFb({ temperature: v })} />
             <div className="flex items-center justify-between gap-4 border-t pt-4 sm:col-span-2">
               <label htmlFor="fb-vision" className="min-w-0">
                 <span className="block text-sm">Accepts images</span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">On if this model can see, so drawings can be graded without a separate vision model.</span>
               </label>
-              <BigSwitch id="fb-vision" checked={!!fb.vision} onCheckedChange={(v) => setFb({ vision: v })} />
+              <BigSwitch id="fb-vision" checked={!!fbOpen?.vision} onCheckedChange={(v) => setFb({ vision: v })} />
             </div>
           </div>
+          )
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
             No feedback model. AI-graded cards can't be graded without one.
@@ -153,16 +183,16 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
           <BigSwitch
             checked={!!ai.vision}
             aria-label="Use a separate vision model"
-            onCheckedChange={(on) => set({ vision: on ? { kind: "openai-chat", url: fb?.url ?? "", model: "", apiKeyEnv: fb?.apiKeyEnv, vision: true, temperature: 0.3, timeoutMs: 60000 } : null })}
+            onCheckedChange={(on) => set({ vision: on ? { kind: "openai-chat", url: fbOpen?.url ?? "", model: "", apiKeyEnv: fbOpen?.apiKeyEnv, vision: true, temperature: 0.3, timeoutMs: 60000 } : null })}
           />
         }
       >
-        {ai.vision && (
+        {visionOpen && (
           <div className="grid gap-4 sm:grid-cols-2">
-            <TextField label="URL" mono className="sm:col-span-2" value={ai.vision.url} error={errors["vision.url"]} onChange={(v) => set({ vision: { ...ai.vision!, url: v } })} />
-            <TextField label="Model" mono value={ai.vision.model} error={errors["vision.model"]} onChange={(v) => set({ vision: { ...ai.vision!, model: v } })} />
-            <TextField label="API key variable" mono value={ai.vision.apiKeyEnv ?? ""} error={errors["vision.apiKeyEnv"]} onChange={(v) => set({ vision: { ...ai.vision!, apiKeyEnv: v } })} placeholder="none" />
-            <NumberField label="Timeout" suffix="s" value={sec(ai.vision.timeoutMs ?? 45000)} error={errors["vision.timeoutMs"]} onChange={(v) => set({ vision: { ...ai.vision!, timeoutMs: ms(v) } })} />
+            <TextField label="URL" mono className="sm:col-span-2" value={visionOpen.url} error={errors["vision.url"]} onChange={(v) => set({ vision: { ...visionOpen, url: v } })} />
+            <TextField label="Model" mono value={visionOpen.model} error={errors["vision.model"]} onChange={(v) => set({ vision: { ...visionOpen, model: v } })} />
+            <TextField label="API key variable" mono value={visionOpen.apiKeyEnv ?? ""} error={errors["vision.apiKeyEnv"]} onChange={(v) => set({ vision: { ...visionOpen, apiKeyEnv: v } })} placeholder="none" />
+            <NumberField label="Timeout" suffix="s" value={sec(visionOpen.timeoutMs ?? 45000)} error={errors["vision.timeoutMs"]} onChange={(v) => set({ vision: { ...visionOpen, timeoutMs: ms(v) } })} />
           </div>
         )}
       </Block>

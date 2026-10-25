@@ -5,6 +5,8 @@ import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { DEFAULT_SETTINGS, Etude, EtudeError, type StudyScope } from "../core/engine.ts";
+import { chatProviderKeyEnv } from "../core/ai.ts";
+import { readChatGptHostId } from "../core/chatgpt.ts";
 import { DEFAULT_PRESET, type Rating } from "../core/model.ts";
 import { cardFrame } from "./frame.ts";
 
@@ -233,7 +235,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.get("/api/export", (c) => c.json(etude.exportPack({ ...scopeOf(c), name: c.req.query("name") || undefined })));
   app.get("/api/settings", (c) => {
     const s = etude.settings();
-    const keys = [s.ai.decision?.apiKeyEnv, s.ai.feedback?.apiKeyEnv, s.ai.vision?.apiKeyEnv].filter(Boolean) as string[];
+    const keys = [s.ai.decision?.apiKeyEnv, chatProviderKeyEnv(s.ai.feedback), chatProviderKeyEnv(s.ai.vision)].filter(Boolean) as string[];
     return c.json({
       ...s,
       keyStatus: Object.fromEntries(keys.map((k) => [k, !!process.env[k]])),
@@ -246,6 +248,61 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.get("/api/defaults", (c) => c.json(DEFAULT_PRESET));
   app.post("/api/ai/test", async (c) => c.json(await etude.testAi()));
   app.patch("/api/settings", async (c) => c.json(etude.updateSettings(await body(c))));
+
+  // ------------------------------------------------------- ChatGPT plan
+  // The sign-in listener runs here, so its 127.0.0.1 callback only reaches a browser on this machine.
+  let login: { url: string; started: number; error?: string } | null = null;
+  let models: { at: number; rows: { slug: string; displayName: string }[] } | null = null;
+  const loginState = () => (login ? (login.error ? { state: "error", error: login.error } : { state: "pending", url: login.url }) : null);
+  const requestHost = (c: Context) => (c.req.header("x-forwarded-host") ?? c.req.header("host") ?? "").split(",")[0].trim();
+  const localBrowser = (c: Context) => /^(localhost|127\.\d+\.\d+\.\d+|\[?::1\]?)$/i.test(requestHost(c).replace(/:\d+$/, ""));
+
+  app.post("/api/chatgpt/login", async (c) => {
+    const host = requestHost(c);
+    if (!localBrowser(c))
+      return c.json({
+        remote: true,
+        host,
+        cli: "etude settings chatgpt login",
+        message:
+          "Sign-in finishes on 127.0.0.1, which this browser can't reach. Run `etude settings chatgpt login` on the machine running Etude; if that machine has no browser, sign in here and run `etude settings chatgpt import <file>` there with the copied ~/.etude/chatgpt.json.",
+      });
+    if (login && !login.error) return c.json({ pending: true, url: login.url, host });
+    const session = await etude.chatgptLogin().catch((e) => {
+      throw new EtudeError(`couldn't start ChatGPT sign-in: ${(e as Error).message}`, 502);
+    });
+    const current: { url: string; started: number; error?: string } = { url: session.url, started: Date.now() };
+    login = current;
+    session.wait.then(
+      () => {
+        if (login === current) login = null;
+      },
+      (e: Error) => {
+        if (login === current) current.error = e.message;
+      },
+    );
+    return c.json({ pending: true, url: session.url, host });
+  });
+
+  app.get("/api/chatgpt/status", async (c) => {
+    const status = etude.chatgptStatus();
+    if (status.signedIn && status.plan === "enabled" && (!models || Date.now() - models.at > 5 * 60 * 1000)) {
+      const rows = await etude.chatgptModels().catch(() => []);
+      models = { at: Date.now(), rows };
+    }
+    return c.json({
+      ...status,
+      hostId: readChatGptHostId(etude.home),
+      models: status.signedIn ? (models?.rows ?? []) : [],
+      login: loginState(),
+    });
+  });
+
+  app.post("/api/chatgpt/logout", async (c) => {
+    login = null;
+    models = null;
+    return c.json({ ...(await etude.chatgptLogout()), ...etude.chatgptStatus() });
+  });
   app.get("/api/themes", (c) => c.json({ selected: etude.currentTheme().id, themes: etude.listThemes() }));
   app.put("/api/themes/:id", async (c) => c.json(etude.saveTheme({ ...(await body(c)), id: c.req.param("id") })));
   app.delete("/api/themes/:id", (c) => c.json(etude.deleteTheme(c.req.param("id"))));

@@ -22,9 +22,9 @@ Read `docs/cli.md` in the repo for the full reference and recipes. Don't guess f
 
 ## Mental model
 
-- **Item**: one piece of content with a `type`, `fields`, a deck, tags, `source` and `notes`. Ids are stable strings (`cmpt371.w1.dtrans-1`); choose readable ones.
+- **Item**: one piece of content with a `type`, `fields`, a deck, tags, `source` and `notes`. Ids are stable strings (`net.w1.dtrans-1`); choose readable ones.
 - **Card**: each item has one card per face of its type (usually just `main`). Cards carry the FSRS state (new, learning, review, relearning), due date, stability and difficulty. Card commands take numeric `cardId`s or item ids.
-- **Deck**: a tree named with `::` (`"CMPT 371::Week 1"`). Settings resolve as built-in defaults → parent decks → the deck's preset → the deck's own overrides. `etude deck show <deck>` reports each value and where it comes from.
+- **Deck**: a tree named with `::` (`"Networks::Week 1"`). Settings resolve as built-in defaults → parent decks → the deck's preset → the deck's own overrides. `etude deck show <deck>` reports each value and where it comes from.
 - **Preset**: named settings shared by several decks (retention, steps, daily limits, an exam `deadline`).
 - **Tag**: hierarchical with `::`. `tag:a::b` matches `a::b` and everything below it. Tags and decks can carry AI grading instructions.
 - **Type**: fields schema, template, an optional `prepare` script, and a grader (`self`, `script`, `ai`, `hybrid`). **Private fields** (answers, references) stay hidden from the learner until they submit. Built-ins: `basic`, `typed`, `numeric`, `mcq`, `order`, `match`, `cloze`, `free`, `draw`. Run `etude type show <id> --fields-only` for field names.
@@ -38,8 +38,8 @@ Read `docs/cli.md` in the repo for the full reference and recipes. Don't guess f
 
 ```sh
 etude deck list --format table
-etude stats overview --deck "CMPT 371"
-etude item list 'deck:"CMPT 371" tag:delay'
+etude stats overview --deck "Networks"
+etude item list 'deck:"Networks" tag:delay'
 etude item show <item-id>              # fields, cards, reviews, attempts
 ```
 
@@ -63,18 +63,18 @@ etude item move --query 'tag:hard' --to "Physics::Hard"
 etude item tag <id>... -t exam::core            # ids, --query, or ids on stdin with -
 etude item archive --query 'tag:outdated'       # archive is the normal way to remove
 etude tag rename old::name new::name
-etude deck rename "Inbox::Networking" "CMPT 371::Networking"
+etude deck rename "Inbox::Networking" "Networks::Transport"
 ```
 
 **Settings and deadlines.** These recipes live in [references/scheduling.md](references/scheduling.md).
 
 ```sh
 etude preset create exam --name "Exam" deadline=2026-10-23T16:30:00-07:00 desiredRetention=0.92
-etude deck preset "CMPT 371" exam --reschedule
-etude deck set "CMPT 371" newPerDay=40           # this deck only; --to-preset writes to its preset
-etude deck unset "CMPT 371" newPerDay            # back to inherited
+etude deck preset "Networks" exam --reschedule
+etude deck set "Networks" newPerDay=40           # this deck only; --to-preset writes to its preset
+etude deck unset "Networks" newPerDay            # back to inherited
 etude card due --query 'tag:http is:due' --in 1d # push to tomorrow without faking a review
-etude card suspend --query 'deck:"CMPT 371" prop:lapses>=4'
+etude card suspend --query 'deck:"Networks" prop:lapses>=4'
 ```
 
 **Themes.** `etude theme list`, then `etude theme set paper`. Make one with `etude theme create sea --from midnight --var highlight="oklch(0.7 0.12 210)" --use`, and change it later with `theme edit` (variables, scheme, `--css-file`). `theme export`/`import` move themes between collections.

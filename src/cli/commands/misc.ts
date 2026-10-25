@@ -44,7 +44,7 @@ command({
     { ...LIMIT_FLAG, default: 50 },
     OFFSET_FLAG,
   ],
-  examples: ['etude search deck:"CMPT 371" is:due', 'etude search "tag:delay prop:lapses>=2" --order lapses'],
+  examples: ['etude search deck:"Networks" is:due', 'etude search "tag:delay prop:lapses>=2" --order lapses'],
   output: "{ total, rows: [...] }",
   run: (ctx) => ctx.e.search(ctx.args.query.join(" "), { limit: ctx.flags.limit, offset: ctx.flags.offset, order: ctx.flags.order }),
 });

@@ -31,7 +31,7 @@ command({
   description:
     "`resolved` is what applies to the deck's cards. `config` is the deck's own overrides, `inherited` what applies without them (parents and preset), `presetBase` what applies without the preset. `sources` names, per setting, the layer it comes from: default, parent-preset, parent, preset or deck.",
   args: [{ name: "deck", description: "Deck name; `::` separates levels.", required: true }],
-  examples: ['etude deck show "CMPT 371::Week 1"'],
+  examples: ['etude deck show "Networks::Week 1"'],
   run(ctx) {
     const e = ctx.e;
     const d = e.deck(ctx.args.deck);
@@ -89,7 +89,7 @@ command({
   ],
   writes: true,
   dryRun: true,
-  examples: ['etude deck rename "Physics::Waves" "Physics::Oscillations and waves"', 'etude deck move "Inbox::Networking" "CMPT 371::Networking"'],
+  examples: ['etude deck rename "Physics::Waves" "Physics::Oscillations and waves"', 'etude deck move "Inbox::Networking" "Networks::Transport"'],
   output: "{ from, to, decks: [{ from, to }] }",
   run(ctx) {
     const e = ctx.e;
@@ -160,7 +160,7 @@ for (const field of ["description", "instructions"] as const) {
     ],
     writes: true,
     dryRun: true,
-    examples: [`etude deck ${field} "CMPT 371"`, `etude deck ${field} "CMPT 371" --file notes.md`],
+    examples: [`etude deck ${field} "Networks"`, `etude deck ${field} "Networks" --file notes.md`],
     output: `{ deck, ${field} }`,
     run(ctx) {
       const e = ctx.e;
@@ -190,9 +190,9 @@ command({
   writes: true,
   dryRun: true,
   examples: [
-    'etude deck set "CMPT 371" deadline=2026-10-23T16:30:00-07:00 desiredRetention=0.92 --reschedule',
+    'etude deck set "Networks" deadline=2026-10-23T16:30:00-07:00 desiredRetention=0.92 --reschedule',
     'etude deck set "Spanish" newPerDay=30 learningSteps="1m 10m 1h"',
-    'etude deck set "CMPT 371" newPerDay=40 --to-preset',
+    'etude deck set "Networks" newPerDay=40 --to-preset',
   ],
   output: "{ deck, config (own overrides), changed: { key: { from, to } } (effective values), rescheduled? }",
   run(ctx) {
@@ -233,7 +233,7 @@ command({
   flags: [{ name: "all", type: "boolean", description: "Remove every override." }, RESCHEDULE_FLAG],
   writes: true,
   dryRun: true,
-  examples: ['etude deck unset "CMPT 371" deadline', 'etude deck unset "CMPT 371" --all'],
+  examples: ['etude deck unset "Networks" deadline', 'etude deck unset "Networks" --all'],
   output: "{ deck, removed, config, changed }",
   run(ctx) {
     const e = ctx.e;
@@ -260,7 +260,7 @@ command({
   flags: [{ name: "clear-overrides", type: "boolean", description: "Also drop the deck's own overrides so the preset fully applies." }, RESCHEDULE_FLAG],
   writes: true,
   dryRun: true,
-  examples: ['etude deck preset "CMPT 371" exam', 'etude deck preset "CMPT 371" none'],
+  examples: ['etude deck preset "Networks" exam', 'etude deck preset "Networks" none'],
   output: "{ deck, presetId, changed }",
   run(ctx) {
     const e = ctx.e;

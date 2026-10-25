@@ -104,7 +104,7 @@ A card type is a folder: `type.json` (fields and grader), `template.html`, `styl
 
 ## Scheduling
 
-Cards are scheduled with FSRS-6 (via [ts-fsrs](https://github.com/open-spaced-repetition/ts-fsrs)). Settings come in layers: the defaults, then for each deck from the root down, its preset and its own overrides. A preset on `CMPT 371` therefore applies to `CMPT 371::Week 1` unless that subdeck overrides it. Retention, learning steps, limits, ordering, FSRS weights and how scores turn into suggested ratings are all set per layer.
+Cards are scheduled with FSRS-6 (via [ts-fsrs](https://github.com/open-spaced-repetition/ts-fsrs)). Settings come in layers: the defaults, then for each deck from the root down, its preset and its own overrides. A preset on `Networks` therefore applies to `Networks::Week 1` unless that subdeck overrides it. Retention, learning steps, limits, ordering, FSRS weights and how scores turn into suggested ratings are all set per layer.
 
 A deck can have an exam `deadline`. No card in it is scheduled after the deadline minus a margin (12 hours by default). A card that would come back later is pulled in, usually to halfway between now and the deadline, so even a well-known card gets one more look. After changing retention, steps or a deadline, `etude reschedule --deck NAME` replays the review history with the new settings; the deck page offers the same thing when you save such a change.
 
@@ -113,9 +113,9 @@ A deck can have an exam `deadline`. No card in it is scheduled after the deadlin
 The same language works in Browse, in filtered study sessions and in `etude search`:
 
 ```
-deck:"CMPT 371"       the deck and everything below it      (deck:cmpt* wildcards)
-tag:cmpt371::w1       the tag and every tag below it        (tag:exam::* wildcards)
-type:numeric  id:cmpt371.w1.*  source:KR
+deck:"Networks"       the deck and everything below it      (deck:net* wildcards)
+tag:net::w1           the tag and every tag below it        (tag:exam::* wildcards)
+type:numeric  id:net.w1.*  source:ch1
 is:new is:learning is:review is:relearning is:due is:suspended is:buried is:archived
 prop:lapses>=2  prop:reps=0  prop:stability<3  prop:difficulty>7  prop:due<=1 (days from now)
 rated:1  rated:7:1    reviewed in the last N days (optionally with that rating)

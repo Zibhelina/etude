@@ -18,6 +18,7 @@ Etude is a spaced-repetition app in which every card type is a small program. A 
 - **Exam deadlines.** Set a deadline on a deck and no card is scheduled past it.
 - **Search language** for browsing and for filtered study sessions.
 - **Packs.** One JSON file carries decks, presets, types and items. Import is idempotent and keeps review history.
+- **Import from Anki.** `.apkg` and `.colpkg` files bring their notetypes, decks, tags, media and review history across; see [docs/anki.md](docs/anki.md).
 - **CLI and HTTP API** that print JSON.
 - **Works on phones and tablets**, plus an embeddable study widget at `/embed?deck=...&n=10` for other apps.
 

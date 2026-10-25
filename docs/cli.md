@@ -309,6 +309,8 @@ These work on every command, before or after the command words.
   - [`pack export`](#pack-export) Write a pack of the items in a scope, with their decks, presets, tag instructions and custom types. Scheduling is not included.
   - [`pack check`](#pack-check) Validate pack files without a database: structure per type, ids, and every generator over many seeds. Exits 4 on errors.
   - [`pack new`](#pack-new) Write a starter pack with one valid item of each built-in type, to edit.
+- **anki**: Anki: bring an .apkg or .colpkg collection in (types, decks, items, cards, media, history)
+  - [`anki import`](#anki-import) Import an Anki package: card types, presets, decks, items, cards, media and review history.
 - **db**: The database file: path, backups, integrity, schema version
   - [`db path`](#db-path) Which database and media directory the CLI uses, and how it was chosen.
   - [`db backup`](#db-backup) Copy the database consistently (SQLite online backup; safe while the server runs).
@@ -2819,6 +2821,42 @@ etude pack new [file] [flags]
 
 ```sh
 etude pack new physics.pack.json --deck "Physics" --prefix phys
+```
+
+## anki
+
+Anki: bring an .apkg or .colpkg collection in (types, decks, items, cards, media, history).
+
+### etude anki import
+
+<a id="anki-import"></a>
+
+Import an Anki package: card types, presets, decks, items, cards, media and review history.
+
+Item ids come from the note guid, so importing the same package again updates its items instead of duplicating them: progress made in Etude is kept and reviews aren't imported twice. Each notetype becomes a card type (`anki-<name>`), each deck config a preset, and `::` in deck and tag names keeps its hierarchy. Imported cards keep Anki's due dates and FSRS memory state. With --dry-run the report says what would change and nothing is written. Filtered decks are skipped and their cards land in their home deck.
+
+```
+etude anki import <file> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `file` | An .apkg or .colpkg exported by Anki (legacy or current format). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--no-scheduling` | boolean | Content only: every card starts new, with no review history or due dates. |
+| `--deck-prefix <DECK>` | string | Nest every imported deck under this one. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { format, dryRun, scheduling, types: { created, updated, unchanged }, presets: { created, updated, unchanged }, decks, items: { created, updated, unchanged }, cards, reviews, read: { notes, cards, reviews }, media: { files, bytes }, skipped: [{ what, name, reason }] }
+
+```sh
+etude anki import spanish.apkg --dry-run
+etude anki import spanish.apkg
+etude anki import backlog.colpkg --deck-prefix "Anki"
 ```
 
 ## db

@@ -81,7 +81,7 @@ export interface StudyCard {
 
 export interface FieldSpec {
   name: string;
-  kind: "markdown" | "text" | "number" | "boolean" | "list" | "json" | "code";
+  kind: "markdown" | "text" | "number" | "boolean" | "list" | "json" | "code" | "html";
   label?: string;
   description?: string;
   required?: boolean;
@@ -97,6 +97,7 @@ export interface CardType {
   name: string;
   description?: string;
   faces?: string[];
+  facesWhen?: string;
   fields: FieldSpec[];
   prepare?: string;
   template: { html: string; css?: string; js?: string };
@@ -200,14 +201,15 @@ const TOKEN = (() => {
   return fromUrl ?? localStorage.getItem("etude.token");
 })();
 
-async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function call<T>(method: string, path: string, body?: unknown, raw?: Blob): Promise<T> {
   const headers: Record<string, string> = {};
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (raw) headers["Content-Type"] = "application/octet-stream";
+  else if (body !== undefined) headers["Content-Type"] = "application/json";
   if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
   const res = await fetch(path, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: raw ?? (body !== undefined ? JSON.stringify(body) : undefined),
   });
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
@@ -221,6 +223,21 @@ const qs = (o: Record<string, string | number | undefined | null>) => {
   const s = p.toString();
   return s ? `?${s}` : "";
 };
+
+export interface AnkiImportReport {
+  format: "new" | "legacy";
+  dryRun: boolean;
+  scheduling: boolean;
+  types: { created: number; updated: number; unchanged: number };
+  presets: { created: number; updated: number; unchanged: number };
+  decks: number;
+  items: { created: number; updated: number; unchanged: number };
+  cards: number;
+  reviews: number;
+  read: { notes: number; cards: number; reviews: number };
+  media: { files: number; bytes: number };
+  skipped: { what: string; name: string; reason: string }[];
+}
 
 export interface Scope {
   deck?: string;
@@ -272,6 +289,14 @@ export const api = {
   saveTag: (tag: string, instructions: string, description = "") => call("PUT", "/api/tags", { tag, instructions, description }),
   renameTag: (from: string, to: string) => call("POST", "/api/tags/rename", { from, to }),
   importPack: (pack: unknown, dryRun = false) => call<any>("POST", `/api/import${dryRun ? "?dryRun=1" : ""}`, pack),
+  /** The package is the request body; the flags ride in the query. */
+  importAnki: (pkg: Blob, opts: { dryRun?: boolean; scheduling?: boolean; deckPrefix?: string } = {}) =>
+    call<AnkiImportReport>(
+      "POST",
+      `/api/anki/import${qs({ dryRun: opts.dryRun ? 1 : undefined, scheduling: opts.scheduling === false ? 0 : undefined, deckPrefix: opts.deckPrefix })}`,
+      undefined,
+      pkg,
+    ),
   exportUrl: (s: Scope) => `/api/export${qs({ deck: s.deck, q: s.q })}`,
   settings: () => call<any>("GET", "/api/settings"),
   defaults: () => call<PresetConfig>("GET", "/api/defaults"),

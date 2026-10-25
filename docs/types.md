@@ -34,9 +34,10 @@ This is the JSON that `PUT /api/types/:id` accepts and the editor exports:
 - `id`: lowercase slug, `^[a-z0-9][a-z0-9-]{0,63}$`. Items refer to the type by id, so it doesn't change once items use it.
 - `name` is required. `description` is shown in the type list and when adding a card.
 - `faces`: optional list of simple names (`[\w-]+`). Each face becomes its own scheduled card from the same item (for example `forward` and `reverse`). Without `faces`, every item makes one card called `main`. Adding a face to a type that already has items creates the missing cards on save.
+- `facesWhen` (optional): the body of `function (fields)` returning the faces this item has. It decides which cards an item gets, so a cloze import can leave out `c3` for a note with two clozes, and an optional reverse can leave out its second template when the field that drives it is empty. The script is authoritative for the item, so it can also name a face that isn't in `faces` yet. Faces are only ever added: a card that already exists is kept even if the item stops qualifying, so history isn't lost.
 - `fields[]`:
   - `name` is an identifier (`^[A-Za-z_]\w*$`) and must be unique.
-  - `kind` is one of `markdown | text | number | boolean | list | json | code`.
+  - `kind` is one of `markdown | text | number | boolean | list | json | code | html`. `html` holds raw HTML (Anki imports use it) and is edited as plain source.
   - `label` and `description` only matter to editors.
   - `required` fields must be non-empty when an item is saved.
   - A `private` field is hidden until the answer is graded.

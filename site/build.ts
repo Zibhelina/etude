@@ -84,83 +84,27 @@ const demos = DEMOS.map(({ id, label }) => {
     type: def.id,
     name: def.name,
     // The landing page shows the task, not the lesson: the explanatory note stays in the app.
-    fields: Object.fromEntries(Object.entries({ ...fieldDefaults(def), ...item.fields }).filter(([k]) => k !== "note")),
+    fields: Object.fromEntries(Object.entries({ ...fieldDefaults(def), ...item.fields }).filter(([k]) => k !== "note" && k !== "demo" && k !== "demoGrade")),
     prepare: def.prepare ?? null,
     grade: grader.code,
     private: def.fields.filter((f) => f.private).map((f) => f.name),
   };
 });
 // The repertoire: every card type in the box, live, for the visitor's own hands. Items come from
-// the showcase pack; the built-in types it doesn't use get a small general-interest item here.
-const SITE_ITEMS: Record<string, { type: string; fields: Record<string, unknown> }> = {
-  "site.basic.sky": { type: "basic", fields: {
-    front: "Why is the sky blue?",
-    back: "Air molecules scatter short wavelengths of sunlight far more than long ones (Rayleigh scattering, roughly as $1/\\lambda^4$), so blue light reaches your eye from every direction of the sky.",
-    extra: "At sunset the light crosses much more air, most of the blue is scattered away before it arrives, and what's left is red and orange.",
-  } },
-  "site.typed.capital": { type: "typed", fields: {
-    prompt: "What is the capital of **Australia**?",
-    answers: ["Canberra"],
-    placeholder: "A city",
-    explanation: "Not Sydney. Canberra was chosen in 1908 as a compromise between the two rivals, Sydney and Melbourne, and built from scratch.",
-  } },
-  "site.mcq.day": { type: "mcq", fields: {
-    prompt: "Which planet has the **shortest day**, one full turn on its axis?",
-    options: [
-      { text: "Jupiter", correct: true, why: "About 9 hours 56 minutes, despite being the largest planet." },
-      { text: "Earth", why: "About 23 hours 56 minutes." },
-      { text: "Mars", why: "About 24 hours 37 minutes, a little longer than ours." },
-      { text: "Mercury", why: "Very slow: about 59 Earth days." },
-    ],
-    explanation: "The giant planets spin fastest. Jupiter's quick rotation flattens it visibly at the poles.",
-  } },
-  "site.cloze.haiku": { type: "cloze", fields: {
-    text: "A traditional haiku has three lines of {{5|five}}, {{7|seven}} and {{5|five}} sounds, and usually a word for the season, the {{kigo::Japanese term}}.",
-    explanation: "In Japanese the count is in *on*, sound units shorter than English syllables, which is why haiku translated into English often come out shorter.",
-  } },
-  "site.match.paintings": { type: "match", fields: {
-    prompt: "Match each painting with its painter.",
-    pairs: [
-      ["*The Starry Night*", "Vincent van Gogh"],
-      ["*Girl with a Pearl Earring*", "Johannes Vermeer"],
-      ["*The Persistence of Memory*", "Salvador Dalí"],
-      ["*The Birth of Venus*", "Sandro Botticelli"],
-      ["*The Great Wave off Kanagawa*", "Katsushika Hokusai"],
-    ],
-    explanation: "Van Gogh painted *The Starry Night* in 1889 from the window of an asylum in Saint-Rémy; Hokusai's *Great Wave* is a woodblock print, so thousands of copies exist.",
-  } },
-  "site.numeric.train": { type: "numeric", fields: {
-    prompt: "A train covers **90 km** in **45 minutes**. What is its average speed?",
-    answer: 120,
-    unit: "km/h",
-    tolerance: 0.01,
-    generator: [
-      "// A speed and a time that give a whole number of kilometres.",
-      "let v, t, d;",
-      "do { v = rng.int(6, 30) * 10; t = rng.pick([15, 20, 30, 40, 45, 50, 75, 90]); d = (v * t) / 60; } while (!Number.isInteger(d));",
-      "return {",
-      "  prompt: `A train covers **${d} km** in **${t} minutes**. What is its average speed?`,",
-      "  answer: v,",
-      "  explanation: `Speed is distance over time, with the time in hours: $\\\\frac{${d}\\\\,\\\\text{km}}{${t}/60\\\\,\\\\text{h}} = ${v}\\\\,\\\\text{km/h}$.`,",
-      "};",
-    ].join("\n"),
-  } },
-  "site.order.scale": { type: "order", fields: {
-    prompt: "Put these in order of size, **smallest first**.",
-    steps: ["A proton", "A hydrogen atom", "A virus", "A red blood cell", "A grain of sand", "A cat"],
-    explanation: "Roughly $10^{-15}$ m, $10^{-10}$ m, $10^{-7}$ m, $10^{-5}$ m, half a millimetre and half a metre. A hydrogen atom is about 60,000 times wider than the proton at its centre.",
-  } },
-};
+// the showcase pack (one per type) plus site/variants.json, more items of the same types that the
+// repertoire rotates through but the tour in the app doesn't need.
+const variants: { id: string; type: string; fields: Record<string, unknown> }[] = JSON.parse(readFileSync(join(here, "variants.json"), "utf8"));
+const itemById = (id: string) => pack.items.find((i: { id: string }) => i.id === id) ?? variants.find((i) => i.id === id);
 const REPERTOIRE: [string, [string, string, string, string[]][]][] = [
   ["Recall", [
-    ["basic", "Flip a card", "The classic: think of the answer, turn the card over, and be honest with yourself.", ["site.basic.sky"]],
-    ["typed", "Type the answer", "A short answer typed from memory, checked against the accepted spellings.", ["site.typed.capital"]],
-    ["mcq", "Pick the answer", "Options shuffled every time, so you remember the answer, not its position.", ["site.mcq.day"]],
-    ["cloze", "Fill the blanks", "A sentence with holes in it. Each blank is checked on its own.", ["site.cloze.haiku"]],
-    ["match", "Match the pairs", "Wire each item to its partner. The right side comes shuffled.", ["site.match.paintings"]],
+    ["basic", "Flip a card", "The classic: think of the answer, turn the card over, and be honest with yourself.", ["showcase.basic.sky"]],
+    ["typed", "Type the answer", "A short answer typed from memory, checked against the accepted spellings.", ["showcase.typed.capital"]],
+    ["mcq", "Pick the answer", "Options shuffled every time, so you remember the answer, not its position.", ["showcase.mcq.day"]],
+    ["cloze", "Fill the blanks", "A sentence with holes in it. Each blank is checked on its own.", ["showcase.cloze.haiku"]],
+    ["match", "Match the pairs", "Wire each item to its partner. The right side comes shuffled.", ["showcase.match.paintings"]],
   ]],
   ["Calculate", [
-    ["numeric", "Compute, with units", "New numbers every review. Units are fine, and the answer gets a tolerance.", ["site.numeric.train"]],
+    ["numeric", "Compute, with units", "New numbers every review. Units are fine, and the answer gets a tolerance.", ["showcase.numeric.train"]],
     ["math", "Write the expression", "Type it however you like: any equivalent form is accepted, and it renders as you type.", ["showcase.math.derivative", "showcase.math.factor", "showcase.math.roots", "showcase.math.exact", "showcase.math.line"]],
     ["estimate", "Estimate it", "Slide to your best guess. Close is full credit, near is partial.", ["showcase.estimate.everest", "showcase.estimate.heartbeats"]],
     ["balance", "Balance the equation", "Step the coefficients until every atom balances. The tally updates as you go.", ["showcase.balance.combustion", "showcase.balance.rust", "showcase.balance.aluminium-acid"]],
@@ -168,7 +112,7 @@ const REPERTOIRE: [string, [string, string, string, string[]][]][] = [
     ["plot", "Mark the points", "Tap the points that matter on the grid: roots, vertices, intersections.", ["showcase.plot.parabola", "showcase.plot.lines"]],
   ]],
   ["Arrange", [
-    ["order", "Put them in order", "Drag the blocks, or move them with the keyboard. Partial credit for what's already in order.", ["site.order.scale"]],
+    ["order", "Put them in order", "Drag the blocks, or move them with the keyboard. Partial credit for what's already in order.", ["showcase.order.scale"]],
     ["timeline", "Place it in time", "Drag each event to its year. Graded on order and on how many years off.", ["showcase.timeline.computing", "showcase.timeline.physics"]],
     ["graph-walk", "Walk the graph", "Tap the nodes in the order the algorithm would visit them, on a graph made for this review.", ["showcase.graph-walk.bfs", "showcase.graph-walk.dfs"]],
   ]],
@@ -208,10 +152,12 @@ const gallery = REPERTOIRE.flatMap(([group, entries]) => entries.map(([type, lab
     .replaceAll("__BASE__", "./");
   writeFileSync(join(out, "frames/gallery", `${def.id}.html`), html);
   const items = ids.map((id) => {
-    const item = SITE_ITEMS[id] ?? pack.items.find((i: { id: string }) => i.id === id);
+    const item = itemById(id);
     if (!item) throw new Error(`repertoire: no item ${id}`);
     if (item.type !== type) throw new Error(`repertoire: ${id} is a ${item.type} item, not ${type}`);
-    return { id, fields: { ...fieldDefaults(def), ...item.fields } };
+    // Watch-mode example answers stay in the app.
+    const { demo: _d, demoGrade: _g, ...own } = item.fields as Record<string, unknown>;
+    return { id, fields: { ...fieldDefaults(def), ...own } };
   });
   const g = def.grader as { kind: string; code?: string };
   const prep = def.prepare ?? "";
@@ -266,7 +212,7 @@ const files = FILES.map(([name, lang, note]) => {
   const src = readFileSync(join(showType, name), "utf8");
   return { name, note, lines: src.split("\n").length, html: highlight(src.replace(/\n$/, ""), lang) };
 });
-const derivative = pack.items.find((i: { id: string }) => i.id === "showcase.math.derivative");
+const derivative = itemById("showcase.math.derivative")!;
 const generator = { code: derivative.fields.generator as string, html: highlight(derivative.fields.generator, "js") };
 
 writeFileSync(

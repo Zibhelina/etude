@@ -1,0 +1,118 @@
+[
+  {
+    "id": "showcase.basic.sky",
+    "type": "basic",
+    "deck": "Etude Showcase::1 Recall",
+    "tags": [
+      "showcase",
+      "topic::science"
+    ],
+    "fields": {
+      "front": "Why is the sky blue?",
+      "back": "Air molecules scatter short wavelengths of sunlight far more than long ones (Rayleigh scattering, roughly as $1/\\lambda^4$), so blue light reaches your eye from every direction of the sky.",
+      "extra": "At sunset the light crosses much more air, most of the blue is scattered away before it arrives, and what's left is red and orange."
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.typed.capital",
+    "type": "typed",
+    "deck": "Etude Showcase::1 Recall",
+    "tags": [
+      "showcase",
+      "topic::geography"
+    ],
+    "fields": {
+      "prompt": "What is the capital of **Australia**?",
+      "answers": [
+        "Canberra"
+      ],
+      "placeholder": "A city",
+      "explanation": "Not Sydney. Canberra was chosen in 1908 as a compromise between the two rivals, Sydney and Melbourne, and built from scratch."
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.mcq.day",
+    "type": "mcq",
+    "deck": "Etude Showcase::1 Recall",
+    "tags": [
+      "showcase",
+      "topic::astronomy"
+    ],
+    "fields": {
+      "prompt": "Which planet has the **shortest day**, one full turn on its axis?",
+      "options": [
+        {
+          "text": "Jupiter",
+          "correct": true,
+          "why": "About 9 hours 56 minutes, despite being the largest planet."
+        },
+        {
+          "text": "Earth",
+          "why": "About 23 hours 56 minutes."
+        },
+        {
+          "text": "Mars",
+          "why": "About 24 hours 37 minutes, a little longer than ours."
+        },
+        {
+          "text": "Mercury",
+          "why": "Very slow: about 59 Earth days."
+        }
+      ],
+      "explanation": "The giant planets spin fastest. Jupiter's quick rotation flattens it visibly at the poles."
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.cloze.haiku",
+    "type": "cloze",
+    "deck": "Etude Showcase::1 Recall",
+    "tags": [
+      "showcase",
+      "topic::poetry"
+    ],
+    "fields": {
+      "text": "A traditional haiku has three lines of {{5|five}}, {{7|seven}} and {{5|five}} sounds, and usually a word for the season, the {{kigo::Japanese term}}.",
+      "explanation": "In Japanese the count is in *on*, sound units shorter than English syllables, which is why haiku translated into English often come out shorter."
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.match.paintings",
+    "type": "match",
+    "deck": "Etude Showcase::1 Recall",
+    "tags": [
+      "showcase",
+      "topic::art"
+    ],
+    "fields": {
+      "prompt": "Match each painting with its painter.",
+      "pairs": [
+        [
+          "*The Starry Night*",
+          "Vincent van Gogh"
+        ],
+        [
+          "*Girl with a Pearl Earring*",
+          "Johannes Vermeer"
+        ],
+        [
+          "*The Persistence of Memory*",
+          "Salvador Dalí"
+        ],
+        [
+          "*The Birth of Venus*",
+          "Sandro Botticelli"
+        ],
+        [
+          "*The Great Wave off Kanagawa*",
+          "Katsushika Hokusai"
+        ]
+      ],
+      "explanation": "Van Gogh painted *The Starry Night* in 1889 from the window of an asylum in Saint-Rémy; Hokusai's *Great Wave* is a woodblock print, so thousands of copies exist."
+    },
+    "source": ""
+  }
+]

@@ -66,9 +66,13 @@ export function WatchPage({ scope, title }: { scope: Scope; title: string }) {
 
   useEffect(() => { if (list?.length) load(0); }, [list]);
 
+  // The reader's own answer: bring the verdict into view. The example's: stay on the card, since
+  // the filled-in answer is the point, and the verdict also shows above the card.
   useEffect(() => {
-    if (phase === "result") setTimeout(() => resultRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }), 120);
-  }, [phase]);
+    if (phase !== "result") return;
+    if (by === "example") window.scrollTo({ top: 0, behavior: "smooth" });
+    else setTimeout(() => resultRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }), 120);
+  }, [phase, by]);
 
   /** Fills the card with the example answer and grades it like a real one. */
   const showExample = useCallback(async () => {
@@ -195,7 +199,11 @@ export function WatchPage({ scope, title }: { scope: Scope; title: string }) {
             <Badge variant="outline" className="font-normal">{card.type}</Badge>
             {ai && <Badge variant="outline" className="gap-1 font-normal"><Sparkles className="size-3" />AI-graded</Badge>}
             {card.generated && <Badge variant="outline" className="font-normal">new variant every time</Badge>}
-            <span className="ml-auto hidden sm:inline">Try it, or let it show you.</span>
+            {phase === "result" && verdict ? (
+              <span className={cn("ml-auto text-sm font-medium", verdict.cls)}>{by === "example" ? "Example: " : ""}{verdict.label}</span>
+            ) : (
+              <span className="ml-auto hidden sm:inline">Try it, or let it show you.</span>
+            )}
           </div>
 
           <div className={cn("transition-opacity duration-300", phase === "loading" && "opacity-40")}>

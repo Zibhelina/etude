@@ -43,12 +43,12 @@
 .bl-eq.right .bl-coef, .bl-eq.right .bl-term.is-one .bl-coef { color: var(--success); }
 .bl-eq.near .bl-coef, .bl-eq.near .bl-term.is-one .bl-coef { color: var(--warning); }
 .bl-eq.wrong .bl-coef { color: var(--foreground); }
-.bl-eq.wrong .bl-term.off .bl-coef { color: var(--danger); text-decoration: underline wavy color-mix(in oklab, var(--danger) 75%, transparent); text-decoration-thickness: 1px; text-underline-offset: 0.18em; }
+.bl-eq.wrong .bl-term.off .bl-coef { color: var(--danger); text-decoration: line-through; text-decoration-thickness: 1.5px; }
 
 /* The atom ledger, ruled like a table in a paper: a rule on top, one under the head, one at the end.
    Columns: atom | left bar | left count | relation | right count | right bar | check. */
 .bl-ledger { width: 100%; max-width: 30rem; margin: 0 auto; border-top: 1.5px solid color-mix(in oklab, var(--foreground) 55%, transparent); border-bottom: 1.5px solid color-mix(in oklab, var(--foreground) 55%, transparent); font-variant-numeric: tabular-nums; }
-.bl-row { display: grid; grid-template-columns: 2.5rem 1fr 2.2rem 1.6rem 2.2rem 1fr 2.5rem; align-items: center; min-height: 2.6rem; padding: 0 0.25rem; }
+.bl-row { display: grid; grid-template-columns: 2.5rem 1fr 2.2rem 1.6rem 2.2rem 1fr 3.6rem; align-items: center; min-height: 2.6rem; padding: 0 0.25rem; }
 .bl-row + .bl-row:not(.bl-head) { border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent); }
 .bl-row > .el { font-size: 1.12rem; padding-left: 0.25rem; }
 .bl-row .n { font: 1.15rem/1 KaTeX_Main, "Times New Roman", serif; transition: color 0.2s; }
@@ -65,13 +65,15 @@
 .bl-head .hr { grid-column: 5 / 7; text-align: left; }
 .bl-head .rel { grid-column: 4; font: inherit; color: inherit; }
 /* An unbalanced row: the relation carries the accent; the bars show by how much. */
-.bl-row.more-l .rel, .bl-row.more-r .rel { color: var(--highlight); font-weight: 700; }
-.bl-row .st .d { font: 0.78rem var(--font-sans); color: var(--muted-foreground); white-space: nowrap; }
+.bl-row.more-l .rel, .bl-row.more-r .rel { color: var(--foreground); }
+.bl-row.more-l .bar, .bl-row.more-r .bar { background: color-mix(in oklab, var(--danger) 45%, var(--muted-foreground)); }
+.bl-row.more-l .st .d, .bl-row.more-r .st .d { color: color-mix(in oklab, var(--danger) 70%, var(--foreground)); }
+.bl-row .st .d { font: 0.7rem var(--font-sans); color: var(--muted-foreground); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .bl-row.ok .bar { background: color-mix(in oklab, var(--success) 65%, transparent); }
 .bl-row.ok .n, .bl-row.ok .rel { color: color-mix(in oklab, var(--success) 82%, var(--foreground)); }
 .bl-row .st { display: flex; justify-content: center; color: color-mix(in oklab, var(--success) 82%, var(--foreground)); }
 .bl-row .st svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.bl-sum { padding: 0.5rem 0.25rem; border-top: 1px solid color-mix(in oklab, var(--foreground) 30%, transparent); font-size: 0.8rem; color: var(--muted-foreground); text-align: center; }
+.bl-sum { text-wrap: balance; padding: 0.5rem 0.25rem; border-top: 1px solid color-mix(in oklab, var(--foreground) 30%, transparent); font-size: 0.8rem; color: var(--muted-foreground); text-align: center; }
 .bl-ledger.all-ok .bl-sum { color: color-mix(in oklab, var(--success) 82%, var(--foreground)); font-weight: 500; }
 
 .bl-hint { font-size: 0.82rem; text-align: center; margin: -0.25rem 0 0; }
@@ -82,14 +84,14 @@
 .bl-final .s { display: inline-flex; align-items: baseline; white-space: nowrap; }
 .bl-final .t { display: inline-flex; align-items: baseline; gap: 0.3em; }
 .bl-final .c { font-family: KaTeX_Main, "Times New Roman", serif; font-size: 1.12em; }
-.bl-final .c.hit { color: var(--highlight); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 0.2em; }
+.bl-final .c.hit { color: var(--foreground); text-decoration: underline; text-decoration-color: color-mix(in oklab, var(--foreground) 55%, transparent); text-decoration-thickness: 1.5px; text-underline-offset: 0.22em; }
 .bl-final .op { color: var(--muted-foreground); padding: 0 0.45em; }
 .bl-final .katex { font-size: 1.12em; }
 .bl-note { margin: 0; font-size: 0.85rem; color: var(--muted-foreground); text-align: center; }
 
 @media (max-width: 480px) {
   .bl-eq { font-size: 1.25rem; }
-  .bl-row { grid-template-columns: 2.1rem 1fr 1.9rem 1.3rem 1.9rem 1fr 1.8rem; }
+  .bl-row { grid-template-columns: 2.1rem 1fr 1.9rem 1.3rem 1.9rem 1fr 3.1rem; }
   .bl-final { font-size: 1.1rem; }
 }
 [data-mode="result"] .bl-coef { background-color: transparent; }

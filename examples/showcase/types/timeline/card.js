@@ -38,8 +38,9 @@ const anchorEl = view.anchors
 
 // Geometry, in px inside .tl. The axis runs the full width of .tl; .tl-wrap's padding is room
 // for cards near the ends to hang over without leaving the card.
-const STEM = 14, GAP = 8, LABELS = 24;
+const STEM = 12, GAP = 7, LABEL_H = 22;
 let geo = { w: 600, axisY: 80 };
+let arcs = { runs: [], band: 0 }; // result only: where each wrong one was put
 const xOf = (y) => ((y - from) / span) * geo.w;
 const yearAt = (clientX) => {
   const r = tl.getBoundingClientRect();
@@ -57,7 +58,9 @@ function ticks(w) {
   return out;
 }
 
-const placedYear = (id) => (result ? (Number.isFinite(result.given[id]) ? result.given[id] : result.key.years[id]) : guess[id]);
+// Once graded every event sits at its true year; where you put it is drawn as a ghost on the axis.
+const attemptMade = () => result && result.given !== result.key.years;
+const placedYear = (id) => (result ? result.key.years[id] : guess[id]);
 
 function layout() {
   const w = tl.clientWidth || 600;
@@ -70,59 +73,69 @@ function layout() {
     if (el.parentNode !== pins) pins.appendChild(el);
     if (!result) el.querySelector(".yr").textContent = fmt(guess[id]);
   }
-  // Every card on the line, anchors included, sorted by year, gets a side and a lane: the first lane
-  // (nearest the axis) on either side where it doesn't overlap a neighbour, starting with the side
-  // opposite the previous card, so neighbours stagger above and below.
-  const items = [
+  // Every card on the line, anchors included, is a flag: its stem rises from the axis at its year
+  // and meets the card's left edge (or right edge near the end of the line). Each card takes the
+  // lane nearest the axis, on either side, where it overlaps nothing, no nearer card stands over
+  // its stem, and it stands over no farther card's stem, so stems are straight and never pass
+  // behind a card.
+const all = [
     ...anchorEl.map((a) => ({ el: a.el, year: a.year, anchor: true })),
     ...ids.map((id) => ({ el: chipEl[id], year: placedYear(id), id })),
-  ].sort((a, b) => a.year - b.year || (a.anchor ? -1 : 1));
-  // Each card gets a side and a lane (lane 0 nearest the axis), staggering neighbours above and
-  // below. Its stem must not pass through a card nearer the axis: if the year's own x is covered,
-  // the stem jogs sideways just off the axis to the nearest clear gap (sx), and the card sits there.
-  const placed = [];
-  const lanes = { up: [], down: [] };
-  const clearX = (side, L, x) => {
-    const near = placed.filter((p) => p.side === side && p.lane < L).map((p) => [p.lo - 8, p.hi + 8]).sort((a, b) => a[0] - b[0]);
-    const blocked = (v) => near.some(([a, b]) => v > a && v < b);
-    if (!blocked(x)) return x;
-    const cands = near.flatMap(([a, b]) => [a, b]).filter((v) => v >= -pad && v <= w + pad && !blocked(v));
-    return cands.sort((a, b) => Math.abs(a - x) - Math.abs(b - x))[0] ?? null;
-  };
-  const fits = (it, side, L, sx) => {
-    const cx = clamp(clamp(sx, it.wd / 2 - pad, w + pad - it.wd / 2), sx - it.wd / 2 + 14, sx + it.wd / 2 - 14);
-    const lo = cx - it.wd / 2, hi = cx + it.wd / 2;
-    const ok = placed.every((p) => p.side !== side || (p.lane === L ? hi + GAP <= p.lo || p.hi + GAP <= lo : p.lane < L || p.sx < lo - 6 || p.sx > hi + 6));
-    return ok ? { cx, lo, hi } : null;
-  };
-  let prev = "down";
-  for (const it of items) {
-    it.wd = it.el.offsetWidth;
-    it.h = it.el.offsetHeight;
-    it.x = xOf(it.year);
-    const order = prev === "up" ? ["down", "up"] : ["up", "down"];
-    let best = null;
-    for (let L = 0; L < 8 && !best; L++) {
-      for (const side of order) {
-        const sx = clearX(side, L, it.x);
-        if (sx === null || Math.abs(sx - it.x) > Math.max(120, w * 0.25)) continue;
-        const f = fits(it, side, L, sx);
-        if (f) { best = { side, lane: L, sx, ...f }; break; }
+  ];
+  for (const it of all) { it.wd = it.el.offsetWidth; it.h = it.el.offsetHeight; it.x = xOf(it.year); }
+  if (result) arcs = planArcs();
+  const M = 5;
+  const spanFor = (it, dir) =>
+    dir === "r" ? [it.x - 0.5, it.x - 0.5 + it.wd] : dir === "l" ? [it.x + 0.5 - it.wd, it.x + 0.5] : (() => { const c = clamp(it.x, it.wd / 2 - pad, w + pad - it.wd / 2); return [c - it.wd / 2, c + it.wd / 2]; })();
+  // Graded, a card below the axis must not drop its stem through a miss's hairline.
+  const clearOfMisses = (x) => !arcs.runs.some((r) => x > Math.min(r.gx, r.tx) - 6 && x < Math.max(r.gx, r.tx) + 6);
+  const sides = result && attemptMade() ? ["up", "down"] : null;
+  function plan(order) {
+    const placed = [];
+    const lanes = { up: [], down: [] };
+    const ok = (it, side, L, lo, hi) =>
+      (side === "up" || !result || clearOfMisses(it.x)) &&
+      placed.every((p) => p.side !== side ||
+        (p.lane === L ? hi + GAP <= p.lo || p.hi + GAP <= lo
+          : p.lane < L ? !(it.x > p.lo - M && it.x < p.hi + M)
+          : !(p.x > lo - M && p.x < hi + M)));
+    const loose = (it, side, L, lo, hi) => (side === "up" || !result || clearOfMisses(it.x)) && placed.every((p) => p.side !== side || p.lane !== L || hi + GAP <= p.lo || p.hi + GAP <= lo);
+    let prev = "down", bad = 0;
+    for (const src of order) {
+      const it = { ...src };
+      const dirs = [];
+      if (it.x - 0.5 + it.wd <= w + pad) dirs.push("r");
+      if (it.x + 0.5 - it.wd >= -pad) dirs.push("l");
+      if (!dirs.length) dirs.push("c");
+      const sideOrder = sides ?? (prev === "up" ? ["down", "up"] : ["up", "down"]);
+      let best = null;
+      const any = (it, side, L, lo, hi) => placed.every((p) => p.side !== side || p.lane !== L || hi + GAP <= p.lo || p.hi + GAP <= lo);
+      for (const test of [ok, loose, any]) {
+        for (let L = 0; L < 10 && !best; L++)
+          for (const side of sideOrder) {
+            if (best) break;
+            for (const dir of dirs) {
+              const [lo, hi] = spanFor(it, dir);
+              if (test(it, side, L, lo, hi)) { best = { side, lane: L, dir, lo, hi }; break; }
+            }
+          }
+        if (best) break;
+        bad++;
       }
+      Object.assign(it, best);
+      placed.push(it);
+      for (let L = 0; L <= it.lane; L++) lanes[it.side][L] ??= { h: 0 };
+      lanes[it.side][it.lane].h = Math.max(lanes[it.side][it.lane].h, it.h);
+      prev = it.side;
     }
-    // A very crowded line: the lowest free lane on the emptier side, stem straight through.
-    if (!best) {
-      const side = lanes.up.length <= lanes.down.length ? "up" : "down";
-      let L = 0;
-      while (!fits(it, side, L, it.x)) L++;
-      best = { side, lane: L, sx: it.x, ...fits(it, side, L, it.x) };
-    }
-    Object.assign(it, best);
-    placed.push(it);
-    for (let L = 0; L <= it.lane; L++) lanes[it.side][L] ??= { h: 0 };
-    lanes[it.side][it.lane].h = Math.max(lanes[it.side][it.lane].h, it.h);
-    prev = it.side;
+    const height = [...lanes.up, ...lanes.down].reduce((s, l) => s + (l.h ? l.h + GAP : 0), 0);
+    return { placed, lanes, cost: bad * 10000 + height };
   }
+  // A few orders (latest first, earliest first, widest first, middle out); keep the tidiest.
+  const byYear = all.slice().sort((a, b) => b.year - a.year || (a.anchor ? 1 : -1));
+  const mid = (from + to) / 2;
+  const orders = [byYear, byYear.slice().reverse(), all.slice().sort((a, b) => b.wd - a.wd), all.slice().sort((a, b) => Math.abs(a.year - mid) - Math.abs(b.year - mid))];
+  const { placed: items, lanes } = orders.map(plan).reduce((a, b) => (b.cost < a.cost ? b : a));
   // Lane offsets from the axis; at least one lane each side keeps the band steady while placing.
   const minH = 40;
   const size = (l) => (l.h ? l.h + GAP : 0);
@@ -135,16 +148,19 @@ function layout() {
   const downH = Math.max(minH + GAP, lanes.down.reduce((s, l) => s + size(l), 0));
   const axisY = STEM + upH;
   geo.axisY = axisY;
+  const LABELS = LABEL_H + arcs.band;
   tl.style.height = `${axisY + LABELS + 6 + downH}px`;
   tl.style.setProperty("--axis", `${axisY}px`);
+  tl.style.setProperty("--lab", `${9 + arcs.band}px`);
   // Year labels under the axis, knocked out of any stem passing behind them; a label a stem would
   // split down the middle is left out.
+  // Stems of cards below the axis cross the label row: a label they'd cut through is left out.
   const downX = items.filter((it) => it.side === "down").map((it) => it.x);
   const labels = [];
   ticksEl.innerHTML = ticks(w)
     .map((t) => {
       const x = xOf(t.y);
-      const show = t.major && !downX.some((dx) => Math.abs(dx - x) < 7);
+      const show = t.major;
       if (show) labels.push(x);
       return `<i class="${t.major ? "major" : ""}" style="left:${x}px">${show ? `<span>${fmt(t.y)}</span>` : ""}</i>`;
     })
@@ -153,17 +169,12 @@ function layout() {
   let stems = "";
   for (const it of items) {
     const top = it.side === "up" ? axisY - STEM - up[it.lane] - it.h : axisY + LABELS + 6 + down[it.lane];
-    it.el.style.left = `${it.cx - it.wd / 2}px`;
+    it.el.style.left = `${it.lo}px`;
     it.el.style.top = `${top}px`;
     it.el.dataset.side = it.side;
-    const seg = (x, y0, y1) => (stems += `<i class="${cls(it)}" style="left:${x}px;top:${Math.min(y0, y1)}px;height:${Math.abs(y1 - y0)}px"></i>`);
-    const near = it.side === "up" ? top + it.h : top, jog = it.side === "up" ? axisY - 7 : axisY + LABELS + 3;
-    if (Math.abs(it.sx - it.x) < 1) seg(it.x, axisY, near);
-    else {
-      seg(it.x, axisY, jog);
-      stems += `<i class="h ${cls(it)}" style="left:${Math.min(it.x, it.sx)}px;top:${jog}px;width:${Math.abs(it.sx - it.x)}px"></i>`;
-      seg(it.sx, jog, near);
-    }
+    it.el.dataset.dir = it.dir;
+    const near = it.side === "up" ? top + it.h : top;
+    stems += `<i class="${cls(it)}" style="left:${it.x}px;top:${Math.min(axisY, near)}px;height:${Math.abs(near - axisY)}px"></i>`;
   }
   // Dots sit on the axis at each card's year.
   stems += items.map((it) => `<b class="${cls(it)}" style="left:${it.x}px"></b>`).join("");
@@ -249,31 +260,40 @@ layout();
 etude.getAnswer(() => ({ ...guess }));
 
 // ---------------------------------------------------------------- result
-// Each card stays where it was put, colored by how close it was. A wrong one gets a ring at its
-// true year and an arrow along the axis from where it was put to where it belongs.
-function drawMarks() {
+// A wrong one: a small hollow ghost on the axis where you put it, and a thin arc under the axis
+// from it to the true year, where the event now sits. Arcs that overlap nest one level deeper.
+function planArcs() {
   const { key, given } = result;
   const runs = [];
-  let rings = "";
   for (const c of view.chips) {
     const y = key.years[c.id], g = given[c.id];
     if (!Number.isFinite(g) || Math.abs(g - y) <= key.tolerance) continue;
-    const gx = xOf(g), tx = xOf(y), dir = Math.sign(tx - gx);
-    runs.push({ a: Math.min(gx, tx), b: Math.max(gx, tx), dir, tx, gx });
-    rings += `<b style="left:${tx}px" title="${etude.escape(c.label)}: ${fmt(y)}"></b>`;
+    runs.push({ id: c.id, gx: xOf(g), tx: xOf(y) });
   }
-  // A wrong one: a ring at the true year, and a red arrow from your year to it. Arrows that would
-  // overlap go on separate tracks just above the axis.
-  const tracks = [];
-  let html = "";
-  for (const r of runs.sort((p, q) => p.a - q.a)) {
-    let t = tracks.findIndex((end) => end + 10 < r.a);
-    if (t < 0) t = tracks.length;
-    tracks[t] = r.b;
-    const a = r.dir > 0 ? r.gx : r.tx + 10, b = r.dir > 0 ? r.tx - 10 : r.gx;
-    html += `<i class="run ${r.dir > 0 ? "r" : "l"}" style="left:${a}px;width:${Math.max(0, b - a)}px;--t:${t}"></i>`;
+  // Each miss is a straight hairline on its own track under the axis; overlapping ones take
+  // separate tracks, so lines are parallel and never cross.
+  runs.sort((p, q) => Math.min(p.gx, p.tx) - Math.min(q.gx, q.tx));
+  const ends = [];
+  for (const r of runs) {
+    const a = Math.min(r.gx, r.tx) - 8, b = Math.max(r.gx, r.tx) + 8;
+    let t = ends.findIndex((e) => e < a);
+    if (t < 0) t = ends.length;
+    ends[t] = b;
+    r.depth = 9 + t * 7;
   }
-  marksEl.innerHTML = html + rings;
+  return { runs, band: runs.length ? Math.max(...runs.map((r) => r.depth)) + 5 : 0 };
+}
+function drawMarks() {
+  const y0 = geo.axisY;
+  let svg = "";
+  for (const r of arcs.runs) {
+    const y = y0 + r.depth, dir = Math.sign(r.tx - r.gx);
+    svg += `<path d="M${r.gx + dir * 3} ${y}L${r.tx - dir * 4} ${y}"/>`;
+    svg += `<path class="head" d="M${r.tx} ${y}L${r.tx - dir * 5} ${y - 2.6}L${r.tx - dir * 5} ${y + 2.6}Z"/>`;
+    svg += `<circle cx="${r.gx}" cy="${y}" r="2.5"/>`;
+  }
+  marksEl.innerHTML = `<svg width="${geo.w}" height="${tl.offsetHeight}" viewBox="0 0 ${geo.w} ${tl.offsetHeight}" aria-hidden="true">${svg}</svg>`;
+  tl.classList.toggle("has-arcs", arcs.runs.length > 0);
 }
 
 etude.onResult(({ key, answer }) => {
@@ -294,23 +314,21 @@ etude.onResult(({ key, answer }) => {
       yr.innerHTML = `${fmt(y)}<em>not placed</em>`;
     } else if (Math.abs(g - y) <= tol) {
       el.classList.add("tl-ok");
-      yr.innerHTML = g === y ? fmt(y) : `${fmt(g)}<em>${fmt(y)}</em>`;
+      yr.innerHTML = g === y ? `${fmt(y)}<i class="ck">✓</i>` : `${fmt(y)}<i class="ck">✓</i><em>yours ${fmt(g)}</em>`;
     } else {
       el.classList.add("tl-bad");
-      yr.innerHTML = `<s>${fmt(g)}</s><em>${fmt(y)}</em>`;
+      yr.innerHTML = `${fmt(y)}<s aria-label="you put ${fmt(g)}">${fmt(g)}</s>`;
+      el.title = `${c.label}: ${fmt(y)}; you put ${fmt(g)}`;
     }
   }
   if (!attempt) tl.classList.add("is-preview");
   layout();
+  // The line already reads in order; a list only adds something when events carry notes.
+  if (!view.chips.some((c) => key.notes?.[c.id])) return;
   const rows = view.chips
     .slice()
     .sort((a, b) => key.years[a.id] - key.years[b.id])
-    .map((c) => {
-      const y = key.years[c.id], g = given[c.id];
-      const o = Number.isFinite(g) ? g - y : null;
-      const status = !attempt ? "" : o === null ? `<span class="st miss">not placed</span>` : Math.abs(o) <= tol ? `<span class="st ok">${o === 0 ? "exact" : `${Math.abs(o)} off`}</span>` : `<span class="st bad">yours ${fmt(g)}, ${Math.abs(o)} ${Math.abs(o) === 1 ? "year" : "years"} ${o > 0 ? "late" : "early"}</span>`;
-      return `<div class="tl-row"><b>${fmt(y)}</b><span class="lbl">${etude.escape(c.label)}${key.notes?.[c.id] ? `<span class="nt">${etude.mdInline(key.notes[c.id])}</span>` : ""}</span>${status}</div>`;
-    })
+    .map((c) => `<div class="tl-row"><b>${fmt(key.years[c.id])}</b><span class="lbl">${etude.escape(c.label)}${key.notes?.[c.id] ? `<span class="nt">${etude.mdInline(key.notes[c.id])}</span>` : ""}</span></div>`)
     .join("");
   etude.$(".tl-list").innerHTML = `<div class="e-section-title">In order</div>${rows}`;
 });

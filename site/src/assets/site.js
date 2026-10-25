@@ -141,7 +141,6 @@ const stage = $("#stage");
 if (stage) {
   const tabs = $(".stage-tabs", stage), body = $(".stage-body", stage), loader = $(".stage-loader", stage);
   const checkBtn = $("[data-check]", stage), verdictEl = $(".verdict", stage), ratings = $(".ratings", stage);
-  const variantBadge = $("[data-variant]", stage);
   let cur = null; // { demo, prep, seed, frame, phase, result }
   let index = 0;
 
@@ -166,7 +165,6 @@ if (stage) {
     const demo = DEMOS[i];
     $$(".stage-tab", tabs).forEach((t, j) => t.setAttribute("aria-selected", String(j === i)));
     $(`[data-i="${i}"]`, tabs)?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: reduced ? "auto" : "smooth" });
-    variantBadge.hidden = !(demo.fields.generator || demo.prepare?.includes("rng."));
     verdictEl.innerHTML = "";
     ratings.hidden = true;
     checkBtn.parentElement.hidden = false;
@@ -228,7 +226,6 @@ if (stage) {
   });
 
   checkBtn.addEventListener("click", () => cur?.phase === "answer" && post({ type: "collect" }));
-  $("[data-reroll]", stage).addEventListener("click", () => open(index));
   addEventListener("keydown", (e) => {
     if (!cur || !stage.matches(":hover, :focus-within")) return;
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && cur.phase === "answer") { e.preventDefault(); post({ type: "collect" }); }
@@ -298,7 +295,7 @@ if (stage) {
   stage.appendChild(cursor);
   const toggle = document.createElement("button");
   toggle.type = "button"; toggle.className = "linkish demo-toggle";
-  $("[data-reroll]", stage).before(toggle);
+  $(".window-bar", stage).appendChild(toggle);
   const acks = new Map();
   let ackId = 0, auto = !reduced, gen = 0, touched = false, resumeTimer = null;
   const ask = (type, step) => new Promise((r) => { const id = ++ackId; acks.set(id, r); post({ type, id, step }); setTimeout(() => acks.has(id) && (acks.delete(id), r(null)), 3000); });

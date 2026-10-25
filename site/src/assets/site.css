@@ -628,3 +628,21 @@ h1, h2, h3 { margin: 0; letter-spacing: -0.025em; font-weight: 600; }
 @keyframes tap { from { opacity: 0.9; scale: 0.3; } to { opacity: 0; scale: 1.4; } }
 .demo-toggle svg { width: 0.85rem; height: 0.85rem; }
 @media (hover: none) and (pointer: coarse) { .demo-cursor { display: none; } }
+
+/* calmer hero: the card window fits the viewport and scrolls inside, without a visible bar */
+@media (min-width: 1000px) {
+  .hero { padding: 2.25rem 0 3.5rem; }
+  .hero-grid { grid-template-columns: 1fr 1fr; gap: 4.5rem; }
+  .stage { height: min(46rem, calc(100svh - 8.5rem)); display: flex; flex-direction: column; }
+  .stage-body { flex: 1; min-height: 0; max-height: none; }
+}
+.stage-body { scrollbar-width: none; }
+.stage-body::-webkit-scrollbar { display: none; }
+.stage .window-bar { padding: 0.55rem 0.8rem; }
+.stage .window-title { margin-right: 0; }
+.stage .demo-toggle { margin-left: auto; }
+.stage-body { padding-top: 1.1rem; }
+.hero h1 { margin-top: 0; }
+.lede { max-width: 30rem; }
+.hero-bg .grid { opacity: 0.35; }
+.stage-wrap::before { opacity: 0.6; }

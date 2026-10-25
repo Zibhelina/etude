@@ -1,5 +1,6 @@
 // AI grading. A decision model returns the verdict as calibrated probabilities (fast, cheap);
 // a language model writes the feedback. Both are plain HTTP and configurable per install.
+import { chatGptHome, chatGptResponses, DEFAULT_CHATGPT_MODEL } from "./chatgpt.ts";
 import type { Verdict } from "./model.ts";
 
 export interface DecisionProvider {
@@ -11,7 +12,7 @@ export interface DecisionProvider {
   timeoutMs?: number;
 }
 
-export interface ChatProvider {
+export interface OpenAiChatProvider {
   /** Any OpenAI-compatible chat completions endpoint (OpenRouter, OpenAI, a local llama.cpp or vLLM server). */
   kind: "openai-chat";
   url: string;
@@ -20,6 +21,23 @@ export interface ChatProvider {
   timeoutMs?: number;
   vision?: boolean;
   temperature?: number;
+}
+
+export interface ChatGptProvider {
+  /** The user's ChatGPT plan, through the Responses API. No API key: sign in with `etude settings chatgpt login`. */
+  kind: "chatgpt";
+  model: string;
+  /** Responses endpoint; only set this for a proxy or a test server. */
+  baseUrl?: string;
+  timeoutMs?: number;
+  vision?: boolean;
+}
+
+export type ChatProvider = OpenAiChatProvider | ChatGptProvider;
+
+/** The env var a chat provider reads its key from (the ChatGPT plan uses none). */
+export function chatProviderKeyEnv(p: ChatProvider | null | undefined): string | undefined {
+  return p && p.kind === "openai-chat" ? p.apiKeyEnv : undefined;
 }
 
 export interface AiSettings {
@@ -152,8 +170,25 @@ async function decide(p: DecisionProvider, ctx: GradingContext): Promise<AiVerdi
 const FEEDBACK_STYLE = (lang: string) =>
   `Write feedback for a student who just answered a practice card. Write in ${lang}. Talk to the student directly, in two to four short sentences of markdown (use $...$ for math). Start with whether the answer is right. Then name exactly what was missing or wrong, and the fix. If it is right, add the one thing that would make it exam-perfect, or say nothing more. No praise filler, no headings, no restating the question.`;
 
-async function chat(p: ChatProvider, system: string, user: string, image: string | null, json: boolean) {
+async function chat(p: ChatProvider, system: string, user: string, image: string | null, json: boolean, home?: string) {
   const t0 = Date.now();
+  if (p.kind === "chatgpt") {
+    try {
+      const out = await chatGptResponses({
+        home: home ?? chatGptHome(),
+        model: p.model || DEFAULT_CHATGPT_MODEL,
+        instructions: system,
+        input: user,
+        image,
+        timeoutMs: p.timeoutMs ?? 60_000,
+        endpoints: p.baseUrl ? { responses: p.baseUrl } : undefined,
+      });
+      return { text: out.text, model: out.model, ms: out.ms, cost: undefined };
+    } catch (e) {
+      // The engine treats AiError as "grading failed, let the learner self-rate"; keep that path.
+      throw new AiError((e as Error).message);
+    }
+  }
   const content: any = image
     ? [
         { type: "text", text: user },
@@ -187,22 +222,28 @@ function parseJson(text: string): any {
 }
 
 /** Verdict and feedback in one call from a chat model; used for images and when no decision model is set. */
-async function judgeWithLlm(p: ChatProvider, ctx: GradingContext, lang: string): Promise<AiVerdict> {
+async function judgeWithLlm(p: ChatProvider, ctx: GradingContext, lang: string, home?: string): Promise<AiVerdict> {
   const system = `You grade practice answers. Reply with JSON only: {"verdict": "correct" | "partial" | "incorrect", "score": number from 0 to 1, "feedback": string}.
 Verdict meanings: ${LEVELS.map((l) => l.label).join("; ")}.
 For "feedback": ${FEEDBACK_STYLE(lang)}`;
-  const out = await chat(p, system, contextText(ctx), ctx.answerImage, true);
+  const out = await chat(p, system, contextText(ctx), ctx.answerImage, true, home);
   const j = parseJson(out.text);
   const verdict: Verdict = ["correct", "partial", "incorrect"].includes(j.verdict) ? j.verdict : "incorrect";
   const score = Number.isFinite(Number(j.score)) ? Math.max(0, Math.min(1, Number(j.score))) : verdict === "correct" ? 1 : verdict === "partial" ? 0.5 : 0;
   return { verdict, score, feedback: String(j.feedback ?? "").trim() || undefined, model: out.model, ms: out.ms, cost: out.cost };
 }
 
-export async function aiVerdict(settings: AiSettings, ctx: GradingContext, opts: { vision?: boolean } = {}): Promise<AiVerdict> {
+export interface AiRunOptions {
+  vision?: boolean;
+  /** Where the ChatGPT-plan credentials live (an engine passes its ETUDE_HOME). */
+  home?: string;
+}
+
+export async function aiVerdict(settings: AiSettings, ctx: GradingContext, opts: AiRunOptions = {}): Promise<AiVerdict> {
   const visionModel = settings.vision ?? (settings.feedback?.vision ? settings.feedback : null);
   if (opts.vision || ctx.answerImage) {
     if (!visionModel) throw new AiError("no vision model configured");
-    return judgeWithLlm(visionModel, ctx, settings.language);
+    return judgeWithLlm(visionModel, ctx, settings.language, opts.home);
   }
   const d = settings.decision;
   if (d?.kind === "openrouter-decisions") {
@@ -210,18 +251,18 @@ export async function aiVerdict(settings: AiSettings, ctx: GradingContext, opts:
       return await decide(d, ctx);
     } catch (e) {
       if (!settings.feedback) throw e;
-      const v = await judgeWithLlm(settings.feedback, ctx, settings.language);
+      const v = await judgeWithLlm(settings.feedback, ctx, settings.language, opts.home);
       return { ...v, model: `${v.model} (decision model failed: ${(e as Error).message.slice(0, 80)})` };
     }
   }
   if (!settings.feedback) throw new AiError("no AI grader configured");
-  return judgeWithLlm(settings.feedback, ctx, settings.language);
+  return judgeWithLlm(settings.feedback, ctx, settings.language, opts.home);
 }
 
-export async function aiFeedback(settings: AiSettings, ctx: GradingContext): Promise<{ feedback: string; model: string; ms: number; cost?: number }> {
+export async function aiFeedback(settings: AiSettings, ctx: GradingContext, opts: AiRunOptions = {}): Promise<{ feedback: string; model: string; ms: number; cost?: number }> {
   const p = ctx.answerImage ? (settings.vision ?? (settings.feedback?.vision ? settings.feedback : null)) : settings.feedback;
   if (!p) throw new AiError("no feedback model configured");
   const verdictLine = ctx.verdict && ctx.verdict !== "ungraded" ? `\n\n## Grade already given\n${ctx.verdict}${ctx.score != null ? ` (score ${ctx.score.toFixed(2)})` : ""}. Your feedback must agree with this grade.` : "";
-  const out = await chat(p, FEEDBACK_STYLE(settings.language), contextText(ctx) + verdictLine, ctx.answerImage, false);
+  const out = await chat(p, FEEDBACK_STYLE(settings.language), contextText(ctx) + verdictLine, ctx.answerImage, false, opts.home);
   return { feedback: out.text, model: out.model, ms: out.ms, cost: out.cost };
 }

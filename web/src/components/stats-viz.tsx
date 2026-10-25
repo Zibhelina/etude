@@ -49,15 +49,6 @@ export function RecallRing({ value, target, size = 176, label, sub }: { value: n
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} role="img" aria-label={`${label}: ${value == null ? "no data" : `${(v * 100).toFixed(1)}%`}, target ${Math.round(target * 100)}%`}>
-        <defs>
-          <linearGradient id={`${id}g`} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.75} />
-            <stop offset="100%" stopColor={color} />
-          </linearGradient>
-          <filter id={`${id}f`} x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="6" />
-          </filter>
-        </defs>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--muted)" strokeWidth={stroke} />
         {value != null && (
           <>
@@ -67,22 +58,6 @@ export function RecallRing({ value, target, size = 176, label, sub }: { value: n
               r={r}
               fill="none"
               stroke={color}
-              strokeOpacity={0.35}
-              strokeWidth={stroke}
-              strokeLinecap="round"
-              strokeDasharray={C}
-              strokeDashoffset={shown ? C * (1 - v) : C}
-              transform={`rotate(-90 ${size / 2} ${size / 2})`}
-              filter={`url(#${id}f)`}
-              className="viz-anim"
-              style={{ transition: "stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)" }}
-            />
-            <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={r}
-              fill="none"
-              stroke={`url(#${id}g)`}
               strokeWidth={stroke}
               strokeLinecap="round"
               strokeDasharray={C}
@@ -121,21 +96,12 @@ export function Sparkline({ values, color = "var(--highlight)", height = 34, dom
   const x = (i: number) => 2 + (i / (values.length - 1)) * (W - 6);
   const y = (v: number) => 3 + (height - 6) * (1 - (v - lo) / span);
   const line = pts.map((p, k) => `${k ? "L" : "M"}${x(p.i).toFixed(1)},${y(p.v).toFixed(1)}`).join("");
-  const area = `${line}L${x(pts[pts.length - 1].i).toFixed(1)},${height}L${x(pts[0].i).toFixed(1)},${height}Z`;
   const last = pts[pts.length - 1];
   return (
     <div ref={ref} className="w-full">
       <svg width={W} height={height} className="block max-w-full overflow-visible" aria-hidden>
-        <defs>
-          <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.28} />
-            <stop offset="100%" stopColor={color} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <path d={area} fill={`url(#${id})`} />
         <path d={line} fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
         <circle cx={x(last.i)} cy={y(last.v)} r={3} fill={color} />
-        <circle cx={x(last.i)} cy={y(last.v)} r={6} fill={color} opacity={0.2} />
       </svg>
     </div>
   );
@@ -211,10 +177,6 @@ export function ForgettingCurve({ curve, target }: { curve: { days: number; reca
       </div>
       <svg width={W} height={H} className="block max-w-full touch-none" role="img" aria-label={`Forgetting curve: average recall falls from ${Math.round(curve[0].recall * 100)}% today to ${Math.round(curve[curve.length - 1].recall * 100)}% in ${maxD} days without reviews`} onPointerMove={onMove} onPointerLeave={() => setHover(null)}>
         <defs>
-          <linearGradient id={`${id}a`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--highlight)" stopOpacity={0.32} />
-            <stop offset="100%" stopColor="var(--highlight)" stopOpacity={0} />
-          </linearGradient>
           <clipPath id={`${id}c`}>
             <rect x={0} y={0} width={clipW} height={H} className="viz-anim" style={{ transition: "width 1.3s cubic-bezier(.3,.7,.2,1)" }} />
           </clipPath>
@@ -232,7 +194,7 @@ export function ForgettingCurve({ curve, target }: { curve: { days: number; reca
         <line x1={L} x2={W - R} y1={fy(target)} y2={fy(target)} stroke="var(--foreground)" strokeOpacity={0.45} strokeDasharray="4 4" />
         <text x={W - R} y={fy(target) - 6} textAnchor="end" fontSize={11} className="fill-muted-foreground">target {Math.round(target * 100)}%</text>
         <g clipPath={`url(#${id}c)`}>
-          <path d={area} fill={`url(#${id}a)`} />
+          <path d={area} fill="var(--highlight)" fillOpacity={0.1} />
           <path d={d} fill="none" stroke="var(--highlight)" strokeWidth={2.25} strokeLinecap="round" />
           {cross != null && cross > 0 && (
             <g>

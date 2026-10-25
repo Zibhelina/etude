@@ -6,6 +6,8 @@ import { createMarkdownEditor } from "@/editor/markdown-editor";
 import { createCodeEditor } from "@/editor/code-editor";
 import type { EditorHandle } from "@/editor/code-editor";
 import { cn } from "@/lib/utils";
+import { useMediaPaste } from "@/components/media-paste";
+import { mediaPasteExtension } from "@/editor/media-paste";
 
 interface Common {
   value: string;
@@ -40,7 +42,8 @@ function useEditor(make: (el: HTMLElement, onChange: (v: string) => void) => Edi
 
 /** Markdown with live preview: math, code and formatting render in place, like Obsidian. */
 export function LiveMarkdown({ value, onChange, placeholder, className, minLines = 2 }: Common) {
-  const host = useEditor((el, change) => createMarkdownEditor(el, { value, katex, placeholder, minLines, onChange: change }), value, onChange, [placeholder, minLines]);
+  const copy = useMediaPaste();
+  const host = useEditor((el, change) => createMarkdownEditor(el, { value, katex, placeholder, minLines, onChange: change, extensions: copy ? [mediaPasteExtension(copy)] : [] }), value, onChange, [placeholder, minLines, copy]);
   return <div ref={host} className={cn("live-md e-editor bg-transparent", className)} />;
 }
 

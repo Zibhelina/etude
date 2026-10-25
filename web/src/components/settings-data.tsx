@@ -54,11 +54,12 @@ export function DataSection({ dbPath, mediaDir }: { dbPath: string; mediaDir: st
   const stamp = new Date().toISOString().slice(0, 10);
 
   return (
-    <Section id="data" title="Data" description="Everything lives in one SQLite file. Drawings and other answer images sit in the media folder next to it.">
+    <Section id="data" title="Data" description="The collection lives in a SQLite file. Pasted images, audio, video, imported media and drawings are copied into Etude's own media folder next to it.">
       <Block>
         <div className="grid gap-4">
           <CopyValue label="Database" value={dbPath} />
           <CopyValue label="Media folder" value={mediaDir} />
+          <p className="text-sm text-muted-foreground">Paste media files or local file paths into a card field to copy them here. Cards keep working when the originals are moved or deleted. Back up this folder together with the database.</p>
         </div>
       </Block>
       <Block

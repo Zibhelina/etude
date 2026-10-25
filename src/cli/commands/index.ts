@@ -11,6 +11,7 @@ import "./settings.ts";
 import "./theme.ts";
 import "./pack.ts";
 import "./anki.ts";
+import "./media.ts";
 import "./market.ts";
 import "./db.ts";
 import "./misc.ts";

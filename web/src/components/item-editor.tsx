@@ -192,6 +192,7 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
   const [type, setType] = useState<CardType | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [mediaPending, setMediaPending] = useState(false);
   const [version, setVersion] = useState(0);
   const [tab, setTab] = useState("edit");
 
@@ -212,7 +213,7 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
   const dirty = !!item && !!draft && JSON.stringify(draftOf(item)) !== JSON.stringify(draft);
 
   const save = useCallback(async () => {
-    if (!item || !draft) return;
+    if (!item || !draft || mediaPending) return;
     setSaving(true);
     try {
       const r = await api.saveItem(item.id, { type: item.type, ...draft, archived: item.archived });
@@ -226,7 +227,7 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
     } finally {
       setSaving(false);
     }
-  }, [item, draft, onSaved]);
+  }, [item, draft, onSaved, mediaPending]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -285,7 +286,7 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button size="icon" variant="ghost" className="size-8"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={duplicate}><Copy />Duplicate</DropdownMenuItem>
+            <DropdownMenuItem disabled={mediaPending} onClick={duplicate}><Copy />Duplicate</DropdownMenuItem>
             <DropdownMenuItem onClick={() => navigate(`/types/${encodeURIComponent(item.type)}`)}><Dices />Edit card type</DropdownMenuItem>
             <DropdownMenuItem onClick={async () => { await api.bulkCards("reset", item.cards.map((c) => c.id)); load(); onSaved(); }}><RotateCcw />Forget scheduling</DropdownMenuItem>
             <DropdownMenuItem onClick={async () => { await api.bulkCards(allSuspended ? "unsuspend" : "suspend", item.cards.map((c) => c.id)); load(); onSaved(); }}>
@@ -334,7 +335,7 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
               <h3 className="text-sm font-medium">Content</h3>
               <ItemAiEdit key={item.id} id={item.id} fields={draft.fields} specs={type.fields} onApply={(fields) => setDraft((current) => current && { ...current, fields })} />
             </div>
-            <FieldEditor fields={type.fields} value={draft.fields} onChange={(fields) => setDraft({ ...draft, fields })} />
+            <FieldEditor key={item.id} fields={type.fields} value={draft.fields} onChange={(fields) => setDraft((current) => current && { ...current, fields })} onMediaPendingChange={setMediaPending} />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium">Notes</label>
@@ -364,11 +365,11 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
         </TabsContent>
       </Tabs>
 
-      <div className={cn("sticky bottom-0 -mx-4 mt-2 flex items-center gap-2 border-t bg-background px-4 py-3 transition-opacity sm:-mx-6 sm:px-6 xl:-mx-10 xl:px-10", dirty ? "opacity-100" : "pointer-events-none opacity-0")}>
-        <span className="text-sm text-muted-foreground">Unsaved changes</span>
+      <div className={cn("sticky bottom-0 -mx-4 mt-2 flex items-center gap-2 border-t bg-background px-4 py-3 transition-opacity sm:-mx-6 sm:px-6 xl:-mx-10 xl:px-10", dirty || mediaPending ? "opacity-100" : "pointer-events-none opacity-0")}>
+        <span className="text-sm text-muted-foreground">{mediaPending ? "Copying media…" : "Unsaved changes"}</span>
         <div className="flex-1" />
-        <Button variant="ghost" size="sm" onClick={() => setDraft(draftOf(item))}>Discard</Button>
-        <Button size="sm" className="gap-1.5" onClick={save} disabled={saving}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Save <kbd className="hidden text-[10px] opacity-60 sm:inline">Ctrl S</kbd></Button>
+        <Button variant="ghost" size="sm" disabled={mediaPending} onClick={() => setDraft(draftOf(item))}>Discard</Button>
+        <Button size="sm" className="gap-1.5" onClick={save} disabled={saving || mediaPending}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Save <kbd className="hidden text-[10px] opacity-60 sm:inline">Ctrl S</kbd></Button>
       </div>
     </div>
   );
@@ -480,6 +481,7 @@ export function NewItemDialog({ open, onOpenChange, decks, types, onCreated, def
   const [id, setId] = useState("");
   const [def, setDef] = useState<CardType | null>(null);
   const [fields, setFields] = useState<Record<string, unknown>>({});
+  const [mediaPending, setMediaPending] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   useEffect(() => {
     if (open) api.type(type).then(setDef);
@@ -488,6 +490,7 @@ export function NewItemDialog({ open, onOpenChange, decks, types, onCreated, def
     if (open && !deck && (defaultDeck || decks.length)) setDeck(defaultDeck || decks[0]);
   }, [open, decks]);
   const create = async () => {
+    if (mediaPending) return;
     const slug = deck.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "card";
     const itemId = id.trim() || `${slug}.${Date.now().toString(36)}`;
     try {
@@ -508,7 +511,7 @@ export function NewItemDialog({ open, onOpenChange, decks, types, onCreated, def
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium">Type</label>
-            <Select value={type} onValueChange={(v) => { setType(v); setFields({}); }}>
+            <Select value={type} disabled={mediaPending} onValueChange={(v) => { setType(v); setFields({}); }}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>{types.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
             </Select>
@@ -523,12 +526,12 @@ export function NewItemDialog({ open, onOpenChange, decks, types, onCreated, def
           <label className="text-sm font-medium">Tags</label>
           <TagInput value={tags} known={[]} onChange={setTags} />
         </div>
-        {def && <div className="border-t pt-4"><FieldEditor fields={def.fields} value={fields} onChange={setFields} /></div>}
+        {def && <div className="border-t pt-4"><FieldEditor key={type} fields={def.fields} value={fields} onChange={setFields} onMediaPendingChange={setMediaPending} /></div>}
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium">ID <span className="font-normal text-muted-foreground">(optional, keeps the card matched across imports)</span></label>
           <Input value={id} onChange={(e) => setId(e.target.value)} placeholder="course.topic.slug" className="font-mono text-[13px]" />
         </div>
-        <DialogFooter><Button onClick={create} className="gap-1.5"><Check className="size-4" />Add card</Button></DialogFooter>
+        <DialogFooter><Button disabled={mediaPending} onClick={create} className="gap-1.5"><Check className="size-4" />Add card</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );

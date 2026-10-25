@@ -1,8 +1,9 @@
 // The engine: one object that owns the database and every operation on it.
 // The HTTP server and the CLI are thin layers over this class.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Db, type Row } from "./db.ts";
 import {
@@ -42,6 +43,7 @@ import { BUILTIN_THEMES, DEFAULT_THEME, MAX_CUSTOM_THEMES, ThemeError, builtinTh
 import { openPackage } from "./anki/package.ts";
 import { readCollection } from "./anki/collection.ts";
 import { convertCollection, type PlannedCard } from "./anki/convert.ts";
+import { MAX_MEDIA_BYTES, mediaType } from "./media.ts";
 
 export class EtudeError extends Error {
   status: number;
@@ -205,6 +207,54 @@ export class Etude {
 
   close() {
     this.db.close();
+  }
+
+  /** Copies media into the collection. Identical content shares one file. */
+  storeMedia(name: string, data: Uint8Array, opts: { dryRun?: boolean } = {}) {
+    if (typeof name !== "string" || !name.trim()) throw new EtudeError("a media filename is required");
+    const type = mediaType(name);
+    if (!type) throw new EtudeError("unsupported media type; choose an image, audio or video file");
+    if (!data.byteLength) throw new EtudeError("the media file is empty");
+    if (data.byteLength > MAX_MEDIA_BYTES) throw new EtudeError("media files must be 100 MiB or smaller");
+    const hash = createHash("sha256").update(data).digest("hex");
+    const file = `files/${hash}${type.extension}`;
+    const path = join(this.mediaDir, file);
+    const created = !existsSync(path);
+    if (created && !opts.dryRun) {
+      mkdirSync(dirname(path), { recursive: true });
+      const temp = join(dirname(path), `.${hash}-${randomUUID()}.tmp`);
+      try {
+        writeFileSync(temp, data, { flag: "wx" });
+        renameSync(temp, path);
+      } finally {
+        rmSync(temp, { force: true });
+      }
+    }
+    return { name: basename(name), file, path, url: `/media/${file}`, mime: type.mime, kind: type.kind, bytes: data.byteLength, created, dryRun: !!opts.dryRun };
+  }
+
+  /** Imports a local file or file URL; the source is left intact. */
+  importMedia(input: string, opts: { dryRun?: boolean } = {}) {
+    if (typeof input !== "string" || !input.trim()) throw new EtudeError("a media file path is required");
+    let path = input.trim();
+    if (path.startsWith("file:")) {
+      try { path = fileURLToPath(path); } catch { throw new EtudeError("invalid local file URL"); }
+    }
+    if (path.startsWith("~/")) path = join(homedir(), path.slice(2));
+    path = resolve(path);
+    if (!mediaType(path)) throw new EtudeError("unsupported media type; choose an image, audio or video file");
+    let data: Buffer;
+    try {
+      const stat = statSync(path);
+      if (!stat.isFile()) throw new EtudeError("the media path must point to a file");
+      if (stat.size > MAX_MEDIA_BYTES) throw new EtudeError("media files must be 100 MiB or smaller");
+      data = readFileSync(path);
+    } catch (e) {
+      if (e instanceof EtudeError) throw e;
+      const code = (e as NodeJS.ErrnoException).code;
+      throw new EtudeError(code === "ENOENT" ? `media file not found: ${path}` : `couldn't read media file: ${path}`, code === "ENOENT" ? 404 : 400);
+    }
+    return this.storeMedia(basename(path), data, opts);
   }
 
   // ---------------------------------------------------------------- settings

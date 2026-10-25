@@ -1,0 +1,32 @@
+<div class="sc-eyebrow">Type fast</div>
+{{#note}}<div class="prose e-muted ty-note only-answer">{{md:note}}</div>{{/note}}
+<div class="ty-stage only-answer">
+  <div class="ty-top"><span class="ty-live"></span><span class="ty-speed"></span></div>
+  <div class="ty-box">
+    <div class="ty-words" aria-hidden="true"></div>
+    <input class="ty-input" aria-label="Type the words" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="next" autofocus>
+    <div class="ty-blur">click here or start typing</div>
+  </div>
+  <div class="ty-hint"><kbd>tab</kbd> restart · <kbd>space</kbd> next word · the clock starts on your first key</div>
+</div>
+<template data-on="result">
+  <div class="ty-res">
+    <div class="ty-big">
+      <div><div class="ty-k">wpm</div><div class="ty-v ty-wpm"></div></div>
+      <div><div class="ty-k">acc</div><div class="ty-v ty-acc"></div></div>
+    </div>
+    <div class="ty-chart"></div>
+  </div>
+  <div class="ty-more">
+    <div><div class="ty-k">test type</div><div class="ty-s ty-type"></div></div>
+    <div><div class="ty-k">raw</div><div class="ty-s ty-raw"></div></div>
+    <div><div class="ty-k">characters</div><div class="ty-s ty-chars" title="correct / incorrect / extra / missed"></div></div>
+    <div><div class="ty-k">consistency</div><div class="ty-s ty-cons"></div></div>
+    <div><div class="ty-k">time</div><div class="ty-s ty-time"></div></div>
+  </div>
+  <div class="ty-history">
+    <div class="ty-k">word history</div>
+    <div class="ty-hw"></div>
+  </div>
+  <p class="sc-how">WPM counts only words typed correctly, at five characters a word; raw counts every key. Accuracy is the share of keystrokes that were right, even the ones you later fixed.</p>
+</template>

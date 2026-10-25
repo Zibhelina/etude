@@ -203,5 +203,71 @@
       "seconds": 30,
       "target": 12
     }
+  },
+  {
+    "id": "showcase.typing.english",
+    "type": "typing",
+    "deck": "Etude Showcase::5 Games",
+    "tags": [
+      "showcase",
+      "topic::typing"
+    ],
+    "fields": {
+      "note": "25 of the most common English words. The clock starts on your first key.",
+      "count": 25,
+      "target": 60
+    }
+  },
+  {
+    "id": "showcase.typing.python",
+    "type": "typing",
+    "deck": "Etude Showcase::5 Games",
+    "tags": [
+      "showcase",
+      "topic::typing",
+      "topic::python"
+    ],
+    "fields": {
+      "note": "30 seconds of Python keywords and builtins: practice the words you actually type.",
+      "seconds": 30,
+      "target": 45,
+      "wordlist": [
+        "def",
+        "return",
+        "lambda",
+        "yield",
+        "import",
+        "from",
+        "class",
+        "self",
+        "None",
+        "True",
+        "False",
+        "elif",
+        "while",
+        "for",
+        "in",
+        "not",
+        "and",
+        "or",
+        "try",
+        "except",
+        "finally",
+        "raise",
+        "with",
+        "as",
+        "async",
+        "await",
+        "print()",
+        "len()",
+        "range()",
+        "enumerate()",
+        "zip()",
+        "dict()",
+        "list()",
+        "isinstance()",
+        "__init__"
+      ]
+    }
   }
 ]

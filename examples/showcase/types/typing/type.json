@@ -1,0 +1,43 @@
+{
+  "id": "typing",
+  "name": "Type fast",
+  "description": "A typing test in the style of Monkeytype: common words, your own word list or a passage, by word count or against the clock. The clock starts on the first key and the result is your WPM. Score = WPM ÷ target.",
+  "fields": [
+    {
+      "name": "note",
+      "kind": "markdown",
+      "description": "Optional line shown above the test (also the card's title in lists)."
+    },
+    {
+      "name": "text",
+      "kind": "text",
+      "description": "A passage to type exactly. Leave empty to draw random words instead."
+    },
+    {
+      "name": "wordlist",
+      "kind": "list",
+      "description": "Words to draw from (vocabulary, keywords, names). Empty: the 200 most common English words."
+    },
+    {
+      "name": "count",
+      "kind": "number",
+      "default": 25,
+      "description": "Words in a word-count test, 5 to 200. Ignored for a passage or a timed test."
+    },
+    {
+      "name": "seconds",
+      "kind": "number",
+      "default": 0,
+      "description": "0 for a word-count test, or 10 to 120 for a timed one."
+    },
+    {
+      "name": "target",
+      "kind": "number",
+      "default": 60,
+      "description": "WPM that earns full credit."
+    }
+  ],
+  "grader": {
+    "kind": "script"
+  }
+}

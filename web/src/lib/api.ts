@@ -385,6 +385,9 @@ export const api = {
   deleteTheme: (id: string) => call<{ deleted: string; selected: string }>("DELETE", `/api/themes/${encodeURIComponent(id)}`),
   selectTheme: (id: string) => call<ThemeData>("PUT", "/api/theme", { id }),
 
+  updateStatus: (check = false, force = false) => call<UpdateStatus>("GET", `/api/update${qs({ check: check ? 1 : undefined, force: force ? 1 : undefined })}`),
+  applyUpdate: () => call<{ result: "updated" | "current"; from: string; to: string; commits: UpdateCommit[]; restarting: boolean }>("POST", "/api/update", {}),
+
   market: (refresh = false) => call<MarketListing>("GET", `/api/market${refresh ? "?refresh=1" : ""}`),
   marketEntry: (kind: MarketKind, id: string) => call<MarketFile>("GET", `/api/market/entry/${kind}/${encodeURIComponent(id)}`),
   marketInstall: (id: string, kind: MarketKind, opts: { use?: boolean; dryRun?: boolean } = {}) =>
@@ -395,6 +398,17 @@ export const api = {
   publishStatus: () => call<{ ok: boolean; login?: string; reason?: string; repo: string }>("GET", "/api/market/publish/status"),
   publish: (input: PublishInput & { dryRun?: boolean; full?: boolean }) => call<PublishResult>("POST", "/api/market/publish", input),
 };
+
+export interface UpdateCommit {
+  sha: string;
+  subject: string;
+  date: string;
+}
+
+export type UpdateStatus = { canRestart: boolean; checked: string | null; checkError?: string; version: string } & (
+  | { kind: "git"; branch: string | null; upstream: string | null; commit: string; incoming: UpdateCommit[]; behind: number; ahead: number; dirty: string[]; blocked?: string }
+  | { kind: "package"; latest: string | null; url: string }
+);
 
 export type MarketKind = "theme" | "deck" | "type";
 

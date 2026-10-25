@@ -8,6 +8,7 @@ import { api, relative, type DeckNode } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { EmptyState, Page, PageHeader, Section } from "@/components/page";
+import { UpdateBar } from "@/components/update-bar";
 
 export function DecksPage() {
   const [decks, setDecks] = useState<DeckNode[] | null>(null);
@@ -276,6 +277,7 @@ export function DecksPage() {
           })}
         </Section>
       )}
+      <UpdateBar />
       <NewDeckDialog open={creating} onOpenChange={setCreating} onDone={reload} />
     </Page>
   );

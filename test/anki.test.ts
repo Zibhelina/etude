@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Etude } from "../src/core/engine.ts";
+import { checkPack } from "../src/cli/pack-check.ts";
 
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/anki/${name}`, import.meta.url));
 
@@ -286,6 +287,36 @@ test("tags keep their :: hierarchy", async () => {
   const item = e.item(itemWith(e, "France"));
   assert.deepEqual(item.tags.sort(), ["capitals", "geo::europe"]);
   assert.ok(e.listTags().some((t) => t.tag === "geo::europe"));
+});
+
+test("changing an imported item's type moves its cards onto the new faces with their history", async () => {
+  const { e } = await fresh();
+  e.importAnki(fixture("sample.apkg"));
+  const single = itemWith(e, "peixe");
+  const card = cardOf(e, single);
+  const reviews = e.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM reviews WHERE card_id = ?", card)!.n;
+  e.upsertItem({ id: single, type: "typed", deck: e.item(single).deck, fields: { prompt: "peixe", answers: ["fish"] } });
+  assert.deepEqual(faces(e, single), ["main"]);
+  assert.equal(cardOf(e, single, "main"), card);
+  assert.equal(e.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM reviews WHERE card_id = ?", card)!.n, reviews);
+
+  const both = itemWith(e, "cão");
+  const [t0, t1] = [cardOf(e, both, "t0"), cardOf(e, both, "t1")];
+  e.upsertItem({ id: both, type: "free", deck: e.item(both).deck, fields: { prompt: "cão", reference: "dog" } });
+  assert.deepEqual(faces(e, both), ["main", "t1"], "only as many cards move as the new type has faces");
+  assert.equal(cardOf(e, both, "main"), t0);
+  assert.equal(cardOf(e, both, "t1"), t1);
+});
+
+test("a pack exported from an Anki import passes pack check", async () => {
+  const { e } = await fresh();
+  e.importAnki(fixture("sample.apkg"));
+  const pack = e.exportPack();
+  assert.ok(pack.items.every((i: { id: string }) => i.id.startsWith("anki-")));
+  const r = checkPack(pack);
+  assert.deepEqual(r.errors, []);
+  pack.items[0].id = "has spaces";
+  assert.ok(checkPack(pack).errors.some((m) => m.includes("has spaces") && m.includes("id must")));
 });
 
 test("editing a cloze note adds the faces it gained and keeps the ones it lost", async () => {

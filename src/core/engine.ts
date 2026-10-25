@@ -19,7 +19,7 @@ import {
   type Verdict,
 } from "./model.ts";
 import { initSandbox, runScript, ScriptError } from "./sandbox.ts";
-import { fieldDefaults, loadBuiltinTypes, validateFields, validateType, TYPE_ID } from "./types.ts";
+import { fieldDefaults, loadBuiltinTypes, validateFields, validateType, ITEM_ID, TYPE_ID } from "./types.ts";
 import * as sched from "./scheduler.ts";
 import { compile, QueryError } from "./query.ts";
 import { aiFeedback, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type GradingContext } from "./ai.ts";
@@ -117,10 +117,19 @@ const SUP: Record<string, string> = { "0": "⁰", "1": "¹", "2": "²", "3": "³
 const SUB: Record<string, string> = { "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉", "+": "₊", "-": "₋" };
 const script = (s: string, map: Record<string, string>, mark: string) => ([...s].every((c) => map[c]) ? [...s].map((c) => map[c]).join("") : mark === "_" ? `_${s}` : `^${s.length > 1 ? `(${s})` : s}`);
 
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+const entity = (m: string, e: string) =>
+  e[0] === "#" ? String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : ENTITIES[e.toLowerCase()] ?? m;
+
 /** One-line plain text from markdown with math: $x^3 \sin x$ reads x³ sin x, cloze blanks show their answer. */
 export function plainLabel(text: string): string {
   return text
+    // Anki imports keep their HTML: drop real tags (a bare < or > is text) and decode entities.
+    .replace(/<\/?(?:br|div|p|li|tr|td|th|h\d)\b[^<>]*>/gi, " ")
+    .replace(/<\/?[a-zA-Z][\w:-]*(?:\s[^<>]*)?\/?>/g, "")
+    .replace(/&(#\d+|#x[\da-f]+|[a-z]+);/gi, entity)
     .replace(/```[\s\S]*?```/g, " [code] ")
+    .replace(/^[ \t]*>+[ \t]?/gm, "")
     .replace(/\{\{([^}|:]+)[^}]*\}\}/g, "[$1]")
     .replace(/\\(?:text|mathrm|mathbf|operatorname|mathit)\{([^}]*)\}/g, "$1")
     .replace(/\\[dt]?frac\{((?:[^{}]|\{[^{}]*\})*)\}\{((?:[^{}]|\{[^{}]*\})*)\}/g, (_, a, b) => `${/^[\w\\]+$/.test(a) ? a : `(${a})`}/${/^[\w\\]+$/.test(b) ? b : `(${b})`}`)
@@ -132,7 +141,7 @@ export function plainLabel(text: string): string {
     .replace(/_\{([^{}]*)\}|_(\w)(?=\W|$)/g, (_, a, b) => script((a ?? b).trim(), SUB, "_"))
     .replace(/\\[,;! ]/g, " ")
     .replace(/[{}$]/g, "")
-    .replace(/[*`#>|]/g, "")
+    .replace(/[*`#|]/g, "")
     .replace(/\s+([,.;:?!)])/g, "$1")
     .replace(/\s+/g, " ")
     .trim()
@@ -528,6 +537,16 @@ export class Etude {
     for (const face of this.facesFor(def, fields)) this.db.run("INSERT OR IGNORE INTO cards (item_id, face, due) VALUES (?, ?, ?)", itemId, face, ts);
   }
 
+  /** After a type change, moves cards on faces the new type lacks onto its unused faces, in order, so their history stays live. */
+  private carryCards(itemId: string, faces: string[]) {
+    const cards = this.db.all<{ id: number; face: string }>("SELECT id, face FROM cards WHERE item_id = ? ORDER BY id", itemId);
+    const open = faces.filter((f) => !cards.some((c) => c.face === f));
+    for (const c of cards) {
+      if (!open.length) break;
+      if (!faces.includes(c.face)) this.db.run("UPDATE cards SET face = ? WHERE id = ?", open.shift()!, c.id);
+    }
+  }
+
   // ----------------------------------------------------------- decks/presets
 
   ensureDeck(name: string): number {
@@ -738,7 +757,7 @@ export class Etude {
 
   /** Creates or updates one item. Returns what happened. */
   upsertItem(input: Partial<Item> & { id: string; type: string; deck: string; fields: Record<string, unknown> }, opts: { ord?: number } = {}): "created" | "updated" | "unchanged" {
-    if (!input.id || !/^[A-Za-z0-9][\w.:-]{0,199}$/.test(input.id)) throw new EtudeError(`invalid item id "${input.id}"`);
+    if (!input.id || !ITEM_ID.test(input.id)) throw new EtudeError(`invalid item id "${input.id}"`);
     const def = this.type(input.type);
     const fields = { ...fieldDefaults(def), ...(input.fields ?? {}) };
     const errs = validateFields(def, fields);
@@ -779,6 +798,7 @@ export class Etude {
       }
       this.db.run("DELETE FROM item_tags WHERE item_id = ?", input.id);
       for (const t of tags) this.db.run("INSERT INTO item_tags (item_id, tag) VALUES (?, ?)", input.id, t);
+      if (old && old.type !== next.type) this.carryCards(input.id, this.facesFor(def, fields));
       this.ensureCards(input.id, def, fields);
     });
     return result!;

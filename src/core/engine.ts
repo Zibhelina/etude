@@ -853,11 +853,23 @@ export class Etude {
     });
   }
 
-  /** Hides cards from study until `until` (default: the next study day). `null` unburies. */
-  setBuried(cardIds: number[], until: Date | null = new Date(this.dayStart().getTime() + 86400_000)) {
+  /** Hides cards until the next study day, or `until`; `null` unburies. Returns changed ids. */
+  setBuried(cardIds: number[], until: Date | null = new Date(this.dayStart().getTime() + 86400_000), opts: { preserveExisting?: boolean } = {}) {
+    const changed: number[] = [];
+    const ts = iso();
     this.db.tx(() => {
-      for (const id of cardIds) this.db.run("UPDATE cards SET buried_until = ? WHERE id = ?", until ? iso(until) : null, id);
+      for (const id of new Set(cardIds)) {
+        const r = this.db.run("UPDATE cards SET buried_until = ? WHERE id = ? AND (? = 0 OR buried_until IS NULL OR buried_until <= ?)", until ? iso(until) : null, id, Number(!!opts.preserveExisting), ts);
+        if (r.changes) changed.push(id);
+      }
     });
+    return changed;
+  }
+
+  /** All cards belonging to the same items as the selected cards. */
+  noteCards(cardIds: number[]): number[] {
+    if (!cardIds.length) return [];
+    return this.db.all<{ id: number }>(`SELECT id FROM cards WHERE item_id IN (SELECT item_id FROM cards WHERE id IN (${cardIds.map(() => "?").join(", ")})) ORDER BY id`, ...cardIds).map((r) => r.id);
   }
 
   /** A card's scheduling right now, with what each rating would do. */

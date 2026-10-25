@@ -203,7 +203,8 @@ function forwardKeys() {
     }
     if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
     const result = document.body.dataset.mode === "result";
-    const keys = result ? ["1", "2", "3", "4", " ", "Enter", "u"] : [" ", "Enter"];
+    if (e.repeat && (e.key === "=" || e.key === "-")) return;
+    const keys = result ? ["1", "2", "3", "4", " ", "Enter", "u", "=", "-"] : [" ", "Enter", "=", "-"];
     if (!keys.includes(e.key)) return;
     // Let the card's own handlers run first; forward only keys the card didn't use.
     setTimeout(() => {

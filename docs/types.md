@@ -117,7 +117,7 @@ A small `std.normalize(s)` is also in scope in card scripts. The full `std` (bel
 
 - Ctrl/Cmd+Enter always goes to the app (submit or reveal).
 - Escape goes to the app, and so does Ctrl/Cmd+Z in result mode (undo).
-- In answer mode, Space and Enter go to the app only when the card's own handler didn't call `preventDefault()` and focus isn't in an input. In result mode, 1–4, Space, Enter and `u` are forwarded the same way, for rating.
+- In answer mode, Space, Enter, `=` and `-` go to the app only when the card's own handler didn't call `preventDefault()` and focus isn't in an input. In result mode, 1–4, Space, Enter, `u`, `=` and `-` are forwarded the same way, for rating and for burying (`=` the note, `-` the card, as in Anki).
 - On mount, the first `[autofocus]` element (or input or textarea) gets focus.
 - The frame resizes to the card's height automatically. Don't use fixed heights or internal scrolling for the whole card.
 

@@ -301,6 +301,8 @@ export const api = {
   previewItem: (id: string, seed: number, face = "main") => call<{ view: Record<string, unknown>; key: Record<string, unknown>; seed: number }>("POST", `/api/items/${encodeURIComponent(id)}/preview`, { seed, face }),
   bulkItems: (action: string, ids: string[], extra: Record<string, unknown> = {}) => call("POST", "/api/items-bulk", { action, ids, ...extra }),
   bulkCards: (action: string, cardIds: number[]) => call("POST", "/api/cards-bulk", { action, cardIds }),
+  /** Buries cards or whole notes; returns only newly buried ids so Undo preserves existing burials. */
+  buryCards: (cardIds: number[], note: boolean) => call<{ count: number; cardIds: number[] }>("POST", "/api/cards-bulk", { action: note ? "bury-note" : "bury", cardIds }),
 
   counts: (s: Scope) => call<Counts>("GET", `/api/study/counts${qs({ deck: s.deck, q: s.q })}`),
   next: (s: Scope, exclude?: number) => call<{ card: StudyCard | null; counts: Counts }>("GET", `/api/study/next${qs({ deck: s.deck, q: s.q, exclude })}`),

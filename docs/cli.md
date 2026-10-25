@@ -1568,12 +1568,14 @@ etude card bury [refs...] [flags]
 | `--face <VALUE>` | string | With item ids: only the card for this face. |
 | `--date <DATE>` | string | A date (2026-10-22 means the start of that study day) or ISO date-time; also `today`, `tomorrow`. |
 | `--in <DURATION>` | string | A duration from now: 30m, 12h, 3d, 2w. |
+| `--note` | boolean | Bury every card of the selected cards' items. |
 | `--dry-run` | boolean | Show what would change without writing anything. |
 
 Output: { count, until, cards }
 
 ```sh
 etude card bury 42
+etude card bury 42 --note
 etude card bury --query tag:hard --in 3d
 ```
 

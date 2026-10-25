@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, CornerDownLeft, Dices, Loader2, MessageSquareText, Pencil, RotateCcw, Sparkles, Undo2 } from "lucide-react";
+import { ArrowLeft, CornerDownLeft, Dices, EyeOff, Loader2, MessageSquareText, Pencil, RotateCcw, Sparkles, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -132,6 +132,8 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   }, [card, phase, attemptId, practice, load]);
 
   const undo = useCallback(async () => {
+    if (busy.current) return;
+    busy.current = true;
     try {
       const r = await api.undo();
       if (!r) return toast("Nothing to undo");
@@ -147,6 +149,8 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       toast("Undid the last rating");
     } catch (e) {
       toast.error((e as Error).message);
+    } finally {
+      busy.current = false;
     }
   }, [scope.deck, scope.q]);
 
@@ -162,7 +166,49 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     setPhase("answer");
   }, [card]);
 
+  /** Bury the card or its whole note, then move on without rating. */
+  const bury = useCallback(async (note: boolean) => {
+    if (!card || busy.current || (phase !== "answer" && phase !== "result")) return;
+    busy.current = true;
+    const shown = card.cardId;
+    try {
+      const r = await api.buryCards([shown], note);
+      await load();
+      toast(`Buried ${note ? "this note" : "this card"} until tomorrow`, {
+        action: r.cardIds.length ? {
+          label: "Undo",
+          onClick: async () => {
+            if (busy.current) return;
+            busy.current = true;
+            try {
+              await api.bulkCards("unbury", r.cardIds);
+              const [c, cnt] = await Promise.all([api.card(shown), api.counts(scope)]);
+              setCard(c);
+              setCounts(cnt);
+              setResult(null);
+              setAttemptId(null);
+              setFeedback(null);
+              setReady(true);
+              setPractice(false);
+              setPhase("answer");
+              shownAt.current = Date.now();
+            } catch (e) {
+              toast.error((e as Error).message);
+            } finally {
+              busy.current = false;
+            }
+          },
+        } : undefined,
+      });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      busy.current = false;
+    }
+  }, [card, phase, load, scope.deck, scope.q]);
+
   const onKey = useCallback((key: string) => {
+    if ((key === "=" || key === "-") && (phase === "answer" || phase === "result")) return void bury(key === "=");
     if (phase === "answer") {
       if (key === "Mod+Enter" || ((key === " " || key === "Enter") && card?.grader === "self")) reveal();
       return;
@@ -174,10 +220,11 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
         rate(s);
       } else if (key === "Undo" || key === "u") undo();
     }
-  }, [phase, card, reveal, rate, result, undo]);
+  }, [phase, card, reveal, rate, result, undo, bury]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
+      if (e.repeat && (e.key === "=" || e.key === "-")) return;
       const t = e.target as HTMLElement;
       if (t?.closest("input, textarea, [contenteditable]")) return;
       if (e.key === "Escape") return navigate("/");
@@ -209,6 +256,14 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
             <Tooltip><TooltipTrigger asChild><span className="text-learn">{counts.learning}</span></TooltipTrigger><TooltipContent>Learning</TooltipContent></Tooltip>
             <Tooltip><TooltipTrigger asChild><span className="text-review">{counts.review}</span></TooltipTrigger><TooltipContent>Review</TooltipContent></Tooltip>
           </div>
+        )}
+        {card && (phase === "answer" || phase === "result") && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => bury(true)} aria-label="Bury note until tomorrow" aria-keyshortcuts="="><EyeOff /></Button>
+            </TooltipTrigger>
+            <TooltipContent>Bury until tomorrow: <kbd className="opacity-70">=</kbd> the note, <kbd className="opacity-70">-</kbd> just this card</TooltipContent>
+          </Tooltip>
         )}
         <Tooltip>
           <TooltipTrigger asChild>

@@ -220,6 +220,10 @@ if (stage) {
       case "error":
         verdictEl.textContent = `Card error: ${msg.message}`;
         break;
+      case "demo-ack":
+        acks.get(msg.id)?.(msg.point ?? null);
+        acks.delete(msg.id);
+        break;
     }
   });
 
@@ -267,7 +271,98 @@ if (stage) {
     open((index + 1) % DEMOS.length);
   }
 
-  open(0, 12345);
+  // ------------------------------------------------ autoplay: a cursor plays the deck
+  // Solvers turn a card's prepared view and key into taps. Ratings vary like a real session.
+  const W = (pc) => [1, 3, 6, 8, 10].includes(pc) ? [0.5, 0.45] : [0.5, 0.86];
+  const SOLVE = {
+    chess: (p) => [{ sel: `[data-sq="${p.key.answers[0].slice(0, 2)}"]` }, { sel: `[data-sq="${p.key.answers[0].slice(2, 4)}"]` }],
+    "unit-circle": (p) => { const t = ((p.key.target + 15) * Math.PI) / 180; return [{ sel: ".uc-svg", svg: [0.92 * Math.cos(t), -0.92 * Math.sin(t)] }]; },
+    chord: (p) => p.key.pcs.map((pc) => ({ sel: `.cd-kb .key[data-m="${48 + pc}"]`, at: W(pc) })),
+    math: (p) => {
+      const m = /x\^\{(\d)\}\s*(\\sin x|\\cos x|e\^\{x\}|\\ln x)/.exec(p.fields.prompt ?? "");
+      const n = m ? Number(m[1]) : 0, lo = n - 1 === 1 ? "x" : `x^${n - 1}`;
+      const f = { "\\sin x": `${lo}(${n}sin(x) + x cos(x))`, "\\cos x": `${lo}(${n}cos(x) - x sin(x))`, "e^{x}": `${lo}e^x(${n} + x)`, "\\ln x": `${lo}(${n}ln(x) + 1)` };
+      return [{ sel: "#answer" }, { kind: "type", sel: "#answer", text: m ? f[m[2]] : String(p.key.answers?.[0] ?? "") }];
+    },
+    "graph-walk": (p) => p.key.order.map((id) => ({ sel: `.gw-node[data-id="${id}"]`, pause: 180 })),
+    staff: (p) => [{ sel: `.st-kb .key[data-m="${60 + p.key.pc}"]`, at: W(p.key.pc) }],
+    plot: (p) => p.key.points.map(([x, y]) => ({ sel: ".pl-svg", svg: [x, -y] })),
+    timeline: (p) => Object.entries(p.key.years).map(([id, y]) => ({ kind: "drag", sel: `.tl-chip[data-id="${id}"]`, to: { sel: ".tl", at: [(y - p.view.from) / (p.view.to - p.view.from), 0.6] } })),
+    color: (p) => ["h", "s", "l"].map((k, i) => ({ kind: "range", sel: `.co-slider[data-k="${k}"] input`, value: p.key.hsl[i] })),
+  };
+  // Mostly the suggested rating, sometimes Easy: a person who knows some cards cold.
+  const RATE = { timeline: 3, chess: 3, "unit-circle": 2, chord: 4, math: 3, "graph-walk": 3, staff: 4, plot: 3, color: 3 };
+  const cursor = document.createElement("div");
+  cursor.className = "demo-cursor";
+  cursor.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 8-6.2 1.6L9.6 19z"/></svg><i></i>`;
+  stage.appendChild(cursor);
+  const toggle = document.createElement("button");
+  toggle.type = "button"; toggle.className = "linkish demo-toggle";
+  $("[data-reroll]", stage).before(toggle);
+  const acks = new Map();
+  let ackId = 0, auto = !reduced, gen = 0, touched = false, resumeTimer = null;
+  const ask = (type, step) => new Promise((r) => { const id = ++ackId; acks.set(id, r); post({ type, id, step }); setTimeout(() => acks.has(id) && (acks.delete(id), r(null)), 3000); });
+  const live = (g) => g === gen && auto;
+  const until = async (cond, g, ms = 8000) => { const t = Date.now(); while (!cond()) { if (!live(g) || Date.now() - t > ms) return false; await sleep(80); } return true; };
+  function place(x, y) { const r = stage.getBoundingClientRect(); cursor.style.transform = `translate(${x - r.left}px, ${y - r.top}px)`; cursor.classList.add("on"); }
+  const tap = async () => { cursor.classList.remove("tap"); void cursor.offsetWidth; cursor.classList.add("tap"); await sleep(140); };
+  async function moveToFrame(step, g) {
+    let pt = await ask("demo-where", step);
+    if (!pt || !live(g)) return false;
+    const fr = cur.frame.getBoundingClientRect(), br = body.getBoundingClientRect();
+    const y = fr.top + pt.y;
+    if (y < br.top + 30 || y > br.bottom - 30) { body.scrollTo({ top: body.scrollTop + y - (br.top + br.height / 2), behavior: "smooth" }); await sleep(450); pt = await ask("demo-where", step); }
+    if (!pt) return false;
+    const f2 = cur.frame.getBoundingClientRect();
+    place(f2.left + pt.x, f2.top + pt.y);
+    await sleep(step.kind === "type" ? 300 : 620);
+    return live(g);
+  }
+  async function moveTo(el, g) { const r = el.getBoundingClientRect(); place(r.left + r.width / 2, r.top + r.height / 2); await sleep(640); return live(g); }
+  async function play(g) {
+    while (live(g)) {
+      if (!(await until(() => cur?.phase === "answer" && stageVis.on, g, 60000))) return;
+      await sleep(900);
+      const steps = SOLVE[cur.demo.type]?.(cur.prep) ?? [];
+      for (const st of steps) {
+        if (!(await moveToFrame(st, g))) return;
+        if (st.kind !== "type" && st.kind !== "range") await tap();
+        if (st.kind === "drag") {
+          const end = await ask("demo-where", st.to), fr = cur.frame.getBoundingClientRect();
+          const done = ask("demo-do", st);
+          if (end) place(fr.left + end.x, fr.top + end.y);
+          await done;
+        } else await ask("demo-do", st);
+        await sleep(st.pause ?? 380);
+      }
+      if (!(await until(() => !checkBtn.disabled, g, 3000))) { if (live(g)) open((index + 1) % DEMOS.length); continue; }
+      if (!(await moveTo(checkBtn, g))) return;
+      await tap(); post({ type: "collect" });
+      if (!(await until(() => cur.phase === "result" && !ratings.hidden, g))) return;
+      await sleep(2200);
+      const r = RATE[cur.demo.type] ?? cur.result?.suggested ?? 3;
+      const b = $(`[data-r="${cur.result?.verdict === "partial" ? 2 : r}"]`, ratings);
+      if (!b || !(await moveTo(b, g))) return;
+      await tap(); rate(Number(b.dataset.r));
+      await until(() => cur.phase === "loading" || cur.phase === "answer", g, 4000);
+    }
+  }
+  const stageVis = visibility(stage);
+  function setAuto(on) {
+    auto = on; gen++;
+    toggle.innerHTML = on ? `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>Playing the deck` : `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5v14l12-7z"/></svg>Play the deck`;
+    if (!on) cursor.classList.remove("on");
+    else { if (touched || cur?.phase !== "answer") open((index + 1) % DEMOS.length); touched = false; play(gen); }
+  }
+  // A real person takes over: stop the demo where it is and let them finish the card.
+  const takeOver = (e) => { if (!e.isTrusted || e.target.closest(".demo-toggle")) return; touched = true; clearTimeout(resumeTimer); if (auto) setAuto(false); };
+  stage.addEventListener("pointerdown", takeOver);
+  addEventListener("blur", () => { if (document.activeElement === cur?.frame) { touched = true; if (auto) setAuto(false); } });
+  stage.addEventListener("pointerenter", (e) => { if (e.isTrusted && e.pointerType === "mouse") clearTimeout(resumeTimer); });
+  stage.addEventListener("pointerleave", (e) => { if (e.isTrusted && !auto && !reduced) { clearTimeout(resumeTimer); resumeTimer = setTimeout(() => setAuto(true), 9000); } });
+  toggle.addEventListener("click", () => { clearTimeout(resumeTimer); setAuto(!auto); });
+  tabs.addEventListener("click", (e) => { if (e.isTrusted) { touched = true; if (auto) setAuto(false); } }, true);
+  setAuto(auto);
 }
 
 // ------------------------------------------- the self-grading numeric mini card

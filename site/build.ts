@@ -72,7 +72,7 @@ const demos = DEMOS.map(({ id, label }) => {
   const fit = `<style>.ch-board svg{max-width:18rem;transition:max-width .5s cubic-bezier(.22,1,.36,1)}.uc-stage{max-width:280px}.gw-svg{max-width:330px}.pl-stage{max-width:290px}.co-swatch{height:5rem}.kb-oct{max-width:15rem}body[data-mode=result] .ch-board svg{max-width:13rem}@media (min-width:400px){.kb:not(.kb-nowrap){flex-wrap:nowrap;gap:0}.kb:not(.kb-nowrap) .kb-oct{flex-basis:0;max-width:15rem}}</style>`;
   const html = cardFrame(def, "__BASE__")
     .replace('<base href="__BASE__">', `<base href="../">${fontFace}`)
-    .replace("</head>", `${fit}\n</head>`)
+    .replace("</head>", `${fit}\n<script src="assets/demo-driver.js"></script>\n</head>`)
     .replaceAll("__BASE__", "./");
   writeFileSync(join(out, "frames", `${def.id}.html`), html);
   const grader = def.grader as { kind: string; code?: string };

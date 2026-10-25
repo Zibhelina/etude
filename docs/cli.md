@@ -235,6 +235,7 @@ These work on every command, before or after the command words.
 - **item**: Items: the content (fields, tags, source) behind one or more cards (`etude item` alone runs `list`)
   - [`item list`](#item-list) Items matching a search (one row per item, not per card).
   - [`item show`](#item-show) An item with its fields, cards, scheduling, reviews and attempts.
+  - [`item ai-edit`](#item-ai-edit) Ask the configured language model to propose changes to a card's content. Nothing is saved.
   - [`item add`](#item-add) Add an item. Re-running with the same --id and content is a no-op.
   - [`item edit`](#item-edit) Change an item's fields, deck, tags, source, notes or type. Scheduling is kept.
   - [`item move`](#item-move) Move items to another deck.
@@ -984,6 +985,38 @@ etude item show <id>
 | `id` | Item id. |
 
 Output: { id, type, deck, fields, tags, source, notes, archived, created, updated, cards: [...], reviews: [...], attempts: [...] }
+
+### etude item ai-edit
+
+<a id="item-ai-edit"></a>
+
+Ask the configured language model to propose changes to a card's content. Nothing is saved.
+
+Uses the language model configured for feedback. Pass --fields or --fields-file to work from an unsaved draft. Review the returned fields, then use `item edit --replace-fields --fields` to save them.
+
+```
+etude item ai-edit <id> [flags]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Item id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--instruction <TEXT>` | string | Describe the change (`-` reads stdin). |
+| `--instruction-file <PATH>` | string | Read the requested change from a file. |
+| `--fields <JSON>` | string | Fields as a JSON object (`-` reads stdin). |
+| `--fields-file <PATH>` | string | Read the fields JSON object from a file (`-` for stdin). |
+
+Output: { itemId, fields, changed: [fieldNames], model, ms, cost? }
+
+```sh
+etude item ai-edit net.router --instruction "Make the answer shorter and add an example"
+etude item ai-edit sp.perro --instruction-file change.txt --fields-file draft.json
+```
 
 ### etude item add
 

@@ -118,6 +118,30 @@ command({
 });
 
 command({
+  name: "item ai-edit",
+  summary: "Ask the configured language model to propose changes to a card's content. Nothing is saved.",
+  description: "Uses the language model configured for feedback. Pass --fields or --fields-file to work from an unsaved draft. Review the returned fields, then use `item edit --replace-fields --fields` to save them.",
+  args: [{ name: "id", description: "Item id.", required: true }],
+  flags: [
+    { name: "instruction", type: "string", description: "Describe the change (`-` reads stdin).", placeholder: "TEXT" },
+    { name: "instruction-file", type: "string", description: "Read the requested change from a file.", placeholder: "PATH" },
+    ...FIELD_FLAGS.slice(0, 2),
+  ],
+  writes: false,
+  dryRun: false,
+  confirm: false,
+  examples: ['etude item ai-edit net.router --instruction "Make the answer shorter and add an example"', 'etude item ai-edit sp.perro --instruction-file change.txt --fields-file draft.json'],
+  output: "{ itemId, fields, changed: [fieldNames], model, ms, cost? }",
+  async run(ctx) {
+    const instruction = textInput(ctx, ctx.flags.instruction, ctx.flags["instruction-file"]);
+    if (!instruction?.trim()) throw new CliError("--instruction or --instruction-file is required");
+    const raw = textInput(ctx, ctx.flags.fields, ctx.flags["fields-file"]);
+    const fields = raw === undefined ? undefined : parseJson(raw, "--fields");
+    return ctx.e.suggestItemEdit(ctx.args.id, instruction, { fields });
+  },
+});
+
+command({
   name: "item add",
   summary: "Add an item. Re-running with the same --id and content is a no-op.",
   description:

@@ -178,6 +178,10 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const b = await body(c);
     return c.json(etude.prepare(c.req.param("id"), b.face ?? "main", Number(b.seed ?? 1)));
   });
+  app.post("/api/items/:id/ai-edit", async (c) => {
+    const b = await body(c);
+    return c.json(await etude.suggestItemEdit(c.req.param("id"), b.instruction, { fields: b.fields }));
+  });
   app.post("/api/items-bulk", async (c) => {
     const b = await body(c);
     const ids: string[] = b.ids ?? [];

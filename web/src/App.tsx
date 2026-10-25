@@ -1,4 +1,4 @@
-import { BarChart3, Blocks, Layers, Library, Settings } from "lucide-react";
+import { BarChart3, Blocks, Layers, Library, Settings, Store } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -15,11 +15,13 @@ import { TypesPage } from "@/pages/types";
 import { StatsPage } from "@/pages/stats";
 import { SettingsPage } from "@/pages/settings";
 import { EmbedStudy } from "@/pages/embed";
+import { MarketPage } from "@/pages/market";
 
 const NAV = [
   { to: "/", label: "Decks", icon: Layers, match: (p: string) => p === "/" || p === "/deck" },
   { to: "/browse", label: "Browse", icon: Library, match: (p: string) => p === "/browse" },
   { to: "/types", label: "Card types", icon: Blocks, match: (p: string) => p.startsWith("/types") },
+  { to: "/market", label: "Market", icon: Store, match: (p: string) => p === "/market" },
   { to: "/stats", label: "Stats", icon: BarChart3, match: (p: string) => p === "/stats" },
   { to: "/settings", label: "Settings", icon: Settings, match: (p: string) => p === "/settings" },
 ];
@@ -73,6 +75,7 @@ export function App() {
   else if (path.startsWith("/types")) page = <TypesPage id={path.split("/")[2] ? decodeURIComponent(path.split("/")[2]) : null} />;
   else if (path === "/stats") page = <StatsPage deck={params.get("deck") ?? undefined} />;
   else if (path === "/settings") page = <SettingsPage />;
+  else if (path === "/market") page = <MarketPage />;
   else page = <DecksPage />;
 
   return (

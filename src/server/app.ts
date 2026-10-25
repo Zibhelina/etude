@@ -9,6 +9,7 @@ import { chatProviderKeyEnv } from "../core/ai.ts";
 import { readChatGptHostId } from "../core/chatgpt.ts";
 import { DEFAULT_PRESET, type Rating } from "../core/model.ts";
 import { cardFrame } from "./frame.ts";
+import { buildSubmission, fetchEntry, fetchIndex, ghStatus, installEntry, installState, installedEntries, manualPublishUrl, marketSettings, publishFile, summarize, entryPath, entryJson, forgetInstall, type MarketKind } from "../core/market.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const require = createRequire(import.meta.url);
@@ -321,6 +322,37 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.put("/api/themes/:id", async (c) => c.json(etude.saveTheme({ ...(await body(c)), id: c.req.param("id") })));
   app.delete("/api/themes/:id", (c) => c.json(etude.deleteTheme(c.req.param("id"))));
   app.put("/api/theme", async (c) => c.json(etude.selectTheme(String((await body(c)).id ?? ""))));
+
+  // ------------------------------------------------------------- market
+  app.get("/api/market", async (c) => {
+    const cfg = marketSettings(etude);
+    const index = await fetchIndex(cfg.url, { refresh: c.req.query("refresh") === "1" });
+    const installed = installedEntries(etude);
+    return c.json({ ...cfg, generated: index.generated, entries: index.entries.map((x) => ({ ...x, installed: installState(etude, x, installed), installedIds: installed[x.id]?.kind === x.kind ? installed[x.id].ids : [] })), selectedTheme: etude.currentTheme().id });
+  });
+  app.get("/api/market/entry/:kind/:id", async (c) => {
+    const kind = c.req.param("kind") as MarketKind;
+    const file = await fetchEntry(marketSettings(etude).url, { kind, id: c.req.param("id"), path: entryPath(kind, c.req.param("id")) });
+    return c.json(file);
+  });
+  app.post("/api/market/install", async (c) => {
+    const b = await body(c);
+    const out = await installEntry(etude, String(b.id ?? ""), { kind: b.kind, dryRun: !!b.dryRun });
+    if (b.use && out.entry.kind === "theme" && !b.dryRun) etude.selectTheme(out.ids[0]);
+    return c.json(out);
+  });
+  app.post("/api/market/forget", async (c) => c.json({ forgot: forgetInstall(etude, String((await body(c)).id ?? "")) }));
+  app.get("/api/market/publish/status", (c) => c.json({ ...ghStatus(), repo: marketSettings(etude).repo }));
+  app.post("/api/market/publish", async (c) => {
+    const b = await body(c);
+    const repo = marketSettings(etude).repo;
+    const gh = b.dryRun ? null : ghStatus();
+    const file = buildSubmission(etude, { ...b, author: b.author || (gh?.ok ? gh.login : undefined) });
+    const preview = { path: entryPath(file.kind, file.id), bytes: Buffer.byteLength(entryJson(file)), entry: { ...file, content: undefined }, summary: summarize(file), manualUrl: manualPublishUrl(repo, file), repo };
+    if (b.dryRun) return c.json({ dryRun: true, ...preview, ...(b.full ? { file } : {}) });
+    if (!gh?.ok) return c.json({ error: gh?.reason ?? "gh isn't available", ...preview }, 424);
+    return c.json({ ...publishFile(file, { repo }), ...preview });
+  });
 
   // --------------------------------------------- card frames and runtime
   app.get("/frame/:type", (c) => {

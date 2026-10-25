@@ -41,11 +41,6 @@ export function RecallRing({ value, target, size = 176, label, sub }: { value: n
   const C = 2 * Math.PI * r;
   const v = value ?? 0;
   const color = value == null ? "var(--muted-foreground)" : recallColor(v, target);
-  // The target tick, measured clockwise from 12 o'clock.
-  const a = target * 2 * Math.PI - Math.PI / 2;
-  const tick = (d: number) => [size / 2 + Math.cos(a) * (r + d), size / 2 + Math.sin(a) * (r + d)];
-  const [x1, y1] = tick(-stroke / 2 - 3);
-  const [x2, y2] = tick(stroke / 2 + 3);
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} role="img" aria-label={`${label}: ${value == null ? "no data" : `${(v * 100).toFixed(1)}%`}, target ${Math.round(target * 100)}%`}>
@@ -68,7 +63,6 @@ export function RecallRing({ value, target, size = 176, label, sub }: { value: n
             />
           </>
         )}
-        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--foreground)" strokeWidth={2} strokeLinecap="round" opacity={0.85} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
         <div className="tabular text-[40px] leading-none tracking-tight" style={SERIF}>

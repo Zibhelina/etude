@@ -24,14 +24,57 @@ Classic flashcards test recognition: you see the front, think of the back, flip 
 | Exam dates | Intervals ignore them | A deadline pulls every card in before the exam |
 | Automation | Add-ons, or editing the database | Every action is a CLI command with JSON output |
 
+## What a card can be
+
+Every card below is a real card type from the [showcase pack](examples/showcase/), screenshotted after answering it. Each one is a folder of HTML, CSS and JavaScript you can open and change, and each is graded by something that actually checks the work.
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<p><b>Write kanji by hand.</b> Draw the character with a mouse, pen or finger. A vision model reads your strokes against a description of the character and tells you what to fix.</p>
+<img src="docs/screenshots/cards/kanji.png" alt="Writing the kanji for water by hand, graded by a vision model with feedback">
+</td>
+<td width="50%" valign="top">
+<p><b>Solve chess puzzles on a real board.</b> Tap or drag the move. The answer is checked against the engine-verified list of mates, so any correct move counts.</p>
+<img src="docs/screenshots/cards/chess.png" alt="A mate-in-one chess puzzle solved on the board">
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<p><b>Play chords on a piano.</b> A new root and quality every review. Any voicing or inversion counts, because the grader compares pitch classes. Hear your chord and the right one.</p>
+<img src="docs/screenshots/cards/chord.png" alt="Building an A major 7th chord on a piano keyboard, with each chord tone checked">
+</td>
+<td width="50%" valign="top">
+<p><b>Read music.</b> A new note on the treble or bass staff every review, ledger lines and accidentals included. Answer on the keyboard or with the letter keys.</p>
+<img src="docs/screenshots/cards/staff.png" alt="Middle C on a treble staff with a piano keyboard to answer on">
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<p><b>Trace algorithms.</b> Tap the nodes of a generated graph in the order BFS or DFS visits them. The real traversal animates afterwards.</p>
+<img src="docs/screenshots/cards/graph.png" alt="Tapping the nodes of a generated graph in breadth-first order">
+</td>
+<td width="50%" valign="top">
+<p><b>Place history on a timeline.</b> Drag events between fixed anchors. Graded by order and by how many years each one is off.</p>
+<img src="docs/screenshots/cards/timeline.png" alt="Dragging computing milestones onto a timeline">
+</td>
+</tr>
+</table>
+
+The pack also has ear training (name the interval you hear), regexes with live tests, spotting the buggy line in a listing, binary and two's complement switches, the unit circle, points on a graph, balancing chemical equations, colors from hex codes, Fermi estimates on a log slider and 30-second arithmetic sprints. Import it and try them all:
+
+```sh
+etude pack import examples/showcase.pack.json
+```
+
 ## What you can do with it
 
 - **Prepare for an exam.** Put the course in a deck, set the exam date as its deadline and study every day. No card is scheduled after the deadline, and cards you already know still get one last look before it. The Stats page forecasts how many reviews are left each day until then.
 - **Practise calculations instead of memorizing answers.** A numeric item can carry a generator, so "the transmission delay of an L-byte packet on an R Mbps link" comes back with different numbers every time. The seed is stored with each review, so any variant can be reproduced.
 - **Explain things in your own words.** Free-answer cards are graded against a reference answer and a rubric. You get a verdict and two to four sentences on what was missing and how to fix it, in the language of the card.
 - **Write math and code the way you would on paper.** Answer fields are live Markdown editors, like Obsidian: `$math$`, code blocks and formatting render as you type, so a derivation can be the answer. Code cards have a real editor with highlighting for about 140 languages, and JavaScript answers run against hidden tests in a sandbox.
-- **Draw your answer.** Sketch a graph, a circuit, a timeline or a structure, and a vision model grades it.
-- **Learn skills that aren't text.** The showcase pack has ear training, a piano for chords, notes on a staff, chess mates checked against an engine, regexes with live tests, BFS and DFS on generated graphs, the unit circle, balancing chemical equations, binary and two's complement, colors from hex codes, Fermi estimates and timed arithmetic sprints. Each one is a card type you can open, read and change.
+- **Draw your answer.** Write kanji or hanzi by hand, sketch a graph, a circuit or a molecule, and a vision model grades it.
+- **Learn skills that aren't text.** Music, chess, algorithms and history become cards you play, move, tap and drag, as in the gallery above. If the skill you want isn't there, a card type is a web page, so you can build it.
 - **Let an agent make your cards.** Give an agent your notes and the bundled [skill](skill/SKILL.md). It writes a pack, validates it with `etude pack check`, imports it, and later reads `etude stats weak` to see which topics you keep failing.
 - **Get quizzed in a chat.** An agent can run a study session without the web app: `etude study next` returns the card and how to answer it, and `etude study answer` grades and schedules it.
 - **Study from anywhere on your own server.** Run Etude on your computer and open it from your phone or tablet; the layout is made for phones too. A compact study view at `/embed` fits inside other apps.

@@ -198,5 +198,21 @@
       "background": "grid"
     },
     "source": ""
+  },
+  {
+    "id": "showcase.draw.kanji-water",
+    "type": "draw",
+    "deck": "Etude Showcase::6 Languages",
+    "tags": [
+      "showcase",
+      "topic::japanese"
+    ],
+    "fields": {
+      "prompt": "Write the kanji for **water** (*mizu*, みず).",
+      "reference": "水: a long central vertical stroke ending in a small hook to the left; on the left, a short horizontal stroke that bends down to the lower left; on the right, a short stroke rising to the upper right and a long sweep down to the lower right.",
+      "rubric": "Must be recognisable as 水 with its four parts: the hooked central vertical, the bent left stroke, and the two strokes on the right. Stroke order and neatness don't matter.",
+      "background": "blank"
+    },
+    "source": ""
   }
 ]

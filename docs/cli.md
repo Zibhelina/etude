@@ -322,6 +322,15 @@ These work on every command, before or after the command words.
   - [`pack new`](#pack-new) Write a starter pack with one valid item of each built-in type, to edit.
 - **anki**: Anki: bring an .apkg or .colpkg collection in (types, decks, items, cards, media, history)
   - [`anki import`](#anki-import) Import an Anki package: card types, presets, decks, items, cards, media and review history.
+- **market**: Market: browse, install and publish shared themes, decks and card types (`etude market` alone runs `list`)
+  - [`market list`](#market-list) Entries in the market, newest first, with whether each is installed here.
+  - [`market show`](#market-show) One entry: its details from the index and what it contains.
+  - [`market install`](#market-install) Add an entry to your collection. Installing again updates it; decks keep your scheduling.
+  - [`market installed`](#market-installed) What you installed from the market, with what each put in your collection.
+  - [`market forget`](#market-forget) Stop tracking an installed entry. What it added stays in your collection; delete that with `theme delete`, `deck delete` or `type delete`.
+  - [`market publish`](#market-publish) Share a theme, deck or card type: opens a pull request on the market repository with your GitHub account.
+  - [`market check`](#market-check) Validate market entry files without a database. Exits 4 on problems.
+  - [`market index`](#market-index) For the market repository: check every file under entries/ (each deck and type is dry-run imported) and write index.json.
 - **db**: The database file: path, backups, integrity, schema version
   - [`db path`](#db-path) Which database and media directory the CLI uses, and how it was chosen.
   - [`db backup`](#db-backup) Copy the database consistently (SQLite online backup; safe while the server runs).
@@ -3126,6 +3135,222 @@ Output: { format, dryRun, scheduling, types: { created, updated, unchanged }, pr
 etude anki import spanish.apkg --dry-run
 etude anki import spanish.apkg
 etude anki import backlog.colpkg --deck-prefix "Anki"
+```
+
+## market
+
+Market: browse, install and publish shared themes, decks and card types.
+
+### etude market list
+
+<a id="market-list"></a>
+
+Entries in the market, newest first, with whether each is installed here.
+
+```
+etude market list [flags]
+```
+
+*read-only*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--kind <theme\|deck\|type>` | string | theme, deck or type. |
+| `--query <WORDS>` | string | Only entries whose name, description, author or tags contain these words. Also `--q`. |
+| `--refresh` | boolean | Skip the one-minute cache of the index. |
+| `--url <URL>` | string | Read the market from this URL or folder instead of the configured one (`settings set market.url=…`). |
+
+Output: array of { id, kind, name, description, author, tags, version, updated, bytes, installed: installed|update|null }
+
+```sh
+etude market list
+etude market list --kind theme
+etude market list -q "japanese"
+```
+
+### etude market show
+
+<a id="market-show"></a>
+
+One entry: its details from the index and what it contains.
+
+```
+etude market show <id> [flags]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Entry id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--kind <theme\|deck\|type>` | string | theme, deck or type. |
+| `--url <URL>` | string | Read the market from this URL or folder instead of the configured one (`settings set market.url=…`). |
+| `--content` | boolean | Download the entry and print the whole file. |
+
+Output: { id, kind, name, …, summary, installed } or the entry file with --content
+
+```sh
+etude market show dusk-rose
+etude market show morse-code --content
+```
+
+### etude market install
+
+<a id="market-install"></a>
+
+Add an entry to your collection. Installing again updates it; decks keep your scheduling.
+
+A theme becomes a custom theme (it gets a new id if yours already uses the published one). A deck or card type is imported as a pack: items match by id, so reinstalling updates content and keeps review history. With --file, installs a local entry file instead of one from the market.
+
+```
+etude market install [id] [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `id` (optional) | Entry id (omit with --file). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--kind <theme\|deck\|type>` | string | theme, deck or type. |
+| `--url <URL>` | string | Read the market from this URL or folder instead of the configured one (`settings set market.url=…`). |
+| `--file <FILE>` | string | Install this entry file (`-` for stdin). |
+| `--use` | boolean | Themes: also select it. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { entry, result: created|updated|unchanged, ids, dryRun, report }
+
+```sh
+etude market install dusk-rose --use
+etude market install morse-code --dry-run
+etude market install --file my-deck.json
+```
+
+### etude market installed
+
+<a id="market-installed"></a>
+
+What you installed from the market, with what each put in your collection.
+
+```
+etude market installed
+```
+
+*read-only*
+
+Output: array of { id, kind, name, version, updated, at, ids }
+
+### etude market forget
+
+<a id="market-forget"></a>
+
+Stop tracking an installed entry. What it added stays in your collection; delete that with `theme delete`, `deck delete` or `type delete`.
+
+```
+etude market forget <id>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Entry id. |
+
+Output: { forgot: id }
+
+### etude market publish
+
+<a id="market-publish"></a>
+
+Share a theme, deck or card type: opens a pull request on the market repository with your GitHub account.
+
+Needs the GitHub CLI signed in (`gh auth login`). Etude forks the market repository if you can't push to it, adds the entry file on a new branch and opens a pull request; it shows up for everyone once it's merged. Decks are shared without your review history. With -o the entry file is written and nothing is sent. --dry-run builds and checks the file and prints where it would go.
+
+```
+etude market publish <ref> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `ref` | Theme id, deck name, or type id in your collection. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--kind <theme\|deck\|type>` | string | theme, deck or type. |
+| `--id <SLUG>` | string | Entry id in the market (default: from the name). |
+| `--name <TEXT>` | string | Name shown in the market (default: the theme's, deck's or type's). |
+| `--description <TEXT>` | string | A few lines on what it is and who it's for. |
+| `--author <NAME>` | string | How you want to be credited. Default: your GitHub login. |
+| `--tag <TAG> (repeatable)` | string | A tag (repeatable). |
+| `--version <TEXT>` | string | Version label; bump it when you publish an update. |
+| `--examples <N>` | number | Card types: how many of your items of the type go along as examples. Default `3`. |
+| `-o, --out <FILE>` | string | Write the entry file here instead of publishing. |
+| `--force` | boolean | Overwrite an existing --out file. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { url, number, branch, repo, fork, path, updated } or { written } with --out, or { dryRun, path, bytes, entry, manualUrl }
+
+```sh
+etude market publish my-theme --kind theme --tag dark
+etude market publish "Japanese::Kana" --kind deck --description "All 92 kana, both ways"
+etude market publish morse --kind type -o morse.json
+```
+
+### etude market check
+
+<a id="market-check"></a>
+
+Validate market entry files without a database. Exits 4 on problems.
+
+```
+etude market check <files...>
+```
+
+*read-only · no database*
+
+| Argument | Description |
+| --- | --- |
+| `files...` | Entry files. |
+
+Output: { ok, files: [{ file, ok, errors }] }
+
+```sh
+etude market check entries/themes/*.json
+```
+
+### etude market index
+
+<a id="market-index"></a>
+
+For the market repository: check every file under entries/ (each deck and type is dry-run imported) and write index.json.
+
+```
+etude market index <dir> [flags]
+```
+
+*writes · no database*
+
+| Argument | Description |
+| --- | --- |
+| `dir` | The market repository checkout. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--repo <OWNER/NAME>` | string | owner/name recorded in the index. |
+| `--check` | boolean | Only check; don't write index.json. |
+
+Output: { ok, entries, problems: [{ path, errors }], written? }
+
+```sh
+etude market index .
+etude market index . --check
 ```
 
 ## db

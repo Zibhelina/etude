@@ -69,7 +69,7 @@ const demos = DEMOS.map(({ id, label }) => {
   const def = loadTypeDir(typeDir(item.type));
   // Frames sit in /frames/ and resolve everything from the site root through <base>.
   // On the landing page the cards sit in a smaller window than in the app, so big boards shrink.
-  const fit = `<style>.ch-board svg{max-width:18rem;transition:max-width .5s cubic-bezier(.22,1,.36,1)}.uc-stage{max-width:280px}.gw-svg{max-width:330px}.pl-stage{max-width:290px}.co-swatch{height:5rem}.kb-oct{max-width:15rem}body[data-mode=result] .ch-board svg{max-width:13rem}@media (min-width:400px){.kb:not(.kb-nowrap){flex-wrap:nowrap;gap:0}.kb:not(.kb-nowrap) .kb-oct{flex-basis:0;max-width:15rem}}</style>`;
+  const fit = `<style>.ch-board svg{max-width:16rem;transition:max-width .5s cubic-bezier(.22,1,.36,1)}.uc-stage{max-width:250px}.gw-svg{max-width:280px}.pl-stage{max-width:260px}.co-swatch{height:3.2rem}.co-sliders{gap:.3rem}.co-slider input{height:2.2rem}.co-hex{font-size:1.7rem}.st-staff svg{max-width:17rem}.kb-oct{max-width:15rem}body[data-mode=result] .ch-board svg{max-width:12rem}@media (min-width:400px){.kb:not(.kb-nowrap){flex-wrap:nowrap;gap:0}.kb:not(.kb-nowrap) .kb-oct{flex-basis:0;max-width:15rem}}</style>`;
   const html = cardFrame(def, "__BASE__")
     .replace('<base href="__BASE__">', `<base href="../">${fontFace}`)
     .replace("</head>", `${fit}\n<script src="assets/demo-driver.js"></script>\n</head>`)
@@ -82,7 +82,8 @@ const demos = DEMOS.map(({ id, label }) => {
     label,
     type: def.id,
     name: def.name,
-    fields: { ...fieldDefaults(def), ...item.fields },
+    // The landing page shows the task, not the lesson: the explanatory note stays in the app.
+    fields: Object.fromEntries(Object.entries({ ...fieldDefaults(def), ...item.fields }).filter(([k]) => k !== "note")),
     prepare: def.prepare ?? null,
     grade: grader.code,
     private: def.fields.filter((f) => f.private).map((f) => f.name),

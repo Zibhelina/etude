@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 
 const [BASE, OUT, PAGE = "index.html", WIDTH = "1440", STEPS = "[]"] = process.argv.slice(2);
-const width = Number(WIDTH), mobile = width < 700, height = mobile ? 844 : 900;
+const width = Number(WIDTH), mobile = width < 700, height = Number(process.env.H ?? (mobile ? 844 : 900));
 mkdirSync(OUT, { recursive: true });
 const profile = `${process.env.TMPDIR ?? "/tmp"}/etude-site-check-${process.pid}`;
 const port = 9450 + (process.pid % 40);

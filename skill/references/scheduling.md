@@ -10,7 +10,7 @@ The value a deck uses is resolved in this order, each layer overriding the one b
 4. The deck's own overrides
 
 ```sh
-etude deck show "CMPT 371::Week 1"   # resolved, inherited, presetBase, own config, and where each value comes from
+etude deck show "Networks::Week 1"   # resolved, inherited, presetBase, own config, and where each value comes from
 ```
 
 | Goal | Command |
@@ -49,8 +49,8 @@ With `deadline` set, no card is scheduled past `deadline - deadlineMargin`. A ca
 
 ```sh
 etude preset create exam --name "Midterm" deadline=2026-10-23T16:30:00-07:00 desiredRetention=0.92 newPerDay=60
-etude deck preset "CMPT 371" exam --reschedule
-etude stats forecast --deck "CMPT 371"      # daily due counts up to the deadline
+etude deck preset "Networks" exam --reschedule
+etude stats forecast --deck "Networks"      # daily due counts up to the deadline
 etude preset unset exam deadline            # after the exam
 ```
 

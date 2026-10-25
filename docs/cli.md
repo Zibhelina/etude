@@ -31,7 +31,7 @@ Run it as `etude` (after `npm link` or through `bin/etude.js`) or straight from 
 - Text fields: `--front "..."`, `--front-file q.md`, or `--front -` to read stdin. This works for every field of every card type (`--prompt`, `--reference-file`, `--answer`, ...), because `item add` and `item edit` accept any field name as a flag.
 - Whole field objects: `--fields '{"prompt": "...", "answer": 4}'` or `--fields-file f.json` (or `-`).
 - `--set key=value` parses the value as JSON when it can (`--set answer=0.1`, `--set tags='["a","b"]'`, `--set shuffle=false`) and keeps it as text otherwise. `--unset key` removes a field.
-- Settings take `key=value` pairs the same way: `etude deck set "CMPT 371" desiredRetention=0.92 learningSteps="1m 10m"`.
+- Settings take `key=value` pairs the same way: `etude deck set "Networks" desiredRetention=0.92 learningSteps="1m 10m"`.
 - Bulk commands take ids as arguments, from `--query "<search>"`, or one per line on stdin with `-`: `etude card list "prop:lapses>=4" --ids | etude card suspend -`.
 - Only one input per command can read stdin.
 
@@ -42,14 +42,14 @@ Run it as `etude` (after `npm link` or through `bin/etude.js`) or straight from 
 - Archiving is the normal way to remove things (`item archive`, `deck archive`). Real deletes (`item delete`, `deck delete`, `preset delete`, `type delete`, `type reset`, `db restore`) refuse to run without `--yes`.
 - `etude db backup` takes a consistent copy of the database. Do it before any bulk change.
 
-**Ids.** Items have string ids you choose (`cmpt371.w1.dtrans-1`; lowercase, dots and dashes) or that are generated from the deck and content. Each item has one card per face, and cards have numeric ids (`cardId`). Commands that work on cards also accept an item id and expand it to that item's cards (`--face` picks one). Decks are named by their full path with `::` (`"CMPT 371::Week 1"`); presets and card types by a lowercase slug.
+**Ids.** Items have string ids you choose (`net.w1.dtrans-1`; lowercase, dots and dashes) or that are generated from the deck and content. Each item has one card per face, and cards have numeric ids (`cardId`). Commands that work on cards also accept an item id and expand it to that item's cards (`--face` picks one). Decks are named by their full path with `::` (`"Networks::Week 1"`); presets and card types by a lowercase slug.
 
 **Search language.** `--query`, `item list`, `card list` and `search` all take the same searches as the app's Browse page:
 
 ```text
-deck:"CMPT 371"        the deck and everything below it      (deck:cmpt* wildcards)
-tag:cmpt371::w1        the tag and every tag below it        (tag:exam::* wildcards)
-type:numeric  id:cmpt371.w1.*  source:KR
+deck:"Networks"       the deck and everything below it      (deck:net* wildcards)
+tag:net::w1           the tag and every tag below it        (tag:exam::* wildcards)
+type:numeric  id:net.w1.*  source:ch1
 is:new is:learning is:review is:relearning is:due is:suspended is:buried is:archived
 prop:lapses>=2  prop:reps=0  prop:stability<3  prop:difficulty>7  prop:due<=1 (days from now)
 rated:1  rated:7:1     reviewed in the last N days (optionally with that rating)
@@ -104,12 +104,12 @@ Importing again after editing updates items in place. See [packs.md](packs.md) f
 A `generator` field holds JavaScript that runs in a sandbox with a seeded `rng` and returns field values, so every review can show new numbers.
 
 ```sh
-etude item add --type numeric --deck "CMPT 371::Delay" --id cmpt371.dtrans-gen --unit ms \
+etude item add --type numeric --deck "Networks::Delay" --id net.dtrans-gen --unit ms \
   --prompt "A packet on a link. Transmission delay in ms?" --answer 1 \
   --generator 'const L = rng.pick([500,1000,1500]); const R = rng.pick([1,10,100]);
 const ms = Number((L*8/(R*1e6)*1e3).toPrecision(6));
 return { prompt: `A ${L}-byte packet on a ${R} Mbps link. Transmission delay in ms?`, answer: ms };'
-etude item variants cmpt371.dtrans-gen -n 10      # check the outputs and keys
+etude item variants net.dtrans-gen -n 10      # check the outputs and keys
 ```
 
 ### Write a custom card type
@@ -128,7 +128,7 @@ etude type import my-types/vocab
 ### Quiz someone in a chat
 
 ```sh
-etude study next --deck "CMPT 371"         # card.view is what to show; card.answerFormat says how to answer
+etude study next --deck "Networks"         # card.view is what to show; card.answerFormat says how to answer
 # ask the question from card.view, wait for the person's answer
 etude study submit 42 --seed 1234 --answer "their answer, verbatim"
 # show grade, key and feedback; then record the review with the suggested rating, or the one they pick
@@ -141,9 +141,9 @@ etude study rate 42 good --attempt 118
 
 ```sh
 etude preset create exam --name "Exam cram" deadline=2026-10-23T16:30:00-07:00 desiredRetention=0.92 newPerDay=50
-etude deck preset "CMPT 371" exam --reschedule
-etude deck show "CMPT 371"                 # resolved settings, and where each one comes from
-etude stats forecast --deck "CMPT 371"
+etude deck preset "Networks" exam --reschedule
+etude deck show "Networks"                 # resolved settings, and where each one comes from
+etude stats forecast --deck "Networks"
 ```
 
 `deck set` overrides one deck only; `deck set ... --to-preset` writes into its preset instead; `deck unset` resets a value to inherited.
@@ -151,8 +151,8 @@ etude stats forecast --deck "CMPT 371"
 ### Push some cards to tomorrow
 
 ```sh
-etude card due --query 'deck:"CMPT 371" tag:http is:due' --in 1d --dry-run
-etude card due --query 'deck:"CMPT 371" tag:http is:due' --in 1d
+etude card due --query 'deck:"Networks" tag:http is:due' --in 1d --dry-run
+etude card due --query 'deck:"Networks" tag:http is:due' --in 1d
 etude card bury 42 43                      # or just hide them until the next study day
 ```
 
@@ -161,10 +161,10 @@ etude card bury 42 43                      # or just hide them until the next st
 ### Find weak cards and suspend leeches
 
 ```sh
-etude stats tags --deck "CMPT 371"                        # recall per tag
-etude stats weak --deck "CMPT 371" --lapses 3             # cards forgotten 3+ times
-etude card list 'deck:"CMPT 371" prop:lapses>=4' --ids | etude card suspend -
-etude item tag --query 'deck:"CMPT 371" prop:lapses>=4' -t leech
+etude stats tags --deck "Networks"                        # recall per tag
+etude stats weak --deck "Networks" --lapses 3             # cards forgotten 3+ times
+etude card list 'deck:"Networks" prop:lapses>=4' --ids | etude card suspend -
+etude item tag --query 'deck:"Networks" prop:lapses>=4' -t leech
 ```
 
 ### Back up and export
@@ -172,7 +172,7 @@ etude item tag --query 'deck:"CMPT 371" prop:lapses>=4' -t leech
 ```sh
 etude db backup                                  # ~/.etude/backups/etude-<time>.db
 etude db check
-etude pack export --deck "CMPT 371" -o cmpt371.pack.json
+etude pack export --deck "Networks" -o net.pack.json
 etude pack export -o everything.pack.json
 ```
 
@@ -369,7 +369,7 @@ etude deck show <deck>
 | `deck` | Deck name; `::` separates levels. |
 
 ```sh
-etude deck show "CMPT 371::Week 1"
+etude deck show "Networks::Week 1"
 ```
 
 ### etude deck create
@@ -429,7 +429,7 @@ Output: { from, to, decks: [{ from, to }] }
 
 ```sh
 etude deck rename "Physics::Waves" "Physics::Oscillations and waves"
-etude deck move "Inbox::Networking" "CMPT 371::Networking"
+etude deck move "Inbox::Networking" "Networks::Transport"
 ```
 
 ### etude deck archive
@@ -539,8 +539,8 @@ etude deck description <deck> [text] [flags]
 Output: { deck, description }
 
 ```sh
-etude deck description "CMPT 371"
-etude deck description "CMPT 371" --file notes.md
+etude deck description "Networks"
+etude deck description "Networks" --file notes.md
 ```
 
 ### etude deck instructions
@@ -571,8 +571,8 @@ etude deck instructions <deck> [text] [flags]
 Output: { deck, instructions }
 
 ```sh
-etude deck instructions "CMPT 371"
-etude deck instructions "CMPT 371" --file notes.md
+etude deck instructions "Networks"
+etude deck instructions "Networks" --file notes.md
 ```
 
 ### etude deck set
@@ -603,9 +603,9 @@ etude deck set <deck> <pairs...> [flags]
 Output: { deck, config (own overrides), changed: { key: { from, to } } (effective values), rescheduled? }
 
 ```sh
-etude deck set "CMPT 371" deadline=2026-10-23T16:30:00-07:00 desiredRetention=0.92 --reschedule
+etude deck set "Networks" deadline=2026-10-23T16:30:00-07:00 desiredRetention=0.92 --reschedule
 etude deck set "Spanish" newPerDay=30 learningSteps="1m 10m 1h"
-etude deck set "CMPT 371" newPerDay=40 --to-preset
+etude deck set "Networks" newPerDay=40 --to-preset
 ```
 
 ### etude deck unset
@@ -634,8 +634,8 @@ etude deck unset <deck> [keys...] [flags]
 Output: { deck, removed, config, changed }
 
 ```sh
-etude deck unset "CMPT 371" deadline
-etude deck unset "CMPT 371" --all
+etude deck unset "Networks" deadline
+etude deck unset "Networks" --all
 ```
 
 ### etude deck preset
@@ -664,8 +664,8 @@ etude deck preset <deck> <preset> [flags]
 Output: { deck, presetId, changed }
 
 ```sh
-etude deck preset "CMPT 371" exam
-etude deck preset "CMPT 371" none
+etude deck preset "Networks" exam
+etude deck preset "Networks" none
 ```
 
 ## preset
@@ -734,7 +734,7 @@ Output: { preset, applied? }
 
 ```sh
 etude preset create exam --name "Exam cram" desiredRetention=0.92 deadline=2026-10-23T16:30-07:00 newPerDay=50
-etude preset create cmpt371 --from-deck "CMPT 371" --apply
+etude preset create net --from-deck "Networks" --apply
 ```
 
 ### etude preset set
@@ -911,7 +911,7 @@ etude item list [query...] [flags]
 Output: { total, rows: [{ id, type, deck, tags, title, source, cards, suspended, archived, generated, updated }] }
 
 ```sh
-etude item list deck:"CMPT 371" tag:delay
+etude item list deck:"Networks" tag:delay
 etude item list type:numeric --ids | etude item tag - -t numeric
 ```
 
@@ -969,7 +969,7 @@ Output: { result: created|updated|unchanged, item: { id, type, deck, tags, title
 
 ```sh
 etude item add --deck "Spanish" --front "el perro" --back "the dog" -t vocab
-etude item add --type numeric --deck "CMPT 371::Delay" --id cmpt371.dtrans-1 --prompt "1500 B on 10 Mbps: $d_{trans}$ in ms?" --answer 1.2 --unit ms
+etude item add --type numeric --deck "Networks::Delay" --id net.dtrans-1 --prompt "1500 B on 10 Mbps: $d_{trans}$ in ms?" --answer 1.2 --unit ms
 etude item add --type mcq --deck Quiz --fields-file q.json
 cat prompt.md | etude item add --type free --deck Essays --prompt - --reference-file ref.md
 ```
@@ -1015,7 +1015,7 @@ Any other `--<field> VALUE` or `--<field>-file PATH` sets that field of the item
 Output: { result, changed: [keys], item }
 
 ```sh
-etude item edit cmpt371.dtrans-1 --set answer=1.2 --set unit=ms
+etude item edit net.dtrans-1 --set answer=1.2 --set unit=ms
 etude item edit sp.perro --back-file back.md --add-tag review
 etude item edit q1 --set tags='["a","b"]' --unset extra
 ```
@@ -1046,7 +1046,7 @@ etude item move [ids...] [flags]
 Output: { count, ids, deck }
 
 ```sh
-etude item move q1 q2 --to "CMPT 371::Review"
+etude item move q1 q2 --to "Networks::Review"
 etude item move --query "tag:hard" --to "Hard ones"
 ```
 
@@ -1222,7 +1222,7 @@ etude item duplicate <id> [flags]
 Output: { id, from, item }
 
 ```sh
-etude item duplicate cmpt371.dtrans-1
+etude item duplicate net.dtrans-1
 etude item duplicate q1 --id q1-reverse --to Other
 ```
 
@@ -1253,7 +1253,7 @@ etude item preview <id> [flags]
 Output: { itemId, face, seed, view, key?, fields? }
 
 ```sh
-etude item preview cmpt371.dtrans-1 --seed 7
+etude item preview net.dtrans-1 --seed 7
 etude item preview q1 --with-key
 ```
 
@@ -1282,7 +1282,7 @@ etude item variants <id> [flags]
 Output: { itemId, generated, distinct, variants: [{ seed, view, key }] }
 
 ```sh
-etude item variants cmpt371.dtrans-1 -n 10
+etude item variants net.dtrans-1 -n 10
 ```
 
 ## card
@@ -1313,7 +1313,7 @@ Output: { cardId, itemId, face, deck, state, stateName, due, stability, difficul
 
 ```sh
 etude card show 42
-etude card show cmpt371.dtrans-1
+etude card show net.dtrans-1
 ```
 
 ### etude card list
@@ -1557,7 +1557,7 @@ Output: { count, due, cards }
 
 ```sh
 etude card due 42 --date 2026-10-22
-etude card due --query "deck:\"CMPT 371\" is:due" --in 1d
+etude card due --query "deck:\"Networks\" is:due" --in 1d
 etude card due 42 --now
 ```
 
@@ -1582,7 +1582,7 @@ etude card reschedule [flags]
 Output: { rescheduled: number }
 
 ```sh
-etude card reschedule --deck "CMPT 371"
+etude card reschedule --deck "Networks"
 ```
 
 ## tag
@@ -1649,7 +1649,7 @@ etude tag rename <from> <to> [flags]
 Output: { from, to, tags: [{ from, to }] }
 
 ```sh
-etude tag rename net::delay cmpt371::delay
+etude tag rename delay net::delay
 ```
 
 ### etude tag instructions
@@ -1678,7 +1678,7 @@ etude tag instructions <tag> [text] [flags]
 Output: { tag, instructions }
 
 ```sh
-etude tag instructions cmpt371::delay "Accept ms or s when the conversion is right."
+etude tag instructions net::delay "Accept ms or s when the conversion is right."
 ```
 
 ### etude tag description
@@ -1707,7 +1707,7 @@ etude tag description <tag> [text] [flags]
 Output: { tag, description }
 
 ```sh
-etude tag description cmpt371::delay
+etude tag description net::delay
 ```
 
 ### etude tag items
@@ -2082,7 +2082,7 @@ etude study counts [flags]
 Output: { new, learning, learningSoon, review, doneToday, nextDue }
 
 ```sh
-etude study counts --deck "CMPT 371"
+etude study counts --deck "Networks"
 ```
 
 ### etude study next
@@ -2108,7 +2108,7 @@ etude study next [flags]
 Output: { card: { cardId, itemId, face, seed, type, deck, tags, state, title, grader, view, answerFormat, intervals } | null, counts }
 
 ```sh
-etude study next --deck "CMPT 371"
+etude study next --deck "Networks"
 etude study next --query "tag:delay is:due"
 ```
 
@@ -2301,7 +2301,7 @@ etude stats overview [flags]
 Output: the engine's stats object (cards, retention, trueRetention, recall, days, forecast, overdue, tags, tagTree, today, ratings, verdicts, streak, window, deadline)
 
 ```sh
-etude stats --deck "CMPT 371"
+etude stats --deck "Networks"
 etude stats overview --days 90
 ```
 
@@ -2345,7 +2345,7 @@ etude stats tags [flags]
 Output: array of { tag, depth, cards, seen, recall }
 
 ```sh
-etude stats tags --deck "CMPT 371"
+etude stats tags --deck "Networks"
 ```
 
 ### etude stats weak
@@ -2372,7 +2372,7 @@ etude stats weak [flags]
 Output: { total, rows: [card rows as in `card list`] }
 
 ```sh
-etude stats weak --deck "CMPT 371" --lapses 3
+etude stats weak --deck "Networks" --lapses 3
 ```
 
 ## settings
@@ -2759,7 +2759,7 @@ etude pack export [flags]
 Output: the pack, or { written, items, decks, types } with --out
 
 ```sh
-etude pack export --deck "CMPT 371" -o cmpt371.pack.json
+etude pack export --deck "Networks" -o net.pack.json
 etude pack export > everything.pack.json
 ```
 
@@ -2976,7 +2976,7 @@ etude search [query...] [flags]
 Output: { total, rows: [...] }
 
 ```sh
-etude search deck:"CMPT 371" is:due
+etude search deck:"Networks" is:due
 etude search "tag:delay prop:lapses>=2" --order lapses
 ```
 

@@ -22,7 +22,7 @@ command({
   summary: "A card's scheduling: state, due, stability, difficulty, recall probability now, and what each rating would do.",
   args: [{ name: "ref", description: "Card id, or an item id with a single card (or --face).", required: true }],
   flags: [FACE_FLAG],
-  examples: ["etude card show 42", "etude card show cmpt371.dtrans-1"],
+  examples: ["etude card show 42", "etude card show net.dtrans-1"],
   output: "{ cardId, itemId, face, deck, state, stateName, due, stability, difficulty, reps, lapses, lastReview, suspended, buriedUntil, retrievability, intervals, deadline }",
   run(ctx) {
     const s = ctx.e.cardSchedule(oneCard(ctx, ctx.args.ref));
@@ -120,7 +120,7 @@ command({
   flags: [...BULK, ...MOMENT_FLAGS],
   writes: true,
   dryRun: true,
-  examples: ["etude card due 42 --date 2026-10-22", 'etude card due --query "deck:\\"CMPT 371\\" is:due" --in 1d', "etude card due 42 --now"],
+  examples: ["etude card due 42 --date 2026-10-22", 'etude card due --query "deck:\\"Networks\\" is:due" --in 1d', "etude card due 42 --now"],
   output: "{ count, due, cards }",
   run(ctx) {
     const e = ctx.e;
@@ -137,7 +137,7 @@ command({
   flags: [DECK_FLAG, QUERY_FLAG],
   writes: true,
   dryRun: true,
-  examples: ['etude card reschedule --deck "CMPT 371"'],
+  examples: ['etude card reschedule --deck "Networks"'],
   output: "{ rescheduled: number }",
   run(ctx) {
     return ctx.e.reschedule(scopeOf(ctx.flags));

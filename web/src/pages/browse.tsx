@@ -75,7 +75,7 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
         <div className="flex flex-col gap-2 border-b p-3">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-            <Input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder='deck:"CMPT 371" tag:exam::core is:due' className="pl-8 font-mono text-[13px]" />
+            <Input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder='deck:"Networks" tag:exam::core is:due' className="pl-8 font-mono text-[13px]" />
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <CheckBox checked={allChecked} label="Select all" onClick={() => setChecked(allChecked ? new Set() : new Set(items.map((r) => r.itemId)))} />

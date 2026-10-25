@@ -86,7 +86,7 @@ command({
   name: "study counts",
   summary: "Today's queue for a scope: new, learning, review, done today, next due.",
   flags: [DECK_FLAG, QUERY_FLAG],
-  examples: ['etude study counts --deck "CMPT 371"'],
+  examples: ['etude study counts --deck "Networks"'],
   output: "{ new, learning, learningSoon, review, doneToday, nextDue }",
   run: (ctx) => ctx.e.counts(scopeOf(ctx.flags)),
 });
@@ -97,7 +97,7 @@ command({
   description:
     "Use `view` to present the card (render its markdown for the learner). Keep `cardId` and `seed`: submit with them so the answer is graded against exactly this variant. Respects daily limits and the preset's ordering; `--exclude` skips the card just answered.",
   flags: [DECK_FLAG, QUERY_FLAG, { name: "exclude", type: "number", description: "Card id to avoid repeating right away." }],
-  examples: ['etude study next --deck "CMPT 371"', 'etude study next --query "tag:delay is:due"'],
+  examples: ['etude study next --deck "Networks"', 'etude study next --query "tag:delay is:due"'],
   output: "{ card: { cardId, itemId, face, seed, type, deck, tags, state, title, grader, view, answerFormat, intervals } | null, counts }",
   run(ctx) {
     const r = ctx.e.next(scopeOf(ctx.flags), { exclude: ctx.flags.exclude });

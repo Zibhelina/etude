@@ -36,7 +36,7 @@ command({
     { name: "force", type: "boolean", description: "Overwrite an existing --out file." },
   ],
   writes: true,
-  examples: ['etude pack export --deck "CMPT 371" -o cmpt371.pack.json', "etude pack export > everything.pack.json"],
+  examples: ['etude pack export --deck "Networks" -o net.pack.json', "etude pack export > everything.pack.json"],
   output: "the pack, or { written, items, decks, types } with --out",
   run(ctx) {
     const pack = ctx.e.exportPack({ deck: ctx.flags.deck, query: ctx.flags.query, name: ctx.flags.name });

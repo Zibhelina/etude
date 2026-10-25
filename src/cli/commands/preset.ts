@@ -45,7 +45,7 @@ command({
   ],
   writes: true,
   dryRun: true,
-  examples: ["etude preset create exam --name \"Exam cram\" desiredRetention=0.92 deadline=2026-10-23T16:30-07:00 newPerDay=50", 'etude preset create cmpt371 --from-deck "CMPT 371" --apply'],
+  examples: ["etude preset create exam --name \"Exam cram\" desiredRetention=0.92 deadline=2026-10-23T16:30-07:00 newPerDay=50", 'etude preset create net --from-deck "Networks" --apply'],
   output: "{ preset, applied? }",
   run(ctx) {
     const e = ctx.e;

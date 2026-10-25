@@ -5,10 +5,10 @@ A pack is one JSON file that carries decks, presets, card types and items. It is
 ```json
 {
   "etude": "pack/1",
-  "name": "CMPT 371 Midterm",
+  "name": "Networks Midterm",
   "description": "Optional markdown.",
   "presets": [{ "id": "exam", "name": "Exam cram", "config": { "desiredRetention": 0.92, "deadline": "2026-10-23T16:30:00-07:00" } }],
-  "decks": [{ "name": "CMPT 371", "preset": "exam", "description": "", "instructions": "Grading notes the AI grader reads for every item in this deck." }],
+  "decks": [{ "name": "Networks", "preset": "exam", "description": "", "instructions": "Grading notes the AI grader reads for every item in this deck." }],
   "types": [],
   "items": []
 }
@@ -20,10 +20,10 @@ Every key except `etude` is optional. Decks named by items but not listed are cr
 
 ```json
 {
-  "id": "cmpt371.w1.dtrans-1",
+  "id": "net.w1.dtrans-1",
   "type": "numeric",
-  "deck": "CMPT 371::1 Introduction",
-  "tags": ["cmpt371::delay", "exam::core"],
+  "deck": "Networks::1 Introduction",
+  "tags": ["net::delay", "exam::core"],
   "fields": { "prompt": "...", "answer": 0.1, "unit": "ms" },
   "source": "Intro slides p. 27",
   "notes": ""
@@ -33,7 +33,7 @@ Every key except `etude` is optional. Decks named by items but not listed are cr
 - `id`: required, stable, unique across all packs. Use lowercase dotted slugs (`course.unit.topic-n`). Never reuse an id for different content.
 - `type`: a built-in type id (below) or a type defined in the pack's `types`.
 - `deck`: full deck path; `::` separates levels.
-- `tags`: hierarchical with `::`. Searching `tag:cmpt371` matches every tag below it.
+- `tags`: hierarchical with `::`. Searching `tag:net` matches every tag below it.
 - `fields`: the type's fields. Markdown fields support GitHub markdown, fenced code (highlighted for any language named after the fence), tables, images and KaTeX math (`$inline$`, `$$display$$`).
 - `source`: where the content comes from (shown after answering).
 

@@ -96,7 +96,7 @@ command({
     OFFSET_FLAG,
     { name: "ids", type: "boolean", description: "Print only item ids, one per line (handy for piping into bulk commands)." },
   ],
-  examples: ['etude item list deck:"CMPT 371" tag:delay', "etude item list type:numeric --ids | etude item tag - -t numeric"],
+  examples: ['etude item list deck:"Networks" tag:delay', "etude item list type:numeric --ids | etude item tag - -t numeric"],
   output: "{ total, rows: [{ id, type, deck, tags, title, source, cards, suspended, archived, generated, updated }] }",
   run(ctx) {
     const q = [queryOf({ deck: ctx.flags.deck }), ctx.args.query.join(" ")].filter(Boolean).join(" ");
@@ -138,7 +138,7 @@ command({
   dryRun: true,
   examples: [
     'etude item add --deck "Spanish" --front "el perro" --back "the dog" -t vocab',
-    'etude item add --type numeric --deck "CMPT 371::Delay" --id cmpt371.dtrans-1 --prompt "1500 B on 10 Mbps: $d_{trans}$ in ms?" --answer 1.2 --unit ms',
+    'etude item add --type numeric --deck "Networks::Delay" --id net.dtrans-1 --prompt "1500 B on 10 Mbps: $d_{trans}$ in ms?" --answer 1.2 --unit ms',
     'etude item add --type mcq --deck Quiz --fields-file q.json',
     'cat prompt.md | etude item add --type free --deck Essays --prompt - --reference-file ref.md',
   ],
@@ -189,7 +189,7 @@ command({
   dynamicFlags: true,
   writes: true,
   dryRun: true,
-  examples: ["etude item edit cmpt371.dtrans-1 --set answer=1.2 --set unit=ms", "etude item edit sp.perro --back-file back.md --add-tag review", 'etude item edit q1 --set tags=\'["a","b"]\' --unset extra'],
+  examples: ["etude item edit net.dtrans-1 --set answer=1.2 --set unit=ms", "etude item edit sp.perro --back-file back.md --add-tag review", 'etude item edit q1 --set tags=\'["a","b"]\' --unset extra'],
   output: "{ result, changed: [keys], item }",
   run(ctx) {
     const e = ctx.e;
@@ -232,7 +232,7 @@ command({
   flags: [{ name: "to", type: "string", description: "Destination deck (created if missing).", placeholder: "DECK" }, ...BULK],
   writes: true,
   dryRun: true,
-  examples: ['etude item move q1 q2 --to "CMPT 371::Review"', 'etude item move --query "tag:hard" --to "Hard ones"'],
+  examples: ['etude item move q1 q2 --to "Networks::Review"', 'etude item move --query "tag:hard" --to "Hard ones"'],
   output: "{ count, ids, deck }",
   run(ctx) {
     if (!ctx.flags.to) throw new CliError("--to <deck> is required");
@@ -308,7 +308,7 @@ command({
   ],
   writes: true,
   dryRun: true,
-  examples: ["etude item duplicate cmpt371.dtrans-1", "etude item duplicate q1 --id q1-reverse --to Other"],
+  examples: ["etude item duplicate net.dtrans-1", "etude item duplicate q1 --id q1-reverse --to Other"],
   output: "{ id, from, item }",
   run(ctx) {
     const e = ctx.e;
@@ -329,7 +329,7 @@ command({
     FACE_FLAG,
     { name: "with-key", type: "boolean", description: "Include the private answer key and the generated fields. Don't show these to a learner before they answer." },
   ],
-  examples: ["etude item preview cmpt371.dtrans-1 --seed 7", "etude item preview q1 --with-key"],
+  examples: ["etude item preview net.dtrans-1 --seed 7", "etude item preview q1 --with-key"],
   output: "{ itemId, face, seed, view, key?, fields? }",
   run(ctx) {
     const e = ctx.e;
@@ -349,7 +349,7 @@ command({
     { name: "seed", type: "number", description: "First seed.", default: 1 },
     FACE_FLAG,
   ],
-  examples: ["etude item variants cmpt371.dtrans-1 -n 10"],
+  examples: ["etude item variants net.dtrans-1 -n 10"],
   output: "{ itemId, generated, distinct, variants: [{ seed, view, key }] }",
   run(ctx) {
     const e = ctx.e;

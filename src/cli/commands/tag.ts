@@ -43,7 +43,7 @@ command({
   ],
   writes: true,
   dryRun: true,
-  examples: ["etude tag rename net::delay cmpt371::delay"],
+  examples: ["etude tag rename delay net::delay"],
   output: "{ from, to, tags: [{ from, to }] }",
   run(ctx) {
     const from = normTag(ctx.args.from), to = normTag(ctx.args.to);
@@ -79,7 +79,7 @@ for (const field of ["instructions", "description"] as const) {
     ],
     writes: true,
     dryRun: true,
-    examples: [`etude tag ${field} cmpt371::delay${field === "instructions" ? ' "Accept ms or s when the conversion is right."' : ""}`],
+    examples: [`etude tag ${field} net::delay${field === "instructions" ? ' "Accept ms or s when the conversion is right."' : ""}`],
     output: `{ tag, ${field} }`,
     run(ctx) {
       const t = normTag(ctx.args.tag);

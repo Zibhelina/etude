@@ -10,7 +10,7 @@ command({
   name: "stats overview",
   summary: "Everything the Stats page shows for a scope: card states, retention, recall, daily activity, forecast, ratings, verdicts, streak, deadline.",
   flags: [...SCOPE, DAYS],
-  examples: ['etude stats --deck "CMPT 371"', "etude stats overview --days 90"],
+  examples: ['etude stats --deck "Networks"', "etude stats overview --days 90"],
   output: "the engine's stats object (cards, retention, trueRetention, recall, days, forecast, overdue, tags, tagTree, today, ratings, verdicts, streak, window, deadline)",
   run: (ctx) => ctx.e.stats(scopeOf(ctx.flags), ctx.flags.days),
 });
@@ -30,7 +30,7 @@ command({
   name: "stats tags",
   summary: "Predicted recall per tag (with parent tags), weakest first.",
   flags: [...SCOPE, { name: "min-cards", type: "number", description: "Skip tags with fewer seen cards.", default: 1 }],
-  examples: ['etude stats tags --deck "CMPT 371"'],
+  examples: ['etude stats tags --deck "Networks"'],
   output: "array of { tag, depth, cards, seen, recall }",
   run(ctx) {
     const s = ctx.e.stats(scopeOf(ctx.flags)) as any;
@@ -44,7 +44,7 @@ command({
   summary: "Cards most likely forgotten or most often lapsed: candidates for rewording, splitting or suspending.",
   description: "Sorted by lapses, then by recall probability now. Leeches are cards with at least --lapses lapses.",
   flags: [...SCOPE, { name: "lapses", type: "number", description: "Minimum lapses to count as weak.", default: 2 }, { name: "limit", type: "number", description: "Rows.", default: 20 }],
-  examples: ['etude stats weak --deck "CMPT 371" --lapses 3'],
+  examples: ['etude stats weak --deck "Networks" --lapses 3'],
   output: "{ total, rows: [card rows as in `card list`] }",
   run(ctx) {
     const q = [ctx.flags.deck ? `deck:"${ctx.flags.deck}"` : "", ctx.flags.query ? `(${ctx.flags.query})` : "", `prop:lapses>=${ctx.flags.lapses}`, "-is:suspended"].filter(Boolean).join(" ");

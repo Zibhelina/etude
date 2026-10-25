@@ -55,18 +55,6 @@ for (const b of $$("[data-copy]")) {
   });
 }
 
-for (const el of $$("[data-count]")) {
-  whenVisible(el, () => {
-    const to = Number(el.dataset.count), t0 = performance.now(), dur = reduced ? 1 : 1100;
-    const tick = (t) => {
-      const k = Math.min(1, (t - t0) / dur);
-      el.textContent = String(Math.round(to * (1 - Math.pow(1 - k, 3))));
-      if (k < 1) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  });
-}
-
 fetch("https://api.github.com/repos/Zibhelina/etude")
   .then((r) => (r.ok ? r.json() : null))
   .then((d) => {
@@ -403,11 +391,12 @@ if (ai) {
       const verdictEl = $("[data-verdict]", ai), scoreEl = $("[data-score]", ai), meter = $("[data-meter]", ai), fb = $("[data-feedback]", ai);
       await sleep(300);
       verdictEl.textContent = VERDICT[s.verdict] ?? s.verdict;
+      verdictEl.classList.add("on");
       scoreEl.textContent = `${Math.round(s.score * 100)}%`;
       meter.style.width = `${Math.round(s.score * 100)}%`;
       await sleep(700);
       // Type the feedback out, keeping math and bold as whole pieces.
-      const parts = s.feedback.split(/(\$[^$\n]+?\$|\*\*[^*]+\*\*)/).filter(Boolean);
+      const parts = s.feedback.replace(/"([^"]+)"/g, "$1").split(/(\$[^$\n]+?\$|\*\*[^*]+\*\*)/).filter(Boolean);
       fb.classList.add("caret");
       for (const p of parts) {
         if (p.startsWith("$") || p.startsWith("**")) { fb.insertAdjacentHTML("beforeend", md(p)); await sleep(reduced ? 0 : 60); continue; }
@@ -425,25 +414,22 @@ if (ai) {
 const gen = $("#generators");
 if (gen) {
   $("[data-gen-code]", gen).innerHTML = GENERATOR.html;
-  const stack = $("[data-variants]", gen), seedEl = $("[data-seed]", gen), dots = $("[data-dots]", gen);
-  dots.innerHTML = "<i></i>".repeat(6);
+  const list = $("[data-variants]", gen);
   const vis = visibility(gen);
-  let n = 0, timer = null;
+  let timer = null;
+  // Each roll is a fresh seed, the way a review gets one; the newest variant sits on top.
   const roll = () => {
-    const seed = ((n + 1) * 2654435761) >>> 0;
+    const seed = (Math.random() * 2 ** 32) >>> 0;
     const out = runScript(GENERATOR.code, ["rng"], {}, seed);
-    const el = document.createElement("div");
-    el.className = "variant pre";
-    el.innerHTML = `<div class="q">${md(out.prompt)}</div><div class="a">Accepted: ${tex(`f'(x) = ${out.answers[0]}`)} <span style="opacity:.7">or any equivalent form</span></div>`;
-    for (const old of $$(".variant", stack)) { old.classList.add("out"); setTimeout(() => old.remove(), 700); }
-    stack.appendChild(el);
+    const el = document.createElement("li");
+    el.className = "pre";
+    el.innerHTML = `<div class="q">${md(out.prompt)}</div><div class="s">${seed}</div><div class="a">accepts ${tex(`f'(x) = ${out.answers[0]}`)} or any equivalent form</div>`;
+    list.prepend(el);
     requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove("pre")));
-    seedEl.textContent = String(seed);
-    $$("i", dots).forEach((d, i) => d.classList.toggle("on", i === n % 6));
-    n++;
+    while (list.children.length > 4) list.lastElementChild.remove();
   };
-  const schedule = () => { clearInterval(timer); timer = setInterval(() => vis.on && !reduced && roll(), 3400); };
-  roll();
+  const schedule = () => { clearInterval(timer); timer = setInterval(() => vis.on && !reduced && roll(), 3800); };
+  for (let i = 0; i < 4; i++) roll();
   schedule();
   $("[data-roll]", gen).addEventListener("click", () => { roll(); schedule(); });
 }
@@ -479,42 +465,57 @@ if (exam) {
       }
       return { reviews, examAt, recall: f.get_retrievability(card, new Date(examAt), false) };
     }
-    const slider = $("#days", exam);
-    const trackOff = $("[data-track-off]", exam), trackOn = $("[data-track-on]", exam), axis = $("[data-axis]", exam);
-    const pad = 0.03;
-    function lane(track, run, D) {
-      const W = 1000, Hh = 100, span = D * DAY;
-      const frac = (t) => pad + ((t - t0) / span) * (1 - 2 * pad);
-      const x = (t) => frac(t) * W;
-      const y = (r) => Hh - 10 - ((Math.max(0.7, r) - 0.7) / 0.3) * (Hh - 26);
-      const R = (card, t) => Number(f.get_retrievability(card, new Date(t), false));
-      let d = "";
-      const pts = 300;
-      for (let i = 0; i <= pts; i++) {
-        const t = run.reviews[0].t + ((run.examAt - run.reviews[0].t) * i) / pts;
-        const last = [...run.reviews].reverse().find((r) => r.t <= t);
-        d += `${d ? "L" : "M"}${x(t).toFixed(1)},${y(R(last.card, t)).toFixed(1)}`;
-      }
-      const color = track.classList.contains("with") ? "var(--highlight)" : "var(--muted-foreground)";
-      const area = `${d}L${x(run.examAt).toFixed(1)},${Hh}L${x(run.reviews[0].t).toFixed(1)},${Hh}Z`;
-      const days = new Map();
-      for (const r of run.reviews) days.set(Math.round((r.t - t0) / DAY), r);
-      track.innerHTML =
-        `<svg class="curve" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none"><path class="area" d="${area}" fill="${color}" opacity=".08"/><path d="${d}" stroke="${color}" opacity=".9"/></svg>` +
-        [...days.values()].map((r) => `<span class="dot" style="left:${frac(r.t) * 100}%;top:${(y(R(r.card, r.t + 1000)) / Hh) * 100}%"></span>`).join("") +
-        `<span class="deadline" style="left:${frac(run.examAt) * 100}%"></span>`;
-      return [...days.keys()];
+    const slider = $("#days", exam), chart = $("[data-chart]", exam);
+    const R = (card, t) => Number(f.get_retrievability(card, new Date(t), false));
+    const pct = (r) => `${(Math.floor(Math.min(r, 0.999) * 1000) / 10).toFixed(1)}%`;
+    // One chart, both schedules. It's drawn at the chart's real pixel width so the labels stay readable.
+    function draw(D, off, on) {
+      const W = Math.max(300, Math.round(chart.clientWidth || 800)), small = W < 560;
+      const H = small ? 230 : 300, L = small ? 38 : 48, Rt = small ? 10 : 16, T = 22, B = 40;
+      const span = D * DAY;
+      // The y range follows the curves, so the dips are visible instead of a flat line near the top.
+      let lo = 1;
+      for (const run of [off, on]) for (let i = 0; i <= 120; i++) { const t = run.reviews[0].t + ((run.examAt - run.reviews[0].t) * i) / 120; lo = Math.min(lo, R(run.reviews.findLast((r) => r.t <= t).card, t)); }
+      const ystep = lo > 0.85 ? 0.02 : lo > 0.7 ? 0.05 : 0.1, ymin = Math.max(0, Math.floor((lo - 0.01) / ystep) * ystep);
+      const x = (t) => L + ((t - t0) / span) * (W - L - Rt);
+      const y = (r) => T + (1 - (Math.max(ymin, r) - ymin) / (1 - ymin)) * (H - T - B);
+      const curve = (run) => {
+        let d = "";
+        for (let i = 0; i <= 360; i++) {
+          const t = run.reviews[0].t + ((run.examAt - run.reviews[0].t) * i) / 360;
+          const last = run.reviews.findLast((r) => r.t <= t);
+          d += `${d ? "L" : "M"}${x(t).toFixed(1)},${y(R(last.card, t)).toFixed(1)}`;
+        }
+        return d;
+      };
+      const dots = (run, cls) => {
+        const days = new Map();
+        for (const r of run.reviews) days.set(Math.round((r.t - t0) / DAY), r);
+        return [...days.values()].map((r) => `<circle class="${cls}" cx="${x(r.t).toFixed(1)}" cy="${y(R(r.card, r.t + 1000)).toFixed(1)}" r="${cls === "d-on" ? 4 : 3.6}"/>`).join("");
+      };
+      let g = "";
+      for (let r = ymin; r <= 1.0001; r += ystep) g += `<line class="grid" x1="${L}" x2="${W - Rt}" y1="${y(r)}" y2="${y(r)}"/><text x="${L - 8}" y="${y(r) + 4}" text-anchor="end">${Math.round(r * 100)}%</text>`;
+      const step = D <= 14 ? 2 : D <= 30 ? 5 : 10;
+      const ex = x(on.examAt);
+      for (let d = 0; d < D; d += step) if (ex - x(t0 + d * DAY) > 34) g += `<text x="${x(t0 + d * DAY)}" y="${H - 8}" text-anchor="middle">${d === 0 ? "day 0" : d}</text>`;
+      g += `<line class="examline" x1="${ex}" x2="${ex}" y1="${T}" y2="${H - B}"/><text class="serif" x="${ex}" y="${H - 8}" text-anchor="middle" style="fill:var(--foreground)">exam</text>`;
+      // The recall the deadline buys back, shaded between the two curves' final values.
+      g += `<path class="c-on" d="${curve(on)}"/><path class="c-off" d="${curve(off)}"/>` + dots(on, "d-on") + dots(off, "d-off");
+      chart.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Predicted recall over time, with and without a deadline">${g}</svg>`;
     }
-    const pct = (r) => `${(Math.floor(r * 1000) / 10).toFixed(1)}%`;
+    let last = null;
     function render() {
       const D = Number(slider.value);
       slider.style.setProperty("--p", `${((D - Number(slider.min)) / (Number(slider.max) - Number(slider.min))) * 100}%`);
       $("[data-days]", exam).textContent = String(D);
       const off = study(D, false, 0), on = study(D, true, 0);
-      const dOff = lane(trackOff, off, D), dOn = lane(trackOn, on, D);
+      last = [D, off, on];
+      draw(D, off, on);
+      const count = (run) => new Set(run.reviews.map((r) => Math.round((r.t - t0) / DAY))).size;
       const nextDay = Math.ceil((off.reviews.at(-1).card.due.getTime() - t0) / DAY);
-      $("[data-last-off]", exam).innerHTML = `<b>${dOff.length}</b> reviews · next one due day ${nextDay}${nextDay > D ? `, <span class="after">after the exam</span>` : ""} · recall ${pct(off.recall)}`;
-      $("[data-last-on]", exam).innerHTML = `<b>${dOn.length}</b> reviews · last on day ${dOn.at(-1)} · recall ${pct(on.recall)}`;
+      const lastOn = Math.max(...on.reviews.map((r) => Math.round((r.t - t0) / DAY)));
+      $("[data-last-off]", exam).innerHTML = `${count(off)} reviews, then the next is due on day ${nextDay}${nextDay > D ? `, <span class="after">after the exam</span>` : ""}.`;
+      $("[data-last-on]", exam).innerHTML = `${count(on)} reviews, the last on day ${lastOn}, so it's fresh on the day.`;
       // A deck: 40 cards learned over the first 60% of the time, all answered Good.
       let rOff = 0, rOn = 0;
       for (let i = 0; i < 40; i++) {
@@ -524,13 +525,8 @@ if (exam) {
       }
       $("[data-recall-off]", exam).textContent = pct(rOff / 40);
       $("[data-recall-on]", exam).textContent = pct(rOn / 40);
-      const step = D <= 14 ? 2 : D <= 30 ? 5 : 10;
-      let ticks = "";
-      const examFrac = pad + ((on.examAt - t0) / (D * DAY)) * (1 - 2 * pad);
-      for (let d = 0; d <= D; d += step) if (Math.abs(pad + (d / D) * (1 - 2 * pad) - examFrac) > 0.05) ticks += `<span style="left:${(pad + (d / D) * (1 - 2 * pad)) * 100}%">${d === 0 ? "day 0" : d}</span>`;
-      ticks += `<span class="exam-tick" style="left:${examFrac * 100}%">exam</span>`;
-      axis.innerHTML = ticks;
     }
+    new ResizeObserver(() => last && draw(...last)).observe(chart);
     slider.addEventListener("input", render);
     render();
   });
@@ -621,13 +617,7 @@ if (codeTabs) {
   show(4);
 }
 
-const TILES = [
-  [["chess", "Mate in one"], ["unit-circle", "Unit circle"], ["chord", "Build the chord"], ["staff", "Read the note"], ["graph-walk", "Visit the nodes"], ["timeline", "Place it in time"], ["balance", "Balance the equation"], ["plot", "Mark the points"], ["color", "Make this color"], ["regex", "Write the regex"]],
-  [["bug-hunt", "Find the bug"], ["math", "Math answer"], ["bits", "Flip the bits"], ["interval", "Name the interval"], ["free", "Free answer"], ["code", "Code"], ["estimate", "Estimate it"], ["sprint", "Sprint"], ["draw", "Drawing"]],
-];
-for (const [i, row] of TILES.entries()) {
-  const el = $(`[data-marquee="${i}"]`);
-  if (!el) continue;
-  const html = row.map(([f, label]) => `<div class="tile"><img src="assets/cards/${f}.webp" alt="${esc(label)} card" loading="lazy"><span>${esc(label)}</span></div>`).join("");
-  el.innerHTML = html + html.replace(/alt="[^"]*"/g, 'alt="" aria-hidden="true"');
-}
+// The catalogue: stills of the included types, as the app renders them.
+const CATALOGUE = [["chess", "Mate in one"], ["balance", "Balance the equation"], ["bits", "Flip the bits"], ["bug-hunt", "Find the bug"], ["chord", "Build the chord"], ["timeline", "Place it in time"], ["estimate", "Estimate it"], ["graph-walk", "Visit the nodes"], ["interval", "Name the interval"]];
+const cat = $("[data-catalogue]");
+if (cat) cat.innerHTML = CATALOGUE.map(([f, label]) => `<li><div class="tile"><img src="assets/cards/${f}.webp" alt="${esc(label)} card" loading="lazy"></div><p>${esc(label)}</p></li>`).join("");

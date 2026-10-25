@@ -38,6 +38,9 @@ await send("Emulation.setTouchEmulationEnabled", { enabled: mobile, maxTouchPoin
 await send("Page.navigate", { url: BASE + "index.html" });
 await sleep(3500);
 if (mobile) { await evaluate(`scrollTo(0, document.querySelector("#stage").getBoundingClientRect().top + scrollY - 70)`); await sleep(800); }
+// The hero plays the deck by itself: pause it and reopen the chess card so the test starts clean.
+await evaluate(`(() => { const t = document.querySelector(".demo-toggle"); if (t && /Playing/.test(t.textContent)) t.click(); document.querySelectorAll(".stage-tab")[0].click(); })()`);
+await sleep(2500);
 
 /** The CDP session of the current card frame (card frames are out-of-process: sandboxed). */
 async function frameContext() {

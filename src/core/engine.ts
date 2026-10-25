@@ -79,9 +79,11 @@ export interface Settings {
   theme: string;
   /** Custom themes. */
   themes: Theme[];
+  /** Where the market is read from and published to; empty values mean the public market (src/core/market.ts). */
+  market: { url: string; repo: string };
 }
 
-export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [] };
+export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" } };
 
 export interface StudyScope {
   deck?: string;
@@ -179,12 +181,14 @@ export class Etude {
 
   settings(): Settings {
     const s = this.db.setting<Partial<Settings>>("settings", {});
-    return { ...DEFAULT_SETTINGS, ...s, ai: { ...DEFAULT_AI, ...(s.ai ?? {}) } };
+    return { ...DEFAULT_SETTINGS, ...s, ai: { ...DEFAULT_AI, ...(s.ai ?? {}) }, market: { ...DEFAULT_SETTINGS.market, ...(s.market ?? {}) } };
   }
 
   updateSettings(patch: Partial<Settings>): Settings {
     const cur = this.settings();
-    const next: Settings = { ...cur, ...patch, ai: { ...cur.ai, ...(patch.ai ?? {}) } };
+    const next: Settings = { ...cur, ...patch, ai: { ...cur.ai, ...(patch.ai ?? {}) }, market: { ...cur.market, ...(patch.market ?? {}) } };
+    if (typeof next.market.url !== "string" || typeof next.market.repo !== "string") throw new EtudeError("market.url and market.repo must be text");
+    if (next.market.repo && !/^[\w.-]+\/[\w.-]+$/.test(next.market.repo)) throw new EtudeError("market.repo must look like owner/name");
     if (!(next.dayStartHour >= 0 && next.dayStartHour < 24)) throw new EtudeError("dayStartHour must be 0 to 23");
     if (patch.themes !== undefined) next.themes = this.checkThemes(patch.themes);
     if (patch.theme !== undefined || patch.themes !== undefined) {

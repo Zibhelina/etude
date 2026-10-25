@@ -105,9 +105,10 @@ etude pack import examples/showcase.pack.json
 - **A search language** for Browse, filtered study sessions and the CLI.
 - **Packs.** One JSON file carries decks, presets, tags, card types and items. Import is idempotent and keeps review history.
 - **Statistics:** card states, true retention, a review heatmap, the forecast up to a deadline and recall per tag.
-- **Themes:** five built in (three dark, two light), or your own with CSS variables and extra CSS.
+- **Themes:** six built in (four dark, two light), or your own with CSS variables and extra CSS.
 - **A complete CLI** with more than 100 commands, stable JSON output, a machine-readable catalog (`etude commands`) and a dry run on most commands that change data.
 - **Import from Anki.** `.apkg` and `.colpkg` files bring their notetypes, decks, tags, media and review history across; see [docs/anki.md](docs/anki.md).
+- **A market for themes, decks and card types.** The Market tab installs what other people shared from [etude-market](https://github.com/Zibhelina/etude-market), and Publish shares yours as a pull request; see [docs/market.md](docs/market.md).
 
 ## Quick start
 

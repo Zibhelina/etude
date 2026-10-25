@@ -32,9 +32,14 @@
   }
   async function run(s) {
     if (s.kind === "type") {
-      const el = document.querySelector(s.sel);
+      const el = document.querySelector(s.into ?? s.sel);
       el.focus();
-      for (const ch of s.text) { el.value += ch; el.dispatchEvent(new Event("input", { bubbles: true })); await sleep(42); }
+      // A real InputEvent, so cards that count keystrokes (the typing test) see each one.
+      for (const ch of s.text) {
+        el.value += ch;
+        el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: ch }));
+        await sleep(s.delay ? s.delay * (0.6 + Math.random() * 0.8) : 42);
+      }
       return;
     }
     if (s.kind === "range") {

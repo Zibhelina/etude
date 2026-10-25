@@ -7,7 +7,7 @@ const up = (n, steps, semis) => {
   return t;
 };
 const ACC = { "-2": "𝄫", "-1": "♭", 0: "", 1: "♯", 2: "𝄪" };
-const TEX = { "-2": "\\flat\\flat", "-1": "\\flat", 0: "", 1: "\\sharp", 2: "\\sharp\\sharp" };
+const TEX = { "-2": "{\\flat\\flat}", "-1": "{\\flat}", 0: "", 1: "{\\sharp}", 2: "{\\sharp\\sharp}" };
 const txt = (n) => `${n.letter}${ACC[n.acc]}`;
 const tex = (n) => `\\mathrm{${n.letter}}${TEX[n.acc]}`;
 

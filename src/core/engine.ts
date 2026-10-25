@@ -117,10 +117,19 @@ const SUP: Record<string, string> = { "0": "⁰", "1": "¹", "2": "²", "3": "³
 const SUB: Record<string, string> = { "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉", "+": "₊", "-": "₋" };
 const script = (s: string, map: Record<string, string>, mark: string) => ([...s].every((c) => map[c]) ? [...s].map((c) => map[c]).join("") : mark === "_" ? `_${s}` : `^${s.length > 1 ? `(${s})` : s}`);
 
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+const entity = (m: string, e: string) =>
+  e[0] === "#" ? String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : ENTITIES[e.toLowerCase()] ?? m;
+
 /** One-line plain text from markdown with math: $x^3 \sin x$ reads x³ sin x, cloze blanks show their answer. */
 export function plainLabel(text: string): string {
   return text
+    // Anki imports keep their HTML: drop real tags (a bare < or > is text) and decode entities.
+    .replace(/<\/?(?:br|div|p|li|tr|td|th|h\d)\b[^<>]*>/gi, " ")
+    .replace(/<\/?[a-zA-Z][\w:-]*(?:\s[^<>]*)?\/?>/g, "")
+    .replace(/&(#\d+|#x[\da-f]+|[a-z]+);/gi, entity)
     .replace(/```[\s\S]*?```/g, " [code] ")
+    .replace(/^[ \t]*>+[ \t]?/gm, "")
     .replace(/\{\{([^}|:]+)[^}]*\}\}/g, "[$1]")
     .replace(/\\(?:text|mathrm|mathbf|operatorname|mathit)\{([^}]*)\}/g, "$1")
     .replace(/\\[dt]?frac\{((?:[^{}]|\{[^{}]*\})*)\}\{((?:[^{}]|\{[^{}]*\})*)\}/g, (_, a, b) => `${/^[\w\\]+$/.test(a) ? a : `(${a})`}/${/^[\w\\]+$/.test(b) ? b : `(${b})`}`)
@@ -132,7 +141,7 @@ export function plainLabel(text: string): string {
     .replace(/_\{([^{}]*)\}|_(\w)(?=\W|$)/g, (_, a, b) => script((a ?? b).trim(), SUB, "_"))
     .replace(/\\[,;! ]/g, " ")
     .replace(/[{}$]/g, "")
-    .replace(/[*`#>|]/g, "")
+    .replace(/[*`#|]/g, "")
     .replace(/\s+([,.;:?!)])/g, "$1")
     .replace(/\s+/g, " ")
     .trim()

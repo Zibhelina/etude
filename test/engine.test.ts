@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Etude } from "../src/core/engine.ts";
+import { Etude, plainLabel } from "../src/core/engine.ts";
 
 const pack = {
   etude: "pack/1",
@@ -190,4 +190,12 @@ test("custom types: save, validate, use", async () => {
 test("runaway scripts are stopped", async () => {
   const { e } = await setup();
   assert.throws(() => e.upsertItem({ id: "n.loop", type: "numeric", deck: "Net", fields: { prompt: "x", answer: 1, generator: "while (true) {}" } }), /timed out/);
+});
+
+test("titles drop HTML tags and keep comparison signs", () => {
+  assert.equal(plainLabel("[x86-64 ASM] What does the&nbsp;<code>idivb %bl</code> instruction do?"), "[x86-64 ASM] What does the idivb %bl instruction do?");
+  assert.equal(plainLabel("Pr\u00e4sens of s<span style=\"text-decoration-line: underline;\">ie</span>hen<br>ich sehe"), "Pr\u00e4sens of siehen ich sehe");
+  assert.equal(plainLabel("Land > Hauptstadt, and x > 3 when a < b"), "Land > Hauptstadt, and x > 3 when a < b");
+  assert.equal(plainLabel("> A quoted *line*"), "A quoted line");
+  assert.equal(plainLabel("&lt;limits.h&gt; &amp; &#39;INT_MAX&#39;"), "<limits.h> & 'INT_MAX'");
 });

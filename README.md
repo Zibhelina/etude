@@ -37,7 +37,7 @@ AI is optional. Etude doesn't need an account, a key or an internet connection, 
 - **An assistant that manages your collection.** Through the CLI an agent can reorganize decks, reword or split cards you keep failing, set an exam deadline and reschedule around it.
 - **Knowing what to review next.** An agent can read your statistics, tell you which topics are slipping and quiz you on them in a chat.
 
-The first one is built into the app: add a key in Settings. The rest work with any agent that can run commands, using the bundled [skill](skill/SKILL.md).
+The first one is built into the app: sign in with your ChatGPT plan or add an API key in Settings. The rest work with any agent that can run commands, using the bundled [skill](skill/SKILL.md).
 
 ## What a card can be
 
@@ -98,7 +98,7 @@ etude pack import examples/showcase.pack.json
 
 - **Programmable card types.** Eleven built-in types ship as editable files: basic, typed answer, cloze, numeric, multiple choice, match, order, free answer, math, code and drawing. Custom types are written the same way and edited in the app with a live preview.
 - **Four kinds of grader.** `self` (you rate), `script` (checked by code, with partial credit), `ai` (a decision model plus feedback) and `hybrid` (a script that hands the cases it can't decide to the AI). Grading instructions cascade from the item's rubric through its tags, decks and type.
-- **AI providers you choose.** The defaults use OpenRouter: `liquid/d1-ultra` for the verdict, a fast chat model for feedback and a vision model for drawings. Any OpenAI-compatible endpoint works, including a local llama.cpp or Ollama server. AI stays off until you add a key.
+- **AI providers you choose.** Sign in with ChatGPT to grade with your Plus or Pro plan, or use an API key. The API defaults use OpenRouter: `liquid/d1-ultra` for the verdict, a fast chat model for feedback and a vision model for drawings. Any OpenAI-compatible endpoint works, including a local llama.cpp or Ollama server. AI stays off until you add a key.
 - **FSRS-6 scheduling** with learning steps, fuzz, per-deck daily limits, new and review ordering, sibling burying, a suggested rating from the grade, undo, and replaying history after a settings change.
 - **Settings that inherit down the deck tree.** A preset on `Physics` applies to `Physics::Waves` unless that deck overrides it.
 - **Exam deadlines** per deck.
@@ -133,7 +133,9 @@ node src/cli/main.ts pack import examples/showcase.pack.json
 
 ### Turn on AI grading
 
-Put a key in `~/.etude/.env` and restart the server:
+**With your ChatGPT plan.** If you have ChatGPT Plus or Pro, open Settings → AI grading and click **Continue with ChatGPT**. Sign in in the browser and grading uses your plan's included usage, with no API key. You can cap how much Etude may use, or disconnect it, in ChatGPT's settings. Sign in from a browser on the computer that runs Etude (or run `etude settings chatgpt login` there); after that, grading works from any device.
+
+**With an API key.** Put a key in `~/.etude/.env` and restart the server:
 
 ```sh
 OPENROUTER_API_KEY=sk-or-...

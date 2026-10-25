@@ -189,3 +189,8 @@ FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 
 KaTeX fonts (assets/fonts/KaTeX_*.woff2): MIT, see node_modules/katex/LICENSE
+
+
+Caveat (assets/fonts/caveat.woff2, Latin subset):
+Copyright 2014 The Caveat Project Authors (https://github.com/googlefonts/caveat)
+Licensed under the SIL Open Font License, Version 1.1 (same text as above).

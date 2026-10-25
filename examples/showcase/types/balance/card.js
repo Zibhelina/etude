@@ -75,12 +75,14 @@ const render = () => {
     r.querySelector(".track.l .bar").style.width = `${(x.left / scale) * 100}%`;
     r.querySelector(".track.r .bar").style.width = `${(x.right / scale) * 100}%`;
     r.querySelector(".rel").textContent = good ? "=" : x.left < x.right ? "<" : ">";
-    r.querySelector(".st").innerHTML = good ? CHECK : "";
+    // Unbalanced: how many atoms the lighter side is short, on that side's arrow.
+    const d = Math.abs(x.left - x.right);
+    r.querySelector(".st").innerHTML = good ? CHECK : `<span class="d">${d} ${etude.escape(x.e)} short</span>`;
     r.setAttribute("aria-label", `${x.e}: ${x.left} on the left, ${x.right} on the right${good ? ", balanced" : ""}`);
   });
   const done = ok === t.length;
   ledger.classList.toggle("all-ok", done);
-  sum.textContent = done ? "Every element balances." : `${ok} of ${t.length} balanced.`;
+  sum.textContent = done ? "Every element balances" : `${ok} of ${t.length} balanced`;
 };
 const set = (k, v) => {
   if (etude.mode !== "answer") return;
@@ -143,7 +145,7 @@ etude.onResult(({ grade, key, answer }) => {
   if (state) eq.classList.add(state);
   if (state === "near") {
     ledger.classList.add("near");
-    sum.textContent = `Every element balances, but every coefficient divides by ${d.divisor}.`;
+    sum.textContent = `Every element balances, but every coefficient divides by\u00a0${d.divisor}`;
   }
   if (state === "wrong" || state === "near") terms.forEach((t, k) => t.classList.toggle("off", coef[k] !== sol[k]));
   // The balanced equation, typeset; coefficients that differ from the learner's are marked.
@@ -163,5 +165,5 @@ etude.onResult(({ grade, key, answer }) => {
     `<div class="e-section-title">${state === "near" ? "In lowest terms" : "The balanced equation"}</div>` +
     `<div class="bl-final"><span class="s">${half(0, nl)}</span><span class="s"><span class="op">${tex("\\longrightarrow")}</span>${half(nl, species.length)}</span></div>` +
     (state === "near" ? `<p class="bl-note">Divide each of yours by ${d.divisor}.</p>` : "") +
-    (state === "wrong" ? `<p class="bl-note">The numbers in pink are where yours differed.</p>` : "");
+    (state === "wrong" ? `<p class="bl-note">Underlined: where yours differed.</p>` : "");
 });

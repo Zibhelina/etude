@@ -231,12 +231,16 @@ h1, h2, h3 { margin: 0; font-family: var(--font-serif); font-weight: 400; letter
 .section { padding: 4rem 0; position: relative; }
 @media (min-width: 900px) { .section { padding: 4.5rem 0; } }
 .head { border-top: 1px solid var(--rule); padding-top: 1.4rem; margin-bottom: 3.5rem; display: grid; gap: 1.25rem; }
-@media (min-width: 900px) { .head { grid-template-columns: 15rem 1fr; gap: 2rem; } .head .opus { flex-direction: column; gap: 0.15rem; } }
+/* the movement label sits above the heading; on wide screens the heading and its paragraph share one row */
+@media (min-width: 1000px) {
+  .head > div { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 3.5rem; align-items: end; }
+  .head > div > .sub { margin: 0; }
+}
 .head h2 { font-size: clamp(2rem, 4vw, 3.15rem); line-height: 1.1; text-wrap: balance; max-width: 24ch; }
 .sub { margin: 1.2rem 0 0; color: var(--muted-foreground); font-size: 1.05rem; max-width: 40rem; text-wrap: pretty; }
 [data-reveal] { opacity: 0; translate: 0 20px; transition: opacity 0.9s var(--ease), translate 0.9s var(--ease); transition-delay: var(--d, 0s); }
 [data-reveal].in { opacity: 1; translate: 0 0; }
-@media (min-width: 900px) { .head ~ * { margin-left: 17rem; } .head ~ .catalogue, .head ~ .catalogue-head { margin-left: 0; } }
+
 
 /* -------------------------------------------------------- no. 2: two cards */
 .versus { display: grid; gap: 3rem; }
@@ -452,19 +456,6 @@ h1, h2, h3 { margin: 0; font-family: var(--font-serif); font-weight: 400; letter
 .fineprint { font-size: 0.8rem; color: var(--muted-foreground); margin: 0.9rem 0 0; }
 .fineprint a { color: var(--foreground); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
 
-.catalogue-head { margin-top: 5rem; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem 2rem; border-top: 1.5px solid var(--foreground); padding-top: 1rem; }
-.catalogue-head h3 { font-size: 1.6rem; }
-.catalogue-head p { margin: 0; color: var(--muted-foreground); font-size: 0.9rem; }
-/* masonry by columns: every card keeps its natural height, nothing gets cropped */
-.catalogue { list-style: none; margin: 2rem 0 0; padding: 0; columns: 2; column-gap: 1.5rem; counter-reset: t; }
-@media (min-width: 760px) { .catalogue { columns: 3; } }
-
-.catalogue li { counter-increment: t; break-inside: avoid; margin-bottom: 2rem; }
-.catalogue .tile { border-radius: 0.5rem; border: 1px solid var(--border); background: rgb(15 15 15); overflow: hidden; position: relative; }
-.catalogue img { width: 100%; height: auto; transition: scale 0.6s var(--ease); }
-.catalogue li:hover img { scale: 1.035; }
-.catalogue p { margin: 0.7rem 0 0; display: flex; gap: 0.6rem; align-items: baseline; font-family: var(--font-serif); font-size: 1.05rem; }
-
 /* ------------------------------------------------------- no. 9: features */
 .feats { margin: 0; display: grid; gap: 0 2.5rem; }
 @media (min-width: 640px) { .feats { grid-template-columns: 1fr 1fr; } }
@@ -575,7 +566,83 @@ h1, h2, h3 { margin: 0; font-family: var(--font-serif); font-weight: 400; letter
   .footer .wrap { grid-template-columns: 1fr 1fr; }
   .footer .wrap > div:first-child { grid-column: 1 / -1; }
   .footer li a { display: inline-block; padding: 0.3rem 0; }
-  .catalogue-head { margin-top: 4rem; }
-  .catalogue { gap: 1.75rem 1rem; }
-  .catalogue p { font-size: 0.95rem; }
 }
+
+/* ============================================================ the repertoire
+   Every included type, live. A programme of types on the left (grouped, numbered in one run), one
+   large card on the right. The current type is marked by color alone: no tinted band, no bar. */
+.rep { display: grid; gap: 1.75rem; border-top: 1.5px solid var(--foreground); padding-top: 1rem; }
+.rep > * { min-width: 0; }
+.rep-programme { font-family: var(--font-serif); }
+.rep-group-h { margin: 0; font-style: italic; font-size: 0.95rem; color: var(--muted-foreground); }
+.rep-programme ol { list-style: none; margin: 0; padding: 0; }
+.rep-item {
+  display: flex; align-items: baseline; gap: 0.7rem; width: 100%; text-align: left; cursor: pointer;
+  background: none; border: 0; padding: 0.22rem 0; font: inherit; font-size: 1.04rem; line-height: 1.35; color: var(--muted-foreground);
+  border-radius: 0.2rem; transition: color 0.2s;
+}
+.rep-item:hover { color: var(--foreground); }
+.rep-item[aria-current="true"] { color: var(--foreground); }
+.rep-item[aria-current="true"] .rep-n { color: var(--highlight); }
+.rep-item:focus-visible { outline: 1.5px solid var(--highlight); outline-offset: 3px; }
+.rep-n { flex: none; min-width: 1.4rem; text-align: right; font-size: 0.85rem; color: color-mix(in oklab, var(--muted-foreground) 70%, transparent); }
+.rep-l { min-width: 0; }
+.rep-dag { margin-left: -0.45rem; color: var(--highlight); font-size: 0.85em; }
+.rep-foot-note { margin: 0; font-size: 0.85rem; font-style: italic; color: var(--muted-foreground); }
+.rep-foot-note span { font-style: normal; color: var(--highlight); }
+
+.rep-stage { display: flex; flex-direction: column; gap: 1.25rem; }
+.rep-notes { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.2rem 2rem; }
+.rep-group-name { margin: 0; font: italic 0.95rem var(--font-serif); color: var(--muted-foreground); }
+.rep-name { font-size: 1.85rem; line-height: 1.15; }
+.rep-desc, .rep-grader { margin: 0.35rem 0 0; font-size: 0.92rem; color: var(--muted-foreground); max-width: 40rem; text-wrap: pretty; }
+.rep-grader { margin-top: 0.1rem; font-size: 0.84rem; color: color-mix(in oklab, var(--muted-foreground) 80%, transparent); }
+/* overflow: clip (not hidden) so the foot can stick to the bottom of the screen when a card is taller than it */
+.rep-card { display: flex; flex-direction: column; overflow: clip; box-shadow: 0 1px 0 oklch(1 0 0 / 4%) inset, 0 24px 48px -32px oklch(0 0 0 / 70%); }
+.rep-body { position: relative; padding: 1.5rem 1.75rem 1.4rem; min-height: 24rem; }
+.rep-body iframe { display: block; width: 100%; border: 0; background: transparent; transition: height 0.35s var(--ease); }
+.rep-body iframe.loading { visibility: hidden; }
+.rep-loader { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted-foreground); font-size: 0.8rem; pointer-events: none; transition: opacity 0.3s; }
+.rep-loader.hide { opacity: 0; }
+.rep-foot { position: sticky; bottom: 0; z-index: 2; background: var(--card); border-top: 1px solid var(--border); padding: 0.75rem 1.75rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; }
+.rep-verdict { flex: 1 1 14rem; justify-content: flex-start; flex-wrap: wrap; }
+.rep-verdict .v:not(.correct):not(.partial):not(.incorrect) { font-weight: 500; }
+.rep-actions { margin-left: auto; display: flex; gap: 0.5rem; }
+.rep-actions .btn-primary { min-width: 9.5rem; }
+.rep-actions kbd { border-color: transparent; color: inherit; opacity: 0.55; }
+@media (hover: none) and (pointer: coarse) { .rep-actions kbd { display: none; } }
+
+/* wide: the programme in two columns beside the card */
+@media (min-width: 1100px) {
+  .rep { grid-template-columns: 26rem minmax(0, 1fr); gap: 3rem; align-items: start; }
+  .rep-programme { columns: 2; column-gap: 2rem; position: sticky; top: 5.5rem; }
+  .rep-foot-note { break-inside: avoid; }
+  .rep-group { break-inside: avoid; padding-bottom: 1.4rem; }
+  .rep-group-h { padding-bottom: 0.3rem; margin-bottom: 0.25rem; border-bottom: 1px solid var(--border); }
+}
+/* narrower: the programme becomes one horizontal strip above the card */
+@media (max-width: 1099px) {
+  .rep-programme {
+    display: flex; gap: 1.5rem; overflow-x: auto; scrollbar-width: none; padding-block: 0.2rem 0.6rem;
+    border-bottom: 1px solid var(--border); scroll-padding-inline: 2rem; margin: 0; padding-inline: 0;
+    mask-image: linear-gradient(90deg, #000 calc(100% - 2.5rem), transparent); -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 2.5rem), transparent);
+  }
+  .rep-programme::-webkit-scrollbar { display: none; }
+  .rep-programme::after { content: ""; flex: none; width: 1.5rem; }
+  .rep-foot-note { display: none; }
+  .rep-group { flex: none; display: flex; flex-direction: column; gap: 0.15rem; }
+  .rep-programme ol { display: flex; gap: 1.1rem; }
+  .rep-item { width: auto; white-space: nowrap; font-size: 0.98rem; padding: 0.3rem 0; }
+  .rep-item:focus-visible { outline-offset: 1px; }
+  .rep-n { min-width: 0; }
+}
+@media (max-width: 640px) {
+  .rep-body { padding: 1.1rem 1rem 1rem; min-height: 18rem; }
+  .rep-foot { padding: 0.7rem 0.8rem; }
+  .rep-actions { width: 100%; }
+  .rep-actions .btn { flex: 1; min-width: 0; }
+  .rep-name { font-size: 1.55rem; }
+}
+
+/* nav: solid enough that scrolled headings don't show through it */
+.nav::before { inset: 0 0 -1rem; background: linear-gradient(var(--background) 0%, var(--background) 70%, transparent 100%); }

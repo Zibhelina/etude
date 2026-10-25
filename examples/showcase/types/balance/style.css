@@ -1,36 +1,99 @@
 .sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }
 .sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }
 
-.bl-eq { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5rem 0.35rem; padding: 0.4rem 0; }
-.bl-op { font-size: 1.25rem; color: var(--muted-foreground); padding: 0 0.1rem; }
-.bl-op.arrow { padding: 0 0.3rem; }
-.bl-term { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.3rem 0.35rem; background: color-mix(in oklab, var(--foreground) 3%, transparent); transition: border-color 0.15s; }
-.bl-term:focus-within { border-color: color-mix(in oklab, var(--highlight) 60%, transparent); }
-.bl-mid { display: flex; align-items: baseline; gap: 0.15rem; padding: 0 0.25rem; }
-.bl-coef { width: 1.7em; font: 600 1.3rem var(--font-sans); font-variant-numeric: tabular-nums; text-align: right; color: var(--highlight); background: transparent; border: none; outline: none; padding: 0; border-radius: 0.3rem; }
-.bl-coef:focus { background: color-mix(in oklab, var(--highlight) 12%, transparent); }
-.bl-coef:disabled { color: var(--highlight); opacity: 1; }
-.bl-term.is-one .bl-coef { color: color-mix(in oklab, var(--foreground) 35%, transparent); }
-.bl-formula { font-size: 1.25rem; white-space: nowrap; }
-.bl-step { width: 100%; min-width: 2.75rem; height: 2.5rem; border: none; border-radius: calc(var(--radius) - 4px); background: transparent; color: var(--muted-foreground); font: 500 1.2rem var(--font-sans); cursor: pointer; touch-action: manipulation; }
-.bl-step:hover:not(:disabled) { background: var(--accent); color: var(--foreground); }
-.bl-step:disabled { opacity: 0.3; cursor: default; }
-[data-mode="result"] .bl-step { visibility: hidden; height: 0.4rem; }
-.bl-eq.right .bl-term { border-color: color-mix(in oklab, var(--success) 70%, transparent); }
-.bl-eq.near .bl-term { border-color: color-mix(in oklab, var(--warning) 70%, transparent); }
-.bl-eq.wrong .bl-term { border-color: color-mix(in oklab, var(--danger) 60%, transparent); }
+/* The equation. Each side stays on one line; a narrow card breaks the line at the arrow. */
+.bl-eq { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0.6rem 0; padding: 0.75rem 0 0.25rem; font-size: 1.45rem; }
+.bl-side { display: inline-flex; align-items: center; white-space: nowrap; }
+.bl-plus, .bl-arrow { color: var(--muted-foreground); padding: 0 0.45em; font-size: 0.95em; }
+.bl-arrow { padding: 0 0.55em; }
+.bl-term { display: inline-flex; align-items: center; gap: 0.1em; }
+.bl-formula { cursor: text; line-height: 1; }
+.bl-formula .katex { font-size: 1.12em; }
 
-.bl-tally { display: flex; flex-direction: column; gap: 0.5rem; align-items: center; }
-.bl-tally-head { font-size: 0.8rem; color: var(--muted-foreground); }
-.bl-tally.all-ok .bl-tally-head { color: var(--success); font-weight: 500; }
-.bl-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; }
-.bl-chip { display: grid; grid-template-columns: 2rem auto 2rem; align-items: center; border: 1px solid var(--border); border-radius: 999px; padding: 0.3rem 0.4rem; font-variant-numeric: tabular-nums; transition: border-color 0.15s, background 0.15s; }
-.bl-chip .n { text-align: center; font-weight: 600; font-size: 0.95rem; color: var(--danger); }
-.bl-chip .el { position: relative; text-align: center; padding: 0 0.35rem 0.35rem; font-size: 1rem; }
-.bl-chip .beam { position: absolute; left: 0; right: 0; bottom: 0.05rem; height: 2px; border-radius: 1px; background: color-mix(in oklab, var(--danger) 70%, transparent); transform: rotate(calc(var(--tilt) * 14deg)); transition: transform 0.25s, background 0.15s; }
-.bl-chip.ok { border-color: color-mix(in oklab, var(--success) 60%, transparent); background: color-mix(in oklab, var(--success) 10%, transparent); }
-.bl-chip.ok .n { color: var(--success); }
-.bl-chip.ok .beam { background: var(--success); }
-.bl-hint { font-size: 0.85rem; text-align: center; margin-top: -0.4rem; }
-.bl-final { font-size: 1.05rem; overflow-x: auto; }
-.bl-final .katex-display { margin: 0.25rem 0; }
+/* Coefficient: the number, with a small chevron above and below it. */
+.bl-coef-box { position: relative; display: inline-flex; flex-direction: column; align-items: center; }
+.bl-coef {
+  width: 1.1em; min-width: 1.1em; padding: 0.06em 0.08em; margin: 0;
+  font: 400 1em/1.1 KaTeX_Main, "Times New Roman", serif; font-variant-numeric: tabular-nums;
+  text-align: center; color: var(--highlight); caret-color: var(--highlight);
+  background: color-mix(in oklab, var(--foreground) 5%, transparent); border: none; border-radius: 0.3rem; outline: none;
+  transition: background 0.15s, color 0.15s;
+}
+.bl-coef:focus { background: color-mix(in oklab, var(--highlight) 14%, transparent); }
+.bl-coef:disabled { opacity: 1; -webkit-text-fill-color: currentColor; }
+.bl-term.is-one .bl-coef { color: var(--muted-foreground); }
+.bl-term.is-one .bl-coef:focus { color: var(--highlight); }
+.bl-step {
+  display: flex; align-items: center; justify-content: center;
+  width: 2.5rem; height: 1.75rem; margin: 0 -0.7rem; padding: 0;
+  border: none; border-radius: 0.4rem; background: transparent; color: var(--muted-foreground);
+  cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  opacity: 0.55; transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.bl-step svg { width: 0.85rem; height: 0.55rem; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.bl-term:hover .bl-step, .bl-term:focus-within .bl-step { opacity: 1; }
+.bl-step:hover:not(:disabled) { background: var(--accent); color: var(--foreground); }
+.bl-step:active:not(:disabled) { color: var(--highlight); }
+.bl-step:disabled { opacity: 0.22 !important; cursor: default; }
+@media (hover: none) { .bl-step { opacity: 0.85; } }
+[data-mode="result"] .bl-step { visibility: hidden; height: 0.5rem; }
+[data-mode="result"] .bl-formula { cursor: default; }
+
+/* After grading: the learner's coefficients keep their place, colored by the verdict. */
+.bl-eq.right .bl-coef, .bl-eq.right .bl-term.is-one .bl-coef { color: var(--success); }
+.bl-eq.near .bl-coef, .bl-eq.near .bl-term.is-one .bl-coef { color: var(--warning); }
+.bl-eq.wrong .bl-coef { color: var(--foreground); }
+.bl-eq.wrong .bl-term.off .bl-coef { color: var(--danger); text-decoration: underline wavy color-mix(in oklab, var(--danger) 75%, transparent); text-decoration-thickness: 1px; text-underline-offset: 0.18em; }
+
+/* The atom ledger, ruled like a table in a paper: a rule on top, one under the head, one at the end.
+   Columns: atom | left bar | left count | relation | right count | right bar | check. */
+.bl-ledger { width: 100%; max-width: 30rem; margin: 0 auto; border-top: 1.5px solid color-mix(in oklab, var(--foreground) 55%, transparent); border-bottom: 1.5px solid color-mix(in oklab, var(--foreground) 55%, transparent); font-variant-numeric: tabular-nums; }
+.bl-row { display: grid; grid-template-columns: 2.5rem 1fr 2.2rem 1.6rem 2.2rem 1fr 2.5rem; align-items: center; min-height: 2.6rem; padding: 0 0.25rem; }
+.bl-row + .bl-row:not(.bl-head) { border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent); }
+.bl-row > .el { font-size: 1.12rem; padding-left: 0.25rem; }
+.bl-row .n { font: 1.15rem/1 KaTeX_Main, "Times New Roman", serif; transition: color 0.2s; }
+.bl-row .n.l { text-align: right; }
+.bl-row .n.r { text-align: left; }
+.bl-row .rel { text-align: center; font: 1.05rem/1 KaTeX_Main, "Times New Roman", serif; color: var(--muted-foreground); }
+.bl-row .track { display: flex; align-items: center; height: 1.3rem; }
+.bl-row .track.l { justify-content: flex-end; padding-right: 0.55rem; }
+.bl-row .track.r { justify-content: flex-start; padding-left: 0.55rem; }
+.bl-row .bar { display: block; height: 0.36rem; width: 0; border-radius: 999px; background: color-mix(in oklab, var(--foreground) 55%, transparent); transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1), background 0.2s; }
+.bl-head { min-height: 2.1rem; border-bottom: 1px solid color-mix(in oklab, var(--foreground) 30%, transparent); font-size: 0.75rem; color: var(--muted-foreground); white-space: nowrap; }
+.bl-head > .el { font-size: 0.75rem; padding-left: 0.25rem; }
+.bl-head .hl { grid-column: 2 / 4; text-align: right; }
+.bl-head .hr { grid-column: 5 / 7; text-align: left; }
+.bl-head .rel { grid-column: 4; font: inherit; color: inherit; }
+/* An unbalanced row: the relation carries the accent; the bars show by how much. */
+.bl-row.more-l .rel, .bl-row.more-r .rel { color: var(--highlight); font-weight: 700; }
+.bl-row .st .d { font: 0.78rem var(--font-sans); color: var(--muted-foreground); white-space: nowrap; }
+.bl-row.ok .bar { background: color-mix(in oklab, var(--success) 65%, transparent); }
+.bl-row.ok .n, .bl-row.ok .rel { color: color-mix(in oklab, var(--success) 82%, var(--foreground)); }
+.bl-row .st { display: flex; justify-content: center; color: color-mix(in oklab, var(--success) 82%, var(--foreground)); }
+.bl-row .st svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.bl-sum { padding: 0.5rem 0.25rem; border-top: 1px solid color-mix(in oklab, var(--foreground) 30%, transparent); font-size: 0.8rem; color: var(--muted-foreground); text-align: center; }
+.bl-ledger.all-ok .bl-sum { color: color-mix(in oklab, var(--success) 82%, var(--foreground)); font-weight: 500; }
+
+.bl-hint { font-size: 0.82rem; text-align: center; margin: -0.25rem 0 0; }
+@media (pointer: coarse) { .bl-hint .kb { display: none; } }
+
+/* The balanced equation in the reveal. */
+.bl-final { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 0.4rem 0; padding: 0.4rem 0; font-size: 1.3rem; }
+.bl-final .s { display: inline-flex; align-items: baseline; white-space: nowrap; }
+.bl-final .t { display: inline-flex; align-items: baseline; gap: 0.3em; }
+.bl-final .c { font-family: KaTeX_Main, "Times New Roman", serif; font-size: 1.12em; }
+.bl-final .c.hit { color: var(--highlight); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 0.2em; }
+.bl-final .op { color: var(--muted-foreground); padding: 0 0.45em; }
+.bl-final .katex { font-size: 1.12em; }
+.bl-note { margin: 0; font-size: 0.85rem; color: var(--muted-foreground); text-align: center; }
+
+@media (max-width: 480px) {
+  .bl-eq { font-size: 1.25rem; }
+  .bl-row { grid-template-columns: 2.1rem 1fr 1.9rem 1.3rem 1.9rem 1fr 1.8rem; }
+  .bl-final { font-size: 1.1rem; }
+}
+[data-mode="result"] .bl-coef { background-color: transparent; }
+.bl-note.ok { display: flex; align-items: center; justify-content: center; gap: 0.4rem; color: var(--success); font-weight: 500; font-size: 0.9rem; }
+.bl-note.ok svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.bl-ledger.near .bl-sum { color: color-mix(in oklab, var(--warning) 70%, var(--foreground)); }
+[data-mode="result"] .bl-ledger { margin-bottom: 0.25rem; }

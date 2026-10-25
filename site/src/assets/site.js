@@ -2,7 +2,7 @@
 // card runtime and grades them with the types' own scripts; the deadline chart runs ts-fsrs.
 import katex from "../runtime/vendor/katex.js";
 import math from "../runtime/mathexpr.js";
-import { DEMOS, PRELUDE, TYPE_FILES, GENERATOR } from "../data.js";
+import { DEMOS, PRELUDE, TYPE_FILES, GENERATOR, GALLERY } from "../data.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -617,7 +617,179 @@ if (codeTabs) {
   show(4);
 }
 
-// The catalogue: stills of the included types, as the app renders them.
-const CATALOGUE = [["chess", "Mate in one"], ["balance", "Balance the equation"], ["bits", "Flip the bits"], ["bug-hunt", "Find the bug"], ["chord", "Build the chord"], ["timeline", "Place it in time"], ["estimate", "Estimate it"], ["graph-walk", "Visit the nodes"], ["interval", "Name the interval"]];
-const cat = $("[data-catalogue]");
-if (cat) cat.innerHTML = CATALOGUE.map(([f, label]) => `<li><div class="tile"><img src="assets/cards/${f}.webp" alt="${esc(label)} card" loading="lazy"></div><p>${esc(label)}</p></li>`).join("");
+// ---------------------------------------------------------------- the repertoire
+// Every included type, live and for the visitor's own hands: no autoplay here. Script-graded cards
+// are graded in the page by the type's own grade script; AI-graded ones show their reference.
+const rep = $("[data-rep]");
+if (rep && GALLERY?.length) {
+  const list = $("[data-rep-list]", rep), card = $("[data-rep-card]", rep), body = $(".rep-body", card), loader = $(".rep-loader", card);
+  const checkBtn = $("[data-rep-check]", rep), againBtn = $("[data-rep-variant]", rep), verdictEl = $(".rep-verdict", rep);
+  const groupEl = $("[data-rep-group]", rep), nameEl = $("[data-rep-name]", rep), descEl = $("[data-rep-desc]", rep), graderEl = $("[data-rep-grader]", rep);
+  $("[data-rep-count]").textContent = String(GALLERY.length);
+  const coarse = matchMedia("(pointer: coarse)").matches;
+  const AGAIN = { variant: "New variant", shuffle: "Shuffle again", reset: "Start over" };
+  const GRADER = {
+    script: "Graded by the card's own script, right here in your browser.",
+    hybrid: "Graded by running hidden tests in a sandbox; code with no tests goes to AI.",
+    self: "You grade yourself: see the answer, then rate how well you knew it.",
+    ai: "Graded by AI in the app. Here, Check shows the reference it compares against.",
+  };
+  const CHECK = { self: "Show answer", ai: "Show the reference" };
+
+  // The programme: types grouped by what they ask of you, numbered in one run like a concert programme.
+  let n = 0, html = "";
+  for (const group of [...new Set(GALLERY.map((e) => e.group))]) {
+    html += `<div class="rep-group"><p class="rep-group-h">${esc(group)}</p><ol>`;
+    GALLERY.forEach((e, i) => {
+      if (e.group !== group) return;
+      html += `<li><button type="button" class="rep-item" data-i="${i}" data-type="${esc(e.type)}" aria-controls="rep-panel" aria-current="false" tabindex="-1"><span class="rep-n tabular">${++n}</span><span class="rep-l">${esc(e.label)}</span>${e.grader === "ai" ? `<span class="rep-dag" aria-label="graded by AI">†</span>` : ""}</button></li>`;
+    });
+    html += `</ol></div>`;
+  }
+  list.innerHTML = html + `<p class="rep-foot-note"><span aria-hidden="true">†</span> graded by AI in the app</p>`;
+  const items = $$(".rep-item", list);
+
+  let cur = null; // { entry, i, k, seed, prep, frame, phase }
+  const variant = new Map(); // which item of an entry was shown last
+  const post = (msg) => cur?.frame.contentWindow?.postMessage({ etude: 1, ...msg }, "*");
+
+  function open(i, { fresh = false, focus = false } = {}) {
+    const entry = GALLERY[i];
+    let k = variant.get(i) ?? 0;
+    if (fresh && entry.items.length > 1) k = (k + 1) % entry.items.length;
+    variant.set(i, k);
+    const item = entry.items[k];
+    const seed = (Math.random() * 2 ** 32) >>> 0;
+    items.forEach((b, j) => { b.setAttribute("aria-current", String(j === i)); b.tabIndex = j === i ? 0 : -1; });
+    // Keep the chosen type in view in the phone's horizontal strip, without scrolling the page.
+    const b = items[i];
+    if (list.scrollWidth > list.clientWidth + 2) list.scrollTo({ left: b.offsetLeft - list.clientWidth / 2 + b.offsetWidth / 2, behavior: reduced ? "auto" : "smooth" });
+    groupEl.textContent = entry.group;
+    nameEl.textContent = entry.label;
+    descEl.textContent = entry.desc;
+    graderEl.textContent = GRADER[entry.grader] ?? "";
+    verdictEl.innerHTML = "";
+    checkBtn.hidden = false;
+    checkBtn.disabled = true;
+    checkBtn.firstChild.textContent = `${CHECK[entry.grader] ?? "Check"} `;
+    againBtn.innerHTML = `${AGAIN[entry.again]} <span aria-hidden="true">↻</span>`;
+    againBtn.classList.remove("btn-primary");
+    againBtn.classList.add("btn-ghost");
+    let prep;
+    try { prep = prepare({ id: item.id, fields: item.fields, prepare: entry.prepare, private: entry.private }, seed); }
+    catch (e) { verdictEl.textContent = `Couldn't prepare the card: ${e.message}`; return; }
+    const old = cur?.frame;
+    const frame = document.createElement("iframe");
+    frame.title = `${entry.name} card`;
+    frame.setAttribute("sandbox", "allow-scripts");
+    frame.className = "loading";
+    frame.style.height = old ? old.style.height : "420px";
+    frame.src = `frames/gallery/${entry.type}.html`;
+    cur = { entry, i, k, item, seed, prep, frame, phase: "loading", ready: true, focus };
+    old?.remove();
+    loader.classList.remove("hide");
+    body.appendChild(frame);
+  }
+
+  addEventListener("message", (e) => {
+    if (!cur || e.source !== cur.frame.contentWindow) return;
+    const msg = e.data;
+    if (!msg || msg.etude !== 1) return;
+    switch (msg.type) {
+      case "loaded":
+        // The visitor chose this card with a pointer: let it take the keyboard, as it would in the app.
+        if (cur.focus && !coarse) post({ type: "rep-focus" });
+        post({ type: "init", view: cur.prep.view, mode: "answer", answer: null, result: null, theme: theme() });
+        break;
+      case "mounted":
+        cur.phase = "answer";
+        cur.frame.classList.remove("loading");
+        loader.classList.add("hide");
+        checkBtn.disabled = !cur.ready;
+        break;
+      case "size":
+        if (typeof msg.height === "number") cur.frame.style.height = `${Math.max(140, Math.min(msg.height + 4, 2400))}px`;
+        break;
+      case "ready-state":
+        cur.ready = !!msg.ready;
+        if (cur.phase === "answer") checkBtn.disabled = !cur.ready;
+        break;
+      case "submit":
+        onSubmit(msg.answer);
+        break;
+      case "key":
+        if (msg.key === "Mod+Enter" && cur.phase === "answer") post({ type: "collect" });
+        else if (msg.key === "Mod+Enter" && cur.phase === "result") again();
+        break;
+      case "error":
+        verdictEl.textContent = `Card error: ${msg.message}`;
+        break;
+    }
+  });
+
+  function onSubmit(answer) {
+    if (cur.phase !== "answer") return;
+    cur.phase = "grading";
+    checkBtn.disabled = true;
+    const { entry, prep } = cur;
+    let g = { score: null, verdict: "ungraded", grader: { kind: entry.grader } }, line;
+    if (entry.grade) {
+      const t0 = performance.now();
+      try {
+        const out = runScript(entry.grade, ["answer", "view", "key", "fields"], { answer, view: prep.view, key: prep.key, fields: prep.fields }) ?? {};
+        const ms = Math.max(1, Math.round(performance.now() - t0));
+        if (out.defer) line = `<span class="v">Not graded here</span><span class="m">· with no tests, the app hands this to AI</span>`;
+        else {
+          const score = out.score == null ? null : Math.max(0, Math.min(1, Number(out.score)));
+          g = { score, verdict: verdictOf(score), feedback: out.feedback, details: out.details, suggested: suggest(score), grader: { kind: "script", ms } };
+          const pct = g.verdict === "partial" ? `<span class="m tabular">${Math.round(score * 100)}%</span>` : "";
+          line = `<span class="v ${g.verdict}">${VERDICT[g.verdict] ?? "Graded"}</span>${pct}<span class="m">· by the card's script in ${ms} ms</span>`;
+        }
+      } catch (err) {
+        line = `<span class="v incorrect">Grader error</span><span class="m">${esc(err.message)}</span>`;
+      }
+    } else if (entry.grader === "ai") line = `<span class="v">Graded by AI in the app</span><span class="m">· the reference is below</span>`;
+    else line = `<span class="v">How well did you know it?</span><span class="m">· in the app you'd rate it Again, Hard, Good or Easy</span>`;
+    cur.phase = "result";
+    post({ type: "result", result: { grade: g, key: prep.key, answer } });
+    verdictEl.innerHTML = line;
+    verdictEl.classList.remove("pop"); void verdictEl.offsetWidth; verdictEl.classList.add("pop");
+    checkBtn.hidden = true;
+    againBtn.classList.replace("btn-ghost", "btn-primary");
+  }
+  const again = () => open(cur.i, { fresh: true, focus: true });
+
+  checkBtn.addEventListener("click", () => cur?.phase === "answer" && post({ type: "collect" }));
+  againBtn.addEventListener("click", () => cur && again());
+  rep.addEventListener("keydown", (e) => {
+    if (!cur || !(e.ctrlKey || e.metaKey) || e.key !== "Enter") return;
+    e.preventDefault();
+    if (cur.phase === "answer") post({ type: "collect" });
+    else if (cur.phase === "result") again();
+  });
+
+  // Pick a type with a click, or move through the programme with the arrow keys (one tab stop).
+  list.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-i]");
+    if (b) open(Number(b.dataset.i), { focus: e.detail > 0 });
+  });
+  let keyTimer = null;
+  list.addEventListener("keydown", (e) => {
+    const at = items.indexOf(document.activeElement);
+    if (at < 0 || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    const row = getComputedStyle(list).flexDirection === "row" || list.scrollWidth > list.clientWidth + 2;
+    const next = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+    let to = next ? Math.max(0, Math.min(items.length - 1, at + next)) : e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : -1;
+    if (to < 0) return;
+    if (!row && (e.key === "ArrowLeft" || e.key === "ArrowRight")) return;
+    e.preventDefault();
+    items[to].focus({ preventScroll: true });
+    items[to].scrollIntoView({ block: "nearest", inline: "nearest" });
+    clearTimeout(keyTimer);
+    keyTimer = setTimeout(() => open(to), 160);
+  });
+
+  // For site/tools/repertoire.mjs: the prepared card, as the server would hold it.
+  window.__rep = () => cur && { type: cur.entry.type, view: cur.prep.view, key: cur.prep.key, fields: cur.prep.fields, phase: cur.phase };
+  whenVisible(rep, () => open(0), "0px 0px 40% 0px");
+}

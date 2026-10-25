@@ -286,11 +286,40 @@
       </div>
     </div>
 
-    <div class="catalogue-head" data-reveal>
-      <h3>In the box</h3>
-      <p>Some of the included types, as they look in the app.</p>
+  </div>
+</section>
+
+<!-- ================================================== intermezzo: the repertoire -->
+<section class="section" id="repertoire">
+  <div class="wrap">
+    <header class="head" data-reveal>
+      <p class="opus">Intermezzo <span>the repertoire</span></p>
+      <div>
+        <h2><span data-rep-count>26</span> ways to ask a&nbsp;question.</h2>
+        <p class="sub">Every type that ships with Etude, running here as it runs in the app. Pick one, answer it and press Check: the card's own script grades it in your browser. The two that AI grades show you the reference answer instead.</p>
+      </div>
+    </header>
+    <div class="rep" data-rep data-reveal>
+      <nav class="rep-programme" aria-label="Card types" data-rep-list></nav>
+      <div class="rep-stage">
+        <div class="rep-notes" aria-live="polite">
+          <p class="rep-group-name" data-rep-group></p>
+          <h3 class="rep-name" data-rep-name></h3>
+          <p class="rep-desc" data-rep-desc></p>
+          <p class="rep-grader" data-rep-grader></p>
+        </div>
+        <div class="sheet rep-card" role="region" aria-label="The card" id="rep-panel" data-rep-card>
+          <div class="rep-body"><div class="rep-loader">Loading card…</div></div>
+          <div class="rep-foot">
+            <div class="verdict rep-verdict" aria-live="polite"></div>
+            <div class="rep-actions">
+              <button class="btn btn-ghost" type="button" data-rep-variant>New variant <span aria-hidden="true">↻</span></button>
+              <button class="btn btn-primary" type="button" data-rep-check disabled>Check <kbd>Ctrl ↵</kbd></button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-    <ol class="catalogue" data-catalogue data-reveal></ol>
   </div>
 </section>
 

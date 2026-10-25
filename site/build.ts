@@ -4,7 +4,7 @@
 // The landing page runs real Etude card types with no server: the card frames, runtime and
 // vendor files are copied here, and each demo's prepare and grade scripts run in the page with
 // the same helpers (`std`, `rng`) the server's sandbox gives them.
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -89,6 +89,152 @@ const demos = DEMOS.map(({ id, label }) => {
     private: def.fields.filter((f) => f.private).map((f) => f.name),
   };
 });
+// The repertoire: every card type in the box, live, for the visitor's own hands. Items come from
+// the showcase pack; the built-in types it doesn't use get a small general-interest item here.
+const SITE_ITEMS: Record<string, { type: string; fields: Record<string, unknown> }> = {
+  "site.basic.sky": { type: "basic", fields: {
+    front: "Why is the sky blue?",
+    back: "Air molecules scatter short wavelengths of sunlight far more than long ones (Rayleigh scattering, roughly as $1/\\lambda^4$), so blue light reaches your eye from every direction of the sky.",
+    extra: "At sunset the light crosses much more air, most of the blue is scattered away before it arrives, and what's left is red and orange.",
+  } },
+  "site.typed.capital": { type: "typed", fields: {
+    prompt: "What is the capital of **Australia**?",
+    answers: ["Canberra"],
+    placeholder: "A city",
+    explanation: "Not Sydney. Canberra was chosen in 1908 as a compromise between the two rivals, Sydney and Melbourne, and built from scratch.",
+  } },
+  "site.mcq.day": { type: "mcq", fields: {
+    prompt: "Which planet has the **shortest day**, one full turn on its axis?",
+    options: [
+      { text: "Jupiter", correct: true, why: "About 9 hours 56 minutes, despite being the largest planet." },
+      { text: "Earth", why: "About 23 hours 56 minutes." },
+      { text: "Mars", why: "About 24 hours 37 minutes, a little longer than ours." },
+      { text: "Mercury", why: "Very slow: about 59 Earth days." },
+    ],
+    explanation: "The giant planets spin fastest. Jupiter's quick rotation flattens it visibly at the poles.",
+  } },
+  "site.cloze.haiku": { type: "cloze", fields: {
+    text: "A traditional haiku has three lines of {{5|five}}, {{7|seven}} and {{5|five}} sounds, and usually a word for the season, the {{kigo::Japanese term}}.",
+    explanation: "In Japanese the count is in *on*, sound units shorter than English syllables, which is why haiku translated into English often come out shorter.",
+  } },
+  "site.match.paintings": { type: "match", fields: {
+    prompt: "Match each painting with its painter.",
+    pairs: [
+      ["*The Starry Night*", "Vincent van Gogh"],
+      ["*Girl with a Pearl Earring*", "Johannes Vermeer"],
+      ["*The Persistence of Memory*", "Salvador Dalí"],
+      ["*The Birth of Venus*", "Sandro Botticelli"],
+      ["*The Great Wave off Kanagawa*", "Katsushika Hokusai"],
+    ],
+    explanation: "Van Gogh painted *The Starry Night* in 1889 from the window of an asylum in Saint-Rémy; Hokusai's *Great Wave* is a woodblock print, so thousands of copies exist.",
+  } },
+  "site.numeric.train": { type: "numeric", fields: {
+    prompt: "A train covers **90 km** in **45 minutes**. What is its average speed?",
+    answer: 120,
+    unit: "km/h",
+    tolerance: 0.01,
+    generator: [
+      "// A speed and a time that give a whole number of kilometres.",
+      "let v, t, d;",
+      "do { v = rng.int(6, 30) * 10; t = rng.pick([15, 20, 30, 40, 45, 50, 75, 90]); d = (v * t) / 60; } while (!Number.isInteger(d));",
+      "return {",
+      "  prompt: `A train covers **${d} km** in **${t} minutes**. What is its average speed?`,",
+      "  answer: v,",
+      "  explanation: `Speed is distance over time, with the time in hours: $\\\\frac{${d}\\\\,\\\\text{km}}{${t}/60\\\\,\\\\text{h}} = ${v}\\\\,\\\\text{km/h}$.`,",
+      "};",
+    ].join("\n"),
+  } },
+  "site.order.scale": { type: "order", fields: {
+    prompt: "Put these in order of size, **smallest first**.",
+    steps: ["A proton", "A hydrogen atom", "A virus", "A red blood cell", "A grain of sand", "A cat"],
+    explanation: "Roughly $10^{-15}$ m, $10^{-10}$ m, $10^{-7}$ m, $10^{-5}$ m, half a millimetre and half a metre. A hydrogen atom is about 60,000 times wider than the proton at its centre.",
+  } },
+};
+const REPERTOIRE: [string, [string, string, string, string[]][]][] = [
+  ["Recall", [
+    ["basic", "Flip a card", "The classic: think of the answer, turn the card over, and be honest with yourself.", ["site.basic.sky"]],
+    ["typed", "Type the answer", "A short answer typed from memory, checked against the accepted spellings.", ["site.typed.capital"]],
+    ["mcq", "Pick the answer", "Options shuffled every time, so you remember the answer, not its position.", ["site.mcq.day"]],
+    ["cloze", "Fill the blanks", "A sentence with holes in it. Each blank is checked on its own.", ["site.cloze.haiku"]],
+    ["match", "Match the pairs", "Wire each item to its partner. The right side comes shuffled.", ["site.match.paintings"]],
+  ]],
+  ["Calculate", [
+    ["numeric", "Compute, with units", "New numbers every review. Units are fine, and the answer gets a tolerance.", ["site.numeric.train"]],
+    ["math", "Write the expression", "Type it however you like: any equivalent form is accepted, and it renders as you type.", ["showcase.math.derivative", "showcase.math.factor", "showcase.math.roots", "showcase.math.exact", "showcase.math.line"]],
+    ["estimate", "Estimate it", "Slide to your best guess. Close is full credit, near is partial.", ["showcase.estimate.everest", "showcase.estimate.heartbeats"]],
+    ["balance", "Balance the equation", "Step the coefficients until every atom balances. The tally updates as you go.", ["showcase.balance.combustion", "showcase.balance.rust", "showcase.balance.aluminium-acid"]],
+    ["unit-circle", "Find the angle", "Put the angle where it belongs, in degrees, radians or both.", ["showcase.unit-circle.mixed", "showcase.unit-circle.radians"]],
+    ["plot", "Mark the points", "Tap the points that matter on the grid: roots, vertices, intersections.", ["showcase.plot.parabola", "showcase.plot.lines"]],
+  ]],
+  ["Arrange", [
+    ["order", "Put them in order", "Drag the blocks, or move them with the keyboard. Partial credit for what's already in order.", ["site.order.scale"]],
+    ["timeline", "Place it in time", "Drag each event to its year. Graded on order and on how many years off.", ["showcase.timeline.computing", "showcase.timeline.physics"]],
+    ["graph-walk", "Walk the graph", "Tap the nodes in the order the algorithm would visit them, on a graph made for this review.", ["showcase.graph-walk.bfs", "showcase.graph-walk.dfs"]],
+  ]],
+  ["Code", [
+    ["code", "Write a function", "A real editor. The answer runs against hidden tests in a sandbox.", ["showcase.code.roman"]],
+    ["regex", "Write the regex", "The visible tests light up as you type; hidden ones decide the grade.", ["showcase.regex.hex-color", "showcase.regex.iso-date"]],
+    ["bug-hunt", "Find the bug", "Point at the line that's wrong. The fix appears afterwards.", ["showcase.bug-hunt.moving-average", "showcase.bug-hunt.closure-retry"]],
+    ["bits", "Flip the bits", "Flip switches until the binary makes the number.", ["showcase.bits.unsigned", "showcase.bits.twos-complement"]],
+  ]],
+  ["Play & listen", [
+    ["chess", "Mate in one", "Find the mate on a real board. Tap, or drag the piece.", ["showcase.chess.smothered", "showcase.chess.queen-f2"]],
+    ["chord", "Build the chord", "Play it on the keyboard. Any voicing or inversion counts.", ["showcase.chord.triads", "showcase.chord.sevenths"]],
+    ["staff", "Read the note", "Read the note off the staff and play it.", ["showcase.staff.treble", "showcase.staff.bass"]],
+    ["interval", "Name the interval", "Ear training: listen to two notes and name the distance between them. Turn your sound on.", ["showcase.interval.basic", "showcase.interval.all"]],
+    ["color", "Mix the color", "Build the color from its hex code with hue, saturation and lightness.", ["showcase.color.hex"]],
+    ["sprint", "Beat the clock", "Thirty seconds of mental arithmetic. It submits itself when the time is up.", ["showcase.sprint.mixed"]],
+  ]],
+  ["Draw & write", [
+    ["free", "Prove it", "A proof in your own words, with math that renders as you type.", ["showcase.free.induction"]],
+    ["draw", "Write it by hand", "Draw or write it with your finger or mouse. A vision model reads the strokes.", ["showcase.draw.kanji-water", "showcase.draw.parabola"]],
+  ]],
+];
+// In the repertoire the card has most of the content width, so only the tallest pieces are capped.
+const galleryFit = `<style>.ch-board svg{max-width:21rem}.uc-stage{max-width:300px}.gw-svg{max-width:340px}.pl-stage{max-width:330px}.st-staff svg{max-width:20rem}body[data-mode=result] .ch-board svg{max-width:15rem}</style>`;
+// A card focuses its first input when it mounts. Down here that would pull the keyboard (and on a
+// phone, the on-screen keyboard) into a card the visitor only scrolled past, so focus waits until
+// the page says they picked it.
+const holdFocus = `<script>(() => { let ok = false; const f = HTMLElement.prototype.focus; HTMLElement.prototype.focus = function (o) { if (ok) return f.call(this, { ...(o ?? {}), preventScroll: true }); }; addEventListener("message", (e) => { if (e.source === parent && e.data?.etude === 1 && e.data.type === "rep-focus") ok = true; }); })();</script>`;
+mkdirSync(join(out, "frames/gallery"), { recursive: true });
+const gallery = REPERTOIRE.flatMap(([group, entries]) => entries.map(([type, label, desc, ids]) => {
+  const dir = typeDir(type);
+  const def = loadTypeDir(dir);
+  const html = cardFrame(def, "__BASE__")
+    .replace('<base href="__BASE__">', `<base href="../../">${fontFace}`)
+    .replace("</head>", `${galleryFit}\n<script src="assets/demo-driver.js"></script>\n${holdFocus}\n</head>`)
+    .replaceAll("__BASE__", "./");
+  writeFileSync(join(out, "frames/gallery", `${def.id}.html`), html);
+  const items = ids.map((id) => {
+    const item = SITE_ITEMS[id] ?? pack.items.find((i: { id: string }) => i.id === id);
+    if (!item) throw new Error(`repertoire: no item ${id}`);
+    if (item.type !== type) throw new Error(`repertoire: ${id} is a ${item.type} item, not ${type}`);
+    return { id, fields: { ...fieldDefaults(def), ...item.fields } };
+  });
+  const g = def.grader as { kind: string; code?: string };
+  const prep = def.prepare ?? "";
+  return {
+    group,
+    label,
+    type: def.id,
+    name: def.name,
+    desc,
+    // script, hybrid (a script that may hand the answer to AI), ai or self
+    grader: g.kind,
+    grade: g.code ?? null,
+    prepare: def.prepare ?? null,
+    private: def.fields.filter((f) => f.private).map((f) => f.name),
+    // What another go gives you: a new variant (a generator, random picks or another item), the
+    // same card reshuffled, or the same card again.
+    again: items.length > 1 || items.some((i) => typeof i.fields.generator === "string") || /\brng\.(int|float|pick|bool|next)\b/.test(prep) ? "variant" : /\brng\.shuffle\b/.test(prep) ? "shuffle" : "reset",
+    items,
+  };
+}));
+const allTypes = [join(root, "types"), join(root, "examples/showcase/types")].flatMap((d) => readdirSync(d).filter((t: string) => existsSync(join(d, t, "type.json"))));
+const missing = allTypes.filter((t) => !gallery.some((e) => e.type === t));
+// A new type should get a place in REPERTOIRE; until then the build says so instead of failing.
+if (missing.length) console.warn(`site: the repertoire is missing types: ${missing.join(", ")}`);
+
 // Highlighted source for the "card types are code" section and the generator example, using the
 // same highlighter classes (tok-*) as the app, styled by runtime/code.css.
 const { highlightCode, classHighlighter } = await import("@lezer/highlight");
@@ -123,7 +269,7 @@ const generator = { code: derivative.fields.generator as string, html: highlight
 
 writeFileSync(
   join(out, "data.js"),
-  `// Generated by site/build.ts.\nexport const PRELUDE = ${JSON.stringify(prelude)};\nexport const DEMOS = ${JSON.stringify(demos)};\nexport const TYPE_FILES = ${JSON.stringify(files)};\nexport const GENERATOR = ${JSON.stringify(generator)};\n`,
+  `// Generated by site/build.ts.\nexport const PRELUDE = ${JSON.stringify(prelude)};\nexport const DEMOS = ${JSON.stringify(demos)};\nexport const TYPE_FILES = ${JSON.stringify(files)};\nexport const GENERATOR = ${JSON.stringify(generator)};\nexport const GALLERY = ${JSON.stringify(gallery)};\n`,
 );
 
-console.log(JSON.stringify({ out, version: pkg.version, demos: demos.map((d) => d.type) }));
+console.log(JSON.stringify({ out, version: pkg.version, demos: demos.map((d) => d.type), gallery: gallery.length }));

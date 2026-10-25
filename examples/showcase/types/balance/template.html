@@ -1,8 +1,8 @@
 <div class="sc-eyebrow">Balance the equation</div>
-{{#prompt}}<div class="prose">{{md:prompt}}</div>{{/prompt}}
+{{#prompt}}<div class="prose bl-prompt">{{md:prompt}}</div>{{/prompt}}
 <div class="bl-eq" role="group" aria-label="Equation"></div>
-<div class="bl-tally" aria-live="polite"></div>
-<p class="e-muted bl-hint only-answer">Tap <b>+</b> and <b>−</b>, or focus a coefficient and use <kbd>↑</kbd> <kbd>↓</kbd> (or type a number). <kbd>←</kbd> <kbd>→</kbd> move between species.</p>
+<div class="bl-ledger" aria-live="polite"></div>
+<p class="e-muted bl-hint only-answer">Tap the arrows or type a number.<span class="kb"> On a keyboard, <kbd>↑</kbd> <kbd>↓</kbd> change a coefficient and <kbd>←</kbd> <kbd>→</kbd> move between them.</span></p>
 <template data-on="result">
   <div class="e-reveal">
     <div class="bl-answer"></div>

@@ -1,0 +1,25 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- The social share image (site/src/assets/og.png). Render with site/tools/shoot.mjs after a build. -->
+<link rel="stylesheet" href="../../dist/assets/site.css">
+<style>
+  body { width: 1200px; height: 630px; overflow: hidden; margin: 0; }
+  .og { position: relative; height: 100%; display: grid; grid-template-columns: 1.1fr 0.9fr; align-items: center; gap: 3rem; padding: 0 4.5rem; isolation: isolate; }
+  .og .hero-bg { inset: 0; }
+  .og h1 { font-size: 4.1rem; line-height: 1.02; letter-spacing: -0.045em; font-weight: 640; margin: 1.6rem 0 0; }
+  .og h1 em { font-style: italic; font-family: var(--font-serif); font-weight: 400; color: var(--highlight); font-size: 1.08em; }
+  .og .wordmark { font-size: 2.6rem; }
+  .og p { color: var(--muted-foreground); font-size: 1.25rem; margin: 1.4rem 0 0; max-width: 30rem; }
+  .og .url { position: absolute; left: 4.5rem; bottom: 2.4rem; font: 0.95rem var(--font-mono); color: var(--muted-foreground); }
+  .og img { width: 100%; border-radius: 1rem; border: 1px solid var(--border); box-shadow: 0 30px 80px -30px #000; }
+</style></head>
+<body><div class="og">
+  <div class="hero-bg" aria-hidden="true"><div class="grid"></div><div class="glow"></div></div>
+  <div>
+    <div class="wordmark"><span class="eps">ε</span>tude</div>
+    <h1>Flashcards that can be <em>anything</em> a web page can be.</h1>
+    <p>Programmable card types, AI grading, FSRS-6 and exam deadlines.</p>
+  </div>
+  <img src="../../src/assets/cards/chess.webp" alt="">
+  <div class="url">github.com/Zibhelina/etude</div>
+</div></body></html>

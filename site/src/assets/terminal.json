@@ -1,0 +1,29 @@
+{
+  "recorded": "2026-10-25T02:42:52Z",
+  "steps": [
+    {
+      "cmd": "etude pack check waves.pack.json | jq .ok",
+      "out": "true"
+    },
+    {
+      "cmd": "etude pack import waves.pack.json | jq '.[0].items'",
+      "out": "{\"created\":2,\"updated\":0,\"unchanged\":0}"
+    },
+    {
+      "cmd": "etude deck set Physics::Waves deadline=2026-11-12T09:00-08:00 | jq .changed",
+      "out": "{\"deadline\":{\"from\":null,\"to\":\"2026-11-12T17:00:00.000Z\"}}"
+    },
+    {
+      "cmd": "etude study next --deck Physics::Waves | jq '.card | {cardId, seed, title, answerFormat}'",
+      "out": "{\n  \"cardId\": 1,\n  \"seed\": 1879451685,\n  \"title\": \"A wave has frequency f = 50 Hz and wavelength λ = 4 m. Its speed?\",\n  \"answerFormat\": \"a JSON array with one string per part (1 part), e.g. [\\\"1.2\\\"]; units may be included\"\n}"
+    },
+    {
+      "cmd": "etude study answer 1 --seed 1879451685 --answer '[\"200 m/s\"]' | jq '{verdict: .grade.verdict, rated}'",
+      "out": "{\n  \"verdict\": \"correct\",\n  \"rated\": {\n    \"reviewId\": 1,\n    \"rating\": \"good\",\n    \"due\": \"2026-10-25T02:52:49.424Z\",\n    \"in\": \"10m\",\n    \"state\": \"learning\"\n  }\n}"
+    },
+    {
+      "cmd": "etude study submit 2 --seed 1223266306 --feedback --text -a \"They add up and get louder and quieter.\" | jq '{verdict: .grade.verdict, feedback}'",
+      "out": "{\n  \"verdict\": \"incorrect\",\n  \"feedback\": \"You've described the audible result but not the mechanism, so this doesn't yet earn the mark. The missing piece is phase: the two waves slowly drift in and out of phase, so their sum alternately reinforces and cancels. State that this swelling and fading happens at the difference frequency, $|f_1 - f_2|$, and the answer is complete.\"\n}"
+    }
+  ]
+}

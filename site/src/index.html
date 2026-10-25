@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Etude: flashcards that can be anything a web page can be</title>
+<meta name="description" content="Etude is a free, self-hosted spaced-repetition app where every card type is a small program. Scripts and AI grade your answers, FSRS-6 schedules the reviews and your exam date is part of the plan.">
+<meta name="theme-color" content="#0f0f0f">
+<meta property="og:title" content="εtude">
+<meta property="og:description" content="Flashcards that can be anything a web page can be. Programmable card types, AI grading, FSRS-6 and exam deadlines.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://zibhelina.github.io/etude/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preload" href="assets/fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="runtime/vendor/katex.css">
+<link rel="stylesheet" href="runtime/code.css">
+<link rel="stylesheet" href="assets/site.css">
+<script type="module" src="assets/site.js"></script>
+</head>
+<body>
+
+<header class="nav" id="nav">
+  <div class="wrap">
+    <a href="./" class="wordmark" aria-label="Etude home"><span class="eps">ε</span>tude</a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#cards">Cards</a>
+      <a href="#grading">Grading</a>
+      <a href="#exams">Exams</a>
+      <a href="#agents">Agents</a>
+      <a href="#app">The app</a>
+    </nav>
+    <div class="nav-end">
+      <a class="btn btn-ghost btn-sm" href="https://github.com/Zibhelina/etude" aria-label="Etude on GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span class="gh-stars" data-stars hidden></span>
+      </a>
+      <a class="btn btn-primary btn-sm" href="download.html">Download</a>
+    </div>
+  </div>
+</header>
+
+<main>
+<!-- ============================================================ hero -->
+<section class="hero">
+  <div class="hero-bg" aria-hidden="true"><div class="grid"></div><div class="glow"></div><div class="glow b"></div></div>
+  <div class="wrap hero-grid">
+    <div>
+      <a class="pill fade-up" href="https://github.com/Zibhelina/etude/blob/main/CHANGELOG.md"><b>v{{VERSION}}</b> Programmable cards<span class="hide-sm">, AI grading, exam deadlines</span></a>
+      <h1>
+        <span class="w" style="animation-delay:.05s">Flashcards</span>
+        <span class="w" style="animation-delay:.12s">that</span>
+        <span class="w" style="animation-delay:.19s">can</span>
+        <span class="w" style="animation-delay:.26s">be</span>
+        <span class="w" style="animation-delay:.36s"><em>anything</em></span>
+        <span class="w" style="animation-delay:.46s">a&nbsp;web&nbsp;page</span>
+        <span class="w" style="animation-delay:.64s">can</span>
+        <span class="w" style="animation-delay:.70s">be.</span>
+      </h1>
+      <p class="lede fade-up" style="animation-delay:.55s">Etude is a spaced-repetition app where <strong>every card type is a small program</strong>. You compute, drag, play, draw and prove. Scripts and AI grade the answer, FSRS-6 schedules the next review, and your exam date is part of the plan.</p>
+      <div class="hero-cta fade-up" style="animation-delay:.7s">
+        <a class="btn btn-primary btn-lg" href="download.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+          Download Etude
+        </a>
+        <a class="btn btn-lg" href="#cards">
+          See the cards
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </a>
+      </div>
+      <div class="hero-meta fade-up" style="animation-delay:.85s">
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Free and open source</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Runs on your own computer</span>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Desktop and phone</span>
+      </div>
+    </div>
+
+    <div class="stage-wrap fade-up" style="animation-delay:.35s">
+      <div class="window stage" id="stage">
+        <div class="window-bar">
+          <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="window-title">Etude Showcase</div>
+        </div>
+        <div class="stage-tabs" role="tablist" aria-label="Card types"></div>
+        <div class="stage-meta">
+          <span class="badge new">new</span>
+          <span class="badge hl" data-variant hidden>variant</span>
+          <span class="sp"></span>
+          <button class="linkish" data-reroll type="button" title="A new variant of this card">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+            New variant
+          </button>
+        </div>
+        <div class="stage-body">
+          <div class="stage-loader">Loading card…</div>
+        </div>
+        <div class="stage-foot">
+          <div class="verdict" aria-live="polite"></div>
+          <div class="stage-actions"><button class="btn btn-primary" data-check type="button" disabled>Check <kbd style="border-color:transparent;color:inherit;opacity:.55">Ctrl ↵</kbd></button></div>
+          <div class="ratings" hidden></div>
+        </div>
+      </div>
+      <p class="stage-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>These are real Etude cards, running in your browser with the app's own code. Go ahead and answer one.</p>
+    </div>
+  </div>
+</section>
+
+<section class="facts" aria-label="Etude in numbers">
+  <div class="wrap">
+    <div class="fact"><b class="tabular" data-count="26">26</b><span>card types included</span></div>
+    <div class="fact"><b class="tabular" data-count="113">113</b><span>CLI commands, all JSON</span></div>
+    <div class="fact"><b>FSRS-6</b><span>scheduling, with exam deadlines</span></div>
+    <div class="fact"><b>MIT</b><span>self-hosted, no account</span></div>
+  </div>
+</section>
+
+<!-- =================================================== why: versus -->
+<section class="section" id="cards">
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <span class="eyebrow">Why another flashcard app</span>
+      <h2>Recognition isn't the skill. <span class="serif">Doing it</span> is.</h2>
+      <p class="sub">Classic flashcards show a front, you think of the back and grade yourself. That works for vocabulary. Most of what people study is something you do: compute, derive, trace an algorithm, explain why.</p>
+    </div>
+
+    <div class="versus">
+      <div class="vs-panel" data-reveal>
+        <h3>A classic card <small>front, back, your honest guess</small></h3>
+        <div class="flip" aria-hidden="true">
+          <div class="flip-card">
+            <div class="front">Transmission delay of a 1,500-byte packet on a 10&nbsp;Mbps link?</div>
+            <div class="back"><span><b>1.2 ms</b><br><small>Did you get it? Be honest.</small></span></div>
+          </div>
+        </div>
+        <div class="self-rate" aria-hidden="true"><span>Again</span><span>Hard</span><span>Good</span><span>Easy</span></div>
+        <ol class="vs-steps">
+          <li><i>1</i><span>See the front, <b>think of the back</b>.</span></li>
+          <li><i>2</i><span>Flip it and <b>grade yourself</b>.</span></li>
+          <li><i>3</i><span>Next time: <b>the same numbers</b>, so you end up memorizing 1.2&nbsp;ms.</span></li>
+        </ol>
+      </div>
+
+      <div class="vs-panel etude" data-reveal style="--d:.1s">
+        <h3><span class="wordmark" style="font-size:1.25rem"><span class="eps">ε</span>tude</span> <small>a card that checks your work</small></h3>
+        <div class="paper" id="mini" aria-label="A numeric card answering itself" style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:.8rem">
+          <div class="label">Numeric <span class="badge hl">variant</span></div>
+          <div class="prompt" data-q>&nbsp;</div>
+          <div class="answer mono" style="margin:0;font-family:var(--font-mono);font-size:.9rem;line-height:1.5"><span data-typed></span><span class="caret"></span></div>
+          <div class="grade-line" style="margin:0;min-height:1.5rem" data-v></div>
+        </div>
+        <ol class="vs-steps">
+          <li><i>1</i><span>A generator makes <b>new numbers every review</b>.</span></li>
+          <li><i>2</i><span>You <b>work it out</b> and type the answer, units and all.</span></li>
+          <li><i>3</i><span>A script <b>checks it</b>, with partial credit, and FSRS schedules the next review.</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="compare" data-reveal>
+      <div class="compare-row head"><div></div><div class="a">Classic flashcard apps</div><div class="b">Etude</div></div>
+      <div class="compare-row"><div class="k">What a card is</div><div class="a">A front and a back</div><div class="b">A program: template, script and grader</div></div>
+      <div class="compare-row"><div class="k">Who grades it</div><div class="a">You</div><div class="b">You, a script, AI, or a script that hands hard cases to AI</div></div>
+      <div class="compare-row"><div class="k">Calculations</div><div class="a">Same numbers every time</div><div class="b">A new variant every review</div></div>
+      <div class="compare-row"><div class="k">Open answers</div><div class="a">You compare with the back</div><div class="b">An AI verdict plus a few sentences on what was missing</div></div>
+      <div class="compare-row"><div class="k">Math answers</div><div class="a">Shown, never checked</div><div class="b">Typed with live rendering, graded by equivalence</div></div>
+      <div class="compare-row"><div class="k">Exam dates</div><div class="a">Intervals ignore them</div><div class="b">A deadline pulls every card in before the exam</div></div>
+      <div class="compare-row"><div class="k">Automation</div><div class="a">Add-ons, or editing the database</div><div class="b">Every action is a CLI command with JSON output</div></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ======================================================= grading -->
+<section class="section" id="grading">
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <span class="eyebrow">Grading</span>
+      <h2>A grader for <span class="serif">every</span> kind of answer.</h2>
+      <p class="sub">Each card type picks how it's checked. Grading instructions stack from the item's rubric through its tags, decks and type, so the grader knows what your course expects.</p>
+    </div>
+    <div class="graders">
+      <div class="grader" data-reveal><code>self</code><h3>You rate it</h3><p>For recall you can judge yourself: show the answer, pick Again, Hard, Good or Easy.</p></div>
+      <div class="grader" data-reveal style="--d:.06s"><code>script</code><h3>Code checks it</h3><p>Numbers within a tolerance, math by equivalence, chess moves against the engine's list, with partial credit.</p></div>
+      <div class="grader" data-reveal style="--d:.12s"><code>ai</code><h3>AI reads it</h3><p>Open answers and drawings get a verdict and two to four sentences on what was missing, in the card's language.</p></div>
+      <div class="grader" data-reveal style="--d:.18s"><code>hybrid</code><h3>Both</h3><p>A script decides what it can and hands the rest to AI. Code cards run hidden tests when there are any.</p></div>
+    </div>
+
+    <div class="ai-demo" id="ai-demo">
+      <div class="paper" data-reveal>
+        <div class="label">Free answer <span class="badge">graded by AI</span></div>
+        <div class="prompt" data-prompt></div>
+        <div class="answer" data-answer></div>
+      </div>
+      <div class="paper" data-reveal style="--d:.1s;display:flex;flex-direction:column">
+        <div class="label">Result</div>
+        <div class="grade-line"><span class="v" data-verdict></span><span class="tabular" style="color:var(--muted-foreground)" data-score></span><span class="meter"><i data-meter></i></span></div>
+        <div class="feedback-box" style="flex:1">
+          <div class="h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>Feedback</div>
+          <div class="feedback-text" data-feedback></div>
+        </div>
+        <p class="fineprint" style="margin-top:1rem" data-model></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ===================================================== generators -->
+<section class="section" id="generators">
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <span class="eyebrow">Generators</span>
+      <h2>New numbers, <span class="serif">every</span> review.</h2>
+      <p class="sub">Give an item a generator and it stops repeating itself, so you learn the method instead of an answer. The seed is saved with each review, so any variant can be brought back.</p>
+    </div>
+    <div class="gen">
+      <div data-reveal>
+        <pre class="code"><div class="code-head"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/></svg>generator · showcase.math.derivative</div><code data-gen-code></code></pre>
+      </div>
+      <div class="variants" data-reveal style="--d:.1s">
+        <div class="label" style="font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground)">What the learner sees</div>
+        <div class="variant-stack" data-variants></div>
+        <div class="seed"><span>seed <b data-seed>0</b></span><span class="seed-dots" data-dots></span></div>
+        <button class="btn" type="button" data-roll>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+          Roll a new variant
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- =========================================================== exams -->
+<section class="section" id="exams">
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <span class="eyebrow">Exam deadlines</span>
+      <h2>Your exam date is <span class="serif">part of</span> the schedule.</h2>
+      <p class="sub">Spaced repetition will happily push a card you know to after your exam. Give the deck a deadline and nothing is scheduled past it: every card comes back for one more look before the day.</p>
+    </div>
+    <div class="exam" data-reveal id="exam">
+      <div class="exam-top">
+        <div>
+          <label for="days">Exam in <b data-days>30</b> days</label>
+          <input class="slider" id="days" type="range" min="7" max="60" value="30" step="1">
+        </div>
+        <div class="exam-stats">
+          <div class="exam-stat"><b data-recall-off>–</b><span>recall on exam day, no deadline</span></div>
+          <div class="exam-stat hl"><b data-recall-on>–</b><span>with a deadline</span></div>
+        </div>
+      </div>
+      <div class="lanes">
+        <div>
+          <div class="lane-h"><span>Without a deadline</span><span data-last-off></span></div>
+          <div class="track" data-track-off></div>
+        </div>
+        <div>
+          <div class="lane-h"><span>With a deadline</span><span data-last-on></span></div>
+          <div class="track with" data-track-on></div>
+          <div class="axis" data-axis></div>
+        </div>
+      </div>
+      <p class="exam-note">One card learned on day 0 and answered Good at every review, with daily study at 5 pm and the exam at 9 am. The line is the predicted chance you'd recall it; the numbers above are for a deck of 40 cards learned over the first weeks. Computed live in your browser with the real FSRS-6 scheduler (ts-fsrs) and Etude's deadline rule.</p>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ========================================================== agents -->
+<section class="section" id="agents">
+  <div class="wrap agent">
+    <div data-reveal>
+      <span class="eyebrow">For agents</span>
+      <h2 style="margin-top:.9rem;font-size:clamp(1.9rem,4.2vw,3rem);line-height:1.08;letter-spacing:-.04em">Built for you <span class="serif" style="color:var(--highlight)">and</span> your agent.</h2>
+      <p class="sub" style="margin-top:1.1rem;color:var(--muted-foreground);font-size:1.05rem">Every action in the app is also a command with JSON output. Give an agent your notes and it can write the deck, quiz you in a chat and read back what you keep missing.</p>
+      <ul class="agent-list">
+        <li><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span><span><b>One file per deck</b>A pack carries decks, presets, tags, card types and items. Import is idempotent and keeps review history.</span></li>
+        <li><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg></span><span><b>A catalog it can read</b><code>etude commands</code> lists every command with its arguments, flags, examples and whether it writes.</span></li>
+        <li><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></span><span><b>A skill to drop in</b>The repo ships a skill file that teaches an agent the whole workflow, from writing a pack to finding weak cards.</span></li>
+      </ul>
+    </div>
+    <div class="term" data-reveal style="--d:.1s" id="term">
+      <div class="window-bar"><div class="dots" aria-hidden="true"><i></i><i></i><i></i></div><div class="window-title">agent session · recorded</div></div>
+      <div class="term-body"><pre data-term></pre></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ============================================================= app -->
+<section class="section" id="app">
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <span class="eyebrow">The app</span>
+      <h2>Quiet, fast and <span class="serif">made for</span> studying.</h2>
+      <p class="sub">A dark, keyboard-first web app that runs on your computer. Open it in a browser, or on your phone over your own network.</p>
+    </div>
+    <div data-reveal>
+      <div class="shots-tabs" role="tablist" aria-label="Screens" data-shot-tabs>
+        <button role="tab" aria-selected="true" data-shot="decks">Decks</button>
+        <button role="tab" aria-selected="false" data-shot="study">Study</button>
+        <button role="tab" aria-selected="false" data-shot="browse">Browse</button>
+        <button role="tab" aria-selected="false" data-shot="types">Card types</button>
+        <button role="tab" aria-selected="false" data-shot="stats">Stats</button>
+      </div>
+      <div class="browser">
+        <div class="window-bar"><div class="dots" aria-hidden="true"><i></i><i></i><i></i></div><div class="url">127.0.0.1:4610</div><div style="width:2.4rem"></div></div>
+        <div class="browser-view">
+          <img class="on" data-shot-img="decks" src="assets/shots/app-decks.webp" alt="The Decks page: a tree of decks with new, learning and due counts" width="2400" height="1500">
+          <img data-shot-img="study" src="assets/shots/app-study.webp" alt="Studying a chess card: White to play and mate in one" width="2400" height="1500" loading="lazy">
+          <img data-shot-img="browse" src="assets/shots/app-browse.webp" alt="Browse: a search, a list of cards and the card editor" width="2400" height="1500" loading="lazy">
+          <img data-shot-img="types" src="assets/shots/app-types.webp" alt="The card type editor with a live preview of the chess card" width="2400" height="1500" loading="lazy">
+          <img data-shot-img="stats" src="assets/shots/app-stats.webp" alt="Stats: retention, recall, streak and a review heatmap" width="2400" height="1500" loading="lazy">
+        </div>
+      </div>
+      <p class="shot-caption" data-shot-caption></p>
+    </div>
+    <div class="phones" data-reveal>
+      <div class="phone l"><img src="assets/shots/phone-decks.webp" alt="Decks on a phone" loading="lazy" width="780" height="1688"></div>
+      <div class="phone c"><img src="assets/shots/phone-chess.webp" alt="A chess card on a phone" loading="lazy" width="780" height="1688"></div>
+      <div class="phone r"><img src="assets/shots/phone-stats.webp" alt="Stats on a phone" loading="lazy" width="780" height="1688"></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- =========================================================== types -->
+<section class="section" id="types">
+  <div class="wrap">
+    <div class="types">
+      <div data-reveal>
+        <span class="eyebrow">Card types</span>
+        <h2 style="margin-top:.9rem;font-size:clamp(1.9rem,4.2vw,3rem);line-height:1.08;letter-spacing:-.04em">Every card type is a folder of code <span class="serif" style="color:var(--highlight)">you can read</span>.</h2>
+        <p class="sub" style="margin-top:1.1rem;color:var(--muted-foreground);font-size:1.05rem">A type is a template, a stylesheet, a script for the card and optional scripts that prepare and grade it. The included types are written exactly this way, so you can open any of them, copy it and make it yours, in the app with a live preview or in your own editor.</p>
+        <div class="tree" style="margin-top:2rem" data-tree></div>
+      </div>
+      <div data-reveal style="--d:.1s;min-width:0">
+        <div class="code-tabs" role="tablist" aria-label="Files of the unit circle type" data-code-tabs></div>
+        <pre class="code"><code data-code></code></pre>
+        <p class="fineprint" data-code-note style="margin-top:.9rem"></p>
+      </div>
+    </div>
+  </div>
+  <div class="marquee" aria-label="Some of the included card types">
+    <div class="marquee-row" style="--dur:80s" data-marquee="0"></div>
+    <div class="marquee-row rev" style="--dur:95s" data-marquee="1"></div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ======================================================= features -->
+<section class="section">
+  <div class="wrap">
+    <div class="section-head center" data-reveal>
+      <span class="eyebrow">And everything around it</span>
+      <h2>The parts you'd expect, <span class="serif">done carefully</span>.</h2>
+    </div>
+    <div class="feats" data-reveal>
+      <div class="feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg><h3>FSRS-6 scheduling</h3><p>Learning steps, fuzz, daily limits, ordering, sibling burying, a suggested rating from the grade, undo, and replaying history after you change a setting.</p></div>
+      <div class="feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg><h3>Settings that inherit</h3><p>A preset on <code>Physics</code> applies to <code>Physics::Waves</code> unless that deck overrides it. Deadlines too.</p></div>
+      <div class="feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><h3>A search language</h3><p><code>deck:Physics is:due prop:lapses&gt;=2</code> works in Browse, in filtered study sessions and in the CLI.</p></div>
+      <div class="feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><h3>Statistics that mean something</h3><p>True retention, predicted recall now, a review heatmap, recall per tag and the forecast up to your deadline.</p></div>
+      <div class="feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg><h3>Phone, tablet, embed</h3><p>Layouts made for phones, a token for your network, and a compact <code>/embed</code> view that fits inside other apps.</p></div>
+      <div class="feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 11.979 2z"/></svg><h3>Themes</h3><p>Five built in, three dark and two light, or your own with CSS variables. Cards follow the theme.</p></div>
+      <div class="feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg><h3>Safe to share decks</h3><p>Card code runs in sandboxed frames and server scripts in QuickJS, so a pack from someone else can't touch your data.</p></div>
+      <div class="feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg><h3>AI you choose</h3><p>Off until you add a key. OpenRouter, OpenAI or any OpenAI-compatible server, including a local llama.cpp or Ollama.</p></div>
+      <div class="feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/></svg><h3>Math and code that render</h3><p>Answer fields are live Markdown editors: <code>$math$</code> and code blocks render as you type, with highlighting for about 140 languages.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================= cta -->
+<section class="cta">
+  <div class="big-eps" aria-hidden="true">ε</div>
+  <div class="wrap" data-reveal>
+    <h2>Practice that <span class="serif" style="color:var(--highlight)">checks</span> your work.</h2>
+    <p>Free and open source under MIT. It runs on your own computer, and your collection stays there unless you turn on AI grading.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary btn-lg" href="download.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        Download Etude
+      </a>
+      <a class="btn btn-lg" href="https://github.com/Zibhelina/etude">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        View on GitHub
+      </a>
+    </div>
+    <div><div class="copy-line"><code><span class="ps">$ </span>git clone https://github.com/Zibhelina/etude &amp;&amp; cd etude &amp;&amp; npm install &amp;&amp; npm run build &amp;&amp; npm start</code><button class="copy-btn" type="button" data-copy="git clone https://github.com/Zibhelina/etude && cd etude && npm install && npm run build && npm start" aria-label="Copy the install command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div></div>
+  </div>
+</section>
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div>
+      <a href="./" class="wordmark"><span class="eps">ε</span>tude</a>
+      <p>Spaced-repetition practice with programmable card types and AI grading.</p>
+    </div>
+    <div><h4>Product</h4><ul><li><a href="#cards">Cards</a></li><li><a href="#grading">Grading</a></li><li><a href="#exams">Exams</a></li><li><a href="#agents">Agents</a></li><li><a href="download.html">Download</a></li></ul></div>
+    <div><h4>Docs</h4><ul><li><a href="https://github.com/Zibhelina/etude#readme">README</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/docs/packs.md">Packs</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/docs/types.md">Card types</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/docs/cli.md">CLI reference</a></li></ul></div>
+    <div><h4>Project</h4><ul><li><a href="https://github.com/Zibhelina/etude">GitHub</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/SECURITY.md">Security</a></li><li><a href="https://github.com/Zibhelina/etude/issues">Issues</a></li></ul></div>
+    <div class="fine"><span>MIT License · © 2026 Joao Araujo</span><span>Made with <span class="wordmark" style="font-size:1em"><span class="eps">ε</span>tude</span> cards, of course.</span></div>
+  </div>
+</footer>
+</body>
+</html>

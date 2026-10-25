@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Download Etude</title>
+<meta name="description" content="Install Etude on macOS, Windows or Linux. It needs Node 24 or newer and runs in your browser.">
+<meta name="theme-color" content="#0f0f0f">
+<meta property="og:title" content="Download εtude">
+<meta property="og:description" content="Install Etude on macOS, Windows or Linux and open it from your phone.">
+<meta property="og:image" content="https://zibhelina.github.io/etude/assets/og.png">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preload" href="assets/fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/site.css">
+<script type="module" src="assets/download.js"></script>
+</head>
+<body>
+<header class="nav" id="nav">
+  <div class="wrap">
+    <a href="./" class="wordmark" aria-label="Etude home"><span class="eps">ε</span>tude</a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="./#cards">Cards</a>
+      <a href="./#grading">Grading</a>
+      <a href="./#exams">Exams</a>
+      <a href="./#agents">Agents</a>
+      <a href="download.html" aria-current="page">Download</a>
+    </nav>
+    <div class="nav-end">
+      <a class="btn btn-ghost btn-sm" href="https://github.com/Zibhelina/etude" aria-label="Etude on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="dl-hero">
+    <div class="hero-bg" aria-hidden="true"><div class="grid"></div><div class="glow"></div></div>
+    <div class="wrap">
+      <div class="dl-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path transform="translate(2.324 21.144) scale(0.04253 -0.04253)" d="M428 393Q428 378 416.0 367.0Q404 356 391 356Q382 356 369 365Q333 392 283 392Q198 392 149 359Q116 339 116 308Q116 289 133 272Q142 263 145.0 262.0Q148 261 157 264Q188 278 238 278Q256 278 265.5 277.5Q275 277 286.5 274.0Q298 271 303.0 264.5Q308 258 308 247Q308 225 287 215Q270 206 223.0 206.0Q176 206 142 219L132 212Q68 169 68 112Q68 39 201 39Q315 39 348 99Q351 105 362 105Q376 103 376 88Q376 81 372 73Q350 29 302.0 3.5Q254 -22 190 -22Q108 -22 63 23Q27 57 27 107Q27 150 59 194Q72 211 97 232L107 239L99 248Q76 273 76 304Q76 338 97 364Q123 399 171.0 423.0Q219 447 275 452H290Q359 452 405 421Q428 406 428 393Z"/></svg></div>
+      <h1 class="fade-up" style="animation-delay:.1s">Get <span class="wordmark"><span class="eps">ε</span>tude</span></h1>
+      <p class="lede fade-up" style="animation-delay:.2s">Etude runs on your own computer and opens in your browser. Install it once, then study from your desk, your phone or anywhere on your network.</p>
+      <div class="dl-version fade-up" style="animation-delay:.25s"><a class="pill" href="https://github.com/Zibhelina/etude/blob/main/CHANGELOG.md"><b>v{{VERSION}}</b> What's new in this version</a></div>
+      <div class="os-tabs fade-up" style="animation-delay:.3s">
+        <div class="shots-tabs" role="tablist" aria-label="Operating system">
+          <button role="tab" data-os="mac" aria-selected="true"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 1.43c0 1.14-.42 2.2-1.26 3.18-1 1.17-2.21 1.84-3.52 1.74a3.5 3.5 0 0 1-.03-.43c0-1.1.48-2.27 1.33-3.23.42-.49.96-.89 1.6-1.21.65-.32 1.26-.49 1.83-.52.02.16.05.31.05.47Zm4.6 16.12c-.37.86-.81 1.65-1.32 2.37-.69.99-1.26 1.67-1.7 2.05-.68.63-1.41.95-2.2.97-.56 0-1.24-.16-2.03-.49-.8-.32-1.53-.48-2.2-.48-.7 0-1.46.16-2.27.48-.81.33-1.46.5-1.96.52-.76.03-1.51-.3-2.27-1.01-.48-.42-1.08-1.13-1.8-2.14-.77-1.08-1.4-2.33-1.9-3.76-.53-1.54-.8-3.04-.8-4.48 0-1.66.36-3.08 1.07-4.28a6.3 6.3 0 0 1 2.25-2.28 6.04 6.04 0 0 1 3.04-.86c.6 0 1.38.19 2.35.55.97.36 1.6.55 1.86.55.2 0 .9-.22 2.08-.65 1.12-.4 2.06-.57 2.84-.5 2.1.17 3.67.99 4.72 2.48-1.88 1.14-2.8 2.73-2.79 4.77.02 1.59.6 2.91 1.73 3.96.51.49 1.08.86 1.72 1.13-.14.4-.28.78-.43 1.15Z"/></svg>macOS</button>
+          <button role="tab" data-os="windows" aria-selected="false"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.1 10.4 4v7.1H3V5.1Zm0 13.8 7.4 1.1v-7H3v5.9Zm8.3 1.2L21 21.5v-8.4h-9.7v7ZM11.3 3.9v7.2H21V2.5l-9.7 1.4Z"/></svg>Windows</button>
+          <button role="tab" data-os="linux" aria-selected="false"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2c-2.2 0-3.6 1.9-3.6 4.6 0 1.3.2 2.2-.4 3.3-.8 1.4-2.6 3.3-3.2 5.6-.3 1.2.1 2 .7 2.3-.3.9-.1 1.9 1 2.4 1 .4 2.4.6 3.6 1.1.9.4 1.8.3 2.4-.4.4.1 1 .1 1.6 0 .6.7 1.5.8 2.4.4 1.2-.5 2.6-.7 3.6-1.1 1.1-.5 1.3-1.5 1-2.4.6-.3 1-1.1.7-2.3-.6-2.3-2.4-4.2-3.2-5.6-.6-1.1-.4-2-.4-3.3C15.6 3.9 14.2 2 12 2Zm-1.4 4.3c.4 0 .7.5.7 1.1s-.3 1.1-.7 1.1-.7-.5-.7-1.1.3-1.1.7-1.1Zm2.8 0c.4 0 .7.5.7 1.1s-.3 1.1-.7 1.1-.7-.5-.7-1.1.3-1.1.7-1.1ZM12 9.3c.9 0 2 .5 2 .9s-1.1 1.2-2 1.2-2-.8-2-1.2 1.1-.9 2-.9Z"/></svg>Linux</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding-bottom:6rem">
+    <div class="wrap">
+      <div class="dl-grid">
+        <div class="dl-card os-panel" data-panel>
+          <h2>Install</h2>
+          <p>Four steps and Etude is running. Update it later with <code>git pull</code> and <code>npm run build</code>.</p>
+          <ol class="steps">
+            <li>
+              <div>
+                <h3>Install Node 24 or newer</h3>
+                <p data-node-note>Etude runs on Node. Node runs its TypeScript directly, so there's no compile step for the server.</p>
+                <div class="cmd"><pre data-node-cmd></pre><button class="copy-btn" type="button" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div>
+              </div>
+            </li>
+            <li>
+              <div>
+                <h3>Get Etude and build the app</h3>
+                <p>Clone the repository, install the dependencies and build the web app once.</p>
+                <div class="cmd"><pre><span class="ps" data-ps>$ </span>git clone https://github.com/Zibhelina/etude.git
+<span class="ps" data-ps>$ </span>cd etude
+<span class="ps" data-ps>$ </span>npm install
+<span class="ps" data-ps>$ </span>npm run build</pre><button class="copy-btn" type="button" aria-label="Copy" data-copy-text="git clone https://github.com/Zibhelina/etude.git
+cd etude
+npm install
+npm run build"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div>
+              </div>
+            </li>
+            <li>
+              <div>
+                <h3>Start it</h3>
+                <div class="cmd"><pre><span class="ps" data-ps>$ </span>npm start</pre><button class="copy-btn" type="button" aria-label="Copy" data-copy-text="npm start"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div>
+                <p style="margin-top:.7rem">Then open <a href="http://127.0.0.1:4610">127.0.0.1:4610</a>. Your collection lives in <code data-home>~/.etude/etude.db</code>.</p>
+              </div>
+            </li>
+            <li>
+              <div>
+                <h3>Try the showcase <span class="opt">optional</span></h3>
+                <p>39 cards, each a different kind of exercise: chess, piano, the unit circle, regexes, timelines and more.</p>
+                <div class="cmd"><pre><span class="ps" data-ps>$ </span>node src/cli/main.ts pack import examples/showcase.pack.json</pre><button class="copy-btn" type="button" aria-label="Copy" data-copy-text="node src/cli/main.ts pack import examples/showcase.pack.json"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button></div>
+              </div>
+            </li>
+          </ol>
+          <p class="fineprint">Want the <code>etude</code> command everywhere? Run <code>npm link</code> in the folder, then <code>etude serve</code> and <code>etude pack import file.json</code> work from any directory.</p>
+        </div>
+
+        <div class="side">
+          <a class="dl-link" href="https://github.com/Zibhelina/etude/archive/refs/heads/main.zip">
+            <span class="i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></span>
+            <span><b>Source code (.zip)</b><span>No git? Unzip it, then run <code>npm install</code>, <code>npm run build</code> and <code>npm start</code> in the folder.</span></span>
+            <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+          </a>
+          <a class="dl-link" href="https://github.com/Zibhelina/etude">
+            <span class="i"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></span>
+            <span><b>GitHub repository</b><span>Code, issues, changelog and releases.</span></span>
+            <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+          </a>
+          <div class="dl-card">
+            <h2 style="font-size:1.05rem">What you need</h2>
+            <ul class="reqs">
+              <li><span><b>Node 24</b> or newer</span></li>
+              <li><span><b>macOS, Windows or Linux</b>, any modern browser</span></li>
+              <li><span>About <b>250 MB</b> of disk with the dependencies</span></li>
+              <li><span>An API key <b>only if</b> you want AI grading</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="more-ways">
+        <div class="dl-card" data-reveal>
+          <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>Turn on AI grading</h2>
+          <p>Put a key in <code data-env>~/.etude/.env</code> and restart. Settings → AI grading has presets for OpenRouter, OpenAI and a local server, and a button that grades a sample answer.</p>
+          <div class="cmd"><pre>OPENROUTER_API_KEY=sk-or-your-key-here</pre></div>
+          <p class="fineprint"><a href="https://github.com/Zibhelina/etude/blob/main/SECURITY.md">SECURITY.md</a> lists exactly what is sent to the provider.</p>
+        </div>
+        <div class="dl-card" data-reveal style="--d:.06s">
+          <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>Study on your phone</h2>
+          <p>By default the server only listens on your computer. Give it a token to open it on your network, then add it to your home screen.</p>
+          <div class="cmd"><pre><span class="ps" data-ps>$ </span>npm start -- --host 0.0.0.0 --token YOUR-SECRET</pre></div>
+          <p class="fineprint">Then open this address on the phone and add it to the home screen. Away from home, use a private network such as Tailscale, or a reverse proxy with TLS.</p>
+          <div class="cmd"><pre>http://&lt;your-computer&gt;:4610/?token=YOUR-SECRET</pre></div>
+        </div>
+        <div class="dl-card" data-reveal style="--d:.12s">
+          <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>Give it to your agent</h2>
+          <p>The repo ships <a href="https://github.com/Zibhelina/etude/blob/main/skill/SKILL.md">skill/SKILL.md</a>. Drop it into an agent's skills folder and it can build packs, quiz you and find weak cards.</p>
+          <div class="cmd"><pre><span class="ps" data-ps>$ </span>etude commands | jq '.commands | length'
+<span class="out">113</span></pre></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div>
+      <a href="./" class="wordmark"><span class="eps">ε</span>tude</a>
+      <p>Spaced-repetition practice with programmable card types and AI grading.</p>
+    </div>
+    <div><h4>Product</h4><ul><li><a href="./#cards">Cards</a></li><li><a href="./#grading">Grading</a></li><li><a href="./#exams">Exams</a></li><li><a href="./#agents">Agents</a></li><li><a href="download.html">Download</a></li></ul></div>
+    <div><h4>Docs</h4><ul><li><a href="https://github.com/Zibhelina/etude#readme">README</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/docs/packs.md">Packs</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/docs/types.md">Card types</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/docs/cli.md">CLI reference</a></li></ul></div>
+    <div><h4>Project</h4><ul><li><a href="https://github.com/Zibhelina/etude">GitHub</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/SECURITY.md">Security</a></li><li><a href="https://github.com/Zibhelina/etude/issues">Issues</a></li></ul></div>
+    <div class="fine"><span>MIT License · © 2026 Joao Araujo</span><span>Made with <span class="wordmark" style="font-size:1em"><span class="eps">ε</span>tude</span> cards, of course.</span></div>
+  </div>
+</footer>
+</body>
+</html>

@@ -48,7 +48,9 @@
     "start": "node src/cli/main.ts serve",
     "test": "node --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p web/tsconfig.json",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "site": "node site/build.ts",
+    "site:serve": "node site/tools/serve.mjs"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",

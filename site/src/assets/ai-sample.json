@@ -1,0 +1,9 @@
+{
+  "prompt": "Prove by induction that for every integer $n \\ge 1$\n\n$$\\sum_{k=1}^{n} k = \\frac{n(n+1)}{2}.$$\n\nWrite it the way you would on paper: math in `$...$` renders as you type.",
+  "answer": "Assume it holds for $n$: $1 + \\dots + n = \\frac{n(n+1)}{2}$. Adding $n+1$ to both sides gives $\\frac{n(n+1)}{2} + (n+1) = \\frac{(n+1)(n+2)}{2}$, which is the formula for $n+1$. So it holds for every $n$.",
+  "verdict": "partial",
+  "score": 0.5036409558023737,
+  "model": "liquid/d1-ultra-20261015",
+  "ms": 387,
+  "feedback": "Your inductive step is correct, but the proof is incomplete: you never checked a base case. Add \"$n=1$: the sum is $1$ and $\\frac{1\\cdot 2}{2}=1$\" before the hypothesis, and state that the hypothesis holds for some $n\\ge 1$."
+}

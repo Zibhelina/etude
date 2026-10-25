@@ -8,3 +8,4 @@ web/dist/
 *.log
 /*.png
 /media/
+site/dist/

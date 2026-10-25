@@ -1,0 +1,87 @@
+[
+ {
+  "name": "app-decks",
+  "url": "/",
+  "width": 1440,
+  "height": 900,
+  "scale": 2,
+  "wait": 2500
+ },
+ {
+  "name": "app-browse",
+  "url": "/browse?q=deck:Physics&item=demo.phys.4",
+  "width": 1440,
+  "height": 900,
+  "scale": 2,
+  "wait": 3500
+ },
+ {
+  "name": "app-types",
+  "url": "/types/chess",
+  "width": 1440,
+  "height": 900,
+  "scale": 2,
+  "wait": 3500
+ },
+ {
+  "name": "app-stats",
+  "url": "/stats",
+  "width": 1440,
+  "height": 900,
+  "scale": 2,
+  "wait": 3000
+ },
+ {
+  "name": "app-study",
+  "url": "/study?card=38",
+  "width": 1152,
+  "height": 720,
+  "scale": 2,
+  "wait": 3500
+ },
+ {
+  "name": "phone-decks",
+  "url": "/",
+  "width": 390,
+  "height": 844,
+  "mobile": true,
+  "scale": 2,
+  "wait": 2500
+ },
+ {
+  "name": "phone-chess",
+  "url": "/study?card=38",
+  "width": 390,
+  "height": 844,
+  "mobile": true,
+  "scale": 2,
+  "wait": 3500
+ },
+ {
+  "name": "phone-circle",
+  "url": "/study?card=12",
+  "width": 390,
+  "height": 844,
+  "mobile": true,
+  "scale": 2,
+  "wait": 3500
+ },
+ {
+  "name": "phone-staff",
+  "url": "/study?card=34",
+  "width": 390,
+  "height": 844,
+  "mobile": true,
+  "scale": 2,
+  "wait": 3500
+ },
+ {
+  "name": "phone-stats",
+  "url": "/stats",
+  "width": 390,
+  "height": 844,
+  "mobile": true,
+  "scale": 2,
+  "wait": 3000
+ }
+]

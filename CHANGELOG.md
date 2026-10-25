@@ -1,7 +1,18 @@
 # Changelog
 
-## Unreleased
+## 2.1.0
 
+- Update from GitHub in one click. A small control in the bottom-right corner of Decks shows a check mark when Etude is current and a pink **N updates** when the repository has new commits; its popover lists them and **Update** pulls, reinstalls dependencies when they changed, rebuilds the app and restarts it. It refuses when the checkout has local changes or commits of its own. Installs that aren't a git checkout (the Mac app, npm) show the latest release with a link instead. CLI: `etude update`, `etude update --check`; API: `GET/POST /api/update`.
+- Study ahead: a deck with nothing due gets **Ahead** on Decks and **Study ahead** on its page and on the All done screen. Every card in scope, soonest due first, no daily limits; ratings count as real reviews. CLI: `etude study next --ahead`; API: `?ahead=1`.
+- Optimize FSRS weights from your own review history (optional `fsrs-rs` dependency).
+- Bury with `=` and `-` during study, and undo works after you've moved to the next card.
+- **Edit for me** and **Suggest changes**: describe a change and AI proposes the edited card for you to accept.
+- Pasted media is copied into the collection, so cards keep working when the original file moves.
+- A richer Stats page: recall against your target, a forgetting curve if you stopped today, memory strength, a study clock and card-state donuts.
+- Drag decks by their grip to reorder them (mouse, touch or arrow keys). CLI: `etude deck reorder`.
+- Market entries can have a cover picture.
+- Dusk, a lighter slate dark theme for panels that crush near-black.
+- Typing fields get focus before other controls; changing an item's type keeps its cards' history; AI features no longer use a sparkles icon.
 - The Market: a new tab to browse and install themes, decks and card types other people shared, read from the public [etude-market](https://github.com/Zibhelina/etude-market) repository. Card types run live in their detail page before you install them; reinstalling updates in place and keeps your scheduling; entries with a newer version show Update. **Publish** opens a pull request with your GitHub CLI, forking the repository when needed; decks go without review history. CLI: `etude market list|show|install|installed|forget|publish|check|index`. See docs/market.md.
 - Watch mode, for tour decks. A deck set to `mode: watch` shows a Watch button instead of Study and plays its cards in order: each card has **Show an answer**, which fills in an example answer and grades it the way a real one would be, then **Next card**. You can still try a card yourself; nothing is scheduled or recorded, and watch decks stay out of study queues. Example answers come from a type's new optional `demo.js` (every built-in and showcase type has one) or an item's `fields.demo`; AI-graded items can ship a recorded grade (`fields.demoGrade`). CLI: `etude study watch`.
 - The Etude Showcase is now a tour of one card for each of the 27 card types, in six groups (Recall, Calculate, Arrange, Code, Play and listen, Draw and write), in watch mode. The website's repertoire keeps the extra variants in `site/variants.json`.

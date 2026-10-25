@@ -1,0 +1,107 @@
+[
+  {
+    "id": "showcase.free.induction",
+    "type": "free",
+    "deck": "Etude Showcase::6 Draw and write",
+    "tags": [
+      "showcase",
+      "topic::proofs"
+    ],
+    "fields": {
+      "prompt": "Prove by induction that for every integer $n \\ge 1$\n\n$$\\sum_{k=1}^{n} k = \\frac{n(n+1)}{2}.$$\n\nWrite it the way you would on paper: math in `$...$` renders as you type.",
+      "reference": "**Base case.** For $n = 1$ the sum is $1$ and $\\frac{1 \\cdot 2}{2} = 1$.\n\n**Inductive step.** Assume $\\sum_{k=1}^{n} k = \\frac{n(n+1)}{2}$ for some $n \\ge 1$. Then\n\n$$\\sum_{k=1}^{n+1} k = \\frac{n(n+1)}{2} + (n+1) = \\frac{(n+1)(n+2)}{2},$$\n\nwhich is the formula for $n+1$. By induction it holds for every $n \\ge 1$.",
+      "rubric": "Full credit needs: a base case that is actually checked; the inductive hypothesis stated; the step that adds $(n+1)$ and simplifies to $\\frac{(n+1)(n+2)}{2}$; a conclusion. Missing the base case, or assuming what is to be proved for $n+1$, is partial at best. A direct proof (Gauss's pairing) is a correct proof but not by induction: partial.",
+      "explanation": "The step is the whole idea: the sum up to $n+1$ is the sum up to $n$ plus one more term.",
+      "demo": "Assume $\\sum_{k=1}^{n} k = \\frac{n(n+1)}{2}$ for some $n$. Then\n\n$\\sum_{k=1}^{n+1} k = \\frac{n(n+1)}{2} + (n+1) = \\frac{(n+1)(n+2)}{2}$.\n\nSo it holds for $n+1$, and by induction for all $n$.",
+      "demoGrade": {
+        "score": 0.5,
+        "verdict": "partial",
+        "feedback": "This is partially correct: your inductive step and conclusion are fine, but you never checked a base case. Add \"For $n=1$, $\\sum_{k=1}^{1}k=1=\\frac{1\\cdot2}{2}$\" before the inductive step. Also state the hypothesis as holding for some $n\\ge1$.",
+        "grader": {
+          "model": "liquid/d1-ultra-20261015 + deepseek/deepseek-v4.1-flash-1017"
+        }
+      }
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.draw.kanji-water",
+    "type": "draw",
+    "deck": "Etude Showcase::6 Draw and write",
+    "tags": [
+      "showcase",
+      "topic::japanese"
+    ],
+    "fields": {
+      "prompt": "Write the kanji for **water** (*mizu*, みず).",
+      "reference": "水: a long central vertical stroke ending in a small hook to the left; on the left, a short horizontal stroke that bends down to the lower left; on the right, a short stroke rising to the upper right and a long sweep down to the lower right.",
+      "rubric": "Must be recognisable as 水 with its four parts: the hooked central vertical, the bent left stroke, and the two strokes on the right. Stroke order and neatness don't matter.",
+      "background": "blank",
+      "demo": {
+        "paths": [
+          [
+            [
+              0.5,
+              0.04
+            ],
+            [
+              0.5,
+              0.9
+            ],
+            [
+              0.4,
+              0.82
+            ]
+          ],
+          [
+            [
+              0.14,
+              0.34
+            ],
+            [
+              0.38,
+              0.34
+            ],
+            [
+              0.12,
+              0.74
+            ]
+          ],
+          [
+            [
+              0.8,
+              0.22
+            ],
+            [
+              0.58,
+              0.44
+            ]
+          ],
+          [
+            [
+              0.56,
+              0.44
+            ],
+            [
+              0.7,
+              0.66
+            ],
+            [
+              0.9,
+              0.88
+            ]
+          ]
+        ]
+      },
+      "demoGrade": {
+        "score": 1,
+        "verdict": "correct",
+        "feedback": "That's 水: all four parts are there, the hooked central vertical, the bent left stroke, and the two strokes on the right. For an exam-perfect version, start the right-hand rising stroke slightly separate from the long sweep rather than joining them at a point, so the two strokes read as distinct.",
+        "grader": {
+          "model": "deepseek/deepseek-v4.1-flash-1017"
+        }
+      }
+    },
+    "source": ""
+  }
+]

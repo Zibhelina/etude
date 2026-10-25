@@ -1,12 +1,13 @@
 {
   "etude": "pack/1",
   "name": "Etude Showcase",
-  "description": "One card per idea, each showing something a normal flashcard app can't do: cards you play, drag, hear, draw, code and derive in, graded by scripts that actually check the work, with fresh variants every review.",
+  "description": "A guided tour of Etude: one card for each of the 27 card types, from flipping a card to playing chess, mixing a color and writing kanji by hand. It opens in Watch mode: each card can show an example answer, graded the way a real one would be, so you see how it works without answering anything. Nothing is scheduled.",
   "presets": [
     {
       "id": "showcase",
-      "name": "Showcase (no limits)",
+      "name": "Showcase (watch)",
       "config": {
+        "mode": "watch",
         "newPerDay": 9999,
         "reviewsPerDay": 9999,
         "newOrder": "deck"
@@ -17,38 +18,32 @@
     {
       "name": "Etude Showcase",
       "preset": "showcase",
-      "description": "A tour of what Etude cards can be. Every card is a different exhibit.",
+      "description": "A tour of what Etude cards can be: one card per card type. Press **Show an answer** to see one answered and graded, or try it yourself.",
       "instructions": "This is a demo deck. Grade fairly: right ideas in different words are correct."
     },
     {
-      "name": "Etude Showcase::1 Answer anything",
-      "description": "Code that runs, math checked for equivalence, proofs in live LaTeX, drawings read by a vision model."
+      "name": "Etude Showcase::1 Recall",
+      "description": "Classic recall, made honest: flip, type, pick, fill and match."
     },
     {
-      "name": "Etude Showcase::2 Math and science",
-      "description": "Drag, fit and tune: geometry and functions you manipulate directly."
+      "name": "Etude Showcase::2 Calculate",
+      "description": "Numbers, expressions and quantities, checked by scripts that do the math."
     },
     {
-      "name": "Etude Showcase::3 Computing",
-      "description": "Regexes run against tests, traces, traversals and bugs you point at."
+      "name": "Etude Showcase::3 Arrange",
+      "description": "Put things in order: steps, years, the path an algorithm takes."
     },
     {
-      "name": "Etude Showcase::4 Music and senses",
-      "description": "Cards you hear and play."
+      "name": "Etude Showcase::4 Code",
+      "description": "Code that runs against hidden tests, regexes, bugs to find and bits to flip."
     },
     {
-      "name": "Etude Showcase::5 Games",
-      "description": "Boards, clocks and quick reflexes."
+      "name": "Etude Showcase::5 Play and listen",
+      "description": "Boards, keyboards, ears, colors and clocks."
     },
     {
-      "name": "Etude Showcase::6 Languages",
-      "description": "Write characters by hand; a vision model reads your strokes."
+      "name": "Etude Showcase::6 Draw and write",
+      "description": "Proofs and drawings, read by AI."
     }
-  ],
-  "order": [
-    "showcase.code.",
-    "showcase.math.",
-    "showcase.free.",
-    "showcase.draw."
   ]
 }

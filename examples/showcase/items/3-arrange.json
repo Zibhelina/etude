@@ -1,0 +1,107 @@
+[
+  {
+    "id": "showcase.order.scale",
+    "type": "order",
+    "deck": "Etude Showcase::3 Arrange",
+    "tags": [
+      "showcase",
+      "topic::science"
+    ],
+    "fields": {
+      "prompt": "Put these in order of size, **smallest first**.",
+      "steps": [
+        "A proton",
+        "A hydrogen atom",
+        "A virus",
+        "A red blood cell",
+        "A grain of sand",
+        "A cat"
+      ],
+      "explanation": "Roughly $10^{-15}$ m, $10^{-10}$ m, $10^{-7}$ m, $10^{-5}$ m, half a millimetre and half a metre. A hydrogen atom is about 60,000 times wider than the proton at its centre."
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.timeline.computing",
+    "type": "timeline",
+    "deck": "Etude Showcase::3 Arrange",
+    "tags": [
+      "showcase",
+      "topic::history"
+    ],
+    "fields": {
+      "prompt": "Drag each milestone in computing to the year it happened.",
+      "events": [
+        {
+          "label": "Turing's paper on computable numbers",
+          "year": 1936
+        },
+        {
+          "label": "ENIAC switched on",
+          "year": 1945
+        },
+        {
+          "label": "The transistor",
+          "year": 1947
+        },
+        {
+          "label": "Shannon's theory of communication",
+          "year": 1948
+        },
+        {
+          "label": "The integrated circuit",
+          "year": 1958
+        },
+        {
+          "label": "ARPANET's first message",
+          "year": 1969
+        },
+        {
+          "label": "Intel 4004",
+          "year": 1971
+        },
+        {
+          "label": "Apple II",
+          "year": 1977
+        },
+        {
+          "label": "IBM PC",
+          "year": 1981
+        },
+        {
+          "label": "The World Wide Web",
+          "year": 1991
+        },
+        {
+          "label": "Google founded",
+          "year": 1998
+        },
+        {
+          "label": "iPhone",
+          "year": 2007
+        }
+      ],
+      "range": [
+        1930,
+        2015
+      ],
+      "count": 5,
+      "tolerance": 3,
+      "explanation": "Three waves. First the idea and the machines: Turing defines computation (1936), ENIAC runs on vacuum tubes (1945), the transistor (1947) and Shannon's information theory (1948) follow. Then the chip: the integrated circuit (1958) and a whole processor on one, the Intel 4004 (1971). Then computers for everyone and the network between them: ARPANET (1969), Apple II (1977), IBM PC (1981), the Web (1991), Google (1998), iPhone (2007)."
+    }
+  },
+  {
+    "id": "showcase.graph-walk.bfs",
+    "type": "graph-walk",
+    "deck": "Etude Showcase::3 Arrange",
+    "tags": [
+      "showcase",
+      "topic::algorithms"
+    ],
+    "fields": {
+      "note": "BFS goes level by level, which is why it finds shortest paths in unweighted graphs.",
+      "algorithm": "bfs",
+      "explanation": "BFS uses a queue: it finishes every neighbour of a node before going a level deeper, so nodes come out in order of their distance from the start. The pink edges are the BFS tree, and following them from the start gives a shortest path to every node."
+    }
+  }
+]

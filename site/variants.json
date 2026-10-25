@@ -1,0 +1,518 @@
+[
+  {
+    "id": "showcase.code.fib",
+    "type": "code",
+    "deck": "Etude Showcase::4 Code",
+    "tags": [
+      "showcase",
+      "topic::programming"
+    ],
+    "fields": {
+      "prompt": "Write a Python **generator** `fib()` that yields the Fibonacci numbers $0, 1, 1, 2, 3, 5, \\dots$ forever, using constant memory.",
+      "language": "python",
+      "starter": "def fib():\n    ",
+      "reference": "def fib():\n    a, b = 0, 1\n    while True:\n        yield a\n        a, b = b, a + b\n",
+      "rubric": "Must be a generator (uses `yield`), start at 0 then 1, never stop, and keep only the last two values (no growing list). Recursion or storing every value is incorrect for the memory requirement.",
+      "explanation": "`a, b = b, a + b` updates both at once, so no temporary is needed. Use it with `itertools.islice(fib(), 10)`."
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.math.line",
+    "type": "math",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::algebra",
+      "generated"
+    ],
+    "fields": {
+      "prompt": "Write an equation of the line through $(1, 2)$ with slope $3$.",
+      "answers": [
+        "y = 3x - 1"
+      ],
+      "placeholder": "y = …",
+      "explanation": "Point-slope form $y - 2 = 3(x - 1)$ is the same line as $y = 3x - 1$. Any equation of this line counts, even $6x - 2y = 2$.",
+      "generator": "const sg = (k) => (k < 0 ? `- ${-k}` : `+ ${k}`);\nconst px = rng.int(-4, 4), py = rng.int(-4, 5), m = rng.pick([-3, -2, -1, 2, 3, 4]);\nconst b = py - m * px;\nconst ys = b === 0 ? `y = ${m}x` : `y = ${m}x ${sg(b)}`;\nreturn {\n  prompt: `Write an equation of the line through $(${px}, ${py})$ with slope $${m}$.`,\n  answers: [ys],\n  explanation: `Point-slope form $y ${sg(-py)} = ${m}(x ${sg(-px)})$ is the same line as $${ys}$. Any equation of this line is accepted.`,\n};"
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.math.factor",
+    "type": "math",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::algebra",
+      "generated"
+    ],
+    "fields": {
+      "prompt": "Factor $x^{2} - 5x + 6$.",
+      "answers": [
+        "(x - 2)(x - 3)"
+      ],
+      "form": "same",
+      "explanation": "Two numbers that multiply to $6$ and add to $-5$: $-2$ and $-3$. Expanding back to $x^2 - 5x + 6$ is equivalent but isn't factored, so it only gets half credit.",
+      "generator": "const sg = (k) => (k < 0 ? `- ${-k}` : `+ ${k}`);\nlet a = 0, b = 0;\nwhile (a === 0 || b === 0 || a === b) { a = rng.int(-7, 7); b = rng.int(-7, 7); }\nconst p = -(a + b), q = a * b;\nconst poly = `x^{2}${p === 0 ? \"\" : ` ${p < 0 ? \"-\" : \"+\"} ${Math.abs(p) === 1 ? \"\" : Math.abs(p)}x`} ${sg(q)}`;\nconst f = `(x ${sg(-a)})(x ${sg(-b)})`;\nreturn {\n  prompt: `Factor $${poly}$.`,\n  answers: [f],\n  explanation: `Two numbers that multiply to $${q}$ and add to $${p}$: $${-a}$ and $${-b}$, so $${poly} = ${f}$. The expanded form is equivalent but isn't factored, so it only gets half credit.`,\n};"
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.math.roots",
+    "type": "math",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::algebra",
+      "generated"
+    ],
+    "fields": {
+      "prompt": "Solve $x^{2} = 2x + 3$. Give every solution.",
+      "answers": [
+        "\\{3, -1\\}"
+      ],
+      "placeholder": "x = …, …",
+      "explanation": "$x^2 - 2x - 3 = (x - 3)(x + 1) = 0$, so $x = 3$ or $x = -1$. One of the two gets half credit.",
+      "generator": "const sg = (k) => (k < 0 ? `- ${-k}` : `+ ${k}`);\nlet a = 0, b = 0;\nwhile (a === b) { a = rng.int(-6, 7); b = rng.int(-6, 7); }\nconst s = a + b, c = -(a * b);\nconst rhs = s === 0 ? `${c}` : `${s === 1 ? \"\" : s === -1 ? \"-\" : s}x${c === 0 ? \"\" : ` ${sg(c)}`}`;\nreturn {\n  prompt: `Solve $x^{2} = ${rhs}$. Give every solution.`,\n  answers: [`\\\\{${a}, ${b}\\\\}`],\n  explanation: `Move everything to one side and factor: $(x ${sg(-a)})(x ${sg(-b)}) = 0$, so $x = ${a}$ or $x = ${b}$. Either order works; one of the two gets half credit.`,\n};"
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.math.exact",
+    "type": "math",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::trigonometry",
+      "generated"
+    ],
+    "fields": {
+      "prompt": "Exact value of $\\cos \\frac{5\\pi}{6}$?",
+      "answers": [
+        "-\\frac{\\sqrt{3}}{2}"
+      ],
+      "form": "exact",
+      "explanation": "$\\frac{5\\pi}{6}$ is $150^\\circ$, in the second quadrant where cosine is negative, with reference angle $\\frac{\\pi}{6}$: $-\\frac{\\sqrt{3}}{2}$. A decimal like $-0.866$ is the right value but not exact, so it gets half credit.",
+      "generator": "const [t, f, v] = rng.pick([\n  [\"\\\\frac{5\\\\pi}{6}\", \"cos\", \"-\\\\frac{\\\\sqrt{3}}{2}\"],\n  [\"\\\\frac{2\\\\pi}{3}\", \"sin\", \"\\\\frac{\\\\sqrt{3}}{2}\"],\n  [\"\\\\frac{7\\\\pi}{4}\", \"cos\", \"\\\\frac{\\\\sqrt{2}}{2}\"],\n  [\"\\\\frac{4\\\\pi}{3}\", \"tan\", \"\\\\sqrt{3}\"],\n  [\"\\\\frac{11\\\\pi}{6}\", \"sin\", \"-\\\\frac{1}{2}\"],\n  [\"\\\\frac{3\\\\pi}{4}\", \"tan\", \"-1\"],\n]);\nreturn {\n  prompt: `Exact value of $\\\\${f} ${t}$?`,\n  answers: [v],\n  explanation: `Find the quadrant and the reference angle, then the sign: $\\\\${f} ${t} = ${v}$. A decimal is the right value but not exact, so it gets half credit.`,\n};"
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.draw.parabola",
+    "type": "draw",
+    "deck": "Etude Showcase::6 Draw and write",
+    "tags": [
+      "showcase",
+      "topic::functions"
+    ],
+    "fields": {
+      "prompt": "Sketch $y = x^2 - 1$ on axes. Mark where it crosses the $x$-axis and its lowest point.",
+      "reference": "Labelled x and y axes. An upward-opening parabola with its vertex (lowest point) at (0, -1), crossing the x-axis at x = -1 and x = 1.",
+      "rubric": "Must open upward, vertex at (0, -1) marked, x-intercepts at -1 and 1 marked. Exact scale doesn't matter.",
+      "background": "grid"
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.unit-circle.radians",
+    "type": "unit-circle",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::math"
+    ],
+    "fields": {
+      "prompt": "Place the angle on the unit circle. Radians only.",
+      "units": "radians",
+      "wrap": false,
+      "explanation": "A full turn is $2\\pi$, so $\\frac{\\pi}{12}$ is one $15^\\circ$ step, $\\frac{\\pi}{6}$ is $30^\\circ$, $\\frac{\\pi}{4}$ is $45^\\circ$ and $\\frac{\\pi}{3}$ is $60^\\circ$. Count the steps from the positive $x$-axis."
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.plot.lines",
+    "type": "plot",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::math"
+    ],
+    "fields": {
+      "prompt": "Mark where the lines $y = 2x - 1$ and $y = -x + 5$ meet, and where each one crosses the $x$-axis.",
+      "points": [
+        [
+          2,
+          3
+        ],
+        [
+          0.5,
+          0
+        ],
+        [
+          5,
+          0
+        ]
+      ],
+      "labels": [
+        "where they meet",
+        "$y = 2x - 1$ crosses",
+        "$y = -x + 5$ crosses"
+      ],
+      "curve": "2*x-1; -x+5",
+      "explanation": "They meet where $2x - 1 = -x + 5$, so $x = 2$ and $y = 3$. Each crosses the $x$-axis where $y = 0$: $x = \\tfrac{1}{2}$ and $x = 5$.",
+      "tolerance": 0.25,
+      "range": [
+        -5,
+        5,
+        -5,
+        5
+      ],
+      "snap": 0.5,
+      "generator": "  const slopes = [-2, -1, 1, 2];\n  for (;;) {\n    const px = rng.int(-3, 3), py = rng.pick([-3, -2, -1, 1, 2, 3]);\n    const [m1, m2] = rng.shuffle(slopes).slice(0, 2);\n    if (m1 === m2) continue;\n    const x1 = px - py / m1, x2 = px - py / m2;\n    if (Math.abs(x1) > 4.5 || Math.abs(x2) > 4.5) continue;\n    const b1 = py - m1 * px, b2 = py - m2 * px;\n    const line = (m, b) => {\n      const mx = m === 1 ? \"x\" : m === -1 ? \"-x\" : `${m}x`;\n      return b === 0 ? mx : `${mx} ${b < 0 ? \"-\" : \"+\"} ${Math.abs(b)}`;\n    };\n    const fr = (v) => (Number.isInteger(v) ? String(v) : (v < 0 ? \"-\" : \"\") + `\\\\tfrac{${Math.abs(v * 2)}}{2}`);\n    return {\n      prompt: `Mark where the lines $y = ${line(m1, b1)}$ and $y = ${line(m2, b2)}$ meet, and where each one crosses the $x$-axis.`,\n      points: [[px, py], [x1, 0], [x2, 0]],\n      labels: [\"where they meet\", `$y = ${line(m1, b1)}$ crosses`, `$y = ${line(m2, b2)}$ crosses`],\n      curve: `${m1}*x+(${b1}); ${m2}*x+(${b2})`,\n      explanation: `They meet where $${line(m1, b1)} = ${line(m2, b2)}$, so $x = ${px}$ and $y = ${py}$. Each crosses the $x$-axis where $y = 0$: $x = ${fr(x1)}$ and $x = ${fr(x2)}$.`,\n    };\n  }"
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.balance.rust",
+    "type": "balance",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::chemistry"
+    ],
+    "fields": {
+      "prompt": "Iron rusting: iron and oxygen make iron(III) oxide.",
+      "reactants": [
+        "Fe",
+        "O2"
+      ],
+      "products": [
+        "Fe2O3"
+      ],
+      "explanation": "Oxygen comes in pairs on the left and threes on the right, so the smallest common count is $6$: $3\\,\\mathrm{O_2}$ and $2\\,\\mathrm{Fe_2O_3}$. That puts $4$ irons on the right, so $4\\,\\mathrm{Fe}$."
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.balance.aluminium-acid",
+    "type": "balance",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::chemistry"
+    ],
+    "fields": {
+      "prompt": "Aluminium dissolves in sulfuric acid, giving aluminium sulfate and hydrogen gas.",
+      "reactants": [
+        "Al",
+        "H2SO4"
+      ],
+      "products": [
+        "Al2(SO4)3",
+        "H2"
+      ],
+      "explanation": "Treat $\\mathrm{SO_4}$ as one unit: it stays intact. $\\mathrm{Al_2(SO_4)_3}$ needs $3$ sulfates, so $3\\,\\mathrm{H_2SO_4}$, which frees $6$ hydrogens: $3\\,\\mathrm{H_2}$. Two aluminiums on the right means $2\\,\\mathrm{Al}$."
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.estimate.heartbeats",
+    "type": "estimate",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::estimation"
+    ],
+    "fields": {
+      "prompt": "Roughly how many times does a human heart beat in a lifetime?",
+      "answer": 2900000000,
+      "min": 100000,
+      "max": 10000000000000,
+      "scale": "log",
+      "unit": "beats",
+      "tolerance": 0.1,
+      "explanation": "Build it from pieces you know:\n\n$$\\underbrace{70}_{\\text{beats/min}} \\times \\underbrace{60 \\times 24 \\times 365}_{\\approx\\,5.3\\,\\times\\,10^{5}\\ \\text{min/year}} \\times \\underbrace{80}_{\\text{years}} \\approx 2.9 \\times 10^{9}$$\n\nAbout three billion. Getting within a factor of two counts as a good Fermi estimate."
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.regex.iso-date",
+    "type": "regex",
+    "deck": "Etude Showcase::4 Code",
+    "tags": [
+      "showcase",
+      "topic::regex"
+    ],
+    "fields": {
+      "prompt": "Find an ISO date `YYYY-MM-DD` **anywhere** in a line: month `01`–`12`, day `01`–`31`, two digits each. It must stand on its own, not be glued into a longer number.",
+      "match": [
+        "due 2026-10-23 at 16:30",
+        "2026-01-05",
+        "backup-2025-12-31.tar"
+      ],
+      "reject": [
+        "2026-13-01",
+        "2026-10-32",
+        "10/23/2026",
+        "2026-1-5",
+        "2026-10-233"
+      ],
+      "hidden": {
+        "match": [
+          "(1999-09-09)",
+          "on 2000-02-29."
+        ],
+        "reject": [
+          "12026-10-23",
+          "2026-00-10",
+          "2026-10-00",
+          "20261023"
+        ]
+      },
+      "mode": "find",
+      "flags": "",
+      "solution": "\\b\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])\\b",
+      "explanation": "Months are `0[1-9]|1[0-2]` and days `0[1-9]|[12]\\d|3[01]`. In find mode a bare `\\d{4}` happily matches inside `12026-10-23`, or stops before the extra digit in `2026-10-233`, so the word boundaries `\\b` at both ends do the real work. (It doesn't know February has no 31st; that's a job for code.)"
+    }
+  },
+  {
+    "id": "showcase.graph-walk.dfs",
+    "type": "graph-walk",
+    "deck": "Etude Showcase::3 Arrange",
+    "tags": [
+      "showcase",
+      "topic::algorithms"
+    ],
+    "fields": {
+      "note": "DFS always goes deeper first: the walk behind maze solving, cycle detection and topological sort.",
+      "algorithm": "dfs",
+      "explanation": "DFS goes as deep as it can along the first unvisited neighbour, and only backs up when it's stuck. The pink edges are the DFS tree: each one is the move that first reached a node."
+    }
+  },
+  {
+    "id": "showcase.bug-hunt.closure-retry",
+    "type": "bug-hunt",
+    "deck": "Etude Showcase::4 Code",
+    "tags": [
+      "showcase",
+      "topic::javascript"
+    ],
+    "fields": {
+      "prompt": "The retries fire one second apart, as intended, but every one of them calls `upload(undefined)`. Which line would you change?",
+      "code": "// Retry each failed upload, one second apart.\nfunction retryAll(failed, upload) {\n  for (var i = 0; i < failed.length; i++) {\n    setTimeout(function () {\n      upload(failed[i]);\n    }, 1000 * (i + 1));\n  }\n}",
+      "language": "javascript",
+      "count": 1,
+      "bugs": [
+        3
+      ],
+      "fix": {
+        "3": "  for (let i = 0; i < failed.length; i++) {"
+      },
+      "explanation": "`var` gives the whole function one shared `i`. The delays are computed during the loop, so they're right, but the callbacks run later, after the loop has left `i` at `failed.length`, so `failed[i]` is `undefined`. `let` makes a fresh `i` for every iteration, and each callback keeps its own."
+    }
+  },
+  {
+    "id": "showcase.bits.twos-complement",
+    "type": "bits",
+    "deck": "Etude Showcase::4 Code",
+    "tags": [
+      "showcase",
+      "topic::binary"
+    ],
+    "fields": {
+      "note": "Two's complement: how every CPU stores negative integers.",
+      "width": 8,
+      "signed": true,
+      "target": -45,
+      "generator": "return { target: -rng.int(3, 128) };",
+      "explanation": "Two quick routes to a negative: write the positive value, flip every bit and add 1; or start from the top bit (worth −128) and add the positive bits that bring you back up to the target."
+    }
+  },
+  {
+    "id": "showcase.typing.python",
+    "type": "typing",
+    "deck": "Etude Showcase::5 Play and listen",
+    "tags": [
+      "showcase",
+      "topic::typing",
+      "topic::python"
+    ],
+    "fields": {
+      "note": "30 seconds of Python keywords and builtins: practice the words you actually type.",
+      "seconds": 30,
+      "target": 45,
+      "wordlist": [
+        "def",
+        "return",
+        "lambda",
+        "yield",
+        "import",
+        "from",
+        "class",
+        "self",
+        "None",
+        "True",
+        "False",
+        "elif",
+        "while",
+        "for",
+        "in",
+        "not",
+        "and",
+        "or",
+        "try",
+        "except",
+        "finally",
+        "raise",
+        "with",
+        "as",
+        "async",
+        "await",
+        "print()",
+        "len()",
+        "range()",
+        "enumerate()",
+        "zip()",
+        "dict()",
+        "list()",
+        "isinstance()",
+        "__init__"
+      ]
+    }
+  },
+  {
+    "id": "showcase.interval.all",
+    "type": "interval",
+    "deck": "Etude Showcase::5 Play and listen",
+    "tags": [
+      "showcase",
+      "topic::music"
+    ],
+    "fields": {
+      "prompt": "All twelve intervals, up to an octave. Name it.",
+      "set": "all",
+      "direction": "mixed",
+      "explanation": "The tritone (6 semitones) is the one that sounds unresolved, right in the middle of the octave. Minor 2nds and major 7ths are the two harsh ones: one semitone up, or one short of an octave."
+    }
+  },
+  {
+    "id": "showcase.chord.sevenths",
+    "type": "chord",
+    "deck": "Etude Showcase::5 Play and listen",
+    "tags": [
+      "showcase",
+      "topic::music"
+    ],
+    "fields": {
+      "prompt": "Build this chord on the keyboard.",
+      "qualities": [
+        "maj7",
+        "7",
+        "m7",
+        "m7b5"
+      ],
+      "explanation": "Every seventh chord stacks thirds: root, 3rd, 5th, 7th. **maj7** is a major triad plus a major 7th; **7** (dominant) has a minor 7th on top; **m7** is minor with a minor 7th; and the half-diminished **ø7** flattens the 5th of m7."
+    }
+  },
+  {
+    "id": "showcase.staff.bass",
+    "type": "staff",
+    "deck": "Etude Showcase::5 Play and listen",
+    "tags": [
+      "showcase",
+      "topic::music"
+    ],
+    "fields": {
+      "prompt": "Name this note, sharps and flats included.",
+      "clef": "bass",
+      "ledger": 2,
+      "accidentals": true,
+      "explanation": "Bass lines from the bottom: **G B D F A** (*Good Boys Do Fine Always*); spaces are **A C E G** (*All Cows Eat Grass*). The bass clef's two dots straddle the F line. Middle C is the first ledger line above."
+    }
+  },
+  {
+    "id": "showcase.timeline.physics",
+    "type": "timeline",
+    "deck": "Etude Showcase::3 Arrange",
+    "tags": [
+      "showcase",
+      "topic::history"
+    ],
+    "fields": {
+      "prompt": "Place these discoveries in physics on the timeline.",
+      "events": [
+        {
+          "label": "Maxwell's equations",
+          "year": 1865
+        },
+        {
+          "label": "Michelson–Morley",
+          "year": 1887
+        },
+        {
+          "label": "X-rays",
+          "year": 1895
+        },
+        {
+          "label": "The electron",
+          "year": 1897
+        },
+        {
+          "label": "Rutherford's nucleus",
+          "year": 1911
+        },
+        {
+          "label": "Schrödinger's equation",
+          "year": 1926
+        },
+        {
+          "label": "The neutron",
+          "year": 1932
+        },
+        {
+          "label": "Nuclear fission",
+          "year": 1938
+        },
+        {
+          "label": "The Higgs boson",
+          "year": 2012
+        },
+        {
+          "label": "Gravitational waves",
+          "year": 2015
+        }
+      ],
+      "anchors": [
+        {
+          "label": "Relativity",
+          "year": 1905
+        }
+      ],
+      "range": [
+        1855,
+        2025
+      ],
+      "count": 5,
+      "tolerance": 3,
+      "explanation": "Most of these land in one burst: from X-rays (1895) to fission (1938), physics went from guessing atoms exist to splitting them. The Higgs (2012) and gravitational waves (2015) confirmed predictions made decades earlier."
+    }
+  },
+  {
+    "id": "showcase.chess.queen-f2",
+    "type": "chess",
+    "deck": "Etude Showcase::5 Play and listen",
+    "tags": [
+      "showcase",
+      "topic::chess"
+    ],
+    "fields": {
+      "prompt": "Black to play and mate in one.",
+      "fen": "r1b1k2r/pppp1ppp/2n5/2b1P3/2B1n2q/2N5/PPPP2PP/R1BQ1K1R b kq - 0 1",
+      "answers": [
+        "h4f2"
+      ],
+      "san": "Qf2#",
+      "explanation": "The queen lands on f2, protected twice (bishop on c5, knight on e4), so the white king can't take it. Every flight square is gone: the queen covers e1, e2 and g1, and g2 holds White's own pawn."
+    }
+  }
+]

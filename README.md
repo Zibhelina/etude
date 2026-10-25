@@ -123,7 +123,7 @@ npm start            # same as: node src/cli/main.ts serve
 
 Open http://127.0.0.1:4610. Your collection lives in `~/.etude/etude.db`.
 
-To see what cards can be, import the showcase, where every card is a different kind of exercise:
+To see what cards can be, import the showcase: one card for each of the 27 card types. It opens in Watch mode, a tour where each card can show an example answer, graded, so you see how it works without answering anything:
 
 ```sh
 node src/cli/main.ts pack import examples/showcase.pack.json

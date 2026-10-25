@@ -1,0 +1,141 @@
+[
+  {
+    "id": "showcase.numeric.train",
+    "type": "numeric",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::physics"
+    ],
+    "fields": {
+      "prompt": "A train covers **90 km** in **45 minutes**. What is its average speed?",
+      "answer": 120,
+      "unit": "km/h",
+      "tolerance": 0.01,
+      "generator": "// A speed and a time that give a whole number of kilometres.\nlet v, t, d;\ndo { v = rng.int(6, 30) * 10; t = rng.pick([15, 20, 30, 40, 45, 50, 75, 90]); d = (v * t) / 60; } while (!Number.isInteger(d));\nreturn {\n  prompt: `A train covers **${d} km** in **${t} minutes**. What is its average speed?`,\n  answer: v,\n  explanation: `Speed is distance over time, with the time in hours: $\\\\frac{${d}\\\\,\\\\text{km}}{${t}/60\\\\,\\\\text{h}} = ${v}\\\\,\\\\text{km/h}$.`,\n};"
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.math.derivative",
+    "type": "math",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::calculus",
+      "generated"
+    ],
+    "fields": {
+      "prompt": "Differentiate $f(x) = x^{3} \\sin x$.",
+      "answers": [
+        "3x^{2} \\sin x + x^{3} \\cos x"
+      ],
+      "explanation": "Product rule: $(uv)' = u'v + uv'$, so $3x^{2}\\sin x + x^{3}\\cos x$. Any equivalent form is accepted, for example $x^{2}(3\\sin x + x\\cos x)$.",
+      "generator": "const n = rng.int(2, 4);\nconst [g, dg] = rng.pick([[\"\\\\sin x\", \"\\\\cos x\"], [\"\\\\cos x\", \"-\\\\sin x\"], [\"e^{x}\", \"e^{x}\"], [\"\\\\ln x\", \"\\\\frac{1}{x}\"]]);\nconst xn = `x^{${n}}`, xn1 = n - 1 === 1 ? \"x\" : `x^{${n - 1}}`;\nconst d = dg.startsWith(\"-\") ? `${n}${xn1} ${g} - ${xn} ${dg.slice(1)}` : `${n}${xn1} ${g} + ${xn} \\\\cdot ${dg}`;\nreturn {\n  prompt: `Differentiate $f(x) = ${xn} ${g}$.`,\n  answers: [d],\n  explanation: `Product rule, $(uv)' = u'v + uv'$ with $u = ${xn}$ and $v = ${g}$: $$f'(x) = ${d}$$ Any equivalent form is accepted.`,\n};"
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.estimate.everest",
+    "type": "estimate",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::estimation"
+    ],
+    "fields": {
+      "prompt": "How tall is **Mount Everest**, above sea level?",
+      "answer": 8849,
+      "min": 0,
+      "max": 15000,
+      "scale": "linear",
+      "step": 50,
+      "unit": "m",
+      "tolerance": 0.03,
+      "explanation": "$8{,}849$ m, from the 2020 China–Nepal survey. Airliners cruise at about $11{,}000$ m, so the summit is a little below cruising altitude."
+    },
+    "source": "2020 China–Nepal joint survey"
+  },
+  {
+    "id": "showcase.balance.combustion",
+    "type": "balance",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::chemistry"
+    ],
+    "fields": {
+      "prompt": "Balance the complete combustion of **propane**.",
+      "reactants": [
+        "C3H8",
+        "O2"
+      ],
+      "products": [
+        "CO2",
+        "H2O"
+      ],
+      "explanation": "Carbon first: $3$ carbons make $3\\,\\mathrm{CO_2}$. Then hydrogen: $8$ hydrogens make $4\\,\\mathrm{H_2O}$. That's $6 + 4 = 10$ oxygen atoms on the right, so $5\\,\\mathrm{O_2}$.",
+      "generator": "  const NAMES = [\"methane\", \"ethane\", \"propane\", \"butane\", \"pentane\", \"hexane\"];\n  const n = rng.int(1, 6);\n  const f = `C${n === 1 ? \"\" : n}H${2 * n + 2}`;\n  return {\n    prompt: `Balance the complete combustion of **${NAMES[n - 1]}**.`,\n    reactants: [f, \"O2\"],\n    products: [\"CO2\", \"H2O\"],\n    explanation: `Carbon first: ${n === 1 ? \"$1$ carbon makes $1\\\\,\\\\mathrm{CO_2}$\" : `$${n}$ carbons make $${n}\\\\,\\\\mathrm{CO_2}$`}. Then hydrogen: $${2 * n + 2}$ hydrogens make $${n + 1}\\\\,\\\\mathrm{H_2O}$. That's $${2 * n} + ${n + 1} = ${3 * n + 1}$ oxygen atoms on the right, so ` +\n      ((3 * n + 1) % 2\n        ? `$\\\\frac{${3 * n + 1}}{2}\\\\,\\\\mathrm{O_2}$. Half a molecule isn't allowed, so double everything: $2\\\\,\\\\mathrm{${f.replace(/(\\d+)/g, \"_{$1}\")}} + ${3 * n + 1}\\\\,\\\\mathrm{O_2} \\\\to ${2 * n}\\\\,\\\\mathrm{CO_2} + ${2 * n + 2}\\\\,\\\\mathrm{H_2O}$.`\n        : `$${(3 * n + 1) / 2}\\\\,\\\\mathrm{O_2}$.`),\n  };"
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.unit-circle.mixed",
+    "type": "unit-circle",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::math"
+    ],
+    "fields": {
+      "prompt": "Place the angle on the unit circle.",
+      "units": "mixed",
+      "wrap": true,
+      "explanation": "Angles start on the positive $x$-axis and turn counter-clockwise; negative angles turn clockwise, and adding $2\\pi$ ($360^\\circ$) lands in the same place. The point on the circle is $(\\cos\\theta, \\sin\\theta)$."
+    },
+    "source": ""
+  },
+  {
+    "id": "showcase.plot.parabola",
+    "type": "plot",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::math"
+    ],
+    "fields": {
+      "prompt": "Mark both roots and the vertex of $y = x^2 - 2x - 3$.",
+      "points": [
+        [
+          -1,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          1,
+          -4
+        ]
+      ],
+      "labels": [
+        "root",
+        "root",
+        "vertex"
+      ],
+      "curve": "1*(x-(-1))*(x-(3))",
+      "explanation": "Factor it: $y = (x + 1)(x - 3)$, so the roots are $x = -1$ and $x = 3$. The vertex sits halfway between them, at $x = \\frac{-1 + 3}{2} = 1$, and $y(1) = -4$. It's a minimum, since the parabola opens upward ($a = 1$).",
+      "tolerance": 0.25,
+      "range": [
+        -5,
+        5,
+        -5,
+        5
+      ],
+      "snap": 0.5,
+      "generator": "  const a = rng.pick([1, 1, -1, -1, 2, -2]);\n  const gap = Math.abs(a) === 2 ? 2 : rng.pick([2, 4]);\n  const vx = rng.int(-4 + gap / 2, 4 - gap / 2);\n  const r1 = vx - gap / 2, r2 = vx + gap / 2;\n  const vy = -a * (gap / 2) * (gap / 2);\n  // y = a x^2 + b x + c\n  const b = -a * (r1 + r2), c = a * r1 * r2;\n  const term = (k, x, first) => {\n    if (k === 0) return \"\";\n    const sign = k < 0 ? \"-\" : first ? \"\" : \"+\";\n    const mag = Math.abs(k) === 1 && x ? \"\" : String(Math.abs(k));\n    return `${sign} ${mag}${x}`.trim();\n  };\n  const tex = [term(a, \"x^2\", true), term(b, \"x\", false), term(c, \"\", false)].filter(Boolean).join(\" \").replace(/\\s+/g, \" \").replace(/^- /, \"-\");\n  const factored = `${a === 1 ? \"\" : a === -1 ? \"-\" : a}(x ${r1 < 0 ? \"+\" : \"-\"} ${Math.abs(r1)})(x ${r2 < 0 ? \"+\" : \"-\"} ${Math.abs(r2)})`.replace(/\\(x - 0\\)/g, \"x\").replace(/\\(x \\+ 0\\)/g, \"x\");\n  return {\n    prompt: `Mark both roots and the vertex of $y = ${tex}$.`,\n    points: [[r1, 0], [r2, 0], [vx, vy]],\n    labels: [\"root\", \"root\", \"vertex\"],\n    curve: `${a}*(x-(${r1}))*(x-(${r2}))`,\n    explanation: `Factor it: $y = ${factored}$, so the roots are $x = ${r1}$ and $x = ${r2}$. The vertex sits halfway between them, at $x = \\\\frac{${r1} + ${r2 < 0 ? `(${r2})` : r2}}{2} = ${vx}$, and $y(${vx}) = ${vy}$. It's a ${a > 0 ? \"minimum, since the parabola opens upward\" : \"maximum, since the parabola opens downward\"} ($a = ${a}$).`,\n  };"
+    },
+    "source": ""
+  }
+]

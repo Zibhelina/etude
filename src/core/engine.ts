@@ -19,7 +19,7 @@ import {
   type Verdict,
 } from "./model.ts";
 import { initSandbox, runScript, ScriptError } from "./sandbox.ts";
-import { fieldDefaults, loadBuiltinTypes, validateFields, validateType, TYPE_ID } from "./types.ts";
+import { fieldDefaults, loadBuiltinTypes, validateFields, validateType, ITEM_ID, TYPE_ID } from "./types.ts";
 import * as sched from "./scheduler.ts";
 import { compile, QueryError } from "./query.ts";
 import { aiFeedback, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type GradingContext } from "./ai.ts";
@@ -748,7 +748,7 @@ export class Etude {
 
   /** Creates or updates one item. Returns what happened. */
   upsertItem(input: Partial<Item> & { id: string; type: string; deck: string; fields: Record<string, unknown> }, opts: { ord?: number } = {}): "created" | "updated" | "unchanged" {
-    if (!input.id || !/^[A-Za-z0-9][\w.:-]{0,199}$/.test(input.id)) throw new EtudeError(`invalid item id "${input.id}"`);
+    if (!input.id || !ITEM_ID.test(input.id)) throw new EtudeError(`invalid item id "${input.id}"`);
     const def = this.type(input.type);
     const fields = { ...fieldDefaults(def), ...(input.fields ?? {}) };
     const errs = validateFields(def, fields);

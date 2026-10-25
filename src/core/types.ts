@@ -5,6 +5,8 @@ import type { CardTypeDef, FieldSpec, GraderSpec } from "./model.ts";
 import { checkSyntax } from "./sandbox.ts";
 
 export const TYPE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+/** Item ids: what the engine stores, including the `anki-<guid>` ids the Anki importer makes. */
+export const ITEM_ID = /^[A-Za-z0-9][\w.:-]{0,199}$/;
 const FIELD_KINDS = new Set(["markdown", "text", "number", "boolean", "list", "json", "code", "html"]);
 const GRADER_KINDS = new Set(["self", "script", "ai", "hybrid"]);
 

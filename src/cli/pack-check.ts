@@ -2,7 +2,7 @@
 // Runs without a database; `etude pack check` and scripts/check-pack.ts both use it.
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadBuiltinTypes, validateType } from "../core/types.ts";
+import { loadBuiltinTypes, validateType, ITEM_ID } from "../core/types.ts";
 import { runScript } from "../core/sandbox.ts";
 import math from "../../runtime/mathexpr.js";
 
@@ -194,7 +194,7 @@ export function checkPack(pack: Json, file = "pack", opts: { knownTypes?: string
     const where = `${file} item ${item?.id ?? `#${i}`}`;
     const err = (m: string) => errors.push(`${where}: ${m}`);
     const warn = (m: string) => warnings.push(`${where}: ${m}`);
-    if (!isStr(item.id) || !/^[a-z0-9][a-z0-9._:-]*$/.test(item.id)) err("id must be a lowercase dotted slug");
+    if (!isStr(item.id) || !ITEM_ID.test(item.id)) err("id must start with a letter or digit and use only letters, digits and . _ : - (200 characters at most)");
     if (ids.has(item.id)) err("duplicate id");
     ids.add(item.id);
     if (!isStr(item.deck)) err("deck missing");

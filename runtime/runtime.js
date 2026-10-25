@@ -184,9 +184,15 @@ function forwardKeys() {
       send("key", { key: "Mod+Enter" });
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && document.body.dataset.mode === "result") {
-      e.preventDefault();
-      send("key", { key: "Undo" });
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "z" && (document.body.dataset.mode === "result" || !typing)) {
+      if (document.body.dataset.mode === "result") {
+        e.preventDefault();
+        if (!e.repeat) send("key", { key: "Undo" });
+      } else if (!e.repeat) {
+        setTimeout(() => {
+          if (!e.defaultPrevented) send("key", { key: "Undo" });
+        }, 0);
+      }
       return;
     }
     if (e.key === "Escape") {
@@ -203,7 +209,8 @@ function forwardKeys() {
     }
     if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
     const result = document.body.dataset.mode === "result";
-    const keys = result ? ["1", "2", "3", "4", " ", "Enter", "u"] : [" ", "Enter"];
+    if (e.repeat && ["u", "U"].includes(e.key)) return;
+    const keys = result ? ["1", "2", "3", "4", " ", "Enter", "u", "U"] : [" ", "Enter", "u", "U"];
     if (!keys.includes(e.key)) return;
     // Let the card's own handlers run first; forward only keys the card didn't use.
     setTimeout(() => {

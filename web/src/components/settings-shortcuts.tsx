@@ -15,7 +15,7 @@ const GROUPS: { title: string; description?: string; rows: Row[] }[] = [
       { keys: ["Space", "Enter"], what: "Show the answer on self-rated cards" },
       { keys: ["1–4"], what: "Rate Again, Hard, Good or Easy" },
       { keys: ["Space", "Enter"], what: "After grading: take the suggested rating (Good if there is none)" },
-      { keys: ["U", `${mod}+Z`], what: "Undo the last rating, while a graded card is showing" },
+      { keys: ["U", `${mod}+Z`], what: "Undo the last rating, including after advancing to the next card (outside answer fields)" },
       { keys: ["Esc"], what: "Back to decks" },
     ],
   },

@@ -132,6 +132,8 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   }, [card, phase, attemptId, practice, load]);
 
   const undo = useCallback(async () => {
+    if (busy.current) return;
+    busy.current = true;
     try {
       const r = await api.undo();
       if (!r) return toast("Nothing to undo");
@@ -142,11 +144,15 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       setResult(null);
       setAttemptId(null);
       setFeedback(null);
+      setReady(true);
+      setPractice(false);
       setPhase("answer");
       shownAt.current = Date.now();
       toast("Undid the last rating");
     } catch (e) {
       toast.error((e as Error).message);
+    } finally {
+      busy.current = false;
     }
   }, [scope.deck, scope.q]);
 
@@ -163,6 +169,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   }, [card]);
 
   const onKey = useCallback((key: string) => {
+    if ((key === "Undo" || key.toLowerCase() === "u") && (phase === "answer" || phase === "result" || phase === "done")) return void undo();
     if (phase === "answer") {
       if (key === "Mod+Enter" || ((key === " " || key === "Enter") && card?.grader === "self")) reveal();
       return;
@@ -172,17 +179,21 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       else if (key === " " || key === "Enter" || key === "Mod+Enter") {
         const s = result?.grade.suggested ?? 3;
         rate(s);
-      } else if (key === "Undo" || key === "u") undo();
+      }
     }
   }, [phase, card, reveal, rate, result, undo]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
+      if (e.repeat && (["u", "U"].includes(e.key) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z"))) return;
       const t = e.target as HTMLElement;
       if (t?.closest("input, textarea, [contenteditable]")) return;
       if (e.key === "Escape") return navigate("/");
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") return onKey("Mod+Enter");
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") return onKey("Undo");
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        return onKey("Undo");
+      }
       if (!e.ctrlKey && !e.metaKey && !e.altKey) onKey(e.key);
     };
     window.addEventListener("keydown", h);
@@ -212,7 +223,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
         )}
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" onClick={undo} aria-label="Undo"><Undo2 /></Button>
+            <Button variant="ghost" size="icon" disabled={phase === "loading" || phase === "grading"} onClick={undo} aria-label="Undo"><Undo2 /></Button>
           </TooltipTrigger>
           <TooltipContent>Undo last rating <kbd className="ml-1 opacity-70">Ctrl Z</kbd></TooltipContent>
         </Tooltip>

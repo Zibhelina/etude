@@ -116,8 +116,8 @@ A small `std.normalize(s)` is also in scope in card scripts. The full `std` (bel
 ### Keyboard and sizing
 
 - Ctrl/Cmd+Enter always goes to the app (submit or reveal).
-- Escape goes to the app, and so does Ctrl/Cmd+Z in result mode (undo).
-- In answer mode, Space and Enter go to the app only when the card's own handler didn't call `preventDefault()` and focus isn't in an input. In result mode, 1–4, Space, Enter and `u` are forwarded the same way, for rating.
+- Escape goes to the app. Ctrl/Cmd+Z undoes the last rating in result mode or when focus is outside an answer field; inside an answer field it keeps its normal text-undo behavior. Undo also works after advancing to the next card. In answer mode a card can keep Ctrl/Cmd+Z for its own undo handler with `preventDefault()`.
+- In answer mode, Space, Enter, and `u` go to the app only when the card's own handler didn't call `preventDefault()` and focus isn't in an input. In result mode, 1–4, Space, Enter, and `u` are forwarded the same way, for rating and undo.
 - On mount, the first `[autofocus]` element (or input or textarea) gets focus.
 - The frame resizes to the card's height automatically. Don't use fixed heights or internal scrolling for the whole card.
 

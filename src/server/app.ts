@@ -112,7 +112,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
       throw new EtudeError("request body must be JSON");
     }
   };
-  const scopeOf = (c: Context): StudyScope => ({ deck: c.req.query("deck") || undefined, query: c.req.query("q") || undefined });
+  const scopeOf = (c: Context): StudyScope => ({ deck: c.req.query("deck") || undefined, query: c.req.query("q") || undefined, ahead: c.req.query("ahead") === "1" || undefined });
 
   app.post("/api/media", async (c) => {
     if (!c.req.header("content-type")?.includes("application/octet-stream")) return c.json({ error: "expected application/octet-stream" }, 415);

@@ -2361,11 +2361,13 @@ etude study counts [flags]
 | --- | --- | --- |
 | `--deck <NAME>` | string | Limit to this deck and its subdecks. |
 | `--query <SEARCH>` | string | Limit to cards matching a search (see `Search language`). Also `--q`. |
+| `--ahead` | boolean | Study ahead: nothing has to be due. Every card in the scope, soonest due first, no daily limits; ratings are real reviews. |
 
 Output: { new, learning, learningSoon, review, doneToday, nextDue }
 
 ```sh
 etude study counts --deck "Networks"
+etude study counts --deck "Networks" --ahead
 ```
 
 ### etude study next
@@ -2374,7 +2376,7 @@ etude study counts --deck "Networks"
 
 The next card to study in a scope, with its view and how to answer it. Private fields are never included.
 
-Use `view` to present the card (render its markdown for the learner). Keep `cardId` and `seed`: submit with them so the answer is graded against exactly this variant. Respects daily limits and the preset's ordering; `--exclude` skips the card just answered.
+Use `view` to present the card (render its markdown for the learner). Keep `cardId` and `seed`: submit with them so the answer is graded against exactly this variant. Respects daily limits and the preset's ordering; `--exclude` skips the card just answered. With `--ahead`, nothing has to be due: every card in the scope comes up, soonest due first.
 
 ```
 etude study next [flags]
@@ -2386,6 +2388,7 @@ etude study next [flags]
 | --- | --- | --- |
 | `--deck <NAME>` | string | Limit to this deck and its subdecks. |
 | `--query <SEARCH>` | string | Limit to cards matching a search (see `Search language`). Also `--q`. |
+| `--ahead` | boolean | Study ahead: nothing has to be due. Every card in the scope, soonest due first, no daily limits; ratings are real reviews. |
 | `--exclude <N>` | number | Card id to avoid repeating right away. |
 
 Output: { card: { cardId, itemId, face, seed, type, deck, tags, state, title, grader, view, answerFormat, intervals } | null, counts }
@@ -2393,6 +2396,7 @@ Output: { card: { cardId, itemId, face, seed, type, deck, tags, state, title, gr
 ```sh
 etude study next --deck "Networks"
 etude study next --query "tag:delay is:due"
+etude study next --deck "Networks" --ahead
 ```
 
 ### etude study card

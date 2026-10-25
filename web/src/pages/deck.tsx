@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, BarChart3, CalendarClock, Check, ChevronDown, ChevronRight, Download, Eye, Library, Pencil, Play, Plus, Search, Trash2, X } from "lucide-react";
+import { Archive, BarChart3, CalendarClock, Check, ChevronDown, ChevronRight, Download, Eye, FastForward, Library, Pencil, Play, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -415,9 +415,15 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards }: { deck: DeckF
           ) : (
             <>
               <CustomStudy deck={deck.name} tags={tags} disabled={!node?.cards} />
-              <Button size="lg" className="flex-1 gap-2 px-6 sm:flex-none" disabled={!work} title={work ? undefined : "Nothing due right now"} onClick={() => navigate(`/study?deck=${enc(deck.name)}`)}>
-                <Play className="size-4" />Study
-              </Button>
+              {work || !node?.cards ? (
+                <Button size="lg" className="flex-1 gap-2 px-6 sm:flex-none" disabled={!work} onClick={() => navigate(`/study?deck=${enc(deck.name)}`)}>
+                  <Play className="size-4" />Study
+                </Button>
+              ) : (
+                <Button size="lg" className="flex-1 gap-2 px-6 sm:flex-none" title="Nothing due right now: review early. FSRS counts an early review for less." onClick={() => navigate(`/study?deck=${enc(deck.name)}&ahead=1`)}>
+                  <FastForward className="size-4" />Study ahead
+                </Button>
+              )}
             </>
           )}
         </div>

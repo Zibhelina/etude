@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarClock, ChevronRight, Eye, GripVertical, Play, Plus, Upload } from "lucide-react";
+import { CalendarClock, ChevronRight, Eye, FastForward, GripVertical, Play, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -173,7 +173,7 @@ export function DecksPage() {
             const work = d.new + d.learning + d.review;
             const soon = d.depth === 0 && d.deadline && new Date(d.deadline) > new Date();
             const watch = d.mode === "watch";
-            const study = () => navigate(`/${watch ? "watch" : "study"}?deck=${encodeURIComponent(d.name)}`);
+            const study = () => navigate(`/${watch ? "watch" : "study"}?deck=${encodeURIComponent(d.name)}${!watch && !work ? "&ahead=1" : ""}`);
             // A new top-level deck after a subtree gets a stronger rule, so groups read as groups.
             const groupStart = i > 0 && d.depth === 0;
             const o = offset(d.name);
@@ -255,14 +255,19 @@ export function DecksPage() {
                     size="sm"
                     variant={work || (watch && d.cards) ? "secondary" : "ghost"}
                     className="size-10 gap-1.5 self-center rounded-full px-0 sm:h-8 sm:w-auto sm:rounded-md sm:px-3"
-                    disabled={watch ? !d.cards : !work}
+                    disabled={!d.cards}
                     onClick={study}
-                    aria-label={`${watch ? "Watch" : "Study"} ${name}`}
+                    title={!watch && !work && d.cards ? "Nothing due: study ahead anyway" : undefined}
+                    aria-label={`${watch ? "Watch" : work || !d.cards ? "Study" : "Study ahead"} ${name}`}
                   >
                     {watch ? (
                       <><Eye className="size-4 text-highlight sm:size-3.5 sm:text-current" /> <span className="hidden sm:inline">Watch</span></>
                     ) : (
+                      work || !d.cards ? (
                       <><Play className={cn("size-4 sm:size-3.5", work && "fill-current text-highlight sm:fill-none sm:text-current")} /> <span className="hidden sm:inline">Study</span></>
+                    ) : (
+                      <><FastForward className="size-4 sm:size-3.5" /> <span className="hidden sm:inline">Ahead</span></>
+                    )
                     )}
                   </Button>
                 </div>

@@ -91,6 +91,8 @@ export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, lea
 export interface StudyScope {
   deck?: string;
   query?: string;
+  /** Study ahead: nothing has to be due. Every card in the scope is in the queue, soonest due first, with no daily limits. Ratings are real reviews. */
+  ahead?: boolean;
 }
 
 export type WeightsSource = { kind: "preset"; id: string } | { kind: "deck"; name: string } | { kind: "defaults" };
@@ -1274,6 +1276,14 @@ export class Etude {
     const nowIso = iso(t);
     const aheadIso = iso(new Date(t.getTime() + this.settings().learnAheadMinutes * 60_000));
 
+    if (scope.ahead) {
+      // Study ahead: everything in scope, soonest due first, no daily limits. FSRS scales the gain for an early review.
+      const byDue = (a: CardRow, b: CardRow) => a.due.localeCompare(b.due);
+      const learning = rows.filter((c) => c.state === 1 || c.state === 3).sort(byDue);
+      const reviews = rows.filter((c) => c.state === 2).sort(byDue);
+      const news = rows.filter((c) => c.state === 0).sort((a, b) => a.ord - b.ord || a.id - b.id);
+      return { learning, reviews, news, doneNew, doneRev, cfg, nowIso, nextLater: null as string | null, ahead: true };
+    }
     const learning = rows.filter((c) => (c.state === 1 || c.state === 3) && c.due <= aheadIso).sort((a, b) => a.due.localeCompare(b.due));
     let reviews = rows.filter((c) => c.state === 2 && c.due <= nowIso);
     if (cfg.reviewOrder === "retrievability") {
@@ -1297,14 +1307,14 @@ export class Etude {
     const nextLater = rows
       .filter((c) => (c.state !== 0 && c.due > aheadIso) || (c.state === 0 && c.due > nowIso))
       .reduce<string | null>((m, c) => (!m || c.due < m ? c.due : m), null);
-    return { learning, reviews, news, doneNew, doneRev, cfg, nowIso, nextLater };
+    return { learning, reviews, news, doneNew, doneRev, cfg, nowIso, nextLater, ahead: false };
   }
 
   counts(scope: StudyScope) {
     const q = this.queue(scope);
     return {
       new: q.news.length,
-      learning: q.learning.filter((c) => c.due <= q.nowIso).length,
+      learning: q.ahead ? q.learning.length : q.learning.filter((c) => c.due <= q.nowIso).length,
       learningSoon: q.learning.length,
       review: q.reviews.length,
       doneToday: q.doneNew + q.doneRev,
@@ -1317,14 +1327,14 @@ export class Etude {
     const q = this.queue(scope);
     const counts = {
       new: q.news.length,
-      learning: q.learning.filter((c) => c.due <= q.nowIso).length,
+      learning: q.ahead ? q.learning.length : q.learning.filter((c) => c.due <= q.nowIso).length,
       learningSoon: q.learning.length,
       review: q.reviews.length,
       doneToday: q.doneNew + q.doneRev,
       nextDue: q.nextLater,
     };
     const not = (list: CardRow[]) => list.filter((c) => c.id !== opts.exclude);
-    const learningNow = not(q.learning.filter((c) => c.due <= q.nowIso));
+    const learningNow = not(q.ahead ? q.learning : q.learning.filter((c) => c.due <= q.nowIso));
     const reviews = not(q.reviews);
     const news = not(q.news);
     let pick: CardRow | undefined = learningNow[0];

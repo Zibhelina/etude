@@ -286,6 +286,8 @@ export interface AnkiImportReport {
 export interface Scope {
   deck?: string;
   q?: string;
+  /** Study ahead: nothing has to be due. */
+  ahead?: boolean;
 }
 
 export interface OptimizeResult {
@@ -342,8 +344,8 @@ export const api = {
   /** Buries cards or whole notes; returns only newly buried ids so Undo preserves existing burials. */
   buryCards: (cardIds: number[], note: boolean) => call<{ count: number; cardIds: number[] }>("POST", "/api/cards-bulk", { action: note ? "bury-note" : "bury", cardIds }),
 
-  counts: (s: Scope) => call<Counts>("GET", `/api/study/counts${qs({ deck: s.deck, q: s.q })}`),
-  next: (s: Scope, exclude?: number) => call<{ card: StudyCard | null; counts: Counts }>("GET", `/api/study/next${qs({ deck: s.deck, q: s.q, exclude })}`),
+  counts: (s: Scope) => call<Counts>("GET", `/api/study/counts${qs({ deck: s.deck, q: s.q, ahead: s.ahead ? 1 : undefined })}`),
+  next: (s: Scope, exclude?: number) => call<{ card: StudyCard | null; counts: Counts }>("GET", `/api/study/next${qs({ deck: s.deck, q: s.q, ahead: s.ahead ? 1 : undefined, exclude })}`),
   card: (cardId: number, seed?: number) => call<StudyCard>("GET", `/api/study/card/${cardId}${qs({ seed })}`),
   submit: (cardId: number, seed: number, answer: unknown, practice = false) =>
     call<{ attemptId: number; grade: Grade; key: Record<string, unknown>; wantsFeedback: boolean }>("POST", "/api/study/submit", { cardId, seed, answer, practice }),

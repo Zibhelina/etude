@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, CornerDownLeft, Dices, EyeOff, Loader2, MessageSquareText, Pencil, RotateCcw, Sparkles, Undo2 } from "lucide-react";
+import { ArrowLeft, FastForward, CornerDownLeft, Dices, EyeOff, Loader2, MessageSquareText, Pencil, RotateCcw, Sparkles, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -60,7 +60,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     } catch (e) {
       toast.error((e as Error).message);
     }
-  }, [scope.deck, scope.q]);
+  }, [scope.deck, scope.q, scope.ahead]);
 
   useEffect(() => {
     if (!startCard) {
@@ -154,7 +154,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     } finally {
       busy.current = false;
     }
-  }, [scope.deck, scope.q]);
+  }, [scope.deck, scope.q, scope.ahead]);
 
   /** Same card, a new random variant, as practice: logged but doesn't move the schedule. */
   const anotherVariant = useCallback(async () => {
@@ -207,7 +207,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     } finally {
       busy.current = false;
     }
-  }, [card, phase, load, scope.deck, scope.q]);
+  }, [card, phase, load, scope.deck, scope.q, scope.ahead]);
 
   const onKey = useCallback((key: string) => {
     if ((key === "=" || key === "-") && (phase === "answer" || phase === "result")) return void bury(key === "=");
@@ -279,7 +279,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
         </Tooltip>
       </header>
 
-      {phase === "done" && <Done counts={counts} />}
+      {phase === "done" && <Done counts={counts} scope={scope} />}
 
       {card && phase !== "done" && (
         <main className="flex flex-1 flex-col gap-6 pt-6">
@@ -292,6 +292,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
                 <TooltipContent>Generated: the numbers change every review</TooltipContent>
               </Tooltip>
             )}
+            {scope.ahead && <Badge variant="outline" className="gap-1 font-normal"><FastForward className="size-3" />studying ahead</Badge>}
             {practice && <Badge variant="outline" className="border-highlight/40 font-normal text-highlight">practice, not scheduled</Badge>}
             <div className="flex-1" />
             <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs text-muted-foreground" onClick={() => navigate(`/browse?item=${encodeURIComponent(card.itemId)}`)}>
@@ -388,15 +389,29 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   );
 }
 
-function Done({ counts }: { counts: Counts | null }) {
+function Done({ counts, scope }: { counts: Counts | null; scope: Scope }) {
+  const aheadUrl = () => {
+    const p = new URLSearchParams();
+    if (scope.deck) p.set("deck", scope.deck);
+    if (scope.q) p.set("q", scope.q);
+    p.set("ahead", "1");
+    return `/study?${p}`;
+  };
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 py-24 text-center">
-      <div className="text-2xl font-semibold tracking-tight">All done for now</div>
+      <div className="text-2xl font-semibold tracking-tight">{scope.ahead ? "Nothing left to study" : "All done for now"}</div>
       <p className="max-w-sm text-muted-foreground">
         {counts?.doneToday ? `${counts.doneToday} reviews today. ` : ""}
-        {counts?.nextDue ? `The next card comes back ${relative(counts.nextDue)}.` : "Nothing else is scheduled."}
+        {scope.ahead ? "There are no cards in this deck." : counts?.nextDue ? `The next card comes back ${relative(counts.nextDue)}.` : "Nothing else is scheduled."}
       </p>
-      <Button variant="outline" className="mt-4" onClick={() => navigate("/")}>Back to decks</Button>
+      <div className="mt-4 flex gap-2">
+        <Button variant="outline" onClick={() => navigate("/")}>Back to decks</Button>
+        {!scope.ahead && counts?.nextDue && (
+          <Button className="gap-1.5" onClick={() => navigate(aheadUrl())} title="Review cards before they're due. FSRS counts an early review for less.">
+            <FastForward className="size-4" />Study ahead
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

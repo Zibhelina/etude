@@ -6,6 +6,7 @@ import { DECK_FLAG, FACE_FLAG, QUERY_FLAG, oneCard, scopeOf, stateName } from ".
 
 group({ name: "study", summary: "Studying: the queue, presenting a card, submitting answers, ratings, undo" });
 
+const AHEAD_FLAG = { name: "ahead", type: "boolean" as const, description: "Study ahead: nothing has to be due. Every card in the scope, soonest due first, no daily limits; ratings are real reviews." };
 const PRACTICE_FLAG = { name: "practice", type: "boolean" as const, description: "Practice only: the review is logged but the card's schedule doesn't move (like “another variant” in the app)." };
 const ANSWER_FLAGS = [
   { name: "answer", type: "string" as const, short: "a", description: "The learner's answer, verbatim (`-` reads stdin). Parsed as JSON when it starts with `[`, `{` or `\"` (`[\"1.2\"]` for numeric parts, `[\"o0\"]` for mcq); anything else is kept as typed. --text forces text.", placeholder: "VALUE" },
@@ -85,8 +86,8 @@ function answerOf(ctx: Ctx, required = true): unknown {
 command({
   name: "study counts",
   summary: "Today's queue for a scope: new, learning, review, done today, next due.",
-  flags: [DECK_FLAG, QUERY_FLAG],
-  examples: ['etude study counts --deck "Networks"'],
+  flags: [DECK_FLAG, QUERY_FLAG, AHEAD_FLAG],
+  examples: ['etude study counts --deck "Networks"', 'etude study counts --deck "Networks" --ahead'],
   output: "{ new, learning, learningSoon, review, doneToday, nextDue }",
   run: (ctx) => ctx.e.counts(scopeOf(ctx.flags)),
 });
@@ -95,9 +96,9 @@ command({
   name: "study next",
   summary: "The next card to study in a scope, with its view and how to answer it. Private fields are never included.",
   description:
-    "Use `view` to present the card (render its markdown for the learner). Keep `cardId` and `seed`: submit with them so the answer is graded against exactly this variant. Respects daily limits and the preset's ordering; `--exclude` skips the card just answered.",
-  flags: [DECK_FLAG, QUERY_FLAG, { name: "exclude", type: "number", description: "Card id to avoid repeating right away." }],
-  examples: ['etude study next --deck "Networks"', 'etude study next --query "tag:delay is:due"'],
+    "Use `view` to present the card (render its markdown for the learner). Keep `cardId` and `seed`: submit with them so the answer is graded against exactly this variant. Respects daily limits and the preset's ordering; `--exclude` skips the card just answered. With `--ahead`, nothing has to be due: every card in the scope comes up, soonest due first.",
+  flags: [DECK_FLAG, QUERY_FLAG, AHEAD_FLAG, { name: "exclude", type: "number", description: "Card id to avoid repeating right away." }],
+  examples: ['etude study next --deck "Networks"', 'etude study next --query "tag:delay is:due"', 'etude study next --deck "Networks" --ahead'],
   output: "{ card: { cardId, itemId, face, seed, type, deck, tags, state, title, grader, view, answerFormat, intervals } | null, counts }",
   run(ctx) {
     const r = ctx.e.next(scopeOf(ctx.flags), { exclude: ctx.flags.exclude });

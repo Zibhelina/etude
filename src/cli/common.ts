@@ -27,7 +27,7 @@ export async function optimizeCommand(ctx: Ctx, target: { preset: string } | { d
   return ctx.dry ? { dryRun: true, ...out } : out;
 }
 
-export const scopeOf = (f: Record<string, any>) => ({ deck: f.deck || undefined, query: f.query || undefined });
+export const scopeOf = (f: Record<string, any>) => ({ deck: f.deck || undefined, query: f.query || undefined, ahead: f.ahead || undefined });
 
 /** `--deck` and `--query` folded into one search string. */
 export function queryOf(f: Record<string, any>): string | undefined {

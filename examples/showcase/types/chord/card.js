@@ -130,7 +130,7 @@ function keyboard(host, { lo = 48, octaves = 2, wrap = true, labels = "c", onPre
 
 // Spelled note names: { letter: "E", acc: -1, oct: 4 } -> "E♭4", or KaTeX "\mathrm{E}\flat_{4}".
 const ACC = { "-2": "𝄫", "-1": "♭", 0: "", 1: "♯", 2: "𝄪" };
-const ACC_TEX = { "-2": "\\flat\\flat", "-1": "\\flat", 0: "", 1: "\\sharp", 2: "\\sharp\\sharp" };
+const ACC_TEX = { "-2": "{\\flat\\flat}", "-1": "{\\flat}", 0: "", 1: "{\\sharp}", 2: "{\\sharp\\sharp}" };
 const noteText = (n) => `${n.letter}${ACC[n.acc]}${n.oct ?? ""}`;
 const noteTex = (n) => `\\mathrm{${n.letter}}${ACC_TEX[n.acc]}${n.oct != null ? `_{${n.oct}}` : ""}`;
 

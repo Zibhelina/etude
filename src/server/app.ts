@@ -224,6 +224,11 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     return c.json(await etude.watchGrade(Number(b.cardId), Number(b.seed), b.answer, { ai: !!b.ai }));
   });
   app.post("/api/reschedule", async (c) => c.json(etude.reschedule(await body(c))));
+  app.post("/api/optimize", async (c) => {
+    const b = await body(c);
+    const target = b.preset ? { preset: String(b.preset) } : { deck: String(b.deck ?? "") };
+    return c.json(await etude.optimizeWeights(target, { apply: !!b.apply, reschedule: !!b.reschedule }));
+  });
 
   // ------------------------------------------------- stats, tags, packs
   app.get("/api/stats", (c) => c.json(etude.stats(scopeOf(c), Number(c.req.query("days") ?? 30) || 30)));

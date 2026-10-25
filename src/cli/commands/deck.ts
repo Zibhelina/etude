@@ -2,7 +2,7 @@ import { normDeck } from "../../core/engine.ts";
 import { resolveConfig } from "../../core/scheduler.ts";
 import { alias, command, group, CliError } from "../registry.ts";
 import { textInput } from "../input.ts";
-import { applyConfigPairs, configSources, diffConfig, needsReschedule, unsetConfigKeys, CONFIG_KEYS } from "../common.ts";
+import { applyConfigPairs, configSources, diffConfig, needsReschedule, optimizeCommand, unsetConfigKeys, CONFIG_KEYS, OPTIMIZE_DESCRIPTION, OPTIMIZE_FLAGS, OPTIMIZE_OUTPUT } from "../common.ts";
 
 group({ name: "deck", summary: "Decks: the tree, settings inheritance, presets, description and grading instructions", defaultVerb: "list" });
 
@@ -268,6 +268,19 @@ command({
     else if (needsReschedule(changed)) out.hint = `run \`etude card reschedule --deck "${d.name}"\` to apply the change to studied cards`;
     return out;
   },
+});
+
+command({
+  name: "deck optimize",
+  summary: "Fit the FSRS weights this deck uses to the history of every deck sharing them (Anki's Optimize).",
+  description: `The weights belong to the deck's preset, or to the deck itself when it overrides them, and --apply saves them there. ${OPTIMIZE_DESCRIPTION}`,
+  args: [{ name: "deck", description: "Deck name.", required: true }],
+  flags: OPTIMIZE_FLAGS,
+  writes: true,
+  dryRun: "self",
+  examples: ['etude deck optimize "Networks"', 'etude deck optimize "Networks" --apply --reschedule'],
+  output: OPTIMIZE_OUTPUT,
+  run: (ctx) => optimizeCommand(ctx, { deck: ctx.args.deck }),
 });
 
 command({

@@ -21,6 +21,7 @@ import {
 import { initSandbox, runScript, ScriptError } from "./sandbox.ts";
 import { fieldDefaults, loadBuiltinTypes, validateFields, validateType, TYPE_ID } from "./types.ts";
 import * as sched from "./scheduler.ts";
+import { fitWeights, MIN_REVIEWS, OptimizerMissing, type Fit } from "./optimize.ts";
 import { compile, QueryError } from "./query.ts";
 import { aiFeedback, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type GradingContext } from "./ai.ts";
 import {
@@ -88,6 +89,26 @@ export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, lea
 export interface StudyScope {
   deck?: string;
   query?: string;
+}
+
+export type WeightsSource = { kind: "preset"; id: string } | { kind: "deck"; name: string } | { kind: "defaults" };
+
+export interface OptimizeResult {
+  /** Where the weights live, and where `apply` saves them. */
+  source: WeightsSource;
+  /** Every deck that shares them, whose history was used. */
+  decks: string[];
+  cards: number;
+  reviews: number;
+  /** Training samples fsrs-rs built from the reviews. */
+  items: number;
+  current: number[] | null;
+  weights: number[];
+  before: Fit;
+  after: Fit;
+  better: boolean;
+  applied: boolean;
+  rescheduled?: number;
 }
 
 export interface StudyCard {
@@ -1578,7 +1599,10 @@ export class Etude {
   /** Recomputes cards from their review history with the current settings, e.g. after changing retention. */
   reschedule(scope: StudyScope = {}) {
     const { where, params } = this.scopeWhere({ ...scope });
-    const cards = this.db.all(`SELECT c.id, c.item_id, d.name AS deck, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${where.replace("c.suspended = 0", "1")}`, ...params);
+    return this.replayCards(this.db.all(`SELECT c.id, c.item_id, d.name AS deck, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${where.replace("c.suspended = 0", "1")}`, ...params));
+  }
+
+  private replayCards(cards: Row[]) {
     let n = 0;
     this.db.tx(() => {
       for (const c of cards) {
@@ -1593,6 +1617,98 @@ export class Etude {
       }
     });
     return { rescheduled: n };
+  }
+
+  /**
+   * Where a deck's FSRS weights come from: the last preset or deck, root first, that sets them.
+   * When none does, the deck shares the weights of its nearest preset (the defaults until that preset gets some).
+   */
+  weightsSource(deckName: string): WeightsSource {
+    const parts = deckParts(deckName);
+    let source: WeightsSource | null = null;
+    let nearest: string | null = null;
+    for (let i = 1; i <= parts.length; i++) {
+      const name = parts.slice(0, i).join("::");
+      const r = this.db.get("SELECT preset_id, config FROM decks WHERE name = ?", name);
+      if (!r) continue;
+      if (r.preset_id) {
+        nearest = r.preset_id;
+        const p = this.db.get("SELECT config FROM presets WHERE id = ?", r.preset_id);
+        if (parse<Partial<PresetConfig>>(p?.config, {}).weights !== undefined) source = { kind: "preset", id: r.preset_id };
+      }
+      if (parse<Partial<PresetConfig>>(r.config, {}).weights !== undefined) source = { kind: "deck", name };
+    }
+    return source ?? (nearest ? { kind: "preset", id: nearest } : { kind: "defaults" });
+  }
+
+  /**
+   * Fits FSRS weights to the review history of every deck that shares the target's weights, like Anki's
+   * Optimize. `apply` saves them where they come from (the preset, or the deck that overrides them), and
+   * only when they fit the history better than the current ones.
+   */
+  async optimizeWeights(target: { preset: string } | { deck: string }, opts: { apply?: boolean; reschedule?: boolean } = {}) {
+    let source: WeightsSource;
+    if ("preset" in target) {
+      this.preset(target.preset);
+      source = { kind: "preset", id: target.preset };
+    } else source = this.weightsSource(this.deck(target.deck).name);
+    if (source.kind === "defaults") throw new EtudeError("this deck uses no preset and no weights of its own: attach a preset first (etude deck preset)");
+    const key = JSON.stringify(source);
+    const decks = this.db.all<{ id: number; name: string }>("SELECT id, name FROM decks ORDER BY name").filter((d) => JSON.stringify(this.weightsSource(d.name)) === key);
+    if (!decks.length) throw new EtudeError(`no deck takes its weights from preset "${(source as { id: string }).id}"`);
+    const ids = decks.map((d) => d.id);
+    const marks = ids.map(() => "?").join(", ");
+    const reviews = this.db
+      .all<{ card_id: number; ts: string; rating: number; state: number; duration_ms: number | null }>(
+        `SELECT r.card_id, r.ts, r.rating, r.state, r.duration_ms FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id WHERE r.practice = 0 AND i.deck_id IN (${marks}) ORDER BY r.card_id, r.ts`,
+        ...ids,
+      )
+      .map((r) => ({ cardId: r.card_id, ts: r.ts, rating: r.rating, state: r.state, durationMs: r.duration_ms }));
+    if (reviews.length < MIN_REVIEWS) throw new EtudeError(`optimizing needs at least ${MIN_REVIEWS} reviews; ${decks.length === 1 ? "this deck has" : `these ${decks.length} decks have`} ${reviews.length}`);
+    const cfg = this.configFor(decks[0].name);
+    let fit;
+    try {
+      fit = await fitWeights(reviews, {
+        current: cfg.weights,
+        dayStartHour: this.settings().dayStartHour,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        enableShortTerm: cfg.enableShortTerm,
+        relearningSteps: cfg.relearningSteps.length,
+      });
+    } catch (e) {
+      if (e instanceof OptimizerMissing) throw new EtudeError(e.message, 501);
+      throw new EtudeError(`optimizing failed: ${(e as Error).message}`);
+    }
+    const better = fit.after.rmse < fit.before.rmse;
+    const out: OptimizeResult = {
+      source,
+      decks: decks.map((d) => d.name),
+      cards: new Set(reviews.map((r) => r.cardId)).size,
+      reviews: reviews.length,
+      items: fit.items,
+      current: cfg.weights ?? null,
+      weights: fit.weights,
+      before: fit.before,
+      after: fit.after,
+      better,
+      applied: false,
+    };
+    if (opts.apply && better) {
+      if (source.kind === "preset") {
+        const p = this.preset(source.id);
+        this.savePreset({ ...p, config: { ...p.config, weights: fit.weights } });
+      } else {
+        const d = this.deck(source.name);
+        this.updateDeck(d.name, { config: { ...d.config, weights: fit.weights } });
+      }
+      out.applied = true;
+      if (opts.reschedule) {
+        out.rescheduled = this.replayCards(
+          this.db.all(`SELECT c.id, c.item_id, d.name AS deck, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE d.id IN (${marks})`, ...ids),
+        ).rescheduled;
+      }
+    }
+    return out;
   }
 
   // ------------------------------------------------------------- overview

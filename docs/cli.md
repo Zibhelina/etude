@@ -221,6 +221,7 @@ These work on every command, before or after the command words.
   - [`deck instructions`](#deck-instructions) Get or set a deck's AI grading instructions (they apply to its subdecks too).
   - [`deck set`](#deck-set) Override settings on this deck (they win over its preset and parents).
   - [`deck unset`](#deck-unset) Remove this deck's own overrides so the values are inherited again.
+  - [`deck optimize`](#deck-optimize) Fit the FSRS weights this deck uses to the history of every deck sharing them (Anki's Optimize).
   - [`deck preset`](#deck-preset) Attach a preset to a deck, or detach it with `none`.
 - **preset**: Presets: named settings shared by several decks (`etude preset` alone runs `list`)
   - [`preset list`](#preset-list) Every preset with the decks that use it.
@@ -231,6 +232,7 @@ These work on every command, before or after the command words.
   - [`preset rename`](#preset-rename) Change a preset's display name (the id stays).
   - [`preset delete`](#preset-delete) Delete a preset no deck uses (archived decks count).
   - [`preset decks`](#preset-decks) Decks that use a preset.
+  - [`preset optimize`](#preset-optimize) Fit the preset's FSRS weights to the review history of the decks using it (Anki's Optimize).
   - [`preset defaults`](#preset-defaults) The built-in default for every scheduling setting (what applies when no deck or preset sets it).
 - **item**: Items: the content (fields, tags, source) behind one or more cards (`etude item` alone runs `list`)
   - [`item list`](#item-list) Items matching a search (one row per item, not per card).
@@ -690,6 +692,37 @@ etude deck unset "Networks" deadline
 etude deck unset "Networks" --all
 ```
 
+### etude deck optimize
+
+<a id="deck-optimize"></a>
+
+Fit the FSRS weights this deck uses to the history of every deck sharing them (Anki's Optimize).
+
+The weights belong to the deck's preset, or to the deck itself when it overrides them, and --apply saves them there. Trains FSRS-6 on the review history (practice reviews don't count) of every deck that shares these weights, with fsrs-rs, the optimizer Anki uses, and compares how well the current and the new weights predict that history: log loss and RMSE, lower is better. Nothing changes without --apply, and --apply only saves weights that fit better (lower RMSE). Needs at least 400 reviews and the optional package @open-spaced-repetition/binding, which `npm install` adds on supported platforms.
+
+```
+etude deck optimize <deck> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `deck` | Deck name. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--apply` | boolean | Save the new weights where the current ones come from, if they fit the history better. |
+| `--reschedule` | boolean | With --apply: replay every card's history in those decks with the new weights. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { source: { kind: preset|deck, id|name }, decks, cards, reviews, items, current, weights, before: { logLoss, rmse }, after: { logLoss, rmse }, better, applied, rescheduled? }
+
+```sh
+etude deck optimize "Networks"
+etude deck optimize "Networks" --apply --reschedule
+```
+
 ### etude deck preset
 
 <a id="deck-preset"></a>
@@ -917,6 +950,37 @@ etude preset decks <id>
 | `id` | Preset id. |
 
 Output: array of { deck, archived }
+
+### etude preset optimize
+
+<a id="preset-optimize"></a>
+
+Fit the preset's FSRS weights to the review history of the decks using it (Anki's Optimize).
+
+Trains FSRS-6 on the review history (practice reviews don't count) of every deck that shares these weights, with fsrs-rs, the optimizer Anki uses, and compares how well the current and the new weights predict that history: log loss and RMSE, lower is better. Nothing changes without --apply, and --apply only saves weights that fit better (lower RMSE). Needs at least 400 reviews and the optional package @open-spaced-repetition/binding, which `npm install` adds on supported platforms.
+
+```
+etude preset optimize <id> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Preset id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--apply` | boolean | Save the new weights where the current ones come from, if they fit the history better. |
+| `--reschedule` | boolean | With --apply: replay every card's history in those decks with the new weights. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { source: { kind: preset|deck, id|name }, decks, cards, reviews, items, current, weights, before: { logLoss, rmse }, after: { logLoss, rmse }, better, applied, rescheduled? }
+
+```sh
+etude preset optimize exam
+etude preset optimize exam --apply --reschedule
+```
 
 ### etude preset defaults
 

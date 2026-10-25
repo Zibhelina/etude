@@ -90,5 +90,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "optionalDependencies": {
+    "@open-spaced-repetition/binding": "0.5.0"
   }
 }

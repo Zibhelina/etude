@@ -23,7 +23,7 @@ import { fieldDefaults, loadBuiltinTypes, validateFields, validateType, ITEM_ID,
 import * as sched from "./scheduler.ts";
 import { fitWeights, MIN_REVIEWS, OptimizerMissing, type Fit } from "./optimize.ts";
 import { compile, QueryError } from "./query.ts";
-import { aiFeedback, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type GradingContext } from "./ai.ts";
+import { aiEditFields, aiFeedback, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type GradingContext } from "./ai.ts";
 import {
   beginChatGptLogin,
   chatGptEndpoints,
@@ -776,21 +776,56 @@ export class Etude {
     };
   }
 
+  private checkItemFields(id: string, def: CardTypeDef, fields: Record<string, unknown>) {
+    const errs = validateFields(def, fields);
+    if (errs.length && typeof fields.generator !== "string") throw new EtudeError(`${id}: ${errs.join("; ")}`);
+    if (typeof fields.generator === "string") {
+      // A generated item must produce valid fields; try a few seeds now so mistakes surface at import.
+      for (const seed of [1, 2, 3]) {
+        const gen = this.generate(fields, seed, id);
+        const e = validateFields(def, gen);
+        if (e.length) throw new EtudeError(`${id}: generator output (seed ${seed}): ${e.join("; ")}`);
+      }
+    }
+  }
+
+  /** Returns a validated edit proposal without saving or changing scheduling. */
+  async suggestItemEdit(id: string, instruction: string, opts: { fields?: Record<string, unknown> } = {}) {
+    const item = this.item(id);
+    if (typeof instruction !== "string" || !instruction.trim()) throw new EtudeError("describe how you want to change the card");
+    const input = opts.fields === undefined ? item.fields : opts.fields;
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new EtudeError("fields must be an object");
+    const before = structuredClone(input);
+    const def = this.type(item.type);
+    try {
+      const proposal = await aiEditFields(this.settings().ai, def, before, instruction.trim(), { home: this.home });
+      const allowed = new Set([...def.fields.map((f) => f.name), ...Object.keys(before), "generator"]);
+      let fields = { ...before };
+      for (const [name, value] of Object.entries(proposal.changes)) {
+        if (!allowed.has(name)) throw new AiError(`language model returned an unknown field "${name}"`);
+        if (value === null) delete fields[name];
+        else fields = { ...fields, [name]: value };
+      }
+      try {
+        if (fields.generator !== undefined && typeof fields.generator !== "string") throw new EtudeError("generator should be code");
+        this.checkItemFields(id, def, { ...fieldDefaults(def), ...fields });
+      } catch (e) {
+        throw new AiError(`proposed edit is invalid: ${(e as Error).message}`);
+      }
+      const changed = [...new Set([...Object.keys(before), ...Object.keys(fields)])].filter((name) => JSON.stringify(before[name]) !== JSON.stringify(fields[name]));
+      return { itemId: id, fields, changed, model: proposal.model, ms: proposal.ms, ...(proposal.cost != null ? { cost: proposal.cost } : {}) };
+    } catch (e) {
+      if (e instanceof AiError) throw new EtudeError(`couldn't edit the card: ${e.message}`, 502);
+      throw e;
+    }
+  }
+
   /** Creates or updates one item. Returns what happened. */
   upsertItem(input: Partial<Item> & { id: string; type: string; deck: string; fields: Record<string, unknown> }, opts: { ord?: number } = {}): "created" | "updated" | "unchanged" {
     if (!input.id || !ITEM_ID.test(input.id)) throw new EtudeError(`invalid item id "${input.id}"`);
     const def = this.type(input.type);
     const fields = { ...fieldDefaults(def), ...(input.fields ?? {}) };
-    const errs = validateFields(def, fields);
-    if (errs.length && typeof fields.generator !== "string") throw new EtudeError(`${input.id}: ${errs.join("; ")}`);
-    if (typeof fields.generator === "string") {
-      // A generated item must produce valid fields; try a few seeds now so mistakes surface at import.
-      for (const seed of [1, 2, 3]) {
-        const gen = this.generate(fields, seed, input.id);
-        const e = validateFields(def, gen);
-        if (e.length) throw new EtudeError(`${input.id}: generator output (seed ${seed}): ${e.join("; ")}`);
-      }
-    }
+    this.checkItemFields(input.id, def, fields);
     const deckId = this.ensureDeck(input.deck);
     const tags = [...new Set((input.tags ?? []).map(normTag).filter(Boolean))];
     const old = this.db.get("SELECT * FROM items WHERE id = ?", input.id);

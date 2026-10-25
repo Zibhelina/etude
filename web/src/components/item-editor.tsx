@@ -11,6 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FieldEditor } from "@/components/field-editor";
+import { ItemAiEdit } from "@/components/item-ai-edit";
 import { CardPreview } from "@/components/card-preview";
 import { Markdown } from "@/components/markdown";
 import { api, humanInterval, relative, RATING_LABEL, STATE_NAMES, type CardType, type ItemDetail, type SearchRow, type TypeSummary } from "@/lib/api";
@@ -329,6 +330,10 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
             <TagInput value={draft.tags} known={tags} onChange={(t) => setDraft({ ...draft, tags: t })} />
           </div>
           <div className="border-t pt-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-medium">Content</h3>
+              <ItemAiEdit key={item.id} id={item.id} fields={draft.fields} specs={type.fields} onApply={(fields) => setDraft((current) => current && { ...current, fields })} />
+            </div>
             <FieldEditor fields={type.fields} value={draft.fields} onChange={(fields) => setDraft({ ...draft, fields })} />
           </div>
           <div className="flex flex-col gap-1.5">

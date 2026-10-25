@@ -61,6 +61,8 @@ const samplesOf = (items: any[]) => [...new Set(items.map(sampleOf).filter(Boole
 export interface IndexEntry extends MarketMeta {
   path: string;
   bytes: number;
+  /** Optional picture of the entry in use, `covers/<kind>s/<id>.<webp|png|jpg>`. */
+  cover?: string;
   summary: MarketSummary;
 }
 
@@ -218,6 +220,30 @@ export function marketSettings(e: Etude): MarketSettings {
 }
 
 const indexCache = new Map<string, { at: number; index: MarketIndex }>();
+
+const COVER_EXT = ["webp", "png", "jpg"] as const;
+export const MAX_COVER_BYTES = 600 * 1024;
+const COVER_TYPE: Record<string, string> = { webp: "image/webp", png: "image/png", jpg: "image/jpeg" };
+
+/** An entry's cover image, as bytes and a content type. */
+export async function fetchCover(url: string, cover: string): Promise<{ body: Buffer; type: string }> {
+  const m = /^covers\/(themes|decks|types)\/[a-z0-9-]+\.(webp|png|jpg)$/.exec(cover);
+  if (!m) throw new MarketError(`unexpected cover path ${cover}`);
+  let body: Buffer;
+  if (!isRemote(url)) {
+    const p = join(localDir(url), cover);
+    if (!existsSync(p)) throw new MarketError(`the market has no ${cover}`, 404);
+    body = readFileSync(p);
+  } else {
+    const res = await fetch(`${url.replace(/\/+$/, "")}/${cover}`, { signal: AbortSignal.timeout(20_000) }).catch((e) => {
+      throw new MarketError(`couldn't reach the market (${(e as Error).message})`, 502);
+    });
+    if (!res.ok) throw new MarketError(`the market answered ${res.status} for ${cover}`, res.status === 404 ? 404 : 502);
+    body = Buffer.from(await res.arrayBuffer());
+  }
+  if (body.length > MAX_COVER_BYTES) throw new MarketError(`${cover} is larger than ${MAX_COVER_BYTES} bytes`);
+  return { body, type: COVER_TYPE[m[2]] };
+}
 
 export async function fetchIndex(url: string, opts: { refresh?: boolean } = {}): Promise<MarketIndex> {
   const hit = indexCache.get(url);
@@ -565,7 +591,13 @@ export async function buildIndex(dir: string, opts: { repo?: string; dryRunInto?
         problems.push({ path, errors });
         continue;
       }
-      entries.push({ ...metaOf(file), path, bytes, summary: summarize(file) });
+      const ext = COVER_EXT.find((x) => existsSync(join(root, "covers", `${kind}s`, `${file.id}.${x}`)));
+      const cover = ext ? `covers/${kind}s/${file.id}.${ext}` : undefined;
+      if (cover && statSync(join(root, cover)).size > MAX_COVER_BYTES) {
+        problems.push({ path: cover, errors: [`cover is larger than ${MAX_COVER_BYTES / 1024} KB`] });
+        continue;
+      }
+      entries.push({ ...metaOf(file), path, bytes, ...(cover ? { cover } : {}), summary: summarize(file) });
     }
   }
   entries.sort((a, b) => (b.updated || "").localeCompare(a.updated || "") || a.name.localeCompare(b.name));

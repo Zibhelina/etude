@@ -177,6 +177,13 @@ function Cover({ entry, large }: { entry: MarketEntry; large?: boolean }) {
   const s = entry.summary as any;
   if (entry.kind === "theme") return <ThemeMiniature theme={s.theme} className={large ? "" : "rounded-lg"} />;
   const Icon = KIND_ICON[entry.kind];
+  if (entry.cover) {
+    return (
+      <div className={cn("aspect-[16/10] min-w-0 overflow-hidden rounded-lg bg-[#070707]", large && "rounded-xl")}>
+        <img src={api.marketCoverUrl(entry.kind, entry.id)} alt="" loading="lazy" className="size-full object-contain" />
+      </div>
+    );
+  }
   const samples: string[] = s.samples ?? [];
   const chips: string[] =
     entry.kind === "deck"
@@ -213,6 +220,13 @@ function Cover({ entry, large }: { entry: MarketEntry; large?: boolean }) {
   );
 }
 
+function metaLine(entry: MarketEntry): string {
+  const s = entry.summary as any;
+  if (entry.kind === "theme") return `Theme · ${s.theme.scheme}`;
+  if (entry.kind === "deck") return `Deck · ${plural(s.items, "card")}${s.watch ? " · tour" : ""}`;
+  return `Card type · ${(s.types as any[]).map((t) => GRADER_WORD[t.grader] ?? t.grader).join(", ")}`;
+}
+
 function EntryTile({ entry, onOpen }: { entry: MarketEntry; onOpen(): void }) {
   return (
     <button onClick={onOpen} className="group flex min-w-0 flex-col gap-3 rounded-xl border p-2 text-left transition-colors hover:border-ring/70 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none">
@@ -224,7 +238,7 @@ function EntryTile({ entry, onOpen }: { entry: MarketEntry; onOpen(): void }) {
         </div>
         <div className="line-clamp-2 min-h-[2.5em] text-[13px] leading-snug text-muted-foreground">{entry.description || KIND_LABEL[entry.kind]}</div>
         <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{KIND_LABEL[entry.kind]}</span>
+          <span className="truncate">{metaLine(entry)}</span>
           <span aria-hidden="true">·</span>
           <span className="truncate">by {entry.author}</span>
           {entry.kind === "theme" && <ThemeSwatches theme={(entry.summary as any).theme} className="ml-auto" />}

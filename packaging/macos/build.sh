@@ -66,7 +66,8 @@ DMG="$OUT/Etude-mac-$NAME.dmg"
 STAGE="$OUT/$ARCH/dmg"; rm -rf "$STAGE"; mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/" && ln -s /Applications "$STAGE/Applications"
 rm -f "$DMG"
-hdiutil create -volname "Etude" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG" >/dev/null
+for i in 1 2 3 4 5; do hdiutil create -volname "Etude" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG" >/dev/null && break; sleep 3; done
+[ -f "$DMG" ]
 rm -rf "$STAGE"
 if [ "$IDENTITY" != "-" ]; then codesign --force --sign "$IDENTITY" "$DMG"; fi
 echo "$DMG ($(du -h "$DMG" | cut -f1))"

@@ -146,6 +146,14 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     etude.resetType(c.req.param("id"));
     return c.json(etude.type(c.req.param("id")));
   });
+  app.get("/api/type-folders", (c) => c.json(etude.listTypeFolders()));
+  app.post("/api/type-folders", async (c) => c.json({ path: etude.createTypeFolder((await body(c)).path ?? "") }));
+  app.post("/api/type-folders/rename", async (c) => {
+    const b = await body(c);
+    return c.json(etude.renameTypeFolder(b.from ?? "", b.to ?? ""));
+  });
+  app.post("/api/type-folders/delete", async (c) => c.json(etude.deleteTypeFolder((await body(c)).path ?? "")));
+  app.post("/api/types/:id/move", async (c) => c.json({ id: c.req.param("id"), folder: etude.moveType(c.req.param("id"), (await body(c)).folder ?? "") }));
   app.post("/api/types-preview", async (c) => {
     const b = await body(c);
     return c.json(await etude.previewType(b.def, b.fields ?? {}, { seed: b.seed, face: b.face, answer: b.answer }));

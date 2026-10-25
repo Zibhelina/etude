@@ -75,7 +75,7 @@ const defFor = (ctx: Ctx): CardTypeDef => (ctx.flags.from ? loadTypeSource(ctx, 
 command({
   name: "type list",
   summary: "Card types with their grader, item count and whether they are shipped, edited or custom.",
-  output: "array of { id, name, description, builtin, shipped, edited, updated, items, grader }",
+  output: "array of { id, name, description, builtin, shipped, edited, updated, items, grader, folder }",
   run: (ctx) => ctx.e.listTypes(),
 });
 
@@ -230,6 +230,75 @@ command({
     ctx.e.deleteType(ctx.args.id);
     return { deleted: ctx.args.id };
   },
+});
+
+command({
+  name: "type move",
+  summary: "Put a type in a folder of the Types page (created if needed); `--root` takes it out of every folder.",
+  description: "Folders only organize the Types page. Moving never changes the type's definition, so a built-in stays unedited.",
+  args: [
+    { name: "id", description: "Type id.", required: true },
+    { name: "folder", description: "Folder path, `::` between levels (e.g. `Networks::DNS`)." },
+  ],
+  flags: [{ name: "root", type: "boolean", description: "Take the type out of every folder." }],
+  writes: true,
+  dryRun: true,
+  examples: ["etude type move dns-trace Networks::DNS", "etude type move dns-trace --root"],
+  output: "{ id, folder }",
+  run(ctx) {
+    if (!ctx.flags.root && !ctx.args.folder) throw new CliError("give a folder, or --root to take the type out of its folder");
+    return { id: ctx.args.id, folder: ctx.e.moveType(ctx.args.id, ctx.flags.root ? "" : ctx.args.folder) };
+  },
+});
+
+command({
+  name: "type folder list",
+  summary: "Folders of the Types page with the types directly inside each one.",
+  flags: [{ name: "tree", type: "boolean", description: "Also list types that aren't in any folder, under the folder \"\"." }],
+  output: "array of { folder, depth, types: [ids] }",
+  run(ctx) {
+    const types = ctx.e.listTypes();
+    const rows = ctx.e.listTypeFolders().map((f: string) => ({ folder: f, depth: f.split("::").length - 1, types: types.filter((t: any) => t.folder === f).map((t: any) => t.id) }));
+    if (ctx.flags.tree) rows.unshift({ folder: "", depth: -1, types: types.filter((t: any) => !t.folder).map((t: any) => t.id) });
+    return rows;
+  },
+});
+
+command({
+  name: "type folder create",
+  summary: "Create a folder (and its parents) in the Types page.",
+  args: [{ name: "path", description: "Folder path, `::` between levels.", required: true }],
+  writes: true,
+  dryRun: true,
+  examples: ["etude type folder create Networks::DNS"],
+  output: "{ path }",
+  run: (ctx) => ({ path: ctx.e.createTypeFolder(ctx.args.path) }),
+});
+
+command({
+  name: "type folder rename",
+  summary: "Rename or move a folder with every folder and type inside it.",
+  args: [
+    { name: "from", description: "Current folder path.", required: true },
+    { name: "to", description: "New folder path.", required: true },
+  ],
+  writes: true,
+  dryRun: true,
+  examples: ["etude type folder rename Networks Courses::Networks"],
+  output: "{ from, to, folders, types }",
+  run: (ctx) => ctx.e.renameTypeFolder(ctx.args.from, ctx.args.to),
+});
+
+command({
+  name: "type folder delete",
+  summary: "Delete a folder and the folders inside it. Types are kept and move up to the parent folder.",
+  args: [{ name: "path", description: "Folder path.", required: true }],
+  writes: true,
+  dryRun: true,
+  confirm: true,
+  examples: ["etude type folder delete Networks::Old --yes"],
+  output: "{ deleted, folders, moved: [type ids] }",
+  run: (ctx) => ctx.e.deleteTypeFolder(ctx.args.path),
 });
 
 command({

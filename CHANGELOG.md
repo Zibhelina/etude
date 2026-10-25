@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Folders for card types. The Types page groups custom types in nested folders (`Courses::Networks::DNS`) that you can create, rename, move and delete, with drag and drop or a Move dialog that works on phones. Deleting a folder never deletes a type; its contents move up. A built-in can be filed too and stays unedited. A search box finds a type by name, id or description. CLI: `etude type move`, `etude type folder list|create|rename|delete`.
+
 ## 2.0.0
 
 The first public release of Etude 2, a rewrite of the original Python app.

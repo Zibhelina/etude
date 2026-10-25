@@ -319,7 +319,9 @@ export class Etude {
       shipped = new Set();
     }
     return this.db
-      .all("SELECT t.id, t.def, t.builtin, t.updated, (SELECT COUNT(*) FROM items i WHERE i.type = t.id AND i.archived = 0) AS items FROM types t ORDER BY t.builtin DESC, t.id")
+      .all(
+        "SELECT t.id, t.def, t.builtin, t.updated, (SELECT COUNT(*) FROM items i WHERE i.type = t.id AND i.archived = 0) AS items, COALESCE(p.folder, '') AS folder FROM types t LEFT JOIN type_placement p ON p.type_id = t.id ORDER BY t.builtin DESC, t.id",
+      )
       .map((r) => {
         const def = parse<CardTypeDef>(r.def, {} as CardTypeDef);
         const isShipped = shipped.has(r.id);
@@ -333,8 +335,103 @@ export class Etude {
           updated: r.updated,
           items: r.items,
           grader: def.grader?.kind,
+          folder: r.folder as string,
         };
       });
+  }
+
+  // ------------------------------------------------------------ type folders
+  // Folders only organize the Types page; they never change a type or its items.
+
+  /** Every folder path, sorted, including the parents of nested ones. */
+  listTypeFolders(): string[] {
+    const paths = new Set<string>();
+    const add = (p: string) => {
+      const parts = deckParts(p);
+      for (let i = 1; i <= parts.length; i++) paths.add(parts.slice(0, i).join("::"));
+    };
+    for (const r of this.db.all("SELECT path FROM type_folders")) add(r.path);
+    for (const r of this.db.all("SELECT folder FROM type_placement")) add(r.folder);
+    return [...paths].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  }
+
+  /** Creates a folder (and its parents). Returns the normalized path. */
+  createTypeFolder(path: string): string {
+    const p = normDeck(path);
+    if (!p) throw new EtudeError("folder name can't be empty");
+    const parts = deckParts(p);
+    this.db.tx(() => {
+      for (let i = 1; i <= parts.length; i++) this.db.run("INSERT OR IGNORE INTO type_folders (path) VALUES (?)", parts.slice(0, i).join("::"));
+    });
+    return p;
+  }
+
+  /** Puts a type in a folder ("" takes it out of every folder). The folder is created if needed. */
+  moveType(id: string, folder: string): string {
+    if (!this.db.get("SELECT 1 AS x FROM types WHERE id = ?", id)) throw new EtudeError(`unknown type "${id}"`, 404);
+    const f = normDeck(folder ?? "");
+    this.db.tx(() => {
+      if (!f) this.db.run("DELETE FROM type_placement WHERE type_id = ?", id);
+      else {
+        this.createTypeFolder(f);
+        this.db.run("INSERT INTO type_placement (type_id, folder) VALUES (?, ?) ON CONFLICT(type_id) DO UPDATE SET folder = excluded.folder", id, f);
+      }
+    });
+    return f;
+  }
+
+  private underFolder(path: string) {
+    return { eq: path, like: path.replace(/[\\%_]/g, "\\$&") + "::%" };
+  }
+
+  /** Renames or moves a folder with everything inside it (A::B → C::B). */
+  renameTypeFolder(from: string, to: string): { from: string; to: string; folders: number; types: number } {
+    const src = normDeck(from), dst = normDeck(to);
+    if (!src || !dst) throw new EtudeError("folder names can't be empty");
+    if (!this.listTypeFolders().includes(src)) throw new EtudeError(`no folder "${src}"`, 404);
+    if (dst === src) return { from: src, to: dst, folders: 0, types: 0 };
+    if (dst.startsWith(src + "::")) throw new EtudeError("a folder can't move inside itself");
+    const { eq, like } = this.underFolder(src);
+    let folders = 0, types = 0;
+    this.db.tx(() => {
+      // Implied folders (only parents of placements) become real rows so they survive the move.
+      for (const p of this.listTypeFolders()) if (p === src || p.startsWith(src + "::")) this.db.run("INSERT OR IGNORE INTO type_folders (path) VALUES (?)", p);
+      for (const r of this.db.all("SELECT path FROM type_folders WHERE path = ? OR path LIKE ? ESCAPE '\\'", eq, like)) {
+        this.db.run("DELETE FROM type_folders WHERE path = ?", r.path);
+        this.db.run("INSERT OR IGNORE INTO type_folders (path) VALUES (?)", dst + r.path.slice(src.length));
+        folders++;
+      }
+      for (const r of this.db.all("SELECT type_id, folder FROM type_placement WHERE folder = ? OR folder LIKE ? ESCAPE '\\'", eq, like)) {
+        this.db.run("UPDATE type_placement SET folder = ? WHERE type_id = ?", dst + r.folder.slice(src.length), r.type_id);
+        types++;
+      }
+      this.createTypeFolder(dst);
+    });
+    return { from: src, to: dst, folders, types };
+  }
+
+  /**
+   * Deletes a folder and the folders inside it. Types are never deleted: everything that was
+   * inside moves up to the deleted folder's parent.
+   */
+  deleteTypeFolder(path: string): { deleted: string; folders: number; moved: string[] } {
+    const p = normDeck(path);
+    if (!this.listTypeFolders().includes(p)) throw new EtudeError(`no folder "${p}"`, 404);
+    const parent = deckParts(p).slice(0, -1).join("::");
+    const { eq, like } = this.underFolder(p);
+    const moved: string[] = [];
+    let folders = 0;
+    this.db.tx(() => {
+      folders = this.listTypeFolders().filter((f) => f === p || f.startsWith(p + "::")).length;
+      this.db.run("DELETE FROM type_folders WHERE path = ? OR path LIKE ? ESCAPE '\\'", eq, like);
+      for (const r of this.db.all("SELECT type_id FROM type_placement WHERE folder = ? OR folder LIKE ? ESCAPE '\\'", eq, like)) {
+        moved.push(r.type_id);
+        if (parent) this.db.run("UPDATE type_placement SET folder = ? WHERE type_id = ?", parent, r.type_id);
+        else this.db.run("DELETE FROM type_placement WHERE type_id = ?", r.type_id);
+      }
+      if (parent) this.createTypeFolder(parent);
+    });
+    return { deleted: p, folders, moved };
   }
 
   type(id: string): CardTypeDef & { updated: string; builtin: boolean } {
@@ -390,7 +487,10 @@ export class Etude {
     if (used) throw new EtudeError(`type "${id}" is used by ${used} item(s)`);
     const row = this.db.get("SELECT builtin FROM types WHERE id = ?", id);
     if (row?.builtin) throw new EtudeError("built-in types can't be deleted");
-    this.db.run("DELETE FROM types WHERE id = ?", id);
+    this.db.tx(() => {
+      this.db.run("DELETE FROM types WHERE id = ?", id);
+      this.db.run("DELETE FROM type_placement WHERE type_id = ?", id);
+    });
     this.typeCache.delete(id);
   }
 

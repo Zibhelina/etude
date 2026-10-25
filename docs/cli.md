@@ -273,6 +273,11 @@ These work on every command, before or after the command words.
   - [`type test-grade`](#type-test-grade) Run a type's grader on an answer without saving anything.
   - [`type reset`](#type-reset) Restore an edited built-in type to the shipped version.
   - [`type delete`](#type-delete) Delete a custom type no item uses (archived items count).
+  - [`type move`](#type-move) Put a type in a folder of the Types page (created if needed); `--root` takes it out of every folder.
+  - [`type folder list`](#type-folder-list) Folders of the Types page with the types directly inside each one.
+  - [`type folder create`](#type-folder-create) Create a folder (and its parents) in the Types page.
+  - [`type folder rename`](#type-folder-rename) Rename or move a folder with every folder and type inside it.
+  - [`type folder delete`](#type-folder-delete) Delete a folder and the folders inside it. Types are kept and move up to the parent folder.
   - [`type copy`](#type-copy) Copy a type (built-in or custom) under a new id, as a starting point.
   - [`type new`](#type-new) Scaffold a minimal working type directory to edit and then `etude type import`.
   - [`type frame`](#type-frame) The HTML document a card of this type renders in (what the app loads into its sandboxed iframe).
@@ -1757,7 +1762,7 @@ etude type list
 
 *read-only*
 
-Output: array of { id, name, description, builtin, shipped, edited, updated, items, grader }
+Output: array of { id, name, description, builtin, shipped, edited, updated, items, grader, folder }
 
 ### etude type show
 
@@ -1978,6 +1983,135 @@ etude type delete <id> [flags]
 
 ```sh
 etude type delete my-old-type --yes
+```
+
+### etude type move
+
+<a id="type-move"></a>
+
+Put a type in a folder of the Types page (created if needed); `--root` takes it out of every folder.
+
+Folders only organize the Types page. Moving never changes the type's definition, so a built-in stays unedited.
+
+```
+etude type move <id> [folder] [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Type id. |
+| `folder` (optional) | Folder path, `::` between levels (e.g. `Networks::DNS`). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--root` | boolean | Take the type out of every folder. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, folder }
+
+```sh
+etude type move dns-trace Networks::DNS
+etude type move dns-trace --root
+```
+
+### etude type folder list
+
+<a id="type-folder-list"></a>
+
+Folders of the Types page with the types directly inside each one.
+
+```
+etude type folder list [flags]
+```
+
+*read-only*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--tree` | boolean | Also list types that aren't in any folder, under the folder "". |
+
+Output: array of { folder, depth, types: [ids] }
+
+### etude type folder create
+
+<a id="type-folder-create"></a>
+
+Create a folder (and its parents) in the Types page.
+
+```
+etude type folder create <path> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `path` | Folder path, `::` between levels. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { path }
+
+```sh
+etude type folder create Networks::DNS
+```
+
+### etude type folder rename
+
+<a id="type-folder-rename"></a>
+
+Rename or move a folder with every folder and type inside it.
+
+```
+etude type folder rename <from> <to> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `from` | Current folder path. |
+| `to` | New folder path. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { from, to, folders, types }
+
+```sh
+etude type folder rename Networks Courses::Networks
+```
+
+### etude type folder delete
+
+<a id="type-folder-delete"></a>
+
+Delete a folder and the folders inside it. Types are kept and move up to the parent folder.
+
+```
+etude type folder delete <path> [flags]
+```
+
+*writes · `--dry-run` · needs `--yes`*
+
+| Argument | Description |
+| --- | --- |
+| `path` | Folder path. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { deleted, folders, moved: [type ids] }
+
+```sh
+etude type folder delete Networks::Old --yes
 ```
 
 ### etude type copy

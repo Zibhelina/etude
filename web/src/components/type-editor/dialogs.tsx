@@ -18,6 +18,7 @@ export function NewTypeDialog({
   types,
   from,
   initialSource,
+  folder,
 }: {
   open: boolean;
   onOpenChange(o: boolean): void;
@@ -26,6 +27,8 @@ export function NewTypeDialog({
   from?: { def: CardType; sample: Record<string, unknown> };
   /** Preselect "copy" with this type id (from the list's row menu). */
   initialSource?: string;
+  /** File the new type in this Types-page folder when it's saved. */
+  folder?: string;
 }) {
   const [mode, setMode] = useState<"blank" | "copy">("blank");
   const [source, setSource] = useState("");
@@ -79,7 +82,7 @@ export function NewTypeDialog({
         def = { ...exportShape(src), id, name: name.trim() };
         fromId = source;
       }
-      stashPending({ def, sample, from: fromId });
+      stashPending({ def, sample, from: fromId, ...(folder ? { folder } : {}) });
       onOpenChange(false);
       navigate(`/types/${encodeURIComponent(id)}`);
     } catch (e) {
@@ -92,7 +95,7 @@ export function NewTypeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{from ? `Duplicate ${from.def.name}` : "New card type"}</DialogTitle>
+          <DialogTitle>{from ? `Duplicate ${from.def.name}` : folder ? `New card type in “${folder.split("::").pop()}”` : "New card type"}</DialogTitle>
           <DialogDescription>
             {from ? "Makes an independent copy, including unsaved edits. Nothing is created until you save it." : "Nothing is created until you save it in the editor."}
           </DialogDescription>

@@ -119,6 +119,8 @@ export interface TypeSummary {
   updated: string;
   items: number;
   grader: string;
+  /** Folder path in the Types page ("A::B"), "" when the type isn't in a folder. */
+  folder: string;
 }
 
 export interface SearchRow {
@@ -260,6 +262,11 @@ export const api = {
   type: (id: string) => call<CardType>("GET", `/api/types/${encodeURIComponent(id)}`),
   saveType: (def: CardType) => call<CardType>("PUT", `/api/types/${encodeURIComponent(def.id)}`, def),
   deleteType: (id: string) => call("DELETE", `/api/types/${encodeURIComponent(id)}`),
+  typeFolders: () => call<string[]>("GET", "/api/type-folders"),
+  createTypeFolder: (path: string) => call<{ path: string }>("POST", "/api/type-folders", { path }),
+  renameTypeFolder: (from: string, to: string) => call<{ from: string; to: string }>("POST", "/api/type-folders/rename", { from, to }),
+  deleteTypeFolder: (path: string) => call<{ deleted: string; moved: string[] }>("POST", "/api/type-folders/delete", { path }),
+  moveType: (id: string, folder: string) => call<{ id: string; folder: string }>("POST", `/api/types/${encodeURIComponent(id)}/move`, { folder }),
   resetType: (id: string) => call<CardType>("POST", `/api/types/${encodeURIComponent(id)}/reset`, {}),
   previewType: (def: CardType, fields: Record<string, unknown>, opts: { seed?: number; face?: string; answer?: unknown } = {}) =>
     call<{ errors: string[]; view?: Record<string, unknown>; key?: Record<string, unknown>; grade?: Grade | null; seed?: number }>("POST", "/api/types-preview", { def, fields, ...opts }),

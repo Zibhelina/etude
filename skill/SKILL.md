@@ -97,7 +97,7 @@ Never invent a grade, rate a card the user didn't answer, or rate on their behal
 
 - Packs are JSON (`etude: "pack/1"`) with presets, decks, types and items. Start from `etude pack new file.json --deck X --prefix x`, which has one working item of every built-in type.
 - Always `etude pack check file.json` (it runs generators over many seeds), then `etude pack import file.json --dry-run`, then import. Re-importing updates by id and keeps review history, so **never change an id** of an item someone has studied. Changing it creates a new card and orphans the history.
-- Custom types: `etude type new <id> -o dir`, edit, `etude type validate dir`, `etude type preview --from dir --fields '...'`, `etude type test-grade --from dir ... --answer ...`, `etude type import dir`. Details in [references/types.md](references/types.md).
+- Custom types: `etude type new <id> -o dir`, edit, `etude type validate dir`, `etude type preview --from dir --fields '...'`, `etude type test-grade --from dir ... --answer ...`, `etude type import dir`. Details in [references/types.md](references/types.md). Folders on the Types page (`etude type folder create Networks::DNS`, `etude type move <id> <folder>`, `etude type folder list`) only organize; they never change a type.
 - Check generated items with `etude item variants <id> -n 20`. Look at the keys: wrong arithmetic in a generator teaches the wrong thing on every review.
 
 ## Rules

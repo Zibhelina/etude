@@ -30,7 +30,7 @@ const strip = (def: any): CardTypeDef => {
 
 export function writeTypeDir(def: CardTypeDef, dir: string) {
   mkdirSync(dir, { recursive: true });
-  const { template, prepare, grader, ...meta } = strip(def) as any;
+  const { template, prepare, demo, grader, ...meta } = strip(def) as any;
   const g = { ...grader };
   const files: string[] = ["type.json", "template.html"];
   if (g.code) {
@@ -43,6 +43,7 @@ export function writeTypeDir(def: CardTypeDef, dir: string) {
   if (template?.css) writeFileSync(join(dir, "style.css"), template.css), files.push("style.css");
   if (template?.js) writeFileSync(join(dir, "card.js"), template.js), files.push("card.js");
   if (prepare) writeFileSync(join(dir, "prepare.js"), prepare), files.push("prepare.js");
+  if (demo) writeFileSync(join(dir, "demo.js"), demo), files.push("demo.js");
   return files;
 }
 

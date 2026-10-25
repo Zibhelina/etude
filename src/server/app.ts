@@ -212,6 +212,12 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     return c.json(etude.rate(Number(b.cardId), Number(b.rating) as Rating, { attemptId: b.attemptId ? Number(b.attemptId) : undefined, durationMs: b.durationMs, practice: !!b.practice }));
   });
   app.post("/api/study/undo", (c) => c.json(etude.undo()));
+  app.get("/api/watch/list", (c) => c.json({ cards: etude.watchList(scopeOf(c)) }));
+  app.get("/api/watch/card/:cardId", (c) => c.json(etude.watchCard(Number(c.req.param("cardId")), c.req.query("seed") ? Number(c.req.query("seed")) : undefined)));
+  app.post("/api/watch/grade", async (c) => {
+    const b = await body(c);
+    return c.json(await etude.watchGrade(Number(b.cardId), Number(b.seed), b.answer, { ai: !!b.ai }));
+  });
   app.post("/api/reschedule", async (c) => c.json(etude.reschedule(await body(c))));
 
   // ------------------------------------------------- stats, tags, packs

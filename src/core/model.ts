@@ -48,6 +48,11 @@ export interface CardTypeDef {
   grader: GraderSpec;
   /** Default instructions for AI grading of this type (lowest layer of the cascade). */
   instructions?: string;
+  /**
+   * Body of `function (view, key, fields, rng)` returning an example answer, in the shape the
+   * card's `getAnswer` produces. Watch mode shows it, graded, so a reader sees how the card works.
+   */
+  demo?: string;
 }
 
 export interface PresetConfig {
@@ -74,6 +79,8 @@ export interface PresetConfig {
   autoApply: boolean;
   /** Hide a card's siblings (other faces of the same item) until tomorrow once one is reviewed. */
   burySiblings: boolean;
+  /** "watch": a tour deck. Every card is shown once with an example answer and nothing is scheduled. */
+  mode: "study" | "watch";
 }
 
 export const DEFAULT_PRESET: PresetConfig = {
@@ -93,6 +100,7 @@ export const DEFAULT_PRESET: PresetConfig = {
   autoRate: { good: 0.95, hard: 0.5 },
   autoApply: false,
   burySiblings: true,
+  mode: "study",
 };
 
 export interface Preset {
@@ -160,7 +168,8 @@ export interface Grade {
   details?: unknown;
   suggested: Rating | null;
   confidence?: number;
-  grader: { kind: string; model?: string; ms?: number; cost?: number; error?: string };
+  /** `example`: a recorded grade shown in watch mode, not one made for this answer. */
+  grader: { kind: string; model?: string; ms?: number; cost?: number; error?: string; example?: boolean };
 }
 
 export interface Prepared {

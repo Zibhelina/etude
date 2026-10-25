@@ -458,6 +458,7 @@ export class Etude {
       template: { html: def.template.html, css: def.template.css ?? "", js: def.template.js ?? "" },
       grader: def.grader,
       ...(def.instructions ? { instructions: def.instructions } : {}),
+      ...(def.demo ? { demo: def.demo } : {}),
     };
     const old = this.db.get("SELECT def FROM types WHERE id = ?", def.id);
     if (old && old.def === json(clean)) return clean;
@@ -1002,6 +1003,12 @@ export class Etude {
   // ------------------------------------------------------------ preparation
 
   private generate(fields: Record<string, unknown>, seed: number, where: string): Record<string, unknown> {
+    // An item's example answer for watch mode (`demo`, `demoGrade`) never reaches the card.
+    if ("demo" in fields || "demoGrade" in fields) {
+      fields = { ...fields };
+      delete fields.demo;
+      delete fields.demoGrade;
+    }
     if (typeof fields.generator !== "string") return fields;
     const out = runScript<Record<string, unknown>>(fields.generator, { params: ["rng"], args: {}, seed, where: `${where}/generator` });
     if (!out || typeof out !== "object" || Array.isArray(out)) throw new EtudeError(`${where}: generator must return an object of fields`);
@@ -1108,6 +1115,13 @@ export class Etude {
       ...params,
       iso(t),
     ) as (CardRow & { ord: number; deck: string })[];
+    // Watch decks are tours, not study: their cards never enter the queue.
+    const watching = new Map<string, boolean>();
+    const watch = (deck: string) => {
+      if (!watching.has(deck)) watching.set(deck, this.configFor(deck).mode === "watch");
+      return watching.get(deck)!;
+    };
+    for (let i = rows.length - 1; i >= 0; i--) if (watch(rows[i].deck)) rows.splice(i, 1);
     const dayStart = iso(this.dayStart(t));
     const done = this.db.get(
       `SELECT SUM(r.state = 0) AS new, SUM(r.state = 2) AS rev FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.ts >= ? AND ${where}`,
@@ -1220,6 +1234,62 @@ export class Etude {
     };
   }
 
+  // ----------------------------------------------------------------- watch
+
+  /**
+   * The cards a watch session shows, in deck order: one per item (its first face), skipping
+   * suspended and archived ones. Watching records nothing.
+   */
+  watchList(scope: StudyScope): { cardId: number; itemId: string; type: string; deck: string; title: string }[] {
+    const { where, params } = this.scopeWhere(scope);
+    const rows = this.db.all(
+      `SELECT c.id, c.item_id, c.face, i.type, i.fields, d.name AS deck FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${where} ORDER BY d.name, i.ord, c.id`,
+      ...params,
+    );
+    const seen = new Set<string>();
+    const out: { cardId: number; itemId: string; type: string; deck: string; title: string }[] = [];
+    for (const r of rows) {
+      if (seen.has(r.item_id)) continue;
+      seen.add(r.item_id);
+      out.push({ cardId: r.id, itemId: r.item_id, type: r.type, deck: r.deck, title: this.titleOf(r.type, parse(r.fields, {})) });
+    }
+    return out;
+  }
+
+  /**
+   * A card for watch mode: what it shows plus an example answer. The answer is the item's own
+   * `fields.demo` when it has one, otherwise what the type's `demo` script makes from the key.
+   * `demoGrade` is a recorded grade an AI-graded item can show instead of calling a model.
+   */
+  watchCard(cardId: number, seed?: number): { card: StudyCard; demo: { answer: unknown; grade: Grade | null } } {
+    const card = this.present(cardId, seed);
+    const c = this.cardWithDeck(cardId);
+    const raw = parse<Record<string, unknown>>(c.item_fields, {});
+    const def = this.type(c.type);
+    let answer: unknown = null;
+    if (raw.demo !== undefined) answer = raw.demo;
+    else if (def.demo) {
+      const prep = this.prepare(c.item_id, c.face, card.seed);
+      answer = runScript(def.demo, {
+        params: ["view", "key", "fields", "rng"],
+        args: { view: prep.view, key: prep.key, fields: prep.fields },
+        seed: hashString(`${card.seed}:${c.item_id}:demo`),
+        where: `${def.id}/demo`,
+      }) ?? null;
+    }
+    const g = raw.demoGrade as Partial<Grade> | undefined;
+    const grade: Grade | null = g && typeof g === "object"
+      ? { score: g.score ?? null, verdict: g.verdict ?? this.verdictOf(g.score ?? null), feedback: g.feedback, suggested: null, grader: { kind: def.grader.kind, model: g.grader?.model, example: true } as Grade["grader"] }
+      : null;
+    return { card, demo: { answer, grade } };
+  }
+
+  /** Grades an answer in watch mode: nothing is stored, and AI is called only when `ai` is set. */
+  async watchGrade(cardId: number, seed: number, answer: unknown, opts: { ai?: boolean } = {}) {
+    const { grade, prep } = await this.grade(cardId, seed, answer, { noAi: !opts.ai });
+    return { grade, key: prep.key };
+  }
+
   private cardWithDeck(cardId: number) {
     const c = this.db.get<CardRow & { deck: string; type: string; tags: string; item_fields: string }>(
       "SELECT c.*, d.name AS deck, i.type, i.tags, i.fields AS item_fields FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE c.id = ?",
@@ -1284,7 +1354,7 @@ export class Etude {
   }
 
   /** Grades an answer against a card variant without storing anything. */
-  async grade(cardId: number, seed: number, answer: unknown): Promise<{ grade: Grade; prep: Prepared & { fields: Record<string, unknown> } }> {
+  async grade(cardId: number, seed: number, answer: unknown, opts: { noAi?: boolean } = {}): Promise<{ grade: Grade; prep: Prepared & { fields: Record<string, unknown> } }> {
     const c = this.cardWithDeck(cardId);
     const def = this.type(c.type);
     const cfg = this.configFor(c.deck);
@@ -1307,6 +1377,8 @@ export class Etude {
         const out = scripted();
         const score = out.score == null ? null : Math.max(0, Math.min(1, Number(out.score)));
         grade = { score, verdict: this.verdictOf(score), feedback: out.feedback, details: out.details, suggested: sched.suggestRating(score, cfg), grader: { kind: "script", ms: Date.now() - t0 } };
+      } else if (opts.noAi) {
+        grade = { score: null, verdict: "ungraded", suggested: null, grader: { kind: "ai" } };
       } else {
         const ctx = this.gradingContext(c, prep, answer);
         const v = await aiVerdict(this.settings().ai, ctx, { vision: !!(g as { vision?: boolean }).vision, home: this.home });
@@ -1538,7 +1610,8 @@ export class Etude {
         unseen += Number(tt?.new ?? 0);
       }
       const counts = cards ? this.counts({ deck: d.name }) : { new: 0, learning: 0, learningSoon: 0, review: 0, doneToday: 0, nextDue: null };
-      return { ...this.deckFromRow(d), depth: deckParts(d.name).length - 1, cards, unseen, ...counts, deadline: this.configFor(d.name).deadline ?? null, at: iso(t) };
+      const cfg = this.configFor(d.name);
+      return { ...this.deckFromRow(d), depth: deckParts(d.name).length - 1, cards, unseen, ...counts, deadline: cfg.deadline ?? null, mode: cfg.mode, at: iso(t) };
     });
   }
 

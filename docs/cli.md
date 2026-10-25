@@ -290,6 +290,7 @@ These work on every command, before or after the command words.
   - [`study rate`](#study-rate) Record a rating and reschedule the card. Pass --attempt to link the graded attempt.
   - [`study answer`](#study-answer) Submit and rate in one step: grades the answer, then applies the suggested rating (or the one you give).
   - [`study undo`](#study-undo) Undo the most recent review (any card): the card returns exactly to its previous state.
+  - [`study watch`](#study-watch) Watch mode: the cards of a scope in order, one per item, each with an example answer and its grade. Records nothing.
 - **stats**: Statistics: overview, forecast, recall per tag (`etude stats` alone runs `overview`)
   - [`stats overview`](#stats-overview) Everything the Stats page shows for a scope: card states, retention, recall, daily activity, forecast, ratings, verdicts, streak, deadline.
   - [`stats forecast`](#stats-forecast) Cards due per day for the next 30 days (overdue counts on today).
@@ -593,7 +594,7 @@ etude deck instructions "Networks" --file notes.md
 
 Override settings on this deck (they win over its preset and parents).
 
-Values are JSON when they parse, text otherwise. Steps accept "1m 10m" or '["1m","10m"]'. Dates accept anything Date can read. Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, weights; also autoRate.good and autoRate.hard.
+Values are JSON when they parse, text otherwise. Steps accept "1m 10m" or '["1m","10m"]'. Dates accept anything Date can read. Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, weights; also autoRate.good and autoRate.hard.
 
 ```
 etude deck set <deck> <pairs...> [flags]
@@ -755,7 +756,7 @@ etude preset create net --from-deck "Networks" --apply
 
 Change settings in a preset. Every deck using it is affected.
 
-Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, weights; also autoRate.good / autoRate.hard. Use `--name` to rename.
+Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, weights; also autoRate.good / autoRate.hard. Use `--name` to rename.
 
 ```
 etude preset set <id> [pairs...] [flags]
@@ -2416,6 +2417,33 @@ etude study undo [flags]
 | `--dry-run` | boolean | Show what would change without writing anything. |
 
 Output: { undone: { cardId, itemId } | null }
+
+### etude study watch
+
+<a id="study-watch"></a>
+
+Watch mode: the cards of a scope in order, one per item, each with an example answer and its grade. Records nothing.
+
+What the app's Watch button shows, for decks in watch mode (a tour) or any scope. Each card carries `demo.answer` (the item's own `fields.demo`, or what its type's `demo.js` makes) and `demo.grade`: a recorded grade when the item ships one, otherwise the script grader's verdict on that answer. AI-graded cards without a recorded grade come back ungraded instead of calling a model.
+
+```
+etude study watch [flags]
+```
+
+*read-only*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--deck <NAME>` | string | Limit to this deck and its subdecks. |
+| `--query <SEARCH>` | string | Limit to cards matching a search (see `Search language`). Also `--q`. |
+| `--limit <N>` | number | At most this many cards. |
+
+Output: { cards: [{ cardId, itemId, type, deck, title, seed, view, demo: { answer, grade } }] }
+
+```sh
+etude study watch --deck "Etude Showcase"
+etude study watch --query "type:chess"
+```
 
 ## stats
 

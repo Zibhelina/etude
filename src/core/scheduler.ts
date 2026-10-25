@@ -144,5 +144,6 @@ export function validateConfig(c: Partial<PresetConfig>): string[] {
   if (c.weights !== undefined && c.weights !== null && (!Array.isArray(c.weights) || ![17, 19, 21].includes(c.weights.length)))
     e.push("weights must have 17, 19 or 21 numbers");
   if (c.deadline && Number.isNaN(new Date(c.deadline).getTime())) e.push("deadline must be an ISO date");
+  if (c.mode !== undefined && c.mode !== "study" && c.mode !== "watch") e.push('mode must be "study" or "watch"');
   return e;
 }

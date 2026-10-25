@@ -129,17 +129,38 @@ function exportPng() {
 }
 
 etude.getAnswer(() => ({ image: exportPng(), strokes: strokes.length }));
-new ResizeObserver(fit).observe(canvas);
+new ResizeObserver(() => { fit(); if (shippedPaths && strokes.length) fromPaths(shippedPaths); }).observe(canvas);
 fit();
 etude.setReady(false);
 
-if (etude.answer?.image) {
+// An answer can also be strokes in 0..1 coordinates of a square centred on the canvas
+// (`{ paths: [[[x, y], ...], ...] }`): how a deck ships an example drawing for watch mode.
+function fromPaths(paths) {
+  const w = W(), h = H();
+  const s = Math.min(w, h) * 0.84, x0 = (w - s) / 2, y0 = (h - s) / 2;
+  strokes.length = 0;
+  for (const p of paths) {
+    if (!Array.isArray(p) || p.length < 1) continue;
+    const pts = [];
+    for (let i = 0; i < p.length; i++) {
+      const [ax, ay] = p[i], [bx, by] = p[i + 1] ?? p[i];
+      const n = i + 1 < p.length ? 12 : 1;
+      for (let t = 0; t < n; t++) pts.push([x0 + (ax + ((bx - ax) * t) / n) * s, y0 + (ay + ((by - ay) * t) / n) * s]);
+    }
+    strokes.push({ tool: "pen", color: COLORS[0], size: 7, points: pts });
+  }
+  paint();
+}
+const shippedPaths = Array.isArray(etude.answer?.paths) ? etude.answer.paths : null;
+if (shippedPaths) requestAnimationFrame(() => fromPaths(shippedPaths));
+else if (etude.answer?.image) {
   const img = new Image();
   img.onload = () => { ctx.drawImage(img, 0, 0, W(), H()); };
   img.src = etude.answer.image;
 }
 etude.onResult(({ answer }) => {
   canvas.classList.add("locked");
+  if (!strokes.length && Array.isArray(answer?.paths)) return requestAnimationFrame(() => fromPaths(answer.paths));
   if (!strokes.length && answer?.image) {
     const img = new Image();
     img.onload = () => { ctx.clearRect(0, 0, W(), H()); ctx.drawImage(img, 0, 0, W(), H()); };

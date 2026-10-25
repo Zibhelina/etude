@@ -15,7 +15,7 @@ const read = (dir: string, file: string) => {
 
 /**
  * A type directory holds `type.json` plus optional `template.html`, `style.css`, `card.js`,
- * `prepare.js` and `grade.js`. Files win over the same keys inside type.json.
+ * `prepare.js`, `grade.js` and `demo.js`. Files win over the same keys inside type.json.
  */
 export function loadTypeDir(dir: string): CardTypeDef {
   const meta = JSON.parse(readFileSync(join(dir, "type.json"), "utf8"));
@@ -25,6 +25,7 @@ export function loadTypeDir(dir: string): CardTypeDef {
   return {
     ...meta,
     prepare: read(dir, "prepare.js") ?? meta.prepare,
+    ...((read(dir, "demo.js") ?? meta.demo) ? { demo: read(dir, "demo.js") ?? meta.demo } : {}),
     template: {
       html: read(dir, "template.html") ?? meta.template?.html ?? "",
       css: read(dir, "style.css") ?? meta.template?.css ?? "",
@@ -74,6 +75,13 @@ export function validateType(def: unknown): string[] {
   if (t.facesWhen) {
     const e = checkSyntax(t.facesWhen, ["fields"], `${t.id}/facesWhen`);
     if (e) errors.push(e);
+  }
+  if (t.demo !== undefined) {
+    if (typeof t.demo !== "string") errors.push("demo must be a script");
+    else {
+      const e = checkSyntax(t.demo, ["view", "key", "fields", "rng"], `${t.id}/demo`);
+      if (e) errors.push(e);
+    }
   }
   if (g && "code" in g && g.code) {
     const e = checkSyntax(g.code, ["answer", "view", "key", "fields"], `${t.id}/grade`);

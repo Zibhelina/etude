@@ -156,6 +156,15 @@ export interface SearchRow {
   retrievability: number | null;
 }
 
+export interface ItemEditProposal {
+  itemId: string;
+  fields: Record<string, unknown>;
+  changed: string[];
+  model: string;
+  ms: number;
+  cost?: number;
+}
+
 export interface ItemDetail {
   id: string;
   type: string;
@@ -298,6 +307,7 @@ export const api = {
   item: (id: string) => call<ItemDetail>("GET", `/api/items/${encodeURIComponent(id)}`),
   saveItem: (id: string, item: { type: string; deck: string; fields: Record<string, unknown>; tags: string[]; source?: string; notes?: string; archived?: boolean }) =>
     call<{ result: string; item: ItemDetail }>("PUT", `/api/items/${encodeURIComponent(id)}`, item),
+  suggestItemEdit: (id: string, instruction: string, fields: Record<string, unknown>) => call<ItemEditProposal>("POST", `/api/items/${encodeURIComponent(id)}/ai-edit`, { instruction, fields }),
   previewItem: (id: string, seed: number, face = "main") => call<{ view: Record<string, unknown>; key: Record<string, unknown>; seed: number }>("POST", `/api/items/${encodeURIComponent(id)}/preview`, { seed, face }),
   bulkItems: (action: string, ids: string[], extra: Record<string, unknown> = {}) => call("POST", "/api/items-bulk", { action, ids, ...extra }),
   bulkCards: (action: string, cardIds: number[]) => call("POST", "/api/cards-bulk", { action, cardIds }),

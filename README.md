@@ -24,6 +24,21 @@ Classic flashcards test recognition: you see the front, think of the back, flip 
 | Exam dates | Intervals ignore them | A deadline pulls every card in before the exam |
 | Automation | Add-ons, or editing the database | Every action is a CLI command with JSON output |
 
+## With AI or without it
+
+AI is optional. Etude doesn't need an account, a key or an internet connection, and nothing is sent anywhere until you turn AI on.
+
+**Without AI**, Etude is a flashcard app you fully control. Your collection is one SQLite file on your own machine. Most card types are checked by scripts, not by a model: numbers with a tolerance, math by equivalence, code against tests, chess moves against the engine's list, chords by their notes, or you rate yourself as in any flashcard app. Every card type, theme and scheduling setting is yours to edit.
+
+**With AI**, Etude goes further:
+
+- **Feedback on your answers.** Explanations, proofs and drawings get a verdict and a few sentences on what was missing and how to fix it.
+- **Cards made from what you need to study.** Hand an agent your lecture notes, slides or a textbook chapter. It writes the cards as a pack, checks them and imports them.
+- **An assistant that manages your collection.** Through the CLI an agent can reorganize decks, reword or split cards you keep failing, set an exam deadline and reschedule around it.
+- **Knowing what to review next.** An agent can read your statistics, tell you which topics are slipping and quiz you on them in a chat.
+
+The first one is built into the app: add a key in Settings. The rest work with any agent that can run commands, using the bundled [skill](skill/SKILL.md).
+
 ## What a card can be
 
 Every card below is a real card type from the [showcase pack](examples/showcase/), screenshotted after answering it. Each one is a folder of HTML, CSS and JavaScript you can open and change, and each is graded by something that actually checks the work.

@@ -151,12 +151,12 @@ function Count({ value, cls }: { value: number; cls: string }) {
   return <span className={cn("hidden items-center justify-end tabular text-sm sm:flex", value ? cls : "text-muted-foreground/40")}>{value}</span>;
 }
 
-/** One vertical guide per nesting level, so subdecks visibly hang from their parent. */
+/** Indentation for one nesting level per depth. */
 export function TreeGuides({ depth }: { depth: number }) {
   return (
     <>
       {Array.from({ length: depth }, (_, i) => (
-        <span key={i} aria-hidden className="relative w-4 shrink-0 before:absolute before:inset-y-0 before:left-[19px] before:border-l before:border-foreground/12 sm:w-5 sm:before:left-[15px]" />
+        <span key={i} aria-hidden className="w-4 shrink-0 sm:w-5" />
       ))}
     </>
   );

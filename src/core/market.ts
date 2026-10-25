@@ -87,8 +87,24 @@ const slugify = (s: string) =>
 const isRemote = (url: string) => /^https?:\/\//i.test(url);
 const localDir = (url: string) => resolve(url.replace(/^file:\/\//, ""));
 
+/**
+ * raw.githubusercontent.com caches a branch for five minutes, whatever the query string. For a
+ * refresh, ask the GitHub API which commit the branch is on and read that commit instead.
+ */
+async function pinnedUrl(url: string): Promise<string> {
+  const m = /^https:\/\/raw\.githubusercontent\.com\/([\w.-]+)\/([\w.-]+)\/([\w./-]+?)\/?$/.exec(url);
+  if (!m) return url;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${m[1]}/${m[2]}/commits/${m[3]}`, { signal: AbortSignal.timeout(10_000), headers: { Accept: "application/vnd.github.sha" } });
+    const sha = res.ok ? (await res.text()).trim() : "";
+    return /^[0-9a-f]{40}$/.test(sha) ? `https://raw.githubusercontent.com/${m[1]}/${m[2]}/${sha}` : url;
+  } catch {
+    return url;
+  }
+}
+
 /** Reads one file of the market, from a URL or a folder. */
-async function readMarketFile(url: string, path: string): Promise<{ text: string; bytes: number }> {
+async function readMarketFile(url: string, path: string, opts: { fresh?: boolean } = {}): Promise<{ text: string; bytes: number }> {
   if (!isRemote(url)) {
     const p = join(localDir(url), path);
     if (!existsSync(p)) throw new MarketError(`the market has no ${path}`, 404);
@@ -96,7 +112,7 @@ async function readMarketFile(url: string, path: string): Promise<{ text: string
     if (buf.length > MAX_ENTRY_BYTES) throw new MarketError(`${path} is larger than ${MAX_ENTRY_BYTES} bytes`);
     return { text: buf.toString("utf8"), bytes: buf.length };
   }
-  const full = `${url.replace(/\/+$/, "")}/${path}`;
+  const full = `${(opts.fresh ? await pinnedUrl(url) : url).replace(/\/+$/, "")}/${path}`;
   let res: Response;
   try {
     res = await fetch(full, { signal: AbortSignal.timeout(20_000), headers: { Accept: "application/json, text/plain" } });
@@ -206,7 +222,7 @@ const indexCache = new Map<string, { at: number; index: MarketIndex }>();
 export async function fetchIndex(url: string, opts: { refresh?: boolean } = {}): Promise<MarketIndex> {
   const hit = indexCache.get(url);
   if (hit && !opts.refresh && Date.now() - hit.at < 60_000) return hit.index;
-  const { text } = await readMarketFile(url, "index.json");
+  const { text } = await readMarketFile(url, "index.json", { fresh: opts.refresh });
   const index = parseJson(text, "index.json");
   if (index?.etude !== "market/1" || !Array.isArray(index.entries)) throw new MarketError("index.json isn't an Etude market index");
   indexCache.set(url, { at: Date.now(), index });

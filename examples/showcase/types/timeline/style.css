@@ -2,66 +2,115 @@
 .sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }
 
 .tl-prompt { font-size: 1.05rem; }
-.tl-tray { display: flex; flex-wrap: wrap; gap: 0.45rem; min-height: 2.9rem; padding: 0.5rem; border: 1px dashed var(--border); border-radius: calc(var(--radius) - 2px); }
-.tl-tray.empty { border-color: transparent; min-height: 0; padding: 0; }
-body[data-mode="result"] .tl-tray.empty { display: none; }
-.tl-wrap { padding: 0 2.2rem; }
-.tl { position: relative; height: calc(var(--lanes, 1) * 2.75rem + 4.6rem); --lane: 0; box-sizing: content-box; }
-.tl-axis { position: absolute; left: 0; right: 0; bottom: 2.6rem; height: 2px; background: var(--foreground); opacity: 0.7; border-radius: 2px; }
-.tl-tick { position: absolute; bottom: 2.6rem; width: 0; }
-.tl-tick::before { content: ""; position: absolute; left: -0.5px; top: -5px; width: 1px; height: 10px; background: var(--muted-foreground); }
-.tl-tick span { position: absolute; top: 9px; transform: translateX(-50%); font: 0.72rem var(--font-mono); color: var(--muted-foreground); white-space: nowrap; }
-.tl-anchor { position: absolute; bottom: 2.6rem; width: 0; }
-.tl-anchor i { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--muted-foreground); }
-.tl-anchor span { position: absolute; top: 1.55rem; transform: translateX(-50%); font-size: 0.7rem; color: var(--muted-foreground); white-space: nowrap; display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
-.tl-anchor b { font: 0.66rem var(--font-mono); font-weight: 400; opacity: 0.8; }
-.tl-chip { display: inline-flex; flex-direction: column; align-items: center; gap: 0.05rem; padding: 0.35rem 0.7rem; min-height: 40px; justify-content: center; border-radius: 999px; border: 1px solid color-mix(in oklab, var(--highlight) 55%, var(--border)); background: linear-gradient(color-mix(in oklab, var(--highlight) 12%, transparent), color-mix(in oklab, var(--highlight) 12%, transparent)), var(--background); color: var(--foreground); font: 500 0.86rem var(--font-sans); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; white-space: nowrap; }
-.tl-chip .yr { font: 0.68rem var(--font-mono); color: var(--muted-foreground); }
-.tl-chip .yr:empty { display: none; }
-.tl-chip:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 35%, transparent); }
-.tl-chip { --tx: 0px; --ty: 0px; transform: translate(var(--tx), var(--ty)); }
-.tl-chip.dragging { cursor: grabbing; z-index: 30 !important; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); transition: none; }
-.tl-guide { position: absolute; top: 0; bottom: 2.6rem; width: 0; border-left: 1px dashed var(--highlight); pointer-events: none; }
-.tl-guide::after { content: attr(data-y); position: absolute; bottom: -1.6rem; transform: translateX(-50%); font: 600 0.72rem var(--font-mono); color: var(--highlight); background: var(--background); padding: 0 0.25rem; }
-.tl-tray.drop { border-color: var(--highlight); background: color-mix(in oklab, var(--highlight) 8%, transparent); }
-.tl-pins .tl-chip { position: absolute; bottom: calc(3.4rem + var(--lane) * 2.75rem); transform: translate(calc(-50% + var(--tx)), var(--ty)); padding: 0.2rem 0.6rem; min-height: 36px; z-index: calc(20 - var(--lane)); --dx: 0px; }
-.tl-stems { position: absolute; inset: 0; pointer-events: none; }
-.tl-stems i { position: absolute; bottom: 2.6rem; width: 2px; margin-left: -1px; height: calc(0.8rem + var(--lane) * 2.75rem); background: color-mix(in oklab, var(--highlight) 80%, var(--foreground)); }
-.tl-stems i.is-correct { background: var(--success); }
-.tl-stems i.is-wrong { background: var(--danger); }
-.tl.has-arcs .tl-stems i { bottom: 4.1rem; }
 .tl-prompt, .tl-tray, .tl-wrap, .tl-help { user-select: none; -webkit-user-select: none; }
 
-.tl-chip:disabled { cursor: default; }
-.tl-chip.is-correct { border-color: var(--success); background: linear-gradient(color-mix(in oklab, var(--success) 14%, transparent), color-mix(in oklab, var(--success) 14%, transparent)), var(--background); }
-.tl-chip.is-wrong { border-color: var(--danger); background: linear-gradient(color-mix(in oklab, var(--danger) 12%, transparent), color-mix(in oklab, var(--danger) 12%, transparent)), var(--background); }
-.tl-chip.is-missed { border-style: dashed; opacity: 0.7; }
-.tl-marks { position: absolute; left: 0; right: 0; bottom: 2.6rem; height: 0; pointer-events: none; }
-.tl-true { position: absolute; width: 0; }
-.tl-true i { position: absolute; left: -5.5px; top: -5.5px; width: 11px; height: 11px; transform: rotate(45deg); background: var(--warning); border: 1.5px solid var(--background); }
-.tl-true.good i { background: var(--success); }
-.tl-arcs { position: absolute; left: 0; top: 0; width: 100%; height: 1.5rem; overflow: visible; }
-.tl-arcs path { fill: none; stroke: color-mix(in oklab, var(--danger) 80%, transparent); stroke-width: 1.7; }
-/* With arcs under the line, the year labels move down to make room. */
-.tl.has-arcs { padding-bottom: 1.5rem; }
-.tl.has-arcs .tl-tick span { top: calc(9px + 1.5rem); }
-.tl.has-arcs .tl-anchor span { top: calc(1.55rem + 1.5rem); }
-.tl.has-arcs .tl-axis, .tl.has-arcs .tl-tick, .tl.has-arcs .tl-anchor, .tl.has-arcs .tl-marks { bottom: 4.1rem; }
-.tl.has-arcs .tl-pins .tl-chip { bottom: calc(4.9rem + var(--lane) * 2.75rem); }
-.tl-help { font-size: 0.82rem; margin: -0.5rem 0 0; }
-.tl-list { display: flex; flex-direction: column; gap: 0.55rem; }
-.tl-row { display: grid; grid-template-columns: 3.4rem 1fr auto; gap: 0.7rem; align-items: baseline; font-size: 0.93rem; }
-.tl-row b { font: 600 0.9rem var(--font-mono); }
+/* The tray: events still to place. */
+.tl-tray { display: flex; flex-wrap: wrap; gap: 0.5rem; min-height: 3.25rem; padding: 0.55rem; border-radius: calc(var(--radius) - 2px); background: color-mix(in oklab, var(--foreground) 3.5%, transparent); border: 1px dashed transparent; transition: border-color 0.15s, background 0.15s; }
+.tl-tray-empty { display: none; align-self: center; padding: 0 0.35rem; font-size: 0.82rem; color: var(--muted-foreground); }
+.tl-tray.empty .tl-tray-empty { display: block; }
+.tl-tray.drop { border-color: var(--highlight); background: color-mix(in oklab, var(--highlight) 8%, transparent); }
+body[data-mode="result"] .tl-tray.empty { display: none; }
+
+/* The line. .tl is exactly the axis; the wrap's padding lets end cards hang past it. */
+.tl-wrap { padding: 0 1rem; }
+.tl { position: relative; --axis: 80px; transition: height 0.25s cubic-bezier(0.22, 1, 0.36, 1); }
+.tl-axis { position: absolute; left: -1rem; right: -1rem; top: var(--axis); height: 1.5px; margin-top: -0.75px; background: color-mix(in oklab, var(--foreground) 70%, transparent); border-radius: 1px; }
+.tl-ticks i { position: absolute; top: var(--axis); width: 1px; height: 5px; margin-left: -0.5px; background: color-mix(in oklab, var(--foreground) 30%, transparent); }
+.tl-ticks i.major { height: 8px; background: color-mix(in oklab, var(--foreground) 60%, transparent); }
+.tl-ticks span { position: absolute; z-index: 3; top: 9px; left: 0; transform: translateX(-50%); padding: 1px 3px; background: var(--background); font: 0.8rem/1 KaTeX_Main, "Times New Roman", serif; color: var(--muted-foreground); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tl-hint { position: absolute; left: 0; right: 0; top: calc(var(--axis) - 2.4rem); text-align: center; font-size: 0.8rem; color: color-mix(in oklab, var(--muted-foreground) 70%, transparent); pointer-events: none; }
+.tl.targeting .tl-hint { visibility: hidden; }
+
+/* Stems from each card to its year, and a dot on the axis. */
+.tl-stems i.h { width: auto; height: 1px; margin: -0.5px 0 0; }
+.tl-stems i { position: absolute; width: 1px; margin-left: -0.5px; background: color-mix(in oklab, var(--highlight) 70%, transparent); }
+.tl-stems b { position: absolute; z-index: 3; top: var(--axis); width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--highlight); box-shadow: 0 0 0 1px var(--background); }
+.tl-stems .anchor { background: color-mix(in oklab, var(--muted-foreground) 60%, transparent); }
+.tl-stems b.anchor { background: var(--muted-foreground); width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 1px; transform: rotate(45deg); }
+.tl-stems i.tl-ok { background: color-mix(in oklab, var(--success) 80%, transparent); }
+.tl-stems b.tl-ok { background: var(--success); }
+.tl-stems i.tl-bad { background: color-mix(in oklab, var(--danger) 60%, transparent); }
+.tl-stems b.tl-bad { background: var(--danger); }
+.tl-stems i.tl-miss { background: color-mix(in oklab, var(--warning) 70%, transparent); }
+.tl-stems b.tl-miss { background: var(--background); box-shadow: inset 0 0 0 1.5px var(--warning), 0 0 0 1px var(--background); }
+
+/* An event card. In the tray it's a plain pill; on the line it gains its year. */
+.tl-chip {
+  --tx: 0px; --ty: 0px;
+  display: inline-flex; align-items: center; gap: 0.5rem; max-width: 24rem;
+  min-height: 2.5rem; padding: 0.3rem 0.75rem 0.3rem 0.55rem;
+  border-radius: 0.6rem; border: 1px solid color-mix(in oklab, var(--foreground) 16%, transparent);
+  background: var(--card, var(--background)); color: var(--foreground);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+  font: 500 0.86rem/1.25 var(--font-sans); text-align: left;
+  cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+  transform: translate(var(--tx), var(--ty));
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.tl-chip .grip { flex: none; width: 6px; height: 10px; fill: color-mix(in oklab, var(--muted-foreground) 70%, transparent); }
+.tl-chip .lbl { overflow-wrap: anywhere; }
+.tl-chip .yr { display: none; }
+.tl-chip:hover { border-color: color-mix(in oklab, var(--highlight) 55%, transparent); }
+.tl-chip:focus-visible { outline: none; border-color: var(--highlight); box-shadow: 0 0 0 3px color-mix(in oklab, var(--highlight) 25%, transparent); }
+.tl-chip.dragging { cursor: grabbing; z-index: 30 !important; border-color: var(--highlight); box-shadow: 0 10px 28px rgb(0 0 0 / 0.28); transition: none; }
+
+/* On the line: a compact card, label over its year. */
+.tl-pins .tl-chip, .tl-anchor { position: absolute; z-index: 4; }
+.tl-pins .tl-chip { width: max-content; flex-direction: column; align-items: flex-start; gap: 0.05rem; min-height: 0; max-width: 9.5rem; padding: 0.32rem 0.6rem 0.34rem; border-color: color-mix(in oklab, var(--highlight) 45%, transparent); font-size: 0.8rem; line-height: 1.2; }
+.tl-pins .tl-chip .grip { display: none; }
+.tl-pins .tl-chip .yr { display: block; font: 0.8rem/1.15 KaTeX_Main, "Times New Roman", serif; color: var(--highlight); font-variant-numeric: tabular-nums; }
+.tl-pins .tl-chip.dragging .yr { color: var(--highlight); }
+.tl-anchor { width: max-content; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.05rem; max-width: 9rem; padding: 0.25rem 0.5rem; border-radius: 0.5rem; background: color-mix(in oklab, var(--foreground) 7%, var(--background)); font-size: 0.75rem; line-height: 1.2; color: color-mix(in oklab, var(--foreground) 72%, transparent); pointer-events: none; }
+.tl-anchor .yr { font: 0.78rem/1.15 KaTeX_Main, "Times New Roman", serif; }
+
+/* While dragging: a guide down to the axis with the year it would land on. */
+.tl-guide { position: absolute; top: 0; height: var(--axis); width: 0; border-left: 1px dashed var(--highlight); pointer-events: none; z-index: 1; }
+.tl-guide span { position: absolute; top: var(--axis); left: 0; transform: translate(-50%, 6px); padding: 0.05rem 0.35rem; border-radius: 0.3rem; background: var(--highlight); color: var(--background); font: 600 0.78rem/1.3 var(--font-sans); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* Result. */
+.tl-chip:disabled { cursor: default; opacity: 1; }
+.tl-pins .tl-chip.tl-ok { border-color: color-mix(in oklab, var(--success) 70%, transparent); background: color-mix(in oklab, var(--success) 9%, var(--card, var(--background))); }
+.tl-pins .tl-chip.tl-ok .yr { color: color-mix(in oklab, var(--success) 75%, var(--foreground)); }
+.tl-pins .tl-chip.tl-bad { border-color: color-mix(in oklab, var(--danger) 65%, transparent); background: color-mix(in oklab, var(--danger) 8%, var(--card, var(--background))); }
+.tl-pins .tl-chip.tl-bad .yr { color: var(--foreground); }
+.tl-pins .tl-chip.tl-miss { border-style: dashed; border-color: color-mix(in oklab, var(--warning) 70%, transparent); background: transparent; }
+.tl-pins .tl-chip.tl-miss .yr { color: var(--foreground); }
+.tl-chip .yr s { color: var(--danger); text-decoration-thickness: 1px; margin-right: 0.35em; }
+.tl-chip .yr em { font-style: normal; }
+.tl-chip.tl-ok .yr em { color: var(--muted-foreground); margin-left: 0.35em; }
+.tl-chip.tl-ok .yr em::before { content: "true "; font: 0.7rem var(--font-sans); }
+.tl-chip.tl-miss .yr em { font: 0.7rem var(--font-sans); color: color-mix(in oklab, var(--warning) 60%, var(--foreground)); margin-left: 0.35em; }
+.tl.is-preview .tl-pins .tl-chip .yr { color: var(--foreground); }
+.tl-marks b { position: absolute; top: var(--axis); width: 13px; height: 13px; margin: -6.5px 0 0 -6.5px; border-radius: 50%; border: 2px solid color-mix(in oklab, var(--success) 75%, var(--foreground)); background: var(--background); z-index: 2; }
+.tl-marks .run { position: absolute; z-index: 1; top: calc(var(--axis) - var(--t, 0) * 5px); height: 2.5px; margin-top: -1.25px; background: color-mix(in oklab, var(--danger) 85%, transparent); border-radius: 2px; }
+.tl-marks .run::after { content: ""; position: absolute; top: 50%; width: 6px; height: 6px; border: solid color-mix(in oklab, var(--danger) 85%, transparent); border-width: 2px 2px 0 0; }
+.tl-marks .run.r::after { right: 0; transform: translate(0, -50%) rotate(45deg); }
+.tl-marks .run.l::after { left: 0; transform: translate(0, -50%) rotate(-135deg); }
+
+.tl-help { font-size: 0.82rem; margin: -0.25rem 0 0; }
+@media (pointer: coarse) { .tl-help .kb { display: none; } }
+
+/* The reveal: every event in order. */
+.tl-list { display: flex; flex-direction: column; }
+.tl-row { display: grid; grid-template-columns: 3.4rem 1fr auto; gap: 0.75rem; align-items: baseline; padding: 0.5rem 0; font-size: 0.93rem; border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent); }
+.tl-list .e-section-title + .tl-row { border-top: 1.5px solid color-mix(in oklab, var(--foreground) 45%, transparent); }
+.tl-row:last-child { border-bottom: 1.5px solid color-mix(in oklab, var(--foreground) 45%, transparent); }
+.tl-row b { font: 400 1rem KaTeX_Main, "Times New Roman", serif; font-variant-numeric: tabular-nums; }
 .tl-row .lbl { display: flex; flex-direction: column; }
 .tl-row .nt { font-size: 0.82rem; color: var(--muted-foreground); }
 .tl-row .st { font-size: 0.82rem; white-space: nowrap; }
-.tl-row .st.ok { color: var(--success); }
-.tl-row .st.bad { color: var(--danger); }
-.tl-row .st.miss { color: var(--warning); }
+.tl-row .st.ok { color: color-mix(in oklab, var(--success) 75%, var(--foreground)); }
+.tl-row .st.bad { color: color-mix(in oklab, var(--danger) 85%, var(--foreground)); }
+.tl-row .st.miss { color: color-mix(in oklab, var(--warning) 60%, var(--foreground)); }
+
 @media (max-width: 480px) {
-  .tl-wrap { padding: 0 1.6rem; }
-  .tl-chip { font-size: 0.8rem; padding: 0.3rem 0.55rem; }
-  .tl-anchor span { font-size: 0.62rem; }
+  .tl-wrap { padding: 0 0.75rem; }
+  .tl-axis { left: -0.75rem; right: -0.75rem; }
+  .tl-chip { font-size: 0.82rem; }
+  .tl-pins .tl-chip { max-width: 7.2rem; font-size: 0.74rem; padding: 0.28rem 0.5rem 0.3rem; }
+  .tl-pins .tl-chip .yr { font-size: 0.76rem; }
+  .tl-anchor { max-width: 6.5rem; font-size: 0.7rem; }
+  .tl-ticks span { font-size: 0.74rem; }
   .tl-row { grid-template-columns: 3rem 1fr; row-gap: 0.05rem; }
   .tl-row .st { grid-column: 2; }
 }

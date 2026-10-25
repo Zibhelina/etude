@@ -19,7 +19,7 @@ for f in "$tmp"/png/*.png; do
   n=$(basename "$f" .png)
   case "$n" in
     card-*) magick "$f" -resize 1200x\> -quality 86 "$out/$n.webp" ;;
-    phone-*) magick "$f" -resize 780x\> -quality 86 "$out/$n.webp" ;;
+    phone-*) magick "$f" -resize 804x\> -quality 88 "$out/$n.webp" ;;
     *) magick "$f" -resize 2400x\> -quality 84 "$out/$n.webp" ;;
   esac
 done

@@ -661,3 +661,24 @@ h1, h2, h3 { margin: 0; letter-spacing: -0.025em; font-weight: 600; }
 .phone .screen img { width: 100%; height: auto; flex: none; object-fit: contain; }
 .phone.l .screen, .phone.r .screen { padding-top: 13%; }
 .phone .screen img { flex: 1; min-height: 0; height: 100%; object-fit: cover; object-position: top center; }
+
+/* ---------------------------------------------------------- phones: Apple's iPhone 16 Pro bezel over real screenshots */
+.phones { perspective: none; align-items: flex-end; gap: clamp(1.25rem, 4vw, 3.5rem); padding-bottom: 2.5rem; position: relative; }
+.phones::before { content: ""; position: absolute; left: 50%; bottom: 0.5rem; width: 70%; height: 3rem; translate: -50% 0; border-radius: 50%;
+  background: radial-gradient(closest-side, oklch(0 0 0 / 90%), transparent); filter: blur(12px); z-index: -1; }
+.phone, .phone.l, .phone.r, .phone.c { transform: none; padding: 0; background: none; box-shadow: none; border-radius: 0; }
+.phone::before, .phone::after { content: none; display: none; }
+.phone { --w: clamp(10rem, 21vw, 15rem); width: var(--w); aspect-ratio: 1406 / 2822; position: relative; flex: none;
+  filter: drop-shadow(0 40px 40px oklch(0 0 0 / 70%)) drop-shadow(0 12px 18px oklch(0 0 0 / 55%)); }
+.phone.c { --w: clamp(12rem, 25vw, 18rem); z-index: 1; }
+.phone.l, .phone.r { margin-bottom: 1.25rem; }
+.phone.l .screen, .phone.r .screen { filter: brightness(0.86); }
+.phone .screen { position: absolute; left: 7.255%; top: 3.544%; width: 85.775%; height: 92.913%; object-fit: cover; object-position: top center;
+  border-radius: 14% / 6.5%; aspect-ratio: auto; display: block; }
+.phone .screen, .phone.l .screen, .phone.r .screen { padding: 0 !important; background: #000; box-shadow: none; flex: none; min-height: 0; }
+.phone .screen::after { content: none; }
+.phone .frame { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+@media (max-width: 520px) { .phone.l, .phone.r { display: none; } .phone.c { --w: min(16.5rem, 74vw); } }
+.phones { padding-bottom: 1rem; margin-top: 4rem; }
+.phones::after { content: ""; position: absolute; left: 50%; top: 40%; width: 60%; height: 50%; translate: -50% -50%; z-index: -2; border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--highlight) 10%, transparent), transparent); filter: blur(20px); pointer-events: none; }

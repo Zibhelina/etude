@@ -1,0 +1,4 @@
+iphone-16-pro-black-titanium.webp: iPhone 16 Pro, Black Titanium, from Apple Design Resources
+(https://developer.apple.com/design/resources/), via jamesjingyi/mockup-device-frames
+(Exports/iOS/16 Pro/16 Pro - Black Titanium.png), resized. Frame artwork unchanged.
+Screen opening in the original 1406x2822 image: x=102, y=100, width=1206, height=2622.

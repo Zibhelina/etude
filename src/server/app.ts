@@ -8,6 +8,7 @@ import { DEFAULT_SETTINGS, Etude, EtudeError, type StudyScope } from "../core/en
 import { chatProviderKeyEnv } from "../core/ai.ts";
 import { readChatGptHostId } from "../core/chatgpt.ts";
 import { DEFAULT_PRESET, type Rating } from "../core/model.ts";
+import { MAX_MEDIA_BYTES, mediaType } from "../core/media.ts";
 import { cardFrame } from "./frame.ts";
 import { buildSubmission, fetchCover, fetchEntry, fetchIndex, ghStatus, installEntry, installState, installedEntries, manualPublishUrl, marketSettings, publishFile, summarize, entryPath, entryJson, forgetInstall, type MarketKind } from "../core/market.ts";
 
@@ -41,9 +42,9 @@ function vendorPath(name: string): string | null {
   return null;
 }
 
-function sendFile(c: Context, path: string, opts: { cors?: boolean; cache?: string } = {}) {
+function sendFile(c: Context, path: string, opts: { cors?: boolean; cache?: string; mime?: string } = {}) {
   if (!existsSync(path) || !statSync(path).isFile()) return c.text("not found", 404);
-  const headers: Record<string, string> = { "Content-Type": MIME[extname(path)] ?? "application/octet-stream", "Cache-Control": opts.cache ?? "no-cache" };
+  const headers: Record<string, string> = { "Content-Type": opts.mime ?? MIME[extname(path)] ?? "application/octet-stream", "Cache-Control": opts.cache ?? "no-cache" };
   // Card frames have an opaque origin, so everything they load is a cross-origin request.
   if (opts.cors) headers["Access-Control-Allow-Origin"] = "*";
   return c.body(readFileSync(path), 200, headers);
@@ -87,8 +88,8 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     }
     if (c.req.method !== "GET" && c.req.method !== "HEAD") {
       const ct = c.req.header("content-type") ?? "";
-      // The Anki importer takes the package itself, so it's the one route that may send bytes.
-      const binary = c.req.method === "POST" && c.req.path === "/api/anki/import" && ct.includes("application/octet-stream");
+      // Package and media uploads send bytes; other mutations must be JSON.
+      const binary = c.req.method === "POST" && ["/api/anki/import", "/api/media"].includes(c.req.path) && ct.includes("application/octet-stream");
       if (!ct.includes("application/json") && !binary) return c.json({ error: "expected application/json" }, 415);
       const origin = c.req.header("origin");
       if (origin && origin !== "null") {
@@ -112,6 +113,31 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     }
   };
   const scopeOf = (c: Context): StudyScope => ({ deck: c.req.query("deck") || undefined, query: c.req.query("q") || undefined });
+
+  app.post("/api/media", async (c) => {
+    if (!c.req.header("content-type")?.includes("application/octet-stream")) return c.json({ error: "expected application/octet-stream" }, 415);
+    const name = c.req.query("name") ?? "";
+    if (!mediaType(name)) throw new EtudeError("unsupported media type; choose an image, audio or video file");
+    const reader = c.req.raw.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    if (reader) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          bytes += value.byteLength;
+          if (bytes > MAX_MEDIA_BYTES) {
+            await reader.cancel();
+            throw new EtudeError("media files must be 100 MiB or smaller", 413);
+          }
+          chunks.push(value);
+        }
+      } finally { reader.releaseLock(); }
+    }
+    return c.json(etude.storeMedia(name, Buffer.concat(chunks)));
+  });
+  app.post("/api/media/import", async (c) => c.json(etude.importMedia((await body(c)).path)));
 
   // ------------------------------------------------------------- decks
   app.get("/api/decks", (c) => c.json(etude.deckTree()));
@@ -397,8 +423,10 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const rel = normalize(c.req.path.slice("/media/".length));
     const full = resolve(etude.mediaDir, rel);
     if (!full.startsWith(resolve(etude.mediaDir) + "/")) return c.text("not found", 404);
+    c.header("Content-Security-Policy", "default-src 'none'; sandbox");
+    c.header("X-Content-Type-Options", "nosniff");
     // Card frames have an opaque origin, and @font-face needs CORS even for same-origin paths.
-    return sendFile(c, full, { cors: true });
+    return sendFile(c, full, { cors: true, mime: mediaType(full)?.mime, cache: rel.startsWith("files/") ? "public, max-age=31536000, immutable" : undefined });
   });
 
   // ----------------------------------------------------------- web app

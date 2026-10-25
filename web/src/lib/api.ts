@@ -156,6 +156,18 @@ export interface SearchRow {
   retrievability: number | null;
 }
 
+export interface StoredMedia {
+  name: string;
+  file: string;
+  path: string;
+  url: string;
+  mime: string;
+  kind: "image" | "audio" | "video";
+  bytes: number;
+  created: boolean;
+  dryRun: boolean;
+}
+
 export interface ItemDetail {
   id: string;
   type: string;
@@ -268,6 +280,8 @@ export interface Scope {
 }
 
 export const api = {
+  uploadMedia: (file: File) => call<StoredMedia>("POST", `/api/media${qs({ name: file.name })}`, undefined, file),
+  importMedia: (path: string) => call<StoredMedia>("POST", "/api/media/import", { path }),
   decks: () => call<DeckNode[]>("GET", "/api/decks"),
   deck: (name: string) => call<DeckNode & { resolved: PresetConfig; inherited: PresetConfig; presetBase: PresetConfig }>("GET", `/api/deck${qs({ name })}`),
   createDeck: (name: string) => call("POST", "/api/decks", { name }),

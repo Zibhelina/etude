@@ -6,9 +6,9 @@ Etude is a self-hosted spaced-repetition app where every card type is a small pr
 
 ![Decks](docs/screenshots/decks.png)
 
-![A free-answer card after AI grading, with feedback](docs/screenshots/study-feedback.png)
+![A proof by induction graded by AI, with feedback](docs/screenshots/study-feedback.png)
 
-![Browse: search, preview and edit](docs/screenshots/browse.png)
+![Browse: search, preview and edit, with a chess card open](docs/screenshots/browse.png)
 
 ## Why another flashcard app
 

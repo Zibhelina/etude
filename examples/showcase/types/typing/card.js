@@ -294,7 +294,7 @@ etude.onResult(({ grade, answer }) => {
     const pl = 30, pr = 8, pt = 8, pb = 22;
     const xmax = h[h.length - 1][0];
     const top = Math.max(view.target, ...h.map((p) => Math.max(p[1], p[2])));
-    const step = top > 150 ? 50 : top > 60 ? 20 : 10;
+    const step = [10, 20, 50, 100, 200, 500].find((st) => (top * 1.08) / st <= 6) ?? 1000;
     const ymax = Math.ceil((top * 1.08) / step) * step;
     const X = (s) => pl + ((s - (h.length > 1 ? h[0][0] : 0)) / Math.max(0.001, xmax - (h.length > 1 ? h[0][0] : 0))) * (W - pl - pr);
     const Y = (v) => pt + (1 - v / ymax) * (H - pt - pb);

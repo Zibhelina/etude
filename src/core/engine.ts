@@ -562,7 +562,7 @@ export class Etude {
   }
 
   private deckFromRow(r: Row): Deck {
-    return { id: r.id, name: r.name, presetId: r.preset_id, config: parse(r.config, {}), description: r.description, instructions: r.instructions, archived: !!r.archived };
+    return { id: r.id, name: r.name, presetId: r.preset_id, config: parse(r.config, {}), description: r.description, instructions: r.instructions, archived: !!r.archived, position: r.position ?? null };
   }
 
   updateDeck(nameOrId: string | number, patch: Partial<Pick<Deck, "presetId" | "config" | "description" | "instructions" | "archived">> & { name?: string }) {
@@ -1597,8 +1597,55 @@ export class Etude {
 
   // ------------------------------------------------------------- overview
 
+  /** Non-archived decks in tree order: parents before children, siblings by position, then name. */
+  private orderedDecks(): Row[] {
+    const rows = this.db.all("SELECT * FROM decks WHERE archived = 0");
+    const byName = new Map(rows.map((r) => [r.name as string, r]));
+    const key = (name: string) => {
+      const parts = deckParts(name);
+      return parts.map((leaf, i) => {
+        const pos = byName.get(parts.slice(0, i + 1).join("::"))?.position;
+        return { pos: pos == null ? Infinity : Number(pos), leaf: leaf.toLowerCase() };
+      });
+    };
+    const keys = new Map(rows.map((r) => [r.name as string, key(r.name)]));
+    return rows.sort((a, b) => {
+      const ka = keys.get(a.name)!, kb = keys.get(b.name)!;
+      for (let i = 0; i < Math.min(ka.length, kb.length); i++) {
+        if (ka[i].pos !== kb[i].pos) return ka[i].pos < kb[i].pos ? -1 : 1;
+        if (ka[i].leaf !== kb[i].leaf) return ka[i].leaf < kb[i].leaf ? -1 : 1;
+      }
+      return ka.length - kb.length;
+    });
+  }
+
+  /**
+   * Puts the subdecks of `parent` ("" for top level) in the given order. `order` holds full deck
+   * names; siblings left out keep their current relative order after the listed ones.
+   */
+  reorderDecks(parent: string, order: string[]): string[] {
+    const p = normDeck(parent);
+    if (p) this.deckRow(p);
+    const depth = p ? deckParts(p).length + 1 : 1;
+    const isChild = (n: string) => deckParts(n).length === depth && (!p || n.startsWith(p + "::"));
+    const current = this.db
+      .all("SELECT id, name, position FROM decks")
+      .filter((r) => isChild(r.name))
+      .sort((a, b) => (a.position ?? Infinity) - (b.position ?? Infinity) || a.name.localeCompare(b.name));
+    const ids = new Map(current.map((r) => [r.name.toLowerCase(), r]));
+    const listed: Row[] = [];
+    for (const raw of order) {
+      const r = ids.get(normDeck(raw).toLowerCase());
+      if (!r) throw new EtudeError(`"${raw}" isn't a subdeck of ${p ? `"${p}"` : "the top level"}`);
+      if (!listed.includes(r)) listed.push(r);
+    }
+    const final = [...listed, ...current.filter((r) => !listed.includes(r))];
+    this.db.tx(() => final.forEach((r, i) => this.db.run("UPDATE decks SET position = ? WHERE id = ?", i, r.id)));
+    return final.map((r) => r.name);
+  }
+
   deckTree() {
-    const decks = this.db.all("SELECT * FROM decks WHERE archived = 0 ORDER BY name");
+    const decks = this.orderedDecks();
     const t = now();
     const totals = new Map(
       this.db
@@ -1752,6 +1799,64 @@ export class Etude {
       .map(([tag, v]) => ({ tag, depth: tag.split("::").length - 1, direct: v.direct, cards: v.cards, seen: v.seen, recall: v.seen ? v.r / v.seen : null }))
       .sort((a, b) => a.tag.localeCompare(b.tag));
 
+    // Memory: how strong the studied cards are now, and how recall would fall with no more reviews.
+    const STAB = [1, 3, 7, 21, 60, 180, Infinity];
+    const stability = STAB.map((upTo) => ({ upTo: Number.isFinite(upTo) ? upTo : null, cards: 0 }));
+    const recallBins = new Array(10).fill(0);
+    const difficulty = new Array(10).fill(0);
+    const seenCards = all.filter((c) => c.state !== 0 && c.last_review);
+    // One FSRS instance per deck: building one per card would dominate the cost on big collections.
+    const engines = new Map<string, ReturnType<typeof sched.engine>>();
+    const engOf = (deck: string) => {
+      if (!engines.has(deck)) engines.set(deck, sched.engine(cfgOf(deck)));
+      return engines.get(deck)!;
+    };
+    const fsrsCards = seenCards.map((c) => ({ deck: c.deck, card: sched.toFsrs(c) }));
+    for (const c of seenCards) {
+      stability[STAB.findIndex((u) => c.stability < u)].cards++;
+      const r = sched.retrievability(c, t, cfgOf(c.deck)) ?? 0;
+      recallBins[Math.min(9, Math.floor(r * 10))]++;
+      if (c.difficulty > 0) difficulty[Math.min(9, Math.max(0, Math.floor(c.difficulty) - 1))]++;
+    }
+    const CURVE = [0, 1, 2, 3, 4, 5, 6, 7, 9, 11, 13, 15, 18, 21, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90];
+    const curve = seenCards.length
+      ? CURVE.map((d) => {
+          const at = new Date(t.getTime() + d * 86400_000);
+          let sum = 0;
+          for (const f of fsrsCards) sum += engOf(f.deck).get_retrievability(f.card, at, false) as number;
+          return { days: d, recall: sum / seenCards.length };
+        })
+      : [];
+
+    // When the learner studies: reviews and pass rate per hour of the day, over the window.
+    const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, reviews: 0, passed: 0 }));
+    // Weekly pass rate on review cards and weekly volume, oldest first.
+    const weekCount = Math.ceil(days / 7);
+    const weeks = Array.from({ length: weekCount }, () => ({ reviews: 0, reviewed: 0, passed: 0, ms: 0 }));
+    const weekMs = 7 * 86400_000;
+    const end = dayAt(1).getTime();
+    for (const r of rv) {
+      if (r.ts < sinceIso) continue;
+      const at = new Date(r.ts);
+      const h = hours[at.getHours()];
+      h.reviews++;
+      if (r.rating > 1) h.passed++;
+      const w = weekCount - 1 - Math.floor((end - 1 - at.getTime()) / weekMs);
+      if (w < 0 || w >= weekCount) continue;
+      weeks[w].reviews++;
+      weeks[w].ms += r.duration_ms ?? 0;
+      if (r.state === 2) {
+        weeks[w].reviewed++;
+        if (r.rating > 1) weeks[w].passed++;
+      }
+    }
+    // Longest run of consecutive study days inside the window.
+    let bestStreak = 0;
+    for (let i = -(days - 1), run = 0; i <= 0; i++) {
+      run = byDay.has(dayKey(dayAt(i))) ? run + 1 : 0;
+      bestStreak = Math.max(bestStreak, run);
+    }
+
     return {
       cards: { total: Number(states.total ?? 0), new: Number(states.new ?? 0), learning: Number(states.learning ?? 0), review: Number(states.review ?? 0), mature: Number(states.mature ?? 0) },
       /** Pass rate on review-state cards over the whole window. */
@@ -1769,6 +1874,19 @@ export class Etude {
       ratings,
       verdicts,
       streak,
+      bestStreak,
+      /** Studied cards by stability (days; `upTo` is the exclusive upper bound, null = no bound). */
+      stability,
+      /** Studied cards by predicted recall now, in tenths: [0-10%, 10-20%, ...]. */
+      recallBins,
+      /** Studied cards by FSRS difficulty 1..10, one bucket per point. */
+      difficulty,
+      /** Mean predicted recall of the studied cards if nothing were reviewed for `days` more days. */
+      curve,
+      desiredRetention: cfg.desiredRetention,
+      hours,
+      /** Weekly volume and pass rate on review cards, oldest week first; the last week ends today. */
+      weeks: weeks.map((w) => ({ ...w, rate: w.reviewed ? w.passed / w.reviewed : null })),
       window: { days, from: dayKey(since), to: dayKey(today) },
       deadline: scope.deck ? (cfg.deadline ?? null) : null,
       deadlineMargin: cfg.deadlineMargin,

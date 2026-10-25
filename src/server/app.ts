@@ -120,6 +120,10 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     etude.ensureDeck(String(b.name ?? ""));
     return c.json(etude.deck(String(b.name)));
   });
+  app.post("/api/decks/order", async (c) => {
+    const b = await body(c);
+    return c.json({ order: etude.reorderDecks(String(b.parent ?? ""), Array.isArray(b.order) ? b.order.map(String) : []) });
+  });
   app.get("/api/deck", (c) => c.json(etude.deck(c.req.query("name") ?? "")));
   app.patch("/api/deck", async (c) => c.json(etude.updateDeck(c.req.query("name") ?? "", await body(c))));
   app.delete("/api/deck", (c) => {

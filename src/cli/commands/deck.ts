@@ -103,6 +103,26 @@ command({
 
 alias("deck move", "deck rename");
 
+command({
+  name: "deck reorder",
+  summary: "Set the order of sibling decks in the deck list.",
+  description:
+    "Give two or more decks under the same parent (or all top level) in the order you want. Siblings you leave out keep their order after the listed ones. Subdecks move with their deck. Without an order, decks sort by name.",
+  args: [{ name: "decks", description: "Full deck names, in the new order.", required: true, variadic: true }],
+  writes: true,
+  dryRun: true,
+  examples: ['etude deck reorder "Morse code" "Networks"', 'etude deck reorder "Networks::Week 2" "Networks::Week 1"'],
+  output: "{ parent, order: [full names of every sibling, in the new order] }",
+  run(ctx) {
+    const e = ctx.e;
+    const names = (ctx.args.decks as string[]).map((n) => e.deck(n).name);
+    const parents = new Set(names.map((n) => n.split("::").slice(0, -1).join("::")));
+    if (parents.size > 1) throw new CliError("decks to reorder must share a parent");
+    const parent = [...parents][0] ?? "";
+    return { parent, order: e.reorderDecks(parent, names) };
+  },
+});
+
 for (const archived of [true, false]) {
   command({
     name: archived ? "deck archive" : "deck unarchive",

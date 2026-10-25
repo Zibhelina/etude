@@ -213,6 +213,7 @@ These work on every command, before or after the command words.
   - [`deck show`](#deck-show) A deck with its effective settings and where each one comes from.
   - [`deck create`](#deck-create) Create a deck (and any missing parents).
   - [`deck rename`](#deck-rename) Rename or move a deck, with its subdecks. Merges into an existing deck of the same name.
+  - [`deck reorder`](#deck-reorder) Set the order of sibling decks in the deck list.
   - [`deck archive`](#deck-archive) Hide a deck from the deck list and study. Cards and history are kept.
   - [`deck unarchive`](#deck-unarchive) Bring an archived deck back.
   - [`deck delete`](#deck-delete) Delete an empty deck and its empty subdecks. Decks holding items can't be deleted: move or archive them.
@@ -452,6 +453,35 @@ Output: { from, to, decks: [{ from, to }] }
 ```sh
 etude deck rename "Physics::Waves" "Physics::Oscillations and waves"
 etude deck move "Inbox::Networking" "Networks::Transport"
+```
+
+### etude deck reorder
+
+<a id="deck-reorder"></a>
+
+Set the order of sibling decks in the deck list.
+
+Give two or more decks under the same parent (or all top level) in the order you want. Siblings you leave out keep their order after the listed ones. Subdecks move with their deck. Without an order, decks sort by name.
+
+```
+etude deck reorder <decks...> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `decks...` | Full deck names, in the new order. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { parent, order: [full names of every sibling, in the new order] }
+
+```sh
+etude deck reorder "Morse code" "Networks"
+etude deck reorder "Networks::Week 2" "Networks::Week 1"
 ```
 
 ### etude deck archive

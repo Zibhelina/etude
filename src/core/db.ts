@@ -23,7 +23,9 @@ CREATE TABLE IF NOT EXISTS decks (
   config       TEXT NOT NULL DEFAULT '{}',
   description  TEXT NOT NULL DEFAULT '',
   instructions TEXT NOT NULL DEFAULT '',
-  archived     INTEGER NOT NULL DEFAULT 0
+  archived     INTEGER NOT NULL DEFAULT 0,
+  -- Order among sibling decks; NULL sorts after positioned decks, by name.
+  position     INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS types (
@@ -138,6 +140,8 @@ export class Db {
     this.sql = new DatabaseSync(path, { timeout: 5000 });
     this.sql.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
     this.sql.exec(SCHEMA);
+    // Columns added after a table first shipped.
+    if (!this.all("PRAGMA table_info(decks)").some((c) => c.name === "position")) this.sql.exec("ALTER TABLE decks ADD COLUMN position INTEGER");
     const v = this.get("SELECT value FROM meta WHERE key = 'schema_version'");
     if (!v) this.run("INSERT INTO meta (key, value) VALUES ('schema_version', ?)", String(SCHEMA_VERSION));
   }

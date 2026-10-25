@@ -117,6 +117,8 @@ export interface Deck {
   description: string;
   instructions: string;
   archived: boolean;
+  /** Order among sibling decks (null: unordered, after the ordered ones, by name). */
+  position: number | null;
 }
 
 export interface Item {

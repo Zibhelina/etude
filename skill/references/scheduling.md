@@ -43,6 +43,18 @@ etude deck show "Networks::Week 1"   # resolved, inherited, presetBase, own conf
 
 Changing retention, steps, maximum interval, weights or the deadline only affects future reviews. Add `--reschedule` (or run `etude card reschedule --deck X`) to replay history with the new settings. Commands print a `hint` when that's needed.
 
+## Optimizing the weights
+
+FSRS starts from published default weights. Once a preset's decks have a few hundred reviews, fit the weights to that history, as Anki's Optimize does (it is the same optimizer, fsrs-rs):
+
+```sh
+etude preset optimize exam                        # report only: reviews used, log loss and RMSE before and after
+etude preset optimize exam --apply --reschedule   # save them if they fit better, then replay history with them
+etude deck optimize "Networks"                    # the same for whatever weights this deck uses
+```
+
+Every deck whose weights come from the same place counts: a preset's decks, or a single deck that overrides `weights` itself. `--apply` only saves weights with a lower RMSE than the current ones. It needs at least 400 reviews and the optional package `@open-spaced-repetition/binding`, which `npm install` adds on supported platforms. Re-optimize every month or two, or after changing how you grade (moving from self-rated to typed answers changes your ratings).
+
 ## Exam deadlines
 
 With `deadline` set, no card is scheduled past `deadline - deadlineMargin`. A card that would land later is pulled in, splitting the remaining time in half so even a well-known card gets one more look before the exam.

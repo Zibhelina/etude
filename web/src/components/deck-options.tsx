@@ -12,7 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { StepsInput } from "@/components/deck-steps-input";
-import { api, type DeckNode, type PresetConfig, type Preset } from "@/lib/api";
+import { api, type DeckNode, type OptimizeResult, type PresetConfig, type Preset } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export type DeckFull = DeckNode & { resolved: PresetConfig; inherited: PresetConfig; presetBase: PresetConfig };
@@ -400,6 +400,7 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
       </Group>
 
       <WeightsGroup
+        deck={deck.name}
         value={weights ?? null}
         inherited={deck.inherited.weights ?? null}
         source={source("weights")}
@@ -623,8 +624,20 @@ function ChoiceSelect({ value, onChange, options, ariaLabel }: { value: string; 
   );
 }
 
-function WeightsGroup({ value, inherited, source, dirty, onChange, onReset }: { value: number[] | null; inherited: number[] | null; source: Source; dirty: boolean; onChange(w: number[] | null): void; onReset?: () => void }) {
+function WeightsGroup({ deck, value, inherited, source, dirty, onChange, onReset }: { deck: string; value: number[] | null; inherited: number[] | null; source: Source; dirty: boolean; onChange(w: number[] | null): void; onReset?: () => void }) {
   const [open, setOpen] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
+  const [result, setResult] = useState<OptimizeResult | null>(null);
+  const optimize = async () => {
+    setOptimizing(true);
+    try {
+      setResult(await api.optimizeWeights(deck));
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setOptimizing(false);
+    }
+  };
   const fmt = (w: number[] | null) => JSON.stringify(w ?? DEFAULT_WEIGHTS).replace(/,/g, ", ");
   const [text, setText] = useState(fmt(value));
   const [error, setError] = useState<string | null>(null);
@@ -688,9 +701,41 @@ function WeightsGroup({ value, inherited, source, dirty, onChange, onReset }: { 
               <Copy className="size-3.5" />Copy
             </Button>
           </div>
+          <div className="mt-4 border-t pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">Optimize</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">Fit the weights to your review history with the FSRS optimizer Anki uses. Every deck that shares these weights counts.</span>
+              </div>
+              <Button variant="outline" size="sm" className="h-9 gap-1.5" disabled={optimizing} onClick={optimize}>
+                <RefreshCw className={cn("size-3.5", optimizing && "animate-spin")} />
+                {optimizing ? "Optimizing…" : "Optimize"}
+              </Button>
+            </div>
+            {result && <OptimizeReport result={result} onUse={() => { onChange(result.weights); setResult(null); toast.success(result.source.kind === "preset" ? "New weights in the draft: use Save to preset to share them." : "New weights in the draft: save them below."); }} />}
+          </div>
         </div>
       )}
     </section>
+  );
+}
+
+function OptimizeReport({ result, onUse }: { result: OptimizeResult; onUse(): void }) {
+  const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+  return (
+    <div className="mt-3 rounded-lg bg-background/60 px-3.5 py-3 text-[13px] leading-relaxed ring-1 ring-border">
+      <p>
+        {result.reviews.toLocaleString()} reviews of {result.cards.toLocaleString()} cards in {result.decks.length === 1 ? "1 deck" : `${result.decks.length} decks`}.
+      </p>
+      <p className="mt-1 text-muted-foreground">
+        Log loss {result.before.logLoss.toFixed(3)} → <span className="text-foreground">{result.after.logLoss.toFixed(3)}</span> · RMSE {pct(result.before.rmse)} → <span className="text-foreground">{pct(result.after.rmse)}</span>
+      </p>
+      {result.better ? (
+        <Button size="sm" className="mt-3 h-9" onClick={onUse}>Use these weights</Button>
+      ) : (
+        <p className="mt-2 text-muted-foreground">Your current weights already fit this history at least as well. Keep them.</p>
+      )}
+    </div>
   );
 }
 

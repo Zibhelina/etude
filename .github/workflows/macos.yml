@@ -1,0 +1,41 @@
+name: macOS app
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release to attach the .dmg files to"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: packaging/macos/build.sh arm64
+      - run: packaging/macos/build.sh x64
+      - name: Smoke test (the bundled server starts and serves the app)
+        run: |
+          APP=dist/macos/arm64/Etude.app/Contents/Resources
+          export ETUDE_HOME="$RUNNER_TEMP/etude-home"
+          "$APP/node/bin/node" "$APP/app/bin/etude.js" pack import "$APP/app/examples/showcase.pack.json" > /dev/null
+          "$APP/node/bin/node" "$APP/app/bin/etude.js" serve --port 4699 &
+          for i in $(seq 1 50); do curl -fsS http://127.0.0.1:4699/api/decks > /dev/null && break; sleep 0.2; done
+          curl -fsS http://127.0.0.1:4699/ | grep -q '<div id="root"'
+          kill %1
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: gh release upload "$TAG" dist/macos/Etude-mac-apple-silicon.dmg dist/macos/Etude-mac-intel.dmg --clobber

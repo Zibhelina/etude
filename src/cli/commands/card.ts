@@ -97,13 +97,14 @@ command({
   name: "card bury",
   summary: "Hide cards until the next study day, or until a date.",
   args: [refsArg],
-  flags: [...BULK, ...MOMENT_FLAGS.slice(0, 2)],
+  flags: [...BULK, ...MOMENT_FLAGS.slice(0, 2), { name: "note", type: "boolean", description: "Bury every card of the selected cards' items." }],
   writes: true,
   dryRun: true,
-  examples: ["etude card bury 42", "etude card bury --query tag:hard --in 3d"],
+  examples: ["etude card bury 42", "etude card bury 42 --note", "etude card bury --query tag:hard --in 3d"],
   output: "{ count, until, cards }",
   run(ctx) {
-    const ids = resolveCards(ctx, ctx.args.refs);
+    const selected = resolveCards(ctx, ctx.args.refs);
+    const ids = ctx.flags.note ? ctx.e.noteCards(selected) : selected;
     const e = ctx.e;
     const until = ctx.flags.date || ctx.flags.in ? parseMoment({ date: ctx.flags.date, in: ctx.flags.in }, e.settings().dayStartHour) : new Date(e.dayStart().getTime() + 86400_000);
     e.setBuried(ids, until);

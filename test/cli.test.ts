@@ -253,6 +253,23 @@ test("items: add from flags, files and stdin; edit; bulk ops; delete needs --yes
   assert.equal((await e(["item", "archive", "nope.1"])).code, 3);
 });
 
+test("card bury --note includes sibling cards and supports dry run", async () => {
+  const e = cli(home());
+  const def = { ...(await e(["type", "show", "basic"])).json, id: "two-way", faces: ["forward", "reverse"] };
+  ok(await e(["type", "import", "-"], JSON.stringify(def)));
+  ok(await e(["item", "add", "--type", "two-way", "--deck", "D", "--id", "d.1", "--front", "q", "--back", "a"]));
+  const cards = (await e(["item", "show", "d.1"])).json.cards;
+  const args = ["card", "bury", String(cards[0].id), "--note"];
+  const dry = await e([...args, "--dry-run"]);
+  ok(dry);
+  assert.equal(dry.json.count, 2);
+  assert.equal((await e(["study", "counts", "--deck", "D"])).json.new, 2);
+  const buried = await e(args);
+  ok(buried);
+  assert.deepEqual(buried.json.cards.map((c: any) => c.cardId), cards.map((c: any) => c.id));
+  assert.equal((await e(["study", "counts", "--deck", "D"])).json.new, 0);
+});
+
 test("cards: suspend, bury, reset, due dates, intervals, reschedule", async () => {
   const e = cli(home());
   ok(await e(["deck", "create", "D"]));

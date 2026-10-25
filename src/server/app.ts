@@ -193,14 +193,17 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   });
   app.post("/api/cards-bulk", async (c) => {
     const b = await body(c);
-    const ids: number[] = (b.cardIds ?? []).map(Number);
+    let ids: number[] = (b.cardIds ?? []).map(Number);
     switch (b.action) {
       case "suspend": etude.setSuspended(ids, true); break;
       case "unsuspend": etude.setSuspended(ids, false); break;
       case "reset": etude.resetCards(ids); break;
+      case "bury": ids = etude.setBuried(ids, undefined, { preserveExisting: true }); break;
+      case "bury-note": ids = etude.setBuried(etude.noteCards(ids), undefined, { preserveExisting: true }); break;
+      case "unbury": etude.setBuried(ids, null); break;
       default: throw new EtudeError(`unknown action ${b.action}`);
     }
-    return c.json({ ok: true, count: ids.length });
+    return c.json({ ok: true, count: ids.length, cardIds: ids });
   });
 
   // ------------------------------------------------------------- study

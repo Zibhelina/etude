@@ -61,6 +61,7 @@ Saving validates all of this. Script bodies (`prepare`, `grader.code`) are compi
 | `card.js` | `template.js` |
 | `prepare.js` | `prepare` |
 | `grade.js` | `grader.code` (only read for `script` and `hybrid` graders) |
+| `demo.js` | `demo` (an example answer for watch mode, optional) |
 
 Files win over the same keys inside `type.json`. The built-in types in `types/` use this form.
 
@@ -153,6 +154,15 @@ The app posts its theme into the frame, and posts it again when the user switche
 - `rng`: seeded from the review seed, the item and the face, so a variant can be replayed exactly.
 
 Only `view` reaches the card before grading. `key` goes to the grader, to `onResult` and to result templates. Without a prepare script, private fields go to `key` and every other field goes to `view`.
+
+## Example answers (watch mode)
+
+A deck in watch mode (`mode: "watch"` in its preset or deck options) is a tour: the app shows its cards one by one, each with a **Show an answer** button that fills in an example answer and grades it like a real one, and nothing is scheduled. The example comes from:
+
+1. the item's own `fields.demo`, when it has one (a drawing's strokes, a proof written a particular way), or
+2. the type's `demo` script: the body of `function (view, key, fields, rng)` returning an answer in the shape `getAnswer` produces. It runs in the sandbox like `prepare`, after it, so it sees this variant's key.
+
+A script-graded example is graded on the spot. AI-graded items can ship a recorded grade in `fields.demoGrade` (`{ score, verdict, feedback, grader: { model } }`), so the tour shows a real grade without calling a model; without one, the app says AI would grade it. `demo` and `demoGrade` never reach the card's view. Every built-in and showcase type has a `demo.js`; `etude study watch` prints the same thing for agents.
 
 ## Grading
 

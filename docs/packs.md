@@ -37,6 +37,10 @@ Every key except `etude` is optional. Decks named by items but not listed are cr
 - `fields`: the type's fields. Markdown fields support GitHub markdown, fenced code (highlighted for any language named after the fence), tables, images and KaTeX math (`$inline$`, `$$display$$`).
 - `source`: where the content comes from (shown after answering).
 
+### Example answers
+
+`fields.demo` (an answer in the card's own format) and `fields.demoGrade` (a recorded grade) are optional. Watch-mode decks show them; studying ignores them and they never reach the card. See [Example answers](types.md#example-answers-watch-mode).
+
 ### Generated items
 
 Any item may carry `fields.generator`: the body of a JavaScript function that receives `rng` and returns an object of field overrides. Each review runs it with a fresh seed, so one item produces endless variants of the same exercise. The seed is stored with the review, so a variant can always be reproduced.

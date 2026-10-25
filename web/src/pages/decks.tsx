@@ -195,13 +195,20 @@ export function ImportButton({ onDone }: { onDone(): void }) {
   const pick = () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".json,application/json";
+    input.accept = ".json,.apkg,.colpkg,application/json";
     input.multiple = true;
     input.onchange = async () => {
       for (const f of Array.from(input.files ?? [])) {
         try {
-          const r = await api.importPack(JSON.parse(await f.text()));
-          toast.success(`Imported ${f.name}`, { description: `${r.items.created} new, ${r.items.updated} updated, ${r.items.unchanged} unchanged` });
+          if (/\.(apkg|colpkg)$/i.test(f.name)) {
+            const r = await api.importAnki(f);
+            const media = r.media.files ? ` · ${r.media.files} media` : "";
+            const skipped = r.skipped.length ? ` · ${r.skipped.length} skipped` : "";
+            toast.success(`Imported ${f.name}`, { description: `${r.items.created} new, ${r.items.updated} updated, ${r.items.unchanged} unchanged · ${r.cards} cards · ${r.reviews} reviews${media}${skipped}` });
+          } else {
+            const r = await api.importPack(JSON.parse(await f.text()));
+            toast.success(`Imported ${f.name}`, { description: `${r.items.created} new, ${r.items.updated} updated, ${r.items.unchanged} unchanged` });
+          }
         } catch (e) {
           toast.error(`Couldn't import ${f.name}`, { description: (e as Error).message.slice(0, 400) });
         }

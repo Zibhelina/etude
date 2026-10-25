@@ -35,7 +35,7 @@ for (const s of specs) {
   errors.length = 0;
   await send("Emulation.setDeviceMetricsOverride", { width: s.width ?? 1440, height: s.height ?? 900, deviceScaleFactor: s.scale ?? 2, mobile: !!s.mobile });
   await send("Emulation.setTouchEmulationEnabled", { enabled: !!s.mobile, maxTouchPoints: s.mobile ? 5 : 0 });
-  await send("Emulation.setSafeAreaInsetsOverride", { insets: s.mobile ? { top: 59, bottom: 34, left: 0, right: 0 } : { top: 0, bottom: 0, left: 0, right: 0 } });
+  await send("Emulation.setSafeAreaInsetsOverride", { insets: s.mobile ? { top: 62, bottom: 34, left: 0, right: 0 } : { top: 0, bottom: 0, left: 0, right: 0 } });
   await send("Page.navigate", { url: BASE + s.url });
   await sleep(s.wait ?? 2500);
   for (const st of s.steps ?? []) { const r = await evaluate(st); if (r !== undefined) console.log(s.name, "step:", JSON.stringify(r).slice(0, 200)); await sleep(s.stepWait ?? 900); }

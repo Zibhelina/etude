@@ -20,6 +20,8 @@ AI grading is optional and off until you set a provider key. When a card is grad
 
 Nothing else from the collection is sent. Keys are read from the environment or `~/.etude/.env` and are never returned by the API. The default providers are OpenRouter endpoints; change them in Settings → AI grading or point them at a local OpenAI-compatible server to keep everything on your machine.
 
+With the ChatGPT plan option, the same content goes to OpenAI's Responses API (`api.openai.com/v1/responses`) using an OAuth access token from `~/.etude/chatgpt.json` (mode `0600`, written atomically). Access, refresh and ID tokens stay on the server, are never returned by the API or put in the browser, and a rotated refresh token replaces the old one on disk. Signing out revokes the renewable session with OpenAI before clearing the local tokens.
+
 ## Reporting a vulnerability
 
 Please report sandbox escapes, auth bypasses and anything that lets card code or a pack reach outside its frame through a [private security advisory](https://github.com/Zibhelina/etude/security/advisories/new) instead of a public issue. Include the Etude version, how you ran the server and a minimal pack or steps that reproduce it.

@@ -290,11 +290,16 @@ These work on every command, before or after the command words.
   - [`stats forecast`](#stats-forecast) Cards due per day for the next 30 days (overdue counts on today).
   - [`stats tags`](#stats-tags) Predicted recall per tag (with parent tags), weakest first.
   - [`stats weak`](#stats-weak) Cards most likely forgotten or most often lapsed: candidates for rewording, splitting or suspending.
-- **settings**: App settings: AI providers and models, day start, learn-ahead (`etude settings` alone runs `get`)
+- **settings**: App settings: AI providers and models, day start, learn-ahead, ChatGPT sign-in (`etude settings` alone runs `get`)
   - [`settings get`](#settings-get) Current settings, or one dotted key. Key values are never printed: only whether each key's env var is set.
   - [`settings set`](#settings-set) Change settings with dotted key=value pairs (JSON values when they parse).
   - [`settings unset`](#settings-unset) Reset dotted keys to their defaults.
   - [`settings test-ai`](#settings-test-ai) Grade a fixed sample answer with the configured providers, to check keys and models. Costs a fraction of a cent.
+  - [`settings chatgpt login`](#settings-chatgpt-login) Sign in with ChatGPT, so grading uses the user's ChatGPT Plus or Pro plan instead of an API key.
+  - [`settings chatgpt status`](#settings-chatgpt-status) Whether this install is signed in with ChatGPT, for which account, and whether plan usage is granted.
+  - [`settings chatgpt logout`](#settings-chatgpt-logout) End the ChatGPT session and delete the saved tokens. The app registration is kept for a later sign-in.
+  - [`settings chatgpt models`](#settings-chatgpt-models) The models the signed-in ChatGPT account offers for plan usage (slug and display name).
+  - [`settings chatgpt import`](#settings-chatgpt-import) Adopt a chatgpt.json signed in on another machine (the self-hosted-VM path). This host gets its own host id.
 - **theme**: Themes: pick the app's colors, or make your own with CSS variables and extra CSS (`etude theme` alone runs `list`)
   - [`theme list`](#theme-list) Every theme, built-in first, with which one is selected.
   - [`theme show`](#theme-show) A theme's variables and extra CSS. Without an id, the selected theme.
@@ -2379,7 +2384,7 @@ etude stats weak --deck "Networks" --lapses 3
 
 ## settings
 
-App settings: AI providers and models, day start, learn-ahead.
+App settings: AI providers and models, day start, learn-ahead, ChatGPT sign-in.
 
 ### etude settings get
 
@@ -2473,6 +2478,108 @@ etude settings test-ai
 *read-only*
 
 Output: { verdict?, verdictError?, feedback?, feedbackError? }
+
+### etude settings chatgpt login
+
+<a id="settings-chatgpt-login"></a>
+
+Sign in with ChatGPT, so grading uses the user's ChatGPT Plus or Pro plan instead of an API key.
+
+Opens OpenAI's sign-in page in the system browser and waits for the loopback callback on 127.0.0.1. The browser must run on this machine: a 127.0.0.1 callback never reaches a server on another host. Tokens are saved to $ETUDE_HOME/chatgpt.json with owner-only permissions.
+
+```
+etude settings chatgpt login [flags]
+```
+
+*writes · no database*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--no-open` | boolean | Don't launch a browser; the URL is printed instead. |
+| `--timeout <N>` | number | Seconds to wait for the callback. Default 600. |
+
+Output: { signedIn, email, plan, clientId, hostId, credentialsPath, opened }
+
+```sh
+etude settings chatgpt login
+etude settings chatgpt login --no-open
+```
+
+### etude settings chatgpt status
+
+<a id="settings-chatgpt-status"></a>
+
+Whether this install is signed in with ChatGPT, for which account, and whether plan usage is granted.
+
+```
+etude settings chatgpt status
+```
+
+*read-only · no database*
+
+Output: { signedIn, email, plan, planType, expiresAt, needsReauth, usageUrl, credentialsPath, hostId }
+
+```sh
+etude settings chatgpt status
+```
+
+### etude settings chatgpt logout
+
+<a id="settings-chatgpt-logout"></a>
+
+End the ChatGPT session and delete the saved tokens. The app registration is kept for a later sign-in.
+
+```
+etude settings chatgpt logout
+```
+
+*writes · no database*
+
+Output: { signedIn: false, revoked, warning?, email, clientId, hostId, credentialsPath }
+
+```sh
+etude settings chatgpt logout
+```
+
+### etude settings chatgpt models
+
+<a id="settings-chatgpt-models"></a>
+
+The models the signed-in ChatGPT account offers for plan usage (slug and display name).
+
+```
+etude settings chatgpt models
+```
+
+*read-only · no database*
+
+Output: { models: [{ slug, displayName }] }
+
+```sh
+etude settings chatgpt models
+```
+
+### etude settings chatgpt import
+
+<a id="settings-chatgpt-import"></a>
+
+Adopt a chatgpt.json signed in on another machine (the self-hosted-VM path). This host gets its own host id.
+
+```
+etude settings chatgpt import <file>
+```
+
+*writes · no database*
+
+| Argument | Description |
+| --- | --- |
+| `file` | The credential file copied from the other machine. |
+
+Output: { signedIn, email, hostId, credentialsPath, plan }
+
+```sh
+scp laptop:~/.etude/chatgpt.json /tmp/ && etude settings chatgpt import /tmp/chatgpt.json
+```
 
 ## theme
 

@@ -1,7 +1,8 @@
 // The engine: one object that owns the database and every operation on it.
 // The HTTP server and the CLI are thin layers over this class.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Db, type Row } from "./db.ts";
 import {
@@ -22,6 +23,20 @@ import { fieldDefaults, loadBuiltinTypes, validateFields, validateType, TYPE_ID 
 import * as sched from "./scheduler.ts";
 import { compile, QueryError } from "./query.ts";
 import { aiFeedback, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type GradingContext } from "./ai.ts";
+import {
+  beginChatGptLogin,
+  chatGptEndpoints,
+  chatGptLogout,
+  chatGptStatus,
+  importChatGptCredentials,
+  listChatGptModels,
+  readChatGptCredentials,
+  type ChatGptEndpoints,
+  type ChatGptLoginOptions,
+  type ChatGptLogoutResult,
+  type ChatGptModel,
+  type ChatGptStatus,
+} from "./chatgpt.ts";
 import { BUILTIN_THEMES, DEFAULT_THEME, MAX_CUSTOM_THEMES, ThemeError, builtinTheme, normalizeTheme, type Theme } from "./themes.ts";
 import { openPackage } from "./anki/package.ts";
 import { readCollection } from "./anki/collection.ts";
@@ -135,19 +150,23 @@ export class Etude {
   readonly db: Db;
   readonly mediaDir: string;
   readonly path: string;
+  /** Where per-install files live (ChatGPT credentials): `$ETUDE_HOME`, default `~/.etude`. */
+  readonly home: string;
   private typeCache = new Map<string, CardTypeDef>();
 
-  private constructor(db: Db, mediaDir: string, path: string) {
+  private constructor(db: Db, mediaDir: string, path: string, home: string) {
     this.db = db;
     this.mediaDir = mediaDir;
     this.path = path;
+    this.home = home;
   }
 
-  static async open(path: string, opts: { builtinTypesDir?: string } = {}): Promise<Etude> {
+  static async open(path: string, opts: { builtinTypesDir?: string; home?: string } = {}): Promise<Etude> {
     await initSandbox();
     const db = new Db(path);
     const media = path === ":memory:" ? join(process.env.TMPDIR ?? "/tmp", `etude-media-${process.pid}`) : join(dirname(path), "media");
-    const e = new Etude(db, media, path);
+    const home = resolve(opts.home ?? process.env.ETUDE_HOME ?? join(homedir(), ".etude"));
+    const e = new Etude(db, media, path, home);
     e.syncBuiltinTypes(opts.builtinTypesDir ?? BUILTIN_TYPES_DIR);
     return e;
   }
@@ -1190,7 +1209,7 @@ export class Etude {
         grade = { score, verdict: this.verdictOf(score), feedback: out.feedback, details: out.details, suggested: sched.suggestRating(score, cfg), grader: { kind: "script", ms: Date.now() - t0 } };
       } else {
         const ctx = this.gradingContext(c, prep, answer);
-        const v = await aiVerdict(this.settings().ai, ctx, { vision: !!(g as { vision?: boolean }).vision });
+        const v = await aiVerdict(this.settings().ai, ctx, { vision: !!(g as { vision?: boolean }).vision, home: this.home });
         grade = {
           score: v.score,
           verdict: v.verdict,
@@ -1250,7 +1269,7 @@ export class Etude {
     ctx.score = grade.score;
     let out;
     try {
-      out = await aiFeedback(this.settings().ai, ctx);
+      out = await aiFeedback(this.settings().ai, ctx, { home: this.home });
     } catch (e) {
       if (e instanceof AiError) throw new EtudeError(`feedback failed: ${e.message}`, 502);
       throw e;
@@ -1275,7 +1294,7 @@ export class Etude {
     const ai = this.settings().ai;
     const out: Record<string, unknown> = {};
     try {
-      const v = await aiVerdict(ai, ctx);
+      const v = await aiVerdict(ai, ctx, { home: this.home });
       out.verdict = v;
       ctx.verdict = v.verdict;
       ctx.score = v.score;
@@ -1283,11 +1302,41 @@ export class Etude {
       out.verdictError = (e as Error).message;
     }
     try {
-      out.feedback = await aiFeedback(ai, ctx);
+      out.feedback = await aiFeedback(ai, ctx, { home: this.home });
     } catch (e) {
       out.feedbackError = (e as Error).message;
     }
     return out;
+  }
+
+  // ------------------------------------------------------- ChatGPT plan
+
+  /** Where ChatGPT-plan sign-in stands for this install. */
+  chatgptStatus(): ChatGptStatus {
+    return chatGptStatus(this.home);
+  }
+
+  /** Starts the sign-in loopback listener. The browser must be on this machine. */
+  chatgptLogin(opts: Omit<ChatGptLoginOptions, "home"> = {}) {
+    return beginChatGptLogin({ home: this.home, ...opts });
+  }
+
+  chatgptLogout(endpoints: Partial<ChatGptEndpoints> = {}): Promise<ChatGptLogoutResult> {
+    return chatGptLogout(this.home, endpoints);
+  }
+
+  chatgptModels(endpoints: Partial<ChatGptEndpoints> = {}): Promise<ChatGptModel[]> {
+    return listChatGptModels(this.home, endpoints);
+  }
+
+  /** Adopts a credential file from another machine, with a host id for this one. */
+  chatgptImport(file: string) {
+    return importChatGptCredentials(this.home, file);
+  }
+
+  /** The stored registration, for reauthorization hints (no network). */
+  chatgptCredentials() {
+    return readChatGptCredentials(this.home);
   }
 
   /** Records a rating and reschedules the card. Practice ratings are logged but don't move the schedule. */

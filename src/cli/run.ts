@@ -42,7 +42,14 @@ function locate(argv: string[]): { cmd?: CommandSpec; group?: string; rest: stri
   const w1 = argv[i];
   if (w1 === undefined) return { rest: [], pre };
   const w2 = argv[i + 1];
-  if (w2 !== undefined && !w2.startsWith("-")) {
+  const w3 = argv[i + 2];
+  const word = (w: string | undefined) => w !== undefined && !w.startsWith("-");
+  // Three-word commands: `settings chatgpt login`.
+  if (word(w1) && word(w2) && word(w3)) {
+    const three = findCommand(`${w1} ${w2} ${w3}`);
+    if (three) return { cmd: three, rest: argv.slice(i + 3), pre };
+  }
+  if (word(w2)) {
     const two = findCommand(`${w1} ${w2}`);
     if (two) return { cmd: two, rest: argv.slice(i + 2), pre };
   }
@@ -250,7 +257,7 @@ export async function run(argv: string[], io: Io = defaultIo()): Promise<number>
     const envFile = join(home, ".env");
     if (existsSync(envFile) && io.env === process.env) process.loadEnvFile(envFile);
     const dbPath = resolve(values.db ?? io.env.ETUDE_DB ?? join(home, "etude.db"));
-    if (!cmd.noDb) etude = await Etude.open(dbPath);
+    if (!cmd.noDb) etude = await Etude.open(dbPath, { home });
 
     let stdinUsed = false;
     const ctx: Ctx = {

@@ -116,9 +116,8 @@ function Body({ stats, deck }: { stats: Stats; deck?: string }) {
   return (
     <div className="flex flex-col gap-6">
       {/* Hero: memory now, what's due, and the trend tiles. */}
-      <section aria-label="Overview" className="relative overflow-hidden rounded-2xl border bg-card/40">
-        <div aria-hidden className="pointer-events-none absolute -top-24 -left-24 size-80 rounded-full opacity-[0.13] blur-3xl" style={{ background: s.recall == null ? "var(--muted-foreground)" : recallColor(s.recall, target) }} />
-        <div className="relative flex flex-col gap-6 p-5 sm:p-6 lg:flex-row lg:items-center">
+      <section aria-label="Overview" className="rounded-xl border bg-card/40">
+        <div className="flex flex-col gap-6 p-4 sm:p-5 lg:flex-row lg:items-center">
           <div className="flex items-center gap-5 sm:gap-6">
             <RecallRing value={s.recall} target={target} label="Recall now" sub={s.recall == null ? undefined : `target ${Math.round(target * 100)}%`} />
             <div className="min-w-0">
@@ -181,7 +180,7 @@ function Body({ stats, deck }: { stats: Stats; deck?: string }) {
                 bars={s.stability.map((b, i) => {
                   const lo = i ? s.stability[i - 1].upTo! : 0;
                   const name = b.upTo == null ? `${lo}d+` : i === 0 ? "<1d" : `${lo}–${b.upTo}d`;
-                  return { key: name, value: b.cards, label: name.replace(/d\+?$/, (m) => (m === "d+" ? "+" : "")), color: `color-mix(in oklab, var(--review) ${30 + i * 12}%, var(--new))`, tip: `${b.cards} card${b.cards === 1 ? "" : "s"} · stability ${name}` };
+                  return { key: name, value: b.cards, label: name.replace(/d\+?$/, (m) => (m === "d+" ? "+" : "")), color: "var(--review)", tip: `${b.cards} card${b.cards === 1 ? "" : "s"} · stability ${name}` };
                 })}
                 onPick={(i) => {
                   const lo = i ? s.stability[i - 1].upTo! : 0, hi = s.stability[i].upTo;
@@ -519,7 +518,7 @@ function TargetMeter({ value, target, lo }: { value: number; target: number; lo:
   const color = recallColor(value, target);
   return (
     <div className="relative h-2 w-full rounded-full bg-muted">
-      <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: at(value), background: `linear-gradient(90deg, color-mix(in oklab, ${color} 35%, transparent), ${color})` }} />
+      <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: at(value), background: color }} />
       <div className="absolute -inset-y-1 w-px bg-foreground/60" style={{ left: at(target) }} />
     </div>
   );

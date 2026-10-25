@@ -646,3 +646,105 @@ h1, h2, h3 { margin: 0; font-family: var(--font-serif); font-weight: 400; letter
 
 /* nav: solid enough that scrolled headings don't show through it */
 .nav::before { inset: 0 0 -1rem; background: linear-gradient(var(--background) 0%, var(--background) 70%, transparent 100%); }
+
+/* ============================================================ the phone edition
+   Below 640px the page is its own layout, not the desktop one squeezed: tighter rhythm between
+   movements, labels that stack instead of sharing a row, the app shown as the phone app it is,
+   and nothing that only makes sense with a mouse. */
+.phone-strip { display: none; }
+@media (max-width: 640px) {
+  .section { padding: 2.75rem 0; }
+  .head { margin-bottom: 2rem; padding-top: 1.1rem; gap: 0.9rem; }
+  .head h2 { font-size: 2rem; max-width: none; }
+  .sub { font-size: 1rem; margin-top: 0.9rem; }
+  .cta { padding: 3rem 0 4rem; }
+  .cta h2 { font-size: 2.3rem; }
+  .colophon { margin-top: 1.6rem; }
+  .hero { padding: 1rem 0 2.5rem; }
+  .hero-grid { gap: 2.25rem; }
+  .sheet { box-shadow: 0 1px 0 oklch(1 0 0 / 4%) inset; }
+
+  /* hero: the play/pause control is an icon, so the card names get the bar */
+  .stage .demo-toggle .dt-label { display: none; }
+  .stage .demo-toggle { padding: 0.35rem 0.5rem 0.35rem 0.65rem; }
+  .stage .demo-toggle svg { width: 0.95rem; height: 0.95rem; }
+  .stage-body { padding: 1rem 0.9rem 0.75rem; }
+  .stage-foot { padding: 0.7rem 0.8rem 0.8rem; }
+  .stage-actions .btn-primary { flex: 1; min-width: 0; height: 2.75rem; }
+  .rate { padding: 0.6rem 0.2rem; }
+
+  /* no. 1 */
+  .versus { gap: 2.25rem; }
+  .vs { gap: 1rem; }
+  .flip { height: 11.5rem; }
+  .flip-card { width: min(92%, 20rem); }
+  .vs figcaption { font-size: 0.9rem; }
+  .table-wrap { margin-top: 2.5rem; }
+  .booktabs { border-bottom-width: 1px; border-bottom-color: var(--rule); }
+  .booktabs tbody th { font-family: var(--font-serif); font-weight: 400; font-size: 1.1rem; padding-bottom: 0.2rem !important; }
+  .booktabs td { font-size: 0.92rem; }
+
+  /* no. 2: the grader tag sits on the title line, the description gets the full width */
+  .graders dd { margin-left: 0; }
+  .graders dt code { min-width: 0; }
+  .grading { gap: 2.25rem; }
+  .homework { padding: 1.3rem 1.1rem; font-size: 1rem; }
+  .homework .katex { font-size: 1.1em; }
+
+  /* no. 3 */
+  .code-head { flex-direction: column; gap: 0.1rem; }
+  .gen-code .code { max-height: 17rem; font-size: 0.7rem; }
+  .variant-list li { grid-template-columns: 1.9rem 1fr; padding: 0.85rem 0; }
+  .variant-list .s, .variants-head span:last-child { display: none; }
+  .variant-list .q { font-size: 1.05rem; }
+  .variant-list li:nth-child(n + 2), .variant-list li:nth-child(n + 4) { opacity: 1; }
+
+  /* no. 4 */
+  .exam-top { gap: 0.6rem; }
+  .exam-chart { margin-top: 1.25rem; }
+  .exam-legend { gap: 0.9rem; }
+  .lg.deck { border-top: 1px solid var(--border); padding-top: 0.9rem; }
+  .lg.deck > div { display: flex; flex-direction: column; gap: 0.15rem; }
+  .exam-note { font-size: 0.78rem; }
+
+  /* no. 5 */
+  .agent { gap: 2rem; }
+  .term-body { height: 19rem; }
+
+  /* no. 6: the app shown as the phone app, swiped sideways */
+  .desk-shots { display: none; }
+  .phone-strip {
+    display: flex; gap: 1.25rem; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
+    margin: 0 -1.25rem; padding: 0.25rem 1.25rem 1rem; scroll-padding-inline: 1.25rem; overscroll-behavior-x: contain;
+  }
+  .phone-strip::-webkit-scrollbar { display: none; }
+  .phone-strip::after { content: ""; flex: none; width: 0.01rem; }
+  .phone-slide { flex: none; width: 62%; margin: 0; scroll-snap-align: start; display: flex; flex-direction: column; gap: 0.9rem; }
+  .phone-slide .phone { width: 100%; filter: drop-shadow(0 18px 22px oklch(0 0 0 / 60%)); }
+  .phone-slide figcaption { font-size: 0.86rem; color: var(--muted-foreground); padding-right: 0.5rem; }
+  .phone-slide figcaption b { color: var(--foreground); font-weight: 500; }
+
+  /* no. 7 */
+  .types { gap: 1.5rem; }
+  .tree div:first-child { padding-left: 0.5rem; }
+  .code-tabs + .code { height: 18rem; }
+
+  /* the repertoire: the strip already names the group, so the card heading doesn't repeat it */
+  .rep-group-name { display: none; }
+  .rep-name { font-size: 1.45rem; }
+  .rep-body { min-height: 8rem; }
+  .rep { gap: 1.25rem; }
+
+  /* no. 8 */
+  .feats > div { padding: 1rem 0 1.15rem; }
+
+  /* footer: three short columns fit side by side */
+  .footer .wrap { grid-template-columns: repeat(3, auto); justify-content: space-between; column-gap: 1rem; }
+  .footer .fine { flex-direction: column; }
+}
+@media (max-width: 640px) {
+  .section { padding: 2rem 0; }
+  .stage-foot .verdict:empty, .rep-verdict:empty { display: none; }
+  .stage-foot { gap: 0.5rem; }
+  .term-body { height: 16rem; }
+}

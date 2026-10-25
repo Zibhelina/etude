@@ -346,6 +346,7 @@ These work on every command, before or after the command words.
   - [`db restore`](#db-restore) Replace the database with a backup. The current file is backed up first. Stop the server before restoring.
 - **top level**
   - [`serve`](#serve) Run the web app and HTTP API.
+  - [`update`](#update) Update this copy of Etude from its GitHub repo: fetch, fast-forward, install dependencies, rebuild the web app.
   - [`search`](#search) Find cards with the search language (one row per card). Same as `etude card list`.
   - [`commands`](#commands) The catalog of every command: args, flags with types and defaults, examples, whether it writes. JSON for agents.
   - [`version`](#version) Print the Etude version.
@@ -3668,6 +3669,31 @@ etude serve [flags]
 ```sh
 etude serve
 etude serve --host 0.0.0.0 --token $(openssl rand -hex 16)
+```
+
+### etude update
+
+<a id="update"></a>
+
+Update this copy of Etude from its GitHub repo: fetch, fast-forward, install dependencies, rebuild the web app.
+
+Only works in a git checkout with no local changes. A running server keeps the old code until it restarts; the Update button in the app restarts it for you. Package installs (npm, the Mac app) get the latest release's version and a link instead.
+
+```
+etude update [flags]
+```
+
+*writes · no database*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--check` | boolean | Only check for new commits; change nothing. |
+
+Output: --check: { kind: git|package, version, commit, behind, incoming: [{ sha, date, subject }], blocked? } · otherwise { result: updated|current, from, to, commits, steps }
+
+```sh
+etude update --check
+etude update
 ```
 
 ### etude search

@@ -10,6 +10,7 @@ import { readChatGptHostId } from "../core/chatgpt.ts";
 import { DEFAULT_PRESET, type Rating } from "../core/model.ts";
 import { MAX_MEDIA_BYTES, mediaType } from "../core/media.ts";
 import { cardFrame } from "./frame.ts";
+import { applyUpdate, updateStatus, UpdateError } from "../core/update.ts";
 import { buildSubmission, fetchCover, fetchEntry, fetchIndex, ghStatus, installEntry, installState, installedEntries, manualPublishUrl, marketSettings, publishFile, summarize, entryPath, entryJson, forgetInstall, type MarketKind } from "../core/market.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -67,6 +68,8 @@ export interface AppOptions {
   webDist?: string | null;
   /** The card editor kit (default: `kit/` inside the web build, else web/dist/kit in the repo). */
   kitDir?: string | null;
+  /** Restarts the server on the new code after a successful update. Without it, the update tells the user to restart. */
+  onRestart?: () => void;
 }
 
 export function createApp(etude: Etude, opts: AppOptions = {}) {
@@ -75,6 +78,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
 
   app.onError((err, c) => {
     if (err instanceof EtudeError) return c.json({ error: err.message }, err.status as 400);
+    if (err instanceof UpdateError) return c.json({ error: err.message, details: err.details }, err.status as 400);
     console.error(err);
     return c.json({ error: String(err?.message ?? err) }, 500);
   });
@@ -364,6 +368,19 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.put("/api/themes/:id", async (c) => c.json(etude.saveTheme({ ...(await body(c)), id: c.req.param("id") })));
   app.delete("/api/themes/:id", (c) => c.json(etude.deleteTheme(c.req.param("id"))));
   app.put("/api/theme", async (c) => c.json(etude.selectTheme(String((await body(c)).id ?? ""))));
+
+  // ------------------------------------------------------------- update
+  // `?check=1` asks the remote (at most every 10 min unless `force=1`); without it, the last known state.
+  app.get("/api/update", async (c) =>
+    c.json({ ...(await updateStatus({ fetch: c.req.query("check") === "1", force: c.req.query("force") === "1" })), canRestart: !!opts.onRestart }),
+  );
+  app.post("/api/update", async (c) => {
+    const out = await applyUpdate();
+    const restarting = out.result === "updated" && !!opts.onRestart;
+    // Answer first, then restart on the new code.
+    if (restarting) setTimeout(() => opts.onRestart!(), 250);
+    return c.json({ ...out, restarting });
+  });
 
   // ------------------------------------------------------------- market
   app.get("/api/market", async (c) => {

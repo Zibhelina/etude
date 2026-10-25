@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,11 +28,63 @@ command({
     const token = ctx.flags.token ?? process.env.ETUDE_TOKEN;
     if (host !== "127.0.0.1" && host !== "localhost" && !token) throw new CliError("refusing to listen beyond localhost without --token");
     const dist = ctx.flags.web ? resolve(ctx.flags.web) : join(ROOT, "web", "dist");
-    const app = createApp(ctx.e, { token, webDist: ctx.flags.dev ? null : existsSync(dist) ? dist : null });
-    serve({ fetch: app.fetch, port, hostname: host }, (info) => {
+    let server: ReturnType<typeof serve>;
+    const app = createApp(ctx.e, { token, webDist: ctx.flags.dev ? null : existsSync(dist) ? dist : null, onRestart: () => restart(server, ctx) });
+    server = serve({ fetch: app.fetch, port, hostname: host }, (info) => {
       ctx.note(`etude ${ctx.flags.dev ? "api (dev) " : ""}on http://${host}:${info.port}  db ${ctx.dbPath}`);
     });
     return KEEP_OPEN;
+  },
+});
+
+/**
+ * Comes back on the new code after `etude update`. Under systemd (or another supervisor that sets
+ * ETUDE_SUPERVISED), exit with EX_TEMPFAIL and let it restart us; otherwise free the port and run the
+ * same command again in the foreground, staying around only to pass on its exit code.
+ */
+function restart(server: { close(cb?: () => void): unknown; closeAllConnections?(): void }, ctx: { e: { close(): void }; note(m: string): void }) {
+  ctx.note("etude updated; restarting");
+  const supervised = !!(process.env.INVOCATION_ID || process.env.ETUDE_SUPERVISED);
+  let once = false;
+  const done = () => {
+    // server.close's callback and the 3 s fallback can both fire; restart only once.
+    if (once) return;
+    once = true;
+    try {
+      ctx.e.close();
+    } catch {}
+    if (supervised) process.exit(75);
+    const child = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], { stdio: "inherit", env: process.env });
+    for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(sig, () => child.kill(sig));
+    child.on("exit", (code, sig) => process.exit(code ?? (sig ? 1 : 0)));
+  };
+  server.closeAllConnections?.();
+  server.close(done);
+  // Don't wait forever on a connection that won't close.
+  setTimeout(done, 3000).unref();
+}
+
+command({
+  name: "update",
+  summary: "Update this copy of Etude from its GitHub repo: fetch, fast-forward, install dependencies, rebuild the web app.",
+  description:
+    "Only works in a git checkout with no local changes. A running server keeps the old code until it restarts; the Update button in the app restarts it for you. Package installs (npm, the Mac app) get the latest release's version and a link instead.",
+  flags: [{ name: "check", type: "boolean", description: "Only check for new commits; change nothing." }],
+  noDb: true,
+  writes: true,
+  examples: ["etude update --check", "etude update"],
+  output: "--check: { kind: git|package, version, commit, behind, incoming: [{ sha, date, subject }], blocked? } · otherwise { result: updated|current, from, to, commits, steps }",
+  async run(ctx) {
+    const { applyUpdate, updateStatus, UpdateError } = await import("../../core/update.ts");
+    try {
+      if (ctx.flags.check) return await updateStatus({ fetch: true, force: true });
+      const out = await applyUpdate();
+      if (out.result === "updated") ctx.note("updated; restart `etude serve` to run the new code");
+      return out;
+    } catch (e) {
+      if (e instanceof UpdateError) throw new CliError(e.message, e.status === 409 ? "conflict" : e.status === 502 ? "external" : "internal", e.details);
+      throw e;
+    }
   },
 });
 

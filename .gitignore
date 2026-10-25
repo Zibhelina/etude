@@ -11,3 +11,5 @@ web/dist/
 site/dist/
 packaging/macos/.cache/
 /dist/
+web/.dist-next/
+web/.dist-prev/

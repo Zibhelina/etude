@@ -9,7 +9,7 @@ import { chatProviderKeyEnv } from "../core/ai.ts";
 import { readChatGptHostId } from "../core/chatgpt.ts";
 import { DEFAULT_PRESET, type Rating } from "../core/model.ts";
 import { cardFrame } from "./frame.ts";
-import { buildSubmission, fetchEntry, fetchIndex, ghStatus, installEntry, installState, installedEntries, manualPublishUrl, marketSettings, publishFile, summarize, entryPath, entryJson, forgetInstall, type MarketKind } from "../core/market.ts";
+import { buildSubmission, fetchCover, fetchEntry, fetchIndex, ghStatus, installEntry, installState, installedEntries, manualPublishUrl, marketSettings, publishFile, summarize, entryPath, entryJson, forgetInstall, type MarketKind } from "../core/market.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const require = createRequire(import.meta.url);
@@ -338,6 +338,13 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const kind = c.req.param("kind") as MarketKind;
     const file = await fetchEntry(marketSettings(etude).url, { kind, id: c.req.param("id"), path: entryPath(kind, c.req.param("id")) });
     return c.json(file);
+  });
+  app.get("/api/market/cover/:kind/:id", async (c) => {
+    const url = marketSettings(etude).url;
+    const hit = (await fetchIndex(url)).entries.find((x) => x.kind === c.req.param("kind") && x.id === c.req.param("id"));
+    if (!hit?.cover) return c.json({ error: "no cover" }, 404);
+    const { body, type } = await fetchCover(url, hit.cover);
+    return c.body(new Uint8Array(body), 200, { "Content-Type": type, "Cache-Control": "max-age=600" });
   });
   app.post("/api/market/install", async (c) => {
     const b = await body(c);

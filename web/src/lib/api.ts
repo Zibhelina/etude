@@ -346,6 +346,8 @@ export const api = {
   marketEntry: (kind: MarketKind, id: string) => call<MarketFile>("GET", `/api/market/entry/${kind}/${encodeURIComponent(id)}`),
   marketInstall: (id: string, kind: MarketKind, opts: { use?: boolean; dryRun?: boolean } = {}) =>
     call<{ entry: MarketMeta; result: "created" | "updated" | "unchanged"; ids: string[]; report: any }>("POST", "/api/market/install", { id, kind, ...opts }),
+  /** An <img> can't send the bearer token, so it rides in the query. */
+  marketCoverUrl: (kind: MarketKind, id: string) => `/api/market/cover/${kind}/${encodeURIComponent(id)}${TOKEN ? `?token=${encodeURIComponent(TOKEN)}` : ""}`,
   marketForget: (id: string) => call<{ forgot: boolean }>("POST", "/api/market/forget", { id }),
   publishStatus: () => call<{ ok: boolean; login?: string; reason?: string; repo: string }>("GET", "/api/market/publish/status"),
   publish: (input: PublishInput & { dryRun?: boolean; full?: boolean }) => call<PublishResult>("POST", "/api/market/publish", input),
@@ -372,6 +374,7 @@ export type MarketSummary =
 export interface MarketEntry extends MarketMeta {
   path: string;
   bytes: number;
+  cover?: string;
   summary: MarketSummary;
   installed: "installed" | "update" | null;
   /** What the install put in this collection (theme id, decks, type ids). */

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { api, relative, type DeckNode } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
+import { EmptyState, Page, PageHeader, Section } from "@/components/page";
 
 export function DecksPage() {
   const [decks, setDecks] = useState<DeckNode[] | null>(null);
@@ -43,54 +44,68 @@ export function DecksPage() {
   const due = (decks ?? []).filter((d) => d.depth === 0).reduce((a, d) => a + d.new + d.learning + d.review, 0);
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-8 sm:py-10">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4 sm:mb-8">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Decks</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{decks ? (due ? `${due} cards to study today` : "Nothing due right now") : " "}</p>
-        </div>
-        <div className="flex gap-2">
-          <ImportButton onDone={reload} />
-          <Button variant="outline" size="sm" className="h-10 gap-1.5 sm:h-8" onClick={() => setCreating(true)}><Plus className="size-4" /><span className="hidden sm:inline">New deck</span><span className="sm:hidden">New</span></Button>
-        </div>
-      </div>
+    <Page>
+      <PageHeader
+        title="Decks"
+        description={decks ? (due ? `${due} cards to study today` : "Nothing due right now") : "\u00a0"}
+        actions={
+          <>
+            <ImportButton onDone={reload} />
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" />New deck</Button>
+          </>
+        }
+      />
 
       {decks && decks.length === 0 && (
-        <div className="rounded-xl border border-dashed p-10 text-center text-muted-foreground">
-          No decks yet. Import a pack or create a deck.
-        </div>
+        <EmptyState title="No decks yet" action={<Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" />New deck</Button>}>
+          Import a pack or create a deck to start.
+        </EmptyState>
       )}
 
       {visible.length > 0 && (
-        <div className="overflow-hidden rounded-xl border bg-card/40">
-          <div className="hidden grid-cols-[1fr_repeat(3,3.5rem)_6.5rem] items-center gap-2 border-b px-4 py-2.5 text-xs font-medium text-muted-foreground sm:grid">
+        <Section>
+          <div className="hidden grid-cols-[1fr_repeat(3,3.5rem)_6rem] items-center gap-2 border-b px-5 py-2.5 text-xs font-medium text-muted-foreground sm:grid">
             <span>Deck</span>
             <span className="text-right">New</span>
             <span className="text-right">Learn</span>
             <span className="text-right">Due</span>
             <span />
           </div>
-          {visible.map((d) => {
+          {visible.map((d, i) => {
             const name = d.name.split("::").pop()!;
             const work = d.new + d.learning + d.review;
             const soon = d.depth === 0 && d.deadline && new Date(d.deadline) > new Date();
             const study = () => navigate(`/study?deck=${encodeURIComponent(d.name)}`);
+            // A new top-level deck after a subtree gets a stronger rule, so groups read as groups.
+            const groupStart = i > 0 && d.depth === 0;
             return (
-              <div key={d.id} className="group flex items-center gap-2 border-b px-3 py-2 last:border-b-0 hover:bg-accent/40 sm:grid sm:grid-cols-[1fr_repeat(3,3.5rem)_6.5rem] sm:px-4 sm:py-2.5">
-                <div className="flex min-w-0 flex-1 items-start gap-0.5 pr-2 [--indent:10px] sm:gap-1 sm:pr-0 sm:[--indent:14px]" style={{ paddingLeft: `calc(var(--indent) * ${d.depth})` }}>
-                  <button
-                    className={cn("flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground sm:size-5", !d.hasChildren && "invisible")}
-                    onClick={() => toggle(d.name)}
-                    aria-label={collapsed.has(d.name) ? "Expand" : "Collapse"}
-                  >
-                    <ChevronRight className={cn("size-4 transition-transform", !collapsed.has(d.name) && "rotate-90")} />
-                  </button>
-                  <div className="min-w-0 flex-1 py-1 sm:py-0">
-                    <button className="text-left text-[0.95rem] leading-snug hover:underline sm:truncate" onClick={() => navigate(`/deck?name=${encodeURIComponent(d.name)}`)}>
+              <div
+                key={d.id}
+                className={cn(
+                  "group flex min-h-14 items-stretch gap-2 pr-3 pl-1.5 transition-colors hover:bg-accent/40 sm:grid sm:min-h-12 sm:grid-cols-[1fr_repeat(3,3.5rem)_6rem] sm:pr-5 sm:pl-3",
+                  i > 0 && "border-t",
+                  groupStart && "border-t-foreground/15",
+                )}
+              >
+                <div className="flex min-w-0 flex-1 items-stretch">
+                  <TreeGuides depth={d.depth} />
+                  <div className="flex shrink-0 items-center">
+                    <button
+                      className={cn("flex size-10 items-center justify-center rounded-md text-muted-foreground hover:text-foreground sm:size-8", !d.hasChildren && "invisible")}
+                      onClick={() => toggle(d.name)}
+                      aria-label={collapsed.has(d.name) ? `Expand ${name}` : `Collapse ${name}`}
+                      aria-expanded={!collapsed.has(d.name)}
+                    >
+                      <ChevronRight className={cn("size-4 transition-transform", !collapsed.has(d.name) && "rotate-90")} />
+                    </button>
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col justify-center py-2">
+                    <button
+                      className={cn("text-left text-[0.95rem] leading-snug hover:underline sm:truncate", d.depth === 0 ? "font-medium" : "text-foreground/90")}
+                      onClick={() => navigate(`/deck?name=${encodeURIComponent(d.name)}`)}
+                    >
                       {name}
-                      {soon && (
-                        <span className="ml-2 inline-flex items-center gap-1 align-middle text-xs text-highlight"><CalendarClock className="size-3.5" />{relative(d.deadline!)}</span>
-                      )}
+                      {soon && <span className="ml-2 inline-flex items-center gap-1 align-middle text-xs font-normal text-highlight"><CalendarClock className="size-3.5" />{relative(d.deadline!)}</span>}
                     </button>
                     {/* Phone: counts on one line under the name instead of three narrow columns. */}
                     <div className="mt-0.5 flex gap-3 text-xs tabular text-muted-foreground sm:hidden">
@@ -106,21 +121,44 @@ export function DecksPage() {
                     </div>
                   </div>
                 </div>
-                <span className={cn("hidden tabular text-right text-sm sm:block", d.new ? "text-new" : "text-muted-foreground/40")}>{d.new}</span>
-                <span className={cn("hidden tabular text-right text-sm sm:block", d.learning ? "text-learn" : "text-muted-foreground/40")}>{d.learning}</span>
-                <span className={cn("hidden tabular text-right text-sm sm:block", d.review ? "text-review" : "text-muted-foreground/40")}>{d.review}</span>
-                <div className="flex shrink-0 justify-end">
-                  <Button size="sm" variant={work ? "default" : "ghost"} className="size-11 gap-1 px-0 sm:h-7 sm:w-auto sm:px-3" disabled={!work} onClick={study} aria-label={`Study ${name}`}>
-                    <Play className="size-4 sm:size-3.5" /> <span className="hidden sm:inline">Study</span>
+                <Count value={d.new} cls="text-new" />
+                <Count value={d.learning} cls="text-learn" />
+                <Count value={d.review} cls="text-review" />
+                <div className="flex shrink-0 items-center justify-end">
+                  <Button
+                    size="sm"
+                    variant={work ? "secondary" : "ghost"}
+                    className="size-10 gap-1.5 self-center rounded-full px-0 sm:h-8 sm:w-auto sm:rounded-md sm:px-3"
+                    disabled={!work}
+                    onClick={study}
+                    aria-label={`Study ${name}`}
+                  >
+                    <Play className={cn("size-4 sm:size-3.5", work && "fill-current text-highlight sm:fill-none sm:text-current")} /> <span className="hidden sm:inline">Study</span>
                   </Button>
                 </div>
               </div>
             );
           })}
-        </div>
+        </Section>
       )}
       <NewDeckDialog open={creating} onOpenChange={setCreating} onDone={reload} />
-    </div>
+    </Page>
+  );
+}
+
+/** Desktop count column; muted when zero. */
+function Count({ value, cls }: { value: number; cls: string }) {
+  return <span className={cn("hidden items-center justify-end tabular text-sm sm:flex", value ? cls : "text-muted-foreground/40")}>{value}</span>;
+}
+
+/** One vertical guide per nesting level, so subdecks visibly hang from their parent. */
+export function TreeGuides({ depth }: { depth: number }) {
+  return (
+    <>
+      {Array.from({ length: depth }, (_, i) => (
+        <span key={i} aria-hidden className="relative w-4 shrink-0 before:absolute before:inset-y-0 before:left-[19px] before:border-l before:border-foreground/12 sm:w-5 sm:before:left-[15px]" />
+      ))}
+    </>
   );
 }
 
@@ -144,9 +182,9 @@ function NewDeckDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCh
           <DialogTitle>New deck</DialogTitle>
           <DialogDescription>Use :: for subdecks, like Course::Week 1.</DialogDescription>
         </DialogHeader>
-        <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} placeholder="Deck name" />
+        <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} placeholder="Deck name" aria-label="Deck name" />
         <DialogFooter>
-          <Button onClick={create}>Create</Button>
+          <Button onClick={create} disabled={!name.trim()}>Create</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -173,6 +211,6 @@ export function ImportButton({ onDone }: { onDone(): void }) {
     input.click();
   };
   return (
-    <Button variant="outline" size="sm" className="h-10 gap-1.5 sm:h-8" onClick={pick}><Upload className="size-4" />Import</Button>
+    <Button variant="outline" size="sm" className="gap-1.5" onClick={pick}><Upload className="size-4" />Import</Button>
   );
 }

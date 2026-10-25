@@ -15,6 +15,8 @@ import { DeckOptions, formatDeadline, type DeckFull } from "@/components/deck-op
 import { api, type DeckNode, type Preset, type SearchRow, type TypeSummary } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
+import { Block, Breadcrumb, EmptyState, LinkRow, Page, Section } from "@/components/page";
+import { TreeGuides } from "@/pages/decks";
 
 const enc = encodeURIComponent;
 
@@ -67,32 +69,29 @@ export function DeckPage({ name }: { name: string }) {
 
   if (error)
     return (
-      <div className="mx-auto w-full max-w-4xl px-5 py-10 sm:px-8">
-        <div className="rounded-xl border border-dashed p-10 text-center">
-          <p className="text-muted-foreground">{error}</p>
-          <Button variant="outline" className="mt-4 h-10" onClick={() => navigate("/")}>Back to decks</Button>
-        </div>
-      </div>
+      <Page>
+        <EmptyState title="Couldn't open this deck" action={<Button variant="outline" size="sm" onClick={() => navigate("/")}>Back to decks</Button>}>{error}</EmptyState>
+      </Page>
     );
   if (!deck)
     return (
-      <div className="mx-auto w-full max-w-4xl px-5 py-10 sm:px-8">
+      <Page>
         <div className="h-4 w-40 animate-pulse rounded bg-muted" />
         <div className="mt-4 h-8 w-72 animate-pulse rounded bg-muted" />
         <div className="mt-8 h-24 animate-pulse rounded-xl bg-muted/60" />
-      </div>
+      </Page>
     );
 
   const parts = deck.name.split("::");
   const work = node ? node.new + node.learning + node.review : 0;
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-5 py-8 sm:px-8 sm:py-10">
-      <Breadcrumb parts={parts} />
-      <Header deck={deck} node={node} work={work} tags={tags} onRenamed={(to) => navigate(`/deck?name=${enc(to)}`, { replace: true })} onAddCards={() => switchTab("cards")} />
+    <Page>
+      <Breadcrumb items={[{ label: "Decks", onClick: () => navigate("/") }, ...parts.slice(0, -1).map((p, i) => ({ label: p, onClick: () => navigate(`/deck?name=${enc(parts.slice(0, i + 1).join("::"))}`) }))]} />
+      <Header deck={deck} node={node} work={work} tags={tags} onRenamed={(to) => navigate(`/deck?name=${enc(to)}`, { replace: true })} onAddCards={tab === "cards" ? undefined : () => switchTab("cards")} />
 
       <Tabs value={tab} onValueChange={switchTab} className="mt-8">
-        <TabsList className="h-11 w-full sm:w-auto">
+        <TabsList className="w-full sm:w-auto">
           <TabsTrigger value="overview" className="px-4">Overview</TabsTrigger>
           <TabsTrigger value="cards" className="px-4">Cards</TabsTrigger>
           <TabsTrigger value="options" className="px-4">Options</TabsTrigger>
@@ -148,7 +147,7 @@ export function DeckPage({ name }: { name: string }) {
           <DangerZone deck={deck} hasChildren={children.length > 0} cards={node?.cards ?? 0} />
         </TabsContent>
       </Tabs>
-    </div>
+    </Page>
   );
 }
 
@@ -233,35 +232,35 @@ function DeckCards({ deck, hasChildren, active, onChanged }: { deck: string; has
       <div className="flex flex-col gap-2.5">
         <div className="flex gap-2">
           <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               ref={searchRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search this deck"
               aria-label="Search this deck"
-              className="h-10 pl-9 font-mono text-[13px]"
+              className={cn("h-10 pl-9", query && "pr-10 font-mono text-[13px]")}
             />
             {query && (
-              <button className="absolute right-1 top-1 flex size-8 items-center justify-center rounded text-muted-foreground hover:text-foreground" onClick={() => setQuery("")} aria-label="Clear search">
+              <button className="absolute top-1 right-1 flex size-8 items-center justify-center rounded text-muted-foreground hover:text-foreground" onClick={() => setQuery("")} aria-label="Clear search">
                 <X className="size-4" />
               </button>
             )}
           </div>
-          <Button variant="outline" className="h-10 gap-1.5 px-3" onClick={() => setCreating(true)}><Plus className="size-4" /><span className="hidden min-[420px]:inline">Add</span></Button>
+          <Button variant="outline" className="h-10 gap-1.5 px-3" onClick={() => setCreating(true)} aria-label="Add a card"><Plus className="size-4" /><span className="hidden min-[420px]:inline">Add</span></Button>
         </div>
-        <SearchHints onPick={(h) => setQuery((q) => (q ? `${q} ${h}` : h))} />
+        {!emptyDeck && <SearchHints onPick={(h) => setQuery((q) => (q ? `${q} ${h}` : h))} />}
       </div>
 
       {!emptyDeck && (
-        <div className="overflow-hidden rounded-xl border bg-card/40">
-          <div className="flex min-h-11 items-center gap-2.5 border-b px-3 text-xs text-muted-foreground">
+        <Section>
+          <div className="flex min-h-11 items-center gap-2.5 border-b px-3 text-xs text-muted-foreground sm:px-4">
             <CheckBox checked={allChecked} label="Select all" onClick={() => setChecked(allChecked ? new Set() : new Set(items.map((r) => r.itemId)))} />
             <span className="tabular min-w-0 truncate">
               {error ? <span className="text-destructive">{error}</span> : total == null ? "Loading…" : `${total} card${total === 1 ? "" : "s"}${total > rows.length ? `, showing ${rows.length}` : ""}`}
             </span>
             <div className="flex-1" />
-            <OrderSelect value={order} onChange={setOrder} className="h-9" />
+            <OrderSelect value={order} onChange={setOrder} />
           </div>
           <BulkBar
             checked={checked}
@@ -279,7 +278,7 @@ function DeckCards({ deck, hasChildren, active, onChanged }: { deck: string; has
               active={selected === r.itemId}
               checked={checked.has(r.itemId)}
               hideDeck={!hasChildren}
-              className="min-h-14 py-3 last:border-b-0"
+              className="min-h-14 py-3 last:border-b-0 sm:px-4"
               onOpen={() => open(r.itemId)}
               onToggle={() =>
                 setChecked((prev) => {
@@ -291,25 +290,20 @@ function DeckCards({ deck, hasChildren, active, onChanged }: { deck: string; has
             />
           ))}
           {total != null && !items.length && !error && (
-            <div className="flex flex-col items-center gap-3 px-4 py-10 text-center text-sm text-muted-foreground">
-              No cards in this deck match that search.
-              <Button variant="outline" className="h-10" onClick={() => setQuery("")}>Clear search</Button>
-            </div>
+            <EmptyState inset title="No matches" action={<Button variant="outline" size="sm" onClick={() => setQuery("")}>Clear search</Button>}>No cards in this deck match that search.</EmptyState>
           )}
           {total != null && total > rows.length && (
             <button className="flex h-12 w-full items-center justify-center border-t text-sm text-muted-foreground hover:bg-accent/40 hover:text-foreground" onClick={() => setLimit((l) => Math.min(l + CARDS_PAGE, 1000))}>
               Show {Math.min(CARDS_PAGE, total - rows.length)} more
             </button>
           )}
-        </div>
+        </Section>
       )}
 
       {emptyDeck && (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-12 text-center">
-          <div className="text-sm font-medium">No cards in this deck yet</div>
-          <p className="max-w-sm text-[13px] text-muted-foreground">Add one here, or import a pack from the Decks page.</p>
-          <Button className="mt-1 h-10 gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" />Add a card</Button>
-        </div>
+        <EmptyState title="No cards in this deck yet" action={<Button size="sm" className="gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" />Add a card</Button>}>
+          Add one here, or import a pack from the Decks page.
+        </EmptyState>
       )}
 
       <Sheet open={!!selected} onOpenChange={(o) => !o && open(null)}>
@@ -345,21 +339,7 @@ function DeckCards({ deck, hasChildren, active, onChanged }: { deck: string; has
   );
 }
 
-function Breadcrumb({ parts }: { parts: string[] }) {
-  return (
-    <nav aria-label="Breadcrumb" className="-ml-1 mb-2 flex min-w-0 flex-wrap items-center gap-1 text-sm text-muted-foreground">
-      <button className="rounded px-1 py-1 hover:text-foreground" onClick={() => navigate("/")}>Decks</button>
-      {parts.slice(0, -1).map((p, i) => (
-        <span key={i} className="flex min-w-0 items-center gap-1">
-          <ChevronRight className="size-3.5 shrink-0" />
-          <button className="truncate rounded px-1 py-1 hover:text-foreground" onClick={() => navigate(`/deck?name=${enc(parts.slice(0, i + 1).join("::"))}`)}>{p}</button>
-        </span>
-      ))}
-    </nav>
-  );
-}
-
-function Header({ deck, node, work, tags, onRenamed, onAddCards }: { deck: DeckFull; node?: DeckNode; work: number; tags: string[]; onRenamed(to: string): void; onAddCards(): void }) {
+function Header({ deck, node, work, tags, onRenamed, onAddCards }: { deck: DeckFull; node?: DeckNode; work: number; tags: string[]; onRenamed(to: string): void; onAddCards?(): void }) {
   const [editing, setEditing] = useState(false);
   const leaf = deck.name.split("::").at(-1)!;
   const parent = deck.name.split("::").slice(0, -1).join("::");
@@ -399,47 +379,43 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards }: { deck: DeckF
               }
             }}
             aria-label="Deck name"
-            className="h-11 text-xl font-semibold md:text-xl"
+            className="h-10 text-2xl font-semibold tracking-tight md:text-2xl"
           />
-          <Button size="icon" className="size-11" onClick={rename} aria-label="Save name"><Check /></Button>
-          <Button size="icon" variant="ghost" className="size-11" onClick={() => { setText(leaf); setEditing(false); }} aria-label="Cancel"><X /></Button>
+          <Button size="icon" className="size-10 shrink-0" onClick={rename} aria-label="Save name"><Check /></Button>
+          <Button size="icon" variant="outline" className="size-10 shrink-0" onClick={() => { setText(leaf); setEditing(false); }} aria-label="Cancel"><X /></Button>
         </div>
       ) : (
         <div className="group flex items-start gap-1">
-          <h1 className="min-w-0 text-2xl font-semibold tracking-tight break-words sm:text-[1.75rem]">{leaf}</h1>
-          <Button variant="ghost" size="icon" className="size-10 shrink-0 text-muted-foreground hover:text-foreground" onClick={() => setEditing(true)} aria-label="Rename deck">
+          <h1 className="min-w-0 py-0.5 text-2xl font-semibold tracking-tight break-words">{leaf}</h1>
+          <Button variant="ghost" size="icon" className="-my-0.5 size-10 shrink-0 text-muted-foreground hover:text-foreground" onClick={() => setEditing(true)} aria-label="Rename deck">
             <Pencil className="size-4" />
           </Button>
         </div>
       )}
 
       <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+        <div className="grid grid-cols-4 items-end gap-x-4 sm:flex sm:gap-x-8">
           <Count label="New" value={node?.new ?? 0} cls="text-new" />
           <Count label="Learning" value={node?.learning ?? 0} cls="text-learn" />
           <Count label="Due" value={node?.review ?? 0} cls="text-review" />
-          <div className="text-sm text-muted-foreground min-[420px]:border-l min-[420px]:pl-8">
-            <div className="tabular text-3xl leading-none font-semibold text-foreground">{node?.cards ?? 0}</div>
-            <div className="mt-1.5 text-xs">cards{node?.doneToday ? ` · ${node.doneToday} done today` : ""}</div>
+          <div className="border-l pl-4 sm:pl-8">
+            <div className="tabular text-3xl leading-none font-semibold">{node?.cards ?? 0}</div>
+            <div className="mt-1.5 text-xs text-muted-foreground">Cards{node?.doneToday ? <span className="hidden sm:inline"> · {node.doneToday} done today</span> : ""}</div>
           </div>
         </div>
         <div className="flex gap-2">
           <CustomStudy deck={deck.name} tags={tags} disabled={!node?.cards} />
-          <Button size="lg" className="h-11 flex-1 gap-2 px-6 sm:flex-none" disabled={!work} title={work ? undefined : "Nothing due right now"} onClick={() => navigate(`/study?deck=${enc(deck.name)}`)}>
+          <Button size="lg" className="flex-1 gap-2 px-6 sm:flex-none" disabled={!work} title={work ? undefined : "Nothing due right now"} onClick={() => navigate(`/study?deck=${enc(deck.name)}`)}>
             <Play className="size-4" />Study
           </Button>
         </div>
       </div>
 
       {deadline && <Countdown deadline={deadline} margin={deck.resolved.deadlineMargin} />}
-      {node && node.cards === 0 && (
-        <div className="mt-6 flex flex-col gap-3 rounded-xl border bg-card/60 px-4 py-4 sm:flex-row sm:items-center">
-          <div className="min-w-0 flex-1 text-sm">
-            <div className="font-medium">No cards yet</div>
-            <div className="text-muted-foreground">Add cards in the Cards tab, or import a pack from the Decks page.</div>
-          </div>
-          <Button className="h-10" onClick={onAddCards}>Add cards</Button>
-        </div>
+      {node && node.cards === 0 && onAddCards && (
+        <Section className="mt-6">
+          <Block title="No cards yet" description="Add cards in the Cards tab, or import a pack from the Decks page." aside={<Button size="sm" onClick={onAddCards}>Add cards</Button>} stackAside />
+        </Section>
       )}
       {!work && node && node.cards > 0 && (
         <p className="mt-4 text-sm text-muted-foreground">{node.nextDue ? `Nothing due now. Next card ${relativeShort(node.nextDue)}.` : "Nothing due now."} Custom study works any time.</p>
@@ -531,9 +507,9 @@ function CustomStudy({ deck, tags, disabled }: { deck: string; tags: string[]; d
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="lg" className="h-11 gap-1.5 px-4" disabled={disabled}>Custom study<ChevronDown className="size-4" /></Button>
+          <Button variant="outline" size="lg" className="flex-1 gap-1.5 px-4 sm:flex-none" disabled={disabled}>Custom study<ChevronDown className="size-4" /></Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuContent align="start" className="w-64 sm:w-64" collisionPadding={16}>
           <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Study a slice of this deck</DropdownMenuLabel>
           <DropdownMenuItem className="h-10" onClick={() => go("is:due")}>Due reviews only</DropdownMenuItem>
           <DropdownMenuItem className="h-10" onClick={() => go("is:new")}>New cards only</DropdownMenuItem>
@@ -583,37 +559,27 @@ function CustomStudy({ deck, tags, disabled }: { deck: string; tags: string[]; d
 function Subdecks({ parent, decks }: { parent: string; decks: DeckNode[] }) {
   const depth0 = parent.split("::").length;
   return (
-    <section>
-      <h2 className="mb-2 px-1 text-sm font-medium">Subdecks</h2>
-      <div className="overflow-hidden rounded-xl border bg-card/40">
-        <div className="hidden grid-cols-[1fr_repeat(3,3.5rem)] items-center gap-2 border-b px-4 py-2.5 text-xs font-medium text-muted-foreground sm:grid">
-          <span>Deck</span>
-          <span className="text-right">New</span>
-          <span className="text-right">Learn</span>
-          <span className="text-right">Due</span>
-        </div>
-        {decks.map((d) => {
-          const depth = d.name.split("::").length - depth0 - 1;
-          return (
-            <button
-              key={d.id}
-              onClick={() => navigate(`/deck?name=${enc(d.name)}`)}
-              className="grid min-h-12 w-full grid-cols-[1fr_auto] items-center gap-2 border-b px-4 py-2.5 text-left last:border-b-0 hover:bg-accent/40 sm:grid-cols-[1fr_repeat(3,3.5rem)]"
-            >
-              <span className="min-w-0 text-[0.95rem] leading-snug sm:truncate" style={{ paddingLeft: depth * 18 }}>{d.name.split("::").pop()}</span>
-              <span className="tabular grid grid-cols-[repeat(3,2rem)] text-right text-sm sm:hidden" aria-label={`${d.new} new, ${d.learning} learning, ${d.review} due`}>
-                <span className={d.new ? "text-new" : "text-muted-foreground/50"}>{d.new}</span>
-                <span className={d.learning ? "text-learn" : "text-muted-foreground/50"}>{d.learning}</span>
-                <span className={d.review ? "text-review" : "text-muted-foreground/50"}>{d.review}</span>
-              </span>
-              <span className={cn("tabular hidden text-right text-sm sm:block", d.new ? "text-new" : "text-muted-foreground/40")}>{d.new}</span>
-              <span className={cn("tabular hidden text-right text-sm sm:block", d.learning ? "text-learn" : "text-muted-foreground/40")}>{d.learning}</span>
-              <span className={cn("tabular hidden text-right text-sm sm:block", d.review ? "text-review" : "text-muted-foreground/40")}>{d.review}</span>
-            </button>
-          );
-        })}
-      </div>
-    </section>
+    <Section title="Subdecks" aside={<span className="hidden tabular sm:inline">New · Learn · Due</span>}>
+      {decks.map((d) => {
+        const depth = d.name.split("::").length - depth0 - 1;
+        return (
+          <button
+            key={d.id}
+            onClick={() => navigate(`/deck?name=${enc(d.name)}`)}
+            className="flex min-h-12 w-full items-stretch gap-2 border-b pr-3 pl-4 text-left transition-colors last:border-b-0 hover:bg-accent/40 sm:pr-4 sm:pl-5"
+          >
+            <TreeGuides depth={depth} />
+            <span className="flex min-w-0 flex-1 items-center py-2.5 text-[0.95rem] leading-snug">{d.name.split("::").pop()}</span>
+            <span className="tabular grid grid-cols-[repeat(3,2rem)] items-center text-right text-sm sm:grid-cols-[repeat(3,3.5rem)]" aria-label={`${d.new} new, ${d.learning} learning, ${d.review} due`}>
+              <span className={d.new ? "text-new" : "text-muted-foreground/40"}>{d.new}</span>
+              <span className={d.learning ? "text-learn" : "text-muted-foreground/40"}>{d.learning}</span>
+              <span className={d.review ? "text-review" : "text-muted-foreground/40"}>{d.review}</span>
+            </span>
+            <ChevronRight className="my-auto size-4 shrink-0 text-muted-foreground" />
+          </button>
+        );
+      })}
+    </Section>
   );
 }
 
@@ -638,18 +604,18 @@ function TextSection({ title, help, empty, value, markdown, mono, onSave }: { ti
     }
   };
   return (
-    <section>
-      <div className="mb-2 flex items-start justify-between gap-3">
-        <div className="min-w-0 pt-2.5">
-          <h2 className="text-sm font-medium">{title}</h2>
-          {help && <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">{help}</p>}
-        </div>
-        {!editing && (
-          <Button variant="ghost" size="sm" className="h-10 shrink-0 gap-1.5 px-3 text-muted-foreground" onClick={() => { setEditing(true); setTab("write"); }}>
+    <Section
+      bare
+      title={title}
+      description={help}
+      aside={
+        !editing && (
+          <Button variant="ghost" size="sm" className="-my-1.5 -mr-2 gap-1.5 text-muted-foreground" onClick={() => { setEditing(true); setTab("write"); }}>
             <Pencil className="size-3.5" />Edit
           </Button>
-        )}
-      </div>
+        )
+      }
+    >
       {editing ? (
         <div className="rounded-xl border bg-card/40 p-3">
           {markdown ? (
@@ -676,11 +642,11 @@ function TextSection({ title, help, empty, value, markdown, mono, onSave }: { ti
       ) : value.trim() ? (
         <div className={cn("rounded-xl border bg-card/40 px-4 py-3 text-sm", mono && "font-mono text-[13px] whitespace-pre-wrap")}>{markdown ? <Markdown>{value}</Markdown> : value}</div>
       ) : (
-        <button className="w-full rounded-xl border border-dashed border-input px-4 py-4 text-left text-sm text-muted-foreground hover:bg-accent/30 hover:text-foreground" onClick={() => setEditing(true)}>
+        <button className="w-full rounded-xl border border-dashed px-4 py-4 text-left text-sm text-muted-foreground transition-colors hover:bg-accent/30 hover:text-foreground" onClick={() => setEditing(true)}>
           {empty}
         </button>
       )}
-    </section>
+    </Section>
   );
 }
 
@@ -702,51 +668,43 @@ function DangerZone({ deck, hasChildren, cards }: { deck: DeckFull; hasChildren:
     }
   };
   return (
-    <div className="flex flex-col gap-6">
-      <section>
-        <h2 className="mb-2 px-1 text-sm font-medium">Elsewhere</h2>
-        <div className="divide-y overflow-hidden rounded-xl border bg-card/40">
-          <LinkRow icon={Library} title="Browse cards" desc="List, search and edit every card in this deck." onClick={() => navigate(`/browse?q=${enc(`deck:"${deck.name}"`)}`)} />
-          <LinkRow icon={BarChart3} title="Statistics" desc="Retention, forecast and weakest tags for this deck." onClick={() => navigate(`/stats?deck=${enc(deck.name)}`)} />
-        </div>
-      </section>
-      <section>
-        <h2 className="mb-2 px-1 text-sm font-medium">Export</h2>
-        <div className="flex flex-col gap-3 rounded-xl border bg-card/40 px-4 py-4 sm:flex-row sm:items-center sm:px-5">
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium">Export as a pack</div>
-            <p className="mt-0.5 text-[13px] text-muted-foreground">A JSON pack with the items, subdecks, presets, tag notes and custom card types. Review history stays here.</p>
-          </div>
-          <Button variant="outline" className="h-10 gap-1.5" asChild>
-            <a href={api.exportUrl({ deck: deck.name })} download={`${deck.name.replace(/::/g, " - ").replace(/[/\\?%*:|"<>]/g, "")}.pack.json`}>
-              <Download className="size-4" />Download
-            </a>
-          </Button>
-        </div>
-      </section>
-      <section>
-        <h2 className="mb-2 px-1 text-sm font-medium text-destructive">Danger zone</h2>
-        <div className="divide-y overflow-hidden rounded-xl border border-destructive/30">
-          <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:px-5">
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">Archive deck</div>
-              <p className="mt-0.5 text-[13px] text-muted-foreground">Hides it from the deck list. Cards keep their history; nothing is deleted.</p>
-            </div>
-            <Button variant="outline" className="h-10 gap-1.5" onClick={() => setConfirm("archive")}><Archive className="size-4" />Archive</Button>
-          </div>
-          <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:px-5">
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">Delete deck</div>
-              <p className="mt-0.5 text-[13px] text-muted-foreground">
-                {cards ? `Only empty decks can be deleted. This one holds ${cards} card${cards === 1 ? "" : "s"}; move or archive them first.` : `Removes the deck${hasChildren ? " and its empty subdecks" : ""}.`}
-              </p>
-            </div>
-            <Button variant="outline" className="h-10 gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={cards > 0} onClick={() => setConfirm("delete")}>
+    <div className="flex flex-col gap-8">
+      <Section title="Elsewhere">
+        <LinkRow icon={Library} title="Browse cards" description="List, search and edit every card in this deck." onClick={() => navigate(`/browse?q=${enc(`deck:"${deck.name}"`)}`)} />
+        <LinkRow icon={BarChart3} title="Statistics" description="Retention, forecast and weakest tags for this deck." onClick={() => navigate(`/stats?deck=${enc(deck.name)}`)} />
+      </Section>
+      <Section title="Export">
+        <Block
+          stackAside
+          title="Export as a pack"
+          description="A JSON pack with the items, subdecks, presets, tag notes and custom card types. Review history stays here."
+          aside={
+            <Button variant="outline" size="sm" className="gap-1.5" asChild>
+              <a href={api.exportUrl({ deck: deck.name })} download={`${deck.name.replace(/::/g, " - ").replace(/[/\\?%*:|"<>]/g, "")}.pack.json`}>
+                <Download className="size-4" />Download
+              </a>
+            </Button>
+          }
+        />
+      </Section>
+      <Section title="Danger zone" tone="danger">
+        <Block
+          stackAside
+          title="Archive deck"
+          description="Hides it from the deck list. Cards keep their history; nothing is deleted."
+          aside={<Button variant="outline" size="sm" className="gap-1.5" onClick={() => setConfirm("archive")}><Archive className="size-4" />Archive</Button>}
+        />
+        <Block
+          stackAside
+          title="Delete deck"
+          description={cards ? `Only empty decks can be deleted. This one holds ${cards} card${cards === 1 ? "" : "s"}; move or archive them first.` : `Removes the deck${hasChildren ? " and its empty subdecks" : ""}.`}
+          aside={
+            <Button variant="outline" size="sm" className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={cards > 0} onClick={() => setConfirm("delete")}>
               <Trash2 className="size-4" />Delete
             </Button>
-          </div>
-        </div>
-      </section>
+          }
+        />
+      </Section>
       <AlertDialog open={confirm !== null} onOpenChange={(o) => !o && setConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -764,18 +722,5 @@ function DangerZone({ deck, hasChildren, cards }: { deck: DeckFull; hasChildren:
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  );
-}
-
-function LinkRow({ icon: Icon, title, desc, onClick }: { icon: typeof Library; title: string; desc: string; onClick(): void }) {
-  return (
-    <button onClick={onClick} className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left hover:bg-accent/40 sm:px-5">
-      <Icon className="size-4 shrink-0 text-muted-foreground" />
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium">{title}</div>
-        <div className="text-[13px] text-muted-foreground">{desc}</div>
-      </div>
-      <ChevronRight className="size-4 text-muted-foreground" />
-    </button>
   );
 }

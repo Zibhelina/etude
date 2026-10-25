@@ -124,6 +124,8 @@ npm start            # same as: node src/cli/main.ts serve
 
 Open http://127.0.0.1:4610. Your collection lives in `~/.etude/etude.db`.
 
+Paste an image, audio or video file into a card field and Etude copies it into its own media folder, normally `~/.etude/media`. Pasted local file paths and `file://` URLs are copied too; the card uses the copy even after the original is moved or deleted. Settings → Data shows the folder, and `etude media add ./picture.png` imports a file from the terminal. When Etude runs on another computer, paste the file itself; local paths refer to the computer running Etude. Back up the media folder along with the database.
+
 To see what cards can be, import the showcase: one card for each of the 27 card types. It opens in Watch mode, a tour where each card can show an example answer, graded, so you see how it works without answering anything:
 
 ```sh
@@ -159,7 +161,7 @@ Open `http://<your-computer>:4610/?token=<token>` on the phone and add it to the
 | | |
 |---|---|
 | `~/.etude/.env` | API keys, one per line, e.g. `OPENROUTER_API_KEY=...`. Read at startup. Keys are never stored in the database or shown in the app. |
-| `--db PATH` or `ETUDE_DB` | Collection file. Default `~/.etude/etude.db`. Drawings and attachments are saved in a `media/` folder next to it. |
+| `--db PATH` or `ETUDE_DB` | Collection file. Default `~/.etude/etude.db`. Pasted media, imports and drawings are saved in a `media/` folder next to it. |
 | `ETUDE_HOME` | Where `.env` and the default database live. Default `~/.etude`. |
 | `--port` or `ETUDE_PORT` | Default 4610. |
 | `--host` or `ETUDE_HOST` | Default `127.0.0.1`. Any other address requires a token. |
@@ -250,6 +252,7 @@ etude <group> <verb> [args] [flags]
   preset    named settings shared by several decks
   item      the content behind one or more cards
   card      per-card scheduling: suspend, bury, reset, due dates
+  media     copy images, audio and video into the collection's media folder
   tag       hierarchical labels, with grading instructions
   type      card types: fields, template, prepare script and grader
   study     the queue, presenting a card, submitting answers, ratings, undo

@@ -323,6 +323,9 @@ These work on every command, before or after the command words.
   - [`pack new`](#pack-new) Write a starter pack with one valid item of each built-in type, to edit.
 - **anki**: Anki: bring an .apkg or .colpkg collection in (types, decks, items, cards, media, history)
   - [`anki import`](#anki-import) Import an Anki package: card types, presets, decks, items, cards, media and review history.
+- **media**: Media copied into the collection's own folder
+  - [`media path`](#media-path) Show the collection's media folder.
+  - [`media add`](#media-add) Copy an image, audio or video file into the collection's media folder.
 - **market**: Market: browse, install and publish shared themes, decks and card types (`etude market` alone runs `list`)
   - [`market list`](#market-list) Entries in the market, newest first, with whether each is installed here.
   - [`market show`](#market-show) One entry: its details from the index and what it contains.
@@ -3167,6 +3170,57 @@ etude anki import spanish.apkg
 etude anki import backlog.colpkg --deck-prefix "Anki"
 ```
 
+## media
+
+Media copied into the collection's own folder.
+
+### etude media path
+
+<a id="media-path"></a>
+
+Show the collection's media folder.
+
+```
+etude media path
+```
+
+*read-only*
+
+Output: { path }
+
+```sh
+etude media path
+```
+
+### etude media add
+
+<a id="media-add"></a>
+
+Copy an image, audio or video file into the collection's media folder.
+
+The original stays intact. Identical files share a copy. Files may be up to 100 MiB. Insert the returned URL into a card field; the card then works even if the original is moved or deleted.
+
+```
+etude media add <file> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `file` | Local path or file:// URL. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { name, file, path, url, mime, kind, bytes, created, dryRun }
+
+```sh
+etude media add ~/Pictures/diagram.png
+etude media add ./pronunciation.mp3 --dry-run
+```
+
 ## market
 
 Market: browse, install and publish shared themes, decks and card types.
@@ -3407,7 +3461,7 @@ Output: { db, exists, bytes, mediaDir, source: flag|ETUDE_DB|ETUDE_HOME|default,
 
 Copy the database consistently (SQLite online backup; safe while the server runs).
 
-Default destination: <db dir>/backups/etude-<timestamp>.db. Drawings under media/ are not copied; back that folder up too if you use draw cards.
+Default destination: <db dir>/backups/etude-<timestamp>.db. Files under media/ are not copied; back up the media folder too to keep pasted media, imports and drawings.
 
 ```
 etude db backup [dest] [flags]

@@ -22,7 +22,7 @@ command({
 command({
   name: "db backup",
   summary: "Copy the database consistently (SQLite online backup; safe while the server runs).",
-  description: "Default destination: <db dir>/backups/etude-<timestamp>.db. Drawings under media/ are not copied; back that folder up too if you use draw cards.",
+  description: "Default destination: <db dir>/backups/etude-<timestamp>.db. Files under media/ are not copied; back up the media folder too to keep pasted media, imports and drawings.",
   args: [{ name: "dest", description: "Destination file or directory." }],
   flags: [{ name: "force", type: "boolean", description: "Overwrite an existing file." }],
   writes: true,

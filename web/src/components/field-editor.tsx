@@ -1,6 +1,6 @@
 // Edits an item's fields from its type's schema. Common JSON shapes get real forms;
 // anything else falls back to a JSON editor, so every type stays editable.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Check, EyeOff, MoreVertical, Plus, Trash2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,8 @@ import { CodeEditor } from "@/components/code-editor";
 import { AnyCodeEditor, LiveMarkdown } from "@/components/live-editor";
 import type { FieldSpec } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { MediaPasteProvider } from "@/components/media-paste";
+import { MediaTextInput, useMediaInput } from "@/components/media-input";
 
 type Fields = Record<string, unknown>;
 
@@ -23,16 +25,19 @@ function codeLanguage(spec: FieldSpec, fields: Fields, specs: FieldSpec[]): stri
   return typeof v === "string" ? v : "";
 }
 
-export function FieldEditor({ fields: specs, value, onChange }: { fields: FieldSpec[]; value: Fields; onChange(v: Fields): void }) {
+export function FieldEditor({ fields: specs, value, onChange, onMediaPendingChange }: { fields: FieldSpec[]; value: Fields; onChange(v: Fields): void; onMediaPendingChange?(pending: boolean): void }) {
+  const latest = useRef(value);
+  latest.current = value;
   const set = (name: string, v: unknown) => {
-    const next = { ...value };
+    const next = { ...latest.current };
     if (v === undefined || v === "") delete next[name];
     else next[name] = v;
+    latest.current = next;
     onChange(next);
   };
   const generator = typeof value.generator === "string";
   return (
-    <div className="flex flex-col gap-5">
+    <MediaPasteProvider onPendingChange={onMediaPendingChange}><div className="flex flex-col gap-5">
       {specs.map((f) => (
         <FieldRow key={f.name} spec={f}>
           <FieldInput spec={f} value={value[f.name]} language={f.kind === "code" ? codeLanguage(f, value, specs) : undefined} onChange={(v) => set(f.name, v)} />
@@ -50,7 +55,7 @@ export function FieldEditor({ fields: specs, value, onChange }: { fields: FieldS
           </Button>
         )}
       </FieldRow>
-    </div>
+    </div></MediaPasteProvider>
   );
 }
 
@@ -82,9 +87,9 @@ function FieldInput({ spec, value, onChange, language }: { spec: FieldSpec; valu
     case "code":
       return <AnyCodeEditor language={language ?? "js"} value={String(value ?? "")} onChange={onChange} minLines={4} />;
     case "html":
-      return <AutoTextarea value={String(value ?? "")} onChange={(v) => onChange(v)} mono placeholder="HTML" />;
+      return <AutoTextarea value={String(value ?? "")} onChange={(v) => onChange(v)} mono placeholder="HTML" mediaFormat="html" />;
     case "text":
-      return <Input value={String(value ?? "")} placeholder={spec.default !== undefined ? `default: ${spec.default}` : ""} onChange={(e) => onChange(e.target.value)} />;
+      return <MediaTextInput value={String(value ?? "")} placeholder={spec.default !== undefined ? `default: ${spec.default}` : ""} onChange={onChange} />;
     case "number":
       return <NumberInput value={value as number | undefined} placeholder={spec.default !== undefined ? `default: ${spec.default}` : ""} onChange={onChange} />;
     case "boolean":
@@ -101,12 +106,14 @@ function FieldInput({ spec, value, onChange, language }: { spec: FieldSpec; valu
   }
 }
 
-export function AutoTextarea({ value, onChange, mono, placeholder, className }: { value: string; onChange(v: string): void; mono?: boolean; placeholder?: string; className?: string }) {
+export function AutoTextarea({ value, onChange, mono, placeholder, className, mediaFormat }: { value: string; onChange(v: string): void; mono?: boolean; placeholder?: string; className?: string; mediaFormat?: "html" }) {
+  const media = useMediaInput(value, onChange, mediaFormat);
   return (
     <Textarea
       value={value}
       placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => media.change(e.target.value)}
+      onPaste={media.paste}
       className={cn("field-sizing-content min-h-16 resize-y", mono && "font-mono text-[13px]", className)}
     />
   );

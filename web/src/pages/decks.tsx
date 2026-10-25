@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, ChevronRight, Play, Plus, Upload } from "lucide-react";
+import { CalendarClock, ChevronRight, Eye, Play, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -75,7 +75,8 @@ export function DecksPage() {
             const name = d.name.split("::").pop()!;
             const work = d.new + d.learning + d.review;
             const soon = d.depth === 0 && d.deadline && new Date(d.deadline) > new Date();
-            const study = () => navigate(`/study?deck=${encodeURIComponent(d.name)}`);
+            const watch = d.mode === "watch";
+            const study = () => navigate(`/${watch ? "watch" : "study"}?deck=${encodeURIComponent(d.name)}`);
             // A new top-level deck after a subtree gets a stronger rule, so groups read as groups.
             const groupStart = i > 0 && d.depth === 0;
             return (
@@ -109,7 +110,9 @@ export function DecksPage() {
                     </button>
                     {/* Phone: counts on one line under the name instead of three narrow columns. */}
                     <div className="mt-0.5 flex gap-3 text-xs tabular text-muted-foreground sm:hidden">
-                      {work ? (
+                      {watch ? (
+                        <span>{d.cards} card{d.cards === 1 ? "" : "s"} to watch</span>
+                      ) : work ? (
                         <>
                           {d.new > 0 && <span className="text-new">{d.new} new</span>}
                           {d.learning > 0 && <span className="text-learn">{d.learning} learning</span>}
@@ -121,19 +124,29 @@ export function DecksPage() {
                     </div>
                   </div>
                 </div>
-                <Count value={d.new} cls="text-new" />
-                <Count value={d.learning} cls="text-learn" />
-                <Count value={d.review} cls="text-review" />
+                {watch ? (
+                  <span className="hidden items-center justify-end text-xs text-muted-foreground sm:col-span-3 sm:flex">tour · {d.cards} card{d.cards === 1 ? "" : "s"}</span>
+                ) : (
+                  <>
+                    <Count value={d.new} cls="text-new" />
+                    <Count value={d.learning} cls="text-learn" />
+                    <Count value={d.review} cls="text-review" />
+                  </>
+                )}
                 <div className="flex shrink-0 items-center justify-end">
                   <Button
                     size="sm"
-                    variant={work ? "secondary" : "ghost"}
+                    variant={work || (watch && d.cards) ? "secondary" : "ghost"}
                     className="size-10 gap-1.5 self-center rounded-full px-0 sm:h-8 sm:w-auto sm:rounded-md sm:px-3"
-                    disabled={!work}
+                    disabled={watch ? !d.cards : !work}
                     onClick={study}
-                    aria-label={`Study ${name}`}
+                    aria-label={`${watch ? "Watch" : "Study"} ${name}`}
                   >
-                    <Play className={cn("size-4 sm:size-3.5", work && "fill-current text-highlight sm:fill-none sm:text-current")} /> <span className="hidden sm:inline">Study</span>
+                    {watch ? (
+                      <><Eye className="size-4 text-highlight sm:size-3.5 sm:text-current" /> <span className="hidden sm:inline">Watch</span></>
+                    ) : (
+                      <><Play className={cn("size-4 sm:size-3.5", work && "fill-current text-highlight sm:fill-none sm:text-current")} /> <span className="hidden sm:inline">Study</span></>
+                    )}
                   </Button>
                 </div>
               </div>

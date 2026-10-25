@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, BarChart3, CalendarClock, Check, ChevronDown, ChevronRight, Download, Library, Pencil, Play, Plus, Search, Trash2, X } from "lucide-react";
+import { Archive, BarChart3, CalendarClock, Check, ChevronDown, ChevronRight, Download, Eye, Library, Pencil, Play, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -395,19 +395,31 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards }: { deck: DeckF
 
       <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="grid grid-cols-4 items-end gap-x-4 sm:flex sm:gap-x-8">
-          <Count label="New" value={node?.new ?? 0} cls="text-new" />
-          <Count label="Learning" value={node?.learning ?? 0} cls="text-learn" />
-          <Count label="Due" value={node?.review ?? 0} cls="text-review" />
-          <div className="border-l pl-4 sm:pl-8">
+          {deck.resolved.mode !== "watch" && (
+            <>
+              <Count label="New" value={node?.new ?? 0} cls="text-new" />
+              <Count label="Learning" value={node?.learning ?? 0} cls="text-learn" />
+              <Count label="Due" value={node?.review ?? 0} cls="text-review" />
+            </>
+          )}
+          <div className={cn(deck.resolved.mode !== "watch" && "border-l pl-4 sm:pl-8")}>
             <div className="tabular text-3xl leading-none font-semibold">{node?.cards ?? 0}</div>
             <div className="mt-1.5 text-xs text-muted-foreground">Cards{node?.doneToday ? <span className="hidden sm:inline"> · {node.doneToday} done today</span> : ""}</div>
           </div>
         </div>
         <div className="flex gap-2">
-          <CustomStudy deck={deck.name} tags={tags} disabled={!node?.cards} />
-          <Button size="lg" className="flex-1 gap-2 px-6 sm:flex-none" disabled={!work} title={work ? undefined : "Nothing due right now"} onClick={() => navigate(`/study?deck=${enc(deck.name)}`)}>
-            <Play className="size-4" />Study
-          </Button>
+          {deck.resolved.mode === "watch" ? (
+            <Button size="lg" className="flex-1 gap-2 px-6 sm:flex-none" disabled={!node?.cards} title="A tour: each card can show an example answer, and nothing is scheduled" onClick={() => navigate(`/watch?deck=${enc(deck.name)}`)}>
+              <Eye className="size-4" />Watch
+            </Button>
+          ) : (
+            <>
+              <CustomStudy deck={deck.name} tags={tags} disabled={!node?.cards} />
+              <Button size="lg" className="flex-1 gap-2 px-6 sm:flex-none" disabled={!work} title={work ? undefined : "Nothing due right now"} onClick={() => navigate(`/study?deck=${enc(deck.name)}`)}>
+                <Play className="size-4" />Study
+              </Button>
+            </>
+          )}
         </div>
       </div>
 

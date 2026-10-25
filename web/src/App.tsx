@@ -8,6 +8,7 @@ import { Wordmark } from "@/components/logo";
 import { cn } from "@/lib/utils";
 import { DecksPage } from "@/pages/decks";
 import { StudyPage } from "@/pages/study";
+import { WatchPage } from "@/pages/watch";
 import { DeckPage } from "@/pages/deck";
 import { BrowsePage } from "@/pages/browse";
 import { TypesPage } from "@/pages/types";
@@ -45,7 +46,7 @@ function useSidebarCollapsed() {
 export function App() {
   const { path, params } = useLocation();
   const [collapsed, setCollapsed] = useSidebarCollapsed();
-  const studying = path === "/study";
+  const studying = path === "/study" || path === "/watch";
   if (path === "/embed") {
     const deck = params.get("deck") ?? undefined;
     const q = params.get("q") ?? undefined;
@@ -58,7 +59,11 @@ export function App() {
     );
   }
   let page: React.ReactNode;
-  if (studying) {
+  if (path === "/watch") {
+    const deck = params.get("deck") ?? undefined;
+    const q = params.get("q") ?? undefined;
+    page = <WatchPage key={`${deck}|${q}`} scope={{ deck, q }} title={deck ? deck.split("::").pop()! : q ? `Search: ${q}` : "All cards"} />;
+  } else if (studying) {
     const deck = params.get("deck") ?? undefined;
     const q = params.get("q") ?? undefined;
     const card = params.get("card") ? Number(params.get("card")) : undefined;

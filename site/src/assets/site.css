@@ -682,3 +682,11 @@ h1, h2, h3 { margin: 0; letter-spacing: -0.025em; font-weight: 600; }
 .phones { padding-bottom: 1rem; margin-top: 4rem; }
 .phones::after { content: ""; position: absolute; left: 50%; top: 40%; width: 60%; height: 50%; translate: -50% -50%; z-index: -2; border-radius: 50%;
   background: radial-gradient(closest-side, color-mix(in oklab, var(--highlight) 10%, transparent), transparent); filter: blur(20px); pointer-events: none; }
+
+/* nav: no band. Transparent over the hero; once scrolled, a soft fade instead of a bar with an edge. */
+.nav, .nav.scrolled { background: transparent; border-bottom: 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.nav::before { content: ""; position: absolute; inset: 0 0 -1.5rem; z-index: -1; pointer-events: none; opacity: 0; transition: opacity 0.35s;
+  background: linear-gradient(var(--background) 0%, color-mix(in oklab, var(--background) 85%, transparent) 55%, transparent 100%);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  mask-image: linear-gradient(#000 60%, transparent); -webkit-mask-image: linear-gradient(#000 60%, transparent); }
+.nav.scrolled::before { opacity: 1; }

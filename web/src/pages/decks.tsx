@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, ChevronRight, Eye, Play, Plus, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CalendarClock, ChevronRight, Eye, GripVertical, Play, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -43,6 +43,103 @@ export function DecksPage() {
 
   const due = (decks ?? []).filter((d) => d.depth === 0).reduce((a, d) => a + d.new + d.learning + d.review, 0);
 
+  // ------------------------------------------------------------ reordering
+  // A deck moves among its siblings, carrying its subdecks. The grip drives it with pointer
+  // events (mouse and touch alike) or the arrow keys.
+  const rows = useRef(new Map<string, HTMLDivElement>());
+  const [drag, setDrag] = useState<{ name: string; dy: number; from: number; to: number; height: number; blocks: string[][] } | null>(null);
+  const parentOf = (name: string) => name.split("::").slice(0, -1).join("::");
+  /** Visible sibling groups of `name`: each sibling with its visible subtree, in list order. */
+  const blocksFor = (name: string) => {
+    const parent = parentOf(name), depth = name.split("::").length - 1;
+    const out: string[][] = [];
+    for (const d of visible) {
+      if (d.depth === depth && parentOf(d.name) === parent) out.push([d.name]);
+      else if (out.length && d.depth > depth && d.name.startsWith(out[out.length - 1][0] + "::")) out[out.length - 1].push(d.name);
+    }
+    return out;
+  };
+  const span = (block: string[]) => {
+    const a = rows.current.get(block[0])!.getBoundingClientRect(), b = rows.current.get(block[block.length - 1])!.getBoundingClientRect();
+    return { top: a.top, bottom: b.bottom };
+  };
+  const commit = async (name: string, blocks: string[][], from: number, to: number) => {
+    if (from === to) return;
+    const order = blocks.map((b) => b[0]);
+    order.splice(to, 0, ...order.splice(from, 1));
+    // Show the new order right away; the server's tree replaces it.
+    setDecks((ds) => {
+      if (!ds) return ds;
+      const rank = new Map(order.map((n, i) => [n, i]));
+      const top = (n: string) => { for (const o of order) if (n === o || n.startsWith(o + "::")) return o; return null; };
+      const idx = new Map(ds.map((d, i) => [d.name, i]));
+      return [...ds].sort((a, b) => {
+        const ta = top(a.name), tb = top(b.name);
+        return ta && tb && ta !== tb ? rank.get(ta)! - rank.get(tb)! : idx.get(a.name)! - idx.get(b.name)!;
+      });
+    });
+    try {
+      await api.reorderDecks(parentOf(name), order);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+    reload();
+  };
+  const startDrag = (name: string, e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const blocks = blocksFor(name);
+    const from = blocks.findIndex((b) => b[0] === name);
+    const spans = blocks.map(span);
+    const height = spans[from].bottom - spans[from].top;
+    const y0 = e.clientY;
+    const grip = e.currentTarget as HTMLElement;
+    grip.setPointerCapture(e.pointerId);
+    document.body.style.userSelect = "none";
+    let to = from, dy = 0;
+    const move = (ev: PointerEvent) => {
+      dy = ev.clientY - y0;
+      // Clamp to the sibling group so the deck can't leave its parent.
+      dy = Math.max(spans[0].top - spans[from].top, Math.min(spans[spans.length - 1].bottom - spans[from].bottom, dy));
+      const mid = (spans[from].top + spans[from].bottom) / 2 + dy;
+      to = 0;
+      spans.forEach((s, i) => { if (i !== from && mid > (s.top + s.bottom) / 2) to++; });
+      setDrag({ name, dy, from, to, height, blocks });
+    };
+    const end = () => {
+      grip.removeEventListener("pointermove", move);
+      grip.removeEventListener("pointerup", end);
+      grip.removeEventListener("pointercancel", end);
+      document.body.style.userSelect = "";
+      setDrag(null);
+      commit(name, blocks, from, to);
+    };
+    grip.addEventListener("pointermove", move);
+    grip.addEventListener("pointerup", end);
+    grip.addEventListener("pointercancel", end);
+    setDrag({ name, dy: 0, from, to: from, height, blocks });
+  };
+  const keyMove = (name: string, e: React.KeyboardEvent) => {
+    const step = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const blocks = blocksFor(name);
+    const from = blocks.findIndex((b) => b[0] === name);
+    const to = from + step;
+    if (to < 0 || to >= blocks.length) return;
+    commit(name, blocks, from, to).then(() => requestAnimationFrame(() => rows.current.get(name)?.querySelector<HTMLElement>("[data-grip]")?.focus()));
+  };
+  /** Vertical offset for a row while a drag is in progress. */
+  const offset = (name: string): { y: number; lifted: boolean } => {
+    if (!drag) return { y: 0, lifted: false };
+    const i = drag.blocks.findIndex((b) => b.includes(name));
+    if (i < 0) return { y: 0, lifted: false };
+    if (i === drag.from) return { y: drag.dy, lifted: true };
+    if (drag.from < drag.to && i > drag.from && i <= drag.to) return { y: -drag.height, lifted: false };
+    if (drag.to < drag.from && i >= drag.to && i < drag.from) return { y: drag.height, lifted: false };
+    return { y: 0, lifted: false };
+  };
+
   return (
     <Page>
       <PageHeader
@@ -79,18 +176,38 @@ export function DecksPage() {
             const study = () => navigate(`/${watch ? "watch" : "study"}?deck=${encodeURIComponent(d.name)}`);
             // A new top-level deck after a subtree gets a stronger rule, so groups read as groups.
             const groupStart = i > 0 && d.depth === 0;
+            const o = offset(d.name);
+            const siblings = drag ? 0 : visible.filter((x) => x.depth === d.depth && parentOf(x.name) === parentOf(d.name)).length;
             return (
               <div
                 key={d.id}
+                ref={(el) => { if (el) rows.current.set(d.name, el); else rows.current.delete(d.name); }}
+                style={o.y ? { transform: `translateY(${o.y}px)` } : undefined}
                 className={cn(
-                  "group flex min-h-14 items-stretch gap-2 pr-3 pl-1.5 transition-colors hover:bg-accent/40 sm:grid sm:min-h-12 sm:grid-cols-[1fr_repeat(3,3.5rem)_6rem] sm:pr-5 sm:pl-3",
+                  "group relative flex min-h-14 items-stretch gap-2 pr-3 pl-0.5 hover:bg-accent/40 sm:grid sm:min-h-12 sm:grid-cols-[1fr_repeat(3,3.5rem)_6rem] sm:pr-5 sm:pl-1",
                   i > 0 && "border-t",
                   groupStart && "border-t-foreground/15",
+                  drag && !o.lifted && "transition-transform duration-150 ease-out",
+                  !drag && "transition-colors",
+                  o.lifted && "z-10 bg-card shadow-lg ring-1 ring-border",
                 )}
               >
                 <div className="flex min-w-0 flex-1 items-stretch">
                   <TreeGuides depth={d.depth} />
                   <div className="flex shrink-0 items-center">
+                    <button
+                      data-grip
+                      className={cn(
+                        "flex h-10 w-6 touch-none items-center justify-center rounded-md hover:!text-foreground sm:h-8 sm:w-5",
+                        o.lifted ? "cursor-grabbing text-foreground" : "cursor-grab text-muted-foreground/50 group-hover:text-muted-foreground",
+                        (drag ? !drag.blocks.some((b) => b[0] === d.name) : siblings < 2) && "invisible",
+                      )}
+                      onPointerDown={(e) => startDrag(d.name, e)}
+                      onKeyDown={(e) => keyMove(d.name, e)}
+                      aria-label={`Reorder ${name} (drag, or use the arrow keys)`}
+                    >
+                      <GripVertical className="size-4" />
+                    </button>
                     <button
                       className={cn("flex size-10 items-center justify-center rounded-md text-muted-foreground hover:text-foreground sm:size-8", !d.hasChildren && "invisible")}
                       onClick={() => toggle(d.name)}

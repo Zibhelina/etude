@@ -43,6 +43,7 @@ export interface DeckNode {
   config: Partial<PresetConfig>;
   description: string;
   instructions: string;
+  position: number | null;
   depth: number;
   cards: number;
   unseen: number;
@@ -188,6 +189,14 @@ export interface Stats {
   ratings: { again: number; hard: number; good: number; easy: number };
   verdicts: { correct: number; partial: number; incorrect: number; ungraded: number };
   streak: number;
+  bestStreak: number;
+  stability: { upTo: number | null; cards: number }[];
+  recallBins: number[];
+  difficulty: number[];
+  curve: { days: number; recall: number }[];
+  desiredRetention: number;
+  hours: { hour: number; reviews: number; passed: number }[];
+  weeks: { reviews: number; reviewed: number; passed: number; ms: number; rate: number | null }[];
   window: { days: number; from: string; to: string };
   deadline: string | null;
   deadlineMargin: number;
@@ -262,6 +271,7 @@ export const api = {
   decks: () => call<DeckNode[]>("GET", "/api/decks"),
   deck: (name: string) => call<DeckNode & { resolved: PresetConfig; inherited: PresetConfig; presetBase: PresetConfig }>("GET", `/api/deck${qs({ name })}`),
   createDeck: (name: string) => call("POST", "/api/decks", { name }),
+  reorderDecks: (parent: string, order: string[]) => call<{ order: string[] }>("POST", "/api/decks/order", { parent, order }),
   updateDeck: (name: string, patch: Partial<{ name: string; presetId: string | null; config: Partial<PresetConfig>; description: string; instructions: string; archived: boolean }>) =>
     call<DeckNode & { resolved: PresetConfig }>("PATCH", `/api/deck${qs({ name })}`, patch),
   // Mutations must be JSON (the server refuses anything else), so body-less deletes send {}.

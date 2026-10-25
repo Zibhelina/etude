@@ -54,6 +54,12 @@
   --review: oklch(0.78 0.15 150);
 }
 
+/* Layout, not theme: the height of the phone tab bar, home indicator included. Sticky bars sit on top of it; pages end above it. */
+:root { --tabbar-h: calc(4rem + env(safe-area-inset-bottom)); }
+@media (min-width: 768px) {
+  :root { --tabbar-h: 0px; }
+}
+
 /* Fonts are theme variables: not inlined, so utilities and the page font follow a theme's --font-sans/--font-mono. */
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;

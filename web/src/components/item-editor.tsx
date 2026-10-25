@@ -55,7 +55,7 @@ export function OrderSelect({ value, onChange, className }: { value: string; onC
 export function CheckBox({ checked, onClick, label, className }: { checked: boolean; onClick(e: React.MouseEvent): void; label: string; className?: string }) {
   return (
     <button
-      className={cn("flex size-4 shrink-0 items-center justify-center rounded-[4px] border", checked && "border-foreground bg-foreground text-background", className)}
+      className={cn("relative flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-foreground/30 after:absolute after:-inset-3 after:content-['']", checked && "border-foreground bg-foreground text-background", className)}
       onClick={onClick}
       aria-label={label}
     >
@@ -67,10 +67,10 @@ export function CheckBox({ checked, onClick, label, className }: { checked: bool
 export function ItemRow({ row: r, active, checked, onOpen, onToggle, className, hideDeck }: { row: ItemRowData; active: boolean; checked: boolean; onOpen(): void; onToggle(): void; className?: string; hideDeck?: boolean }) {
   return (
     <div
+      data-item-row
       onClick={onOpen}
       className={cn(
-        "group flex cursor-pointer items-start gap-2.5 border-b px-3 py-2.5 hover:bg-accent/40",
-        active && "bg-accent/70 hover:bg-accent/70",
+        "group flex cursor-pointer items-start gap-3 border-b px-3 py-3 transition-colors hover:bg-accent/40",
         (r.suspended || r.archived) && "opacity-55",
         className,
       )}
@@ -85,7 +85,7 @@ export function ItemRow({ row: r, active, checked, onOpen, onToggle, className, 
         }}
       />
       <div className="min-w-0 flex-1">
-        <div className="line-clamp-2 text-sm leading-snug">{r.title || <span className="text-muted-foreground">{r.itemId}</span>}</div>
+        <div className={cn("line-clamp-2 text-sm leading-snug", active && "font-medium text-highlight")} aria-current={active || undefined}>{r.title || <span className="text-muted-foreground">{r.itemId}</span>}</div>
         <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
           {!hideDeck && <><span className="truncate">{r.deck.split("::").slice(-1)[0]}</span><span>·</span></>}
           <span className="shrink-0">{r.type}</span>
@@ -174,9 +174,9 @@ export function BulkBar({ checked, rows, decks, tags, onClear, onDone, onDeleted
 export function SearchHints({ onPick }: { onPick(s: string): void }) {
   const hints = ["is:due", "is:new", "is:suspended", "prop:lapses>=2", "rated:1:1", "type:free"];
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className="flex flex-wrap gap-1.5">
       {hints.map((h) => (
-        <button key={h} onClick={() => onPick(h)} className="rounded border px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground hover:border-ring hover:text-foreground">{h}</button>
+        <button key={h} onClick={() => onPick(h)} className="h-7 rounded-md border px-2 font-mono text-xs text-muted-foreground transition-colors hover:border-ring hover:text-foreground pointer-coarse:h-9 pointer-coarse:px-2.5">{h}</button>
       ))}
     </div>
   );

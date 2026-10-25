@@ -110,13 +110,14 @@ export function App() {
                   key={n.to}
                   onClick={() => navigate(n.to)}
                   aria-label={n.label}
+                  aria-current={n.match(path) ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-md py-1.5 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground",
+                    "flex h-8 items-center gap-2.5 rounded-md text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground",
                     collapsed ? "justify-center px-0" : "px-2",
-                    n.match(path) && "bg-sidebar-accent text-foreground",
+                    n.match(path) && "font-medium text-foreground",
                   )}
                 >
-                  <n.icon className="size-4 shrink-0" />
+                  <n.icon className={cn("size-4 shrink-0", n.match(path) && "text-highlight")} />
                   {!collapsed && <span className="whitespace-nowrap">{n.label}</span>}
                 </button>
               );
@@ -130,13 +131,14 @@ export function App() {
               );
             })}
           </aside>
-          <main className="min-w-0 flex-1 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">{page}</main>
-          <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden">
+          <main className="min-w-0 flex-1 pb-[var(--tabbar-h)]">{page}</main>
+          <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-20 flex border-t bg-sidebar/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
             {NAV.map((n) => (
               <button
                 key={n.to}
                 onClick={() => navigate(n.to)}
-                className={cn("flex h-16 flex-1 flex-col items-center justify-center gap-1 text-[11px] text-muted-foreground", n.match(path) && "text-foreground")}
+                aria-current={n.match(path) ? "page" : undefined}
+                className={cn("flex h-16 flex-1 flex-col items-center justify-center gap-1 text-[11px] text-muted-foreground", n.match(path) && "font-medium text-foreground")}
               >
                 <n.icon className={cn("size-5", n.match(path) && "text-highlight")} />
                 <span>{n.label === "Card types" ? "Types" : n.label}</span>

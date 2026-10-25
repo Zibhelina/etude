@@ -81,6 +81,8 @@ function FieldInput({ spec, value, onChange, language }: { spec: FieldSpec; valu
       return <LiveMarkdown value={String(value ?? "")} onChange={(v) => onChange(v)} placeholder={spec.default !== undefined ? String(spec.default) : "Markdown, $math$ and ```code``` render as you type"} />;
     case "code":
       return <AnyCodeEditor language={language ?? "js"} value={String(value ?? "")} onChange={onChange} minLines={4} />;
+    case "html":
+      return <AutoTextarea value={String(value ?? "")} onChange={(v) => onChange(v)} mono placeholder="HTML" />;
     case "text":
       return <Input value={String(value ?? "")} placeholder={spec.default !== undefined ? `default: ${spec.default}` : ""} onChange={(e) => onChange(e.target.value)} />;
     case "number":

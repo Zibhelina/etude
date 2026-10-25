@@ -10,5 +10,6 @@ import "./stats.ts";
 import "./settings.ts";
 import "./theme.ts";
 import "./pack.ts";
+import "./anki.ts";
 import "./db.ts";
 import "./misc.ts";

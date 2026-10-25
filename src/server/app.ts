@@ -84,7 +84,9 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     }
     if (c.req.method !== "GET" && c.req.method !== "HEAD") {
       const ct = c.req.header("content-type") ?? "";
-      if (!ct.includes("application/json")) return c.json({ error: "expected application/json" }, 415);
+      // The Anki importer takes the package itself, so it's the one route that may send bytes.
+      const binary = c.req.method === "POST" && c.req.path === "/api/anki/import" && ct.includes("application/octet-stream");
+      if (!ct.includes("application/json") && !binary) return c.json({ error: "expected application/json" }, 415);
       const origin = c.req.header("origin");
       if (origin && origin !== "null") {
         const host = c.req.header("host");
@@ -216,6 +218,18 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     return c.json({ ok: true });
   });
   app.post("/api/import", async (c) => c.json(etude.importPack(await body(c), { dryRun: c.req.query("dryRun") === "1" })));
+  // The package arrives as the raw body; flags are query parameters.
+  app.post("/api/anki/import", async (c) => {
+    const data = Buffer.from(await c.req.arrayBuffer());
+    if (!data.length) throw new EtudeError("the Anki package is empty");
+    return c.json(
+      etude.importAnki(data, {
+        dryRun: ["1", "true"].includes(c.req.query("dryRun") ?? ""),
+        scheduling: !["0", "false"].includes(c.req.query("scheduling") ?? ""),
+        deckPrefix: c.req.query("deckPrefix") || undefined,
+      }),
+    );
+  });
   app.get("/api/export", (c) => c.json(etude.exportPack({ ...scopeOf(c), name: c.req.query("name") || undefined })));
   app.get("/api/settings", (c) => {
     const s = etude.settings();
@@ -269,7 +283,8 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const rel = normalize(c.req.path.slice("/media/".length));
     const full = resolve(etude.mediaDir, rel);
     if (!full.startsWith(resolve(etude.mediaDir) + "/")) return c.text("not found", 404);
-    return sendFile(c, full);
+    // Card frames have an opaque origin, and @font-face needs CORS even for same-origin paths.
+    return sendFile(c, full, { cors: true });
   });
 
   // ----------------------------------------------------------- web app

@@ -11,4 +11,5 @@ The first public release of Etude 2, a rewrite of the original Python app.
 - Packs: plain JSON files with decks, presets, types and items, imported idempotently.
 - A command-line interface covering every action in the app, with JSON output, for scripts and agents.
 - Web app with Decks, Browse, a card type editor, deck options, statistics with a review heatmap and a deadline forecast, themes, and a phone layout.
+- Import from Anki: `.apkg` and `.colpkg` packages with their notetypes, decks, media, deck options and review history (`etude anki import`, or the Import button on Decks).
 - An embeddable study view (`/embed`).

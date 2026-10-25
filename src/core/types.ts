@@ -5,7 +5,7 @@ import type { CardTypeDef, FieldSpec, GraderSpec } from "./model.ts";
 import { checkSyntax } from "./sandbox.ts";
 
 export const TYPE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
-const FIELD_KINDS = new Set(["markdown", "text", "number", "boolean", "list", "json", "code"]);
+const FIELD_KINDS = new Set(["markdown", "text", "number", "boolean", "list", "json", "code", "html"]);
 const GRADER_KINDS = new Set(["self", "script", "ai", "hybrid"]);
 
 const read = (dir: string, file: string) => {
@@ -60,6 +60,8 @@ export function validateType(def: unknown): string[] {
   }
   if (t.faces !== undefined && (!Array.isArray(t.faces) || !t.faces.length || !t.faces.every((f) => typeof f === "string" && /^[\w-]+$/.test(f))))
     errors.push("faces must be a non-empty list of simple names");
+  if (t.facesWhen !== undefined && typeof t.facesWhen !== "string") errors.push("facesWhen must be a script");
+  else if (t.facesWhen && !t.faces?.length) errors.push("facesWhen needs a faces list to choose from");
   if (!t.template || typeof t.template.html !== "string") errors.push("template.html is required");
   const g = t.grader as GraderSpec | undefined;
   if (!g || !GRADER_KINDS.has(g.kind)) errors.push(`grader.kind must be one of ${[...GRADER_KINDS].join(", ")}`);
@@ -67,6 +69,10 @@ export function validateType(def: unknown): string[] {
   if (errors.length) return errors;
   if (t.prepare) {
     const e = checkSyntax(t.prepare, ["fields", "face", "rng"], `${t.id}/prepare`);
+    if (e) errors.push(e);
+  }
+  if (t.facesWhen) {
+    const e = checkSyntax(t.facesWhen, ["fields"], `${t.id}/facesWhen`);
     if (e) errors.push(e);
   }
   if (g && "code" in g && g.code) {
@@ -101,7 +107,7 @@ export function validateFields(def: CardTypeDef, fields: Record<string, unknown>
       (f.kind === "number" && typeof v !== "number") ||
       (f.kind === "boolean" && typeof v !== "boolean") ||
       (f.kind === "list" && !Array.isArray(v)) ||
-      ((f.kind === "markdown" || f.kind === "text" || f.kind === "code") && typeof v !== "string");
+      ((f.kind === "markdown" || f.kind === "text" || f.kind === "code" || f.kind === "html") && typeof v !== "string");
     if (bad) errors.push(`field "${f.name}" should be ${f.kind}`);
   }
   return errors;

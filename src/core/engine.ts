@@ -528,6 +528,16 @@ export class Etude {
     for (const face of this.facesFor(def, fields)) this.db.run("INSERT OR IGNORE INTO cards (item_id, face, due) VALUES (?, ?, ?)", itemId, face, ts);
   }
 
+  /** After a type change, moves cards on faces the new type lacks onto its unused faces, in order, so their history stays live. */
+  private carryCards(itemId: string, faces: string[]) {
+    const cards = this.db.all<{ id: number; face: string }>("SELECT id, face FROM cards WHERE item_id = ? ORDER BY id", itemId);
+    const open = faces.filter((f) => !cards.some((c) => c.face === f));
+    for (const c of cards) {
+      if (!open.length) break;
+      if (!faces.includes(c.face)) this.db.run("UPDATE cards SET face = ? WHERE id = ?", open.shift()!, c.id);
+    }
+  }
+
   // ----------------------------------------------------------- decks/presets
 
   ensureDeck(name: string): number {
@@ -779,6 +789,7 @@ export class Etude {
       }
       this.db.run("DELETE FROM item_tags WHERE item_id = ?", input.id);
       for (const t of tags) this.db.run("INSERT INTO item_tags (item_id, tag) VALUES (?, ?)", input.id, t);
+      if (old && old.type !== next.type) this.carryCards(input.id, this.facesFor(def, fields));
       this.ensureCards(input.id, def, fields);
     });
     return result!;

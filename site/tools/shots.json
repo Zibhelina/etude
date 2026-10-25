@@ -42,7 +42,7 @@
  {
   "name": "phone-decks",
   "url": "/",
-  "width": 390,
+  "width": 333,
   "height": 844,
   "mobile": true,
   "scale": 2,
@@ -51,7 +51,7 @@
  {
   "name": "phone-chess",
   "url": "/study?card=38",
-  "width": 390,
+  "width": 316,
   "height": 844,
   "mobile": true,
   "scale": 2,
@@ -60,7 +60,7 @@
  {
   "name": "phone-circle",
   "url": "/study?card=12",
-  "width": 390,
+  "width": 333,
   "height": 844,
   "mobile": true,
   "scale": 2,
@@ -69,7 +69,7 @@
  {
   "name": "phone-staff",
   "url": "/study?card=34",
-  "width": 390,
+  "width": 333,
   "height": 844,
   "mobile": true,
   "scale": 2,
@@ -78,7 +78,7 @@
  {
   "name": "phone-stats",
   "url": "/stats",
-  "width": 390,
+  "width": 333,
   "height": 844,
   "mobile": true,
   "scale": 2,

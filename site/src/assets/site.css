@@ -646,3 +646,18 @@ h1, h2, h3 { margin: 0; letter-spacing: -0.025em; font-weight: 600; }
 .lede { max-width: 30rem; }
 .hero-bg .grid { opacity: 0.35; }
 .stage-wrap::before { opacity: 0.6; }
+
+/* phone mockups: content sits well inside the frame, like on a real phone */
+.browser .browser-view { border-radius: 1rem; overflow: hidden; }
+.phone { padding: clamp(0.6rem, 1.5vw, 0.95rem); background: linear-gradient(145deg, oklch(0.3 0 0), oklch(0.16 0 0)); }
+.phone .screen { width: 100%; height: 100%; border-radius: calc(clamp(1.4rem, 4vw, 2.4rem) - clamp(0.6rem, 1.5vw, 0.95rem)); background: var(--background); overflow: hidden; }
+.phone .screen img { border-radius: 0; object-fit: cover; object-position: top center; }
+.phone::after { top: calc(clamp(0.6rem, 1.5vw, 0.95rem) + 0.5rem); width: 26%; height: 0.85rem; }
+.phone { background: linear-gradient(145deg, oklch(0.32 0 0), oklch(0.12 0 0)); box-shadow: 0 30px 70px -20px oklch(0 0 0 / 90%), inset 0 0 0 1px oklch(1 0 0 / 12%), inset 0 0 0 4px oklch(0.08 0 0); }
+
+/* The screenshots are the app at 390 px; on the mockup they get a real phone's breathing room. */
+.phone .screen { padding: 0 6.5%; background: oklch(0.13 0 0); }
+.phone .screen { display: flex; flex-direction: column; }
+.phone .screen img { width: 100%; height: auto; flex: none; object-fit: contain; }
+.phone.l .screen, .phone.r .screen { padding-top: 13%; }
+.phone .screen img { flex: 1; min-height: 0; height: 100%; object-fit: cover; object-position: top center; }

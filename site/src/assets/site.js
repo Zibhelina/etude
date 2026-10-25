@@ -626,7 +626,6 @@ if (rep && GALLERY?.length) {
   const list = $("[data-rep-list]", rep), card = $("[data-rep-card]", rep), body = $(".rep-body", card), loader = $(".rep-loader", card);
   const checkBtn = $("[data-rep-check]", rep), againBtn = $("[data-rep-variant]", rep), verdictEl = $(".rep-verdict", rep);
   const groupEl = $("[data-rep-group]", rep), nameEl = $("[data-rep-name]", rep), descEl = $("[data-rep-desc]", rep), graderEl = $("[data-rep-grader]", rep);
-  $("[data-rep-count]").textContent = String(GALLERY.length);
   const coarse = matchMedia("(pointer: coarse)").matches;
   const AGAIN = { variant: "New variant", shuffle: "Shuffle again", reset: "Start over" };
   const GRADER = {

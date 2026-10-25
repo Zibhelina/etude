@@ -10,7 +10,8 @@ export interface Grade {
   details?: unknown;
   suggested: Rating | null;
   confidence?: number;
-  grader: { kind: string; model?: string; ms?: number; cost?: number; error?: string };
+  /** `example`: a recorded grade shown in watch mode, not one made for this answer. */
+  grader: { kind: string; model?: string; ms?: number; cost?: number; error?: string; example?: boolean };
 }
 
 export interface PresetConfig {
@@ -31,6 +32,8 @@ export interface PresetConfig {
   autoRate: { good: number; hard: number };
   autoApply: boolean;
   burySiblings: boolean;
+  /** "watch": a tour deck, shown card by card with example answers and never scheduled. */
+  mode: "study" | "watch";
 }
 
 export interface DeckNode {
@@ -50,6 +53,7 @@ export interface DeckNode {
   doneToday: number;
   nextDue: string | null;
   deadline: string | null;
+  mode: "study" | "watch";
 }
 
 export interface Counts {
@@ -59,6 +63,14 @@ export interface Counts {
   review: number;
   doneToday: number;
   nextDue: string | null;
+}
+
+export interface WatchEntry {
+  cardId: number;
+  itemId: string;
+  type: string;
+  deck: string;
+  title: string;
 }
 
 export interface StudyCard {
@@ -288,6 +300,9 @@ export const api = {
   feedback: (attemptId: number) => call<{ feedback: string; model?: string; ms?: number }>("POST", "/api/study/feedback", { attemptId }),
   rate: (cardId: number, rating: Rating, opts: { attemptId?: number; durationMs?: number; practice?: boolean } = {}) =>
     call<{ reviewId: number; due: string; state: number }>("POST", "/api/study/rate", { cardId, rating, ...opts }),
+  watchList: (s: Scope) => call<{ cards: WatchEntry[] }>("GET", `/api/watch/list${qs({ deck: s.deck, q: s.q })}`),
+  watchCard: (cardId: number, seed?: number) => call<{ card: StudyCard; demo: { answer: unknown; grade: Grade | null } }>("GET", `/api/watch/card/${cardId}${qs({ seed })}`),
+  watchGrade: (cardId: number, seed: number, answer: unknown) => call<{ grade: Grade; key: Record<string, unknown> }>("POST", "/api/watch/grade", { cardId, seed, answer }),
   undo: () => call<{ cardId: number; itemId: string } | null>("POST", "/api/study/undo", {}),
   reschedule: (s: { deck?: string; query?: string }) => call<{ rescheduled: number }>("POST", "/api/reschedule", s),
 

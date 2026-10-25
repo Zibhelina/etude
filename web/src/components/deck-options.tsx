@@ -42,6 +42,7 @@ const LABELS: Record<Key, string> = {
   autoRate: "Auto-rating thresholds",
   autoApply: "Apply suggested rating",
   burySiblings: "Bury siblings",
+  mode: "Mode",
 };
 
 const norm = (v: unknown) => JSON.stringify(v ?? null);
@@ -342,6 +343,11 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
           "newMix",
           <ChoiceSelect value={value("newMix")} onChange={(v) => set("newMix", v as PresetConfig["newMix"])} options={[["mix", "Spread through reviews"], ["first", "New cards first"], ["last", "Reviews first"]]} ariaLabel="New and review mix" />,
           "When new cards appear in a session.",
+        )}
+        {row(
+          "mode",
+          <ChoiceSelect value={value("mode")} onChange={(v) => set("mode", v as PresetConfig["mode"])} options={[["study", "Study"], ["watch", "Watch (a tour)"]]} ariaLabel="Mode" />,
+          "Watch makes the deck a tour: every card can show an example answer, nothing is scheduled, and its cards stay out of study sessions.",
         )}
         {row("burySiblings", <Switch checked={value("burySiblings")} onCheckedChange={(v) => set("burySiblings", v)} aria-label="Bury siblings" />, "After you study one face of an item, hide its other new faces until tomorrow.", { inline: true })}
       </Group>

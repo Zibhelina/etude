@@ -33,6 +33,16 @@ CREATE TABLE IF NOT EXISTS types (
   updated TEXT NOT NULL
 );
 
+-- Folders that organize card types in the Types page. A path is "A::B", like a deck name.
+-- Folders exist on their own (they can be empty); a type sits in at most one folder.
+CREATE TABLE IF NOT EXISTS type_folders (
+  path TEXT PRIMARY KEY
+);
+CREATE TABLE IF NOT EXISTS type_placement (
+  type_id TEXT PRIMARY KEY,
+  folder  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS items (
   id       TEXT PRIMARY KEY,
   type     TEXT NOT NULL REFERENCES types(id),

@@ -119,6 +119,8 @@ export interface PendingType {
   sample?: Record<string, unknown>;
   /** The type it was copied from, used to pick sample data. */
   from?: string;
+  /** Types-page folder to file it in once it's saved. */
+  folder?: string;
 }
 const pendingKey = (id: string) => `etude.pendingType.${id}`;
 export function stashPending(p: PendingType) {

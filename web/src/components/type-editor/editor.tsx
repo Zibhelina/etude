@@ -101,7 +101,7 @@ export function TypeEditor({ id }: { id: string }) {
   // Unsaved new types survive a reload.
   useEffect(() => {
     if (!draft || !isNew) return;
-    const t = setTimeout(() => stashPending({ def: draft, sample }), 400);
+    const t = setTimeout(() => stashPending({ ...readPending(id), def: draft, sample }), 400);
     return () => clearTimeout(t);
   }, [draft, sample, isNew]);
 
@@ -215,6 +215,9 @@ export function TypeEditor({ id }: { id: string }) {
     setSaving(true);
     try {
       await api.saveType(exportShape(draft));
+      // A type made with "New type here" in a folder lands in that folder.
+      const folder = isNew ? readPending(id)?.folder : undefined;
+      if (folder) await api.moveType(draft.id, folder).catch(() => {});
       const fresh = await api.type(draft.id);
       const types = await api.types();
       setAllTypes(types);

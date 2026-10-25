@@ -1,6 +1,6 @@
 // Shared shapes for the engine, the server and the web client.
 
-export type FieldKind = "markdown" | "text" | "number" | "boolean" | "list" | "json" | "code";
+export type FieldKind = "markdown" | "text" | "number" | "boolean" | "list" | "json" | "code" | "html";
 
 export interface FieldSpec {
   name: string;
@@ -36,6 +36,11 @@ export interface CardTypeDef {
   description?: string;
   /** Each face becomes its own scheduled card (e.g. forward and reverse). */
   faces?: string[];
+  /**
+   * Body of `function (fields)` returning the faces this item has, a subset of `faces`.
+   * Without it every item gets every face.
+   */
+  facesWhen?: string;
   fields: FieldSpec[];
   /** Body of `function (fields, face, rng)` returning `{ view, key }`. Runs sandboxed on the server. */
   prepare?: string;

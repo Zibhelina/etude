@@ -23,6 +23,9 @@ import * as sched from "./scheduler.ts";
 import { compile, QueryError } from "./query.ts";
 import { aiFeedback, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type GradingContext } from "./ai.ts";
 import { BUILTIN_THEMES, DEFAULT_THEME, MAX_CUSTOM_THEMES, ThemeError, builtinTheme, normalizeTheme, type Theme } from "./themes.ts";
+import { openPackage } from "./anki/package.ts";
+import { readCollection } from "./anki/collection.ts";
+import { convertCollection, type PlannedCard } from "./anki/convert.ts";
 
 export class EtudeError extends Error {
   status: number;
@@ -333,6 +336,7 @@ export class Etude {
       name: def.name,
       description: def.description ?? "",
       ...(def.faces ? { faces: def.faces } : {}),
+      ...(def.facesWhen ? { facesWhen: def.facesWhen } : {}),
       fields: def.fields,
       ...(def.prepare ? { prepare: def.prepare } : {}),
       template: { html: def.template.html, css: def.template.css ?? "", js: def.template.js ?? "" },
@@ -372,14 +376,32 @@ export class Etude {
   }
 
   private ensureCardsForType(typeId: string) {
-    const faces = this.type(typeId).faces ?? ["main"];
-    const items = this.db.all("SELECT id FROM items WHERE type = ?", typeId);
-    for (const it of items) this.ensureCards(it.id, faces);
+    const def = this.type(typeId);
+    const items = this.db.all("SELECT id, fields FROM items WHERE type = ?", typeId);
+    for (const it of items) this.ensureCards(it.id, def, parse<Record<string, unknown>>(it.fields, {}));
   }
 
-  private ensureCards(itemId: string, faces: string[]) {
+  /**
+   * The faces an item should have. Without `facesWhen` that's the type's `faces`; with it the script
+   * is authoritative for the item, so it can leave faces out (an unused cloze) or add one (`c4` in a
+   * note that gained a fourth cloze). Cards that already exist are never removed.
+   */
+  facesFor(def: CardTypeDef, fields: Record<string, unknown>): string[] {
+    const declared = def.faces ?? ["main"];
+    if (!def.facesWhen) return declared;
+    try {
+      const out = runScript<string[]>(def.facesWhen, { params: ["fields"], args: { fields }, where: `${def.id}/facesWhen` });
+      if (!Array.isArray(out)) return declared;
+      return [...new Set(out.filter((f) => typeof f === "string" && /^[\w-]+$/.test(f)))];
+    } catch {
+      // A broken script must not stop items from being saved; fall back to every face.
+      return declared;
+    }
+  }
+
+  private ensureCards(itemId: string, def: CardTypeDef, fields: Record<string, unknown>) {
     const ts = iso();
-    for (const face of faces) this.db.run("INSERT OR IGNORE INTO cards (item_id, face, due) VALUES (?, ?, ?)", itemId, face, ts);
+    for (const face of this.facesFor(def, fields)) this.db.run("INSERT OR IGNORE INTO cards (item_id, face, due) VALUES (?, ?, ?)", itemId, face, ts);
   }
 
   // ----------------------------------------------------------- decks/presets
@@ -633,7 +655,7 @@ export class Etude {
       }
       this.db.run("DELETE FROM item_tags WHERE item_id = ?", input.id);
       for (const t of tags) this.db.run("INSERT INTO item_tags (item_id, tag) VALUES (?, ?)", input.id, t);
-      this.ensureCards(input.id, def.faces ?? ["main"]);
+      this.ensureCards(input.id, def, fields);
     });
     return result!;
   }
@@ -1580,6 +1602,144 @@ export class Etude {
     return report;
   }
 
+  /**
+   * Imports an Anki package (.apkg/.colpkg, current or legacy format). Items are keyed by note guid,
+   * so importing the same file again updates content instead of duplicating it; cards that already
+   * have history keep their scheduling.
+   */
+  importAnki(source: string | Buffer, opts: { dryRun?: boolean; scheduling?: boolean; deckPrefix?: string } = {}) {
+    const buf = typeof source === "string" ? readFileSync(source) : source;
+    if (!buf?.length) throw new EtudeError("the Anki package is empty");
+    let pkg;
+    try {
+      pkg = openPackage(buf);
+    } catch (e) {
+      throw new EtudeError(`not an Anki package: ${(e as Error).message}`);
+    }
+    const collection = readCollection(pkg.collection);
+    const scheduling = opts.scheduling !== false;
+    const prefix = opts.deckPrefix?.trim();
+    if (prefix && !/^[\w .:&/-]+$/.test(prefix)) throw new EtudeError(`invalid deck prefix "${prefix}"`);
+    const plan = convertCollection(collection, { deckPrefix: prefix || undefined, scheduling, media: pkg.media });
+
+    const report = {
+      format: pkg.format,
+      dryRun: !!opts.dryRun,
+      scheduling,
+      types: { created: 0, updated: 0, unchanged: 0 },
+      presets: { created: 0, updated: 0, unchanged: 0 },
+      decks: 0,
+      items: { created: 0, updated: 0, unchanged: 0 },
+      cards: 0,
+      reviews: 0,
+      /** What the package held, before de-duplication (useful in a dry run). */
+      read: { notes: plan.notes, cards: plan.cardsRead, reviews: plan.reviewsRead },
+      media: { files: plan.media.length, bytes: 0 },
+      skipped: plan.skipped,
+    };
+
+    const cardsByItem = new Map<string, PlannedCard[]>();
+    for (const c of plan.cards) {
+      const list = cardsByItem.get(c.itemId) ?? [];
+      list.push(c);
+      cardsByItem.set(c.itemId, list);
+    }
+
+    const run = () => {
+      for (const p of plan.presets) {
+        const existed = this.db.get<{ name: string; config: string }>("SELECT name, config FROM presets WHERE id = ?", p.id);
+        if (existed && existed.name === p.name && canonical(existed.config) === canonical(p.config)) {
+          report.presets.unchanged++;
+          continue;
+        }
+        this.savePreset({ id: p.id, name: p.name, config: p.config });
+        if (existed) report.presets.updated++;
+        else report.presets.created++;
+      }
+      for (const t of plan.types) {
+        const existed = this.db.get("SELECT def FROM types WHERE id = ?", t.id);
+        const saved = this.saveType(t);
+        if (!existed) report.types.created++;
+        else if (existed.def === json(saved)) report.types.unchanged++;
+        else report.types.updated++;
+      }
+      for (const d of plan.decks) {
+        this.ensureDeck(d.name);
+        const patch: { presetId?: string; description?: string } = {};
+        if (d.presetId) patch.presetId = d.presetId;
+        if (d.description) patch.description = d.description;
+        this.updateDeck(d.name, patch);
+        report.decks++;
+      }
+      plan.items.forEach((it, i) => {
+        const r = this.upsertItem({ id: it.id, type: it.type, deck: it.deck, fields: it.fields, tags: it.tags, source: it.source }, { ord: i + 1 });
+        report.items[r]++;
+        for (const card of cardsByItem.get(it.id) ?? []) {
+          const row = this.db.get<{ id: number; reviewed: number }>(
+            "SELECT id, (SELECT COUNT(*) FROM reviews WHERE card_id = cards.id) AS reviewed FROM cards WHERE item_id = ? AND face = ?",
+            it.id,
+            card.face,
+          );
+          // A face the note no longer qualifies for (an unused cloze, an unfilled optional reverse).
+          if (!row) continue;
+          report.cards++;
+          // Already studied here: keep the learner's progress rather than Anki's old state.
+          if (row.reviewed > 0) continue;
+          this.db.run(
+            "UPDATE cards SET state = ?, due = ?, stability = ?, difficulty = ?, elapsed_days = ?, scheduled_days = ?, reps = ?, lapses = ?, learning_steps = ?, last_review = ?, suspended = ?, buried_until = ? WHERE id = ?",
+            card.state,
+            card.due,
+            card.stability,
+            card.difficulty,
+            card.elapsedDays,
+            card.scheduledDays,
+            card.reps,
+            card.lapses,
+            card.learningSteps,
+            card.lastReview,
+            Number(card.suspended),
+            card.buriedUntil,
+            row.id,
+          );
+          for (const rev of card.reviews) {
+            const res = this.db.run(
+              "INSERT INTO reviews (card_id, ts, rating, state, card_before, due_after, duration_ms, practice) SELECT ?, ?, ?, ?, ?, ?, ?, 0 WHERE NOT EXISTS (SELECT 1 FROM reviews WHERE card_id = ? AND ts = ?)",
+              row.id,
+              rev.ts,
+              rev.rating,
+              rev.stateBefore,
+              rev.cardBefore,
+              rev.dueAfter,
+              rev.durationMs,
+              row.id,
+              rev.ts,
+            );
+            report.reviews += Number(res.changes);
+          }
+        }
+      });
+    };
+
+    try {
+      this.db.tx(() => {
+        run();
+        if (opts.dryRun) throw new DryRun();
+      });
+    } catch (e) {
+      if (!(e instanceof DryRun)) throw e;
+    }
+    // Files aren't part of the transaction, so a dry run writes none.
+    if (!opts.dryRun) {
+      mkdirSync(join(this.mediaDir, "anki"), { recursive: true });
+      for (const m of plan.media) {
+        const data = m.load();
+        writeFileSync(join(this.mediaDir, m.target), data);
+        report.media.bytes += data.length;
+      }
+    }
+    return report;
+  }
+
   exportPack(scope: StudyScope & { name?: string } = {}) {
     const { where, params } = this.scopeWhere(scope);
     const items = this.db.all(
@@ -1611,5 +1771,16 @@ export class Etude {
 }
 
 class DryRun extends Error {}
+
+/** JSON with sorted keys, so two encodings of the same settings compare equal. */
+function canonical(value: unknown): string {
+  const parsed = typeof value === "string" ? JSON.parse(value) : value;
+  const walk = (v: any): any => {
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object") return Object.fromEntries(Object.keys(v).sort().map((k) => [k, walk(v[k])]));
+    return v;
+  };
+  return JSON.stringify(walk(parsed ?? {}));
+}
 
 export { DEFAULT_PRESET };

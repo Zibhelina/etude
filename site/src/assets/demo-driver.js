@@ -5,6 +5,9 @@
     const f = Element.prototype[k];
     Element.prototype[k] = function (id) { try { f.call(this, id); } catch {} };
   }
+  // A card focusing its input must never scroll the landing page to it.
+  const focus = HTMLElement.prototype.focus;
+  HTMLElement.prototype.focus = function (o) { return focus.call(this, { ...(o ?? {}), preventScroll: true }); };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   function point(s) {
     if (s.svg) {

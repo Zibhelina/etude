@@ -142,6 +142,7 @@ if (stage) {
   const tabs = $(".stage-tabs", stage), body = $(".stage-body", stage), loader = $(".stage-loader", stage);
   const checkBtn = $("[data-check]", stage), verdictEl = $(".verdict", stage), ratings = $(".ratings", stage);
   let cur = null; // { demo, prep, seed, frame, phase, result }
+  const stageVis = visibility(stage);
   let index = 0;
 
   tabs.innerHTML = DEMOS.map((d, i) => `<button class="stage-tab" role="tab" type="button" aria-selected="${i === 0}" data-i="${i}">${esc(d.label)}</button>`).join("");
@@ -164,7 +165,9 @@ if (stage) {
     index = i;
     const demo = DEMOS[i];
     $$(".stage-tab", tabs).forEach((t, j) => t.setAttribute("aria-selected", String(j === i)));
-    $(`[data-i="${i}"]`, tabs)?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: reduced ? "auto" : "smooth" });
+    // Scroll the tab strip only: scrollIntoView would also scroll the page back up to the hero.
+    const t = $(`[data-i="${i}"]`, tabs);
+    if (t) tabs.scrollTo({ left: t.offsetLeft - tabs.clientWidth / 2 + t.offsetWidth / 2, behavior: reduced ? "auto" : "smooth" });
     verdictEl.innerHTML = "";
     ratings.hidden = true;
     checkBtn.parentElement.hidden = false;
@@ -265,6 +268,7 @@ if (stage) {
     verdictEl.innerHTML = `<span class="v" style="color:var(--${["", "again", "hard", "good", "easy"][r]})">${RATING[r]}</span><span class="m">· back in ${b?.querySelector("small")?.textContent ?? "a while"}. Next card…</span>`;
     ratings.hidden = true;
     await sleep(1100);
+    while (!stageVis.on) await sleep(400);
     open((index + 1) % DEMOS.length);
   }
 
@@ -344,7 +348,6 @@ if (stage) {
       await until(() => cur.phase === "loading" || cur.phase === "answer", g, 4000);
     }
   }
-  const stageVis = visibility(stage);
   function setAuto(on) {
     auto = on; gen++;
     toggle.innerHTML = on ? `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>Playing the deck` : `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5v14l12-7z"/></svg>Play the deck`;

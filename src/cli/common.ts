@@ -11,6 +11,22 @@ export const SCOPE_FLAGS = [DECK_FLAG, QUERY_FLAG];
 export const LIMIT_FLAG: FlagSpec = { name: "limit", type: "number", description: "Maximum rows to return.", default: 100 };
 export const OFFSET_FLAG: FlagSpec = { name: "offset", type: "number", description: "Rows to skip (for paging).", default: 0 };
 
+/** Shared by `preset optimize` and `deck optimize`. */
+export const OPTIMIZE_FLAGS: FlagSpec[] = [
+  { name: "apply", type: "boolean", description: "Save the new weights where the current ones come from, if they fit the history better." },
+  { name: "reschedule", type: "boolean", description: "With --apply: replay every card's history in those decks with the new weights." },
+];
+export const OPTIMIZE_OUTPUT =
+  "{ source: { kind: preset|deck, id|name }, decks, cards, reviews, items, current, weights, before: { logLoss, rmse }, after: { logLoss, rmse }, better, applied, rescheduled? }";
+export const OPTIMIZE_DESCRIPTION =
+  "Trains FSRS-6 on the review history (practice reviews don't count) of every deck that shares these weights, with fsrs-rs, the optimizer Anki uses, and compares how well the current and the new weights predict that history: log loss and RMSE, lower is better. Nothing changes without --apply, and --apply only saves weights that fit better (lower RMSE). Needs at least 400 reviews and the optional package @open-spaced-repetition/binding, which `npm install` adds on supported platforms.";
+
+export async function optimizeCommand(ctx: Ctx, target: { preset: string } | { deck: string }) {
+  if (ctx.flags.reschedule && !ctx.flags.apply) throw new CliError("--reschedule only applies with --apply");
+  const out = await ctx.e.optimizeWeights(target, { apply: !!ctx.flags.apply && !ctx.dry, reschedule: !!ctx.flags.reschedule });
+  return ctx.dry ? { dryRun: true, ...out } : out;
+}
+
 export const scopeOf = (f: Record<string, any>) => ({ deck: f.deck || undefined, query: f.query || undefined });
 
 /** `--deck` and `--query` folded into one search string. */

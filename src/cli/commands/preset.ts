@@ -2,7 +2,7 @@ import { TYPE_ID } from "../../core/types.ts";
 import { resolveConfig } from "../../core/scheduler.ts";
 import { DEFAULT_PRESET } from "../../core/model.ts";
 import { command, group, CliError } from "../registry.ts";
-import { applyConfigPairs, unsetConfigKeys, CONFIG_KEYS } from "../common.ts";
+import { applyConfigPairs, optimizeCommand, unsetConfigKeys, CONFIG_KEYS, OPTIMIZE_DESCRIPTION, OPTIMIZE_FLAGS, OPTIMIZE_OUTPUT } from "../common.ts";
 import { slug as slugOf } from "../input.ts";
 
 group({ name: "preset", summary: "Presets: named settings shared by several decks", defaultVerb: "list" });
@@ -157,6 +157,19 @@ command({
     ctx.e.preset(ctx.args.id);
     return users(ctx.e, ctx.args.id);
   },
+});
+
+command({
+  name: "preset optimize",
+  summary: "Fit the preset's FSRS weights to the review history of the decks using it (Anki's Optimize).",
+  description: OPTIMIZE_DESCRIPTION,
+  args: [{ name: "id", description: "Preset id.", required: true }],
+  flags: OPTIMIZE_FLAGS,
+  writes: true,
+  dryRun: "self",
+  examples: ["etude preset optimize exam", "etude preset optimize exam --apply --reschedule"],
+  output: OPTIMIZE_OUTPUT,
+  run: (ctx) => optimizeCommand(ctx, { preset: ctx.args.id }),
 });
 
 command({

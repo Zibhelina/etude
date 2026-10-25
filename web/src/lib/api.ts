@@ -267,6 +267,20 @@ export interface Scope {
   q?: string;
 }
 
+export interface OptimizeResult {
+  source: { kind: "preset"; id: string } | { kind: "deck"; name: string };
+  decks: string[];
+  cards: number;
+  reviews: number;
+  items: number;
+  current: number[] | null;
+  weights: number[];
+  before: { logLoss: number; rmse: number };
+  after: { logLoss: number; rmse: number };
+  better: boolean;
+  applied: boolean;
+}
+
 export const api = {
   decks: () => call<DeckNode[]>("GET", "/api/decks"),
   deck: (name: string) => call<DeckNode & { resolved: PresetConfig; inherited: PresetConfig; presetBase: PresetConfig }>("GET", `/api/deck${qs({ name })}`),
@@ -315,6 +329,7 @@ export const api = {
   watchGrade: (cardId: number, seed: number, answer: unknown) => call<{ grade: Grade; key: Record<string, unknown> }>("POST", "/api/watch/grade", { cardId, seed, answer }),
   undo: () => call<{ cardId: number; itemId: string } | null>("POST", "/api/study/undo", {}),
   reschedule: (s: { deck?: string; query?: string }) => call<{ rescheduled: number }>("POST", "/api/reschedule", s),
+  optimizeWeights: (deck: string) => call<OptimizeResult>("POST", "/api/optimize", { deck }),
 
   stats: (s: Scope, days = 30) => call<Stats>("GET", `/api/stats${qs({ deck: s.deck, q: s.q, days })}`),
   tags: () => call<{ tag: string; items: number; instructions: string | null; description: string | null }[]>("GET", "/api/tags"),

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronRight, Copy, Download, Folder, FolderInput, FolderOpen, FolderPlus, MoreHorizontal, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { Check, ChevronRight, Copy, Download, Folder, FolderInput, FolderOpen, FolderPlus, Inbox, MoreHorizontal, Package, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,34 +11,47 @@ import { TypeEditor, Kind } from "@/components/type-editor/editor";
 import { ImportTypesDialog, NewTypeDialog } from "@/components/type-editor/dialogs";
 import { download, exportShape, GRADER_LABEL } from "@/components/type-editor/starter";
 import { api, type TypeSummary } from "@/lib/api";
-import { navigate } from "@/lib/router";
+import { navigate, useLocation } from "@/lib/router";
 import { cn } from "@/lib/utils";
 
 export function TypesPage({ id }: { id: string | null }) {
   if (id) return <TypeEditor key={id} id={id} />;
-  return <TypeList />;
+  return <TypeLibrary />;
 }
+
+// The page is a small file browser: the left rail (desktop) is the folder tree, the main column shows
+// one place at a time (everything at the top level, a folder, or the built-ins), and search goes flat.
 
 const COLLAPSED_KEY = "etude.typeFolders.collapsed";
 const DRAG_TYPE = "application/x-etude-type";
 const DRAG_FOLDER = "application/x-etude-folder";
+/** The `folder` URL value for the built-in types, which aren't a real folder. */
+const BUILT_IN = "@builtin";
 
 const leaf = (path: string) => path.split("::").pop()!;
 const parentOf = (path: string) => path.split("::").slice(0, -1).join("::");
 const within = (path: string, folder: string) => path === folder || path.startsWith(folder + "::");
 const byName = (a: TypeSummary, b: TypeSummary) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+const byLeaf = (a: string, b: string) => leaf(a).localeCompare(leaf(b), undefined, { sensitivity: "base" });
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 function ancestors(path: string): string[] {
   const parts = path.split("::");
   return parts.map((_, i) => parts.slice(0, i + 1).join("::"));
 }
 
+const open = (folder: string) => navigate(folder ? `/types?folder=${encodeURIComponent(folder)}` : "/types");
+
 type MoveTarget = { kind: "type"; id: string; name: string; folder: string } | { kind: "folder"; path: string };
 type FolderDialog = { mode: "create"; parent: string } | { mode: "rename"; path: string };
+type DragProps = { draggable: boolean; onDragStart(e: React.DragEvent): void; onDragEnd(): void };
+type DropProps = { onDragOver(e: React.DragEvent): void; onDragLeave(e: React.DragEvent): void; onDrop(e: React.DragEvent): void };
 
-function TypeList() {
+function TypeLibrary() {
+  const { params } = useLocation();
+  const here = params.get("folder") ?? "";
   const [types, setTypes] = useState<TypeSummary[] | null>(null);
-  const [folders, setFolders] = useState<string[]>([]);
+  const [stored, setStored] = useState<string[]>([]);
   const [creating, setCreating] = useState<{ source?: string; folder?: string } | null>(null);
   const [importing, setImporting] = useState(false);
   const [query, setQuery] = useState("");
@@ -52,12 +65,29 @@ function TypeList() {
     Promise.all([api.types(), api.typeFolders()])
       .then(([t, f]) => {
         setTypes(t);
-        setFolders(f);
+        setStored(f);
       })
       .catch((e) => toast.error((e as Error).message));
   useEffect(() => {
     reload();
   }, []);
+
+  const all = types ?? [];
+  const custom = all.filter((t) => !t.shipped || t.folder);
+  const builtins = all.filter((t) => t.shipped && !t.folder).sort(byName);
+  const folders = useMemo(() => {
+    const s = new Set(stored);
+    for (const t of all) if (t.folder) for (const p of ancestors(t.folder)) s.add(p);
+    return [...s];
+  }, [stored, types]);
+  const childFolders = (parent: string) => folders.filter((f) => parentOf(f) === parent).sort(byLeaf);
+  const typesIn = (folder: string) => custom.filter((t) => t.folder === folder).sort(byName);
+  const deepCount = (folder: string) => custom.filter((t) => t.folder && within(t.folder, folder)).length;
+
+  // A folder that was renamed or deleted elsewhere: fall back to the top level.
+  useEffect(() => {
+    if (types && here && here !== BUILT_IN && !folders.includes(here)) open("");
+  }, [types, here, folders.join()]);
 
   const saveCollapsed = (next: Set<string>) => {
     setCollapsed(next);
@@ -68,13 +98,16 @@ function TypeList() {
     next.has(path) ? next.delete(path) : next.add(path);
     saveCollapsed(next);
   };
-  /** Opens a folder and everything above it, so whatever just moved there is visible. */
-  const reveal = (path: string) => {
-    if (!path) return;
-    const next = new Set(collapsed);
-    for (const p of ancestors(path)) next.delete(p);
-    saveCollapsed(next);
-  };
+  // The current folder is always visible in the rail.
+  useEffect(() => {
+    if (!here || here === BUILT_IN) return;
+    const hidden = ancestors(parentOf(here) || "").filter((p) => p && collapsed.has(p));
+    if (parentOf(here) && hidden.length) {
+      const next = new Set(collapsed);
+      hidden.forEach((p) => next.delete(p));
+      saveCollapsed(next);
+    }
+  }, [here]);
 
   const exportType = async (t: TypeSummary) => {
     try {
@@ -87,8 +120,9 @@ function TypeList() {
   const moveType = async (id: string, folder: string) => {
     try {
       await api.moveType(id, folder);
-      reveal(folder);
       await reload();
+      const t = all.find((x) => x.id === id);
+      toast.success(`Moved ${t?.name ?? id} to ${folder ? leaf(folder) : "the top level"}`, folder && folder !== here ? { action: { label: "Open", onClick: () => open(folder) } } : undefined);
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -96,36 +130,19 @@ function TypeList() {
   const moveFolder = async (path: string, parent: string) => {
     const to = parent ? `${parent}::${leaf(path)}` : leaf(path);
     if (to === path) return;
-    if (within(parent, path)) return void toast.error("A folder can't move inside itself");
+    if (within(parent, path)) return void toast.error("A folder can't go inside itself");
     if (folders.includes(to)) return void toast.error(`There's already a folder called “${leaf(path)}” there`);
     try {
       await api.renameTypeFolder(path, to);
-      reveal(parent);
+      if (within(here, path)) open(to + here.slice(path.length));
       await reload();
     } catch (e) {
       toast.error((e as Error).message);
     }
   };
 
-  const q = query.trim().toLowerCase();
-  const matches = (t: TypeSummary) => !q || t.name.toLowerCase().includes(q) || t.id.includes(q) || t.description.toLowerCase().includes(q);
-
-  // Custom types, plus any built-in someone filed in a folder.
-  const all = types ?? [];
-  const filed = all.filter((t) => !t.shipped || t.folder);
-  const builtins = all.filter((t) => t.shipped && !t.folder && matches(t)).sort(byName);
-  const shown = filed.filter(matches);
-  const sig = shown.map((t) => t.id + "@" + t.folder).join();
-
-  const rows = useMemo(() => buildRows(folders, shown, q ? new Set() : collapsed, !!q), [folders, sig, collapsed, q]);
-  const counts = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const t of filed) if (t.folder) for (const p of ancestors(t.folder)) m.set(p, (m.get(p) ?? 0) + 1);
-    return m;
-  }, [filed.map((t) => t.id + "@" + t.folder).join()]);
-
   // ------------------------------------------------------------ drag and drop
-  const dragProps = (data: { type?: string; folder?: string }): DragProps => ({
+  const drag = (data: { type?: string; folder?: string }): DragProps => ({
     draggable: true,
     onDragStart: (e) => {
       e.stopPropagation();
@@ -135,7 +152,7 @@ function TypeList() {
     },
     onDragEnd: () => setDropAt(null),
   });
-  const dropProps = (folder: string): DropProps => ({
+  const drop = (folder: string): DropProps => ({
     onDragOver: (e) => {
       if (![...e.dataTransfer.types].some((t) => t === DRAG_TYPE || t === DRAG_FOLDER)) return;
       e.preventDefault();
@@ -155,128 +172,179 @@ function TypeList() {
       if (type) {
         const t = all.find((x) => x.id === type);
         if (t && t.folder !== folder) moveType(type, folder);
-      } else if (path) moveFolder(path, folder);
+      } else if (path && path !== folder) moveFolder(path, folder);
     },
   });
 
+  const folderActions = (path: string) => ({
+    onNewType: () => setCreating({ folder: path }),
+    onNewFolder: () => setFolderDialog({ mode: "create", parent: path }),
+    onRename: () => setFolderDialog({ mode: "rename", path }),
+    onMove: () => setMoving({ kind: "folder", path }),
+    onDelete: () => setDeleting(path),
+  });
+  const rowProps = (t: TypeSummary) => ({
+    t,
+    onExport: exportType,
+    onDuplicate: () => setCreating({ source: t.id, folder: t.folder || (here !== BUILT_IN ? here : "") || undefined }),
+    onMove: () => setMoving({ kind: "type", id: t.id, name: t.name, folder: t.folder }),
+    drag: drag({ type: t.id }),
+  });
+
+  // ------------------------------------------------------------ what the main column shows
+  const q = query.trim().toLowerCase();
+  const matches = (t: TypeSummary) => t.name.toLowerCase().includes(q) || t.id.includes(q) || t.description.toLowerCase().includes(q);
+  const results = q ? all.filter(matches).sort(byName) : [];
+  const inBuiltIn = here === BUILT_IN;
+  const subfolders = inBuiltIn ? [] : childFolders(here);
+  const listed = inBuiltIn ? builtins : typesIn(here);
+  const crumbs = here && !inBuiltIn ? ancestors(here) : [];
+  const title = inBuiltIn ? "Built in" : here ? leaf(here) : "Card types";
+
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-8 sm:py-10">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4 sm:mb-8">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">Card types</h1>
-          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            A type is fields, an HTML/CSS/JS template and a grader. The built-in ones are written the same way, so any of them can be copied or changed.
-          </p>
+    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-10">
+      {/* header */}
+      <header className="mb-6 sm:mb-8">
+        {here && (
+          <nav aria-label="Folder" className="-ml-1.5 mb-1 flex min-w-0 flex-wrap items-center text-sm text-muted-foreground">
+            <Crumb label="Card types" onClick={() => open("")} drop={drop("")} active={dropAt === ""} />
+            {crumbs.slice(0, -1).map((c) => (
+              <span key={c} className="flex min-w-0 items-center">
+                <ChevronRight className="size-3.5 shrink-0 opacity-50" />
+                <Crumb label={leaf(c)} onClick={() => open(c)} drop={drop(c)} active={dropAt === c} />
+              </span>
+            ))}
+            <ChevronRight className="size-3.5 shrink-0 opacity-50" />
+          </nav>
+        )}
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-4">
+          <div className="min-w-0 flex-1 basis-56">
+            <div className="flex min-w-0 items-center gap-1">
+              <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">{title}</h1>
+              {here && !inBuiltIn && <FolderMenu name={leaf(here)} {...folderActions(here)} className="size-9" />}
+            </div>
+            <p className="mt-1 max-w-xl text-sm text-pretty text-muted-foreground">
+              {inBuiltIn
+                ? "These ship with Etude. Open one to see how it's made, or duplicate it to start your own."
+                : here
+                  ? [plural(listed.length, "type"), subfolders.length ? plural(subfolders.length, "folder") : ""].filter(Boolean).join(" · ")
+                  : "Fields, an HTML/CSS/JS template and a grader. Built\u2011in types are written the same way, so any of them can be copied or changed."}
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setImporting(true)}><Upload className="size-4" />Import</Button>
+            <Button size="sm" className="h-9 gap-1.5" onClick={() => setCreating(here && !inBuiltIn ? { folder: here } : {})}><Plus className="size-4" />New type</Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setImporting(true)}><Upload className="size-4" />Import</Button>
-          <Button size="sm" className="h-9 gap-1.5" onClick={() => setCreating({})}><Plus className="size-4" />New type</Button>
-        </div>
-      </div>
+      </header>
 
       {!types && (
         <div className="flex flex-col gap-2">
-          {Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-[72px] rounded-xl" />)}
+          {Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
         </div>
       )}
 
       {types && (
-        <div className="flex flex-col gap-8">
-          {all.length > 8 && (
-            <div className="relative -mb-3">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a type" aria-label="Find a type" className="h-10 pr-10 pl-9" />
-              {query && (
-                <button className="absolute top-1/2 right-1 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground" onClick={() => setQuery("")} aria-label="Clear search">
-                  <X className="size-4" />
+        <div className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-8">
+          {/* the folder rail */}
+          <aside className="hidden lg:block">
+            <div className="sticky top-6 flex flex-col gap-0.5 text-sm">
+              <RailItem icon={Inbox} label="Not in a folder" count={typesIn("").length} active={!here && !q} onClick={() => { setQuery(""); open(""); }} drop={drop("")} dropping={dropAt === ""} />
+              <div className="mt-5 mb-1 flex items-center justify-between pr-1 pl-[1.625rem]">
+                <span className="text-xs font-medium text-muted-foreground">Folders</span>
+                <button className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" onClick={() => setFolderDialog({ mode: "create", parent: here && !inBuiltIn ? here : "" })} aria-label="New folder" title="New folder">
+                  <FolderPlus className="size-4" />
                 </button>
-              )}
-            </div>
-          )}
-
-          <section>
-            <div className="mb-2 flex min-h-8 items-center justify-between gap-2 px-1" {...dropProps("")}>
-              <h2 className={cn("flex items-baseline gap-2 text-sm font-medium text-muted-foreground transition-colors", dropAt === "" && "text-highlight")}>
-                Custom<span className="tabular text-xs">{filed.length}</span>
-              </h2>
-              <Button variant="ghost" size="sm" className="-mr-2 h-8 gap-1.5 text-muted-foreground" onClick={() => setFolderDialog({ mode: "create", parent: "" })}>
-                <FolderPlus className="size-4" />New folder
-              </Button>
-            </div>
-            <div className={cn("overflow-hidden rounded-xl border bg-card/40 transition-colors", dropAt === "" && "border-highlight/60")} {...dropProps("")}>
-              {rows.length ? (
-                rows.map((r, i) =>
-                  r.kind === "loose" ? (
-                    <div key="loose" className="border-b border-t-foreground/15 bg-muted/30 px-4 py-2 text-xs font-medium text-muted-foreground [&:not(:first-child)]:border-t" {...dropProps("")}>
-                      Not in a folder
-                    </div>
-                  ) : r.kind === "folder" ? (
-                    <FolderRow
-                      key={`f:${r.path}`}
-                      path={r.path}
-                      depth={r.depth}
-                      count={counts.get(r.path) ?? 0}
-                      open={q ? true : !collapsed.has(r.path)}
-                      dropping={dropAt === r.path}
-                      groupStart={i > 0 && r.depth === 0}
-                      onToggle={() => toggle(r.path)}
-                      onNewType={() => setCreating({ folder: r.path })}
-                      onNewFolder={() => setFolderDialog({ mode: "create", parent: r.path })}
-                      onRename={() => setFolderDialog({ mode: "rename", path: r.path })}
-                      onMove={() => setMoving({ kind: "folder", path: r.path })}
-                      onDelete={() => setDeleting(r.path)}
-                      drag={dragProps({ folder: r.path })}
-                      drop={dropProps(r.path)}
-                    />
-                  ) : (
-                    <Row
-                      key={r.t.id}
-                      t={r.t}
-                      depth={r.depth}
-                      onExport={exportType}
-                      onDuplicate={() => setCreating({ source: r.t.id, folder: r.t.folder || undefined })}
-                      onMove={() => setMoving({ kind: "type", id: r.t.id, name: r.t.name, folder: r.t.folder })}
-                      drag={dragProps({ type: r.t.id })}
-                      drop={dropProps(r.t.folder)}
-                    />
-                  ),
-                )
-              ) : q ? (
-                <p className="px-6 py-8 text-center text-sm text-muted-foreground">No custom type matches “{query.trim()}”.</p>
-              ) : (
-                <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
-                  <p className="max-w-sm text-sm text-muted-foreground">No custom types yet. Start from a blank template, or copy a built-in one and make it yours.</p>
-                  <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setCreating({})}><Plus className="size-4" />New type</Button>
-                </div>
-              )}
-            </div>
-            {rows.length > 3 && folders.length === 0 && !q && (
-              <p className="mt-2 px-1 text-xs text-pretty text-muted-foreground">
-                Group types with <span className="text-foreground/80">New folder</span>, then drag types onto a folder or use <span className="text-foreground/80">Move to folder</span> in a type's menu.
-              </p>
-            )}
-          </section>
-
-          {(builtins.length > 0 || !q) && (
-            <section>
-              <h2 className="mb-2 flex items-baseline gap-2 px-1 text-sm font-medium text-muted-foreground">
-                Built in<span className="tabular text-xs">{builtins.length}</span>
-              </h2>
-              <div className="overflow-hidden rounded-xl border bg-card/40">
-                {builtins.map((t) => (
-                  <Row
-                    key={t.id}
-                    t={t}
-                    depth={0}
-                    onExport={exportType}
-                    onDuplicate={() => setCreating({ source: t.id })}
-                    onMove={() => setMoving({ kind: "type", id: t.id, name: t.name, folder: "" })}
-                    drag={dragProps({ type: t.id })}
-                  />
-                ))}
               </div>
-            </section>
-          )}
+              {folders.length ? (
+                <RailTree parent="" depth={0} childFolders={childFolders} count={(f) => typesIn(f).length} here={q ? null : here} collapsed={collapsed} toggle={toggle} drag={drag} drop={drop} dropAt={dropAt} onOpen={(f) => { setQuery(""); open(f); }} />
+              ) : (
+                <p className="py-1 pr-2.5 pl-[1.625rem] text-[13px] leading-relaxed text-pretty text-muted-foreground/80">No folders yet. Make one, then drag types onto it.</p>
+              )}
+              <div className="my-3 h-px bg-border" />
+              <RailItem icon={Package} label="Built in" count={builtins.length} active={inBuiltIn && !q} onClick={() => { setQuery(""); open(BUILT_IN); }} />
+            </div>
+          </aside>
+
+          <main className="min-w-0">
+            <div className="mb-6 flex gap-2">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Escape" && setQuery("")} placeholder="Search types" aria-label="Find a type" className="h-10 pr-10 pl-9" />
+                {query && (
+                  <button className="absolute top-1/2 right-1 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground" onClick={() => setQuery("")} aria-label="Clear search">
+                    <X className="size-4" />
+                  </button>
+                )}
+              </div>
+              {!inBuiltIn && (
+                <Button variant="outline" className="h-10 gap-1.5 lg:hidden" onClick={() => setFolderDialog({ mode: "create", parent: here })} aria-label="New folder">
+                  <FolderPlus className="size-4" /><span className="hidden sm:inline">New folder</span>
+                </Button>
+              )}
+            </div>
+
+            {q ? (
+              <Group label={`${plural(results.length, "match")}`}>
+                {results.length ? (
+                  <List>{results.map((t) => <TypeRow key={t.id} {...rowProps(t)} showPlace />)}</List>
+                ) : (
+                  <Empty>Nothing called “{query.trim()}”. Try part of a name or an id.</Empty>
+                )}
+              </Group>
+            ) : (
+              <div className="flex flex-col gap-8">
+                {subfolders.length > 0 && (
+                  <div className="lg:hidden">
+                    <Group label="Folders">
+                      <List>
+                        {subfolders.map((f) => (
+                          <FolderCard
+                            key={f}
+                            path={f}
+                            count={typesIn(f).length}
+                            folders={childFolders(f).length}
+                            dropping={dropAt === f}
+                            drag={drag({ folder: f })}
+                            drop={drop(f)}
+                            {...folderActions(f)}
+                          />
+                        ))}
+                      </List>
+                    </Group>
+                  </div>
+                )}
+
+                <Group label={inBuiltIn ? undefined : here ? (subfolders.length ? "Types" : undefined) : "Not in a folder"}>
+                  {listed.length ? (
+                    <List drop={inBuiltIn ? undefined : drop(here)} dropping={!inBuiltIn && dropAt === here}>
+                      {listed.map((t) => <TypeRow key={t.id} {...rowProps(t)} />)}
+                    </List>
+                  ) : here ? (
+                    <div {...drop(here)} className={cn("flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center transition-colors", dropAt === here && "border-highlight/70 bg-highlight/5")}>
+                      <FolderOpen className="size-6 text-muted-foreground/70" />
+                      <p className="max-w-xs text-sm text-pretty text-muted-foreground">Nothing here yet. Drag types onto this folder, use Move to folder in a type's menu, or start a new one here.</p>
+                      <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setCreating({ folder: here })}><Plus className="size-4" />New type here</Button>
+                    </div>
+                  ) : custom.length ? (
+                    <div {...drop("")} className={cn("rounded-xl border border-dashed px-6 py-6 text-center text-sm text-muted-foreground transition-colors", dropAt === "" && "border-highlight/70 bg-highlight/5")}>
+                      Every custom type is in a folder.
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center">
+                      <p className="max-w-sm text-sm text-muted-foreground">No custom types yet. Start from a blank template, or copy a built-in one and make it yours.</p>
+                      <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => setCreating({})}><Plus className="size-4" />New type</Button>
+                    </div>
+                  )}
+                </Group>
+                {!here && (
+                  <div className="lg:hidden">
+                    <List><BuiltInCard count={builtins.length} /></List>
+                  </div>
+                )}
+              </div>
+            )}
+          </main>
         </div>
       )}
 
@@ -287,8 +355,8 @@ function TypeList() {
         state={folderDialog}
         folders={folders}
         onOpenChange={(o) => !o && setFolderDialog(null)}
-        onDone={async (path) => {
-          reveal(parentOf(path));
+        onDone={async (path, from) => {
+          if (from && within(here, from)) open(path + here.slice(from.length));
           await reload();
         }}
       />
@@ -297,8 +365,8 @@ function TypeList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete the folder “{deleting && leaf(deleting)}”?</AlertDialogTitle>
             <AlertDialogDescription>
-              {deleting && (counts.get(deleting) ?? 0) > 0
-                ? `No type is deleted: the ${counts.get(deleting)} type${counts.get(deleting) === 1 ? "" : "s"} inside move to ${parentOf(deleting) ? `“${leaf(parentOf(deleting))}”` : "the top level"}. Folders inside it go too.`
+              {deleting && deepCount(deleting) > 0
+                ? `No type is deleted. The ${plural(deepCount(deleting), "type")} inside move to ${parentOf(deleting) ? `“${leaf(parentOf(deleting))}”` : "the top level"}, and the folders inside it go too.`
                 : "It's empty, so nothing else changes."}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -306,8 +374,10 @@ function TypeList() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={async () => {
+                const d = deleting!;
                 try {
-                  await api.deleteTypeFolder(deleting!);
+                  await api.deleteTypeFolder(d);
+                  if (within(here, d)) open(parentOf(d));
                   await reload();
                 } catch (e) {
                   toast.error((e as Error).message);
@@ -323,144 +393,239 @@ function TypeList() {
   );
 }
 
-type TreeRow = { kind: "folder"; path: string; depth: number } | { kind: "type"; t: TypeSummary; depth: number } | { kind: "loose" };
+// ------------------------------------------------------------------ pieces
 
-/** Folders first, then the types directly inside, depth-first, like a file browser. */
-function buildRows(folders: string[], types: TypeSummary[], collapsed: Set<string>, searching: boolean): TreeRow[] {
-  const all = new Set(folders);
-  for (const t of types) if (t.folder) for (const p of ancestors(t.folder)) all.add(p);
-  // While searching, only folders that lead to a match are worth showing.
-  const keep = searching ? new Set(types.flatMap((t) => (t.folder ? ancestors(t.folder) : []))) : all;
-  const children = (parent: string) =>
-    [...all].filter((p) => parentOf(p) === parent && keep.has(p)).sort((a, b) => leaf(a).localeCompare(leaf(b), undefined, { sensitivity: "base" }));
-  const out: TreeRow[] = [];
-  const walk = (parent: string, depth: number) => {
-    for (const f of children(parent)) {
-      out.push({ kind: "folder", path: f, depth });
-      if (!collapsed.has(f)) walk(f, depth + 1);
-    }
-    const here = types.filter((x) => x.folder === parent).sort(byName);
-    // Top-level types after the folders get a label, so they don't read as the last folder's contents.
-    if (!parent && here.length && out.length) out.push({ kind: "loose" });
-    for (const t of here) out.push({ kind: "type", t, depth });
-  };
-  walk("", 0);
-  return out;
+function Crumb({ label, onClick, drop, active }: { label: string; onClick(): void; drop: DropProps; active: boolean }) {
+  return (
+    <button className={cn("min-h-8 max-w-48 truncate rounded-md px-1.5 transition-colors hover:text-foreground", active && "bg-highlight/10 text-highlight")} onClick={onClick} {...drop}>
+      {label}
+    </button>
+  );
 }
 
-type DragProps = { draggable: boolean; onDragStart(e: React.DragEvent): void; onDragEnd(): void };
-type DropProps = { onDragOver(e: React.DragEvent): void; onDragLeave(e: React.DragEvent): void; onDrop(e: React.DragEvent): void };
-
-/** One step of indentation per level, the same width as a folder's chevron. */
-function Indent({ depth }: { depth: number }) {
-  return <>{Array.from({ length: depth }, (_, i) => <span key={i} aria-hidden className="w-4 shrink-0 sm:w-7" />)}</>;
+function Group({ label, aside, children }: { label?: React.ReactNode; aside?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section>
+      {label && (
+        <div className="mb-2.5 flex items-baseline justify-between px-0.5 text-xs font-medium text-muted-foreground">
+          <span>{label}</span>
+          {aside !== undefined && <span className="tabular">{aside}</span>}
+        </div>
+      )}
+      {children}
+    </section>
+  );
 }
 
-function FolderRow(p: {
-  path: string;
-  depth: number;
+function List({ children, drop, dropping }: { children: React.ReactNode; drop?: DropProps; dropping?: boolean }) {
+  return <div className={cn("divide-y overflow-hidden rounded-xl border bg-card/40 transition-colors", dropping && "border-highlight/70")} {...drop}>{children}</div>;
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="rounded-xl border border-dashed px-6 py-10 text-center text-sm text-muted-foreground">{children}</p>;
+}
+
+function RailItem({ icon: Icon, label, count, active, onClick, drop, dropping }: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
   count: number;
-  open: boolean;
+  active: boolean;
+  onClick(): void;
+  drop?: DropProps;
+  dropping?: boolean;
+}) {
+  return (
+    <button
+      className={cn(
+        "flex h-9 items-center gap-2 rounded-lg pr-2.5 pl-[1.625rem] text-left transition-colors hover:bg-accent/60",
+        active ? "bg-accent font-medium text-foreground" : "text-foreground/80",
+        dropping && "bg-highlight/10 text-highlight",
+      )}
+      onClick={onClick}
+      {...drop}
+    >
+      <Icon className={cn("size-4 shrink-0", active ? "text-foreground/80" : "text-muted-foreground")} />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className="tabular w-6 text-right text-xs text-muted-foreground">{count}</span>
+    </button>
+  );
+}
+
+function RailTree(p: {
+  parent: string;
+  depth: number;
+  childFolders(parent: string): string[];
+  count(folder: string): number;
+  here: string | null;
+  collapsed: Set<string>;
+  toggle(path: string): void;
+  drag(d: { folder: string }): DragProps;
+  drop(folder: string): DropProps;
+  dropAt: string | null;
+  onOpen(folder: string): void;
+}) {
+  return (
+    <>
+      {p.childFolders(p.parent).map((f) => {
+        const kids = p.childFolders(f).length > 0;
+        const expanded = kids && !p.collapsed.has(f);
+        const active = p.here === f;
+        return (
+          <div key={f}>
+            <div
+              data-rail={f}
+              className={cn(
+                "group flex h-9 items-center rounded-lg pr-2.5 transition-colors hover:bg-accent/60",
+                active ? "bg-accent font-medium text-foreground" : "text-foreground/80",
+                p.dropAt === f && "bg-highlight/10 text-highlight",
+              )}
+              style={{ paddingLeft: `${0.125 + p.depth * 1.25}rem` }}
+              {...p.drag({ folder: f })}
+              {...p.drop(f)}
+            >
+              <button
+                className={cn("flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground", !kids && "invisible")}
+                onClick={() => p.toggle(f)}
+                aria-label={expanded ? `Collapse ${leaf(f)}` : `Expand ${leaf(f)}`}
+                aria-expanded={expanded}
+                tabIndex={kids ? 0 : -1}
+              >
+                <ChevronRight className={cn("size-3.5 transition-transform", expanded && "rotate-90")} />
+              </button>
+              <button className="flex h-full min-w-0 flex-1 items-center gap-2 text-left" onClick={() => p.onOpen(f)}>
+                {p.dropAt === f ? <FolderOpen className="size-4 shrink-0 text-highlight" /> : active ? <FolderOpen className="size-4 shrink-0 text-foreground/80" /> : <Folder className="size-4 shrink-0 text-muted-foreground" />}
+                <span className="min-w-0 flex-1 truncate">{leaf(f)}</span>
+                <span className="tabular w-6 text-right text-xs text-muted-foreground">{p.count(f)}</span>
+              </button>
+            </div>
+            {expanded && <RailTree {...p} parent={f} depth={p.depth + 1} />}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function FolderMenu(p: { name: string; onNewType(): void; onNewFolder(): void; onRename(): void; onMove(): void; onDelete(): void; className?: string }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className={cn("size-8 shrink-0 text-muted-foreground", p.className)} aria-label={`Actions for folder ${p.name}`} onClick={(e) => e.stopPropagation()}>
+          <MoreHorizontal className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuItem onClick={p.onNewType}><Plus />New type here…</DropdownMenuItem>
+        <DropdownMenuItem onClick={p.onNewFolder}><FolderPlus />New folder inside…</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={p.onRename}><Pencil />Rename…</DropdownMenuItem>
+        <DropdownMenuItem onClick={p.onMove}><FolderInput />Move to…</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onClick={p.onDelete}><Trash2 />Delete folder…</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function FolderCard(p: {
+  path: string;
+  count: number;
+  folders: number;
   dropping: boolean;
-  /** A top-level folder after another group: a stronger rule above it. */
-  groupStart?: boolean;
-  onToggle(): void;
+  drag: DragProps;
+  drop: DropProps;
   onNewType(): void;
   onNewFolder(): void;
   onRename(): void;
   onMove(): void;
   onDelete(): void;
-  drag: DragProps;
-  drop: DropProps;
 }) {
   const name = leaf(p.path);
-  const Icon = p.open ? FolderOpen : Folder;
   return (
     <div
       data-folder={p.path}
-      className={cn("group flex min-h-12 items-stretch border-b pl-2 transition-colors last:border-b-0 hover:bg-accent/40",
-        p.groupStart && "border-t border-t-foreground/15 -mt-px", p.dropping && "bg-highlight/10 shadow-[inset_0_0_0_1px_var(--highlight)]")}
+      role="button"
+      tabIndex={0}
+      onClick={() => open(p.path)}
+      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), open(p.path))}
+      className={cn(
+        "group flex min-h-14 cursor-pointer items-center gap-3 py-2 pr-1.5 pl-4 outline-none transition-colors hover:bg-accent/40 focus-visible:bg-accent/40",
+        p.dropping && "bg-highlight/10",
+      )}
       {...p.drag}
       {...p.drop}
     >
-      <Indent depth={p.depth} />
-      <button className="flex min-w-0 flex-1 items-center gap-1.5 py-2 pr-2 text-left" onClick={p.onToggle} aria-expanded={p.open} aria-label={`${p.open ? "Collapse" : "Expand"} ${name}`}>
-        <span className="flex size-6 shrink-0 items-center justify-center text-muted-foreground sm:size-7">
-          <ChevronRight className={cn("size-4 transition-transform", p.open && "rotate-90")} />
-        </span>
-        <Icon className={cn("size-4 shrink-0", p.dropping ? "text-highlight" : "text-muted-foreground")} />
-        <span className="ml-1 truncate text-[0.95rem] font-semibold">{name}</span>
-        <span className="tabular shrink-0 text-xs text-muted-foreground">{p.count}</span>
-      </button>
-      <div className="flex shrink-0 items-center pr-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-10" aria-label={`Actions for folder ${name}`}><MoreHorizontal className="size-4" /></Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={p.onNewType}><Plus />New type here…</DropdownMenuItem>
-            <DropdownMenuItem onClick={p.onNewFolder}><FolderPlus />New folder inside…</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={p.onRename}><Pencil />Rename…</DropdownMenuItem>
-            <DropdownMenuItem onClick={p.onMove}><FolderInput />Move to…</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onClick={p.onDelete}><Trash2 />Delete folder…</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      {p.dropping ? <FolderOpen className="size-5 shrink-0 text-highlight" /> : <Folder className="size-5 shrink-0 text-muted-foreground" />}
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[0.95rem] font-medium">{name}</div>
+        <div className="truncate text-xs text-muted-foreground">{p.count || p.folders ? [p.count ? plural(p.count, "type") : "", p.folders ? plural(p.folders, "folder") : ""].filter(Boolean).join(" · ") : "Empty"}</div>
       </div>
+      <FolderMenu name={name} {...p} className="size-9" />
     </div>
   );
 }
 
-function Row({ t, depth, onExport, onDuplicate, onMove, drag, drop }: {
+function BuiltInCard({ count }: { count: number }) {
+  return (
+    <button className="flex min-h-14 w-full items-center gap-3 py-2 pr-2.5 pl-4 text-left transition-colors hover:bg-accent/40" onClick={() => open(BUILT_IN)}>
+      <Package className="size-5 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[0.95rem] font-medium">Built in</span>
+        <span className="block truncate text-xs text-muted-foreground">{plural(count, "type")} that ship with Etude</span>
+      </span>
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+    </button>
+  );
+}
+
+function TypeRow({ t, onExport, onDuplicate, onMove, drag, showPlace }: {
   t: TypeSummary;
-  depth: number;
   onExport(t: TypeSummary): void;
   onDuplicate(): void;
   onMove(): void;
   drag?: DragProps;
-  drop?: DropProps;
+  /** In search results: say which folder the type lives in. */
+  showPlace?: boolean;
 }) {
+  const place = t.folder ? t.folder.split("::").join(" › ") : t.shipped ? "Built in" : "Not in a folder";
+  // Most types are script-graded; only say so when it's something else.
+  const grader = t.grader !== "script" ? GRADER_LABEL[t.grader] ?? t.grader : null;
   return (
-    <div data-type={t.id} className="group flex items-stretch border-b last:border-b-0 hover:bg-accent/40" {...drag} {...drop}>
-      {/* Inside a folder the name lines up with the folder's name, past its chevron and icon. */}
-      {depth > 0 && (
-        <>
-          <span aria-hidden className="w-2 shrink-0" />
-          <Indent depth={depth} />
-          <span aria-hidden className="w-5 shrink-0 sm:w-8" />
-        </>
-      )}
-      <button className={cn("flex min-w-0 flex-1 flex-col gap-1 py-3 pr-4 text-left", depth > 0 ? "pl-0" : "pl-4")} onClick={() => navigate(`/types/${encodeURIComponent(t.id)}`)}>
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-[0.95rem] font-medium">{t.name}</span>
-          <code className="font-mono text-xs text-muted-foreground">{t.id}</code>
-          {/* The section says built-in or custom; an edited built-in, or one filed in a folder, says what it is. */}
-          {(t.edited || (t.shipped && t.folder)) && <Kind summary={t} />}
+    <div data-type={t.id} className="group flex min-h-16 items-center gap-3 pr-1.5 pl-4 transition-colors hover:bg-accent/40" {...drag}>
+      <button className="flex min-w-0 flex-1 flex-col gap-0.5 py-2.5 text-left" onClick={() => navigate(`/types/${encodeURIComponent(t.id)}`)}>
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className="truncate text-[0.95rem] font-medium">{t.name}</span>
+          <code className="hidden shrink-0 font-mono text-xs text-muted-foreground/70 sm:inline">{t.id}</code>
+          {t.edited && <Kind summary={t} />}
         </div>
-        {t.description && <p className="line-clamp-2 text-sm text-muted-foreground">{t.description}</p>}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground sm:hidden">
-          <span>{GRADER_LABEL[t.grader] ?? t.grader}</span>
-          <span>·</span>
-          <span className="tabular">{t.items} item{t.items === 1 ? "" : "s"}</span>
+        {t.description && <p className="line-clamp-2 max-w-[68ch] text-[13px] leading-snug text-muted-foreground sm:line-clamp-1">{t.description.replace(/\.$/, "")}</p>}
+        {showPlace && (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground/80">
+            {t.folder ? <Folder className="size-3 shrink-0" /> : t.shipped ? <Package className="size-3 shrink-0" /> : <Inbox className="size-3 shrink-0" />}
+            <span className="truncate">{place}</span>
+          </div>
+        )}
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground sm:hidden">
+          <code className="font-mono">{t.id}</code>
+          <span aria-hidden>·</span>
+          <span className="tabular">{plural(t.items, "item")}</span>
+          {grader && <><span aria-hidden>·</span><span>{grader}</span></>}
         </div>
       </button>
-      <div className="hidden w-24 shrink-0 flex-col items-start gap-0.5 pt-3.5 text-xs text-muted-foreground sm:flex">
-        <span>{GRADER_LABEL[t.grader] ?? t.grader}</span>
-        <span className="tabular">{t.items} item{t.items === 1 ? "" : "s"}</span>
+      <div className="hidden shrink-0 items-center gap-3 text-xs text-muted-foreground sm:flex">
+        {grader && <span className="rounded-md border px-1.5 py-0.5 text-[11px]">{grader}</span>}
+        <span className="tabular w-8 text-right" title={plural(t.items, "item")}>{t.items}</span>
       </div>
-      <div className="flex shrink-0 items-start pr-2 pt-2 sm:pl-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-10" aria-label={`Actions for ${t.name}`}><MoreHorizontal className="size-4" /></Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onMove}><FolderInput />Move to folder…</DropdownMenuItem>
-            <DropdownMenuItem onClick={onDuplicate}><Copy />Duplicate…</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onExport(t)}><Download />Export JSON</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="size-9 shrink-0 text-muted-foreground transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 sm:data-[state=open]:opacity-100" aria-label={`Actions for ${t.name}`}><MoreHorizontal className="size-4" /></Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={onMove}><FolderInput />Move to folder…</DropdownMenuItem>
+          <DropdownMenuItem onClick={onDuplicate}><Copy />Duplicate…</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onExport(t)}><Download />Export JSON</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
@@ -482,7 +647,8 @@ function MoveDialog({ target, folders, onOpenChange, onMoveType, onMoveFolder }:
   }, [target]);
   if (!target) return null;
 
-  const options = target.kind === "folder" ? folders.filter((f) => !within(f, target.path)) : folders;
+  const sorted = [...folders].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  const options = target.kind === "folder" ? sorted.filter((f) => !within(f, target.path)) : sorted;
   const current = target.kind === "type" ? target.folder : parentOf(target.path);
   const freshName = fresh.replace(/::/g, " ").trim();
   const dest = freshName ? (pick ? `${pick}::${freshName}` : freshName) : pick;
@@ -503,40 +669,44 @@ function MoveDialog({ target, folders, onOpenChange, onMoveType, onMoveFolder }:
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>Folders only organize this page. The type and its cards don't change.</DialogDescription>
+          <DialogDescription>Folders only organize the Types page. The type and its cards don't change.</DialogDescription>
         </DialogHeader>
-        <div className="flex max-h-72 flex-col overflow-y-auto rounded-lg border p-1" role="listbox" aria-label="Folders">
-          {["", ...options].map((f) => (
-            <button
-              key={f || "(top)"}
-              role="option"
-              aria-selected={pick === f}
-              className={cn("flex min-h-10 shrink-0 items-center gap-2 rounded-md pr-2 text-left text-sm outline-none transition-colors hover:bg-accent/60 focus-visible:ring-1 focus-visible:ring-ring", pick === f && "bg-accent font-medium text-foreground")}
-              style={{ paddingLeft: `${0.5 + 1.1 * (f ? f.split("::").length - 1 : 0)}rem` }}
-              onClick={() => setPick(f)}
-            >
-              <Folder className="size-4 shrink-0 opacity-70" />
-              <span className="truncate">{f ? leaf(f) : target.kind === "type" ? "No folder" : "Top level"}</span>
-              <span className="ml-auto flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                {f === current && "now here"}
-                {pick === f && <Check className="size-4 text-highlight" />}
-              </span>
-            </button>
-          ))}
+        <div className="flex max-h-72 flex-col gap-0.5 overflow-y-auto rounded-xl border bg-card/40 p-1.5" role="listbox" aria-label="Folders">
+          {["", ...options].map((f) => {
+            const chosen = pick === f;
+            return (
+              <button
+                key={f || "(top)"}
+                role="option"
+                aria-selected={chosen}
+                className={cn("flex min-h-10 shrink-0 items-center gap-2.5 rounded-lg pr-2.5 text-left text-sm outline-none transition-colors hover:bg-accent/60 focus-visible:ring-1 focus-visible:ring-ring", chosen && "bg-accent font-medium")}
+                style={{ paddingLeft: `${0.625 + 1 * (f ? f.split("::").length - 1 : 0)}rem` }}
+                onClick={() => setPick(f)}
+              >
+                {f ? (chosen ? <FolderOpen className="size-4 shrink-0 text-highlight" /> : <Folder className="size-4 shrink-0 text-muted-foreground" />) : <Inbox className={cn("size-4 shrink-0", chosen ? "text-highlight" : "text-muted-foreground")} />}
+                <span className="min-w-0 flex-1 truncate">{f ? leaf(f) : target.kind === "type" ? "No folder" : "Top level"}</span>
+                {f === current && <span className="shrink-0 text-xs font-normal text-muted-foreground">here now</span>}
+                <Check className={cn("size-4 shrink-0 text-highlight", !chosen && "invisible")} />
+              </button>
+            );
+          })}
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">Or a new folder {pick ? <>inside “{leaf(pick)}”</> : "at the top level"}</span>
-          <Input value={fresh} onChange={(e) => setFresh(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} placeholder="Folder name" className="h-10" />
+          <span className="text-[13px] text-muted-foreground">or make a new folder {pick ? <>inside <span className="text-foreground">{leaf(pick)}</span></> : "at the top level"}</span>
+          <Input value={fresh} onChange={(e) => setFresh(e.target.value)} onKeyDown={(e) => e.key === "Enter" && go()} placeholder="New folder name" className="h-10" />
         </div>
         <DialogFooter>
-          <Button onClick={go} disabled={dest === current} className="h-10 gap-1.5 sm:h-9"><FolderInput className="size-4" />{freshName ? "Create and move" : "Move"}</Button>
+          <Button onClick={go} disabled={dest === current} className="h-10 gap-1.5 sm:h-9">
+            <FolderInput className="size-4" />
+            {freshName ? `Move to new “${freshName}”` : dest ? `Move to ${leaf(dest)}` : target.kind === "type" ? "Take out of folder" : "Move to top level"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-function FolderNameDialog({ state, folders, onOpenChange, onDone }: { state: FolderDialog | null; folders: string[]; onOpenChange(o: boolean): void; onDone(path: string): Promise<void> }) {
+function FolderNameDialog({ state, folders, onOpenChange, onDone }: { state: FolderDialog | null; folders: string[]; onOpenChange(o: boolean): void; onDone(path: string, from?: string): Promise<void> }) {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -559,7 +729,7 @@ function FolderNameDialog({ state, folders, onOpenChange, onDone }: { state: Fol
     try {
       if (state.mode === "create") await api.createTypeFolder(path);
       else await api.renameTypeFolder(state.path, path);
-      await onDone(path);
+      await onDone(path, state.mode === "rename" ? state.path : undefined);
       onOpenChange(false);
     } catch (e) {
       toast.error((e as Error).message);
@@ -569,10 +739,10 @@ function FolderNameDialog({ state, folders, onOpenChange, onDone }: { state: Fol
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>{state.mode === "create" ? (parent ? `New folder in “${leaf(parent)}”` : "New folder") : "Rename folder"}</DialogTitle>
-          <DialogDescription>{state.mode === "create" ? "Drag types onto it, or use Move to folder in a type's menu." : "Everything inside stays inside."}</DialogDescription>
+          <DialogTitle>{state.mode === "create" ? "New folder" : "Rename folder"}</DialogTitle>
+          <DialogDescription>{state.mode === "create" ? (parent ? `Inside ${parent.split("::").join(" › ")}.` : "At the top level.") : "Everything inside stays inside."}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-1.5">
           <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} placeholder="Networks" className={cn("h-10", taken && "border-destructive")} />

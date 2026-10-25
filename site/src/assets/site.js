@@ -236,7 +236,8 @@ if (stage) {
     verdictEl.innerHTML = `<span class="v ${g.verdict}">${VERDICT[g.verdict] ?? "Rate yourself"}</span>${pct}<span class="m">· checked by the card's script in ${g.grader.ms} ms</span>`;
     verdictEl.classList.remove("pop"); void verdictEl.offsetWidth; verdictEl.classList.add("pop");
     // The answer and explanation grow the card: bring them into view inside the window.
-    setTimeout(() => body.scrollTo({ top: body.scrollHeight, behavior: reduced ? "auto" : "smooth" }), 350);
+    // The typing test puts its result (wpm, accuracy) at the top instead, so it stays there.
+    setTimeout(() => body.scrollTo({ top: cur.demo.type === "typing" ? 0 : body.scrollHeight, behavior: reduced ? "auto" : "smooth" }), 350);
     checkBtn.parentElement.hidden = true;
     const { fsrs, generatorParameters, createEmptyCard } = await loadFsrs();
     const f = fsrs(generatorParameters({ enable_fuzz: false, learning_steps: ["1m", "10m"], relearning_steps: ["10m"] }));
@@ -278,9 +279,11 @@ if (stage) {
     plot: (p) => p.key.points.map(([x, y]) => ({ sel: ".pl-svg", svg: [x, -y] })),
     timeline: (p) => Object.entries(p.key.years).map(([id, y]) => ({ kind: "drag", sel: `.tl-chip[data-id="${id}"]`, to: { sel: ".tl", at: [(y - p.view.from) / (p.view.to - p.view.from), 0.6] } })),
     color: (p) => ["h", "s", "l"].map((k, i) => ({ kind: "range", sel: `.co-slider[data-k="${k}"] input`, value: p.key.hsl[i] })),
+    // About 110 wpm with an uneven hand. The test ends itself on the last word.
+    typing: (p) => [{ sel: ".ty-box" }, { kind: "type", sel: ".ty-box", into: ".ty-input", text: p.view.words.join(" "), delay: 105 }],
   };
   // Mostly the suggested rating, sometimes Easy: a person who knows some cards cold.
-  const RATE = { timeline: 3, chess: 3, "unit-circle": 2, chord: 4, math: 3, "graph-walk": 3, staff: 4, plot: 3, color: 3 };
+  const RATE = { typing: 3, timeline: 3, chess: 3, "unit-circle": 2, chord: 4, math: 3, "graph-walk": 3, staff: 4, plot: 3, color: 3 };
   const cursor = document.createElement("div");
   cursor.className = "demo-cursor";
   cursor.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 8-6.2 1.6L9.6 19z"/></svg><i></i>`;
@@ -290,7 +293,8 @@ if (stage) {
   $(".window-bar", stage).appendChild(toggle);
   const acks = new Map();
   let ackId = 0, auto = !reduced, gen = 0, touched = false, resumeTimer = null;
-  const ask = (type, step) => new Promise((r) => { const id = ++ackId; acks.set(id, r); post({ type, id, step }); setTimeout(() => acks.has(id) && (acks.delete(id), r(null)), 3000); });
+  // A long typed step (the typing test) takes longer than the usual 3 s to answer.
+  const ask = (type, step) => new Promise((r) => { const id = ++ackId; acks.set(id, r); post({ type, id, step }); setTimeout(() => acks.has(id) && (acks.delete(id), r(null)), 3000 + (type === "demo-do" && step?.kind === "type" ? step.text.length * (step.delay ?? 42) * 1.5 : 0)); });
   const live = (g) => g === gen && auto;
   const until = async (cond, g, ms = 8000) => { const t = Date.now(); while (!cond()) { if (!live(g) || Date.now() - t > ms) return false; await sleep(80); } return true; };
   function place(x, y) { const r = stage.getBoundingClientRect(); cursor.style.transform = `translate(${x - r.left}px, ${y - r.top}px)`; cursor.classList.add("on"); }
@@ -324,9 +328,14 @@ if (stage) {
         } else await ask("demo-do", st);
         await sleep(st.pause ?? 380);
       }
-      if (!(await until(() => !checkBtn.disabled, g, 3000))) { if (live(g)) open((index + 1) % DEMOS.length); continue; }
-      if (!(await moveTo(checkBtn, g))) return;
-      await tap(); post({ type: "collect" });
+      // Some cards submit themselves (the typing test on its last word); the rest need Check.
+      if (cur.phase === "answer") {
+        if (!(await until(() => !checkBtn.disabled || cur.phase !== "answer", g, 3000))) { if (live(g)) open((index + 1) % DEMOS.length); continue; }
+        if (cur.phase === "answer") {
+          if (!(await moveTo(checkBtn, g))) return;
+          await tap(); post({ type: "collect" });
+        }
+      }
       if (!(await until(() => cur.phase === "result" && !ratings.hidden, g))) return;
       await sleep(2200);
       const r = RATE[cur.demo.type] ?? cur.result?.suggested ?? 3;

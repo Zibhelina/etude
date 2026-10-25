@@ -59,6 +59,7 @@ const DEMOS = [
   { id: "showcase.staff.treble", label: "Sheet music" },
   { id: "showcase.plot.parabola", label: "Plot" },
   { id: "showcase.color.hex", label: "Color" },
+  { id: "showcase.typing.english", label: "Typing" },
 ];
 const typeDir = (id: string) => [join(root, "examples/showcase/types", id), join(root, "types", id)].find((d) => existsSync(join(d, "type.json")))!;
 mkdirSync(join(out, "frames"), { recursive: true });

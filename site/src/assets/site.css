@@ -617,3 +617,14 @@ h1, h2, h3 { margin: 0; letter-spacing: -0.025em; font-weight: 600; }
 .dl-card .fineprint code { font-size: 0.85em; }
 
 @media (max-width: 640px) { .hide-sm { display: none; } .hero-meta { flex-direction: column; gap: 0.35rem; } }
+
+/* autoplay cursor */
+.stage { position: relative; }
+.demo-cursor { position: absolute; left: 0; top: 0; z-index: 5; width: 22px; height: 22px; margin: -3px 0 0 -4px; pointer-events: none; opacity: 0; transition: transform 0.6s cubic-bezier(0.45, 0, 0.2, 1), opacity 0.3s; }
+.demo-cursor.on { opacity: 1; }
+.demo-cursor svg { width: 22px; height: 22px; fill: var(--foreground); stroke: oklch(0 0 0 / 70%); stroke-width: 1.4; filter: drop-shadow(0 2px 6px oklch(0 0 0 / 60%)); }
+.demo-cursor i { position: absolute; left: 4px; top: 3px; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%; border: 2px solid var(--highlight); opacity: 0; }
+.demo-cursor.tap i { animation: tap 0.5s var(--ease); }
+@keyframes tap { from { opacity: 0.9; scale: 0.3; } to { opacity: 0; scale: 1.4; } }
+.demo-toggle svg { width: 0.85rem; height: 0.85rem; }
+@media (hover: none) and (pointer: coarse) { .demo-cursor { display: none; } }

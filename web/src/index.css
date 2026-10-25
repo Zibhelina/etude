@@ -129,6 +129,7 @@
 }
 
 .tabular { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .viz-anim { transition: none !important; } }
 
 .prose-etude { line-height: 1.6; }
 .prose-etude > :first-child { margin-top: 0; }

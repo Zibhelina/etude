@@ -53,7 +53,7 @@ export function Heatmap({ days, weeks: maxWeeks, today }: { days: { day: string;
   const L = 30, T = 20, G = 3;
   // As many weeks as fit at a readable cell size (up to maxWeeks), then cells grow to fill the width.
   const weeks = width ? Math.max(8, Math.min(maxWeeks, Math.floor((width - L) / (11 + G)))) : maxWeeks;
-  const C = width ? Math.max(9, Math.min(28, Math.floor((width - L) / weeks) - G)) : 12;
+  const C = width ? Math.max(9, Math.min(40, Math.floor((width - L) / weeks) - G)) : 12;
   const byDay = useMemo(() => new Map(days.map((d) => [d.day, d])), [days]);
   const end = parseDay(today);
   // Start on the Monday `weeks - 1` weeks before this week's Monday.
@@ -170,7 +170,7 @@ export function BarChart({
   const nice = (() => {
     if (max <= 4) return Math.max(1, Math.ceil(max));
     const p = Math.pow(10, Math.floor(Math.log10(max)));
-    for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= max) return m * p;
+    for (const m of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= max) return m * p;
     return 10 * p;
   })();
   const ticks = nice <= 4 ? Array.from({ length: nice + 1 }, (_, i) => i) : [0, nice / 2, nice];

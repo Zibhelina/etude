@@ -184,6 +184,7 @@ const REPERTOIRE: [string, [string, string, string, string[]][]][] = [
     ["interval", "Name the interval", "Ear training: listen to two notes and name the distance between them. Turn your sound on.", ["showcase.interval.basic", "showcase.interval.all"]],
     ["color", "Mix the color", "Build the color from its hex code with hue, saturation and lightness.", ["showcase.color.hex"]],
     ["sprint", "Beat the clock", "Thirty seconds of mental arithmetic. It submits itself when the time is up.", ["showcase.sprint.mixed"]],
+    ["typing", "Type fast", "A Monkeytype-style typing test. The clock starts on your first key, and the result is your WPM.", ["showcase.typing.english", "showcase.typing.python"]],
   ]],
   ["Draw & write", [
     ["free", "Prove it", "A proof in your own words, with math that renders as you type.", ["showcase.free.induction"]],

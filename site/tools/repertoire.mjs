@@ -216,6 +216,14 @@ const SOLVE = {
     await sleep(31000);
     return "auto";
   },
+  async typing(sid, s) {
+    await clickIn(sid, ".ty-box");
+    await sleep(200);
+    // The 25-word item ends itself on the last word; a timed one ends when the clock runs out.
+    for (const w of s.view.words.slice(0, s.view.seconds ? 30 : undefined)) { await typeText(w + " "); await sleep(60); }
+    if (s.view.seconds) await sleep(s.view.seconds * 1000 + 500);
+    return "auto";
+  },
   async match(sid, s) {
     for (const [l, r] of Object.entries(s.key.pairs)) { await clickIn(sid, `.chip[data-id="${l}"]`); await clickIn(sid, `.chip[data-id="${r}"]`); }
   },

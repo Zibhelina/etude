@@ -56,10 +56,41 @@ function show(os) {
   $("[data-home]").textContent = o.home;
   $("[data-env]").textContent = o.env;
   const panel = $("[data-panel]");
+  panel.classList.toggle("mac", os === "mac");
   panel.classList.remove("os-panel"); void panel.offsetWidth; panel.classList.add("os-panel");
   history.replaceState(null, "", `#${os}`);
 }
 $$("[data-os]").forEach((b) => b.addEventListener("click", () => show(b.dataset.os)));
+
+// Mac: the terminal steps open on request.
+$("[data-mac-term]").addEventListener("click", (ev) => {
+  const open = $("[data-panel]").classList.toggle("show-term");
+  ev.currentTarget.setAttribute("aria-expanded", String(open));
+});
+
+// Mac: Intel Macs get the Intel build as the main button when the browser can tell.
+async function macChip() {
+  if (!/Macintosh|Mac OS X/.test(navigator.userAgent)) return "arm";
+  try {
+    const h = await navigator.userAgentData?.getHighEntropyValues?.(["architecture"]);
+    if (h?.architecture) return h.architecture === "x86" ? "intel" : "arm";
+  } catch {}
+  try {
+    const gl = document.createElement("canvas").getContext("webgl");
+    const ext = gl?.getExtension("WEBGL_debug_renderer_info");
+    const r = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : "";
+    if (/apple m\d|apple gpu/i.test(r)) return "arm";
+    if (/intel|amd|radeon|nvidia/i.test(r)) return "intel";
+  } catch {}
+  return "arm";
+}
+macChip().then((chip) => {
+  if (chip !== "intel") return;
+  const main = $("[data-mac-main]"), alt = $("[data-mac-alt]");
+  [main.href, alt.href] = [alt.href, main.href];
+  $("[data-mac-label]").textContent = "Download for Intel Mac";
+  alt.textContent = "Mac with Apple Silicon (M1 or newer)?";
+});
 show(OS[location.hash.slice(1)] ? location.hash.slice(1) : detect());
 
 // Every command block gets a copy button.

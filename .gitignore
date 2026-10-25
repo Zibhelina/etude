@@ -9,3 +9,5 @@ web/dist/
 /*.png
 /media/
 site/dist/
+packaging/macos/.cache/
+/dist/

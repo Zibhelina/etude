@@ -331,7 +331,82 @@ export const api = {
   saveTheme: (t: ThemeData) => call<{ theme: ThemeData; removed: string[]; created: boolean }>("PUT", `/api/themes/${encodeURIComponent(t.id)}`, t),
   deleteTheme: (id: string) => call<{ deleted: string; selected: string }>("DELETE", `/api/themes/${encodeURIComponent(id)}`),
   selectTheme: (id: string) => call<ThemeData>("PUT", "/api/theme", { id }),
+
+  market: (refresh = false) => call<MarketListing>("GET", `/api/market${refresh ? "?refresh=1" : ""}`),
+  marketEntry: (kind: MarketKind, id: string) => call<MarketFile>("GET", `/api/market/entry/${kind}/${encodeURIComponent(id)}`),
+  marketInstall: (id: string, kind: MarketKind, opts: { use?: boolean; dryRun?: boolean } = {}) =>
+    call<{ entry: MarketMeta; result: "created" | "updated" | "unchanged"; ids: string[]; report: any }>("POST", "/api/market/install", { id, kind, ...opts }),
+  marketForget: (id: string) => call<{ forgot: boolean }>("POST", "/api/market/forget", { id }),
+  publishStatus: () => call<{ ok: boolean; login?: string; reason?: string; repo: string }>("GET", "/api/market/publish/status"),
+  publish: (input: PublishInput & { dryRun?: boolean; full?: boolean }) => call<PublishResult>("POST", "/api/market/publish", input),
 };
+
+export type MarketKind = "theme" | "deck" | "type";
+
+export interface MarketMeta {
+  id: string;
+  kind: MarketKind;
+  name: string;
+  description: string;
+  author: string;
+  tags: string[];
+  version: string;
+  updated: string;
+}
+
+export type MarketSummary =
+  | { theme: ThemeData }
+  | { decks: string[]; items: number; cardTypes: Record<string, number>; types: { id: string; name: string }[]; watch: boolean; samples: string[] }
+  | { types: { id: string; name: string; description: string; grader: string; fields: string[] }[]; items: number; samples: string[] };
+
+export interface MarketEntry extends MarketMeta {
+  path: string;
+  bytes: number;
+  summary: MarketSummary;
+  installed: "installed" | "update" | null;
+  /** What the install put in this collection (theme id, decks, type ids). */
+  installedIds: string[];
+}
+
+export interface MarketListing {
+  url: string;
+  repo: string;
+  generated: string;
+  selectedTheme: string;
+  entries: MarketEntry[];
+}
+
+export interface MarketFile extends MarketMeta {
+  etudeMarket: 1;
+  content: any;
+}
+
+export interface PublishInput {
+  kind: MarketKind;
+  ref: string;
+  id?: string;
+  name?: string;
+  description?: string;
+  author?: string;
+  tags?: string[];
+  version?: string;
+  examples?: number;
+}
+
+export interface PublishResult {
+  dryRun?: boolean;
+  url?: string;
+  number?: number;
+  fork?: string | null;
+  updated?: boolean;
+  path: string;
+  bytes: number;
+  repo: string;
+  manualUrl: string;
+  entry: MarketMeta;
+  summary: MarketSummary;
+  file?: MarketFile;
+}
 
 /** A theme as the server stores it (see src/core/themes.ts). */
 export interface ThemeData {

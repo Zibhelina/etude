@@ -377,7 +377,7 @@ export function TypeEditor({ id }: { id: string }) {
         {/* editor */}
         <div ref={editorPane} className={cn("min-w-0 px-4 pb-6 pt-4 sm:px-6 lg:block lg:px-0 lg:pt-6", view === "edit" ? "block" : "hidden")}>
           <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="grid w-full grid-cols-3 gap-1 group-data-[orientation=horizontal]/tabs:h-auto sm:flex sm:w-fit">
+            <TabsList className="grid w-full grid-cols-3 gap-1 group-data-[orientation=horizontal]/tabs:h-auto sm:flex sm:w-fit lg:grid lg:w-full xl:flex xl:w-fit">
               {[
                 ["info", "Info"],
                 ["fields", `Fields`],

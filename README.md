@@ -325,16 +325,19 @@ Agents that use Etude should read [skill/SKILL.md](skill/SKILL.md). It can be dr
 
 Etude keeps three questions apart: **what** you practice (an item), **how** you answer it and get marked (its card type and grader), and **when** it comes back (the deck's scheduler). Each one can be swapped without touching the others, so a map card can run on FSRS and a typing test can run on a daily drill.
 
-```
-deck ─┬─ item          the content: fields, tags. No study state.
-      │    └─ type     which fields it has, how it looks, how it's graded
-      │
-      └─ cards         one per face of the item; this is what you study
-             │
-   prepare(fields)  →  view (what the card shows) + key (what grading needs)
-   template shows the view in a sandboxed frame  →  you answer
-   grader(answer, view, key)  →  score 0..1  →  suggested rating
-   scheduler(card, attempt)   →  next due date
+```mermaid
+flowchart TD
+  deck["Deck"] -->|holds| item["Item<br/>fields and tags"]
+  item -->|one card per face| card["Card<br/>scheduling state"]
+  card -->|you study it| type
+  subgraph type ["Card type"]
+    direction LR
+    prepare["prepare(fields)"] -->|view + key| template["template<br/>sandboxed frame"]
+    template -->|your answer| grader["grader"]
+  end
+  type -->|score 0 to 1| review["Attempt, then review"]
+  review -->|rating| scheduler["Scheduler<br/>chosen by the deck"]
+  scheduler -->|next due date| card
 ```
 
 | Concept | What it is |

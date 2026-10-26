@@ -532,7 +532,7 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               disabled={presetUsers.length > 0}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              variant="destructive"
               onClick={async () => {
                 if (!preset) return;
                 try {

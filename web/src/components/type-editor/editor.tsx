@@ -26,6 +26,7 @@ import { BLANK_SAMPLE, clearPending, download, exportShape, fieldDefaults, GRADE
 type Grader = CardType["grader"] & { code?: string; vision?: boolean; instructions?: string };
 
 const same = (a: CardType, b: CardType) => JSON.stringify(exportShape(a)) === JSON.stringify(exportShape(b));
+const count = (n: number, one: string) => `${n.toLocaleString()} ${one}${n === 1 ? "" : "s"}`;
 
 export function TypeEditor({ id }: { id: string }) {
   const [saved, setSaved] = useState<CardType | null>(null);
@@ -284,6 +285,8 @@ export function TypeEditor({ id }: { id: string }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   // Where to go once the user agrees to drop unsaved changes.
   const [leaveTo, setLeaveTo] = useState<string | null>(null);
+  // What deleting takes with the type, fetched when Delete is chosen.
+  const [usage, setUsage] = useState<{ items: number; archived: number; cards: number; reviews: number } | null>(null);
   const [view, setView] = useState<"edit" | "preview">("edit");
   const [tab, setTab] = useState("info");
 
@@ -305,10 +308,22 @@ export function TypeEditor({ id }: { id: string }) {
       toast.error((e as Error).message);
     }
   };
+  const askDelete = async () => {
+    try {
+      setUsage(await api.typeUsage(id));
+      setConfirmDelete(true);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+  const viewItems = (q: string) => {
+    setConfirmDelete(false);
+    go(`/browse?q=${encodeURIComponent(q)}`);
+  };
   const del = async () => {
     try {
-      await api.deleteType(id);
-      toast.success(`Deleted ${saved?.name ?? id}`);
+      const r = await api.deleteType(id, { items: !!usage?.items });
+      toast.success(`Deleted ${saved?.name ?? id}${r.items ? ` and ${count(r.items, "item")}` : ""}`);
       navigate("/types");
     } catch (e) {
       toast.error("Couldn't delete", { description: (e as Error).message });
@@ -366,9 +381,7 @@ export function TypeEditor({ id }: { id: string }) {
                   {isNew ? (
                     <DropdownMenuItem variant="destructive" onClick={() => { clearPending(id); navigate("/types"); }}><X />Discard new type</DropdownMenuItem>
                   ) : (
-                    <DropdownMenuItem variant="destructive" disabled={items + archived > 0} onClick={() => setConfirmDelete(true)}>
-                      <Trash2 />{items > 0 ? `Delete (used by ${items})` : archived > 0 ? `Delete (used by ${archived} archived)` : "Delete…"}
-                    </DropdownMenuItem>
+                    <DropdownMenuItem variant="destructive" onClick={askDelete}><Trash2 />Delete…</DropdownMenuItem>
                   )}
                 </>
               )}
@@ -681,12 +694,26 @@ export function TypeEditor({ id }: { id: string }) {
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {saved?.name}?</AlertDialogTitle>
-            <AlertDialogDescription>No items use this type. Export it first if you might want it back.</AlertDialogDescription>
+            <AlertDialogTitle>{usage?.items ? `Delete ${saved?.name} and its ${count(usage.items, "item")}?` : `Delete ${saved?.name}?`}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {usage?.items
+                ? `${count(usage.items, "item")} ${usage.items === 1 ? "uses" : "use"} this type${usage.archived === usage.items ? (usage.items === 1 ? " (archived)" : " (all archived)") : usage.archived ? ` (${usage.archived} archived)` : ""}, with ${count(usage.cards, "card")} and ${count(usage.reviews, "review")} of history. Deleting the type deletes ${usage.items === 1 ? "it" : "them"} too, and that can't be undone. Export the type first if you might want it back.`
+                : "No items use this type. Export it first if you might want it back."}
+            </AlertDialogDescription>
+            {!!usage?.items && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {usage.items > usage.archived && (
+                  <Button variant="outline" size="sm" onClick={() => viewItems(`type:${id}`)}>{usage.archived ? `View ${count(usage.items - usage.archived, "active item")}` : "View them"}</Button>
+                )}
+                {usage.archived > 0 && (
+                  <Button variant="outline" size="sm" onClick={() => viewItems(`type:${id} is:archived`)}>{usage.items > usage.archived ? `View ${usage.archived.toLocaleString()} archived` : "View them"}</Button>
+                )}
+              </div>
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90" onClick={del}>Delete</AlertDialogAction>
+            <AlertDialogAction variant="destructive" onClick={del}>{usage?.items ? `Delete type and ${count(usage.items, "item")}` : "Delete"}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

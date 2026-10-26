@@ -202,9 +202,10 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     return c.json({ ...r.type, leftover: r.leftover });
   });
   app.get("/api/types/:id/leftover", (c) => c.json(etude.leftoverReport({ type: c.req.param("id") })));
-  app.delete("/api/types/:id", (c) => {
-    etude.deleteType(c.req.param("id"));
-    return c.json({ ok: true });
+  app.get("/api/types/:id/usage", (c) => c.json(etude.typeUsage(c.req.param("id"))));
+  app.delete("/api/types/:id", async (c) => {
+    const r = etude.deleteType(c.req.param("id"), { items: !!(await body(c)).items });
+    return c.json({ ok: true, ...r });
   });
   app.post("/api/types/:id/reset", (c) => {
     etude.resetType(c.req.param("id"));

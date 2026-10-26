@@ -228,16 +228,19 @@ command({
 
 command({
   name: "type delete",
-  summary: "Delete a custom type no item uses (archived items count).",
+  summary: "Delete a custom type. Items using it (archived ones count) stop it, unless --items deletes them too.",
+  description: "With --items, every item of the type goes with it, archived ones included, with their cards and review history. Preview with --dry-run.",
   args: [{ name: "id", description: "Type id.", required: true }],
+  flags: [{ name: "items", type: "boolean", description: "Also delete the items using the type, with their cards and history." }],
   writes: true,
   dryRun: true,
   confirm: true,
-  examples: ["etude type delete my-old-type --yes"],
+  examples: ["etude type delete my-old-type --yes", "etude type delete anki-basic-2 --items --dry-run"],
+  output: "{ deleted, items, cards, reviews }",
   run(ctx) {
     ctx.e.type(ctx.args.id);
-    ctx.e.deleteType(ctx.args.id);
-    return { deleted: ctx.args.id };
+    const r = ctx.e.deleteType(ctx.args.id, { items: !!ctx.flags.items });
+    return { deleted: ctx.args.id, ...r };
   },
 });
 

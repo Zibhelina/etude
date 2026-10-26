@@ -171,6 +171,8 @@ export interface CardType {
   showVerdict?: boolean;
   updated?: string;
   builtin?: boolean;
+  /** Files the type ships with (read-only here; packs and `etude type import` set them). */
+  assetFiles?: { name: string; size: number; hash: string }[];
 }
 
 export interface TypeSummary {
@@ -187,6 +189,8 @@ export interface TypeSummary {
   grader: string;
   /** Folder path in the Types page ("A::B"), "" when the type isn't in a folder. */
   folder: string;
+  /** Asset files the type ships with. */
+  assetFiles: { name: string; size: number }[];
 }
 
 export interface SearchRow {

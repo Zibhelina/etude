@@ -30,7 +30,7 @@ const strip = (def: any): CardTypeDef => {
 
 export function writeTypeDir(def: CardTypeDef, dir: string) {
   mkdirSync(dir, { recursive: true });
-  const { template, prepare, demo, grader, ...meta } = strip(def) as any;
+  const { template, prepare, demo, grader, assets, ...meta } = strip(def) as any;
   const g = { ...grader };
   const files: string[] = ["type.json", "template.html"];
   if (g.code) {
@@ -44,6 +44,13 @@ export function writeTypeDir(def: CardTypeDef, dir: string) {
   if (template?.js) writeFileSync(join(dir, "card.js"), template.js), files.push("card.js");
   if (prepare) writeFileSync(join(dir, "prepare.js"), prepare), files.push("prepare.js");
   if (demo) writeFileSync(join(dir, "demo.js"), demo), files.push("demo.js");
+  if (assets && Object.keys(assets).length) {
+    mkdirSync(join(dir, "assets"), { recursive: true });
+    for (const [name, b64] of Object.entries(assets as Record<string, string>)) {
+      writeFileSync(join(dir, "assets", name), Buffer.from(b64, "base64"));
+      files.push(`assets/${name}`);
+    }
+  }
   return files;
 }
 
@@ -82,19 +89,20 @@ command({
 
 command({
   name: "type show",
-  summary: "A type's full definition: fields (with kinds, private flags, defaults), template, prepare and grader code.",
+  summary: "A type's full definition: fields (with kinds, private flags, defaults), template, prepare and grader code, plus its asset files (name, size, hash).",
   args: [{ name: "id", description: "Type id.", required: true }],
   flags: [{ name: "fields-only", type: "boolean", description: "Only the field list (what an item of this type takes)." }],
   examples: ["etude type show numeric --fields-only"],
+  output: "the definition plus assetFiles: [{ name, size, hash }] (never the bytes; `type export` writes those)",
   run(ctx) {
     const def = ctx.e.type(ctx.args.id);
-    return ctx.flags["fields-only"] ? { id: def.id, faces: def.faces ?? ["main"], grader: def.grader.kind, fields: def.fields } : def;
+    return ctx.flags["fields-only"] ? { id: def.id, faces: def.faces ?? ["main"], grader: def.grader.kind, fields: def.fields } : { ...def, assetFiles: ctx.e.typeAssets(def.id) };
   },
 });
 
 command({
   name: "type export",
-  summary: "Write a type as editable files (type.json, template.html, style.css, card.js, prepare.js, grade.js), or print it as JSON.",
+  summary: "Write a type as editable files (type.json, template.html, style.css, card.js, prepare.js, grade.js, assets/), or print it as JSON (assets as base64).",
   args: [{ name: "id", description: "Type id.", required: true }],
   flags: [
     { name: "out", type: "string", short: "o", description: "Directory to write. Default: ./<id>.", placeholder: "DIR" },
@@ -104,7 +112,7 @@ command({
   examples: ["etude type export numeric -o my-numeric", "etude type export numeric --json > numeric.json"],
   output: "{ written: dir, files } or the definition with --json",
   run(ctx) {
-    const def = strip(ctx.e.type(ctx.args.id));
+    const def = ctx.e.typeWithAssets(ctx.args.id);
     if (ctx.flags.json) return def;
     const dir = resolve(ctx.flags.out ?? def.id);
     return { written: dir, files: writeTypeDir(def, dir) };
@@ -114,22 +122,21 @@ command({
 command({
   name: "type import",
   summary: "Create or update a type from a directory, a JSON file, or JSON on stdin (`-`). Saving an edited built-in makes it yours.",
-  description: "The type is validated first (fields, grader, script syntax). Items of the type get cards for any new faces. Unchanged definitions are a no-op.",
+  description:
+    "The type is validated first (fields, grader, script syntax, assets). Items of the type get cards for any new faces. Unchanged definitions are a no-op. A directory's `assets/` folder (or a JSON `assets` object) replaces the type's asset files; a source without assets keeps the stored ones.",
   args: [{ name: "source", description: "Type directory, type.json / JSON file, or `-`.", required: true }],
   flags: [{ name: "id", type: "string", description: "Save under this id instead of the one in the source." }],
   writes: true,
   dryRun: true,
   examples: ["etude type import ./vocab", "etude type import vocab.json --dry-run", "etude type export basic --json | jq '.id=\"basic2\"' | etude type import -"],
-  output: "{ result: created|updated|unchanged, type: { id, name, fields, grader } }",
+  output: "{ result: created|updated|unchanged, type: { id, name, fields, grader }, assets: { files, bytes, created, updated, unchanged, removed } | null }",
   run(ctx) {
     const def = loadTypeSource(ctx, ctx.args.source);
     if (ctx.flags.id) def.id = ctx.flags.id;
     const errors = validateType(def);
     if (errors.length) throw new CliError(`invalid type: ${errors.join("; ")}`, "validation", { errors });
-    const old = ctx.e.db.get("SELECT def FROM types WHERE id = ?", def.id);
-    const saved = ctx.e.saveType(def);
-    const result = !old ? "created" : old.def === JSON.stringify(saved) ? "unchanged" : "updated";
-    return { result, type: { id: saved.id, name: saved.name, faces: saved.faces ?? ["main"], fields: saved.fields.map((f) => f.name), grader: saved.grader.kind } };
+    const { type: saved, result, assets } = ctx.e.saveTypeReport(def);
+    return { result, type: { id: saved.id, name: saved.name, faces: saved.faces ?? ["main"], fields: saved.fields.map((f) => f.name), grader: saved.grader.kind }, assets };
   },
 });
 
@@ -315,7 +322,7 @@ command({
   examples: ['etude type copy numeric numeric-units --name "Numeric with units"'],
   run(ctx) {
     if (ctx.e.db.get("SELECT 1 FROM types WHERE id = ?", ctx.args["new-id"])) throw new CliError(`type "${ctx.args["new-id"]}" already exists`, "conflict");
-    const def = strip(ctx.e.type(ctx.args.id));
+    const def = ctx.e.typeWithAssets(ctx.args.id);
     const saved = ctx.e.saveType({ ...def, id: ctx.args["new-id"], name: ctx.flags.name ?? `${def.name} (copy)` });
     return { created: saved.id, from: ctx.args.id };
   },
@@ -436,7 +443,7 @@ command({
   legacy: true,
   aliasOf: "type export",
   run(ctx) {
-    const def = strip(ctx.e.type(ctx.args.id));
+    const def = ctx.e.typeWithAssets(ctx.args.id);
     const dir = ctx.flags.out ?? def.id;
     writeTypeDir(def, dir);
     return { written: dir };

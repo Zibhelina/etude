@@ -437,7 +437,8 @@ export function ImportButton({ onDone }: { onDone(): void }) {
             toast.success(`Imported ${f.name}`, { description: `${r.items.created} new, ${r.items.updated} updated, ${r.items.unchanged} unchanged · ${r.cards} cards · ${r.reviews} reviews${media}${skipped}` });
           } else {
             const r = await api.importPack(JSON.parse(await f.text()));
-            toast.success(`Imported ${f.name}`, { description: `${r.items.created} new, ${r.items.updated} updated, ${r.items.unchanged} unchanged` });
+            const assets = r.assets?.created + r.assets?.updated ? ` · ${r.assets.created + r.assets.updated} asset files` : "";
+            toast.success(`Imported ${f.name}`, { description: `${r.items.created} new, ${r.items.updated} updated, ${r.items.unchanged} unchanged${assets}` });
           }
         } catch (e) {
           toast.error(`Couldn't import ${f.name}`, { description: (e as Error).message.slice(0, 400) });

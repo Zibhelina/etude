@@ -63,6 +63,11 @@ export interface CardTypeDef {
    * Practice decks chart them. Without it, every top-level numeric detail is tracked.
    */
   metrics?: MetricSpec[];
+  /**
+   * Files shipped once with the type, `{ name: base64 }`. Cards load them with `etude.asset(name)`.
+   * Stored apart from the definition; omitted on save means "keep the stored ones".
+   */
+  assets?: Record<string, string>;
 }
 
 export interface MetricSpec {

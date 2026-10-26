@@ -3,10 +3,17 @@
 // read the app, its cookies or the API. It talks to the app only through postMessage.
 import type { CardTypeDef } from "../core/model.ts";
 
+/** What a card needs to find its type's assets: the type id and each asset's content hash. */
+export interface FrameAssets {
+  type: string;
+  files: { name: string; hash: string }[];
+}
+
 const esc = (s: string) => s.replace(/<\/(script|style)/gi, "<\\/$1");
 
-export function cardFrame(def: CardTypeDef, base: string): string {
+export function cardFrame(def: CardTypeDef, base: string, assets?: FrameAssets): string {
   const js = def.template.js ?? "";
+  const assetMap = { type: assets?.type ?? def.id, files: Object.fromEntries((assets?.files ?? []).map((f) => [f.name, f.hash])) };
   return `<!doctype html>
 <html>
 <head>
@@ -29,7 +36,7 @@ boot(async (etude) => {
     normalize: (s) => String(s ?? "").normalize("NFKC").toLowerCase().replace(/\\s+/g, " ").trim(),
   };
 ${esc(js)}
-}, template);
+}, template, ${JSON.stringify(assetMap).replace(/</g, "\\u003c")});
 </script>
 </body>
 </html>`;

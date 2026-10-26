@@ -26,6 +26,8 @@ etude market installed
 
 Decks are shared without review history. Built-in themes and card types can't be published; publish a copy you changed.
 
+A card type's [assets](types.md#assets) travel inside the entry as base64, with decks and card types alike, so an entry file can be up to 32 MiB. The index lists each type's asset count and size (`summary.types[].assets: { files, bytes }`), and `etude market check` and `etude market index` validate them like the rest of the type.
+
 Without the GitHub CLI, **Save file** downloads the entry and **Add on GitHub** opens the repository's upload page.
 
 ```sh

@@ -59,6 +59,7 @@ import { openPackage } from "./anki/package.ts";
 import { readCollection } from "./anki/collection.ts";
 import { convertCollection, type PlannedCard } from "./anki/convert.ts";
 import { MAX_MEDIA_BYTES, mediaType } from "./media.ts";
+import { decodeAssets, hashBytes, type AssetInfo } from "./assets.ts";
 
 export class EtudeError extends Error {
   status: number;
@@ -569,22 +570,24 @@ export class Etude {
 
   private syncBuiltinTypes(dir: string) {
     const ts = iso();
-    const defs = loadBuiltinTypes(dir);
+    const defs = loadBuiltinTypes(dir).map(splitAssets);
     // Most opens change nothing; skip the write lock then.
-    const stale = defs.filter((def) => {
+    const stale = defs.filter(({ def, assets }) => {
       const row = this.db.get("SELECT def, builtin FROM types WHERE id = ?", def.id);
-      return !row || (row.builtin !== 0 && row.def !== json(def));
+      return !row || (row.builtin !== 0 && (row.def !== json(def) || this.assetsDiffer(def.id, assets ?? {})));
     });
     if (stale.length) this.db.tx(() => {
-      for (const def of stale) {
+      for (const { def, assets } of stale) {
         const row = this.db.get("SELECT builtin FROM types WHERE id = ?", def.id);
         // A built-in the user has edited (builtin = 0) is theirs now; leave it alone.
         if (row && row.builtin === 0) continue;
+        const delta = this.writeAssets(def.id, assets ?? {});
         this.db.run(
-          "INSERT INTO types (id, def, builtin, updated) VALUES (?, ?, 1, ?) ON CONFLICT(id) DO UPDATE SET def = excluded.def, updated = CASE WHEN types.def = excluded.def THEN types.updated ELSE excluded.updated END",
+          "INSERT INTO types (id, def, builtin, updated) VALUES (?, ?, 1, ?) ON CONFLICT(id) DO UPDATE SET def = excluded.def, updated = CASE WHEN types.def = excluded.def AND ? = 0 THEN types.updated ELSE excluded.updated END",
           def.id,
           json(def),
           ts,
+          Number(assetsChanged(delta)),
         );
       }
     });
@@ -600,9 +603,15 @@ export class Etude {
   listTypes() {
     let shipped: Set<string>;
     try {
-      shipped = new Set(loadBuiltinTypes(this.builtinDir).map((t) => t.id));
+      shipped = new Set(loadBuiltinTypes(this.builtinDir, { assets: false }).map((t) => t.id));
     } catch {
       shipped = new Set();
+    }
+    const files = new Map<string, { name: string; size: number }[]>();
+    for (const a of this.db.all("SELECT type_id, name, size FROM type_assets ORDER BY type_id, name")) {
+      const list = files.get(a.type_id) ?? [];
+      list.push({ name: a.name, size: a.size });
+      files.set(a.type_id, list);
     }
     return this.db
       .all(
@@ -622,6 +631,7 @@ export class Etude {
           items: r.items,
           grader: def.grader?.kind,
           folder: r.folder as string,
+          assetFiles: files.get(r.id) ?? [],
         };
       });
   }
@@ -731,6 +741,14 @@ export class Etude {
   }
 
   saveType(def: CardTypeDef): CardTypeDef {
+    return this.saveTypeReport(def).type;
+  }
+
+  /**
+   * Saves a type and says what changed. `def.assets` replaces the type's asset set (names left out
+   * are removed); without `assets` the stored assets stay as they are.
+   */
+  saveTypeReport(def: CardTypeDef): { type: CardTypeDef; result: "created" | "updated" | "unchanged"; assets: AssetDelta | null } {
     const errors = validateType(def);
     if (errors.length) throw new EtudeError(`invalid type: ${errors.join("; ")}`);
     const clean: CardTypeDef = {
@@ -749,7 +767,11 @@ export class Etude {
       ...(def.showVerdict === false ? { showVerdict: false } : {}),
     };
     const old = this.db.get("SELECT def FROM types WHERE id = ?", def.id);
-    if (old && old.def === json(clean)) return clean;
+    const sameDef = !!old && old.def === json(clean);
+    if (sameDef && (def.assets === undefined || !this.assetsDiffer(def.id, def.assets))) {
+      return { type: clean, result: "unchanged", assets: def.assets === undefined ? null : this.unchangedDelta(def.id) };
+    }
+    let assets: AssetDelta | null = null;
     this.db.tx(() => {
       this.db.run(
         "INSERT INTO types (id, def, builtin, updated) VALUES (?, ?, 0, ?) ON CONFLICT(id) DO UPDATE SET def = excluded.def, builtin = 0, updated = excluded.updated",
@@ -757,17 +779,90 @@ export class Etude {
         json(clean),
         iso(),
       );
-      this.ensureCardsForType(clean.id);
+      if (def.assets !== undefined) assets = this.writeAssets(clean.id, def.assets);
+      if (!sameDef) this.ensureCardsForType(clean.id);
     });
     this.typeCache.delete(def.id);
-    return clean;
+    return { type: clean, result: old ? "updated" : "created", assets };
+  }
+
+  // ------------------------------------------------------------ type assets
+
+  /** A type's asset files: name, size and content hash (never the bytes). */
+  typeAssets(id: string): AssetInfo[] {
+    return this.db.all("SELECT name, size, hash FROM type_assets WHERE type_id = ? ORDER BY name", id).map((r) => ({ name: r.name, size: r.size, hash: r.hash }));
+  }
+
+  /** One asset's bytes, or undefined. */
+  typeAsset(id: string, name: string): { bytes: Uint8Array; hash: string; size: number } | undefined {
+    return this.db.get("SELECT bytes, hash, size FROM type_assets WHERE type_id = ? AND name = ?", id, name) as any;
+  }
+
+  /** The type's assets in their JSON form, `{ name: base64 }`. */
+  typeAssetData(id: string): Record<string, string> {
+    return Object.fromEntries(this.db.all("SELECT name, bytes FROM type_assets WHERE type_id = ? ORDER BY name", id).map((r) => [r.name, Buffer.from(r.bytes).toString("base64")]));
+  }
+
+  /** The stored definition plus its assets as base64, the way packs, exports and the market carry it. */
+  typeWithAssets(id: string): CardTypeDef {
+    const { updated: _u, builtin: _b, ...def } = this.type(id) as CardTypeDef & { updated?: string; builtin?: boolean };
+    const assets = this.typeAssetData(id);
+    return Object.keys(assets).length ? { ...def, assets } : def;
+  }
+
+  private assetsDiffer(id: string, assets: Record<string, string>): boolean {
+    const stored = new Map(this.db.all("SELECT name, hash FROM type_assets WHERE type_id = ?", id).map((r) => [r.name as string, r.hash as string]));
+    const names = Object.keys(assets);
+    if (names.length !== stored.size) return true;
+    return names.some((n) => stored.get(n) !== hashBytes(Buffer.from(assets[n], "base64")));
+  }
+
+  private unchangedDelta(id: string): AssetDelta {
+    const rows = this.typeAssets(id);
+    return { files: rows.length, bytes: rows.reduce((n, r) => n + r.size, 0), created: 0, updated: 0, unchanged: rows.length, removed: 0 };
+  }
+
+  /** Replaces a type's asset set with `assets`. */
+  private writeAssets(id: string, assets: Record<string, string>): AssetDelta {
+    const stored = new Map(this.db.all("SELECT name, hash FROM type_assets WHERE type_id = ?", id).map((r) => [r.name as string, r.hash as string]));
+    const delta: AssetDelta = { files: 0, bytes: 0, created: 0, updated: 0, unchanged: 0, removed: 0 };
+    for (const [name, bytes] of decodeAssets(assets)) {
+      const hash = hashBytes(bytes);
+      delta.files++;
+      delta.bytes += bytes.length;
+      const prev = stored.get(name);
+      stored.delete(name);
+      if (prev === hash) {
+        delta.unchanged++;
+        continue;
+      }
+      this.db.run(
+        "INSERT INTO type_assets (type_id, name, hash, size, bytes) VALUES (?, ?, ?, ?, ?) ON CONFLICT(type_id, name) DO UPDATE SET hash = excluded.hash, size = excluded.size, bytes = excluded.bytes",
+        id,
+        name,
+        hash,
+        bytes.length,
+        bytes,
+      );
+      if (prev === undefined) delta.created++;
+      else delta.updated++;
+    }
+    for (const name of stored.keys()) {
+      this.db.run("DELETE FROM type_assets WHERE type_id = ? AND name = ?", id, name);
+      delta.removed++;
+    }
+    return delta;
   }
 
   /** Restores a built-in type that was edited back to the shipped version. */
   resetType(id: string) {
-    const shipped = loadBuiltinTypes(this.builtinDir).find((t) => t.id === id);
-    if (!shipped) throw new EtudeError(`"${id}" is not a built-in type`);
-    this.db.run("UPDATE types SET def = ?, builtin = 1, updated = ? WHERE id = ?", json(shipped), iso(), id);
+    const found = loadBuiltinTypes(this.builtinDir).find((t) => t.id === id);
+    if (!found) throw new EtudeError(`"${id}" is not a built-in type`);
+    const { def: shipped, assets } = splitAssets(found);
+    this.db.tx(() => {
+      this.db.run("UPDATE types SET def = ?, builtin = 1, updated = ? WHERE id = ?", json(shipped), iso(), id);
+      this.writeAssets(id, assets ?? {});
+    });
     this.typeCache.delete(id);
   }
 
@@ -779,6 +874,7 @@ export class Etude {
     this.db.tx(() => {
       this.db.run("DELETE FROM types WHERE id = ?", id);
       this.db.run("DELETE FROM type_placement WHERE type_id = ?", id);
+      this.db.run("DELETE FROM type_assets WHERE type_id = ?", id);
     });
     this.typeCache.delete(id);
   }
@@ -2635,7 +2731,17 @@ export class Etude {
 
   importPack(pack: any, opts: { dryRun?: boolean } = {}) {
     if (!pack || pack.etude !== "pack/1") throw new EtudeError('not an Etude pack (expected "etude": "pack/1")');
-    const report = { presets: 0, decks: 0, schedulers: { created: 0, updated: 0, unchanged: 0 }, types: { created: 0, updated: 0, unchanged: 0 }, items: { created: 0, updated: 0, unchanged: 0 }, tags: 0, errors: [] as string[] };
+    const report = {
+      presets: 0,
+      decks: 0,
+      schedulers: { created: 0, updated: 0, unchanged: 0 },
+      types: { created: 0, updated: 0, unchanged: 0 },
+      /** Asset files the pack's types carry, and what importing did with them. */
+      assets: { files: 0, bytes: 0, created: 0, updated: 0, unchanged: 0, removed: 0 } as AssetDelta,
+      items: { created: 0, updated: 0, unchanged: 0 },
+      tags: 0,
+      errors: [] as string[],
+    };
     const run = () => {
       // Schedulers first: presets and decks may name them.
       for (const sc of pack.schedulers ?? []) report.schedulers[this.saveScheduler(sc).result]++;
@@ -2644,11 +2750,9 @@ export class Etude {
         report.presets++;
       }
       for (const t of pack.types ?? []) {
-        const existed = this.db.get("SELECT def FROM types WHERE id = ?", t.id);
-        const saved = this.saveType(t);
-        if (!existed) report.types.created++;
-        else if (existed.def === json(saved)) report.types.unchanged++;
-        else report.types.updated++;
+        const r = this.saveTypeReport(t);
+        report.types[r.result]++;
+        if (r.assets) for (const k of Object.keys(report.assets) as (keyof AssetDelta)[]) report.assets[k] += r.assets[k];
       }
       for (const d of pack.decks ?? []) {
         this.ensureDeck(d.name);
@@ -2838,7 +2942,7 @@ export class Etude {
     const decks = [...deckNames].sort().map((n) => this.deckFromRow(this.deckRow(n)));
     const presetIds = new Set(decks.map((d) => d.presetId).filter(Boolean) as string[]);
     const typeIds = new Set(items.map((i) => i.type));
-    const custom = this.db.all("SELECT id, def FROM types WHERE builtin = 0").filter((t) => typeIds.has(t.id)).map((t) => parse(t.def, {}));
+    const custom = this.db.all("SELECT id FROM types WHERE builtin = 0").filter((t) => typeIds.has(t.id)).map((t) => this.typeWithAssets(t.id));
     // Script schedulers the exported decks or presets use, unless they ship with Etude unchanged.
     const schedulerIds = new Set(
       [...decks.map((d) => d.config.scheduler), ...[...presetIds].map((id) => this.preset(id).config.scheduler)].filter((x): x is string => !!x && x !== FSRS),
@@ -2861,6 +2965,24 @@ export class Etude {
 }
 
 class DryRun extends Error {}
+
+/** What saving a type's assets did. `files`/`bytes` describe the set that was saved. */
+export interface AssetDelta {
+  files: number;
+  bytes: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+  removed: number;
+}
+
+const assetsChanged = (d: AssetDelta | null) => !!d && d.created + d.updated + d.removed > 0;
+
+/** A loaded type split into the definition that's stored as JSON and its assets. */
+function splitAssets(t: CardTypeDef): { def: CardTypeDef; assets?: Record<string, string> } {
+  const { assets, ...def } = t;
+  return { def, assets };
+}
 
 /** JSON with sorted keys, so two encodings of the same settings compare equal. */
 function canonical(value: unknown): string {

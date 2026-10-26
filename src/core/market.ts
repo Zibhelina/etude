@@ -12,13 +12,14 @@ import { join, resolve } from "node:path";
 import { EtudeError, plainLabel, type Etude } from "./engine.ts";
 import { BUILTIN_THEMES, THEME_ID, ThemeError, freeThemeId, normalizeTheme, type Theme } from "./themes.ts";
 import { validateType } from "./types.ts";
+import type { CardTypeDef } from "./model.ts";
 
 export const MARKET_REPO = "Zibhelina/etude-market";
 export const DEFAULT_MARKET = { url: `https://raw.githubusercontent.com/${MARKET_REPO}/main`, repo: MARKET_REPO };
 export const MARKET_KINDS = ["theme", "deck", "type"] as const;
 export type MarketKind = (typeof MARKET_KINDS)[number];
 /** Largest entry file the app will download or publish. */
-export const MAX_ENTRY_BYTES = 8 * 1024 * 1024;
+export const MAX_ENTRY_BYTES = 32 * 1024 * 1024;
 const ENTRY_ID = /^[a-z0-9][a-z0-9-]{1,63}$/;
 
 export interface MarketSettings {
@@ -47,7 +48,7 @@ export interface MarketFile extends MarketMeta {
 export type MarketSummary =
   | { theme: Theme }
   | { decks: string[]; items: number; cardTypes: Record<string, number>; types: { id: string; name: string }[]; watch: boolean; samples: string[] }
-  | { types: { id: string; name: string; description: string; grader: string; fields: string[] }[]; items: number; samples: string[] };
+  | { types: { id: string; name: string; description: string; grader: string; fields: string[]; assets?: { files: number; bytes: number } }[]; items: number; samples: string[] };
 
 /** A one-line label for an item, from its first text-like field. */
 function sampleOf(item: any): string {
@@ -55,6 +56,13 @@ function sampleOf(item: any): string {
   for (const k of ["prompt", "front", "question", "note", "text", "letter", "title"]) if (typeof f[k] === "string" && f[k].trim()) return plainLabel(f[k]).slice(0, 90);
   const first = Object.values(f).find((v) => typeof v === "string" && v.trim()) as string | undefined;
   return first ? plainLabel(first).slice(0, 90) : "";
+}
+/** How many asset files a type carries and their decoded size, for the index. */
+function assetSummary(t: any): { assets?: { files: number; bytes: number } } {
+  const a = t?.assets;
+  if (!a || typeof a !== "object" || !Object.keys(a).length) return {};
+  const vals = Object.values(a).filter((v): v is string => typeof v === "string");
+  return { assets: { files: vals.length, bytes: vals.reduce((n, b) => n + Buffer.byteLength(b, "base64"), 0) } };
 }
 const samplesOf = (items: any[]) => [...new Set(items.map(sampleOf).filter(Boolean))].slice(0, 3);
 
@@ -200,7 +208,7 @@ export function summarize(file: MarketFile): MarketSummary {
   const types: any[] = c.types ?? [];
   if (file.kind === "type") {
     return {
-      types: types.map((t) => ({ id: t.id, name: t.name, description: t.description ?? "", grader: t.grader?.kind ?? "self", fields: (t.fields ?? []).map((f: any) => f.name) })),
+      types: types.map((t) => ({ id: t.id, name: t.name, description: t.description ?? "", grader: t.grader?.kind ?? "self", fields: (t.fields ?? []).map((f: any) => f.name), ...assetSummary(t) })),
       items: items.length,
       samples: samplesOf(items),
     };
@@ -343,7 +351,7 @@ export function installFile(e: Etude, file: MarketFile, opts: { dryRun?: boolean
     const pack = file.content;
     const r = e.importPack(pack, { dryRun: opts.dryRun });
     report = r;
-    const changed = r.items.created + r.items.updated + r.types.created + r.types.updated;
+    const changed = r.items.created + r.items.updated + r.types.created + r.types.updated + r.assets.created + r.assets.updated + r.assets.removed;
     result = prev ? (changed ? "updated" : "unchanged") : "created";
     ids =
       file.kind === "type"
@@ -398,7 +406,8 @@ export function buildSubmission(e: Etude, input: SubmissionInput): MarketFile {
     name ||= d.name.split("::").pop()!;
     description ||= d.description ?? "";
   } else {
-    const def = e.type(ref);
+    const def = e.typeWithAssets(ref) as CardTypeDef & { builtin?: boolean };
+    def.builtin = e.type(ref).builtin;
     const shipped = e.listTypes().find((t) => t.id === ref);
     if (def.builtin && !shipped?.edited) throw new MarketError(`"${def.name}" ships with Etude already; publish your own type`);
     const n = Math.max(0, Math.min(20, input.examples ?? 3));
@@ -430,7 +439,7 @@ export function buildSubmission(e: Etude, input: SubmissionInput): MarketFile {
   const errors = checkEntry(file);
   if (errors.length) throw new MarketError(`can't publish this: ${errors.join("; ")}`);
   const bytes = Buffer.byteLength(JSON.stringify(file));
-  if (bytes > MAX_ENTRY_BYTES) throw new MarketError(`this ${kind} is ${(bytes / 1e6).toFixed(1)} MB; the market takes up to ${MAX_ENTRY_BYTES / 1e6} MB per entry`);
+  if (bytes > MAX_ENTRY_BYTES) throw new MarketError(`this ${kind} is ${(bytes / 1e6).toFixed(1)} MB; the market takes up to ${MAX_ENTRY_BYTES / 1024 / 1024} MiB per entry`);
   return file;
 }
 

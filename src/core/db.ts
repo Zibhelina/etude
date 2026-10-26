@@ -53,6 +53,16 @@ CREATE TABLE IF NOT EXISTS type_placement (
   folder  TEXT NOT NULL
 );
 
+-- Files a card type ships with (meshes, data, images), served to its cards at /type-assets/<type>/<name>.
+CREATE TABLE IF NOT EXISTS type_assets (
+  type_id TEXT NOT NULL,
+  name    TEXT NOT NULL,
+  hash    TEXT NOT NULL,
+  size    INTEGER NOT NULL,
+  bytes   BLOB NOT NULL,
+  PRIMARY KEY (type_id, name)
+);
+
 CREATE TABLE IF NOT EXISTS items (
   id       TEXT PRIMARY KEY,
   type     TEXT NOT NULL REFERENCES types(id),

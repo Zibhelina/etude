@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CardTypeDef, FieldSpec, GraderSpec } from "./model.ts";
 import { checkSyntax } from "./sandbox.ts";
+import { readAssetDir, validateAssets } from "./assets.ts";
 
 export const TYPE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 /** Item ids: what the engine stores, including the `anki-<guid>` ids the Anki importer makes. */
@@ -17,13 +18,15 @@ const read = (dir: string, file: string) => {
 
 /**
  * A type directory holds `type.json` plus optional `template.html`, `style.css`, `card.js`,
- * `prepare.js`, `grade.js` and `demo.js`. Files win over the same keys inside type.json.
+ * `prepare.js`, `grade.js`, `demo.js` and an `assets/` folder. Files win over the same keys inside
+ * type.json. `assets: false` skips reading the asset files.
  */
-export function loadTypeDir(dir: string): CardTypeDef {
+export function loadTypeDir(dir: string, opts: { assets?: boolean } = {}): CardTypeDef {
   const meta = JSON.parse(readFileSync(join(dir, "type.json"), "utf8"));
   const grade = read(dir, "grade.js");
   const grader: GraderSpec = { ...(meta.grader ?? { kind: "self" }) };
   if (grade && (grader.kind === "script" || grader.kind === "hybrid")) (grader as { code: string }).code = grade;
+  const assets = opts.assets === false ? undefined : readAssetDir(dir);
   return {
     ...meta,
     prepare: read(dir, "prepare.js") ?? meta.prepare,
@@ -34,13 +37,14 @@ export function loadTypeDir(dir: string): CardTypeDef {
       js: read(dir, "card.js") ?? meta.template?.js ?? "",
     },
     grader,
+    ...(assets ? { assets: { ...(meta.assets ?? {}), ...assets } } : {}),
   };
 }
 
-export function loadBuiltinTypes(root: string): CardTypeDef[] {
+export function loadBuiltinTypes(root: string, opts: { assets?: boolean } = {}): CardTypeDef[] {
   return readdirSync(root, { withFileTypes: true })
     .filter((d) => d.isDirectory() && existsSync(join(root, d.name, "type.json")))
-    .map((d) => loadTypeDir(join(root, d.name)))
+    .map((d) => loadTypeDir(join(root, d.name), opts))
     .sort((a, b) => a.id.localeCompare(b.id));
 }
 
@@ -85,6 +89,7 @@ export function validateType(def: unknown): string[] {
       if (e) errors.push(e);
     }
   }
+  errors.push(...validateAssets(t.assets));
   if (t.showVerdict !== undefined && typeof t.showVerdict !== "boolean") errors.push("showVerdict must be true or false");
   if (t.metrics !== undefined) {
     if (!Array.isArray(t.metrics)) errors.push("metrics must be an array");

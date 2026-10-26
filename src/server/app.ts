@@ -10,6 +10,7 @@ import { readChatGptHostId } from "../core/chatgpt.ts";
 import { DEFAULT_PRESET, type Rating } from "../core/model.ts";
 import { MAX_MEDIA_BYTES, mediaType } from "../core/media.ts";
 import { cardFrame } from "./frame.ts";
+import { ASSET_NAME, assetMime } from "../core/assets.ts";
 import { applyUpdate, updateStatus, UpdateError } from "../core/update.ts";
 import { buildSubmission, fetchCover, fetchEntry, fetchIndex, ghStatus, installEntry, installState, installedEntries, manualPublishUrl, marketSettings, publishFile, summarize, entryPath, entryJson, forgetInstall, type MarketKind } from "../core/market.ts";
 
@@ -176,7 +177,8 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
 
   // ------------------------------------------------------------- types
   app.get("/api/types", (c) => c.json(etude.listTypes()));
-  app.get("/api/types/:id", (c) => c.json(etude.type(c.req.param("id"))));
+  // The definition without asset bytes; `assetFiles` lists them (name, size, hash).
+  app.get("/api/types/:id", (c) => c.json({ ...etude.type(c.req.param("id")), assetFiles: etude.typeAssets(c.req.param("id")) }));
   app.put("/api/types/:id", async (c) => c.json(etude.saveType({ ...(await body(c)), id: c.req.param("id") })));
   app.delete("/api/types/:id", (c) => {
     etude.deleteType(c.req.param("id"));
@@ -437,16 +439,19 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   });
 
   // --------------------------------------------- card frames and runtime
+  const frameAssets = (id: string) => ({ type: id, files: etude.typeAssets(id) });
   app.get("/frame/:type", (c) => {
     const def = etude.type(c.req.param("type"));
     const base = publicBase(c);
-    return c.body(cardFrame(def, base), 200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
+    return c.body(cardFrame(def, base, frameAssets(def.id)), 200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
   });
   // The type editor previews unsaved code: it posts the definition and gets a frame back.
   app.post("/api/frame", async (c) => {
     const b = await body(c);
     const base = publicBase(c);
-    return c.json({ html: cardFrame(b.def, base) });
+    // An unsaved edit of a stored type still reaches the stored assets.
+    const id = typeof b.def?.id === "string" ? b.def.id : "";
+    return c.json({ html: cardFrame(b.def, base, frameAssets(id)) });
   });
   app.get("/runtime/vendor/*", (c) => {
     const name = c.req.path.slice("/runtime/vendor/".length);
@@ -463,6 +468,23 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const f = c.req.param("file");
     if (!/^[\w.-]+$/.test(f)) return c.text("not found", 404);
     return sendFile(c, join(ROOT, "runtime", f), { cors: true });
+  });
+  // A type's asset files. `?h=` is the content hash `etude.asset()` puts in the URL: when it matches,
+  // the file can be cached for good, and a changed asset gets a new URL.
+  app.get("/type-assets/:type/:name", (c) => {
+    const name = c.req.param("name");
+    const asset = ASSET_NAME.test(name) ? etude.typeAsset(c.req.param("type"), name) : undefined;
+    const headers: Record<string, string> = {
+      "Access-Control-Allow-Origin": "*",
+      "Content-Security-Policy": "default-src 'none'; sandbox",
+      "X-Content-Type-Options": "nosniff",
+    };
+    if (!asset) return c.text("not found", 404, headers);
+    headers["Content-Type"] = assetMime(name);
+    headers["Cache-Control"] = c.req.query("h") === asset.hash ? "public, max-age=31536000, immutable" : "no-cache";
+    headers["ETag"] = `"${asset.hash}"`;
+    if (c.req.header("if-none-match") === headers.ETag) return c.body(null, 304, headers);
+    return c.body(new Uint8Array(asset.bytes), 200, headers);
   });
   app.get("/media/*", (c) => {
     const rel = normalize(c.req.path.slice("/media/".length));

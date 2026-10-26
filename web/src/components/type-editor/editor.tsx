@@ -417,6 +417,7 @@ export function TypeEditor({ id }: { id: string }) {
                 <AutoTextarea value={draft.description ?? ""} onChange={(v) => set({ description: v })} placeholder="What the learner does and how it's graded." />
               </Field>
               <FacesEditor faces={draft.faces} onChange={(faces) => set({ faces })} />
+              {!!saved?.assetFiles?.length && <AssetList files={saved.assetFiles} />}
             </TabsContent>
 
             <TabsContent value="fields" className="mt-5">
@@ -655,6 +656,30 @@ export function Kind({ summary }: { summary: TypeSummary | null }) {
   if (summary.edited) return <Badge variant="outline" className="border-highlight/40 font-normal text-highlight">edited built-in</Badge>;
   if (summary.shipped) return <Badge variant="outline" className="font-normal text-muted-foreground">built-in</Badge>;
   return <Badge variant="outline" className="font-normal text-muted-foreground">custom</Badge>;
+}
+
+/** The type's asset files. Read-only: they come from packs, the market and `etude type import`. */
+function AssetList({ files }: { files: { name: string; size: number }[] }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-sm font-medium">Assets</div>
+      <ul className="divide-y rounded-lg border text-sm">
+        {files.map((f) => (
+          <li key={f.name} className="flex items-center justify-between gap-3 px-3 py-2">
+            <code className="min-w-0 truncate font-mono text-[13px]">{f.name}</code>
+            <span className="tabular shrink-0 text-xs text-muted-foreground">{formatBytes(f.size)}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-muted-foreground">Cards load these with <code className="font-mono">etude.asset(name)</code>. They're kept when you save here; change them with <code className="font-mono">etude type import</code>.</p>
+    </div>
+  );
+}
+
+function formatBytes(n: number) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {

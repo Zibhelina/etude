@@ -65,8 +65,9 @@ function expand(template, data) {
 
 // ---------- the API a card script receives ----------
 
-function createApi(init) {
+function createApi(init, assets = { type: "", files: {} }) {
   let getter = null;
+  const assetNames = Object.keys(assets.files ?? {}).sort();
   let resultHandlers = [];
   let submitted = false;
   let ready = true;
@@ -76,6 +77,14 @@ function createApi(init) {
     answer: init.answer ?? null,
     result: init.result ?? null,
     root: document.getElementById("card"),
+    /** Names of the files the card type ships with. */
+    assets: assetNames,
+    /** Absolute URL of one of the type's asset files, for `fetch()`, `<img src>` and the like. */
+    asset(name) {
+      const hash = assets.files?.[name];
+      if (hash === undefined) throw new Error(`unknown asset "${name}" (this type has ${assetNames.length ? assetNames.map((n) => `"${n}"`).join(", ") : "no assets"})`);
+      return new URL(`type-assets/${encodeURIComponent(assets.type)}/${encodeURIComponent(name)}?h=${hash}`, document.baseURI).href;
+    },
     md,
     mdInline: (s) => md(s, { inline: true }),
     /** LaTeX to HTML. */
@@ -242,7 +251,7 @@ function splitResultBlocks(src) {
   return { html, blocks };
 }
 
-export function boot(main, templateHtml) {
+export function boot(main, templateHtml, assets) {
   document.documentElement.lang ||= "en";
   let api = null;
   let blocks = [];
@@ -261,7 +270,7 @@ export function boot(main, templateHtml) {
       document.body.dataset.mode = msg.mode ?? "answer";
       const split = splitResultBlocks(templateHtml);
       blocks = split.blocks;
-      api = createApi(msg);
+      api = createApi(msg, assets);
       api.root.innerHTML = expand(split.html, api.view);
       watchCodeBlocks(api.root);
       const showResult = api._result;

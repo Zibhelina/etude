@@ -270,8 +270,8 @@ These work on every command, before or after the command words.
   - [`tag items`](#tag-items) Items with a tag (or a tag below it).
 - **type**: Card types: fields, template (HTML/CSS/JS), prepare script and grader (`etude type` alone runs `list`)
   - [`type list`](#type-list) Card types with their grader, item count and whether they are shipped, edited or custom.
-  - [`type show`](#type-show) A type's full definition: fields (with kinds, private flags, defaults), template, prepare and grader code.
-  - [`type export`](#type-export) Write a type as editable files (type.json, template.html, style.css, card.js, prepare.js, grade.js), or print it as JSON.
+  - [`type show`](#type-show) A type's full definition: fields (with kinds, private flags, defaults), template, prepare and grader code, plus its asset files (name, size, hash).
+  - [`type export`](#type-export) Write a type as editable files (type.json, template.html, style.css, card.js, prepare.js, grade.js, assets/), or print it as JSON (assets as base64).
   - [`type import`](#type-import) Create or update a type from a directory, a JSON file, or JSON on stdin (`-`). Saving an edited built-in makes it yours.
   - [`type validate`](#type-validate) Check a type definition without saving it. Exits 4 when it has problems.
   - [`type preview`](#type-preview) Run a type on sample fields and show what the card gets (view) and what grading uses (key).
@@ -1954,7 +1954,7 @@ Output: array of { id, name, description, builtin, shipped, edited, updated, ite
 
 <a id="type-show"></a>
 
-A type's full definition: fields (with kinds, private flags, defaults), template, prepare and grader code.
+A type's full definition: fields (with kinds, private flags, defaults), template, prepare and grader code, plus its asset files (name, size, hash).
 
 ```
 etude type show <id> [flags]
@@ -1970,6 +1970,8 @@ etude type show <id> [flags]
 | --- | --- | --- |
 | `--fields-only` | boolean | Only the field list (what an item of this type takes). |
 
+Output: the definition plus assetFiles: [{ name, size, hash }] (never the bytes; `type export` writes those)
+
 ```sh
 etude type show numeric --fields-only
 ```
@@ -1978,7 +1980,7 @@ etude type show numeric --fields-only
 
 <a id="type-export"></a>
 
-Write a type as editable files (type.json, template.html, style.css, card.js, prepare.js, grade.js), or print it as JSON.
+Write a type as editable files (type.json, template.html, style.css, card.js, prepare.js, grade.js, assets/), or print it as JSON (assets as base64).
 
 ```
 etude type export <id> [flags]
@@ -2008,7 +2010,7 @@ etude type export numeric --json > numeric.json
 
 Create or update a type from a directory, a JSON file, or JSON on stdin (`-`). Saving an edited built-in makes it yours.
 
-The type is validated first (fields, grader, script syntax). Items of the type get cards for any new faces. Unchanged definitions are a no-op.
+The type is validated first (fields, grader, script syntax, assets). Items of the type get cards for any new faces. Unchanged definitions are a no-op. A directory's `assets/` folder (or a JSON `assets` object) replaces the type's asset files; a source without assets keeps the stored ones.
 
 ```
 etude type import <source> [flags]
@@ -2025,7 +2027,7 @@ etude type import <source> [flags]
 | `--id <VALUE>` | string | Save under this id instead of the one in the source. |
 | `--dry-run` | boolean | Show what would change without writing anything. |
 
-Output: { result: created|updated|unchanged, type: { id, name, fields, grader } }
+Output: { result: created|updated|unchanged, type: { id, name, fields, grader }, assets: { files, bytes, created, updated, unchanged, removed } | null }
 
 ```sh
 etude type import ./vocab

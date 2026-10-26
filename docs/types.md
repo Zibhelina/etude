@@ -2,13 +2,14 @@
 
 A card type decides what a card looks like, what the learner does on it and how the answer is scored. The built-in types (`types/*/`) are written in exactly the format described here, so any of them can be copied, edited or reset from the Card types page, or with `etude type-export` / `etude type-import`.
 
-A type has five parts:
+A type has five parts, plus optional asset files:
 
 - **fields**: the schema of the content an item stores.
 - **template**: HTML, CSS and JavaScript that run in the card's sandboxed frame.
 - **prepare** (optional): a server-side script that turns fields into what the card shows (`view`) and what grading needs (`key`).
 - **grader**: `self`, `script`, `ai` or `hybrid`.
 - **instructions** (optional): default guidance for the AI grader.
+- **assets** (optional): files shipped once with the type (meshes, data, images) that its cards load at runtime. See [Assets](#assets).
 
 ## Shape
 
@@ -27,7 +28,8 @@ This is the JSON that `PUT /api/types/:id` accepts and the editor exports:
   "prepare": "return { view: {...}, key: {...} };",
   "template": { "html": "...", "css": "...", "js": "..." },
   "grader": { "kind": "script", "code": "return { score: 1 };" },
-  "instructions": "Optional AI grading guidance."
+  "instructions": "Optional AI grading guidance.",
+  "assets": { "hello.json": "eyJoZWxsbyI6IndvcmxkIn0=" }
 }
 ```
 
@@ -62,6 +64,7 @@ Saving validates all of this. Script bodies (`prepare`, `grader.code`) are compi
 | `prepare.js` | `prepare` |
 | `grade.js` | `grader.code` (only read for `script` and `hybrid` graders) |
 | `demo.js` | `demo` (an example answer for watch mode, optional) |
+| `assets/<name>` | one entry of `assets` per file (the raw bytes, optional) |
 
 Files win over the same keys inside `type.json`. The built-in types in `types/` use this form.
 
@@ -94,6 +97,8 @@ The body gets `data-mode="answer"` or `data-mode="result"`, so `.only-answer` an
 | `etude.answer` | a previous answer when the card is re-shown, else `null` |
 | `etude.result` | `{ grade, key, answer }` once graded, else `null` |
 | `etude.root` | the `#card` element |
+| `etude.asset(name)` | absolute URL of one of the type's [assets](#assets), for `fetch()`, `<img src>` and the like; throws for an unknown name |
+| `etude.assets` | the names of the type's assets |
 | `etude.md(s)`, `etude.mdInline(s)` | render markdown and math to HTML (fenced code blocks are highlighted automatically) |
 | `etude.tex(src, display?)` | render LaTeX to HTML |
 | `etude.math` | math answers: `parse`, `toLatex`, `evaluate`, `equivalent`, `check` (the same module as `std.math`, so a live preview and the grader agree) |
@@ -144,6 +149,32 @@ The app posts its theme into the frame, and posts it again when the user switche
   - `.e-btn` and `.e-btn.primary`.
 - **Grading marks:** `.is-correct`, `.is-wrong`, `.is-missed`, and `.e-why` for explanations.
 - **Revealed material:** `.e-reveal` for the block shown after answering, `.e-answer` for an answer box, and `kbd`.
+
+## Assets
+
+A type can ship files its cards need, like a 3D mesh, a lookup table or a set of images, once, instead of copying them into every item. In JSON (`PUT /api/types/:id`, packs, market entries, `etude type export --json`) they are an object of name to base64 of the file's bytes:
+
+```json
+"assets": { "skull.bin": "AAECAwQF…", "labels.json": "eyJmcm9udGFs…" }
+```
+
+In the directory form they are the files in `assets/`. Names match `^[\w.-]{1,80}$`. One asset can be up to 20 MiB and a type's assets up to 40 MiB together.
+
+A card loads them by name:
+
+```js
+const mesh = await (await fetch(etude.asset("skull.bin"))).arrayBuffer();
+const labels = await (await fetch(etude.asset("labels.json"))).json();
+```
+
+`etude.asset(name)` returns `<server>/type-assets/<type>/<name>?h=<sha256>`. The route answers with CORS for the card's opaque origin, a content type from the extension (`.json`, `.bin` as `application/octet-stream`, images, fonts, `.glb`…), `nosniff` and a sandbox CSP. When `h` matches the stored file it may be cached for a year, so a changed asset gets a new URL and the browser fetches it again.
+
+Assets are stored apart from the definition:
+
+- Saving a type with `assets` replaces its set: names left out are removed, `{}` removes them all.
+- Saving without `assets` keeps the stored files. The type editor saves this way, and shows the files read-only under **Info → Assets**.
+- `GET /api/types` and `GET /api/types/:id` list `assetFiles` (name, size and, for one type, hash), never the bytes. So does `etude type show`.
+- Deleting a type deletes its assets. Built-in types can have them too (`types/<id>/assets/`), and **Reset to shipped version** restores them.
 
 ## Prepare
 

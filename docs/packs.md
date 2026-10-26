@@ -177,3 +177,12 @@ The editor has syntax highlighting, line numbers, bracket matching and Tab to in
 ## Custom types
 
 A pack may define its own types. A type is fields, a template (HTML, CSS and JavaScript that runs in a sandboxed frame), an optional `prepare` script that turns fields into what the card shows, and a grader. See [types.md](types.md).
+
+A type can carry asset files (`"assets": { "name": "base64" }`, see [Assets](types.md#assets)), shipped once with the type and shared by every item. `etude pack export` includes the assets of the custom types it exports. Importing reports them next to the types:
+
+```json
+"types": { "created": 0, "updated": 0, "unchanged": 1 },
+"assets": { "files": 2, "bytes": 6291456, "created": 0, "updated": 0, "unchanged": 2, "removed": 0 }
+```
+
+`files` and `bytes` describe the assets the pack's types carry; the other counts say what the import did with them. Re-importing identical assets reports them `unchanged`, and a dry run writes nothing.

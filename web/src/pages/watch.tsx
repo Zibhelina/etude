@@ -123,14 +123,18 @@ export function WatchPage({ scope, title }: { scope: Scope; title: string }) {
   const again = useCallback(() => load(index), [index, load]);
 
   const onKey = useCallback((key: string) => {
+    if (key === "ArrowRight") return next();
+    if (key === "ArrowLeft") return prev();
     if (phase === "result" && (key === " " || key === "Enter" || key === "Mod+Enter")) next();
     else if (phase === "answer" && key === "Mod+Enter") frame.current?.collect();
-  }, [phase, next]);
+  }, [phase, next, prev]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
-      if (t?.closest("input, textarea, [contenteditable]")) return;
+      const field = t?.closest("input, textarea, [contenteditable]") as HTMLInputElement | null;
+      const arrow = e.key === "ArrowRight" || e.key === "ArrowLeft";
+      if (field && !(arrow && !(field.isContentEditable ? field.textContent : field.value))) return;
       if (e.key === "Escape") return navigate("/");
       if (e.key === "ArrowRight") return next();
       if (e.key === "ArrowLeft") return prev();

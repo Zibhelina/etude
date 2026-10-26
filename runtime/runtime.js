@@ -198,6 +198,11 @@ function focusCard(root) {
   }
 }
 
+function isEmptyField(el) {
+  if (el.isContentEditable) return !el.textContent;
+  return "value" in el && !el.value;
+}
+
 function forwardKeys() {
   window.addEventListener("keydown", (e) => {
     const typing = e.target instanceof HTMLElement && (e.target.matches("input, textarea, select, [contenteditable]") || e.target.isContentEditable);
@@ -229,7 +234,16 @@ function forwardKeys() {
       }, 0);
       return;
     }
-    if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // Arrows move between cards on pages that browse (Watch); a card that uses them (a map, a board) calls preventDefault.
+    // In a field they only leave it while it's empty, so a half-typed answer keeps its caret keys.
+    if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && (!typing || isEmptyField(e.target))) {
+      setTimeout(() => {
+        if (!e.defaultPrevented) send("key", { key: e.key });
+      }, 0);
+      return;
+    }
+    if (typing) return;
     const result = document.body.dataset.mode === "result";
     if (e.repeat && ["u", "U", "=", "-"].includes(e.key)) return;
     const keys = result ? ["1", "2", "3", "4", " ", "Enter", "u", "U", "=", "-"] : [" ", "Enter", "u", "U", "=", "-"];

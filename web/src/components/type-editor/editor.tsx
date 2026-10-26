@@ -296,6 +296,7 @@ export function TypeEditor({ id }: { id: string }) {
   };
 
   const items = summary?.items ?? 0;
+  const archived = summary?.archived ?? 0;
   const generated = typeof sample.generator === "string" || /\brng\b/.test(draft?.prepare ?? "");
 
   if (missing)
@@ -323,6 +324,7 @@ export function TypeEditor({ id }: { id: string }) {
             <code className="font-mono">{draft.id}</code>
             {isNew ? <Badge variant="outline" className="font-normal text-highlight">new, not saved</Badge> : <Kind summary={summary} />}
             {!isNew && <span className="tabular">{items} item{items === 1 ? "" : "s"}</span>}
+            {!isNew && archived > 0 && <span className="tabular" title={`Archived items still use this type. Find them in Browse with type:${draft.id} is:archived.`}>· {archived} archived</span>}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -344,8 +346,8 @@ export function TypeEditor({ id }: { id: string }) {
                   {isNew ? (
                     <DropdownMenuItem variant="destructive" onClick={() => { clearPending(id); navigate("/types"); }}><X />Discard new type</DropdownMenuItem>
                   ) : (
-                    <DropdownMenuItem variant="destructive" disabled={items > 0} onClick={() => setConfirmDelete(true)}>
-                      <Trash2 />{items > 0 ? `Delete (used by ${items})` : "Delete…"}
+                    <DropdownMenuItem variant="destructive" disabled={items + archived > 0} onClick={() => setConfirmDelete(true)}>
+                      <Trash2 />{items > 0 ? `Delete (used by ${items})` : archived > 0 ? `Delete (used by ${archived} archived)` : "Delete…"}
                     </DropdownMenuItem>
                   )}
                 </>

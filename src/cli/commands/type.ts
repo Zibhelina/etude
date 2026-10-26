@@ -83,7 +83,7 @@ const defFor = (ctx: Ctx): CardTypeDef => (ctx.flags.from ? loadTypeSource(ctx, 
 command({
   name: "type list",
   summary: "Card types with their grader, item count and whether they are shipped, edited or custom.",
-  output: "array of { id, name, description, builtin, shipped, edited, updated, items, grader, folder }",
+  output: "array of { id, name, description, builtin, shipped, edited, updated, items, archived, grader, folder }",
   run: (ctx) => ctx.e.listTypes(),
 });
 

@@ -192,6 +192,8 @@ export interface TypeSummary {
   edited: boolean;
   updated: string;
   items: number;
+  /** Archived items using the type: hidden from its item count, but they keep it from being deleted. */
+  archived: number;
   grader: string;
   /** Folder path in the Types page ("A::B"), "" when the type isn't in a folder. */
   folder: string;
@@ -332,14 +334,16 @@ const TOKEN = (() => {
 })();
 
 async function call<T>(method: string, path: string, body?: unknown, raw?: Blob): Promise<T> {
+  // The server takes changes only as JSON (or bytes for uploads), so a change without a body sends {}.
+  const json = raw || body !== undefined || method === "GET" || method === "HEAD" ? body : {};
   const headers: Record<string, string> = {};
   if (raw) headers["Content-Type"] = "application/octet-stream";
-  else if (body !== undefined) headers["Content-Type"] = "application/json";
+  else if (json !== undefined) headers["Content-Type"] = "application/json";
   if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
   const res = await fetch(path, {
     method,
     headers,
-    body: raw ?? (body !== undefined ? JSON.stringify(body) : undefined),
+    body: raw ?? (json !== undefined ? JSON.stringify(json) : undefined),
   });
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;

@@ -119,16 +119,18 @@ export function replay(reviews: { ts: string; rating: number }[], created: Date,
 }
 
 export function resolveConfig(...layers: (Partial<PresetConfig> | undefined | null)[]): PresetConfig {
-  const out: PresetConfig = { ...DEFAULT_PRESET, autoRate: { ...DEFAULT_PRESET.autoRate }, schedulerOptions: {} };
+  const out: PresetConfig = { ...DEFAULT_PRESET, autoRate: { ...DEFAULT_PRESET.autoRate }, schedulerOptions: {}, newPerFace: {} };
   for (const l of layers) {
     if (!l) continue;
     for (const [k, v] of Object.entries(l)) {
       if (v === undefined) continue;
-      // Scheduler options merge key by key, so a subdeck can change one and inherit the rest.
-      if (k === "schedulerOptions" && v && typeof v === "object") out.schedulerOptions = { ...out.schedulerOptions, ...(v as Record<string, unknown>) };
+      // Scheduler options and face limits merge key by key, so a subdeck can change one and inherit the rest.
+      if ((k === "schedulerOptions" || k === "newPerFace") && v && typeof v === "object") (out as any)[k] = { ...(out as any)[k], ...(v as Record<string, unknown>) };
       else (out as any)[k] = v;
     }
   }
+  // A null face limit drops an inherited one.
+  out.newPerFace = Object.fromEntries(Object.entries(out.newPerFace).filter(([, n]) => n != null));
   return out;
 }
 
@@ -152,5 +154,11 @@ export function validateConfig(c: Partial<PresetConfig>): string[] {
   if (c.mode !== undefined && c.mode !== "study" && c.mode !== "watch") e.push('mode must be "study" or "watch"');
   if (c.scheduler !== undefined && (typeof c.scheduler !== "string" || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(c.scheduler))) e.push('scheduler must be "fsrs" or a scheduler id');
   if (c.schedulerOptions !== undefined && (c.schedulerOptions === null || typeof c.schedulerOptions !== "object" || Array.isArray(c.schedulerOptions))) e.push("schedulerOptions must be an object");
+  if (
+    c.newPerFace !== undefined &&
+    (c.newPerFace === null || typeof c.newPerFace !== "object" || Array.isArray(c.newPerFace) ||
+      Object.entries(c.newPerFace).some(([face, n]) => !/^[\w-]+$/.test(face) || (n !== null && !(typeof n === "number" && Number.isFinite(n) && n >= 0))))
+  )
+    e.push("newPerFace must map face names to non-negative numbers (null drops an inherited limit)");
   return e;
 }

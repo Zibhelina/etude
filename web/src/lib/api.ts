@@ -23,6 +23,8 @@ export interface PresetConfig {
   enableShortTerm: boolean;
   weights?: number[];
   newPerDay: number;
+  /** A face's own daily limit for new cards, within newPerDay. `null` drops an inherited one. */
+  newPerFace: Record<string, number | null>;
   reviewsPerDay: number;
   newOrder: "added" | "random" | "deck";
   reviewOrder: "due" | "retrievability" | "random";
@@ -169,6 +171,13 @@ export interface CleanupReport {
   leftover: LeftoverReport;
   /** `files` lists the first 200. */
   media: { count: number; bytes: number; files: { path: string; bytes: number }[] };
+}
+
+export interface DeckFace {
+  face: string;
+  types: { id: string; name: string }[];
+  cards: number;
+  new: number;
 }
 
 export interface CardType {
@@ -413,6 +422,8 @@ export const api = {
   importMedia: (path: string) => call<StoredMedia>("POST", "/api/media/import", { path }),
   decks: () => call<DeckNode[]>("GET", "/api/decks"),
   deck: (name: string) => call<DeckNode & { resolved: PresetConfig; inherited: PresetConfig; presetBase: PresetConfig }>("GET", `/api/deck${qs({ name })}`),
+  /** The faces of the cards in a deck and its subdecks, with the types that make each and how many are new. */
+  deckFaces: (name: string) => call<DeckFace[]>("GET", `/api/deck/faces${qs({ name })}`),
   createDeck: (name: string) => call("POST", "/api/decks", { name }),
   reorderDecks: (parent: string, order: string[]) => call<{ order: string[] }>("POST", "/api/decks/order", { parent, order }),
   moveDeck: (name: string, parent: string, index?: number) => call<DeckNode>("POST", "/api/decks/move", { name, parent, index }),

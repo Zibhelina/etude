@@ -321,7 +321,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
                 <TooltipContent>Generated: the numbers change every review</TooltipContent>
               </Tooltip>
             )}
-            {scope.ahead && <Badge variant="outline" className="gap-1 font-normal"><FastForward className="size-3" />studying ahead</Badge>}
+            {scope.ahead && <Badge variant="outline" className="gap-1 font-normal"><FastForward className="size-3" />practicing ahead</Badge>}
             {practice && <Badge variant="outline" className="border-highlight/40 font-normal text-highlight">practice, not scheduled</Badge>}
             <div className="flex-1" />
             <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs text-muted-foreground" onClick={() => navigate(`/browse?item=${encodeURIComponent(card.itemId)}`)}>
@@ -451,7 +451,7 @@ function Done({ counts, scope }: { counts: Counts | null; scope: Scope }) {
         <Button variant="outline" onClick={() => navigate("/")}>Back to decks</Button>
         {!scope.ahead && counts?.nextDue && (
           <Button className="gap-1.5" onClick={() => navigate(aheadUrl())} title="Review cards before they're due. FSRS counts an early review for less.">
-            <FastForward className="size-4" />Study ahead
+            <FastForward className="size-4" />Practice ahead
           </Button>
         )}
       </div>

@@ -89,7 +89,7 @@ export function CardPreview({
           </Button>
         )}
         {onTry && (
-          <Button variant="ghost" size="sm" className="gap-1.5" onClick={onTry}><Play className="size-4" /> Study this card</Button>
+          <Button variant="ghost" size="sm" className="gap-1.5" onClick={onTry}><Play className="size-4" /> Practice this card</Button>
         )}
       </div>
       <div className="rounded-xl border bg-background p-3 sm:p-5">

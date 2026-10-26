@@ -294,14 +294,14 @@ export function DecksPage() {
                     className="size-10 gap-1.5 self-center rounded-full px-0 sm:h-8 sm:w-auto sm:rounded-md sm:px-3"
                     disabled={!d.cards}
                     onClick={study}
-                    title={!watch && !work && d.cards ? "Nothing due: study ahead anyway" : undefined}
-                    aria-label={`${watch ? "Watch" : work || !d.cards ? "Study" : "Study ahead"} ${name}`}
+                    title={!watch && !work && d.cards ? "Nothing due: practice ahead anyway" : undefined}
+                    aria-label={`${watch ? "Watch" : work || !d.cards ? "Practice" : "Practice ahead"} ${name}`}
                   >
                     {watch ? (
                       <><Eye className="size-4 text-highlight sm:size-3.5 sm:text-current" /> <span className="hidden sm:inline">Watch</span></>
                     ) : (
                       work || !d.cards ? (
-                      <><Play className={cn("size-4 sm:size-3.5", work && "fill-current text-highlight sm:fill-none sm:text-current")} /> <span className="hidden sm:inline">Study</span></>
+                      <><Play className={cn("size-4 sm:size-3.5", work && "fill-current text-highlight sm:fill-none sm:text-current")} /> <span className="hidden sm:inline">Practice</span></>
                     ) : (
                       <><FastForward className="size-4 sm:size-3.5" /> <span className="hidden sm:inline">Ahead</span></>
                     )

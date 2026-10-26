@@ -423,11 +423,11 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards }: { deck: DeckF
               <CustomStudy deck={deck.name} tags={tags} disabled={!node?.cards} />
               {work || !node?.cards ? (
                 <Button size="lg" className="flex-1 gap-2 px-6 sm:flex-none" disabled={!work} onClick={() => navigate(`/study?deck=${enc(deck.name)}`)}>
-                  <Play className="size-4" />Study
+                  <Play className="size-4" />Practice
                 </Button>
               ) : (
                 <Button size="lg" className="flex-1 gap-2 px-6 sm:flex-none" title="Nothing due right now: review early. FSRS counts an early review for less." onClick={() => navigate(`/study?deck=${enc(deck.name)}&ahead=1`)}>
-                  <FastForward className="size-4" />Study ahead
+                  <FastForward className="size-4" />Practice ahead
                 </Button>
               )}
             </>
@@ -534,7 +534,7 @@ function CustomStudy({ deck, tags, disabled }: { deck: string; tags: string[]; d
           <Button variant="outline" size="lg" className="flex-1 gap-1.5 px-4 sm:flex-none" disabled={disabled}>Custom study<ChevronDown className="size-4" /></Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64 sm:w-64" collisionPadding={16}>
-          <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Study a slice of this deck</DropdownMenuLabel>
+          <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Practice a slice of this deck</DropdownMenuLabel>
           <DropdownMenuItem className="h-10" onClick={() => go("is:due")}>Due reviews only</DropdownMenuItem>
           <DropdownMenuItem className="h-10" onClick={() => go("is:new")}>New cards only</DropdownMenuItem>
           <DropdownMenuItem className="h-10" onClick={() => go("rated:1:1")}>Failed today</DropdownMenuItem>
@@ -572,7 +572,7 @@ function CustomStudy({ deck, tags, disabled }: { deck: string; tags: string[]; d
             </p>
           </div>
           <DialogFooter>
-            <Button className="h-10" disabled={!q.trim() || !!err || count === 0} onClick={() => go(q.trim())}><Play className="size-4" />Study</Button>
+            <Button className="h-10" disabled={!q.trim() || !!err || count === 0} onClick={() => go(q.trim())}><Play className="size-4" />Practice</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { AiSection } from "@/components/settings-ai";
 import { AppearanceSection } from "@/components/settings-appearance";
 import { DataSection } from "@/components/settings-data";
+import { CleanupSection } from "@/components/settings-cleanup";
 import { ShortcutsSection } from "@/components/settings-shortcuts";
 import { Block, NumberField, Section } from "@/components/settings-ui";
 import { draftOf, normalize, validate, type SettingsDraft, type SettingsResponse } from "@/components/settings-model";
@@ -20,6 +21,7 @@ const NAV = [
   { id: "appearance", label: "Appearance" },
   { id: "study", label: "Study" },
   { id: "data", label: "Data" },
+  { id: "cleanup", label: "Clean up" },
   { id: "keys", label: "Keyboard" },
 ];
 
@@ -231,6 +233,8 @@ export function SettingsPage() {
             </Section>
 
             <DataSection dbPath={saved.dbPath} mediaDir={saved.mediaDir} />
+
+            <CleanupSection />
 
             <ShortcutsSection />
 

@@ -157,6 +157,20 @@ export interface FieldSpec {
   language?: string;
 }
 
+/** Cards on faces their type no longer makes, per type and face. */
+export interface LeftoverReport {
+  cards: number;
+  reviewed: number;
+  reviews: number;
+  faces: { type: string; typeName: string; face: string; cards: number; reviews: number }[];
+}
+
+export interface CleanupReport {
+  leftover: LeftoverReport;
+  /** `files` lists the first 200. */
+  media: { count: number; bytes: number; files: { path: string; bytes: number }[] };
+}
+
 export interface CardType {
   id: string;
   name: string;
@@ -408,7 +422,12 @@ export const api = {
 
   types: () => call<TypeSummary[]>("GET", "/api/types"),
   type: (id: string) => call<CardType>("GET", `/api/types/${encodeURIComponent(id)}`),
-  saveType: (def: CardType) => call<CardType>("PUT", `/api/types/${encodeURIComponent(def.id)}`, def),
+  /** `leftover`: cards on faces the saved type no longer makes (null when the definition didn't change). */
+  saveType: (def: CardType) => call<CardType & { leftover: { cards: number; reviews: number } | null }>("PUT", `/api/types/${encodeURIComponent(def.id)}`, def),
+  typeLeftover: (id: string) => call<LeftoverReport>("GET", `/api/types/${encodeURIComponent(id)}/leftover`),
+  cleanup: () => call<CleanupReport>("GET", "/api/cleanup"),
+  deleteLeftoverCards: (type?: string) => call<{ cards: number; reviews: number }>("POST", "/api/cleanup/cards", { type }),
+  deleteUnusedMedia: () => call<{ files: number; bytes: number }>("POST", "/api/cleanup/media", {}),
   deleteType: (id: string) => call("DELETE", `/api/types/${encodeURIComponent(id)}`),
   typeFolders: () => call<string[]>("GET", "/api/type-folders"),
   createTypeFolder: (path: string) => call<{ path: string }>("POST", "/api/type-folders", { path }),

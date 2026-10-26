@@ -20,6 +20,7 @@ export const FSRS_SUMMARY = {
   description: "Spaced repetition: each card comes back right before you'd forget it. For things you want to remember.",
   ratings: true,
   options: [] as SchedulerOption[],
+  stats: null,
   builtin: true,
   script: false,
 };
@@ -47,6 +48,14 @@ export function validateScheduler(def: unknown): string[] {
   else if (s.id === FSRS) e.push('"fsrs" is the built-in scheduler and can\'t be replaced');
   if (typeof s.name !== "string" || !s.name.trim()) e.push("name is required");
   if (s.ratings !== undefined && typeof s.ratings !== "boolean") e.push("ratings must be true or false");
+  if (s.stats !== undefined) {
+    const st = s.stats as Partial<SchedulerDef["stats"] & object>;
+    if (!st || typeof st !== "object" || Array.isArray(st)) e.push("stats must be an object");
+    else {
+      if (typeof st.groupBy !== "string" || !/^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$/.test(st.groupBy)) e.push("stats.groupBy must name a value in the state, e.g. \"box\"");
+      if (st.label !== undefined && typeof st.label !== "string") e.push("stats.label must be text");
+    }
+  }
   if (s.options !== undefined) {
     if (!Array.isArray(s.options)) e.push("options must be an array");
     else {

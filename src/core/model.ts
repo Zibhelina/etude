@@ -87,7 +87,15 @@ export interface SchedulerDef {
   ratings?: boolean;
   /** Settings a deck can give this scheduler, shown in the deck's Options. */
   options?: SchedulerOption[];
+  /** What Stats can show about the cards' state: `groupBy` names a value in the state the script returns (dots reach nested ones), e.g. Leitner's `box`. */
+  stats?: SchedulerStats;
   schedule: string;
+}
+
+export interface SchedulerStats {
+  groupBy: string;
+  /** What one group is called, e.g. "Box". */
+  label?: string;
 }
 
 export interface SchedulerOption {

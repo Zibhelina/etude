@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BarChart, Heatmap, ShareBar, fmtDay, fmtDuration, parseDay } from "@/components/stats-charts";
 import { Donut, ForgettingCurve, Histogram, ProgressChart, RecallRing, SERIF, Sparkline, StudyClock, recallColor } from "@/components/stats-viz";
-import { api, type DeckNode, type PracticeCard, type Stats } from "@/lib/api";
+import { api, type DeckNode, type PracticeCard, type StatsScheduler, type Stats } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 
@@ -79,11 +79,19 @@ function Loading() {
 function Body({ stats, deck }: { stats: Stats; deck?: string }) {
   const s = stats;
   const totalReviews = s.days.reduce((a, d) => a + d.reviews, 0);
+  // Every answer, a drill's runs included: what the heatmap and the clock count.
+  const totalAnswers = totalReviews + s.days.reduce((a, d) => a + (d.runs ?? 0), 0);
   const totalMs = s.days.reduce((a, d) => a + d.ms, 0);
   const target = s.desiredRetention ?? 0.9;
   const scope = deck ? `deck:"${deck}" ` : "";
 
-  if (s.cards.total === 0)
+  // Every card in scope, whatever schedules it (s.cards counts FSRS cards only).
+  const allCards = s.schedulers.reduce((a, x) => a + x.cards, 0);
+  const kind = s.scheduler ? (s.schedulers.find((x) => x.id === s.scheduler)?.kind ?? (s.scheduler === "fsrs" ? "fsrs" : null)) : null;
+  const others = s.schedulers.filter((x) => x.kind !== "fsrs");
+  const drillsReady = others.filter((x) => x.kind === "drill").reduce((a, x) => a + x.due, 0);
+
+  if (allCards === 0)
     return (
       <div className="rounded-xl border border-dashed px-6 py-14 text-center">
         <p className="font-medium">No cards here yet</p>
@@ -110,19 +118,23 @@ function Body({ stats, deck }: { stats: Stats; deck?: string }) {
   const dueToday = s.forecast[0]?.due ?? 0;
   const young = s.cards.review - s.cards.mature;
   // The heatmap starts a little before the first study day instead of showing months of nothing.
-  const first = s.days.find((d) => d.reviews > 0)?.day;
+  const first = s.days.find((d) => d.reviews + (d.runs ?? 0) > 0)?.day;
   const activeWeeks = first ? Math.min(WEEKS, Math.max(16, Math.ceil((parseDay(s.today.day).getTime() - parseDay(first).getTime()) / (7 * 86400_000)) + 2)) : WEEKS;
 
-  // A deck on a drill (or any non-FSRS scheduler) has no memory model: its stats are what it measured.
+  // A deck on a rated script scheduler (Leitner, a user's own): ratings, due dates and whatever its state
+  // groups cards by, but no memory model.
+  if (kind === "rated") return <RatedBody stats={s} deck={deck!} summary={s.schedulers[0]} />;
+
+  // A deck on a drill has no memory model and nothing to forecast: its stats are what it measured.
   if (s.scheduler && s.scheduler !== "fsrs")
     return (
       <div className="flex flex-col gap-6">
         {s.practice.length ? s.practice.map((p) => <PracticePanel key={p.cardId} card={p} />) : <Empty>Every run you do here is measured. Practice once and your results show up.</Empty>}
-        <Panel title="Practice days" aside={totalReviews ? "Sessions per day" : undefined}>
-          {totalReviews ? <Heatmap days={s.days} weeks={activeWeeks} today={s.today.day} /> : <Empty>Each practice day fills a square here.</Empty>}
+        <Panel title="Practice days" aside={totalAnswers ? "Runs per day" : undefined}>
+          {totalAnswers ? <Heatmap days={s.days} weeks={activeWeeks} today={s.today.day} /> : <Empty>Each practice day fills a square here.</Empty>}
           {totalMs > 0 && <TimeSpent days={s.days} today={s.today.day} />}
         </Panel>
-        {totalReviews > 0 && (
+        {totalAnswers > 0 && (
           <Panel title="When you practice" aside={`Last ${WEEKS} weeks`}>
             <StudyClock hours={s.hours} target={target} />
           </Panel>
@@ -143,6 +155,7 @@ function Body({ stats, deck }: { stats: Stats; deck?: string }) {
               <div className="mt-1.5 text-xs text-muted-foreground">
                 {s.overdue ? <span className="text-again">{s.overdue} overdue</span> : dueToday ? "all on time" : "nothing waiting"}
                 {s.today.reviews > 0 && <> · {s.today.reviews} done today</>}
+                {drillsReady > 0 && <> · {drillsReady} drill{drillsReady === 1 ? "" : "s"} ready</>}
               </div>
               <Button size="sm" className="mt-3 h-9 gap-1.5" disabled={!dueToday} onClick={() => navigate(deck ? `/study?deck=${encodeURIComponent(deck)}` : "/study")}>
                 <Play className="size-3.5" />Review now
@@ -167,6 +180,8 @@ function Body({ stats, deck }: { stats: Stats; deck?: string }) {
         </div>
       </section>
 
+      {others.length > 0 && <Schedulers list={s.schedulers} />}
+
       {s.practice.length > 0 && (
         <div className="flex flex-col gap-6">
           {s.practice.slice(0, 4).map((p) => <PracticePanel key={p.cardId} card={p} />)}
@@ -180,7 +195,7 @@ function Body({ stats, deck }: { stats: Stats; deck?: string }) {
       )}
 
       <div className="grid items-start gap-6 lg:grid-cols-2">
-        <Panel title="Cards" aside={<span className="tabular">{s.cards.total} total</span>}>
+        <Panel title="Cards" aside={<span className="tabular">{s.cards.total} {others.length ? "on FSRS" : "total"}</span>}>
           <Donut
             center={s.cards.total}
             sub="cards"
@@ -217,8 +232,8 @@ function Body({ stats, deck }: { stats: Stats; deck?: string }) {
         </Panel>
       </div>
 
-      <Panel title="Review activity" aside={totalReviews ? "Reviews per day" : undefined}>
-        {totalReviews ? (
+      <Panel title="Review activity" aside={totalAnswers ? "Answers per day" : undefined}>
+        {totalAnswers ? (
           <Heatmap days={s.days} weeks={activeWeeks} today={s.today.day} />
         ) : (
           <Empty>No reviews in the last {WEEKS} weeks. Each study day fills a square here.</Empty>
@@ -232,7 +247,7 @@ function Body({ stats, deck }: { stats: Stats; deck?: string }) {
 
       <div className="grid items-start gap-6 lg:grid-cols-2">
         <Panel title="When you study" aside={`Last ${WEEKS} weeks`}>
-          {totalReviews ? <StudyClock hours={s.hours} target={target} /> : <Empty>Your study hours show up after your first reviews.</Empty>}
+          {totalAnswers ? <StudyClock hours={s.hours} target={target} /> : <Empty>Your study hours show up after your first reviews.</Empty>}
         </Panel>
         <Panel title="Ratings" aside={`Last ${WEEKS} weeks`}>
           {totalReviews ? (
@@ -303,7 +318,7 @@ function MiniBars({ values, color = "var(--chart-2)" }: { values: number[]; colo
 }
 
 function StreakDots({ days, today }: { days: Stats["days"]; today: string }) {
-  const by = new Set(days.filter((d) => d.reviews > 0).map((d) => d.day));
+  const by = new Set(days.filter((d) => d.reviews + (d.runs ?? 0) > 0).map((d) => d.day));
   const end = parseDay(today);
   const cells = Array.from({ length: 14 }, (_, k) => {
     const d = new Date(end);
@@ -316,6 +331,134 @@ function StreakDots({ days, today }: { days: Stats["days"]; today: string }) {
       {cells.map((c) => (
         <span key={c.key} title={fmtDay(c.key)} className={cn("h-3.5 flex-1 rounded-[3px]", c.today && "ring-1 ring-foreground/60")} style={{ background: c.on ? "var(--highlight)" : "var(--muted)", opacity: c.on ? 0.9 : 0.6 }} />
       ))}
+    </div>
+  );
+}
+
+/** Cards on schedulers other than FSRS, one row each: they have no memory model, so they're counted apart. */
+function Schedulers({ list }: { list: StatsScheduler[] }) {
+  const max = Math.max(1, ...list.map((x) => x.cards));
+  const word = { fsrs: "Memory model", rated: "Rated, no recall model", drill: "Measured, always ready" } as const;
+  return (
+    <Panel title="By scheduler" aside="Recall, card states and memory strength count FSRS cards only">
+      <ul className="flex flex-col divide-y">
+        {list.map((x) => {
+          const go = () => (x.decks.length === 1 ? navigate(`/stats?deck=${encodeURIComponent(x.decks[0])}`) : undefined);
+          const status = x.kind === "drill" ? (x.due ? `${x.due} ready` : "none ready") : `${x.due} due`;
+          const extra = x.kind === "drill" ? (x.answers ? `${x.answers} run${x.answers === 1 ? "" : "s"}` : "") : x.passRate != null ? `${pct(x.passRate)} pass` : "";
+          return (
+            <li key={x.id} className="py-3 first:pt-0 last:pb-0">
+              <button type="button" onClick={go} disabled={x.decks.length !== 1} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 text-left enabled:cursor-pointer enabled:hover:opacity-80 sm:grid-cols-[13rem_minmax(0,1fr)_auto]">
+                <div className="col-span-2 min-w-0 sm:col-span-1">
+                  <div className="truncate text-sm font-medium">{x.name}</div>
+                  <div className="truncate text-[11px] text-muted-foreground" title={x.decks.join(", ")}>
+                    {word[x.kind]} · {x.decks.length === 1 ? x.decks[0].split("::").pop() : `${x.decks.length} decks`}
+                  </div>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted/60">
+                  <div className="h-full rounded-full" style={{ width: `${Math.max(2, (x.cards / max) * 100)}%`, background: x.kind === "fsrs" ? "var(--review)" : x.kind === "drill" ? "var(--chart-2)" : "var(--chart-3)" }} />
+                </div>
+                <div className="tabular grid grid-cols-[4.5rem_3.75rem_4.25rem] items-baseline text-right text-xs whitespace-nowrap text-muted-foreground sm:grid-cols-[4.75rem_4.5rem_4.5rem]">
+                  <span><span className="text-sm text-foreground">{x.cards}</span> card{x.cards === 1 ? "" : "s"}</span>
+                  <span>{status}</span>
+                  <span>{extra}</span>
+                </div>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </Panel>
+  );
+}
+
+/** A deck on a rated script scheduler: what's due, how answers went, and what its state groups cards by. */
+function RatedBody({ stats: s, deck, summary }: { stats: Stats; deck: string; summary: StatsScheduler }) {
+  const totalReviews = s.days.reduce((a, d) => a + d.reviews, 0);
+  const totalMs = s.days.reduce((a, d) => a + d.ms, 0);
+  const target = s.desiredRetention ?? 0.9;
+  const first = s.days.find((d) => d.reviews + (d.runs ?? 0) > 0)?.day;
+  const activeWeeks = first ? Math.min(WEEKS, Math.max(16, Math.ceil((parseDay(s.today.day).getTime() - parseDay(first).getTime()) / (7 * 86400_000)) + 2)) : WEEKS;
+  const dueToday = s.forecast[0]?.due ?? 0;
+  const g = summary.groups;
+  const groupTotal = g ? g.bins.reduce((a, b) => a + b.cards, 0) + g.other : 0;
+  const ratedTotal = s.ratings.again + s.ratings.hard + s.ratings.good + s.ratings.easy;
+  return (
+    <div className="flex flex-col gap-6">
+      <section aria-label="Overview" className="rounded-xl border bg-card/40">
+        <div className="grid grid-cols-2 gap-x-5 gap-y-5 p-4 sm:grid-cols-4 sm:p-5">
+          <div>
+            <div className="text-xs text-muted-foreground">Due today</div>
+            <div className="tabular text-5xl leading-none tracking-tight" style={SERIF}>{dueToday}</div>
+            <div className="mt-1.5 text-xs text-muted-foreground">{s.overdue ? <span className="text-again">{s.overdue} overdue</span> : dueToday ? "all on time" : "nothing waiting"}</div>
+            <Button size="sm" className="mt-3 h-9 gap-1.5" disabled={!dueToday && !summary.new} onClick={() => navigate(`/study?deck=${encodeURIComponent(deck)}`)}>
+              <Play className="size-3.5" />Practice
+            </Button>
+          </div>
+          <Stat label="Pass rate" value={pct(summary.passRate)} sub={summary.rated ? `${summary.passed}/${summary.rated} not Again · ${WEEKS} weeks` : "No answers yet"} tone={tone(summary.passRate)} />
+          <Stat label="Cards" value={String(summary.cards)} sub={summary.new ? `${summary.new} not seen yet` : "all seen"} />
+          <Stat label="Streak" value={`${s.streak} day${s.streak === 1 ? "" : "s"}`} sub={s.bestStreak ? `Best ${s.bestStreak} in ${WEEKS} weeks` : "Practice today to start one"} />
+        </div>
+        <p className="border-t px-4 py-3 text-xs text-muted-foreground sm:px-5">Scheduled by {summary.name}. It decides when cards come back without predicting recall, so there's no forgetting curve here.</p>
+      </section>
+
+      {g && (
+        <Panel title={`Cards by ${g.label.toLowerCase()}`} aside={<span className="tabular">{groupTotal} seen</span>}>
+          {groupTotal ? (
+            <>
+              <Histogram
+                label={`Seen cards by ${g.label}`}
+                height={120}
+                bars={g.bins.map((b) => ({ key: b.key, value: b.cards, label: b.key, color: "var(--chart-3)", tip: `${g.label} ${b.key}: ${b.cards} card${b.cards === 1 ? "" : "s"}` }))}
+              />
+              {g.other > 0 && <p className="mt-3 text-xs text-muted-foreground">{g.other} card{g.other === 1 ? "" : "s"} without a {g.label.toLowerCase()} yet.</p>}
+            </>
+          ) : (
+            <Empty>Answer a few cards and they spread across the {g.label.toLowerCase()}es.</Empty>
+          )}
+        </Panel>
+      )}
+
+      <Panel title="Forecast" aside="Next 30 days">
+        <Forecast stats={s} deck={deck} />
+      </Panel>
+
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <Panel title="Ratings" aside={`Last ${WEEKS} weeks`}>
+          {ratedTotal ? (
+            <Donut
+              center={ratedTotal}
+              sub="ratings"
+              parts={[
+                { key: "again", label: "Again", value: s.ratings.again, color: "var(--again)" },
+                { key: "hard", label: "Hard", value: s.ratings.hard, color: "var(--hard)" },
+                { key: "good", label: "Good", value: s.ratings.good, color: "var(--good)" },
+                { key: "easy", label: "Easy", value: s.ratings.easy, color: "var(--easy)" },
+              ]}
+            />
+          ) : (
+            <Empty>Ratings appear after your first answers.</Empty>
+          )}
+        </Panel>
+        <Panel title="When you practice" aside={`Last ${WEEKS} weeks`}>
+          {totalReviews ? <StudyClock hours={s.hours} target={target} /> : <Empty>Your practice hours show up after your first answers.</Empty>}
+        </Panel>
+      </div>
+
+      <Panel title="Practice days" aside={totalReviews ? "Answers per day" : undefined}>
+        {totalReviews ? <Heatmap days={s.days} weeks={activeWeeks} today={s.today.day} /> : <Empty>Each practice day fills a square here.</Empty>}
+        {totalMs > 0 && <TimeSpent days={s.days} today={s.today.day} />}
+      </Panel>
+    </div>
+  );
+}
+
+function Stat({ label, value, sub, tone: t }: { label: string; value: string; sub: string; tone?: keyof typeof TONE }) {
+  return (
+    <div className="min-w-0">
+      <div className="truncate text-xs text-muted-foreground">{label}</div>
+      <div className={cn("tabular mt-0.5 text-3xl leading-tight tracking-tight", t ? TONE[t] : value === "—" && "text-muted-foreground/50")} style={SERIF}>{value}</div>
+      <div className="mt-1 truncate text-[11px] text-muted-foreground" title={sub}>{sub}</div>
     </div>
   );
 }

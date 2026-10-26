@@ -434,6 +434,7 @@ export class Etude {
         description: def.description ?? "",
         ratings: def.ratings !== false,
         options: def.options ?? [],
+        stats: def.stats ?? null,
         builtin: !!r.builtin,
         shipped: shipped.has(r.id),
         edited: shipped.has(r.id) && !r.builtin,
@@ -465,6 +466,7 @@ export class Etude {
       ...(def.description ? { description: def.description } : {}),
       ratings: def.ratings !== false,
       ...(def.options?.length ? { options: def.options } : {}),
+      ...(def.stats ? { stats: { groupBy: def.stats.groupBy, ...(def.stats.label ? { label: def.stats.label } : {}) } } : {}),
       schedule: def.schedule,
     };
     const old = this.db.get("SELECT def FROM schedulers WHERE id = ?", def.id);
@@ -2197,10 +2199,34 @@ export class Etude {
     const from = "FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
     const t = now();
     const today = this.dayStart(t);
-    const states = this.db.get(
-      `SELECT COUNT(*) AS total, SUM(c.state = 0) AS new, SUM(c.state IN (1, 3)) AS learning, SUM(c.state = 2) AS review, SUM(c.state = 2 AND c.stability >= 21) AS mature ${from} WHERE ${where}`,
-      ...params,
-    )!;
+    // Each deck's scheduler decides what its numbers mean: FSRS has a memory model, a rated script
+    // (Leitner) has ratings and due dates, a drill has neither and is measured by its results.
+    const cfgs = new Map<string, PresetConfig>();
+    const cfgOf = (deck: string) => {
+      if (!cfgs.has(deck)) cfgs.set(deck, this.configFor(deck));
+      return cfgs.get(deck)!;
+    };
+    const kinds = new Map<string, { kind: "fsrs" | "rated" | "drill"; def: SchedulerDef | null }>();
+    const kindOf = (deck: string) => {
+      if (!kinds.has(deck)) {
+        const def = this.scriptFor(cfgOf(deck));
+        kinds.set(deck, { kind: !def ? "fsrs" : def.ratings === false ? "drill" : "rated", def });
+      }
+      return kinds.get(deck)!;
+    };
+    const onScript = (deck: string) => kindOf(deck).kind !== "fsrs";
+    const everything = this.db.all<CardRow & { deck: string; tags: string; item_id: string; type: string; fields: string }>(`SELECT c.*, d.name AS deck, i.tags, i.type, i.fields ${from} WHERE ${where}`, ...params);
+    const all = everything.filter((c) => !onScript(c.deck));
+    // Card states and maturity are FSRS's; a script scheduler's cards are counted in `schedulers`.
+    const states = { total: all.length, new: 0, learning: 0, review: 0, mature: 0 };
+    for (const c of all) {
+      if (c.state === 0) states.new++;
+      else if (c.state === 1 || c.state === 3) states.learning++;
+      else if (c.state === 2) {
+        states.review++;
+        if (c.stability >= 21) states.mature++;
+      }
+    }
     const dayKey = (ts: string | Date) => {
       const ds = this.dayStart(new Date(ts));
       return `${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, "0")}-${String(ds.getDate()).padStart(2, "0")}`;
@@ -2215,34 +2241,40 @@ export class Etude {
     const since30 = dayAt(-29);
     const rvFrom = `FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id`;
     const windowStart = since < since30 ? since : since30;
-    const rv = this.db.all(`SELECT r.ts, r.rating, r.state, r.duration_ms ${rvFrom} WHERE r.ts >= ? AND r.practice = 0 AND ${where}`, iso(windowStart), ...params);
-    // Pass rates only count rated reviews; a drill's answers (rating 0) are measured in its own metrics.
-    const byDay = new Map<string, { reviews: number; again: number; ms: number }>();
+    const rv = this.db.all(`SELECT r.ts, r.rating, r.state, r.duration_ms, d.name AS deck ${rvFrom} WHERE r.ts >= ? AND r.practice = 0 AND ${where}`, iso(windowStart), ...params);
+    // Pass rates only count rated reviews; a drill's answers (rating 0) are runs, measured in its own metrics.
+    // Retention is FSRS's: a script scheduler's pass rate is reported per scheduler.
+    const byDay = new Map<string, { reviews: number; again: number; runs: number; ms: number }>();
     const ratings = { again: 0, hard: 0, good: 0, easy: 0 };
     const RN = ["", "again", "hard", "good", "easy"] as const;
     const todayStats = { reviews: 0, again: 0, ms: 0, new: 0 };
     let reviewed = 0, passed = 0, reviewed30 = 0, passed30 = 0;
     const sinceIso = iso(since), since30Iso = iso(since30), todayIso = iso(today);
+    const todayRuns = { runs: 0 };
     for (const r of rv) {
-      if (r.ts >= since30Iso && r.state === 2 && r.rating >= 1) {
+      const fsrs = kindOf(r.deck).kind === "fsrs";
+      const run = r.rating === 0;
+      if (fsrs && r.ts >= since30Iso && r.state === 2 && r.rating >= 1) {
         reviewed30++;
         if (r.rating > 1) passed30++;
       }
       if (r.ts >= todayIso) {
-        todayStats.reviews++;
+        if (run) todayRuns.runs++;
+        else todayStats.reviews++;
         if (r.rating === 1) todayStats.again++;
         if (r.state === 0 && r.rating >= 1) todayStats.new++;
         todayStats.ms += r.duration_ms ?? 0;
       }
       if (r.ts < sinceIso) continue;
       const k = dayKey(r.ts);
-      const e = byDay.get(k) ?? { reviews: 0, again: 0, ms: 0 };
-      e.reviews++;
+      const e = byDay.get(k) ?? { reviews: 0, again: 0, runs: 0, ms: 0 };
+      if (run) e.runs++;
+      else e.reviews++;
       if (r.rating === 1) e.again++;
       e.ms += r.duration_ms ?? 0;
       byDay.set(k, e);
       if (r.rating >= 1 && r.rating <= 4) ratings[RN[r.rating] as keyof typeof ratings]++;
-      if (r.state === 2 && r.rating >= 1) {
+      if (fsrs && r.state === 2 && r.rating >= 1) {
         reviewed++;
         if (r.rating > 1) passed++;
       }
@@ -2259,9 +2291,10 @@ export class Etude {
       if (v && v in verdicts) verdicts[v as keyof typeof verdicts]++;
     }
 
-    // Forecast: overdue cards land on today.
+    // Forecast: overdue cards land on today. A drill is always ready by design, so it stays out:
+    // it's counted as `ready` in its scheduler's summary instead.
     const forecast: { day: string; due: number }[] = [];
-    const dueRows = this.db.all(`SELECT c.due ${from} WHERE ${where} AND c.state != 0`, ...params);
+    const dueRows = everything.filter((c) => c.state !== 0 && kindOf(c.deck).kind !== "drill");
     const bounds = Array.from({ length: 31 }, (_, i) => dayAt(i).getTime());
     const buckets = new Array(30).fill(0);
     let overdue = 0;
@@ -2275,19 +2308,7 @@ export class Etude {
     for (let i = 0; i < 30; i++) forecast.push({ day: dayKey(dayAt(i)), due: buckets[i] });
 
     // Predicted recall now, with each card's own deck settings (weights can differ per deck).
-    const cfgs = new Map<string, PresetConfig>();
-    const cfgOf = (deck: string) => {
-      if (!cfgs.has(deck)) cfgs.set(deck, this.configFor(deck));
-      return cfgs.get(deck)!;
-    };
-    const scriptDeck = new Map<string, boolean>();
-    const onScript = (deck: string) => {
-      if (!scriptDeck.has(deck)) scriptDeck.set(deck, !!this.scriptFor(cfgOf(deck)));
-      return scriptDeck.get(deck)!;
-    };
-    const everything = this.db.all<CardRow & { deck: string; tags: string; item_id: string; type: string; fields: string }>(`SELECT c.*, d.name AS deck, i.tags, i.type, i.fields ${from} WHERE ${where}`, ...params);
     // Recall, stability and the forgetting curve are FSRS's predictions; cards on another scheduler have none.
-    const all = everything.filter((c) => !onScript(c.deck));
     const byTag = new Map<string, { n: number; r: number }>();
     const tree = new Map<string, { cards: number; seen: number; r: number; direct: boolean }>();
     let rSum = 0, seenN = 0;
@@ -2358,7 +2379,8 @@ export class Etude {
       : [];
 
     // When the learner studies: reviews and pass rate per hour of the day, over the window.
-    const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, reviews: 0, passed: 0 }));
+    // `reviews` counts every answer; the pass rate is over `rated` ones (a drill run has no rating).
+    const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, reviews: 0, rated: 0, passed: 0 }));
     // Weekly pass rate on review cards and weekly volume, oldest first.
     const weekCount = Math.ceil(days / 7);
     const weeks = Array.from({ length: weekCount }, () => ({ reviews: 0, reviewed: 0, passed: 0, ms: 0 }));
@@ -2369,12 +2391,15 @@ export class Etude {
       const at = new Date(r.ts);
       const h = hours[at.getHours()];
       h.reviews++;
-      if (r.rating > 1 || (r.rating === 0 && r.state !== 0)) h.passed++;
+      if (r.rating >= 1) {
+        h.rated++;
+        if (r.rating > 1) h.passed++;
+      }
       const w = weekCount - 1 - Math.floor((end - 1 - at.getTime()) / weekMs);
       if (w < 0 || w >= weekCount) continue;
       weeks[w].reviews++;
       weeks[w].ms += r.duration_ms ?? 0;
-      if (r.state === 2 && r.rating >= 1) {
+      if (kindOf(r.deck).kind === "fsrs" && r.state === 2 && r.rating >= 1) {
         weeks[w].reviewed++;
         if (r.rating > 1) weeks[w].passed++;
       }
@@ -2386,8 +2411,11 @@ export class Etude {
       bestStreak = Math.max(bestStreak, run);
     }
 
+    const schedulers = this.schedulerSummary(everything, rv, kindOf, t, sinceIso, dayAt(1));
+
     return {
-      cards: { total: Number(states.total ?? 0), new: Number(states.new ?? 0), learning: Number(states.learning ?? 0), review: Number(states.review ?? 0), mature: Number(states.mature ?? 0) },
+      /** FSRS cards by state (a script scheduler's cards are in `schedulers`). */
+      cards: states,
       /** Pass rate on review-state cards over the whole window. */
       retention: reviewed ? passed / reviewed : null,
       /** Pass rate on review-state cards over the last 30 days. */
@@ -2399,7 +2427,7 @@ export class Etude {
       tags: [...byTag.entries()].map(([tag, v]) => ({ tag, cards: v.n, recall: v.r / v.n })).sort((a, b) => a.tag.localeCompare(b.tag)),
       /** Every tag with its ancestors: a card under a::b also counts toward a. */
       tagTree,
-      today: { ...todayStats, day: dayKey(today) },
+      today: { ...todayStats, ...todayRuns, day: dayKey(today) },
       ratings,
       verdicts,
       streak,
@@ -2421,9 +2449,101 @@ export class Etude {
       deadlineMargin: cfg.deadlineMargin,
       /** The scope's own scheduler (a deck's), or null for "all decks". */
       scheduler: scope.deck ? cfg.scheduler : null,
+      /** Every scheduler with cards in scope, FSRS first: how many cards, what's due, and what its state says. */
+      schedulers,
       /** Cards whose results are measurements: every graded attempt's numbers over time. */
-      practice: this.practiceStats(everything.filter((c) => onScript(c.deck) || !!this.typeMetrics(c.type)), sinceIso),
+      // Measured cards: drills, and any card whose type declares metrics. A rated script's cards (Leitner)
+      // are reviews like FSRS's, not measurements, so they don't get a chart each.
+      practice: this.practiceStats(everything.filter((c) => kindOf(c.deck).kind === "drill" || !!this.typeMetrics(c.type)), sinceIso),
     };
+  }
+
+  /**
+   * One row per scheduler in scope. A rated script gets its pass rate and due cards; a drill gets how
+   * many cards are ready now; a scheduler that declares `stats.groupBy` gets its cards counted by that
+   * value of their state (Leitner: cards per box).
+   */
+  private schedulerSummary(
+    cards: (CardRow & { deck: string })[],
+    rv: Row[],
+    kindOf: (deck: string) => { kind: "fsrs" | "rated" | "drill"; def: SchedulerDef | null },
+    t: Date,
+    sinceIso: string,
+    tomorrow: Date,
+  ) {
+    type Summary = {
+      id: string;
+      name: string;
+      kind: "fsrs" | "rated" | "drill";
+      decks: string[];
+      cards: number;
+      new: number;
+      /** Rated: due before tomorrow starts (overdue included). Drill: ready right now. */
+      due: number;
+      answers: number;
+      rated: number;
+      passed: number;
+      passRate: number | null;
+      groups: { label: string; bins: { key: string; cards: number }[]; other: number } | null;
+    };
+    const out = new Map<string, Summary & { values: Map<string, number>; deckSet: Set<string> }>();
+    const idOf = (deck: string) => kindOf(deck).def?.id ?? FSRS;
+    const pick = (obj: unknown, path: string): unknown => {
+      let v: any = obj;
+      for (const k of path.split(".")) v = v == null ? undefined : v[k];
+      return v;
+    };
+    const nowMs = t.getTime(), tomorrowMs = tomorrow.getTime();
+    for (const c of cards) {
+      const { kind, def } = kindOf(c.deck);
+      const id = idOf(c.deck);
+      let e = out.get(id);
+      if (!e) {
+        e = { id, name: def?.name ?? "FSRS", kind, decks: [], cards: 0, new: 0, due: 0, answers: 0, rated: 0, passed: 0, passRate: null, groups: null, values: new Map(), deckSet: new Set() };
+        out.set(id, e);
+      }
+      e.cards++;
+      e.deckSet.add(c.deck);
+      const due = new Date(c.due).getTime();
+      if (c.state === 0) e.new++;
+      else if (kind === "drill" ? due <= nowMs : due < tomorrowMs) e.due++;
+      if (def?.stats && c.state !== 0) {
+        const v = pick(parse(c.sched_state ?? null, null), def.stats.groupBy);
+        const key = v == null || typeof v === "object" ? "" : String(v);
+        e.values.set(key, (e.values.get(key) ?? 0) + 1);
+      }
+    }
+    for (const r of rv) {
+      if (r.ts < sinceIso) continue;
+      const e = out.get(idOf(r.deck));
+      if (!e) continue;
+      e.answers++;
+      if (r.rating >= 1) {
+        e.rated++;
+        if (r.rating > 1) e.passed++;
+      }
+    }
+    return [...out.values()]
+      .sort((a, b) => (a.id === FSRS ? -1 : b.id === FSRS ? 1 : b.cards - a.cards))
+      .map(({ values, deckSet, ...e }) => {
+        const def = kindOf([...deckSet][0]).def;
+        let groups: Summary["groups"] = null;
+        if (def?.stats) {
+          const other = values.get("") ?? 0;
+          values.delete("");
+          const keys = [...values.keys()];
+          const numeric = keys.length > 0 && keys.every((k) => /^-?\d+$/.test(k));
+          let bins: { key: string; cards: number }[];
+          if (numeric) {
+            // Whole numbers (boxes, levels) get every step between the lowest and highest, empty ones too.
+            const ns = keys.map(Number);
+            const lo = Math.min(...ns), hi = Math.max(...ns);
+            bins = hi - lo <= 60 ? Array.from({ length: hi - lo + 1 }, (_, i) => ({ key: String(lo + i), cards: values.get(String(lo + i)) ?? 0 })) : ns.sort((a, b) => a - b).map((n) => ({ key: String(n), cards: values.get(String(n))! }));
+          } else bins = keys.sort((a, b) => a.localeCompare(b)).map((k) => ({ key: k, cards: values.get(k)! }));
+          groups = { label: def.stats.label ?? def.stats.groupBy, bins, other };
+        }
+        return { ...e, decks: [...deckSet].sort(), passRate: e.rated ? e.passed / e.rated : null, groups };
+      });
   }
 
   /** The metrics a type declares, or null when it declares none. */

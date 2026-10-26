@@ -47,7 +47,7 @@ function Tooltip({ tip, width }: { tip: Tip; width: number }) {
  * Review heatmap: one column per week (Monday first), one row per weekday, newest week on the right.
  * Cell color scales with reviews; the again rate shows in the tooltip.
  */
-export function Heatmap({ days, weeks: maxWeeks, today }: { days: { day: string; reviews: number; again: number; ms: number }[]; weeks: number; today: string }) {
+export function Heatmap({ days, weeks: maxWeeks, today }: { days: { day: string; reviews: number; again: number; runs?: number; ms: number }[]; weeks: number; today: string }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [tip, setTip] = useState<Tip>(null);
   const L = 30, T = 20, G = 3;
@@ -68,17 +68,27 @@ export function Heatmap({ days, weeks: maxWeeks, today }: { days: { day: string;
   }
   const shown = new Set(cells.map((c) => c.key));
   const visible = days.filter((d) => shown.has(d.day));
-  const max = Math.max(1, ...visible.map((d) => d.reviews));
+  // Activity is every answer: rated reviews and a drill's runs.
+  const act = (d?: { reviews: number; runs?: number }) => (d ? d.reviews + (d.runs ?? 0) : 0);
+  const max = Math.max(1, ...visible.map((d) => act(d)));
   const W = L + weeks * (C + G), H = T + 7 * (C + G);
   const level = (n: number) => (n === 0 ? 0 : Math.min(4, 1 + Math.floor((n / max) * 3.999)));
-  const total = visible.reduce((a, d) => a + d.reviews, 0);
-  const active = visible.filter((d) => d.reviews > 0).length;
+  const total = visible.reduce((a, d) => a + act(d), 0);
+  const runs = visible.reduce((a, d) => a + (d.runs ?? 0), 0);
+  const active = visible.filter((d) => act(d) > 0).length;
+  const what = (d?: { reviews: number; again: number; runs?: number }) => {
+    if (!d || !act(d)) return "Nothing";
+    const parts = [];
+    if (d.reviews) parts.push(`${d.reviews} review${d.reviews === 1 ? "" : "s"} · ${Math.round((d.again / d.reviews) * 100)}% again`);
+    if (d.runs) parts.push(`${d.runs} run${d.runs === 1 ? "" : "s"}`);
+    return parts.join(" · ");
+  };
 
   return (
     <div ref={ref} className="relative">
       <div className="overflow-hidden">
-        <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="max-w-full" role="img" aria-label={`Reviews per day over the last ${weeks} weeks: ${total} reviews on ${active} days`} onMouseLeave={() => setTip(null)}>
-          <title>{`Reviews per day, last ${weeks} weeks`}</title>
+        <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="max-w-full" role="img" aria-label={`Answers per day over the last ${weeks} weeks: ${total} on ${active} days`} onMouseLeave={() => setTip(null)}>
+          <title>{`Answers per day, last ${weeks} weeks`}</title>
           {months.map((m, i) => (
             <text key={i} x={L + m.col * (C + G)} y={11} className="fill-muted-foreground" fontSize={11}>{m.label}</text>
           ))}
@@ -88,7 +98,7 @@ export function Heatmap({ days, weeks: maxWeeks, today }: { days: { day: string;
           {cells.map((c) => {
             if (c.future) return null;
             const d = byDay.get(c.key);
-            const n = d?.reviews ?? 0;
+            const n = act(d);
             const lv = level(n);
             const isToday = c.key === today;
             return (
@@ -111,13 +121,13 @@ export function Heatmap({ days, weeks: maxWeeks, today }: { days: { day: string;
                     y: r.top - box.top,
                     lines: [
                       fmtDay(c.key),
-                      n ? `${n} review${n === 1 ? "" : "s"} · ${Math.round(((d!.again) / n) * 100)}% again` : "No reviews",
+                      what(d),
                       ...(d?.ms ? [fmtDuration(d.ms)] : []),
                     ],
                   });
                 }}
               >
-                <title>{`${fmtDay(c.key)}: ${n} review${n === 1 ? "" : "s"}${n ? `, ${Math.round((d!.again / n) * 100)}% again` : ""}`}</title>
+                <title>{`${fmtDay(c.key)}: ${what(d)}`}</title>
               </rect>
             );
           })}
@@ -125,7 +135,7 @@ export function Heatmap({ days, weeks: maxWeeks, today }: { days: { day: string;
       </div>
       <Tooltip tip={tip} width={width || 300} />
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" style={{ width: W, maxWidth: "100%" }}>
-        <span className="tabular mr-auto basis-full pb-1 sm:basis-auto sm:pb-0">Last {weeks} weeks · {total} review{total === 1 ? "" : "s"} on {active} day{active === 1 ? "" : "s"}</span>
+        <span className="tabular mr-auto basis-full pb-1 sm:basis-auto sm:pb-0">Last {weeks} weeks · {[total - runs || !runs ? `${total - runs} review${total - runs === 1 ? "" : "s"}` : "", runs ? `${runs} run${runs === 1 ? "" : "s"}` : ""].filter(Boolean).join(" + ")} on {active} day{active === 1 ? "" : "s"}</span>
         Less
         {[0, 1, 2, 3, 4].map((lv) => (
           <span key={lv} className="size-3 rounded-[2px]" style={{ background: lv ? "var(--highlight)" : "var(--muted)", opacity: lv ? [0, 0.28, 0.5, 0.75, 1][lv] : 0.55 }} />

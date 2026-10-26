@@ -105,6 +105,24 @@ A card type can say which numbers in its grade are worth tracking, so Stats char
 
 `key` names a value in the grade's `details` (dots reach nested values; `score` is the grade's score). Every graded attempt counts, practice runs included: a result is a result.
 
+## What Stats shows for a scheduler
+
+Stats shows what a deck's scheduler actually knows:
+
+- **FSRS** decks get the memory model: recall now, the forgetting curve, memory strength, the forecast and weakest tags.
+- **Rated scripts** (Leitner, or your own with `ratings: true`) get what's due, the forecast, the pass rate, ratings and practice days. They don't predict recall, so there's no forgetting curve.
+- **Drills** (`ratings: false`) get the type's metrics over time and their practice days. A drill is always ready, so it stays out of the forecast and the due count; "All decks" shows it as "N drills ready" instead.
+
+On "All decks", recall, card states, retention and the forecast count FSRS cards only, and a **By scheduler** panel lists every other scheduler with its cards, what's due and its pass rate. The heatmap counts every answer, with a drill's runs listed apart from reviews.
+
+A scheduler can also say what its state means, so Stats can chart it. Leitner keeps `{ box }`, so its `scheduler.json` has:
+
+```json
+"stats": { "groupBy": "box", "label": "Box" }
+```
+
+and the deck's Stats page shows a "Cards by box" histogram. `groupBy` names a value in the state your script returns (dots reach nested ones, like `rank.level`). Whole numbers get every step between the lowest and highest, empty ones included; anything else becomes one bar per value. Cards whose state has no such value are counted apart.
+
 ## Switching a deck's scheduler
 
 Changing the scheduler doesn't lose anything. Every answer stays in the review log, and **Reschedule** (or `etude card reschedule --deck "…"`) replays that history through the new scheduler:
@@ -114,4 +132,4 @@ Changing the scheduler doesn't lose anything. Every answer stays in the review l
 
 ## What stays FSRS-only
 
-Some features only make sense with FSRS and skip decks on another scheduler: the weights optimizer, exam deadlines, desired retention and learning steps, recall predictions, and the forgetting curve. Daily limits and ordering still apply to every scheduler.
+Some features only make sense with FSRS and skip decks on another scheduler: the weights optimizer, exam deadlines, desired retention and learning steps, recall predictions, the forgetting curve, memory strength and true retention. Daily limits and ordering still apply to every scheduler.

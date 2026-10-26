@@ -275,7 +275,9 @@ export function Histogram({
 // ---------------------------------------------------------- study clock
 
 /** A 24-hour clock: wedge length is how much you study at that hour, color is how well. */
-export function StudyClock({ hours, target }: { hours: { hour: number; reviews: number; passed: number }[]; target: number }) {
+export function StudyClock({ hours, target }: { hours: { hour: number; reviews: number; rated?: number; passed: number }[]; target: number }) {
+  // Wedge length is every answer; colour is the pass rate over rated ones (a drill run has none).
+  const ratedOf = (h: { reviews: number; rated?: number }) => h.rated ?? h.reviews;
   const shown = useShown(100);
   const [hover, setHover] = useState<number | null>(null);
   const S = 232, c = S / 2, r0 = 34, r1 = c - 28;
@@ -283,8 +285,9 @@ export function StudyClock({ hours, target }: { hours: { hour: number; reviews: 
   const total = hours.reduce((a, h) => a + h.reviews, 0);
   // Best hour: highest pass rate among hours carrying at least 5% of reviews.
   // Only hours with enough answers to mean something; a 3-for-3 hour is luck, not sharpness.
-  const eligible = total >= 40 ? hours.filter((h) => h.reviews >= Math.max(10, total * 0.05)) : [];
-  const best = eligible.length ? eligible.reduce((a, b) => (b.passed / b.reviews > a.passed / a.reviews ? b : a)) : null;
+  const totalRated = hours.reduce((a, h) => a + ratedOf(h), 0);
+  const eligible = totalRated >= 40 ? hours.filter((h) => ratedOf(h) >= Math.max(10, totalRated * 0.05)) : [];
+  const best = eligible.length ? eligible.reduce((a, b) => (b.passed / ratedOf(b) > a.passed / ratedOf(a) ? b : a)) : null;
   const busiest = hours.reduce((a, b) => (b.reviews > a.reviews ? b : a));
   const wedge = (h: number, len: number) => {
     const a0 = ((h / 24) * 2 - 0.5) * Math.PI + 0.025, a1 = (((h + 1) / 24) * 2 - 0.5) * Math.PI - 0.025;
@@ -310,14 +313,14 @@ export function StudyClock({ hours, target }: { hours: { hour: number; reviews: 
           <g className="viz-anim" style={{ transform: `scale(${shown ? 1 : 0.15})`, transformOrigin: `${c}px ${c}px`, opacity: shown ? 1 : 0, transition: "transform 1s cubic-bezier(.2,.8,.2,1), opacity .5s" }}>
             {hours.map((h, i) => {
               const len = h.reviews ? Math.sqrt(h.reviews / max) : 0;
-              const rate = h.reviews ? h.passed / h.reviews : 0;
+              const rate = ratedOf(h) ? h.passed / ratedOf(h) : null;
               return (
                 <g key={h.hour} onMouseEnter={() => setHover(i)}>
                   <path d={wedge(h.hour, 1)} fill="transparent" />
                   {h.reviews > 0 && (
                     <path
                       d={wedge(h.hour, Math.max(len, 0.06))}
-                      fill={recallColor(rate, target)}
+                      fill={rate == null ? "var(--chart-2)" : recallColor(rate, target)}
                       fillOpacity={hover == null || hover === i ? 0.9 : 0.4}
                       style={{ transition: "fill-opacity .15s" }}
                       pointerEvents="none"
@@ -332,7 +335,7 @@ export function StudyClock({ hours, target }: { hours: { hour: number; reviews: 
           {hv ? (
             <>
               <div className="tabular text-lg leading-none" style={SERIF}>{hh(hv.hour)}</div>
-              <div className="tabular mt-1 text-[11px] text-muted-foreground">{hv.reviews} · {hv.reviews ? Math.round((hv.passed / hv.reviews) * 100) : 0}%</div>
+              <div className="tabular mt-1 text-[11px] text-muted-foreground">{hv.reviews}{ratedOf(hv) ? ` · ${Math.round((hv.passed / ratedOf(hv)) * 100)}%` : ""}</div>
             </>
           ) : (
             <div className="text-[11px] text-muted-foreground">24 h</div>
@@ -343,14 +346,14 @@ export function StudyClock({ hours, target }: { hours: { hour: number; reviews: 
         <div>
           <dt className="text-xs text-muted-foreground">Busiest hour</dt>
           <dd className="tabular mt-0.5 text-lg" style={SERIF}>{hh(busiest.hour)}</dd>
-          <dd className="tabular text-xs text-muted-foreground">{busiest.reviews} review{busiest.reviews === 1 ? "" : "s"}</dd>
+          <dd className="tabular text-xs text-muted-foreground">{busiest.reviews} answer{busiest.reviews === 1 ? "" : "s"}</dd>
         </div>
-        <div>
+        {totalRated > 0 && <div>
           <dt className="text-xs text-muted-foreground">Sharpest hour</dt>
           <dd className="tabular mt-0.5 text-lg" style={SERIF}>{best ? hh(best.hour) : "—"}</dd>
-          <dd className="tabular text-xs text-muted-foreground">{best ? `${Math.round((best.passed / best.reviews) * 100)}% not Again` : "Needs more reviews"}</dd>
-        </div>
-        <p className="col-span-2 text-xs text-pretty text-muted-foreground sm:col-span-1">Longer wedges, more reviews. Color is how often you didn't press Again at that hour.</p>
+          <dd className="tabular text-xs text-muted-foreground">{best ? `${Math.round((best.passed / ratedOf(best)) * 100)}% not Again` : "Needs more rated answers"}</dd>
+        </div>}
+        <p className="col-span-2 text-xs text-pretty text-muted-foreground sm:col-span-1">{totalRated ? "Longer wedges, more answers. Color is how often you didn't press Again at that hour." : "Longer wedges, more runs at that hour."}</p>
       </dl>
     </div>
   );

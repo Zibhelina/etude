@@ -2820,7 +2820,7 @@ etude stats overview [flags]
 | `--query <SEARCH>` | string | Limit to cards matching a search (see `Search language`). Also `--q`. |
 | `--days <N>` | number | Activity window in days (heatmap, ratings, verdicts). Default `30`. |
 
-Output: the engine's stats object (cards, retention, trueRetention, recall, days, forecast, overdue, tags, tagTree, today, ratings, verdicts, streak, window, deadline)
+Output: the engine's stats object (cards, retention, trueRetention, recall, days, forecast, overdue, tags, tagTree, today, ratings, verdicts, streak, window, deadline, schedulers: one row per scheduler with cards, due, pass rate and state groups, practice)
 
 ```sh
 etude stats --deck "Networks"

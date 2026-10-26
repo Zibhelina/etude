@@ -253,13 +253,14 @@ export interface Stats {
   /** Pass rate on review-state cards over the last 30 days. */
   trueRetention: { days: number; reviewed: number; passed: number; rate: number | null };
   recall: number | null;
-  days: { day: string; reviews: number; again: number; ms: number }[];
+  /** `reviews` are rated answers; `runs` are a drill's unrated ones. */
+  days: { day: string; reviews: number; again: number; runs: number; ms: number }[];
   forecast: { day: string; due: number }[];
   overdue: number;
   tags: { tag: string; cards: number; recall: number }[];
   /** Every tag with its ancestors; recall is over seen cards, null when none are seen. */
   tagTree: { tag: string; depth: number; direct: boolean; cards: number; seen: number; recall: number | null }[];
-  today: { day: string; reviews: number; again: number; ms: number; new: number };
+  today: { day: string; reviews: number; again: number; runs: number; ms: number; new: number };
   ratings: { again: number; hard: number; good: number; easy: number };
   verdicts: { correct: number; partial: number; incorrect: number; ungraded: number };
   streak: number;
@@ -269,13 +270,33 @@ export interface Stats {
   difficulty: number[];
   curve: { days: number; recall: number }[];
   desiredRetention: number;
-  hours: { hour: number; reviews: number; passed: number }[];
+  hours: { hour: number; reviews: number; rated: number; passed: number }[];
   weeks: { reviews: number; reviewed: number; passed: number; ms: number; rate: number | null }[];
   window: { days: number; from: string; to: string };
   deadline: string | null;
   deadlineMargin: number;
   scheduler: string | null;
+  schedulers: StatsScheduler[];
   practice: PracticeCard[];
+}
+
+/** One scheduler's cards in a Stats scope. */
+export interface StatsScheduler {
+  id: string;
+  name: string;
+  /** fsrs: memory model. rated: a script with Again/Hard/Good/Easy. drill: a script without ratings. */
+  kind: "fsrs" | "rated" | "drill";
+  decks: string[];
+  cards: number;
+  new: number;
+  /** rated/fsrs: due before tomorrow. drill: ready right now. */
+  due: number;
+  answers: number;
+  rated: number;
+  passed: number;
+  passRate: number | null;
+  /** Cards counted by a value of the scheduler's state (its `stats.groupBy`), e.g. Leitner boxes. */
+  groups: { label: string; bins: { key: string; cards: number }[]; other: number } | null;
 }
 
 export interface Preset {

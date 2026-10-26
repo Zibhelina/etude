@@ -211,3 +211,79 @@ test("showVerdict: false reaches the study card and survives a save", async (t) 
   assert.equal(e.next({ deck: "B" }).card!.showVerdict, true);
   assert.throws(() => e.saveType({ ...def, showVerdict: "no" as any }), /showVerdict/);
 });
+
+test("stats keep each scheduler's numbers apart: FSRS memory, Leitner boxes, drills ready", async (t) => {
+  const e = await open(t);
+  e.saveType(loadTypeDir(TYPING));
+  for (const id of ["f1", "f2"]) e.upsertItem({ id, type: "basic", deck: "Facts", fields: { front: id, back: id } });
+  for (const id of ["b1", "b2", "b3"]) e.upsertItem({ id, type: "basic", deck: "Boxes", fields: { front: id, back: id } });
+  e.upsertItem({ id: "type", type: "typing", deck: "Typing", fields: { count: 10, target: 60 } });
+  e.updateDeck("Boxes", { config: { scheduler: "leitner", schedulerOptions: { boxes: "1, 3, 7" } } });
+  e.updateDeck("Typing", { config: { scheduler: "drill", schedulerOptions: { perDay: 0 } } });
+
+  const f = e.next({ deck: "Facts" }).card!;
+  e.rate(f.cardId, 3);
+  const boxes = e.db.all("SELECT c.id FROM cards c JOIN items i ON i.id = c.item_id WHERE i.deck_id = (SELECT id FROM decks WHERE name = 'Boxes') ORDER BY i.id").map((r) => r.id as number);
+  e.rate(boxes[0], 3);
+  e.rate(boxes[0], 3, { at: new Date(Date.now() + 1000) }); // box 2
+  e.rate(boxes[1], 1); // box 1, a miss
+  const d = e.next({ deck: "Typing" }).card!;
+  for (const seed of [1, 2, 3]) {
+    const s = await e.submit(d.cardId, seed, typeIt(e, d.cardId, seed, 60));
+    e.rate(d.cardId, 0, { attemptId: s.attemptId });
+  }
+
+  const all = e.stats({});
+  // Card states are FSRS's: 2 cards, not 6.
+  assert.deepEqual(all.cards, { total: 2, new: 1, learning: 1, review: 0, mature: 0 });
+  // The forecast leaves the always-ready drill out; only FSRS + Leitner cards with reviews are in it.
+  const dueSoon = all.forecast.reduce((a, x) => a + x.due, 0);
+  assert.equal(dueSoon, 3, "1 FSRS card + 2 Leitner cards, no drill");
+  assert.equal(all.overdue, 0, "the drill isn't overdue forever");
+  // Drill runs aren't reviews.
+  assert.equal(all.today.reviews, 4);
+  assert.equal(all.today.runs, 3);
+  assert.equal(all.days.at(-1)!.runs, 3);
+  // Retention is FSRS-only.
+  assert.equal(all.trueRetention.reviewed, 0);
+
+  const by = Object.fromEntries(all.schedulers.map((x) => [x.id, x]));
+  assert.deepEqual(all.schedulers.map((x) => x.id), ["fsrs", "leitner", "drill"]);
+  assert.equal(by.fsrs.cards, 2);
+  assert.equal(by.leitner.kind, "rated");
+  assert.equal(by.leitner.cards, 3);
+  assert.equal(by.leitner.new, 1);
+  assert.equal(by.leitner.rated, 3);
+  assert.equal(by.leitner.passed, 2);
+  assert.ok(Math.abs(by.leitner.passRate! - 2 / 3) < 1e-9);
+  assert.deepEqual(by.leitner.groups, { label: "Box", bins: [{ key: "1", cards: 1 }, { key: "2", cards: 1 }], other: 0 });
+  assert.equal(by.drill.kind, "drill");
+  assert.equal(by.drill.due, 1, "ready now");
+  assert.equal(by.drill.answers, 3);
+  assert.equal(by.drill.rated, 0);
+  assert.equal(by.drill.passRate, null);
+  assert.deepEqual(by.drill.decks, ["Typing"]);
+
+  // A deck page sees only its own scheduler.
+  const leitner = e.stats({ deck: "Boxes" });
+  assert.equal(leitner.scheduler, "leitner");
+  assert.deepEqual(leitner.schedulers.map((x) => x.id), ["leitner"]);
+  assert.equal(leitner.cards.total, 0);
+  assert.equal(leitner.recall, null);
+  assert.equal(leitner.ratings.good, 2);
+  assert.equal(leitner.ratings.again, 1);
+});
+
+test("a user scheduler can declare what Stats groups its cards by", async (t) => {
+  const e = await open(t);
+  assert.throws(() => e.saveScheduler({ id: "lv", name: "Levels", stats: { groupBy: "no spaces" }, schedule: "return { due: ctx.now }" } as any), /stats.groupBy/);
+  e.saveScheduler({ id: "lv", name: "Levels", stats: { groupBy: "rank.level", label: "Level" }, schedule: "return { due: ctx.day[1], state: { rank: { level: attempt.rating } } }" });
+  for (const id of ["a", "b"]) e.upsertItem({ id, type: "basic", deck: "L", fields: { front: id, back: id } });
+  e.updateDeck("L", { config: { scheduler: "lv" } });
+  const ids = e.db.all("SELECT id FROM cards ORDER BY id").map((r) => r.id as number);
+  e.rate(ids[0], 2);
+  e.rate(ids[1], 4);
+  const s = e.stats({ deck: "L" }).schedulers[0];
+  assert.deepEqual(s.groups, { label: "Level", bins: [{ key: "2", cards: 1 }, { key: "3", cards: 0 }, { key: "4", cards: 1 }], other: 0 });
+  assert.equal(e.listSchedulers().find((x) => x.id === "lv")!.stats!.label, "Level");
+});

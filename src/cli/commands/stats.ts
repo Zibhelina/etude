@@ -11,7 +11,7 @@ command({
   summary: "Everything the Stats page shows for a scope: card states, retention, recall, daily activity, forecast, ratings, verdicts, streak, deadline.",
   flags: [...SCOPE, DAYS],
   examples: ['etude stats --deck "Networks"', "etude stats overview --days 90"],
-  output: "the engine's stats object (cards, retention, trueRetention, recall, days, forecast, overdue, tags, tagTree, today, ratings, verdicts, streak, window, deadline)",
+  output: "the engine's stats object (cards, retention, trueRetention, recall, days, forecast, overdue, tags, tagTree, today, ratings, verdicts, streak, window, deadline, schedulers: one row per scheduler with cards, due, pass rate and state groups, practice)",
   run: (ctx) => ctx.e.stats(scopeOf(ctx.flags), ctx.flags.days),
 });
 

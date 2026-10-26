@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Ask Etude**, an assistant inside the app. The round button in the bottom-right corner (or Ctrl/⌘+J) opens a chat on the right that can do anything the CLI can: make a deck from attached notes or PDFs, move and rename decks, switch or install themes, import Anki packages. It uses your configured AI (ChatGPT plan, OpenRouter or a custom endpoint) and you pick the model per chat. Deletes and other destructive commands wait for **Allow**, and every reply that changed something has **Undo these changes**. CLI: `etude agent ask|list|show|undo|delete|models`; API: `/api/agent/*`. See docs/agent.md.
 - Pluggable schedulers. FSRS stays the default, and a deck can pick another scheduler in its Options (or `etude deck set "Deck" scheduler=drill`). **Drill** is for skills you train and measure: no rating buttons, the card comes back as many times a day as you set, **Go again** starts another run, and Stats charts every result (WPM, accuracy… from the type's new `metrics`). **Leitner boxes** ship too, and you can write your own as a small `schedule.js` that gets the grade's details and returns the next due date. Switching schedulers replays the review history. CLI: `etude scheduler list|show|export|import|validate|reset|delete`; API: `/api/schedulers`. See docs/schedulers.md.
 
 ## 2.1.0

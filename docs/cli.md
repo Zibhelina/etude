@@ -347,6 +347,14 @@ These work on every command, before or after the command words.
   - [`market publish`](#market-publish) Share a theme, deck or card type: opens a pull request on the market repository with your GitHub account.
   - [`market check`](#market-check) Validate market entry files without a database. Exits 4 on problems.
   - [`market index`](#market-index) For the market repository: check every file under entries/ (each deck and type is dry-run imported) and write index.json.
+- **agent**: The in-app assistant: ask it to change your collection, list and manage its conversations (`etude agent` alone runs `list`)
+  - [`agent ask`](#agent-ask) Send a message to the assistant and wait for its reply. It can run Etude commands on the collection.
+  - [`agent list`](#agent-list) Conversations with the assistant, newest first.
+  - [`agent show`](#agent-show) One conversation with all its messages, the commands run and their output.
+  - [`agent rename`](#agent-rename) Give a conversation your own title. Automatic titles stop for it.
+  - [`agent delete`](#agent-delete) Delete a conversation and its attachments. Changes it made to the collection stay.
+  - [`agent undo`](#agent-undo) Put the collection back as it was before one of the assistant's replies (default: its latest reply that changed something). Changes made after it are undone too.
+  - [`agent models`](#agent-models) Models the assistant can use, from every configured provider (ChatGPT plan, OpenRouter tool-capable models, a custom endpoint).
 - **db**: The database file: path, backups, integrity, schema version
   - [`db path`](#db-path) Which database and media directory the CLI uses, and how it was chosen.
   - [`db backup`](#db-backup) Copy the database consistently (SQLite online backup; safe while the server runs).
@@ -3749,6 +3757,157 @@ Output: { ok, entries, problems: [{ path, errors }], written? }
 etude market index .
 etude market index . --check
 ```
+
+## agent
+
+The in-app assistant: ask it to change your collection, list and manage its conversations.
+
+### etude agent ask
+
+<a id="agent-ask"></a>
+
+Send a message to the assistant and wait for its reply. It can run Etude commands on the collection.
+
+Starts a new conversation unless --conversation is given. Destructive commands the assistant wants to run are denied unless --yes is given. The collection is snapshotted before the reply's first write, so `etude agent undo` can put it back. Progress (each command it runs) goes to stderr.
+
+```
+etude agent ask <message...> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `message...` | What to ask. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-c, --conversation <ID>` | string | Continue this conversation. |
+| `-m, --model <REF>` | string | Model ref: chatgpt:<model>, openrouter:<model> or custom:<model>. Default: the conversation's, then the last used, then the agent setting, then the feedback model. |
+| `--attach <FILE> (repeatable)` | string | Attach a file (image, PDF, text, .apkg). Repeat for several. |
+| `-y, --yes` | boolean | Allow destructive commands without asking. |
+
+Output: { conversation, reply, commands: [{ command, status, exit }], changed, canUndo, model, ms, error? }
+
+```sh
+etude agent ask "make a deck from these notes" --attach notes.md
+etude agent ask -c 1a2b3c4d "now move it under Languages"
+etude agent ask --model openrouter:deepseek/deepseek-v4.1-flash-1017 "switch to the Nord theme"
+```
+
+### etude agent list
+
+<a id="agent-list"></a>
+
+Conversations with the assistant, newest first.
+
+```
+etude agent list
+```
+
+*read-only*
+
+Output: array of { id, title, model, created, updated }
+
+### etude agent show
+
+<a id="agent-show"></a>
+
+One conversation with all its messages, the commands run and their output.
+
+```
+etude agent show <id>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Conversation id. |
+
+Output: { id, title, model, created, updated, messages: [{ id, role, content, created, snapshot, undone, canUndo }] }
+
+### etude agent rename
+
+<a id="agent-rename"></a>
+
+Give a conversation your own title. Automatic titles stop for it.
+
+```
+etude agent rename <id> <title>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Conversation id. |
+| `title` | New title. |
+
+Output: { id, title, autoTitle, model, created, updated }
+
+### etude agent delete
+
+<a id="agent-delete"></a>
+
+Delete a conversation and its attachments. Changes it made to the collection stay.
+
+```
+etude agent delete <id> [flags]
+```
+
+*writes · needs `--yes`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Conversation id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { deleted }
+
+### etude agent undo
+
+<a id="agent-undo"></a>
+
+Put the collection back as it was before one of the assistant's replies (default: its latest reply that changed something). Changes made after it are undone too.
+
+```
+etude agent undo <id> [flags]
+```
+
+*writes · needs `--yes`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Conversation id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--message <ID>` | number | The assistant message to undo (see `agent show`). |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { restored, undone: [message ids] }
+
+### etude agent models
+
+<a id="agent-models"></a>
+
+Models the assistant can use, from every configured provider (ChatGPT plan, OpenRouter tool-capable models, a custom endpoint).
+
+```
+etude agent models [flags]
+```
+
+*read-only*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--search <TEXT>` | string | Only models whose ref or name contains this. |
+
+Output: { configured, default, groups: [{ provider, label, models: [{ ref, name, vision }], error? }] }
 
 ## db
 

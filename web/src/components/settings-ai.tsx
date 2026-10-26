@@ -1,5 +1,6 @@
 // AI grading settings: providers, presets, key status and a live test.
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { agentApi, type ModelGroup } from "@/lib/agent";
 import { CircleAlert, CircleCheck, FlaskConical, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -219,9 +220,62 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
         </div>
       </Block>
 
+      <AgentBlock ai={ai} onChange={(patch) => set({ agent: { model: ai.agent?.model ?? null, effort: ai.agent?.effort ?? "low", ...patch } })} />
+
       <KeysBlock ai={ai} saved={saved} />
       <TestBlock ai={ai} saved={saved} />
     </Section>
+  );
+}
+
+const EFFORTS: { value: string; label: string }[] = [
+  { value: "low", label: "Low (fastest useful)" },
+  { value: "minimal", label: "Minimal" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High (slowest)" },
+  { value: "default", label: "The model's default" },
+];
+
+function AgentBlock({ ai, onChange }: { ai: AiSettings; onChange(patch: { model?: string | null; effort?: string }): void }) {
+  const [groups, setGroups] = useState<ModelGroup[] | null>(null);
+  useEffect(() => {
+    agentApi.models().then((m) => setGroups(m.groups)).catch(() => setGroups([]));
+  }, []);
+  const value = ai.agent?.model ?? "";
+  const known = (groups ?? []).some((g) => g.models.some((m) => m.ref === value));
+  return (
+    <Block title="Assistant" description="The model Ask Etude starts new chats with, and how long it thinks before acting. You can switch the model per chat; the last one you picked is remembered. Lower effort answers much faster.">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Default model">
+          <Select value={value || "__feedback"} onValueChange={(v) => onChange({ model: v === "__feedback" ? null : v })}>
+            <SelectTrigger className="h-10 w-full md:h-9"><SelectValue /></SelectTrigger>
+            <SelectContent className="max-h-80">
+              <SelectItem value="__feedback">Same as the feedback model</SelectItem>
+              {value && !known && <SelectItem value={value}>{value}</SelectItem>}
+              {(groups ?? []).map((g) =>
+                g.models.slice(0, g.provider === "openrouter" ? 60 : 50).map((m) => (
+                  <SelectItem key={m.ref} value={m.ref}>
+                    {g.label} · {m.name}
+                  </SelectItem>
+                )),
+              )}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Reasoning effort">
+          <Select value={ai.agent?.effort ?? "low"} onValueChange={(v) => onChange({ effort: v })}>
+            <SelectTrigger className="h-10 w-full md:h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {EFFORTS.map((e) => (
+                <SelectItem key={e.value} value={e.value}>
+                  {e.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      </div>
+    </Block>
   );
 }
 

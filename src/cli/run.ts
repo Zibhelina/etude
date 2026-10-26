@@ -230,9 +230,24 @@ export function defaultIo(): Io {
   };
 }
 
+/** The command an argv names, without running it. */
+export function resolveCommand(argv: string[]): CommandSpec | undefined {
+  try {
+    return locate(argv).cmd;
+  } catch {
+    return undefined;
+  }
+}
+
+export interface RunOptions {
+  /** Run against this open collection instead of opening one; it is left open. */
+  etude?: Etude;
+}
+
 /** Runs one invocation. Returns the exit code; the collection stays open only for `serve`. */
-export async function run(argv: string[], io: Io = defaultIo()): Promise<number> {
+export async function run(argv: string[], io: Io = defaultIo(), opts: RunOptions = {}): Promise<number> {
   let etude: Etude | null = null;
+  const shared = opts.etude ?? null;
   let keepOpen = false;
   let pretty = io.isTTY;
   try {
@@ -253,11 +268,12 @@ export async function run(argv: string[], io: Io = defaultIo()): Promise<number>
     if (values.compact) pretty = false;
     if (cmd.confirm && !values.yes && !values["dry-run"]) throw new CliError(`\`etude ${cmd.name}\` is destructive; add --yes to confirm (or --dry-run to preview)`);
 
-    const home = resolve(io.env.ETUDE_HOME ?? join(homedir(), ".etude"));
+    const home = shared ? shared.home : resolve(io.env.ETUDE_HOME ?? join(homedir(), ".etude"));
     const envFile = join(home, ".env");
-    if (existsSync(envFile) && io.env === process.env) process.loadEnvFile(envFile);
-    const dbPath = resolve(values.db ?? io.env.ETUDE_DB ?? join(home, "etude.db"));
-    if (!cmd.noDb) etude = await Etude.open(dbPath, { home });
+    if (!shared && existsSync(envFile) && io.env === process.env) process.loadEnvFile(envFile);
+    const dbPath = shared ? shared.path : resolve(values.db ?? io.env.ETUDE_DB ?? join(home, "etude.db"));
+    if (shared) etude = shared;
+    else if (!cmd.noDb) etude = await Etude.open(dbPath, { home });
 
     let stdinUsed = false;
     const ctx: Ctx = {
@@ -314,7 +330,7 @@ export async function run(argv: string[], io: Io = defaultIo()): Promise<number>
     io.stderr(JSON.stringify(body) + "\n");
     return err.exit;
   } finally {
-    if (etude && !keepOpen) etude.close();
+    if (etude && !keepOpen && etude !== shared) etude.close();
   }
 }
 

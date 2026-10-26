@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, RotateCcw, Save } from "lucide-react";
+import { BookOpen, Globe, Loader2, RotateCcw, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { UpdateSettingsRow } from "@/components/update-bar";
+import { Logo, Wordmark } from "@/components/logo";
 import { cn } from "@/lib/utils";
 import { AiSection } from "@/components/settings-ai";
 import { AppearanceSection } from "@/components/settings-appearance";
@@ -13,12 +15,26 @@ import { Block, NumberField, Section } from "@/components/settings-ui";
 import { draftOf, normalize, validate, type SettingsDraft, type SettingsResponse } from "@/components/settings-model";
 
 const NAV = [
+  { id: "about", label: "About" },
   { id: "ai", label: "AI grading" },
   { id: "appearance", label: "Appearance" },
   { id: "study", label: "Study" },
   { id: "data", label: "Data" },
   { id: "keys", label: "Keyboard" },
-  { id: "about", label: "About" },
+];
+
+function GithubMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} fill="currentColor" aria-hidden="true">
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+    </svg>
+  );
+}
+
+const ABOUT_LINKS = [
+  { label: "GitHub", href: "https://github.com/Zibhelina/etude", icon: GithubMark },
+  { label: "Website", href: "https://zibhelina.github.io/etude/", icon: Globe },
+  { label: "Docs", href: "https://github.com/Zibhelina/etude/tree/main/docs", icon: BookOpen },
 ];
 
 export function SettingsPage() {
@@ -161,6 +177,32 @@ export function SettingsPage() {
           </nav>
 
           <div className="flex flex-col gap-12">
+            <Section id="about" title="About">
+              <Block>
+                <div className="flex items-center gap-3.5">
+                  <Logo tile className="size-11 shrink-0 rounded-[10px]" />
+                  <div className="min-w-0 flex-1">
+                    <Wordmark className="text-[1.35rem] leading-none" />
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Version <span className="font-mono text-[12px] text-foreground/90">{saved.version ?? "unknown"}</span> · FSRS-6 · MIT
+                    </div>
+                  </div>
+                </div>
+                <UpdateSettingsRow />
+                <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm" data-about-links>
+                  {ABOUT_LINKS.map((l) => (
+                    <a key={l.href} href={l.href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground">
+                      <l.icon className="size-3.5" />
+                      {l.label}
+                    </a>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  From a terminal: <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11.5px] text-foreground/85">etude update --check</code>
+                </p>
+              </Block>
+            </Section>
+
             <AiSection ai={draft.ai} saved={saved} errors={shown} onChange={(ai) => setDraft({ ...draft, ai })} />
 
             <AppearanceSection />
@@ -192,18 +234,6 @@ export function SettingsPage() {
 
             <ShortcutsSection />
 
-            <Section id="about" title="About">
-              <Block>
-                <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
-                  <dt className="text-muted-foreground">Version</dt>
-                  <dd className="font-mono text-[13px]">{saved.version ?? "unknown"}</dd>
-                  <dt className="text-muted-foreground">Scheduler</dt>
-                  <dd>FSRS-6</dd>
-                  <dt className="text-muted-foreground">License</dt>
-                  <dd>MIT</dd>
-                </dl>
-              </Block>
-            </Section>
           </div>
 
           <div

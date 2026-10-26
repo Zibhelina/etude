@@ -98,7 +98,7 @@ command({
   name: "card prune",
   summary: "Delete leftover cards: cards on faces their type no longer makes, after a face was removed or `facesWhen` changed.",
   description:
-    "Saving a type never deletes cards, so their history isn't lost by accident; this does, with their review history. An item keeps every card when its type's `facesWhen` fails for it or when it would be left without one. See the cards first with `etude card list is:leftover` (add type: and face: to narrow it), or preview with --dry-run.",
+    "Saving a type never deletes cards, so their history isn't lost by accident; this does, with their review history. An item keeps every card when its type's `facesWhen` fails for it or when it would be left without one; archived items are left alone. See the cards first with `etude card list is:leftover` (add type: and face: to narrow it), or preview with --dry-run.",
   flags: [
     { name: "type", type: "string", description: "Only this type's leftover cards.", placeholder: "ID" },
     { name: "face", type: "string", description: "Only leftover cards on this face.", placeholder: "FACE" },

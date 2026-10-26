@@ -320,6 +320,40 @@ Agents that use Etude should read [skill/SKILL.md](skill/SKILL.md). It can be dr
 
 ## Architecture
 
+### The model
+
+Etude keeps three questions apart: **what** you practice (an item), **how** you answer it and get marked (its card type and grader), and **when** it comes back (the deck's scheduler). Each one can be swapped without touching the others, so a map card can run on FSRS and a typing test can run on a daily drill.
+
+```
+deck ─┬─ item          the content: fields, tags. No study state.
+      │    └─ type     which fields it has, how it looks, how it's graded
+      │
+      └─ cards         one per face of the item; this is what you study
+             │
+   prepare(fields)  →  view (what the card shows) + key (what grading needs)
+   template shows the view in a sandboxed frame  →  you answer
+   grader(answer, view, key)  →  score 0..1  →  suggested rating
+   scheduler(card, attempt)   →  next due date
+```
+
+| Concept | What it is |
+| --- | --- |
+| **Deck** | A node in a tree (`Biology::Cells`). Holds items and settings; subdecks inherit settings from their parents. |
+| **Preset** | Named settings shared by several decks: daily limits, retention, how scores become ratings, which scheduler. A deck can override any of them. |
+| **Item** | The content: a JSON object of `fields`, plus tags, source and notes. Like a note in Anki. It has no scheduling state of its own. |
+| **Card** | What enters the study queue. An item makes one card per **face** of its type (`forward` and `reverse`, or `c1`, `c2`… for a cloze). The card keeps the scheduling state: FSRS stability and difficulty, or a JSON `sched_state` for other schedulers, plus suspended and buried. |
+| **Card type** | The pluggable part: a small app that defines the item's **fields**, a **template** (HTML, CSS and JS running in the card's sandboxed frame), an optional **prepare** script (turns fields into `view` and `key`, so the answer never reaches the frame), a **grader**, and optionally **faces**, **assets** (meshes, data, images shipped once with the type), a **demo** answer for Watch, **metrics** to chart and `showVerdict`. The built-in types (`basic`, `typed`, `numeric`, `mcq`, `order`, `match`, `cloze`, `free`, `math`, `code`, `draw`, `occlusion`) use exactly the same format as custom ones. |
+| **Grader** | Turns an answer into a score from 0 to 1. `self`: you rate yourself. `script`: a JS function in the sandbox. `ai`: a model decides and another writes feedback, with instructions layered from the item, its tags, the deck and the type. `hybrid`: the script first, the AI when the script defers. The preset's `autoRate` thresholds turn the score into a suggested Again / Hard / Good / Easy. |
+| **Attempt** | One graded answer, kept whole: the view shown, the answer and everything the grader returned (a typing test's WPM lives here). |
+| **Review** | An attempt once a rating is applied and the scheduler has moved the card. History, Stats and the FSRS optimizer read these. |
+| **Scheduler** | Decides when a card comes back. One per deck, inherited by subdecks. `fsrs` (default) predicts when you'd forget. `drill` asks for no rating and brings the card back N times a day, charting the type's metrics. `leitner` is the classic boxes. Your own is a folder with `scheduler.json` and `schedule.js`. |
+| **Pack** | One JSON file of types, schedulers, decks and items. Items match by `id`, so re-importing an edited pack updates content and keeps history. |
+| **Market** | A Git repository of decks, card types and themes, installable from the app or the CLI. |
+
+Everything above is reachable from the web app, the HTTP API and the `etude` CLI, and Ask Etude (the in-app agent) uses that same CLI as its tools. The full references are [docs/types.md](docs/types.md), [docs/schedulers.md](docs/schedulers.md) and [docs/packs.md](docs/packs.md).
+
+### The code
+
 ```
 src/core/     the engine, no HTTP: data model and SQLite store (node:sqlite), FSRS scheduler,
               search compiler, QuickJS sandbox for user scripts, AI grading, packs

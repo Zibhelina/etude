@@ -1010,17 +1010,39 @@ export class Etude {
     this.typeCache.delete(id);
   }
 
-  deleteType(id: string) {
-    const used = this.db.get<{ n: number; archived: number }>("SELECT COUNT(*) AS n, COALESCE(SUM(archived), 0) AS archived FROM items WHERE type = ?", id)!;
-    if (used.n) throw new EtudeError(`type "${id}" is used by ${used.n} item(s)${used.archived === used.n ? ", all archived" : used.archived ? `, ${used.archived} of them archived` : ""}`);
+  /** The items using a type (archived ones among them), with their cards and reviews: what deleting it with its items takes. */
+  typeUsage(id: string): { items: number; archived: number; cards: number; reviews: number } {
+    const r = this.db.get<{ items: number; archived: number; cards: number; reviews: number }>(
+      `SELECT COUNT(*) AS items, COALESCE(SUM(i.archived), 0) AS archived,
+         (SELECT COUNT(*) FROM cards c JOIN items j ON j.id = c.item_id WHERE j.type = ?) AS cards,
+         (SELECT COUNT(*) FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items j ON j.id = c.item_id WHERE j.type = ?) AS reviews
+       FROM items i WHERE i.type = ?`,
+      id,
+      id,
+      id,
+    )!;
+    return { items: r.items, archived: r.archived, cards: r.cards, reviews: r.reviews };
+  }
+
+  /**
+   * Deletes a custom type. Items using it (archived ones count) stop it, unless `items` deletes them
+   * too, with their cards and review history. Returns what went with it.
+   */
+  deleteType(id: string, opts: { items?: boolean } = {}): { items: number; cards: number; reviews: number } {
     const row = this.db.get("SELECT builtin FROM types WHERE id = ?", id);
     if (row?.builtin) throw new EtudeError("built-in types can't be deleted");
+    const used = this.typeUsage(id);
+    if (used.items && !opts.items)
+      throw new EtudeError(`type "${id}" is used by ${used.items} item(s)${used.archived === used.items ? ", all archived" : used.archived ? `, ${used.archived} of them archived` : ""}`);
     this.db.tx(() => {
+      // Cards, their attempts and reviews, and tags go with the items.
+      if (opts.items) this.db.run("DELETE FROM items WHERE type = ?", id);
       this.db.run("DELETE FROM types WHERE id = ?", id);
       this.db.run("DELETE FROM type_placement WHERE type_id = ?", id);
       this.db.run("DELETE FROM type_assets WHERE type_id = ?", id);
     });
     this.typeCache.delete(id);
+    return opts.items ? { items: used.items, cards: used.cards, reviews: used.reviews } : { items: 0, cards: 0, reviews: 0 };
   }
 
   private ensureCardsForType(typeId: string) {

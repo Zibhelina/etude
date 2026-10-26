@@ -4,6 +4,7 @@
 //   tag:net::w1           the tag and every tag below it        (tag:exam::* wildcards)
 //   type:numeric  id:net.w1.*  source:ch1
 //   is:new is:learning is:review is:relearning is:due is:suspended is:buried is:archived
+//   is:leftover           cards on faces their type no longer makes (see Etude.leftoverCards)
 //   prop:lapses>=2  prop:reps=0  prop:stability<3  prop:difficulty>7  prop:due<=1 (days from now)
 //   rated:1  rated:7:1    reviewed in the last N days (optionally with that rating)
 //   word  "a phrase"      text in any of the item's fields, ignoring case (not markup or media file names)
@@ -107,11 +108,15 @@ export interface Compiled {
   rank: { sql: string; params: SQLInputValue[] } | null;
 }
 
-/**
- * `fieldNames(key)` gives the field names (across all types) a `key:` term can search, matched without case.
- * A key that is neither built in nor a field is an error.
- */
-export function compile(query: string, now = new Date(), fieldNames: (key: string) => string[] = () => []): Compiled {
+/** What compiling needs from the collection. */
+export interface SearchLookup {
+  /** The field names (across all types) a `key:` term can search, matched without case. A key that is neither built in nor a field is an error. */
+  fieldNames?(key: string): string[];
+  /** Ids of the cards `is:leftover` finds. */
+  leftoverCards?(): number[];
+}
+
+export function compile(query: string, now = new Date(), lookup: SearchLookup = {}): Compiled {
   const tokens = tokenize(query ?? "");
   const params: SQLInputValue[] = [];
   let pos = 0;
@@ -155,6 +160,11 @@ export function compile(query: string, now = new Date(), fieldNames: (key: strin
           case "suspended": return "c.suspended = 1";
           case "buried": params.push(iso); return "(c.buried_until IS NOT NULL AND c.buried_until > ?)";
           case "archived": mentionsArchived = true; return "i.archived = 1";
+          case "leftover": {
+            if (!lookup.leftoverCards) throw new QueryError("is:leftover needs a collection");
+            params.push(JSON.stringify(lookup.leftoverCards()));
+            return "c.id IN (SELECT value FROM json_each(?))";
+          }
           default: throw new QueryError(`unknown is:${val}`);
         }
       }
@@ -181,7 +191,7 @@ export function compile(query: string, now = new Date(), fieldNames: (key: strin
         return `EXISTS (SELECT 1 FROM reviews r WHERE r.card_id = c.id AND r.ts >= ?${extra})`;
       }
       default: {
-        const names = fieldNames(m[1]);
+        const names = lookup.fieldNames?.(m[1]) ?? [];
         if (!names.length) throw new QueryError(`unknown search key "${key}:"`);
         const value = (name: string) => {
           params.push(`$."${name}"`);

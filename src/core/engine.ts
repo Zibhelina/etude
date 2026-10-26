@@ -261,6 +261,7 @@ export class Etude {
   /** Where per-install files live (ChatGPT credentials): `$ETUDE_HOME`, default `~/.etude`. */
   readonly home: string;
   private typeCache = new Map<string, CardTypeDef>();
+  private leftovers: { key: string; cards: LeftoverCard[] } | null = null;
 
   private constructor(db: Db, mediaDir: string, path: string, home: string) {
     this.db = db;
@@ -292,6 +293,7 @@ export class Etude {
    */
   invalidateCaches() {
     this.typeCache.clear();
+    this.leftovers = null;
     this.reindexItems();
   }
 
@@ -1131,10 +1133,18 @@ export class Etude {
    * type never removes them, so their history isn't lost by accident. An item keeps every card when its
    * faces can't be worked out (a failing `facesWhen`) or when it would be left with none.
    */
-  leftoverCards(opts: { type?: string } = {}): LeftoverCard[] {
+  leftoverCards(opts: { type?: string; face?: string } = {}): LeftoverCard[] {
+    // Finding them runs facesWhen for every item, so the answer is kept until items, cards, reviews or types change.
+    const key = this.db.get<{ k: string }>(
+      "SELECT (SELECT COUNT(*) || ':' || COALESCE(MAX(updated), '') FROM items) || '|' || (SELECT COUNT(*) || ':' || COALESCE(MAX(id), 0) FROM cards) || '|' || (SELECT COUNT(*) FROM reviews) || '|' || (SELECT COUNT(*) || ':' || COALESCE(MAX(updated), '') FROM types) AS k",
+    )!.k;
+    if (this.leftovers?.key !== key) this.leftovers = { key, cards: this.findLeftoverCards() };
+    return this.leftovers.cards.filter((c) => (!opts.type || c.type === opts.type) && (!opts.face || c.face === opts.face));
+  }
+
+  private findLeftoverCards(): LeftoverCard[] {
     const rows = this.db.all<{ id: number; item_id: string; face: string; type: string; fields: string }>(
-      `SELECT c.id, c.item_id, c.face, i.type, i.fields FROM cards c JOIN items i ON i.id = c.item_id${opts.type ? " WHERE i.type = ?" : ""} ORDER BY i.ord, i.id, c.id`,
-      ...(opts.type ? [opts.type] : []),
+      "SELECT c.id, c.item_id, c.face, i.type, i.fields FROM cards c JOIN items i ON i.id = c.item_id ORDER BY i.ord, i.id, c.id",
     );
     const defs = new Map<string, CardTypeDef | null>();
     const defFor = (id: string) => {
@@ -1169,7 +1179,7 @@ export class Etude {
   }
 
   /** Leftover cards counted per type and face, with the history that would go with them. */
-  leftoverReport(opts: { type?: string } = {}): LeftoverReport {
+  leftoverReport(opts: { type?: string; face?: string } = {}): LeftoverReport {
     const cards = this.leftoverCards(opts);
     const faces = new Map<string, LeftoverReport["faces"][number]>();
     for (const c of cards) {
@@ -1188,8 +1198,8 @@ export class Etude {
     return { cards: cards.length, reviewed: cards.filter((c) => c.reviews).length, reviews: cards.reduce((n, c) => n + c.reviews, 0), faces: [...faces.values()] };
   }
 
-  /** Deletes leftover cards (every one, or one type's) with their review history. */
-  deleteLeftoverCards(opts: { type?: string } = {}): { cards: number; reviews: number } {
+  /** Deletes leftover cards (every one, one type's, or one face's) with their review history. */
+  deleteLeftoverCards(opts: { type?: string; face?: string } = {}): { cards: number; reviews: number } {
     const doomed = this.leftoverCards(opts);
     this.db.tx(() => {
       for (const c of doomed) this.db.run("DELETE FROM cards WHERE id = ?", c.cardId);
@@ -1665,7 +1675,7 @@ export class Etude {
       return [...names];
     };
     try {
-      return compile(query, new Date(), fieldNames);
+      return compile(query, new Date(), { fieldNames, leftoverCards: () => this.leftoverCards().map((c) => c.cardId) });
     } catch (e) {
       if (e instanceof QueryError) throw new EtudeError(`search: ${e.message}`);
       throw e;

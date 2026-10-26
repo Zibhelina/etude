@@ -156,3 +156,27 @@ test("unused media: only files nothing names, whatever the form of the reference
   assert.deepEqual(e.unusedMedia(), []);
   assert.ok(AGENT_DENY.includes("media prune"), "the assistant's undo can't bring files back");
 });
+
+test("is:leftover finds exactly the cards a prune would delete, and follows edits", async (t) => {
+  const { e, cli, http } = await setup(t);
+  const vocab: CardTypeDef = { ...twoWay, id: "vocab", faces: ["t0", "t1", "t2", "t3"], fields: [...twoWay.fields, { name: "layout", kind: "text", default: "mrgp" }] };
+  e.saveType(vocab);
+  e.upsertItem({ id: "junge", type: "vocab", deck: "German", fields: { front: "der Junge", back: "boy", layout: "mrgp" } });
+  e.upsertItem({ id: "ort", type: "vocab", deck: "German", fields: { front: "der Ort", back: "place", layout: "mrp" } });
+  e.saveType({ ...vocab, facesWhen: 'return fields.layout === "mrp" ? ["t0", "t1", "t2"] : ["t0", "t1", "t3"];' });
+  const found = (q: string) => e.search(q).rows.map((r) => `${r.itemId}/${r.face}`).sort();
+  assert.deepEqual(found("is:leftover"), ["junge/t2", "ort/t3"]);
+  assert.deepEqual(found("is:leftover face:t2"), ["junge/t2"]);
+  assert.deepEqual(found("deck:German -is:leftover"), ["junge/t0", "junge/t1", "junge/t3", "ort/t0", "ort/t1", "ort/t2"]);
+  assert.deepEqual((await cli("card", "list", "is:leftover", "type:vocab")).json.rows.map((r: { face: string }) => r.face).sort(), ["t2", "t3"]);
+
+  // Switching der Ort to mrgp makes its t2 (now gender) a leftover and its t3 a card again.
+  e.upsertItem({ id: "ort", type: "vocab", deck: "German", fields: { front: "der Ort", back: "place", layout: "mrgp" } });
+  assert.deepEqual(found("is:leftover"), ["junge/t2", "ort/t2"]);
+
+  assert.deepEqual(e.leftoverReport({ face: "t2" }).cards, 2);
+  assert.deepEqual(await http("/api/cleanup/cards", { method: "POST", body: { type: "vocab", face: "t3" } }), { cards: 0, reviews: 0 });
+  assert.equal((await cli("card", "prune", "--type", "vocab", "--face", "t2", "--yes")).json.cards, 2);
+  assert.deepEqual(found("is:leftover"), []);
+  assert.deepEqual(faces(e, "ort"), ["t0", "t1", "t3"]);
+});

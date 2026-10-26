@@ -1,5 +1,5 @@
 // Starting points and small helpers for authoring card types.
-import type { CardType, FieldSpec } from "@/lib/api";
+import type { CardType } from "@/lib/api";
 
 export const TYPE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 export const FIELD_NAME = /^[A-Za-z_]\w*$/;
@@ -64,39 +64,7 @@ export const GRADE_EXAMPLE = `// Return a score from 0 to 1. \`details\` reaches
 return { score: std.looseEqual(answer, key.answer) ? 1 : 0 };
 `;
 
-/** The exact shape `saveType` and `PUT /api/types/:id` accept. */
-export function exportShape(def: CardType): CardType {
-  const g = { ...def.grader } as CardType["grader"] & { code?: string; vision?: boolean; instructions?: string };
-  if (g.kind === "self" || g.kind === "ai") delete g.code;
-  if (g.kind === "self" || g.kind === "script") {
-    delete g.vision;
-    delete g.instructions;
-  }
-  return {
-    id: def.id,
-    name: def.name,
-    description: def.description ?? "",
-    ...(def.faces?.length ? { faces: def.faces } : {}),
-    ...(def.facesWhen?.trim() ? { facesWhen: def.facesWhen } : {}),
-    fields: def.fields.map(cleanField),
-    ...(def.titleField ? { titleField: def.titleField } : {}),
-    ...(def.prepare?.trim() ? { prepare: def.prepare } : {}),
-    template: { html: def.template.html, css: def.template.css ?? "", js: def.template.js ?? "" },
-    grader: g,
-    ...(def.instructions?.trim() ? { instructions: def.instructions } : {}),
-  };
-}
-
-export function cleanField(f: FieldSpec): FieldSpec {
-  const out: FieldSpec = { name: f.name, kind: f.kind };
-  if (f.label?.trim()) out.label = f.label;
-  if (f.description?.trim()) out.description = f.description;
-  if (f.required) out.required = true;
-  if (f.private) out.private = true;
-  if (f.default !== undefined) out.default = f.default;
-  if (f.editor) out.editor = f.editor;
-  return out;
-}
+export { cleanField, exportShape } from "./shape";
 
 export function fieldDefaults(def: CardType): Record<string, unknown> {
   return Object.fromEntries(def.fields.filter((f) => f.default !== undefined).map((f) => [f.name, f.default]));

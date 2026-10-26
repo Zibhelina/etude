@@ -171,6 +171,10 @@ export interface CardType {
   grader: { kind: "self" } | { kind: "script"; code: string } | { kind: "ai"; vision?: boolean; instructions?: string } | { kind: "hybrid"; code: string; vision?: boolean; instructions?: string };
   instructions?: string;
   showVerdict?: boolean;
+  /** Body of the script that makes watch mode's example answer. */
+  demo?: string;
+  /** Grader numbers worth tracking over time. */
+  metrics?: { key: string; label?: string; unit?: string; better?: "higher" | "lower"; digits?: number }[];
   updated?: string;
   builtin?: boolean;
   /** Files the type ships with (read-only here; packs and `etude type import` set them). */

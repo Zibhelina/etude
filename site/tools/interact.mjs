@@ -29,7 +29,13 @@ ws.onmessage = (m) => {
   if (d.method === "Target.attachedToTarget" && d.params.targetInfo.type === "iframe") sessions.push(d.params.sessionId);
 };
 const send = (method, params = {}, sessionId) => new Promise((r) => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params, ...(sessionId ? { sessionId } : {}) })); });
-const evaluate = async (expr, sessionId) => (await send("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true }, sessionId)).result?.result?.value;
+// The site's card frames are same-origin, so they run in the page's process and have no CDP
+// session of their own: a "frame:<selector>" context evaluates inside that frame's window instead.
+const inFrameExpr = (sel, expr) => `document.querySelector(${JSON.stringify(sel + ":not(.leaving)")}).contentWindow.eval(${JSON.stringify(expr)})`;
+const evaluate = async (expr, sessionId) => {
+  if (typeof sessionId === "string" && sessionId.startsWith("frame:")) return evaluate(inFrameExpr(sessionId.slice(6), expr));
+  return (await send("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true }, sessionId)).result?.result?.value;
+};
 const shot = async (name) => { const r = await send("Page.captureScreenshot", { format: "png" }); writeFileSync(`${OUT}/${name}.png`, Buffer.from(r.result.data, "base64")); };
 await send("Page.enable"); await send("Runtime.enable");
 await send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
@@ -44,7 +50,7 @@ await sleep(2500);
 
 /** The CDP session of the current card frame (card frames are out-of-process: sandboxed). */
 async function frameContext() {
-  const src = await evaluate(`document.querySelector(".stage-body iframe").src`);
+  const src = await evaluate(`document.querySelector(".stage-body iframe:not(.leaving)").src`);
   for (let k = 0; k < 20; k++) {
     for (const sid of [...sessions].reverse()) {
       const href = await evaluate("location.href", sid).catch(() => null);
@@ -52,10 +58,10 @@ async function frameContext() {
     }
     await sleep(250);
   }
-  // Same-process frame: evaluate through the main session's frame context instead.
-  return null;
+  // Same-process frame: evaluate through the frame's window instead.
+  return "frame:.stage-body iframe";
 }
-async function frameRect() { return evaluate(`(() => { const r = document.querySelector(".stage-body iframe").getBoundingClientRect(); return { x: r.x, y: r.y }; })()`); }
+async function frameRect() { return evaluate(`(() => { const r = document.querySelector(".stage-body iframe:not(.leaving)").getBoundingClientRect(); return { x: r.x, y: r.y }; })()`); }
 async function click(x, y) {
   for (const type of ["mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1, pointerType: "mouse" });
 }

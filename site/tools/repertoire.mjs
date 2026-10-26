@@ -35,7 +35,11 @@ ws.onmessage = (m) => {
   }
 };
 const send = (method, params = {}, sessionId) => new Promise((r) => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params, ...(sessionId ? { sessionId } : {}) })); });
+// The site's card frames are same-origin, so they run in the page's process and have no CDP
+// session of their own: a "frame:<selector>" context evaluates inside that frame's window instead.
+const inFrameExpr = (sel, expr) => `document.querySelector(${JSON.stringify(sel + ":not(.leaving)")}).contentWindow.eval(${JSON.stringify(expr)})`;
 const evaluate = async (expr, sessionId) => {
+  if (typeof sessionId === "string" && sessionId.startsWith("frame:")) return evaluate(inFrameExpr(sessionId.slice(6), expr));
   const r = await send("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true }, sessionId);
   if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description ?? r.result.exceptionDetails.text);
   return r.result?.result?.value;
@@ -58,7 +62,7 @@ async function scrollToRep() {
 async function center(sel, sid) {
   return evaluate(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2, w: b.width, h: b.height }; })()`, sid);
 }
-async function frameOffset() { return evaluate(`(() => { const r = document.querySelector(".rep-body iframe").getBoundingClientRect(); return { x: r.x, y: r.y }; })()`); }
+async function frameOffset() { return evaluate(`(() => { const r = document.querySelector(".rep-body iframe:not(.leaving)").getBoundingClientRect(); return { x: r.x, y: r.y }; })()`); }
 async function mouse(type, x, y, extra = {}) { await send("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: type === "mouseMoved" ? 0 : 1, pointerType: "mouse", ...extra }); }
 async function tap(x, y) {
   if (mobile) {
@@ -82,7 +86,7 @@ async function drag(a, b) {
 /** Point (in page coordinates) of an element inside the card frame, so the page itself receives the input. */
 async function inFrame(sid, sel, at = [0.5, 0.5]) {
   const r = await evaluate(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView?.({ block: "nearest" }); const b = e.getBoundingClientRect(); return { x: b.x + b.width * ${at[0]}, y: b.y + b.height * ${at[1]} }; })()`, sid);
-  if (!r) throw new Error(`no ${sel} in the card (${await evaluate(`location.href + " | " + document.body?.innerHTML.slice(0, 200)`, sid).catch((e) => "frame gone " + e.message)} | page: ${await evaluate(`JSON.stringify(window.__rep?.()?.phase) + " " + document.querySelector(".rep-body iframe")?.src + " " + document.querySelector(".rep-verdict").textContent`)})`);
+  if (!r) throw new Error(`no ${sel} in the card (${await evaluate(`location.href + " | " + document.body?.innerHTML.slice(0, 200)`, sid).catch((e) => "frame gone " + e.message)} | page: ${await evaluate(`JSON.stringify(window.__rep?.()?.phase) + " " + document.querySelector(".rep-body iframe:not(.leaving)")?.src + " " + document.querySelector(".rep-verdict").textContent`)})`);
   const f = await frameOffset();
   return { x: f.x + r.x, y: f.y + r.y };
 }
@@ -117,7 +121,7 @@ async function key(k, code, keyCode, modifiers = 0) {
 
 /** The CDP session of the current card frame (sandboxed frames run out of process). */
 async function frameSession() {
-  const src = await evaluate(`document.querySelector(".rep-body iframe")?.src`);
+  const src = await evaluate(`document.querySelector(".rep-body iframe:not(.leaving)")?.src`);
   for (let k = 0; k < 30; k++) {
     for (const sid of [...sessions].reverse()) {
       const href = await evaluate("location.href", sid).catch(() => null);
@@ -126,6 +130,9 @@ async function frameSession() {
         if (mounted) return sid;
       }
     }
+    // Same-origin frame (the site's own cards): no session of its own, so evaluate through its window.
+    const local = "frame:.rep-body iframe";
+    if (await evaluate(`!!document.querySelector("#card")?.children.length`, local).catch(() => false)) return local;
     await sleep(200);
   }
   throw new Error("card frame not found");

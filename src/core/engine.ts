@@ -60,6 +60,7 @@ import { readCollection } from "./anki/collection.ts";
 import { convertCollection, type PlannedCard } from "./anki/convert.ts";
 import { MAX_MEDIA_BYTES, mediaType } from "./media.ts";
 import { decodeAssets, hashBytes, type AssetInfo } from "./assets.ts";
+import { imagePixels, normalizeBoxes, OcclusionError } from "./occlusion.ts";
 
 export class EtudeError extends Error {
   status: number;
@@ -262,8 +263,72 @@ export class Etude {
     return { name: basename(name), file, path, url: `/media/${file}`, mime: type.mime, kind: type.kind, bytes: data.byteLength, created, dryRun: !!opts.dryRun };
   }
 
+  /**
+   * Creates (or updates) an image occlusion item in one step: copies the image into media when it's
+   * a local path, converts pixel boxes to fractions, then saves the item. `image` may also be an
+   * existing `/media/...` URL. Dry runs store nothing.
+   */
+  addOcclusion(input: { image: string; boxes: unknown[]; deck: string; id?: string; px?: boolean; mode?: string; header?: string; extra?: string; tags?: string[]; source?: string; upsert?: boolean }, opts: { dryRun?: boolean } = {}) {
+    if (!input || typeof input !== "object") throw new EtudeError("expected an object");
+    if (typeof input.deck !== "string" || !input.deck.trim()) throw new EtudeError("a deck is required");
+    if (!Array.isArray(input.boxes) || !input.boxes.length) throw new EtudeError("at least one box is required");
+    if (input.mode !== undefined && input.mode !== "hide-all" && input.mode !== "hide-one") throw new EtudeError('mode must be "hide-all" or "hide-one"');
+    const image = String(input.image ?? "").trim();
+    if (!image) throw new EtudeError("an image is required");
+    let url: string;
+    let bytes: Buffer;
+    let media: ReturnType<Etude["storeMedia"]> | null = null;
+    if (image.startsWith("/media/")) {
+      const full = resolve(this.mediaDir, image.slice("/media/".length));
+      if (!full.startsWith(resolve(this.mediaDir) + "/") || !existsSync(full)) throw new EtudeError(`no media file at ${image}`, 404);
+      url = image;
+      bytes = readFileSync(full);
+    } else {
+      const local = this.readLocalMedia(image);
+      if (mediaType(local.path)?.kind !== "image") throw new EtudeError("the occlusion image must be an image file");
+      media = this.storeMedia(basename(local.path), local.data, opts);
+      url = media.url;
+      bytes = local.data;
+    }
+    let boxes;
+    try {
+      boxes = normalizeBoxes(input.boxes, input.px ? { px: imagePixels(bytes, image) } : {});
+    } catch (e) {
+      if (e instanceof OcclusionError) throw new EtudeError(e.message);
+      throw e;
+    }
+    const fields: Record<string, unknown> = { image: url, boxes };
+    if (input.mode && input.mode !== "hide-all") fields.mode = input.mode;
+    if (input.header) fields.header = input.header;
+    if (input.extra) fields.extra = input.extra;
+    const id = input.id || `${deckParts(input.deck).map((p) => p.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")).filter(Boolean).join(".") || "occlusion"}.io-${createHash("sha256").update(url).digest("hex").slice(0, 8)}`;
+    const item = { id, type: "occlusion", deck: input.deck, fields, tags: input.tags ?? [], source: input.source ?? "" };
+    let result: "created" | "updated" | "unchanged" = "created";
+    let cards: { face: string; label: string }[] = [];
+    const run = () => {
+      const exists = !!this.db.get("SELECT 1 FROM items WHERE id = ?", id);
+      result = this.upsertItem(item);
+      if (exists && result === "updated" && !input.upsert) throw new EtudeError(`item "${id}" already exists with different content; pass upsert to update it`, 409);
+      cards = this.db.all<{ face: string }>("SELECT face FROM cards WHERE item_id = ? ORDER BY id", id).map((c) => ({ face: c.face, label: boxes.filter((b) => (b.group || b.id) === c.face).map((b) => b.label).filter(Boolean).join(" / ") }));
+    };
+    try {
+      this.db.tx(() => {
+        run();
+        if (opts.dryRun) throw new DryRun();
+      });
+    } catch (e) {
+      if (!(e instanceof DryRun)) throw e;
+    }
+    return { result, id, image: url, media: media ? { file: media.file, bytes: media.bytes, created: media.created } : null, boxes, cards, selfGraded: cards.filter((c) => !c.label).map((c) => c.face), dryRun: !!opts.dryRun };
+  }
+
   /** Imports a local file or file URL; the source is left intact. */
   importMedia(input: string, opts: { dryRun?: boolean } = {}) {
+    const { path, data } = this.readLocalMedia(input);
+    return this.storeMedia(basename(path), data, opts);
+  }
+
+  private readLocalMedia(input: string): { path: string; data: Buffer } {
     if (typeof input !== "string" || !input.trim()) throw new EtudeError("a media file path is required");
     let path = input.trim();
     if (path.startsWith("file:")) {
@@ -283,7 +348,7 @@ export class Etude {
       const code = (e as NodeJS.ErrnoException).code;
       throw new EtudeError(code === "ENOENT" ? `media file not found: ${path}` : `couldn't read media file: ${path}`, code === "ENOENT" ? 404 : 400);
     }
-    return this.storeMedia(basename(path), data, opts);
+    return { path, data };
   }
 
   // ---------------------------------------------------------------- settings
@@ -1504,13 +1569,13 @@ export class Etude {
     const def = this.type(r.type);
     const fields = this.generate({ ...fieldDefaults(def), ...parse(r.fields, {}) }, seed, itemId);
     if (def.prepare) {
-      const out = runScript<{ view?: Record<string, unknown>; key?: Record<string, unknown> }>(def.prepare, {
+      const out = runScript<{ view?: Record<string, unknown>; key?: Record<string, unknown>; grader?: string }>(def.prepare, {
         params: ["fields", "face", "rng"],
         args: { fields, face },
         seed: hashString(`${seed}:${itemId}:${face}`),
         where: `${def.id}/prepare`,
       });
-      return { view: out?.view ?? {}, key: out?.key ?? {}, seed, fields };
+      return { view: out?.view ?? {}, key: out?.key ?? {}, seed, fields, ...(out?.grader === "self" ? { selfGraded: true } : {}) };
     }
     const priv = new Set(def.fields.filter((f) => f.private).map((f) => f.name));
     const view: Record<string, unknown> = {};
@@ -1530,12 +1595,14 @@ export class Etude {
     const face = opts.face ?? def.faces?.[0] ?? "main";
     let merged: Record<string, unknown>;
     let view: Record<string, unknown> = {}, key: Record<string, unknown> = {};
+    let selfGraded = false;
     try {
       merged = this.generate({ ...fieldDefaults(def), ...fields }, seed, "preview");
       if (def.prepare) {
         const out = runScript<any>(def.prepare, { params: ["fields", "face", "rng"], args: { fields: merged, face }, seed: hashString(`${seed}:preview:${face}`), where: `${def.id}/prepare` });
         view = out?.view ?? {};
         key = out?.key ?? {};
+        if (out?.grader === "self") selfGraded = true;
       } else {
         const priv = new Set(def.fields.filter((f) => f.private).map((f) => f.name));
         for (const [k, v] of Object.entries(merged)) (priv.has(k) ? key : view)[k] = v;
@@ -1547,7 +1614,7 @@ export class Etude {
     let grade: Grade | null = null;
     if (opts.answer !== undefined) {
       const g = def.grader;
-      if (g.kind === "script" || g.kind === "hybrid") {
+      if ((g.kind === "script" || g.kind === "hybrid") && !selfGraded) {
         try {
           const out = runScript<any>((g as { code: string }).code, { params: ["answer", "view", "key", "fields"], args: { answer: opts.answer, view, key, fields: merged }, where: `${def.id}/grade`, timeoutMs: 1000 });
           const score = out?.score == null ? null : Math.max(0, Math.min(1, Number(out.score)));
@@ -1717,7 +1784,7 @@ export class Etude {
       seed: s,
       view: p.view,
       ...this.previewFor(c, this.configFor(c.deck), now()),
-      grader: def.grader.kind,
+      grader: p.selfGraded ? "self" : def.grader.kind,
       showVerdict: def.showVerdict !== false,
       generated: typeof p.fields.generator === "string" || typeof parse<Record<string, unknown>>(this.db.get("SELECT fields FROM items WHERE id = ?", c.item_id)!.fields, {}).generator === "string",
       title: this.titleOf(c.type, p.fields),
@@ -1863,7 +1930,7 @@ export class Etude {
       return out ?? {};
     };
     try {
-      if (g.kind === "self") grade = { score: null, verdict: "ungraded", suggested: null, grader: { kind: "self" } };
+      if (g.kind === "self" || prep.selfGraded) grade = { score: null, verdict: "ungraded", suggested: null, grader: { kind: "self" } };
       else if (g.kind === "script" || (g.kind === "hybrid" && !scriptedDeferred())) {
         const out = scripted();
         const score = out.score == null ? null : Math.max(0, Math.min(1, Number(out.score)));
@@ -2736,6 +2803,23 @@ export class Etude {
 
   // ------------------------------------------------------------- packs
 
+  /**
+   * A pack can carry its own images: a field whose whole value is a base64 `data:` URL of a media
+   * type is copied into the collection's media and replaced by its `/media/...` URL.
+   */
+  private unpackMedia(fields: Record<string, unknown>, dryRun: boolean): Record<string, unknown> {
+    let out = fields;
+    for (const [k, v] of Object.entries(fields)) {
+      const m = typeof v === "string" ? /^data:([\w.+-]+\/[\w.+-]+);base64,([A-Za-z0-9+/=\s]+)$/.exec(v) : null;
+      if (!m) continue;
+      const ext = Object.entries({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "image/svg+xml": "svg", "image/avif": "avif", "audio/mpeg": "mp3", "audio/ogg": "ogg", "audio/wav": "wav", "video/mp4": "mp4", "video/webm": "webm" }).find(([mime]) => mime === m[1])?.[1];
+      if (!ext) continue;
+      if (out === fields) out = { ...fields };
+      out[k] = this.storeMedia(`${k}.${ext}`, Buffer.from(m[2], "base64"), { dryRun }).url;
+    }
+    return out;
+  }
+
   importPack(pack: any, opts: { dryRun?: boolean } = {}) {
     if (!pack || pack.etude !== "pack/1") throw new EtudeError('not an Etude pack (expected "etude": "pack/1")');
     const report = {
@@ -2778,7 +2862,8 @@ export class Etude {
       const base = (this.db.get("SELECT COALESCE(MAX(ord), 0) AS n FROM items")!.n as number) + 1;
       (pack.items ?? []).forEach((it: any, i: number) => {
         try {
-          const r = this.upsertItem({ id: it.id, type: it.type, deck: it.deck, fields: it.fields ?? {}, tags: it.tags ?? [], source: it.source ?? "", notes: it.notes ?? "", archived: !!it.archived }, { ord: base + i });
+          const fields = this.unpackMedia(it.fields ?? {}, !!opts.dryRun);
+          const r = this.upsertItem({ id: it.id, type: it.type, deck: it.deck, fields, tags: it.tags ?? [], source: it.source ?? "", notes: it.notes ?? "", archived: !!it.archived }, { ord: base + i });
           report.items[r]++;
         } catch (e) {
           report.errors.push(`${it?.id ?? `item #${i}`}: ${(e as Error).message}`);

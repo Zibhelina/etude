@@ -1,0 +1,61 @@
+.io-header { margin-bottom: -0.25rem; }
+.io { display: flex; flex-direction: column; gap: 0.5rem; align-items: center; }
+.io-stage {
+  position: relative; overflow: hidden; max-width: 100%;
+  border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px);
+  background: color-mix(in oklab, var(--foreground) 4%, transparent);
+  touch-action: pan-y; user-select: none; -webkit-user-select: none; outline: none;
+}
+.io-stage:focus-visible { border-color: var(--ring); }
+.io-stage.is-zoomed { touch-action: none; cursor: grab; }
+.io-stage.is-zoomed:active { cursor: grabbing; }
+.io-stage.is-broken::after {
+  content: attr(data-msg); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: var(--muted-foreground); font-size: 0.9rem;
+}
+.io-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; --z: 1; }
+.io-img { display: block; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
+.io-boxes { position: absolute; inset: 0; }
+.io-box { position: absolute; box-sizing: border-box; border-radius: 3px; }
+.io-box.is-cover {
+  background: color-mix(in oklab, var(--foreground) 22%, var(--card));
+  border: calc(1px / var(--z)) solid color-mix(in oklab, var(--foreground) 35%, var(--card));
+}
+.io-box.is-cover.is-target {
+  background: var(--highlight);
+  border: calc(2px / var(--z)) solid color-mix(in oklab, var(--highlight) 60%, black);
+}
+/* The "?" is sized to its box in card.js, and stays that size on screen when zoomed. */
+.io-q {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: rgb(0 0 0 / 0.78); font-weight: 700; line-height: 1;
+  transform: scale(calc(1 / var(--z))); pointer-events: none;
+}
+.io-box.is-open { background: transparent; }
+.io-box.is-open.is-target { border: calc(2px / var(--z)) solid var(--highlight); }
+.io-box.is-open.is-right { border-color: var(--success); }
+.io-box.is-open.is-miss { border-color: var(--danger); }
+/* Images are usually light whatever the theme: a dark dash with a light hairline reads on both. */
+.io-box.is-open:not(.is-target) { border: calc(1px / var(--z)) dashed rgb(0 0 0 / 0.6); outline: calc(1px / var(--z)) solid rgb(255 255 255 / 0.55); }
+.io-chip {
+  position: absolute; left: 0; top: 100%; margin-top: 2px; white-space: nowrap;
+  transform: scale(calc(1 / var(--z))); transform-origin: 0 0; pointer-events: none;
+  background: var(--card); color: var(--foreground); border: 1px solid var(--border);
+  border-radius: 0.35rem; padding: 0.05rem 0.35rem; line-height: 1.35;
+}
+.io-chip.big { font-size: 0.85rem; font-weight: 600; z-index: 2; }
+.io-box.is-right .io-chip.big { border-color: var(--success); }
+.io-box.is-miss .io-chip.big { border-color: var(--danger); }
+.io-chip.small { font-size: 0.72rem; color: var(--foreground); z-index: 1; }
+.io-tools { display: flex; align-items: center; gap: 0.35rem; width: 100%; justify-content: flex-end; }
+.io-hint { font-size: 0.75rem; margin-right: auto; }
+.io-zoom { height: 1.9rem; min-width: 1.9rem; padding: 0 0.5rem; font-size: 0.85rem; }
+.io-zoom:disabled { opacity: 0.4; cursor: default; }
+.io-zoom:disabled:hover { background: transparent; }
+.io-pct { min-width: 3.4rem; font-variant-numeric: tabular-nums; }
+@media (pointer: coarse) { .io-zoom { height: 2.5rem; min-width: 2.5rem; } }
+.io-ask { display: flex; flex-direction: column; gap: 0.4rem; }
+.io-fix { font-size: 0.95rem; color: var(--success); font-weight: 500; }
+.io-fix:empty { display: none; }
+.io-said { font-weight: 600; }
+.io-self { font-size: 0.95rem; }

@@ -152,7 +152,7 @@ export interface FieldSpec {
   required?: boolean;
   private?: boolean;
   default?: unknown;
-  editor?: "choices" | "pairs" | "parts";
+  editor?: "choices" | "pairs" | "parts" | "occlusion";
   /** For `code` fields: the language to highlight, or `field:<name>` to read it from another field. */
   language?: string;
 }

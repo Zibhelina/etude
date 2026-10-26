@@ -183,6 +183,15 @@ export function SearchHints({ onPick }: { onPick(s: string): void }) {
   );
 }
 
+/** What stops an image occlusion item from saving, in words; null when it's fine. Unlabeled boxes are allowed (they self-grade). */
+function occlusionProblem(def: CardType | null, fields: Record<string, unknown>): string | null {
+  const f = def?.fields.find((x) => x.editor === "occlusion");
+  if (!f) return null;
+  if (!fields.image) return "Add an image first: drop it, paste it or choose a file.";
+  if (!Array.isArray(fields[f.name]) || !(fields[f.name] as unknown[]).length) return "Draw at least one box over the image.";
+  return null;
+}
+
 type Draft = { deck: string; fields: Record<string, unknown>; tags: string[]; source: string; notes: string };
 const draftOf = (it: ItemDetail): Draft => ({ deck: it.deck, fields: it.fields, tags: it.tags, source: it.source, notes: it.notes });
 
@@ -214,6 +223,8 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
 
   const save = useCallback(async () => {
     if (!item || !draft || mediaPending) return;
+    const problem = occlusionProblem(type, draft.fields);
+    if (problem) return void toast.error(problem);
     setSaving(true);
     try {
       const r = await api.saveItem(item.id, { type: item.type, ...draft, archived: item.archived });
@@ -227,7 +238,7 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
     } finally {
       setSaving(false);
     }
-  }, [item, draft, onSaved, mediaPending]);
+  }, [item, draft, onSaved, mediaPending, type]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -303,7 +314,7 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
         src={`/frame/${encodeURIComponent(item.type)}?v=${encodeURIComponent(type.updated ?? "")}`}
         version={`${item.id}:${version}:${type.updated}`}
         load={loadPreview}
-        faces={type.faces}
+        faces={type.facesWhen ? item.cards.map((c) => c.face) : type.faces}
         generated={typeof item.fields.generator === "string"}
       />
       {dirty && <p className="-mt-3 text-xs text-muted-foreground">The preview shows the saved version. Save to see your edits.</p>}
@@ -489,8 +500,11 @@ export function NewItemDialog({ open, onOpenChange, decks, types, onCreated, def
   useEffect(() => {
     if (open && !deck && (defaultDeck || decks.length)) setDeck(defaultDeck || decks[0]);
   }, [open, decks]);
+  const occlusion = !!def?.fields.some((f) => f.editor === "occlusion");
   const create = async () => {
     if (mediaPending) return;
+    const problem = occlusionProblem(def, fields);
+    if (problem) return toast.error(problem);
     const slug = deck.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "card";
     const itemId = id.trim() || `${slug}.${Date.now().toString(36)}`;
     try {
@@ -506,7 +520,7 @@ export function NewItemDialog({ open, onOpenChange, decks, types, onCreated, def
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className={cn("max-h-[90dvh] overflow-y-auto", occlusion ? "sm:max-w-[min(72rem,calc(100vw-2rem))]" : "sm:max-w-2xl")}>
         <DialogHeader><DialogTitle>Add a card</DialogTitle></DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
@@ -522,16 +536,28 @@ export function NewItemDialog({ open, onOpenChange, decks, types, onCreated, def
           </div>
         </div>
         {def?.description && <p className="-mt-1 text-xs text-muted-foreground">{def.description}</p>}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium">Tags</label>
-          <TagInput value={tags} known={[]} onChange={setTags} />
-        </div>
-        {def && <div className="border-t pt-4"><FieldEditor key={type} fields={def.fields} value={fields} onChange={setFields} onMediaPendingChange={setMediaPending} /></div>}
+        {/* An image occlusion note starts on the image: tags come after the boxes. */}
+        {!occlusion && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium">Tags</label>
+            <TagInput value={tags} known={[]} onChange={setTags} />
+          </div>
+        )}
+        {def && def.id === type && <div className="border-t pt-4"><FieldEditor key={type} fields={def.fields} value={fields} onChange={setFields} onMediaPendingChange={setMediaPending} /></div>}
+        {occlusion && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium">Tags</label>
+            <TagInput value={tags} known={[]} onChange={setTags} />
+          </div>
+        )}
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium">ID <span className="font-normal text-muted-foreground">(optional, keeps the card matched across imports)</span></label>
           <Input value={id} onChange={(e) => setId(e.target.value)} placeholder="course.topic.slug" className="font-mono text-[13px]" />
         </div>
-        <DialogFooter><Button disabled={mediaPending} onClick={create} className="gap-1.5"><Check className="size-4" />Add card</Button></DialogFooter>
+        <DialogFooter className={cn(occlusion && "sticky -bottom-6 -mx-6 -mb-6 border-t bg-background px-6 py-3")}>
+          {occlusion && <span className="mr-auto self-center text-xs text-muted-foreground">{Array.isArray(fields.boxes) && fields.boxes.length ? "Each box or group becomes a card" : "Draw boxes over the image first"}</span>}
+          <Button disabled={mediaPending} onClick={create} className="gap-1.5"><Check className="size-4" />Add card</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

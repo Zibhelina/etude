@@ -1,0 +1,16 @@
+{{#header}}<div class="prose io-header">{{md:header}}</div>{{/header}}
+<div class="io">
+  <div class="io-stage" tabindex="-1" aria-label="The image">
+    <div class="io-canvas"><img class="io-img" alt="" draggable="false"><div class="io-boxes"></div></div>
+  </div>
+  <div class="io-tools">
+    <span class="io-hint e-muted"></span>
+    <button type="button" class="e-btn io-zoom" data-z="out" aria-label="Zoom out">−</button>
+    <button type="button" class="e-btn io-zoom io-pct" data-z="fit" aria-label="Fit the image">100%</button>
+    <button type="button" class="e-btn io-zoom" data-z="in" aria-label="Zoom in">+</button>
+  </div>
+</div>
+<div class="io-ask"></div>
+<template data-on="result">
+  {{#extra}}<div class="e-reveal"><div class="prose">{{md:extra}}</div></div>{{/extra}}
+</template>

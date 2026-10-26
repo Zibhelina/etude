@@ -187,11 +187,11 @@ function observeSize() {
 
 function focusCard(root) {
   if (!root) return;
-  for (const selector of ["[autofocus]", "input, textarea, [contenteditable]", "button"]) {
+  for (const selector of ["[autofocus], [data-autofocus]", "input, textarea, [contenteditable]", "button"]) {
     for (const el of root.querySelectorAll(selector)) {
       if (el.matches(":disabled, [readonly]") || el.closest("[inert]") || !el.getClientRects().length || getComputedStyle(el).visibility !== "visible") continue;
       if (el.hasAttribute("contenteditable") && !el.isContentEditable) continue;
-      if (selector !== "[autofocus]" && el instanceof HTMLInputElement && !["text", "number", "search", "tel", "url", "email", "password"].includes(el.type)) continue;
+      if (!selector.startsWith("[autofocus]") && el instanceof HTMLInputElement && !["text", "number", "search", "tel", "url", "email", "password"].includes(el.type)) continue;
       el.focus();
       if (document.activeElement === el) return;
     }
@@ -271,7 +271,15 @@ export function boot(main, templateHtml, assets) {
       const split = splitResultBlocks(templateHtml);
       blocks = split.blocks;
       api = createApi(msg, assets);
-      api.root.innerHTML = expand(split.html, api.view);
+      // Parse inertly: an `autofocus` attribute inserted into this cross-origin frame makes Chrome log
+      // an error and does nothing. focusCard() honours it as data-autofocus instead.
+      const tpl = document.createElement("template");
+      tpl.innerHTML = expand(split.html, api.view);
+      for (const el of tpl.content.querySelectorAll("[autofocus]")) {
+        el.removeAttribute("autofocus");
+        el.setAttribute("data-autofocus", "");
+      }
+      api.root.replaceChildren(tpl.content);
       watchCodeBlocks(api.root);
       const showResult = api._result;
       api._result = (result) => {

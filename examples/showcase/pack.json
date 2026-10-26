@@ -1,7 +1,7 @@
 {
   "etude": "pack/1",
   "name": "Etude Showcase",
-  "description": "A guided tour of Etude: one card for each of the 27 card types, from flipping a card to playing chess, mixing a color and writing kanji by hand. It opens in Watch mode: each card can show an example answer, graded the way a real one would be, so you see how it works without answering anything. Nothing is scheduled.",
+  "description": "A guided tour of Etude: one card for each of the 28 card types, from flipping a card to playing chess, mixing a color and writing kanji by hand. It opens in Watch mode: each card can show an example answer, graded the way a real one would be, so you see how it works without answering anything. Nothing is scheduled.",
   "presets": [
     {
       "id": "showcase",

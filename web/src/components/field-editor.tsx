@@ -13,6 +13,7 @@ import type { FieldSpec } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { MediaPasteProvider } from "@/components/media-paste";
 import { MediaTextInput, useMediaInput } from "@/components/media-input";
+import { OcclusionEditor, type OcclusionBox } from "@/components/occlusion-editor";
 
 type Fields = Record<string, unknown>;
 
@@ -36,13 +37,37 @@ export function FieldEditor({ fields: specs, value, onChange, onMediaPendingChan
     onChange(next);
   };
   const generator = typeof value.generator === "string";
+  // An occlusion editor owns its sibling `image` and `mode` fields: they're edited on the image itself.
+  const occlusion = specs.find((f) => f.editor === "occlusion");
+  const owned = new Set(occlusion ? ["image", "mode"].filter((n) => specs.some((f) => f.name === n)) : []);
+  const patch = (p: Record<string, unknown>) => {
+    const next = { ...latest.current };
+    for (const [k, v] of Object.entries(p)) {
+      if (v === undefined || v === "") delete next[k];
+      else next[k] = v;
+    }
+    latest.current = next;
+    onChange(next);
+  };
   return (
     <MediaPasteProvider onPendingChange={onMediaPendingChange}><div className="flex flex-col gap-5">
-      {specs.map((f) => (
-        <FieldRow key={f.name} spec={f}>
-          <FieldInput spec={f} value={value[f.name]} language={f.kind === "code" ? codeLanguage(f, value, specs) : undefined} onChange={(v) => set(f.name, v)} />
-        </FieldRow>
-      ))}
+      {specs.filter((f) => !owned.has(f.name)).map((f) =>
+        f.editor === "occlusion" ? (
+          <div key={f.name} className="flex flex-col gap-1.5">
+            <OcclusionEditor
+              image={String(value.image ?? "")}
+              boxes={(Array.isArray(value[f.name]) ? value[f.name] : []) as OcclusionBox[]}
+              mode={String(value.mode ?? "")}
+              onChange={(p) => patch({ ...(p.image !== undefined ? { image: p.image } : {}), ...(p.boxes !== undefined ? { [f.name]: p.boxes } : {}), ...(p.mode !== undefined ? { mode: p.mode === "hide-all" ? undefined : p.mode } : {}) })}
+              onPendingChange={onMediaPendingChange}
+            />
+          </div>
+        ) : (
+          <FieldRow key={f.name} spec={f}>
+            <FieldInput spec={f} value={value[f.name]} language={f.kind === "code" ? codeLanguage(f, value, specs) : undefined} onChange={(v) => set(f.name, v)} />
+          </FieldRow>
+        ),
+      )}
       <FieldRow spec={{ name: "generator", kind: "code", label: "Generator", description: "Optional. The body of a function that receives rng and returns field overrides, so each review shows a new variant." }}>
         {generator || value.generator !== undefined ? (
           <div className="flex flex-col gap-2">

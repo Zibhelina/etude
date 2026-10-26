@@ -2,6 +2,7 @@
 import "./deck.ts";
 import "./preset.ts";
 import "./item.ts";
+import "./occlusion.ts";
 import "./card.ts";
 import "./tag.ts";
 import "./type.ts";

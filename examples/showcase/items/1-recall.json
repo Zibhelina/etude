@@ -114,5 +114,96 @@
       "explanation": "Van Gogh painted *The Starry Night* in 1889 from the window of an asylum in Saint-Rémy; Hokusai's *Great Wave* is a woodblock print, so thousands of copies exist."
     },
     "source": ""
+  },
+  {
+    "id": "showcase.occlusion.heart",
+    "type": "occlusion",
+    "deck": "Etude Showcase::1 Recall",
+    "tags": [
+      "showcase",
+      "topic::anatomy"
+    ],
+    "fields": {
+      "image": "@inline:images/gray490-heart.webp",
+      "boxes": [
+        {
+          "id": "b1",
+          "x": 0.4517,
+          "y": 0.0786,
+          "w": 0.095,
+          "h": 0.0359,
+          "label": "Trachea"
+        },
+        {
+          "id": "b2",
+          "x": 0.4517,
+          "y": 0.2974,
+          "w": 0.105,
+          "h": 0.0615,
+          "label": "Arch of aorta|aortic arch|arch of the aorta"
+        },
+        {
+          "id": "b3",
+          "x": 0.3233,
+          "y": 0.3282,
+          "w": 0.06,
+          "h": 0.0735,
+          "label": "Superior vena cava|SVC|sup vena cava"
+        },
+        {
+          "id": "b4",
+          "x": 0.3617,
+          "y": 0.4137,
+          "w": 0.1133,
+          "h": 0.0581,
+          "label": "Ascending aorta"
+        },
+        {
+          "id": "b5",
+          "x": 0.4717,
+          "y": 0.4427,
+          "w": 0.1267,
+          "h": 0.0615,
+          "label": "Pulmonary artery|pulmonary trunk"
+        },
+        {
+          "id": "b6",
+          "x": 0.4317,
+          "y": 0.7094,
+          "w": 0.115,
+          "h": 0.0581,
+          "label": "Right ventricle"
+        },
+        {
+          "id": "b7",
+          "x": 0.64,
+          "y": 0.6547,
+          "w": 0.1067,
+          "h": 0.0786,
+          "label": "Left ventricle"
+        },
+        {
+          "id": "b8",
+          "x": 0.1333,
+          "y": 0.4103,
+          "w": 0.1017,
+          "h": 0.0957,
+          "label": "Right lung|lung|lungs",
+          "group": "lungs"
+        },
+        {
+          "id": "b9",
+          "x": 0.765,
+          "y": 0.412,
+          "w": 0.1033,
+          "h": 0.0957,
+          "label": "Left lung|lung|lungs",
+          "group": "lungs"
+        }
+      ],
+      "header": "Heart and lungs, front view. Name the part under the pink box.",
+      "extra": "Gray's labels are from 1918: today the pulmonary artery here is usually called the **pulmonary trunk**. The right lung sits on the viewer's left, because \"right\" means the patient's right."
+    },
+    "source": "Henry Gray, Anatomy of the Human Body (1918), Fig. 490. Public domain, via Wikimedia Commons."
   }
 ]

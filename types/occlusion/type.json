@@ -1,0 +1,16 @@
+{
+  "id": "occlusion",
+  "name": "Image occlusion",
+  "description": "Cover parts of an image and name each one. Every box, or group of boxes, is its own card. Unlabeled boxes are shown and self-graded.",
+  "faces": ["main"],
+  "facesWhen": "const out = [];\nfor (const b of Array.isArray(fields.boxes) ? fields.boxes : []) {\n  if (!b || typeof b !== \"object\") continue;\n  const face = String(b.group || b.id || \"\").replace(/[^\\w-]+/g, \"-\").replace(/^-+|-+$/g, \"\");\n  if (face && !out.includes(face)) out.push(face);\n}\nreturn out.length ? out : [\"main\"];\n",
+  "fields": [
+    { "name": "image", "kind": "text", "label": "Image", "required": true, "description": "The image's media URL." },
+    { "name": "boxes", "kind": "json", "label": "Boxes", "required": true, "private": true, "editor": "occlusion", "description": "[{ id, x, y, w, h, label, group }], coordinates from 0 to 1 of the image. A label takes alternatives: \"Aorta|aortic arch\". Boxes that share a group are asked together." },
+    { "name": "mode", "kind": "text", "label": "Mode", "default": "hide-all", "description": "hide-all: every box is covered and one is asked. hide-one: only the asked box is covered." },
+    { "name": "header", "kind": "markdown", "label": "Header", "description": "Shown above the image." },
+    { "name": "extra", "kind": "markdown", "label": "Extra", "private": true, "description": "Shown after answering." }
+  ],
+  "grader": { "kind": "script" },
+  "instructions": "The learner names the highlighted part of the image. Accept the box's label or any of its |-separated alternatives; ignore case, accents and small typos. Never accept the name of a different box."
+}

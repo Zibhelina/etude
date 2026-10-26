@@ -24,173 +24,182 @@ and that decides when you see it again.
 00:00:16.600 --> 00:00:18.803
 And honestly, that part works great.
 
-00:00:19.846 --> 00:00:22.476
-The catch is, a card is pretty much just
+00:00:19.843 --> 00:00:23.233
+Thing is, a card is basically just text.
 
-00:00:22.726 --> 00:00:23.266
-text.
+00:00:23.283 --> 00:00:25.353
+And most of what we actually learn...
 
-00:00:23.286 --> 00:00:25.596
-And so much of what we actually learn isn't
+00:00:25.443 --> 00:00:26.303
+isn't.
 
-00:00:25.846 --> 00:00:26.306
-text.
-
-00:00:26.326 --> 00:00:26.946
+00:00:26.323 --> 00:00:27.103
 So...
 
-00:00:26.966 --> 00:00:29.036
+00:00:27.123 --> 00:00:29.193
 what if a card could be anything?
 
-00:00:29.440 --> 00:00:30.990
+00:00:29.363 --> 00:00:30.913
 Like, learning chess?
 
-00:00:31.040 --> 00:00:33.150
+00:00:30.963 --> 00:00:33.113
 Find the checkmate, right there on the board.
 
-00:00:33.474 --> 00:00:34.174
+00:00:33.477 --> 00:00:34.227
 Piano?
 
-00:00:34.194 --> 00:00:35.784
+00:00:34.277 --> 00:00:36.440
 Play the chord it asks for.
 
-00:00:36.377 --> 00:00:37.287
+00:00:36.460 --> 00:00:37.480
 Japanese?
 
-00:00:37.337 --> 00:00:38.917
+00:00:37.500 --> 00:00:39.000
 Draw the character with your finger,
 
-00:00:38.937 --> 00:00:41.287
+00:00:39.020 --> 00:00:41.757
 and the AI tells you how your strokes look.
 
-00:00:41.694 --> 00:00:42.954
+00:00:41.777 --> 00:00:42.917
 Got a coding interview?
 
-00:00:42.974 --> 00:00:45.194
+00:00:42.937 --> 00:00:45.197
 Solve the problem, and the tests run the second
 
-00:00:45.214 --> 00:00:46.620
+00:00:45.217 --> 00:00:46.663
 you hit check.
 
-00:00:46.640 --> 00:00:47.420
+00:00:46.683 --> 00:00:47.583
 Chemistry?
 
-00:00:47.440 --> 00:00:48.942
+00:00:47.603 --> 00:00:49.065
 Balance the equation.
 
-00:00:48.962 --> 00:00:51.142
+00:00:49.085 --> 00:00:51.025
 Math gives you new numbers every time,
 
-00:00:51.162 --> 00:00:52.382
-so you learn the method,
+00:00:51.045 --> 00:00:53.385
+so you end up learning how it works.
 
-00:00:52.402 --> 00:00:53.772
-not the answer.
-
-00:00:53.792 --> 00:00:54.572
+00:00:53.475 --> 00:00:54.095
 History?
 
-00:00:54.592 --> 00:00:57.185
+00:00:54.115 --> 00:00:56.628
 Put the events in order on a timeline.
 
-00:00:57.205 --> 00:00:58.105
+00:00:56.648 --> 00:00:57.628
 Ear training?
 
-00:00:58.125 --> 00:01:00.225
+00:00:57.648 --> 00:00:59.668
 Listen to two notes and say how far apart
 
-00:01:00.245 --> 00:01:01.641
+00:00:59.688 --> 00:01:01.004
 they are.
 
-00:01:01.661 --> 00:01:02.601
+00:01:01.024 --> 00:01:02.044
 Even trivia:
 
-00:01:02.621 --> 00:01:04.241
+00:01:02.064 --> 00:01:03.524
 how many times does your heart beat in a
 
-00:01:04.261 --> 00:01:05.211
+00:01:03.544 --> 00:01:04.494
 lifetime?
 
-00:01:16.001 --> 00:01:18.141
+00:01:17.934 --> 00:01:20.074
 And all of it runs on FSRS,
 
-00:01:18.161 --> 00:01:20.341
+00:01:20.094 --> 00:01:22.394
 the same scheduler modern Anki uses,
 
-00:01:20.361 --> 00:01:22.461
+00:01:22.414 --> 00:01:24.644
 so every card comes back right when you need
 
-00:01:22.481 --> 00:01:22.951
+00:01:24.734 --> 00:01:25.061
 it.
 
-00:01:23.461 --> 00:01:25.604
+00:01:25.081 --> 00:01:26.741
+Your decks show what's due today.
+
+00:01:26.761 --> 00:01:29.354
+And the stats show how much you actually remember,
+
+00:01:29.374 --> 00:01:30.804
+and what's about to slip.
+
+00:01:33.178 --> 00:01:35.321
 And it's built to work really well with AI
 
-00:01:25.624 --> 00:01:26.457
+00:01:35.341 --> 00:01:36.174
 agents.
 
-00:01:26.477 --> 00:01:28.524
+00:01:36.194 --> 00:01:38.241
 You don't need one, most cards are checked by
 
-00:01:28.544 --> 00:01:29.614
+00:01:38.261 --> 00:01:39.331
 little scripts right on your
 
-00:01:29.904 --> 00:01:30.404
+00:01:39.621 --> 00:01:40.121
 computer.
 
-00:01:30.424 --> 00:01:31.497
+00:01:40.141 --> 00:01:41.214
 But if you have one,
 
-00:01:31.517 --> 00:01:33.444
+00:01:41.234 --> 00:01:43.161
 it can do everything you can:
 
-00:01:33.464 --> 00:01:35.324
+00:01:43.181 --> 00:01:45.041
 turn your lecture notes into cards,
 
-00:01:35.344 --> 00:01:38.084
+00:01:45.061 --> 00:01:47.801
 grade your explanations, read your stats and tell you
 
-00:01:38.104 --> 00:01:39.524
+00:01:47.821 --> 00:01:49.241
 what to review next.
 
-00:01:39.544 --> 00:01:42.684
+00:01:49.261 --> 00:01:52.401
 Sign in with ChatGPT, bring your own API key,
 
-00:01:42.704 --> 00:01:44.364
+00:01:52.421 --> 00:01:54.081
 or just let your agent drive it from the
 
-00:01:44.384 --> 00:01:45.214
+00:01:54.101 --> 00:01:54.931
 command line.
 
-00:01:46.767 --> 00:01:48.677
+00:01:56.484 --> 00:01:58.314
 And this is my favorite part.
 
-00:01:48.767 --> 00:01:51.147
+00:01:58.404 --> 00:02:00.704
 Every card is a little program you can open
 
-00:01:51.167 --> 00:01:52.267
+00:02:00.724 --> 00:02:01.877
 and change.
 
-00:01:52.287 --> 00:01:53.707
+00:02:01.897 --> 00:02:03.344
 Or just ask your agent:
 
-00:01:53.727 --> 00:01:55.840
+00:02:03.364 --> 00:02:05.424
 make me a card that teaches Morse code.
 
-00:01:55.860 --> 00:01:57.797
+00:02:05.444 --> 00:02:07.344
 A minute later, it's in your deck.
 
-00:01:57.847 --> 00:01:59.957
-Oh, and you can change the themes too.
+00:02:07.364 --> 00:02:11.064
+Oh, and you can change the whole look,
 
-00:02:01.270 --> 00:02:02.580
+00:02:11.084 --> 00:02:13.664
+or grab decks, themes and card types other people
+
+00:02:13.684 --> 00:02:15.034
+made, right from the market.
+
+00:02:18.730 --> 00:02:20.040
 It's called Etude.
 
-00:02:02.630 --> 00:02:04.370
+00:02:20.090 --> 00:02:21.830
 It's free, it's open source,
 
-00:02:04.390 --> 00:02:05.490
+00:02:21.850 --> 00:02:22.950
 and it's on GitHub.
 
-00:02:05.510 --> 00:02:06.380
+00:02:22.970 --> 00:02:23.840
 Go try it.

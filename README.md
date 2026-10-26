@@ -279,9 +279,12 @@ type:numeric  id:net.w1.*  source:ch1
 is:new is:learning is:review is:relearning is:due is:suspended is:buried is:archived
 prop:lapses>=2  prop:reps=0  prop:stability<3  prop:difficulty>7  prop:due<=1 (days from now)
 rated:1  rated:7:1    reviewed in the last N days (optionally with that rating)
-word  "a phrase"      text anywhere in the item's fields
+word  "a phrase"      text in any field, ignoring case (not markup or media file names)
+front:word  front:    text in one field, by name (empty: the field is empty)
 -term  a OR b  (grouping)   implicit AND between terms
 ```
+
+With free text, results come best match first: items whose title is the word, then those whose title starts with it, then the rest. `--order` (or the Browse menu) picks another order.
 
 ## CLI for people, scripts and agents
 

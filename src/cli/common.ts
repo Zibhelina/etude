@@ -1,5 +1,4 @@
 // Helpers several command groups share: scopes, id resolution, config patches.
-import { compile, QueryError } from "../core/query.ts";
 import { DEFAULT_PRESET, STATE_NAMES, type PresetConfig } from "../core/model.ts";
 import { deckParts, type Etude } from "../core/engine.ts";
 import { CliError, type Ctx, type FlagSpec } from "./registry.ts";
@@ -37,24 +36,15 @@ export function queryOf(f: Record<string, any>): string | undefined {
   return parts.length ? parts.join(" ") : undefined;
 }
 
-function compiled(q: string) {
-  try {
-    return compile(q);
-  } catch (e) {
-    if (e instanceof QueryError) throw new CliError(`search: ${e.message}`, "validation");
-    throw e;
-  }
-}
-
 const FROM = "FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
 
 export function cardsMatching(e: Etude, q: string): number[] {
-  const c = compiled(q);
+  const c = e.compileSearch(q);
   return e.db.all(`SELECT c.id ${FROM} WHERE ${c.where} ORDER BY i.ord, c.id`, ...c.params).map((r) => r.id as number);
 }
 
 export function itemsMatching(e: Etude, q: string): string[] {
-  const c = compiled(q);
+  const c = e.compileSearch(q);
   return e.db.all(`SELECT i.id, MIN(i.ord) AS o ${FROM} WHERE ${c.where} GROUP BY i.id ORDER BY o`, ...c.params).map((r) => r.id as string);
 }
 

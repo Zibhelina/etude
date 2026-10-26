@@ -820,7 +820,7 @@ export class Etude {
     }
     return this.db
       .all(
-        "SELECT t.id, t.def, t.builtin, t.updated, (SELECT COUNT(*) FROM items i WHERE i.type = t.id AND i.archived = 0) AS items, COALESCE(p.folder, '') AS folder FROM types t LEFT JOIN type_placement p ON p.type_id = t.id ORDER BY t.builtin DESC, t.id",
+        "SELECT t.id, t.def, t.builtin, t.updated, (SELECT COUNT(*) FROM items i WHERE i.type = t.id AND i.archived = 0) AS items, (SELECT COUNT(*) FROM items i WHERE i.type = t.id AND i.archived = 1) AS archived, COALESCE(p.folder, '') AS folder FROM types t LEFT JOIN type_placement p ON p.type_id = t.id ORDER BY t.builtin DESC, t.id",
       )
       .map((r) => {
         const def = parse<CardTypeDef>(r.def, {} as CardTypeDef);
@@ -834,6 +834,7 @@ export class Etude {
           edited: isShipped && !r.builtin,
           updated: r.updated,
           items: r.items,
+          archived: r.archived,
           grader: def.grader?.kind,
           folder: r.folder as string,
           assetFiles: files.get(r.id) ?? [],
@@ -1078,8 +1079,8 @@ export class Etude {
   }
 
   deleteType(id: string) {
-    const used = this.db.get("SELECT COUNT(*) AS n FROM items WHERE type = ?", id)!.n;
-    if (used) throw new EtudeError(`type "${id}" is used by ${used} item(s)`);
+    const used = this.db.get<{ n: number; archived: number }>("SELECT COUNT(*) AS n, COALESCE(SUM(archived), 0) AS archived FROM items WHERE type = ?", id)!;
+    if (used.n) throw new EtudeError(`type "${id}" is used by ${used.n} item(s)${used.archived === used.n ? ", all archived" : used.archived ? `, ${used.archived} of them archived` : ""}`);
     const row = this.db.get("SELECT builtin FROM types WHERE id = ?", id);
     if (row?.builtin) throw new EtudeError("built-in types can't be deleted");
     this.db.tx(() => {

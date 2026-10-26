@@ -279,7 +279,7 @@ These work on every command, before or after the command words.
   - [`type preview`](#type-preview) Run a type on sample fields and show what the card gets (view) and what grading uses (key).
   - [`type test-grade`](#type-test-grade) Run a type's grader on an answer without saving anything.
   - [`type reset`](#type-reset) Restore an edited built-in type to the shipped version.
-  - [`type delete`](#type-delete) Delete a custom type no item uses (archived items count).
+  - [`type delete`](#type-delete) Delete a custom type. Items using it (archived ones count) stop it, unless --items deletes them too.
   - [`type move`](#type-move) Put a type in a folder of the Types page (created if needed); `--root` takes it out of every folder.
   - [`type folder list`](#type-folder-list) Folders of the Types page with the types directly inside each one.
   - [`type folder create`](#type-folder-create) Create a folder (and its parents) in the Types page.
@@ -2211,7 +2211,9 @@ etude type reset numeric --yes
 
 <a id="type-delete"></a>
 
-Delete a custom type no item uses (archived items count).
+Delete a custom type. Items using it (archived ones count) stop it, unless --items deletes them too.
+
+With --items, every item of the type goes with it, archived ones included, with their cards and review history. Preview with --dry-run.
 
 ```
 etude type delete <id> [flags]
@@ -2225,11 +2227,15 @@ etude type delete <id> [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
+| `--items` | boolean | Also delete the items using the type, with their cards and history. |
 | `--dry-run` | boolean | Show what would change without writing anything. |
 | `-y, --yes` | boolean | Confirm a destructive operation. |
 
+Output: { deleted, items, cards, reviews }
+
 ```sh
 etude type delete my-old-type --yes
+etude type delete anki-basic-2 --items --dry-run
 ```
 
 ### etude type move

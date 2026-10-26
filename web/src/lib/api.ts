@@ -413,7 +413,9 @@ export const api = {
   types: () => call<TypeSummary[]>("GET", "/api/types"),
   type: (id: string) => call<CardType>("GET", `/api/types/${encodeURIComponent(id)}`),
   saveType: (def: CardType) => call<CardType>("PUT", `/api/types/${encodeURIComponent(def.id)}`, def),
-  deleteType: (id: string) => call("DELETE", `/api/types/${encodeURIComponent(id)}`),
+  /** `items`: also delete the items using the type (archived ones too), with their cards and history. */
+  deleteType: (id: string, opts: { items?: boolean } = {}) => call<{ ok: true; items: number; cards: number; reviews: number }>("DELETE", `/api/types/${encodeURIComponent(id)}`, opts),
+  typeUsage: (id: string) => call<{ items: number; archived: number; cards: number; reviews: number }>("GET", `/api/types/${encodeURIComponent(id)}/usage`),
   typeFolders: () => call<string[]>("GET", "/api/type-folders"),
   createTypeFolder: (path: string) => call<{ path: string }>("POST", "/api/type-folders", { path }),
   renameTypeFolder: (from: string, to: string) => call<{ from: string; to: string }>("POST", "/api/type-folders/rename", { from, to }),

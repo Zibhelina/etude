@@ -763,7 +763,7 @@ function DangerZone({ deck, decks, hasChildren, cards, onMoved }: { deck: DeckFu
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className={confirm === "delete" ? "bg-destructive text-white hover:bg-destructive/90" : undefined} onClick={act}>
+            <AlertDialogAction variant={confirm === "delete" ? "destructive" : "default"} onClick={act}>
               {confirm === "archive" ? "Archive" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>

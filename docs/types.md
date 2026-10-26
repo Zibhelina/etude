@@ -44,7 +44,7 @@ This is the JSON that `PUT /api/types/:id` accepts and the editor exports:
   - `required` fields must be non-empty when an item is saved.
   - A `private` field is hidden until the answer is graded.
   - `default` is merged in when an item leaves the field empty.
-  - `editor` asks for a structured form: `choices` (`[{ text, correct, why }]`), `pairs` (`[[left, right]]`) or `parts` (`[{ label, answer, unit, tolerance }]`).
+  - `editor` asks for a structured form: `choices` (`[{ text, correct, why }]`), `pairs` (`[[left, right]]`), `parts` (`[{ label, answer, unit, tolerance }]`) or `occlusion` (`[{ id, x, y, w, h, label, group }]`, drawn on the image in the sibling `image` field; see [Image occlusion](#image-occlusion)).
   - `language` (for `code` fields) is the language the editor highlights: a name (`"python"`) or `"field:<name>"` to follow another field, like the `code` type's `language`.
   - In the item editor, `markdown` fields are live markdown editors and `code` fields are code editors.
 - `template.html` is required; `css` and `js` may be empty.
@@ -178,7 +178,7 @@ Assets are stored apart from the definition:
 
 ## Prepare
 
-`prepare` is the body of `function (fields, face, rng)` and returns `{ view, key }`. It runs on the server, in the sandbox, before every showing.
+`prepare` is the body of `function (fields, face, rng)` and returns `{ view, key }`. It runs on the server, in the sandbox, before every showing. It may also return `grader: "self"`: that one card is then revealed and rated by the learner even though the type has a script grader (the image occlusion type does this for a box with no label).
 
 - `fields`: the item's fields with defaults merged in and the generator already applied.
 - `face`: the name of the face being shown.
@@ -254,6 +254,24 @@ When a type has no prepare script, private fields go into `key` and are not sent
 ## Item generators
 
 Any item can set `fields.generator`, the body of `function (rng)` that returns an object of field overrides. It runs before prepare with the review's seed, so each review shows a new variant, and the stored seed replays it. Keep valid static fields next to it so lists and previews have something to show. See [packs.md](packs.md#generated-items).
+
+## Image occlusion
+
+The built-in `occlusion` type covers parts of an image: a diagram, a slide, an atlas page. Each box, or each group of boxes, is its own card. On the card the asked box is pink with a "?", the learner types its name under the image (Enter checks), and after grading the box opens with its name next to it, outlined green or red. Big images zoom with Ctrl + scroll, a pinch or a double-click, and pan by dragging.
+
+| field | kind | |
+|---|---|---|
+| `image` | text | the image's media URL (`/media/files/…`) |
+| `boxes` | json | `[{ "id": "b1", "x": 0.12, "y": 0.3, "w": 0.1, "h": 0.05, "label": "Aorta\|aortic arch", "group": "atria" }]`, coordinates as fractions of the image from 0 to 1 |
+| `mode` | text | `hide-all` (default): every box is covered and one is asked. `hide-one`: only the asked box is covered |
+| `header` | markdown | shown above the image |
+| `extra` | markdown, private | shown after answering |
+
+- **Cards.** `facesWhen` returns one face per box id, or per `group` when boxes share one (asked together, one answer). Adding a box later adds a card; the existing cards keep their history. Removing a box keeps its card, as cards are never deleted: it says the box was removed, so suspend or delete it by hand.
+- **Grading.** Case, accents and punctuation don't matter, `|` separates accepted names, and small typos pass: none up to 4 letters, one for 5 to 8, two beyond (Damerau-Levenshtein, so a swapped pair counts once). A name that belongs to another box is never accepted, even when it's within the typo allowance, and the feedback says which part it names. An empty answer means "show me": score 0 and the reveal. In a group, any one of its names is right.
+- **Boxes without a label** (an Anki import, or a box you haven't named yet) are revealed and self-graded like a basic card: the card asks you to name the part to yourself, **Show answer** opens it, and you rate yourself. The editor shows how many cards are like this; it doesn't refuse to save.
+- **Editor.** The item editor shows the image with the boxes on it. Drop, paste (Ctrl+V a screenshot) or choose an image; drag to draw a box; drag a box to move it and its handles to resize it; Del deletes, Ctrl+D duplicates, arrows nudge (Shift for 10 px), Ctrl+Z / Ctrl+Shift+Z undo and redo, Ctrl+G groups and Ctrl+Shift+G ungroups. Shift-click (or tap the numbers in the list on a phone) selects several. Each box has a label input in the list beside the image (below it on phones); clicking a row selects its box. Zoom with the buttons, Ctrl + scroll or a pinch, and pan with the hand tool, Space-drag or two fingers. The toolbar shows how many cards the item makes.
+- **CLI.** `etude occlusion add <image> --deck D --box "x,y,w,h=Label" [--box "x,y,w,h@group=Label"] [--px] [--boxes file.json] [--mode hide-one]` copies the image into media and creates the item; `--px` takes pixel coordinates and converts them with the image's size. `item add --type occlusion --fields …` and `item edit <id> --set boxes='[…]'` work too. API: `POST /api/occlusion` with the same fields.
 
 ## Example 1: true or false
 

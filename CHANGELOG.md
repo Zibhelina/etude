@@ -1,9 +1,16 @@
 # Changelog
 
-## Unreleased
+## 2.2.0
 
 - **Ask Etude**, an assistant inside the app. The round button in the bottom-right corner (or Ctrl/⌘+J) opens a chat on the right that can do anything the CLI can: make a deck from attached notes or PDFs, move and rename decks, switch or install themes, import Anki packages. It uses your configured AI (ChatGPT plan, OpenRouter or a custom endpoint) and you pick the model per chat. Deletes and other destructive commands wait for **Allow**, and every reply that changed something has **Undo these changes**. CLI: `etude agent ask|list|show|undo|delete|models`; API: `/api/agent/*`. See docs/agent.md.
 - Pluggable schedulers. FSRS stays the default, and a deck can pick another scheduler in its Options (or `etude deck set "Deck" scheduler=drill`). **Drill** is for skills you train and measure: no rating buttons, the card comes back as many times a day as you set, **Go again** starts another run, and Stats charts every result (WPM, accuracy… from the type's new `metrics`). **Leitner boxes** ship too, and you can write your own as a small `schedule.js` that gets the grade's details and returns the next due date. Switching schedulers replays the review history. CLI: `etude scheduler list|show|export|import|validate|reset|delete`; API: `/api/schedulers`. See docs/schedulers.md.
+- Updates have a clearer home. When this install is behind, an **Update Etude** button appears at the bottom of the sidebar (an icon with a dot when the sidebar is collapsed, a dot on Settings on phones) and opens the list of changes with **Update**. When it's current the corner stays empty. Settings now opens with **About**: version, update status, **Check for updates** and links. The corner pill from 2.1.0 is gone.
+- Move a deck anywhere: drag it onto another deck or between rows, or use **Move to…**, **Move up a level** and **Make it a deck of its own** from its ⋯ menu; a toast offers Undo. CLI: `etude deck move <deck> <parent>|--top`; API: `POST /api/decks/move`.
+- Card types can ship asset files (3D meshes, data) once with the type instead of inside every card: `assets/` in a type folder, `etude.asset(name)` in card code, served from `/type-assets/` with long caching. Packs, the Market and type export/import carry them.
+- A card type can hide the verdict and feedback after an answer (Grader tab, **Show the verdict and feedback**), for skill cards like typing tests; the score is still recorded.
+- Stats follow each deck's scheduler: retention and the forecast count FSRS cards, drill runs are counted apart, and a **By scheduler** panel summarises each one.
+- Decks shows each deck's total card count, and **Study** is now **Practice** throughout.
+- Fixes: an Anki template gated on a media-only field still makes its card; `etude market check` starts the sandbox before checking card types.
 
 ## 2.1.0
 

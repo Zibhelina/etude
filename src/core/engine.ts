@@ -39,7 +39,7 @@ import {
 } from "./schedulers.ts";
 import { fitWeights, MIN_REVIEWS, OptimizerMissing, type Fit } from "./optimize.ts";
 import { compile, QueryError } from "./query.ts";
-import { aiEditFields, aiFeedback, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type GradingContext } from "./ai.ts";
+import { AGENT_EFFORTS, aiEditFields, aiFeedback, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type GradingContext } from "./ai.ts";
 import {
   beginChatGptLogin,
   chatGptEndpoints,
@@ -233,6 +233,11 @@ export class Etude {
     this.db.close();
   }
 
+  /** Drops in-memory caches, after the database was changed underneath (an undo restore). */
+  invalidateCaches() {
+    this.typeCache.clear();
+  }
+
   /** Copies media into the collection. Identical content shares one file. */
   storeMedia(name: string, data: Uint8Array, opts: { dryRun?: boolean } = {}) {
     if (typeof name !== "string" || !name.trim()) throw new EtudeError("a media filename is required");
@@ -294,6 +299,8 @@ export class Etude {
     if (typeof next.market.url !== "string" || typeof next.market.repo !== "string") throw new EtudeError("market.url and market.repo must be text");
     if (next.market.repo && !/^[\w.-]+\/[\w.-]+$/.test(next.market.repo)) throw new EtudeError("market.repo must look like owner/name");
     if (!(next.dayStartHour >= 0 && next.dayStartHour < 24)) throw new EtudeError("dayStartHour must be 0 to 23");
+    const effort = next.ai.agent?.effort;
+    if (effort !== undefined && !AGENT_EFFORTS.includes(effort)) throw new EtudeError(`ai.agent.effort must be one of ${AGENT_EFFORTS.join(", ")}`);
     if (patch.themes !== undefined) next.themes = this.checkThemes(patch.themes);
     if (patch.theme !== undefined || patch.themes !== undefined) {
       if (typeof next.theme !== "string" || !this.findTheme(next.theme, next.themes)) throw new EtudeError(`unknown theme "${next.theme}"`, 404);

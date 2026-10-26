@@ -8,7 +8,6 @@ import { api, relative, type DeckNode } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { EmptyState, Page, PageHeader, Section } from "@/components/page";
-import { UpdateBar } from "@/components/update-bar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { childrenOf, clashes, leafOf, moveDeck, MoveDeckDialog, parentOf } from "@/components/move-deck";
 
@@ -350,7 +349,6 @@ export function DecksPage() {
         </div>
       )}
       <MoveDeckDialog deck={moving} decks={decks ?? []} onOpenChange={(o) => !o && setMoving(null)} onMoved={(n) => after(n)} />
-      <UpdateBar />
       <NewDeckDialog open={creating} onOpenChange={setCreating} onDone={reload} />
     </Page>
   );

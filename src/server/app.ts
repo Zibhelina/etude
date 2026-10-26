@@ -11,6 +11,8 @@ import { DEFAULT_PRESET, type Rating } from "../core/model.ts";
 import { MAX_MEDIA_BYTES, mediaType } from "../core/media.ts";
 import { cardFrame } from "./frame.ts";
 import { ASSET_NAME, assetMime } from "../core/assets.ts";
+import { agentFor, AgentError, AGENT_MAX_ATTACHMENT_BYTES, type AgentEvent } from "../core/agent.ts";
+import { streamSSE } from "hono/streaming";
 import { applyUpdate, updateStatus, UpdateError } from "../core/update.ts";
 import { buildSubmission, fetchCover, fetchEntry, fetchIndex, ghStatus, installEntry, installState, installedEntries, manualPublishUrl, marketSettings, publishFile, summarize, entryPath, entryJson, forgetInstall, type MarketKind } from "../core/market.ts";
 
@@ -79,6 +81,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
 
   app.onError((err, c) => {
     if (err instanceof EtudeError) return c.json({ error: err.message }, err.status as 400);
+    if (err instanceof AgentError) return c.json({ error: err.message }, err.status as 400);
     if (err instanceof UpdateError) return c.json({ error: err.message, details: err.details }, err.status as 400);
     console.error(err);
     return c.json({ error: String(err?.message ?? err) }, 500);
@@ -94,7 +97,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     if (c.req.method !== "GET" && c.req.method !== "HEAD") {
       const ct = c.req.header("content-type") ?? "";
       // Package and media uploads send bytes; other mutations must be JSON.
-      const binary = c.req.method === "POST" && ["/api/anki/import", "/api/media"].includes(c.req.path) && ct.includes("application/octet-stream");
+      const binary = c.req.method === "POST" && (["/api/anki/import", "/api/media"].includes(c.req.path) || /^\/api\/agent\/conversations\/[\w-]+\/attachments$/.test(c.req.path)) && ct.includes("application/octet-stream");
       if (!ct.includes("application/json") && !binary) return c.json({ error: "expected application/json" }, 415);
       const origin = c.req.header("origin");
       if (origin && origin !== "null") {
@@ -386,6 +389,92 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.put("/api/themes/:id", async (c) => c.json(etude.saveTheme({ ...(await body(c)), id: c.req.param("id") })));
   app.delete("/api/themes/:id", (c) => c.json(etude.deleteTheme(c.req.param("id"))));
   app.put("/api/theme", async (c) => c.json(etude.selectTheme(String((await body(c)).id ?? ""))));
+
+  // ------------------------------------------------------------- agent
+  const agent = agentFor(etude);
+  app.get("/api/agent/models", async (c) => c.json(await agent.models(c.req.query("force") === "1")));
+  app.get("/api/agent/conversations", (c) => c.json({ conversations: agent.listConversations(), running: agent.listConversations().filter((x) => agent.runningTurn(x.id)).map((x) => x.id) }));
+  app.post("/api/agent/conversations", async (c) => c.json(agent.createConversation((await body(c)).model ?? null)));
+  app.get("/api/agent/conversations/:id", (c) => c.json({ ...agent.conversation(c.req.param("id")), running: agent.runningTurn(c.req.param("id")) }));
+  app.delete("/api/agent/conversations/:id", (c) => c.json(agent.deleteConversation(c.req.param("id"))));
+  app.patch("/api/agent/conversations/:id", async (c) => {
+    const b = await body(c);
+    if (typeof b.model === "string") agent.setConversationModel(c.req.param("id"), b.model);
+    if (typeof b.title === "string") agent.renameConversation(c.req.param("id"), b.title);
+    return c.json(agent.conversation(c.req.param("id")));
+  });
+  app.post("/api/agent/conversations/:id/attachments", async (c) => {
+    const id = c.req.param("id");
+    const name = c.req.query("name") ?? "file";
+    const reader = c.req.raw.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    if (reader) {
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          bytes += value.byteLength;
+          if (bytes > AGENT_MAX_ATTACHMENT_BYTES) {
+            await reader.cancel();
+            throw new AgentError("attachments must be 50 MB or smaller", 413);
+          }
+          chunks.push(value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    }
+    const meta = agent.addAttachment(id, name, Buffer.concat(chunks));
+    return c.json(await agent.prepareAttachment(id, meta.id));
+  });
+  app.get("/api/agent/conversations/:id/attachments/:att", (c) => {
+    const m = agent.attachment(c.req.param("id"), c.req.param("att"));
+    return sendFile(c, m.path, { mime: m.mime });
+  });
+  app.post("/api/agent/conversations/:id/messages", async (c) => {
+    const id = c.req.param("id");
+    const b = await body(c);
+    agent.conversation(id);
+    if (agent.runningTurn(id)) throw new AgentError("the agent is still working on this conversation", 409);
+    return streamSSE(c, async (sse) => {
+      const queue: AgentEvent[] = [];
+      let wake: (() => void) | null = null;
+      let finished = false;
+      const push = (e: AgentEvent) => {
+        queue.push(e);
+        wake?.();
+      };
+      const turn = agent
+        .send(id, { text: String(b.text ?? ""), attachments: Array.isArray(b.attachments) ? b.attachments.map(String) : [], model: b.model ?? undefined, page: typeof b.page === "string" ? b.page : undefined }, push)
+        .catch((e) => push({ type: "error", error: (e as Error).message }))
+        .finally(() => {
+          finished = true;
+          wake?.();
+        });
+      // A closed tab doesn't stop the turn; the reply is saved and shows up when the panel reloads.
+      sse.onAbort(() => {});
+      while (!finished || queue.length) {
+        if (!queue.length) await new Promise<void>((r) => (wake = r));
+        wake = null;
+        while (queue.length) {
+          const e = queue.shift()!;
+          await sse.writeSSE({ event: e.type, data: JSON.stringify(e) }).catch(() => {});
+        }
+      }
+      await turn;
+    });
+  });
+  app.post("/api/agent/turns/:turn/confirm", async (c) => {
+    const b = await body(c);
+    if (!agent.confirm(c.req.param("turn"), String(b.callId ?? ""), !!b.allow)) throw new AgentError("nothing is waiting for that confirmation", 404);
+    return c.json({ ok: true });
+  });
+  app.post("/api/agent/turns/:turn/stop", (c) => c.json({ stopped: agent.stop(c.req.param("turn")) }));
+  app.post("/api/agent/conversations/:id/undo", async (c) => {
+    const b = await body(c);
+    return c.json(agent.undo(c.req.param("id"), b.messageId ? Number(b.messageId) : undefined));
+  });
 
   // ------------------------------------------------------------- update
   // `?check=1` asks the remote (at most every 10 min unless `force=1`); without it, the last known state.

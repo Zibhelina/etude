@@ -41,6 +41,8 @@ export interface AiSettings {
   vision: ChatProvider | null;
   autoFeedback: "ai-graded" | "always" | "never";
   language: string;
+  /** The in-app assistant's default model ref (chatgpt:…, openrouter:…, custom:…); null uses the feedback model. */
+  agent?: { model: string | null; effort?: string };
 }
 
 export interface SettingsDraft {
@@ -76,7 +78,7 @@ export const usesDecisionModel = (ai: AiSettings) => ai.decision?.kind === "open
 export type PresetId = "openrouter" | "openai" | "chatgpt" | "local";
 
 export function presetAi(id: PresetId, defaults: AiSettings, current: AiSettings): AiSettings {
-  const keep = { autoFeedback: current.autoFeedback, language: current.language };
+  const keep = { autoFeedback: current.autoFeedback, language: current.language, agent: current.agent };
   if (id === "openrouter") return { ...structuredClone(defaults), ...keep, vision: null };
   if (id === "chatgpt")
     return {

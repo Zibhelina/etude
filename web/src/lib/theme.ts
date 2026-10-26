@@ -85,6 +85,15 @@ export async function loadTheme(): Promise<Theme> {
   return list.find((t) => t.id === s.theme) ?? BUILTIN_THEMES[0];
 }
 
+/** Re-reads the selected theme and applies it if it changed (after the assistant ran `theme set`). */
+export async function refreshTheme() {
+  if (isEmbed() || previewing) return;
+  try {
+    const t = await loadTheme();
+    if (themeCss(t) !== themeCss(current)) applyTheme(t);
+  } catch {}
+}
+
 /** Applies the saved theme now and again whenever the tab comes back (another device or the CLI may have changed it). */
 export function startThemeSync() {
   if (isEmbed()) return;

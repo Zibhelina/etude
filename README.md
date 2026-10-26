@@ -141,8 +141,9 @@ The Market also has a Morse code deck, the Showcase, single card types and 22 th
 - **Statistics:** recall now against your target, true retention, streaks, a forgetting curve for what happens if you stop today, memory strength, a 24-hour study clock, the forecast up to a deadline and recall per tag. Each scheduler gets its own numbers.
 - **Themes:** six built in (four dark, two light), or your own with CSS variables and extra CSS.
 - **A complete CLI** with more than 140 commands, stable JSON output, a machine-readable catalog (`etude commands`) and a dry run on most commands that change data.
-- **Updates from GitHub in one click.** A pill on Decks says when there are new commits and updates the app in place; `etude update` does the same from a terminal.
+- **Updates from GitHub in one click.** When there are new commits an Update Etude button appears at the bottom of the sidebar and updates the app in place (Settings → About shows the version and checks on demand); `etude update` does the same from a terminal.
 - **Import from Anki.** `.apkg` and `.colpkg` files bring their notetypes, decks, tags, media and review history across; see [docs/anki.md](docs/anki.md).
+- **Ask Etude, an assistant in the app.** The round button in the corner opens a chat that runs Etude's own commands for you: a deck from your notes or a PDF, a reorganized tree, a new theme. Deletes wait for your OK and every change can be undone. See [docs/agent.md](docs/agent.md).
 - **A market for themes, decks and card types.** The Market tab installs what other people shared from [etude-market](https://github.com/Zibhelina/etude-market), and Publish shares yours as a pull request; see [docs/market.md](docs/market.md).
 
 ## Quick start

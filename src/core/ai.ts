@@ -48,7 +48,13 @@ export interface AiSettings {
   /** When to write feedback without being asked: on every AI-graded answer, on wrong answers too, or only on request. */
   autoFeedback: "ai-graded" | "always" | "never";
   language: string;
+  /** The in-app agent. `model` is a model ref like `chatgpt:gpt-6.1-sol`, `openrouter:<id>` or `custom:<id>`; null uses the feedback model. */
+  agent?: { model: string | null; effort?: AgentEffort };
 }
+
+/** Reasoning effort for the assistant on models that take one (Responses API, OpenRouter reasoning models). */
+export type AgentEffort = "default" | "minimal" | "low" | "medium" | "high";
+export const AGENT_EFFORTS: AgentEffort[] = ["default", "minimal", "low", "medium", "high"];
 
 export const DEFAULT_AI: AiSettings = {
   decision: { kind: "openrouter-decisions", url: "https://openrouter.ai/api/alpha/decisions", model: "liquid/d1-ultra", apiKeyEnv: "OPENROUTER_API_KEY", timeoutMs: 8000 },
@@ -64,6 +70,7 @@ export const DEFAULT_AI: AiSettings = {
   vision: null,
   autoFeedback: "ai-graded",
   language: "the language the card is written in",
+  agent: { model: null, effort: "low" },
 };
 
 export class AiError extends Error {}

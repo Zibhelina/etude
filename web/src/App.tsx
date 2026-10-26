@@ -16,6 +16,8 @@ import { StatsPage } from "@/pages/stats";
 import { SettingsPage } from "@/pages/settings";
 import { EmbedStudy } from "@/pages/embed";
 import { MarketPage } from "@/pages/market";
+import { AgentLauncher, AgentPanel, announceDataChange, useAgentPanel } from "@/components/agent-panel";
+import { SidebarUpdate, useUpdateDot } from "@/components/update-bar";
 
 const NAV = [
   { to: "/", label: "Decks", icon: Layers, match: (p: string) => p === "/" || p === "/deck" },
@@ -49,6 +51,10 @@ export function App() {
   const { path, params } = useLocation();
   const [collapsed, setCollapsed] = useSidebarCollapsed();
   const studying = path === "/study" || path === "/watch";
+  const agent = useAgentPanel();
+  const updateDot = useUpdateDot();
+  // Bumped after the assistant changed something, so the page remounts and reloads its data.
+  const [dataKey, setDataKey] = useState(0);
   if (path === "/embed") {
     const deck = params.get("deck") ?? undefined;
     const q = params.get("q") ?? undefined;
@@ -84,7 +90,11 @@ export function App() {
       {studying ? (
         page
       ) : (
-        <div className="flex min-h-dvh">
+        <div
+          className="flex min-h-dvh"
+          data-agent-open={agent.open}
+          style={{ "--agent-offset": agent.open ? `${agent.width}px` : "0px", } as React.CSSProperties}
+        >
           <aside
             className={cn(
               "sticky top-0 hidden h-dvh shrink-0 flex-col gap-1 overflow-hidden bg-sidebar py-4 transition-[width] duration-200 ease-out md:flex",
@@ -139,8 +149,25 @@ export function App() {
                 btn
               );
             })}
+            <div className="mt-auto pt-4">
+              <SidebarUpdate collapsed={collapsed} />
+            </div>
           </aside>
-          <main className="min-w-0 flex-1 pb-[var(--tabbar-h)]">{page}</main>
+          {/* Room under the last row for the corner launcher, so it never sits on it for good. */}
+          <main key={dataKey} className="min-w-0 flex-1 pb-[calc(var(--tabbar-h)+4rem)] md:pb-16">{page}</main>
+          {agent.open ? (
+            <AgentPanel
+              width={agent.width}
+              setWidth={agent.setWidth}
+              onClose={() => agent.setOpen(false)}
+              onChanged={(final) => {
+                announceDataChange();
+                if (final) setDataKey((k) => k + 1);
+              }}
+            />
+          ) : (
+            <AgentLauncher onOpen={() => agent.setOpen(true)} />
+          )}
           <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-20 flex border-t bg-sidebar/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
             {NAV.map((n) => (
               <button
@@ -149,7 +176,10 @@ export function App() {
                 aria-current={n.match(path) ? "page" : undefined}
                 className={cn("flex h-16 flex-1 flex-col items-center justify-center gap-1 text-[11px] text-muted-foreground", n.match(path) && "font-medium text-foreground")}
               >
-                <n.icon className={cn("size-5", n.match(path) && "text-highlight")} />
+                <span className="relative">
+                  <n.icon className={cn("size-5", n.match(path) && "text-highlight")} />
+                  {n.to === "/settings" && updateDot && <span data-update-dot aria-label="Update available" className="absolute -top-0.5 -right-1 size-2 rounded-full bg-highlight ring-2 ring-sidebar" />}
+                </span>
                 <span>{n.label === "Card types" ? "Types" : n.label}</span>
               </button>
             ))}

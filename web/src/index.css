@@ -144,6 +144,28 @@
 .prose-etude .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; }
 kbd { font-family: var(--font-mono); font-size: 0.72rem; }
 
+/* Ask Etude: the panel slides in, new turns rise in; replies are set for a ~400 px column. */
+@keyframes agent-panel-in { from { transform: translateX(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes agent-sheet-in { from { transform: translateY(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes agent-rise { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+.agent-panel-in { animation: agent-panel-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.agent-sheet-in { animation: agent-sheet-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.agent-rise { animation: agent-rise 200ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .agent-panel-in, .agent-sheet-in, .agent-rise { animation: none; }
+}
+.agent-prose { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.agent-prose p { margin: 0.45em 0; }
+.agent-prose ul, .agent-prose ol { padding-left: 1.15em; margin: 0.35em 0; }
+.agent-prose li { margin: 0.15em 0; }
+.agent-prose li::marker { color: var(--muted-foreground); }
+.agent-prose h1, .agent-prose h2, .agent-prose h3, .agent-prose h4 { font-size: 14px; font-weight: 600; margin: 0.9em 0 0.3em; }
+.agent-prose pre { font-size: 12.5px; padding: 0.6em 0.8em; border-radius: 10px; }
+.agent-prose code { overflow-wrap: anywhere; }
+.agent-prose table { display: block; max-width: 100%; overflow-x: auto; font-size: 13px; border-collapse: collapse; }
+.agent-prose th, .agent-prose td { border-bottom: 1px solid var(--border); padding: 0.3em 0.6em; text-align: left; }
+.agent-prose .katex { font-size: 1.05em; }
+
 /* Embedded in another app: no page background, the host's surface shows through. */
 html.embed, html.embed body { background: transparent; }
 

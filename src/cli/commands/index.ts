@@ -14,5 +14,6 @@ import "./pack.ts";
 import "./anki.ts";
 import "./media.ts";
 import "./market.ts";
+import "./agent.ts";
 import "./db.ts";
 import "./misc.ts";

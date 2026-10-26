@@ -1,7 +1,7 @@
 // Builds examples/showcase.pack.json from the type directories and item files next to this script.
 // node examples/showcase/build.ts
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadTypeDir } from "../../src/core/types.ts";
 
@@ -23,6 +23,17 @@ for (const f of existsSync(itemsDir) ? readdirSync(itemsDir).filter((f) => f.end
   if (!Array.isArray(list)) throw new Error(`${f}: expected an array of items`);
   items.push(...list);
 }
+// Item fields may say "@inline:images/x.webp": the file next to this script, inlined as a data URL,
+// so the pack carries its own images.
+const MIME: Record<string, string> = { ".webp": "image/webp", ".png": "image/png", ".jpg": "image/jpeg", ".svg": "image/svg+xml" };
+for (const it of items as { fields?: Record<string, unknown> }[])
+  for (const [k, v] of Object.entries(it.fields ?? {}))
+    if (typeof v === "string" && v.startsWith("@inline:")) {
+      const rel = v.slice(8);
+      const mime = MIME[extname(rel).toLowerCase()];
+      if (!mime) throw new Error(`${rel}: unknown image type`);
+      it.fields![k] = `data:${mime};base64,${readFileSync(join(here, rel)).toString("base64")}`;
+    }
 const seen = new Set<string>();
 for (const it of items) {
   if (seen.has(it.id)) throw new Error(`duplicate item id ${it.id}`);

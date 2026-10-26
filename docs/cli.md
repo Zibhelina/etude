@@ -250,6 +250,8 @@ These work on every command, before or after the command words.
   - [`item duplicate`](#item-duplicate) Copy an item's content (not its scheduling) under a new id.
   - [`item preview`](#item-preview) What a card of this item shows (view), for a seed. The answer key only with --with-key.
   - [`item variants`](#item-variants) Sample a generated item's outputs over several seeds (with keys), to check a generator.
+- **occlusion**: Image occlusion: cover parts of an image, one card per box or group
+  - [`occlusion add`](#occlusion-add) Make an image occlusion item from an image file and boxes.
 - **card**: Cards: per-card scheduling (suspend, bury, reset, due dates, intervals)
   - [`card show`](#card-show) A card's scheduling: state, due, stability, difficulty, recall probability now, and what each rating would do.
   - [`card list`](#card-list) Cards matching a search (one row per card), with scheduling.
@@ -1487,6 +1489,51 @@ Output: { itemId, generated, distinct, variants: [{ seed, view, key }] }
 
 ```sh
 etude item variants net.dtrans-1 -n 10
+```
+
+## occlusion
+
+Image occlusion: cover parts of an image, one card per box or group.
+
+### etude occlusion add
+
+<a id="occlusion-add"></a>
+
+Make an image occlusion item from an image file and boxes.
+
+Copies the image into the collection's media (or reuses a `/media/...` URL) and creates an `occlusion` item. Each `--box` is `x,y,w,h=Label`: fractions of the image from 0 to 1, or pixels with --px. `x,y,w,h@group=Label` puts boxes in a group, asked together as one card; a label takes alternatives (`Aorta|aortic arch`); a box without a label is shown and self-graded. --boxes reads the same as JSON (`[{ x, y, w, h, label, group, id }]`). Without --id the id comes from the deck and the image's content, so running the same command twice is a no-op. To change an existing item later use `etude item edit <id> --set boxes='[...]'` or --upsert here.
+
+```
+etude occlusion add <image> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `image` | Image file (path or file:// URL), or a /media/... URL already in the collection. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--deck <NAME>` | string | Deck path (created if missing). |
+| `--box <SPEC> (repeatable)` | string | One box, `x,y,w,h=Label` or `x,y,w,h@group=Label` (repeatable). |
+| `--boxes <JSON\|PATH>` | string | Boxes as a JSON array, or a path to a JSON file (`-` reads stdin). |
+| `--px` | boolean | Box coordinates are pixels of the image; they're converted to fractions using its size. |
+| `--mode <hide-all\|hide-one>` | string | hide-all: every box covered, one asked. hide-one: only the asked box covered. Default `"hide-all"`. |
+| `--header <VALUE>` | string | Markdown shown above the image. |
+| `--extra <VALUE>` | string | Markdown shown after answering. |
+| `--id <VALUE>` | string | Item id. Generated from the deck and image when omitted. |
+| `-t, --tag <VALUE> (repeatable)` | string | A tag (repeatable; commas also split). |
+| `--source <VALUE>` | string | Where the image comes from (shown after answering). |
+| `--upsert` | boolean | Update the item when the id exists with different content. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { result: created|updated|unchanged, id, image, media: { file, bytes, created } | null, boxes: [...], cards: [{ face, label }], selfGraded: [faces], dryRun }
+
+```sh
+etude occlusion add heart.png --deck Anatomy::Heart --box "0.12,0.30,0.10,0.05=Aorta|aortic arch" --box "0.55,0.28,0.12,0.06=Pulmonary trunk"
+etude occlusion add plate.jpg --deck Anatomy --px --box "120,340,90,40@atria=Right atrium" --box "410,330,90,40@atria=Left atrium"
+etude occlusion add slide.png --deck Bio --boxes boxes.json --mode hide-one --dry-run
 ```
 
 ## card

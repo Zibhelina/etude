@@ -55,7 +55,8 @@ test("watching records nothing", async () => {
   const [c] = e.watchList({ deck: "Etude Showcase" });
   const { card, demo } = e.watchCard(c.cardId);
   await e.watchGrade(c.cardId, card.seed, demo.answer);
-  assert.equal(e.stats({ deck: "Etude Showcase" }).cards.new, e.watchList({ deck: "Etude Showcase" }).length);
+  // Every card stays new (an occlusion item has a card per box, so count cards, not items).
+  assert.equal(e.stats({ deck: "Etude Showcase" }).cards.new, e.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM cards")!.n);
   assert.equal(e.item(c.itemId).attempts.length, 0);
   assert.equal(e.item(c.itemId).reviews.length, 0);
 });

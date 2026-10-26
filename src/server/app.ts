@@ -146,6 +146,10 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     return c.json(etude.storeMedia(name, Buffer.concat(chunks)));
   });
   app.post("/api/media/import", async (c) => c.json(etude.importMedia((await body(c)).path)));
+  app.post("/api/occlusion", async (c) => {
+    const b = await body(c);
+    return c.json(etude.addOcclusion(b, { dryRun: !!b.dryRun || c.req.query("dryRun") === "1" }));
+  });
 
   // ------------------------------------------------------------- decks
   app.get("/api/decks", (c) => c.json(etude.deckTree()));

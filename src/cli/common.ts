@@ -130,9 +130,9 @@ export function applyConfigPairs(layer: Partial<PresetConfig>, pairs: string[], 
     const top = key.split(".")[0];
     if (!CONFIG_KEYS.includes(top as keyof PresetConfig)) throw new CliError(`unknown setting "${top}". Settings: ${CONFIG_KEYS.join(", ")}`, "validation");
     if (key.includes(".")) {
-      if (top !== "autoRate" && top !== "schedulerOptions") throw new CliError(`"${top}" has no sub-keys`, "validation");
+      if (top !== "autoRate" && top !== "schedulerOptions" && top !== "newPerFace") throw new CliError(`"${top}" has no sub-keys`, "validation");
       if (top === "autoRate") next.autoRate = { ...base.autoRate, ...(next.autoRate ?? {}) };
-      else next.schedulerOptions = { ...(next.schedulerOptions ?? {}) };
+      else next[top] = { ...(next[top] ?? {}) };
       deepSet(next, key, looseValue(raw));
     } else next[key] = configValue(key, raw);
   }

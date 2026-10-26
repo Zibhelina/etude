@@ -1,9 +1,13 @@
 # Changelog
 
-## Unreleased
+## 2.3.0
 
 - Image occlusion, a built-in card type. Drop, paste or pick an image (a diagram, a slide, an atlas page), drag boxes over the parts to hide and name them; every box, or group of boxes, becomes its own card. On the card you type the name under the image and the box opens with its name; small typos pass, another box's name never does (the feedback tells you which part you named), and an empty answer shows it. Pinch, Ctrl + scroll or double-click zooms big images. The editor has move, resize, duplicate, nudge, group, undo and redo, and works with touch. Boxes without a label are revealed and self-graded. Anki imports convert the built-in Image Occlusion notetype and the Image Occlusion Enhanced add-on (as self-graded boxes: Anki doesn't store names). CLI: `etude occlusion add <image> --box "x,y,w,h=Label" [--px]`; API: `POST /api/occlusion`. The Showcase gains a Gray's Anatomy heart.
 - Packs can carry their own images: an item field holding a base64 `data:` URL is copied into media on import.
+- Search that finds the card you meant. Lists show a readable title for every item (a type can pick it with **List title**, `titleField`), free text ignores case in every script (über finds Über) and skips markup, field names and media file names, `name:value` searches one field (`name:` alone finds it empty), and a new **Best match** order, now the default in Browse, the deck page and `etude search`, puts items whose title is the word first. Existing collections are indexed on first open. Thanks to Victor Bonato.
+- Suspend while practicing, as in Anki: `@` suspends the current card, `!` its whole note, with Undo in the toast and a ⏸ menu in the header. Undo leaves cards that were already suspended alone. CLI: `etude card suspend|unsuspend --note`. Thanks to Victor Bonato.
+- ← and → move between cards in Watch even when focus is inside the card.
+- Fix: saving a type in the type editor no longer drops its demo, metrics, verdict setting or field languages.
 
 ## 2.2.0
 

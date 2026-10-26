@@ -2038,7 +2038,7 @@ etude type list
 
 *read-only*
 
-Output: array of { id, name, description, builtin, shipped, edited, updated, items, grader, folder }
+Output: array of { id, name, description, builtin, shipped, edited, updated, items, archived, grader, folder }
 
 ### etude type show
 

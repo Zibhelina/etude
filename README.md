@@ -1,5 +1,7 @@
 # εtude
 
+[![Mentioned in Awesome FSRS](https://awesome.re/mentioned-badge.svg)](https://github.com/open-spaced-repetition/awesome-fsrs#etude)
+
 **Flashcards that can be anything a web page can be.**
 
 Etude is a self-hosted spaced-repetition app where every card type is a small program. A card can give you fresh numbers to compute on every review, ask you to drag events onto a timeline, play a chord on a piano, find the checkmate on a real board, write a proof that renders as you type, or draw a diagram that a vision model grades. Open answers are graded by AI, which tells you exactly what you missed. Scheduling is FSRS-6, with exam deadlines that make sure everything gets reviewed before the day. And every action in the app is also a CLI command with JSON output, so an AI agent can build your decks, quiz you in a chat and find your weak spots.

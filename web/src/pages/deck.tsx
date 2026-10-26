@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, BarChart3, CalendarClock, Check, ChevronDown, ChevronRight, Download, Eye, FastForward, Library, Pencil, Play, Plus, Search, Trash2, X } from "lucide-react";
+import { Archive, ArrowUpToLine, BarChart3, CalendarClock, Check, ChevronDown, ChevronRight, Download, Eye, FastForward, FolderInput, Library, Pencil, Play, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { Block, Breadcrumb, EmptyState, LinkRow, Page, Section } from "@/components/page";
 import { TreeGuides } from "@/pages/decks";
+import { childrenOf, clashes, leafOf, moveDeck, MoveDeckDialog, parentOf } from "@/components/move-deck";
 
 const enc = encodeURIComponent;
 
@@ -144,7 +145,7 @@ export function DeckPage({ name }: { name: string }) {
         </TabsContent>
 
         <TabsContent value="manage" className="mt-6">
-          <DangerZone deck={deck} hasChildren={children.length > 0} cards={node?.cards ?? 0} />
+          <DangerZone deck={deck} decks={decks} hasChildren={children.length > 0} cards={node?.cards ?? 0} onMoved={(to) => navigate(`/deck?name=${enc(to)}&tab=manage`, { replace: true })} />
         </TabsContent>
       </Tabs>
     </Page>
@@ -340,7 +341,12 @@ function DeckCards({ deck, hasChildren, active, onChanged }: { deck: string; has
 }
 
 function Header({ deck, node, work, tags, onRenamed, onAddCards }: { deck: DeckFull; node?: DeckNode; work: number; tags: string[]; onRenamed(to: string): void; onAddCards?(): void }) {
-  const [editing, setEditing] = useState(false);
+  // The deck list's ⋯ → Rename lands here with ?rename=1.
+  const [editing, setEditing] = useState(() => new URLSearchParams(location.search).has("rename"));
+  useEffect(() => {
+    const p = new URLSearchParams(location.search);
+    if (p.has("rename")) { p.delete("rename"); history.replaceState(null, "", `/deck?${p}`); }
+  }, []);
   const leaf = deck.name.split("::").at(-1)!;
   const parent = deck.name.split("::").slice(0, -1).join("::");
   const [text, setText] = useState(leaf);
@@ -668,8 +674,11 @@ function TextSection({ title, help, empty, value, markdown, mono, onSave }: { ti
   );
 }
 
-function DangerZone({ deck, hasChildren, cards }: { deck: DeckFull; hasChildren: boolean; cards: number }) {
+function DangerZone({ deck, decks, hasChildren, cards, onMoved }: { deck: DeckFull; decks: DeckNode[]; hasChildren: boolean; cards: number; onMoved(to: string): void }) {
   const [confirm, setConfirm] = useState<null | "archive" | "delete">(null);
+  const [moving, setMoving] = useState(false);
+  const parent = parentOf(deck.name);
+  const topClash = !!parent && clashes(decks, deck.name, "");
   const leaf = deck.name.split("::").at(-1);
   const act = async () => {
     try {
@@ -691,6 +700,27 @@ function DangerZone({ deck, hasChildren, cards }: { deck: DeckFull; hasChildren:
         <LinkRow icon={Library} title="Browse cards" description="List, search and edit every card in this deck." onClick={() => navigate(`/browse?q=${enc(`deck:"${deck.name}"`)}`)} />
         <LinkRow icon={BarChart3} title="Statistics" description="Retention, forecast and weakest tags for this deck." onClick={() => navigate(`/stats?deck=${enc(deck.name)}`)} />
       </Section>
+      <Section title="Place in the tree">
+        <Block
+          stackAside
+          title="Move deck"
+          description={parent ? <>Inside <span className="text-foreground">{leafOf(parent)}</span>. Subdecks, cards and history move with it.</> : "A top-level deck. Put it inside another deck; subdecks, cards and history move with it."}
+          aside={
+            <div className="flex flex-wrap gap-2">
+              {parent && (
+                <Button variant="outline" size="sm" className="gap-1.5" disabled={topClash} title={topClash ? `There's already a top-level ${leafOf(deck.name)}` : undefined} onClick={async () => {
+                  const to = await moveDeck(decks, deck.name, "", childrenOf(decks, "").indexOf(deck.name.split("::")[0]) + 1, () => {});
+                  if (to) onMoved(to);
+                }}>
+                  <ArrowUpToLine className="size-4" />Make it a deck of its own
+                </Button>
+              )}
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setMoving(true)}><FolderInput className="size-4" />Move to…</Button>
+            </div>
+          }
+        />
+      </Section>
+      <MoveDeckDialog deck={moving ? deck.name : null} decks={decks} onOpenChange={setMoving} onMoved={onMoved} />
       <Section title="Export">
         <Block
           stackAside

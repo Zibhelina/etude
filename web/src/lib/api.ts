@@ -364,6 +364,7 @@ export const api = {
   deck: (name: string) => call<DeckNode & { resolved: PresetConfig; inherited: PresetConfig; presetBase: PresetConfig }>("GET", `/api/deck${qs({ name })}`),
   createDeck: (name: string) => call("POST", "/api/decks", { name }),
   reorderDecks: (parent: string, order: string[]) => call<{ order: string[] }>("POST", "/api/decks/order", { parent, order }),
+  moveDeck: (name: string, parent: string, index?: number) => call<DeckNode>("POST", "/api/decks/move", { name, parent, index }),
   updateDeck: (name: string, patch: Partial<{ name: string; presetId: string | null; config: Partial<PresetConfig>; description: string; instructions: string; archived: boolean }>) =>
     call<DeckNode & { resolved: PresetConfig }>("PATCH", `/api/deck${qs({ name })}`, patch),
   // Mutations must be JSON (the server refuses anything else), so body-less deletes send {}.

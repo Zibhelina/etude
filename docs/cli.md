@@ -210,6 +210,7 @@ These work on every command, before or after the command words.
 
 - **deck**: Decks: the tree, settings inheritance, presets, description and grading instructions (`etude deck` alone runs `list`)
   - [`deck list`](#deck-list) The deck tree with due counts.
+  - [`deck faces`](#deck-faces) The faces of the cards in a deck and its subdecks, with the types that make each and how many are new: what `newPerFace` can limit.
   - [`deck show`](#deck-show) A deck with its effective settings and where each one comes from.
   - [`deck create`](#deck-create) Create a deck (and any missing parents).
   - [`deck rename`](#deck-rename) Rename or move a deck, with its subdecks. Merges into an existing deck of the same name.
@@ -397,6 +398,29 @@ Output: array of decks: { name, depth, presetId, cards, unseen, new, learning, r
 ```sh
 etude deck list
 etude deck list --format table
+```
+
+### etude deck faces
+
+<a id="deck-faces"></a>
+
+The faces of the cards in a deck and its subdecks, with the types that make each and how many are new: what `newPerFace` can limit.
+
+```
+etude deck faces <deck>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `deck` | Deck name. |
+
+Output: array of { face, types: [{ id, name }], cards, new }
+
+```sh
+etude deck faces "German"
+etude deck set "German" newPerFace.t1=5
 ```
 
 ### etude deck show
@@ -692,7 +716,7 @@ etude deck instructions "Networks" --file notes.md
 
 Override settings on this deck (they win over its preset and parents).
 
-Values are JSON when they parse, text otherwise. Steps accept "1m 10m" or '["1m","10m"]'. Dates accept anything Date can read. Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, scheduler, schedulerOptions, weights; also autoRate.good and autoRate.hard.
+Values are JSON when they parse, text otherwise. Steps accept "1m 10m" or '["1m","10m"]'. Dates accept anything Date can read. Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, newPerFace, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, scheduler, schedulerOptions, weights; also autoRate.good and autoRate.hard, and newPerFace.<face>=N for a face's own new-card limit (null drops an inherited one; see `etude deck faces`).
 
 ```
 etude deck set <deck> <pairs...> [flags]
@@ -718,6 +742,7 @@ etude deck set "Networks" deadline=2026-10-23T16:30:00-07:00 desiredRetention=0.
 etude deck set "Spanish" newPerDay=30 learningSteps="1m 10m 1h"
 etude deck set "Networks" newPerDay=40 --to-preset
 etude deck set "Typing" scheduler=drill schedulerOptions.perDay=3
+etude deck set "German" newPerFace.t1=5 newPerFace.t3=2
 ```
 
 ### etude deck unset
@@ -886,7 +911,7 @@ etude preset create net --from-deck "Networks" --apply
 
 Change settings in a preset. Every deck using it is affected.
 
-Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, scheduler, schedulerOptions, weights; also autoRate.good / autoRate.hard. Use `--name` to rename.
+Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, newPerFace, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, scheduler, schedulerOptions, weights; also autoRate.good / autoRate.hard. Use `--name` to rename.
 
 ```
 etude preset set <id> [pairs...] [flags]

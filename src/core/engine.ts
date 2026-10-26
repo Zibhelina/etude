@@ -1756,6 +1756,33 @@ export class Etude {
     return { where: parts.join(" AND "), params, cfg };
   }
 
+  /**
+   * The faces of the cards in a deck and its subdecks, with the types that make each and how many of
+   * its cards are new and not suspended: what `newPerFace` can limit.
+   */
+  deckFaces(name: string): { face: string; types: { id: string; name: string }[]; cards: number; new: number }[] {
+    const d = this.deckRow(name);
+    const rows = this.db.all<{ face: string; type: string; cards: number; new: number }>(
+      `SELECT c.face, i.type, COUNT(*) AS cards, SUM(c.state = 0 AND c.suspended = 0) AS new FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id
+       WHERE i.archived = 0 AND (d.name = ? OR d.name LIKE ? ESCAPE '\\') GROUP BY c.face, i.type ORDER BY c.face, i.type`,
+      d.name,
+      d.name.replace(/[\\%_]/g, "\\$&") + "::%",
+    );
+    const out = new Map<string, { face: string; types: { id: string; name: string }[]; cards: number; new: number }>();
+    for (const r of rows) {
+      const f = out.get(r.face) ?? { face: r.face, types: [], cards: 0, new: 0 };
+      let typeName = r.type;
+      try {
+        typeName = this.type(r.type).name;
+      } catch {}
+      f.types.push({ id: r.type, name: typeName });
+      f.cards += r.cards;
+      f.new += r.new;
+      out.set(r.face, f);
+    }
+    return [...out.values()];
+  }
+
   /** The queue for a deck or search right now: learning, due reviews and today's new cards, in order. */
   queue(scope: StudyScope) {
     const t = now();
@@ -1810,7 +1837,27 @@ export class Etude {
       news.sort((a, b) => hashString(day + a.id) - hashString(day + b.id));
     } else if (cfg.newOrder === "deck") news.sort((a, b) => a.deck.localeCompare(b.deck) || a.ord - b.ord || a.id - b.id);
     else news.sort((a, b) => a.ord - b.ord || a.id - b.id);
-    news = news.slice(0, Math.max(0, cfg.newPerDay - doneNew));
+    let room = Math.max(0, cfg.newPerDay - doneNew);
+    if (Object.keys(cfg.newPerFace).length) {
+      // Faces with their own limit take what's left of it today, in the same order; the rest share newPerDay.
+      const left = new Map(Object.entries(cfg.newPerFace).map(([face, n]) => [face, n ?? Infinity]));
+      for (const r of this.db.all<{ face: string; n: number }>(
+        `SELECT c.face, COUNT(*) AS n FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.state = 0 AND r.ts >= ? AND ${where} GROUP BY c.face`,
+        dayStart,
+        ...params,
+      ))
+        if (left.has(r.face)) left.set(r.face, left.get(r.face)! - r.n);
+      news = news.filter((c) => {
+        if (room <= 0) return false;
+        const n = left.get(c.face);
+        if (n !== undefined) {
+          if (n <= 0) return false;
+          left.set(c.face, n - 1);
+        }
+        room--;
+        return true;
+      });
+    } else news = news.slice(0, room);
 
     const nextLater = rows
       .filter((c) => (c.state !== 0 && c.due > aheadIso) || (c.state === 0 && c.due > nowIso))

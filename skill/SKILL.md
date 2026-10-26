@@ -73,6 +73,7 @@ etude preset create exam --name "Exam" deadline=2026-10-23T16:30:00-07:00 desire
 etude deck preset "Networks" exam --reschedule
 etude deck set "Networks" newPerDay=40           # this deck only; --to-preset writes to its preset
 etude deck unset "Networks" newPerDay            # back to inherited
+etude deck set "German" newPerFace.t1=5          # at most 5 new t1 cards a day (see `etude deck faces "German"`)
 etude card due --query 'tag:http is:due' --in 1d # push to tomorrow without faking a review
 etude card suspend --query 'deck:"Networks" prop:lapses>=4'
 ```

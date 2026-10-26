@@ -109,12 +109,12 @@ const fmtSpan = (d: number) => (d === 0 ? "today" : d < 7 ? `${d} day${d === 1 ?
  * Mean predicted recall of the studied cards if nothing were reviewed from now on.
  * The x axis is square-root scaled so the steep first days get room.
  */
-export function ForgettingCurve({ curve, target }: { curve: { days: number; recall: number }[]; target: number }) {
+export function ForgettingCurve({ curve, target, height = 220 }: { curve: { days: number; recall: number }[]; target: number; height?: number }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const shown = useShown(60);
   const id = useId();
   const [hover, setHover] = useState<number | null>(null);
-  const W = Math.max(260, width || 600), H = 220, L = 38, R = 14, T = 16, B = 26;
+  const W = Math.max(260, width || 600), H = height, L = 38, R = 14, T = 16, B = 26;
   const maxD = curve[curve.length - 1]?.days ?? 90;
   const fx = (d: number) => L + (W - L - R) * Math.sqrt(d / maxD);
   const minR = Math.min(target, ...curve.map((p) => p.recall));
@@ -275,12 +275,12 @@ export function Histogram({
 // ---------------------------------------------------------- study clock
 
 /** A 24-hour clock: wedge length is how much you study at that hour, color is how well. */
-export function StudyClock({ hours, target }: { hours: { hour: number; reviews: number; rated?: number; passed: number }[]; target: number }) {
+export function StudyClock({ hours, target, size = 232 }: { hours: { hour: number; reviews: number; rated?: number; passed: number }[]; target: number; size?: number }) {
   // Wedge length is every answer; colour is the pass rate over rated ones (a drill run has none).
   const ratedOf = (h: { reviews: number; rated?: number }) => h.rated ?? h.reviews;
   const shown = useShown(100);
   const [hover, setHover] = useState<number | null>(null);
-  const S = 232, c = S / 2, r0 = 34, r1 = c - 28;
+  const S = size, c = S / 2, r0 = 34, r1 = c - 28;
   const max = Math.max(1, ...hours.map((h) => h.reviews));
   const total = hours.reduce((a, h) => a + h.reviews, 0);
   // Best hour: highest pass rate among hours carrying at least 5% of reviews.

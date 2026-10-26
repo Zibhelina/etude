@@ -12,6 +12,8 @@ Etude is a self-hosted spaced-repetition app where every card type is a small pr
 
 ![Browse: search, preview and edit, with a chess card open](docs/screenshots/browse.png)
 
+![Stats: recall now, true retention, streak, and what you'd forget if you stopped today](docs/screenshots/stats.png)
+
 ## Why another flashcard app
 
 Classic flashcards test recognition: you see the front, think of the back, flip the card and judge yourself. That works for vocabulary. It works badly for most of what people actually study, where the skill is doing something: computing, deriving, tracing an algorithm, explaining why. Etude keeps what makes spaced repetition work and changes what a card is.
@@ -84,6 +86,30 @@ The pack also has ear training (name the interval you hear), regexes with live t
 etude pack import examples/showcase.pack.json
 ```
 
+## Decks from the Market
+
+Whole decks are built the same way, and the [Market](https://github.com/Zibhelina/etude-market) installs them in one click. These are some of the first ones:
+
+<table>
+<tr>
+<td width="33%" valign="top">
+<p><b>Countries of the world.</b> All 197 countries in one subdeck per continent, on a real map with zoom and pan. Name the highlighted country, or find the one that's named. Names in English, Portuguese, Spanish and French count, typos too, and a wrong pick tells you if it was a neighbour.</p>
+<img src="docs/screenshots/market/countries.png" alt="Brazil highlighted on a map of South America, answered correctly">
+</td>
+<td width="33%" valign="top">
+<p><b>The periodic table.</b> All 118 elements, each asked eight ways: symbol, name, find it on a blank table, name a lit cell, atomic number and position, mass, family and block, electron configuration.</p>
+<img src="docs/screenshots/market/periodic-table.png" alt="Finding iron on the periodic table, with its tile and electron configuration">
+</td>
+<td width="33%" valign="top">
+<p><b>Flippy Bit.</b> One card that's a whole arcade game. Invaders fall carrying a hex number and you flip eight bits to shoot them down before they land. It runs on the drill scheduler, so it never runs out and every run is kept.</p>
+<img src="docs/screenshots/market/flippy-bit.png" alt="Flippy Bit: hex invaders falling over a city, with eight bits to flip">
+</td>
+</tr>
+</table>
+
+The Market also has a Morse code deck, the Showcase, single card types and 22 themes, including Catppuccin, Gruvbox, Nord, Tokyo Night, Rosé Pine and Dracula.
+
+
 ## What you can do with it
 
 - **Prepare for an exam.** Put the course in a deck, set the exam date as its deadline and study every day. No card is scheduled after the deadline, and cards you already know still get one last look before it. The Stats page forecasts how many reviews are left each day until then.
@@ -93,6 +119,7 @@ etude pack import examples/showcase.pack.json
 - **Draw your answer.** Write kanji or hanzi by hand, sketch a graph, a circuit or a molecule, and a vision model grades it.
 - **Learn skills that aren't text.** Music, chess, algorithms and history become cards you play, move, tap and drag, as in the gallery above. If the skill you want isn't there, a card type is a web page, so you can build it.
 - **Let an agent make your cards.** Give an agent your notes and the bundled [skill](skill/SKILL.md). It writes a pack, validates it with `etude pack check`, imports it, and later reads `etude stats weak` to see which topics you keep failing.
+- **Train a skill you measure.** Put a deck on the `drill` scheduler and a card comes back as often as you want, with no rating buttons. A typing test keeps your WPM and accuracy from every run, and Stats charts them over time.
 - **Get quizzed in a chat.** An agent can run a study session without the web app: `etude study next` returns the card and how to answer it, and `etude study answer` grades and schedules it.
 - **Study from anywhere on your own server.** Run Etude on your computer and open it from your phone or tablet; the layout is made for phones too. A compact study view at `/embed` fits inside other apps.
 
@@ -101,20 +128,28 @@ etude pack import examples/showcase.pack.json
 - **Programmable card types.** Eleven built-in types ship as editable files: basic, typed answer, cloze, numeric, multiple choice, match, order, free answer, math, code and drawing. Custom types are written the same way and edited in the app with a live preview.
 - **Four kinds of grader.** `self` (you rate), `script` (checked by code, with partial credit), `ai` (a decision model plus feedback) and `hybrid` (a script that hands the cases it can't decide to the AI). Grading instructions cascade from the item's rubric through its tags, decks and type.
 - **AI providers you choose.** Sign in with ChatGPT to grade with your Plus or Pro plan, or use an API key. The API defaults use OpenRouter: `liquid/d1-ultra` for the verdict, a fast chat model for feedback and a vision model for drawings. Any OpenAI-compatible endpoint works, including a local llama.cpp or Ollama server. AI stays off until you add a key.
-- **FSRS-6 scheduling** with learning steps, fuzz, per-deck daily limits, new and review ordering, sibling burying, a suggested rating from the grade, undo, and replaying history after a settings change.
+- **FSRS-6 scheduling** with learning steps, fuzz, per-deck daily limits, new and review ordering, sibling burying, a suggested rating from the grade, undo, and replaying history after a settings change. **Optimize** fits the FSRS weights to your own review history, as in Anki.
+- **Pluggable schedulers.** Each deck picks FSRS, `drill` (for skills you measure), `leitner` (classic boxes) or a `schedule.js` of your own.
+- **Practice ahead** when nothing is due, **bury** a card with one key, and **undo** even after you've moved on to the next card.
 - **Settings that inherit down the deck tree.** A preset on `Physics` applies to `Physics::Waves` unless that deck overrides it.
 - **Exam deadlines** per deck.
+- **A deck tree you can rearrange.** Drag a deck anywhere: onto another deck to put it inside, between rows to reorder it, or out to the top level. Each row shows its total cards next to New, Learn and Due.
+- **Card types in folders**, and card types can ship their own files (3D models, maps, data) once instead of in every card.
+- **Edit for me.** Describe a change to a card and AI proposes the new fields for you to accept. A card type can also hide the verdict after an answer, for cards where Correct means nothing, like a typing test.
 - **A search language** for Browse, filtered study sessions and the CLI.
 - **Packs.** One JSON file carries decks, presets, tags, card types and items. Import is idempotent and keeps review history.
-- **Statistics:** card states, true retention, a review heatmap, the forecast up to a deadline and recall per tag.
+- **Statistics:** recall now against your target, true retention, streaks, a forgetting curve for what happens if you stop today, memory strength, a 24-hour study clock, the forecast up to a deadline and recall per tag. Each scheduler gets its own numbers.
 - **Themes:** six built in (four dark, two light), or your own with CSS variables and extra CSS.
-- **A complete CLI** with more than 100 commands, stable JSON output, a machine-readable catalog (`etude commands`) and a dry run on most commands that change data.
+- **A complete CLI** with more than 140 commands, stable JSON output, a machine-readable catalog (`etude commands`) and a dry run on most commands that change data.
+- **Updates from GitHub in one click.** A pill on Decks says when there are new commits and updates the app in place; `etude update` does the same from a terminal.
 - **Import from Anki.** `.apkg` and `.colpkg` files bring their notetypes, decks, tags, media and review history across; see [docs/anki.md](docs/anki.md).
 - **A market for themes, decks and card types.** The Market tab installs what other people shared from [etude-market](https://github.com/Zibhelina/etude-market), and Publish shares yours as a pull request; see [docs/market.md](docs/market.md).
 
 ## Quick start
 
-Etude needs Node 24 or newer. Node runs the TypeScript sources directly, so the server has no compile step.
+**On a Mac**, download the app from the [latest release](https://github.com/Zibhelina/etude/releases/latest) ([Apple Silicon](https://github.com/Zibhelina/etude/releases/latest/download/Etude-mac-apple-silicon.dmg), [Intel](https://github.com/Zibhelina/etude/releases/latest/download/Etude-mac-intel.dmg)) and drag it to Applications. It has Node inside and opens on the showcase.
+
+**Anywhere else**, Etude needs Node 24 or newer. Node runs the TypeScript sources directly, so the server has no compile step.
 
 ```sh
 git clone https://github.com/Zibhelina/etude.git
@@ -259,14 +294,18 @@ etude <group> <verb> [args] [flags]
   media     copy images, audio and video into the collection's media folder
   tag       hierarchical labels, with grading instructions
   type      card types: fields, template, prepare script and grader
+  scheduler who decides when a card comes back: FSRS, a drill, Leitner boxes or your own script
   study     the queue, presenting a card, submitting answers, ratings, undo
   stats     overview, forecast, recall per tag, weak cards
-  settings  AI providers and models, day start, learn-ahead
+  settings  AI providers and models, day start, learn-ahead, ChatGPT sign-in
   theme     app colors and custom CSS
   pack      import, export, check, new
+  anki      import an .apkg or .colpkg collection
+  market    browse, install and publish themes, decks and card types
   db        backups, integrity, schema version
 
   serve     run the web app and HTTP API
+  update    update this copy from GitHub
   search    find cards with the search language
   commands  every command as JSON: args, flags, defaults, examples, whether it writes
 ```

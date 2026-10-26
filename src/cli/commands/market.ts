@@ -171,7 +171,9 @@ command({
   noDb: true,
   examples: ["etude market check entries/themes/*.json"],
   output: "{ ok, files: [{ file, ok, errors }] }",
-  run(ctx) {
+  async run(ctx) {
+    // Card types are checked by running their prepare and grade scripts, which needs the sandbox.
+    await initSandbox();
     const files = ctx.args.files.map((f: string) => {
       let data: unknown;
       try {

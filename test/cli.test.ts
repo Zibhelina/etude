@@ -585,3 +585,28 @@ test("subprocess: exit codes, stderr JSON, stdin, --db", () => {
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir);
 });
+
+test("market check runs card type scripts in a fresh process", () => {
+  // A type entry is checked by running its prepare and grade scripts, so the sandbox must be up
+  // even when nothing else in the process has started it.
+  const dir = home();
+  const file = join(dir, "type.json");
+  const type = {
+    id: "yesno",
+    name: "Yes or no",
+    fields: [{ name: "q", kind: "text", required: true }, { name: "a", kind: "text", required: true, private: true }],
+    prepare: "return { view: { q: fields.q }, key: { a: fields.a } };",
+    template: { html: "<p>{{q}}</p>", css: "", js: "etude.getAnswer(() => 'yes');" },
+    grader: { kind: "script", code: "return { score: answer === key.a ? 1 : 0 };" },
+  };
+  const entry = {
+    etudeMarket: 1, kind: "type", id: "yes-no", name: "Yes or no", author: "test", version: "1",
+    content: { etude: "pack/1", name: "Yes or no", types: [type], decks: [{ name: "Y" }],
+      items: [{ id: "yn.1", type: "yesno", deck: "Y", fields: { q: "Is it?", a: "yes" } }] },
+  };
+  writeFileSync(file, JSON.stringify(entry));
+  const r = spawnSync(process.execPath, [MAIN, "market", "check", file], { encoding: "utf8", env: { ...process.env, ETUDE_HOME: dir } });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(JSON.parse(r.stdout).ok, true);
+  rmSync(dir, { recursive: true, force: true });
+});

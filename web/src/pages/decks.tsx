@@ -190,8 +190,9 @@ export function DecksPage() {
       {visible.length > 0 && (
         <Section>
           <div ref={listRef} className="relative">
-          <div className="hidden grid-cols-[1fr_repeat(3,3.5rem)_8.5rem] items-center gap-2 border-b px-5 py-2.5 text-xs font-medium text-muted-foreground sm:grid">
+          <div className="hidden grid-cols-[1fr_4rem_repeat(3,3.5rem)_8.5rem] items-center gap-2 border-b px-5 py-2.5 text-xs font-medium text-muted-foreground sm:grid">
             <span>Deck</span>
+            <span className="text-right">Cards</span>
             <span className="text-right">New</span>
             <span className="text-right">Learn</span>
             <span className="text-right">Due</span>
@@ -213,7 +214,7 @@ export function DecksPage() {
                 key={d.id}
                 ref={(el) => { if (el) rows.current.set(d.name, el); else rows.current.delete(d.name); }}
                 className={cn(
-                  "group relative flex min-h-14 items-stretch gap-2 pr-3 pl-0.5 hover:bg-accent/40 sm:grid sm:min-h-12 sm:grid-cols-[1fr_repeat(3,3.5rem)_8.5rem] sm:pr-5 sm:pl-1",
+                  "group relative flex min-h-14 items-stretch gap-2 pr-3 pl-0.5 hover:bg-accent/40 sm:grid sm:min-h-12 sm:grid-cols-[1fr_4rem_repeat(3,3.5rem)_8.5rem] sm:pr-5 sm:pl-1",
                   i > 0 && "border-t",
                   groupStart && "border-t-foreground/15",
                   !drag && "transition-colors",
@@ -257,23 +258,25 @@ export function DecksPage() {
                       {soon && <span className="ml-2 inline-flex items-center gap-1 align-middle text-xs font-normal text-highlight"><CalendarClock className="size-3.5" />{relative(d.deadline!)}</span>}
                     </button>
                     {/* Phone: counts on one line under the name instead of three narrow columns. */}
-                    <div className="mt-0.5 flex gap-3 text-xs tabular text-muted-foreground sm:hidden">
+                    <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs tabular text-muted-foreground sm:hidden [&>span]:whitespace-nowrap">
                       {watch ? (
                         <span>{d.cards} card{d.cards === 1 ? "" : "s"} to watch</span>
                       ) : work ? (
                         <>
+                          <span>{d.cards} card{d.cards === 1 ? "" : "s"}</span>
                           {d.new > 0 && <span className="text-new">{d.new} new</span>}
                           {d.learning > 0 && <span className="text-learn">{d.learning} learning</span>}
                           {d.review > 0 && <span className="text-review">{d.review} due</span>}
                         </>
                       ) : (
-                        <span>{d.cards ? "nothing due" : "empty"}</span>
+                        <span>{d.cards ? `${d.cards} card${d.cards === 1 ? "" : "s"} · nothing due` : "empty"}</span>
                       )}
                     </div>
                   </div>
                 </div>
+                <span className="hidden items-center justify-end tabular text-sm text-muted-foreground sm:flex" title={`${d.cards} card${d.cards === 1 ? "" : "s"} in this deck`}>{d.cards}</span>
                 {watch ? (
-                  <span className="hidden items-center justify-end text-xs text-muted-foreground sm:col-span-3 sm:flex">tour · {d.cards} card{d.cards === 1 ? "" : "s"}</span>
+                  <span className="hidden items-center justify-end text-xs text-muted-foreground sm:col-span-3 sm:flex">tour</span>
                 ) : (
                   <>
                     <Count value={d.new} cls="text-new" />

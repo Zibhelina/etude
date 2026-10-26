@@ -165,7 +165,7 @@ export function BulkBar({ checked, rows, decks, tags, onClear, onDone, onDeleted
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90" onClick={() => bulk("delete")}>Delete</AlertDialogAction>
+            <AlertDialogAction variant="destructive" onClick={() => bulk("delete")}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

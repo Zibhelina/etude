@@ -116,6 +116,14 @@ test("an optional reverse only makes a second card when its field is filled", as
   assert.deepEqual(faces(e, itemWith(e, "peixe")), ["t0"]);
 });
 
+test("a template gated on a field that holds only an image still makes its card", async () => {
+  const { e } = await fresh();
+  const report = e.importAnki(fixture("media-gate.apkg"));
+  assert.equal(report.cards, 3);
+  assert.deepEqual(faces(e, itemWith(e, "Atlantis")), ["t0", "t1"]);
+  assert.deepEqual(faces(e, itemWith(e, "Lemuria")), ["t0"]);
+});
+
 test("suspended and buried cards keep that state", async () => {
   const { e } = await fresh();
   e.importAnki(fixture("sample.apkg"));

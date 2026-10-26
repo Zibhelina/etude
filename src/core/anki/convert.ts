@@ -464,7 +464,9 @@ var gates = ${JSON.stringify(conditions)};
 var out = [];
 for (var i = 0; i < faces.length; i++) {
   var g = gates[i];
-  if (g && !String(fields[g] == null ? "" : fields[g]).replace(/<[^>]*>/g, "").trim()) continue;
+  var v = String(fields[g] == null ? "" : fields[g]);
+  // As in Anki, a field holding only media (a flag, a map, a sound) counts as filled.
+  if (g && !/<(img|audio|video|object|embed)\b/i.test(v) && !/\[sound:/i.test(v) && !v.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim()) continue;
   out.push(faces[i]);
 }
 return out;`;

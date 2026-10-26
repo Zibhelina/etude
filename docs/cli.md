@@ -213,6 +213,7 @@ These work on every command, before or after the command words.
   - [`deck show`](#deck-show) A deck with its effective settings and where each one comes from.
   - [`deck create`](#deck-create) Create a deck (and any missing parents).
   - [`deck rename`](#deck-rename) Rename or move a deck, with its subdecks. Merges into an existing deck of the same name.
+  - [`deck move`](#deck-move) Move a deck, with its subdecks, under another deck or out to the top level. Keeps its name.
   - [`deck reorder`](#deck-reorder) Set the order of sibling decks in the deck list.
   - [`deck archive`](#deck-archive) Hide a deck from the deck list and study. Cards and history are kept.
   - [`deck unarchive`](#deck-unarchive) Bring an archived deck back.
@@ -467,7 +468,40 @@ Output: { from, to, decks: [{ from, to }] }
 
 ```sh
 etude deck rename "Physics::Waves" "Physics::Oscillations and waves"
-etude deck move "Inbox::Networking" "Networks::Transport"
+etude deck rename "Inbox::Networking" "Networks::Transport"
+```
+
+### etude deck move
+
+<a id="deck-move"></a>
+
+Move a deck, with its subdecks, under another deck or out to the top level. Keeps its name.
+
+The deck keeps its own name and goes under `parent`, or becomes a deck of its own with `--top`. `--index` puts it at that place among its new siblings (0 is first); without it, it goes last. Refuses when the new parent already has a deck of that name. To move and rename at once, use `deck rename` with a full path.
+
+```
+etude deck move <deck> [parent] [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `deck` | Deck to move. |
+| `parent` (optional) | New parent deck. Leave out with --top. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--top` | boolean | Make it a top-level deck. |
+| `--index <N>` | number | Place among the new siblings, 0 first. Default: last. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: the moved deck, as `deck show` returns it (without counts)
+
+```sh
+etude deck move "Inbox::Networking" "Networks"
+etude deck move "Networks::Week 1" --top
+etude deck move "Chess" "Games" --index 0
 ```
 
 ### etude deck reorder
@@ -3944,7 +3978,6 @@ Kept so older scripts keep working. Each takes the same arguments and flags as i
 
 | Command | Same as |
 | --- | --- |
-| `etude deck move` | [`etude deck rename`](#deck-rename) |
 | `etude item search` | [`etude item list`](#item-list) |
 | `etude show` | [`etude item show`](#item-show) |
 | `etude reschedule` | [`etude card reschedule`](#card-reschedule) |

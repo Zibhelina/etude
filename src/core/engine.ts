@@ -899,6 +899,33 @@ export class Etude {
     });
   }
 
+  /**
+   * Moves a deck, with its subdecks, under `parent` ("" for the top level), keeping its own name,
+   * and puts it at `index` among its new siblings (the end when left out). Refuses to merge: if
+   * the new parent already has a deck of that name, rename one of them first.
+   */
+  moveDeck(name: string, parent: string, index?: number) {
+    const src = this.deckRow(name).name;
+    const p = normDeck(parent) ? this.deckRow(parent).name : "";
+    if (p === src || p.startsWith(src + "::")) throw new EtudeError("can't move a deck inside itself");
+    const leaf = deckParts(src).at(-1)!;
+    const dst = p ? `${p}::${leaf}` : leaf;
+    return this.db.tx(() => {
+      if (dst.toLowerCase() !== src.toLowerCase()) {
+        if (this.db.get("SELECT 1 FROM decks WHERE name = ? COLLATE NOCASE", dst)) throw new EtudeError(`${p ? `"${p}"` : "The top level"} already has a deck called "${leaf}"`, 409);
+        this.renameDeck(src, dst);
+      } else if (dst !== src) this.renameDeck(src, dst);
+      const depth = deckParts(dst).length;
+      const siblings = this.orderedDecks()
+        .map((r) => r.name as string)
+        .filter((n) => n !== dst && deckParts(n).length === depth && (!p || n.startsWith(p + "::")));
+      const at = index === undefined || !Number.isFinite(index) ? siblings.length : Math.max(0, Math.min(siblings.length, Math.trunc(index)));
+      siblings.splice(at, 0, dst);
+      this.reorderDecks(p, siblings);
+      return this.deck(dst);
+    });
+  }
+
   /** Deletes a deck only when it and its children hold no items. Archive decks that have content. */
   deleteDeck(name: string) {
     const src = this.deckRow(name).name;

@@ -154,6 +154,11 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const b = await body(c);
     return c.json({ order: etude.reorderDecks(String(b.parent ?? ""), Array.isArray(b.order) ? b.order.map(String) : []) });
   });
+  app.post("/api/decks/move", async (c) => {
+    const b = await body(c);
+    const index = b.index === undefined || b.index === null ? undefined : Number(b.index);
+    return c.json(etude.moveDeck(String(b.name ?? ""), String(b.parent ?? ""), index));
+  });
   app.get("/api/deck", (c) => c.json(etude.deck(c.req.query("name") ?? "")));
   app.patch("/api/deck", async (c) => c.json(etude.updateDeck(c.req.query("name") ?? "", await body(c))));
   app.delete("/api/deck", (c) => {

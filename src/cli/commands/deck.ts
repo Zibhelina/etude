@@ -1,6 +1,6 @@
 import { normDeck } from "../../core/engine.ts";
 import { resolveConfig } from "../../core/scheduler.ts";
-import { alias, command, group, CliError } from "../registry.ts";
+import { command, group, CliError } from "../registry.ts";
 import { textInput } from "../input.ts";
 import { applyConfigPairs, configSources, diffConfig, needsReschedule, optimizeCommand, unsetConfigKeys, CONFIG_KEYS, OPTIMIZE_DESCRIPTION, OPTIMIZE_FLAGS, OPTIMIZE_OUTPUT } from "../common.ts";
 
@@ -89,7 +89,7 @@ command({
   ],
   writes: true,
   dryRun: true,
-  examples: ['etude deck rename "Physics::Waves" "Physics::Oscillations and waves"', 'etude deck move "Inbox::Networking" "Networks::Transport"'],
+  examples: ['etude deck rename "Physics::Waves" "Physics::Oscillations and waves"', 'etude deck rename "Inbox::Networking" "Networks::Transport"'],
   output: "{ from, to, decks: [{ from, to }] }",
   run(ctx) {
     const e = ctx.e;
@@ -101,7 +101,30 @@ command({
   },
 });
 
-alias("deck move", "deck rename");
+command({
+  name: "deck move",
+  summary: "Move a deck, with its subdecks, under another deck or out to the top level. Keeps its name.",
+  description:
+    "The deck keeps its own name and goes under `parent`, or becomes a deck of its own with `--top`. `--index` puts it at that place among its new siblings (0 is first); without it, it goes last. Refuses when the new parent already has a deck of that name. To move and rename at once, use `deck rename` with a full path.",
+  args: [
+    { name: "deck", description: "Deck to move.", required: true },
+    { name: "parent", description: "New parent deck. Leave out with --top." },
+  ],
+  flags: [
+    { name: "top", type: "boolean", description: "Make it a top-level deck." },
+    { name: "index", type: "number", description: "Place among the new siblings, 0 first. Default: last." },
+  ],
+  writes: true,
+  dryRun: true,
+  examples: ['etude deck move "Inbox::Networking" "Networks"', 'etude deck move "Networks::Week 1" --top', 'etude deck move "Chess" "Games" --index 0'],
+  output: "the moved deck, as `deck show` returns it (without counts)",
+  run(ctx) {
+    const e = ctx.e;
+    if (!ctx.flags.top && !ctx.args.parent) throw new CliError("give a parent deck, or --top to make it a deck of its own");
+    if (ctx.flags.top && ctx.args.parent) throw new CliError("give a parent or --top, not both");
+    return e.moveDeck(ctx.args.deck, ctx.flags.top ? "" : ctx.args.parent, ctx.flags.index ?? undefined);
+  },
+});
 
 command({
   name: "deck reorder",

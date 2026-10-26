@@ -3,7 +3,8 @@
 import { createHash } from "node:crypto";
 import { type CardRow, type CardTypeDef, type FieldSpec, type PresetConfig } from "../model.ts";
 import * as sched from "../scheduler.ts";
-import type { AnkiCard, AnkiCollection, AnkiDeckConfig, AnkiNotetype, AnkiReview } from "./collection.ts";
+import type { AnkiCard, AnkiCollection, AnkiDeckConfig, AnkiNote, AnkiNotetype, AnkiReview } from "./collection.ts";
+import { convertAnkiIo, convertIoe, isAnkiIoNotetype, isIoeNotetype, type IoItem } from "./occlusion.ts";
 
 export interface PlannedMedia {
   /** Name as referenced from note HTML. */
@@ -631,10 +632,35 @@ export function convertCollection(col: AnkiCollection, opts: ConvertOptions): Im
   const notesById = new Map(col.notes.map((n) => [n.id, n]));
   const notetypesById = new Map(col.notetypes.map((n) => [n.id, n]));
 
+  // Image occlusion notes (Anki's built-in notetype and the Image Occlusion Enhanced add-on) become
+  // `occlusion` items. A note that can't be read keeps the generic conversion below.
+  const rewrite = (html: string) => rewriteMedia(html, opts.media);
+  const occlusion: IoItem[] = [];
+  const asOcclusion = new Set<number>();
+  for (const nt of col.notetypes) {
+    const notes = col.notes.filter((n) => n.notetypeId === nt.id);
+    if (!notes.length) continue;
+    if (isAnkiIoNotetype(nt, notes)) {
+      for (const n of notes) {
+        const it = convertAnkiIo(nt, n, rewrite);
+        if (it) {
+          occlusion.push(it);
+          asOcclusion.add(n.id);
+        }
+      }
+    } else if (isIoeNotetype(nt)) {
+      const { items, failed } = convertIoe(nt, notes, rewrite, opts.media);
+      occlusion.push(...items);
+      for (const it of items) for (const x of it.notes) asOcclusion.add(x.note.id);
+      if (failed.length) skipped.push({ what: "occlusion", name: nt.name, reason: `${failed.length} note(s) whose mask couldn't be read were imported as plain notes` });
+    }
+  }
+
   // Notes and the notetypes they actually use.
-  const used = new Set(col.notes.map((n) => n.notetypeId));
+  const used = new Set(col.notes.filter((n) => !asOcclusion.has(n.id)).map((n) => n.notetypeId));
   const typesWanted = col.notetypes.filter((nt) => used.has(nt.id));
-  for (const nt of col.notetypes) if (!used.has(nt.id)) skipped.push({ what: "notetype", name: nt.name, reason: "no notes" });
+  const anyNotes = new Set(col.notes.map((n) => n.notetypeId));
+  for (const nt of col.notetypes) if (!anyNotes.has(nt.id)) skipped.push({ what: "notetype", name: nt.name, reason: "no notes" });
 
   const typeIds = new Map<number, string>();
   const takenTypes = new Set<string>();
@@ -645,7 +671,7 @@ export function convertCollection(col: AnkiCollection, opts: ConvertOptions): Im
     typeIds.set(nt.id, id);
   }
 
-  const notesFor = (ntId: number) => col.notes.filter((n) => n.notetypeId === ntId).map((n) => ({ fields: n.fields }));
+  const notesFor = (ntId: number) => col.notes.filter((n) => n.notetypeId === ntId && !asOcclusion.has(n.id)).map((n) => ({ fields: n.fields }));
   const types: CardTypeDef[] = [];
   const mapsByType = new Map<number, Record<string, string>>();
   for (const nt of typesWanted) {
@@ -709,7 +735,43 @@ export function convertCollection(col: AnkiCollection, opts: ConvertOptions): Im
 
   const dayStartHour = 4;
   let skippedReviews = 0;
+  const homeDeckOf = (note: AnkiNote) => {
+    const noteCards = cardsByNote.get(note.id) ?? [];
+    const homeCard = noteCards.find((c) => !c.originalDeckId) ?? noteCards[0];
+    const homeDeck = homeCard ? (homeCard.originalDeckId ? homeCard.originalDeckId : homeCard.deckId) : null;
+    return homeDeck != null ? (deckName(homeDeck) ?? fallbackDeck?.name ?? null) : (fallbackDeck?.name ?? null);
+  };
+  const planReviews = (card: AnkiCard, id: string, face: string, deckPath: string) => {
+    const cfg = decks.find((d) => d.name === deckPath)?.presetId;
+    const config = sched.resolveConfig(cfg ? presets.get(cfg)?.config ?? {} : {});
+    const all = (reviewsByCard.get(card.id) ?? []).sort((a, b) => a.id - b.id);
+    const log = all
+      .filter((r) => r.ease >= 1 && r.ease <= 4 && r.type !== 4)
+      .map((r) => ({ ts: new Date(r.id), rating: r.ease, durationMs: r.time || null }));
+    skippedReviews += all.length - log.length;
+    cards.push(planCard(card, log, id, face, col.created, config, dayStartHour, opts.scheduling));
+  };
+
+  for (const it of occlusion) {
+    const first = it.notes[0].note;
+    const deck = homeDeckOf(first);
+    if (!deck) {
+      skipped.push({ what: "note", name: first.guid, reason: "no deck" });
+      continue;
+    }
+    const id = itemId(it.id || first.guid, takenItems);
+    const deckPath = prefix(deck);
+    const tags = [...new Set(it.notes.flatMap((x) => x.note.tags))];
+    items.push({ id, type: "occlusion", deck: deckPath, fields: it.fields as Record<string, unknown>, tags, source: "anki" });
+    for (const { note, faceOf } of it.notes)
+      for (const card of cardsByNote.get(note.id) ?? []) {
+        const face = faceOf(card.ord);
+        if (face) planReviews(card, id, face, deckPath);
+      }
+  }
+
   for (const note of col.notes) {
+    if (asOcclusion.has(note.id)) continue;
     const nt = notetypesById.get(note.notetypeId);
     const typeId = typeIds.get(note.notetypeId);
     if (!nt || !typeId) {

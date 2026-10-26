@@ -40,12 +40,20 @@ The response is the report described below.
 | MathJax `\(…\)` and `\[…\]` | rendered by the card runtime's TeX renderer |
 | `.nightMode` CSS | Etude's dark theme; Anki's forced white backgrounds are dropped so the theme shows through |
 | type-in-answer cards | a text input; graded by comparing with the field (loose comparison), so they still self-grade if the script can't run |
+| image occlusion note (built-in or the Enhanced add-on) | an `occlusion` item, one card per box or group; see below |
 
 Templates with `{{type:}}` get a script grader; every other imported type is self-graded, which is how Anki's basic cards work too.
 
+## Image occlusion
+
+Image occlusion notes become items of the built-in [`occlusion` type](types.md#image-occlusion), with their review history and scheduling like any other card.
+
+- **Anki's built-in Image Occlusion** (Anki 23.10 and later). The Occlusion field's shapes (`{{c1::image-occlusion:rect:left=.21:top=.34:width=.1:height=.05:oi=1}}`) become boxes in the same 0–1 coordinates. Shapes with the same cloze number are one group, so one card, as in Anki; a cloze with a single shape is a plain box. Ellipses and polygons become their bounding box. Text shapes are labels drawn on the image, so they're skipped. `oi=1` ("hide all, guess one") is `hide-all`; without it the item is `hide-one`. Anki sets it per shape, so a note that mixes both takes the majority. The Image field gives the image, Header becomes `header`, and Back Extra plus Comments become `extra`. Card `cN` keeps its history as face `cN`.
+- **Image Occlusion Enhanced** (the add-on). Its notes, one per shape, are merged into one item per mask: the SVG in Original Mask lists the shapes, and each is normalised by the SVG's width and height. A `<g>` of shapes is one group; ellipses and polygons become their bounding box. The note asking shape *n* (`…-ao-n` in ID (hidden)) becomes face `nN` with its history. `ao` (hide all) is `hide-all` and `oa` is `hide-one`. Header becomes `header`; Footer, Remarks, Sources, Extra 1 and Extra 2 become `extra`. A note whose mask can't be read (missing file, unknown shape, no layer) keeps the generic notetype import, as before, and the report lists it under `skipped`.
+- **No labels.** Neither format stores what a box is called, only where it is, so imported boxes have no label. Their cards are revealed and self-graded (Show answer, then Again/Hard/Good/Easy) like Anki's. Add labels in the editor whenever you like: a labelled box switches to a typed answer, and its card keeps its history.
+
 ## What doesn't
 
-- **Image occlusion.** The add-on's notetypes import, but its occlusion boxes are drawn by add-on JavaScript, so a card shows the underlying image with no boxes. Notes made with Anki's built-in image occlusion likewise lose their boxes.
 - **Add-on and JavaScript template tags.** Scripts in templates and add-on fields (`{{#tag}}` blocks from add-ons, `{{TTS}}`, `{{tts}}`) don't run: unknown fields render empty. `{{kanji:Field}}` (the kanji-writing add-on) becomes its plain text, without a writing canvas.
 - **`{{Tags}}` and `{{Deck}}` are a snapshot.** They are stored as hidden fields (`Anki_Tags`, `Anki_Deck`) when the note is imported, so moving the item to another deck or retagging it later doesn't change what an old card shows. Re-importing refreshes them.
 - **Cards are never deleted.** If a re-import (or an edit) removes a cloze or empties an optional-reverse field, the card that existed stays in the collection with its history; new imports stop creating cards for that face. Delete the card by hand if you want it gone.

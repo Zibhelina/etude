@@ -12,7 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { StepsInput } from "@/components/deck-steps-input";
-import { api, type DeckNode, type OptimizeResult, type PresetConfig, type Preset, type SchedulerSummary } from "@/lib/api";
+import { api, type DeckFace, type DeckNode, type OptimizeResult, type PresetConfig, type Preset, type SchedulerSummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export type DeckFull = DeckNode & { resolved: PresetConfig; inherited: PresetConfig; presetBase: PresetConfig };
@@ -33,6 +33,7 @@ const LABELS: Record<Key, string> = {
   enableShortTerm: "Short-term scheduling",
   weights: "FSRS weights",
   newPerDay: "New cards per day",
+  newPerFace: "New cards per face",
   reviewsPerDay: "Reviews per day",
   newOrder: "New card order",
   reviewOrder: "Review order",
@@ -77,6 +78,10 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
   useEffect(() => {
     api.schedulers().then(setSchedulers).catch(() => {});
   }, []);
+  const [faces, setFaces] = useState<DeckFace[]>([]);
+  useEffect(() => {
+    api.deckFaces(deck.name).then(setFaces, () => setFaces([]));
+  }, [deck.name]);
 
   const preset = presets.find((p) => p.id === deck.presetId) ?? null;
   const usage = (id: string) => decks.filter((d) => d.presetId === id);
@@ -100,7 +105,8 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
       return next;
     });
 
-  const source = (k: Key): Source => {
+  /** Where a setting's value comes from. `has` narrows it to part of a setting, like one face's limit. */
+  const source = (k: Key, has = (c: Partial<PresetConfig>) => c[k] !== undefined): Source => {
     let s: Source = { kind: "default", label: "Default" };
     const parts = deck.name.split("::");
     for (let i = 1; i < parts.length; i++) {
@@ -108,11 +114,11 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
       const node = decks.find((d) => d.name === name);
       if (!node) continue;
       const p = presets.find((x) => x.id === node.presetId);
-      if (p && p.config[k] !== undefined) s = { kind: "parent", label: `${short(name)} · ${p.name}` };
-      if (node.config[k] !== undefined) s = { kind: "parent", label: short(name) };
+      if (p && has(p.config)) s = { kind: "parent", label: `${short(name)} · ${p.name}` };
+      if (has(node.config)) s = { kind: "parent", label: short(name) };
     }
-    if (preset && preset.config[k] !== undefined) s = { kind: "preset", label: preset.name };
-    if (deck.config[k] !== undefined) s = { kind: "deck", label: "This deck" };
+    if (preset && has(preset.config)) s = { kind: "preset", label: preset.name };
+    if (has(deck.config)) s = { kind: "deck", label: "This deck" };
     return s;
   };
 
@@ -227,6 +233,47 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
       {control}
     </SettingRow>
   );
+
+  const faceLimits = value("newPerFace") ?? {};
+  const faceRow = (f: DeckFace) => {
+    const own = deck.config.newPerFace?.[f.face] !== undefined;
+    const browse = `/browse?q=${encodeURIComponent(`deck:"${deck.name}" face:${f.face} is:new`)}`;
+    return (
+      <SettingRow
+        key={`face:${f.face}`}
+        k="newPerFace"
+        label={`New ${f.face} cards per day`}
+        source={source("newPerFace", (c) => c.newPerFace?.[f.face] !== undefined)}
+        dirty={"newPerFace" in draft && !same((draft.newPerFace ?? {})[f.face], deck.resolved.newPerFace?.[f.face])}
+        help={
+          <>
+            {f.types.map((t) => t.name).join(", ")} · {f.new.toLocaleString()} new (<a href={browse} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">view</a>).
+            Empty: they share the limit above.
+          </>
+        }
+        onReset={own ? () => {
+          const mine = { ...(deck.config.newPerFace ?? {}) };
+          delete mine[f.face];
+          const config: Partial<PresetConfig> = { ...deck.config, newPerFace: mine };
+          if (!Object.keys(mine).length) delete config.newPerFace;
+          api.updateDeck(deck.name, { config }).then(() => afterSave(["newPerFace"], [deck.name])).catch((e) => toast.error((e as Error).message));
+        } : undefined}
+      >
+        <LimitField
+          value={faceLimits[f.face] ?? null}
+          ariaLabel={`New ${f.face} cards per day`}
+          onChange={(v) => {
+            const next = { ...faceLimits };
+            // Clearing a limit set further up needs an explicit null to drop it here.
+            if (v !== null) next[f.face] = v;
+            else if (deck.inherited.newPerFace?.[f.face] != null) next[f.face] = null;
+            else delete next[f.face];
+            set("newPerFace", next);
+          }}
+        />
+      </SettingRow>
+    );
+  };
 
   const schedulerId = value("scheduler") ?? "fsrs";
   const current = schedulers.find((x) => x.id === schedulerId);
@@ -386,6 +433,7 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
 
       <Group title="Daily limits" description="Counted across this deck and its subdecks, custom study included.">
         {row("newPerDay", <NumberField value={value("newPerDay")} min={0} onChange={(v) => set("newPerDay", v)} suffix="cards" ariaLabel="New cards per day" />, "New cards introduced per study day, across this deck and its subdecks.")}
+        {faces.length > 1 && faces.map(faceRow)}
         {row("reviewsPerDay", <NumberField value={value("reviewsPerDay")} min={0} onChange={(v) => set("reviewsPerDay", v)} suffix="cards" ariaLabel="Reviews per day" />, "Due reviews shown per day. The rest wait until tomorrow.")}
       </Group>
 
@@ -640,6 +688,33 @@ function ResetButton({ onClick }: { onClick(): void }) {
     <button className="-my-2 inline-flex h-8 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" onClick={onClick}>
       <RotateCcw className="size-3" />Reset to inherited
     </button>
+  );
+}
+
+/** A non-negative whole number, or nothing (null): "no limit of its own". */
+function LimitField({ value, onChange, ariaLabel }: { value: number | null; onChange(v: number | null): void; ariaLabel: string }) {
+  const [text, setText] = useState(value == null ? "" : String(value));
+  useEffect(() => setText((t) => (t.trim() === "" ? value == null : Number(t) === value) ? t : value == null ? "" : String(value)), [value]);
+  const invalid = text.trim() !== "" && !/^\d+$/.test(text.trim());
+  return (
+    <div className="relative">
+      <Input
+        inputMode="numeric"
+        value={text}
+        placeholder="No limit of its own"
+        aria-label={ariaLabel}
+        aria-invalid={invalid || undefined}
+        onChange={(e) => {
+          setText(e.target.value);
+          const t = e.target.value.trim();
+          if (t === "") onChange(null);
+          else if (/^\d+$/.test(t)) onChange(Number(t));
+        }}
+        onBlur={() => invalid && setText(value == null ? "" : String(value))}
+        className="tabular h-10 pr-16"
+      />
+      <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">cards</span>
+    </div>
   );
 }
 

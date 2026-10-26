@@ -31,6 +31,7 @@ etude deck show "Networks::Week 1"   # resolved, inherited, presetBase, own conf
 | `relearningSteps` | `["10m"]` | steps after a lapse |
 | `maximumInterval` | 36500 | days |
 | `newPerDay` / `reviewsPerDay` | 20 / 200 | daily limits, counted across the deck and its subdecks |
+| `newPerFace` | `{}` | a face's own new-card limit within `newPerDay`, by face name: `newPerFace.t1=5`; `0` holds a face back, `null` drops an inherited limit. `etude deck faces <deck>` lists the faces |
 | `newOrder` | added | added \| random \| deck |
 | `reviewOrder` | due | due \| retrievability \| random |
 | `newMix` | mix | new cards mixed, first or last |

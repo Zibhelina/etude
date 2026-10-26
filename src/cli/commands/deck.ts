@@ -26,6 +26,15 @@ command({
 });
 
 command({
+  name: "deck faces",
+  summary: "The faces of the cards in a deck and its subdecks, with the types that make each and how many are new: what `newPerFace` can limit.",
+  args: [{ name: "deck", description: "Deck name.", required: true }],
+  examples: ['etude deck faces "German"', 'etude deck set "German" newPerFace.t1=5'],
+  output: "array of { face, types: [{ id, name }], cards, new }",
+  run: (ctx) => ctx.e.deckFaces(ctx.args.deck),
+});
+
+command({
   name: "deck show",
   summary: "A deck with its effective settings and where each one comes from.",
   description:
@@ -221,7 +230,7 @@ const RESCHEDULE_FLAG = { name: "reschedule", type: "boolean" as const, descript
 command({
   name: "deck set",
   summary: "Override settings on this deck (they win over its preset and parents).",
-  description: `Values are JSON when they parse, text otherwise. Steps accept "1m 10m" or '["1m","10m"]'. Dates accept anything Date can read. Keys: ${CONFIG_KEYS.join(", ")}; also autoRate.good and autoRate.hard.`,
+  description: `Values are JSON when they parse, text otherwise. Steps accept "1m 10m" or '["1m","10m"]'. Dates accept anything Date can read. Keys: ${CONFIG_KEYS.join(", ")}; also autoRate.good and autoRate.hard, and newPerFace.<face>=N for a face's own new-card limit (null drops an inherited one; see \`etude deck faces\`).`,
   args: [
     { name: "deck", description: "Deck name.", required: true },
     { name: "pairs", description: "key=value pairs.", required: true, variadic: true },
@@ -237,6 +246,7 @@ command({
     'etude deck set "Spanish" newPerDay=30 learningSteps="1m 10m 1h"',
     'etude deck set "Networks" newPerDay=40 --to-preset',
     'etude deck set "Typing" scheduler=drill schedulerOptions.perDay=3',
+    'etude deck set "German" newPerFace.t1=5 newPerFace.t3=2',
   ],
   output: "{ deck, config (own overrides), changed: { key: { from, to } } (effective values), rescheduled? }",
   run(ctx) {

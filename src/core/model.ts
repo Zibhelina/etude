@@ -131,6 +131,12 @@ export interface PresetConfig {
   /** FSRS-6 weights; omitted means the published defaults. */
   weights?: number[];
   newPerDay: number;
+  /**
+   * Separate daily limits for new cards on some faces, by face name, within `newPerDay`: `{ t1: 5 }`
+   * introduces at most 5 new t1 cards a day. Faces without one share `newPerDay`. Layers merge face by
+   * face; `null` drops a limit inherited from a preset or parent deck.
+   */
+  newPerFace: Record<string, number | null>;
   reviewsPerDay: number;
   newOrder: "added" | "random" | "deck";
   reviewOrder: "due" | "retrievability" | "random";
@@ -161,6 +167,7 @@ export const DEFAULT_PRESET: PresetConfig = {
   enableFuzz: true,
   enableShortTerm: true,
   newPerDay: 20,
+  newPerFace: {},
   reviewsPerDay: 200,
   newOrder: "added",
   reviewOrder: "due",

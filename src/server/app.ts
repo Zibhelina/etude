@@ -179,6 +179,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     return c.json(etude.moveDeck(String(b.name ?? ""), String(b.parent ?? ""), index));
   });
   app.get("/api/deck", (c) => c.json(etude.deck(c.req.query("name") ?? "")));
+  app.get("/api/deck/faces", (c) => c.json(etude.deckFaces(c.req.query("name") ?? "")));
   app.patch("/api/deck", async (c) => c.json(etude.updateDeck(c.req.query("name") ?? "", await body(c))));
   app.delete("/api/deck", (c) => {
     etude.deleteDeck(c.req.query("name") ?? "");

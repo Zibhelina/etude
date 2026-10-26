@@ -164,6 +164,8 @@ export interface CardType {
   faces?: string[];
   facesWhen?: string;
   fields: FieldSpec[];
+  /** The field that names an item in lists; without it, the first public markdown field. */
+  titleField?: string;
   prepare?: string;
   template: { html: string; css?: string; js?: string };
   grader: { kind: "self" } | { kind: "script"; code: string } | { kind: "ai"; vision?: boolean; instructions?: string } | { kind: "hybrid"; code: string; vision?: boolean; instructions?: string };

@@ -1,6 +1,7 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { registerSearchFunctions } from "./query.ts";
 
 const SCHEMA_VERSION = 1;
 
@@ -74,7 +75,10 @@ CREATE TABLE IF NOT EXISTS items (
   archived INTEGER NOT NULL DEFAULT 0,
   created  TEXT NOT NULL,
   updated  TEXT NOT NULL,
-  ord      INTEGER NOT NULL DEFAULT 0
+  ord      INTEGER NOT NULL DEFAULT 0,
+  -- Derived from the fields on save (see Etude.reindexItems): the label lists show, and what free-text search matches.
+  title    TEXT NOT NULL DEFAULT '',
+  search   TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS items_deck ON items(deck_id);
 
@@ -163,6 +167,10 @@ export class Db {
     // Columns added after a table first shipped.
     if (!this.all("PRAGMA table_info(decks)").some((c) => c.name === "position")) this.sql.exec("ALTER TABLE decks ADD COLUMN position INTEGER");
     if (!this.all("PRAGMA table_info(cards)").some((c) => c.name === "sched_state")) this.sql.exec("ALTER TABLE cards ADD COLUMN sched_state TEXT");
+    const itemCols = new Set(this.all("PRAGMA table_info(items)").map((c) => c.name));
+    if (!itemCols.has("title")) this.sql.exec("ALTER TABLE items ADD COLUMN title TEXT NOT NULL DEFAULT ''");
+    if (!itemCols.has("search")) this.sql.exec("ALTER TABLE items ADD COLUMN search TEXT NOT NULL DEFAULT ''");
+    registerSearchFunctions(this.sql);
     const v = this.get("SELECT value FROM meta WHERE key = 'schema_version'");
     if (!v) this.run("INSERT INTO meta (key, value) VALUES ('schema_version', ?)", String(SCHEMA_VERSION));
   }

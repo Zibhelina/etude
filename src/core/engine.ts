@@ -22,7 +22,7 @@ import {
   type Verdict,
 } from "./model.ts";
 import { initSandbox, runScript, ScriptError } from "./sandbox.ts";
-import { fieldDefaults, loadBuiltinTypes, validateFields, validateType, ITEM_ID, TYPE_ID } from "./types.ts";
+import { fieldDefaults, loadBuiltinTypes, validateFields, validateType, ITEM_ID, TITLE_KINDS, TYPE_ID } from "./types.ts";
 import * as sched from "./scheduler.ts";
 import {
   DAY_HORIZON,
@@ -38,7 +38,7 @@ import {
   type ScriptCtx,
 } from "./schedulers.ts";
 import { fitWeights, MIN_REVIEWS, OptimizerMissing, type Fit } from "./optimize.ts";
-import { compile, QueryError } from "./query.ts";
+import { compile, isMediaRef, itemSearchText, QueryError, stripHtml, type Compiled } from "./query.ts";
 import { AGENT_EFFORTS, aiEditFields, aiFeedback, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type GradingContext } from "./ai.ts";
 import {
   beginChatGptLogin,
@@ -164,17 +164,10 @@ const SUP: Record<string, string> = { "0": "⁰", "1": "¹", "2": "²", "3": "³
 const SUB: Record<string, string> = { "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉", "+": "₊", "-": "₋" };
 const script = (s: string, map: Record<string, string>, mark: string) => ([...s].every((c) => map[c]) ? [...s].map((c) => map[c]).join("") : mark === "_" ? `_${s}` : `^${s.length > 1 ? `(${s})` : s}`);
 
-const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
-const entity = (m: string, e: string) =>
-  e[0] === "#" ? String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : ENTITIES[e.toLowerCase()] ?? m;
-
 /** One-line plain text from markdown with math: $x^3 \sin x$ reads x³ sin x, cloze blanks show their answer. */
 export function plainLabel(text: string): string {
-  return text
-    // Anki imports keep their HTML: drop real tags (a bare < or > is text) and decode entities.
-    .replace(/<\/?(?:br|div|p|li|tr|td|th|h\d)\b[^<>]*>/gi, " ")
-    .replace(/<\/?[a-zA-Z][\w:-]*(?:\s[^<>]*)?\/?>/g, "")
-    .replace(/&(#\d+|#x[\da-f]+|[a-z]+);/gi, entity)
+  // Anki imports keep their HTML.
+  return stripHtml(text)
     .replace(/```[\s\S]*?```/g, " [code] ")
     .replace(/^[ \t]*>+[ \t]?/gm, "")
     .replace(/\{\{([^}|:]+)[^}]*\}\}/g, "[$1]")
@@ -194,6 +187,36 @@ export function plainLabel(text: string): string {
     .trim()
     .slice(0, 160);
 }
+
+/**
+ * The one-line label lists show for an item: the type's `titleField`, else its first public markdown
+ * field, then its other public text fields, in the type's order. Fields with a default are settings
+ * (a mode, a language), never picked automatically. `withPrivate` lets private fields in (Browse and
+ * Stats); a card being studied never gets one.
+ */
+export function itemTitle(def: CardTypeDef | null, fields: Record<string, unknown>, withPrivate: boolean): string {
+  const label = (v: unknown) => {
+    const t = typeof v === "string" ? plainLabel(v) : "";
+    return t && !isMediaRef(t) ? t : "";
+  };
+  if (!def) return Object.values(fields).map(label).find(Boolean) ?? "";
+  const allowed = def.fields.filter((f) => TITLE_KINDS.has(f.kind) && (withPrivate || !f.private));
+  const content = allowed.filter((f) => f.default === undefined);
+  const order = [
+    ...allowed.filter((f) => f.name === def.titleField),
+    ...content.filter((f) => !f.private && f.kind === "markdown"),
+    ...content.filter((f) => !f.private),
+    ...content,
+  ];
+  for (const f of order) {
+    const t = label(fields[f.name]);
+    if (t) return t;
+  }
+  return "";
+}
+
+/** Bump when `itemTitle` or `itemSearchText` change, so collections rebuild the stored columns on open. */
+const ITEM_INDEX_VERSION = "1";
 
 function hashString(s: string): number {
   let h = 2166136261;
@@ -227,6 +250,8 @@ export class Etude {
     const e = new Etude(db, media, path, home);
     e.syncBuiltinTypes(opts.builtinTypesDir ?? BUILTIN_TYPES_DIR);
     e.syncBuiltinSchedulers(opts.builtinSchedulersDir ?? BUILTIN_SCHEDULERS_DIR);
+    // Rows saved by an older version (still running elsewhere, or restored) have blank titles and search text.
+    e.reindexItems(db.get("SELECT value FROM meta WHERE key = 'item_index'")?.value === ITEM_INDEX_VERSION ? { blank: true } : {});
     return e;
   }
 
@@ -234,9 +259,49 @@ export class Etude {
     this.db.close();
   }
 
-  /** Drops in-memory caches, after the database was changed underneath (an undo restore). */
+  /**
+   * Drops in-memory caches and rebuilds the stored item columns, after the database was changed
+   * underneath (an undo restore, which may come from a snapshot taken before those columns existed).
+   */
   invalidateCaches() {
     this.typeCache.clear();
+    this.reindexItems();
+  }
+
+  /**
+   * Rewrites the stored title and search text of every item (or only `type`'s items, or only blank
+   * ones), for when what they derive from changed: a type's definition, or the derivation itself.
+   */
+  private reindexItems(scope: { type?: CardTypeDef; blank?: boolean } = {}) {
+    const only = scope.type;
+    const defs = new Map<string, CardTypeDef | null>(only ? [[only.id, only]] : []);
+    const defFor = (id: string) => {
+      if (!defs.has(id)) {
+        let def: CardTypeDef | null = null;
+        try {
+          def = this.type(id);
+        } catch {}
+        defs.set(id, def);
+      }
+      return defs.get(id)!;
+    };
+    const rows = only
+      ? this.db.all("SELECT id, type, fields, title, search FROM items WHERE type = ?", only.id)
+      : this.db.all(`SELECT id, type, fields, title, search FROM items${scope.blank ? " WHERE title = '' AND search = ''" : ""}`);
+    const changed: [string, string, string][] = [];
+    for (const r of rows) {
+      const fields = parse<Record<string, unknown>>(r.fields, {});
+      const title = itemTitle(defFor(r.type), fields, true);
+      const search = itemSearchText(fields);
+      if (title !== r.title || search !== r.search) changed.push([title, search, r.id]);
+    }
+    const all = !only && !scope.blank;
+    // Most opens change nothing; skip the write lock then.
+    if (!changed.length && !all) return;
+    this.db.tx(() => {
+      for (const [title, search, id] of changed) this.db.run("UPDATE items SET title = ?, search = ? WHERE id = ?", title, search, id);
+      if (all) this.db.run("INSERT INTO meta (key, value) VALUES ('item_index', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", ITEM_INDEX_VERSION);
+    });
   }
 
   /** Copies media into the collection. Identical content shares one file. */
@@ -661,6 +726,7 @@ export class Etude {
           ts,
           Number(assetsChanged(delta)),
         );
+        this.reindexItems({ type: def });
       }
     });
     this.typeCache.clear();
@@ -830,6 +896,7 @@ export class Etude {
       ...(def.faces ? { faces: def.faces } : {}),
       ...(def.facesWhen ? { facesWhen: def.facesWhen } : {}),
       fields: def.fields,
+      ...(def.titleField ? { titleField: def.titleField } : {}),
       ...(def.prepare ? { prepare: def.prepare } : {}),
       template: { html: def.template.html, css: def.template.css ?? "", js: def.template.js ?? "" },
       grader: def.grader,
@@ -852,7 +919,10 @@ export class Etude {
         iso(),
       );
       if (def.assets !== undefined) assets = this.writeAssets(clean.id, def.assets);
-      if (!sameDef) this.ensureCardsForType(clean.id);
+      if (!sameDef) {
+        this.ensureCardsForType(clean.id);
+        this.reindexItems({ type: clean });
+      }
     });
     this.typeCache.delete(def.id);
     return { type: clean, result: old ? "updated" : "created", assets };
@@ -934,6 +1004,7 @@ export class Etude {
     this.db.tx(() => {
       this.db.run("UPDATE types SET def = ?, builtin = 1, updated = ? WHERE id = ?", json(shipped), iso(), id);
       this.writeAssets(id, assets ?? {});
+      this.reindexItems({ type: shipped });
     });
     this.typeCache.delete(id);
   }
@@ -1282,13 +1353,15 @@ export class Etude {
     const old = this.db.get("SELECT * FROM items WHERE id = ?", input.id);
     const ts = iso();
     const next = { type: input.type, deck_id: deckId, fields: json(fields), tags: json(tags), source: input.source ?? "", notes: input.notes ?? "", archived: Number(input.archived ?? false) };
+    const title = itemTitle(def, fields, true);
+    const search = itemSearchText(fields);
     let result: "created" | "updated" | "unchanged";
     this.db.tx(() => {
       if (!old) {
         const ord = opts.ord ?? (this.db.get("SELECT COALESCE(MAX(ord), 0) + 1 AS n FROM items")!.n as number);
         this.db.run(
-          "INSERT INTO items (id, type, deck_id, fields, tags, source, notes, archived, created, updated, ord) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-          input.id, next.type, next.deck_id, next.fields, next.tags, next.source, next.notes, next.archived, ts, ts, ord,
+          "INSERT INTO items (id, type, deck_id, fields, tags, source, notes, archived, created, updated, ord, title, search) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          input.id, next.type, next.deck_id, next.fields, next.tags, next.source, next.notes, next.archived, ts, ts, ord, title, search,
         );
         result = "created";
       } else {
@@ -1298,8 +1371,8 @@ export class Etude {
           return;
         }
         this.db.run(
-          "UPDATE items SET type = ?, deck_id = ?, fields = ?, tags = ?, source = ?, notes = ?, archived = ?, updated = ? WHERE id = ?",
-          next.type, next.deck_id, next.fields, next.tags, next.source, next.notes, next.archived, ts, input.id,
+          "UPDATE items SET type = ?, deck_id = ?, fields = ?, tags = ?, source = ?, notes = ?, archived = ?, updated = ?, title = ?, search = ? WHERE id = ?",
+          next.type, next.deck_id, next.fields, next.tags, next.source, next.notes, next.archived, ts, title, search, input.id,
         );
         result = "updated";
       }
@@ -1427,20 +1500,36 @@ export class Etude {
     };
   }
 
-  /** Items (not cards) matching a search, in collection order. */
-  searchItems(query: string, opts: { limit?: number; offset?: number; order?: string } = {}) {
-    let c;
+  /**
+   * Compiles a search for SQL over `cards c JOIN items i JOIN decks d`. `key:` terms can name any
+   * type's field, matched without case.
+   */
+  compileSearch(query: string): Compiled {
+    const fieldNames = (key: string) => {
+      const names = new Set<string>();
+      for (const r of this.db.all("SELECT def FROM types")) for (const f of parse<CardTypeDef>(r.def, {} as CardTypeDef).fields ?? []) if (f.name.toLowerCase() === key.toLowerCase()) names.add(f.name);
+      return [...names];
+    };
     try {
-      c = compile(query);
+      return compile(query, new Date(), fieldNames);
     } catch (e) {
       if (e instanceof QueryError) throw new EtudeError(`search: ${e.message}`);
       throw e;
     }
+  }
+
+  /** Items (not cards) matching a search. "relevance" (the default) is collection order unless there's free text. */
+  searchItems(query: string, opts: { limit?: number; offset?: number; order?: string } = {}) {
+    const c = this.compileSearch(query);
+    const orders: Record<string, string> = { deck: "d.name, i.ord", updated: "i.updated DESC", created: "i.created DESC", due: "MIN(CASE WHEN c.state = 0 THEN '9999' ELSE c.due END), i.ord", lapses: "MAX(c.lapses) DESC, i.ord", id: "i.id" };
+    const ranked = (opts.order ?? "relevance") === "relevance" && c.rank;
+    const order = ranked ? `${c.rank!.sql}, i.ord` : (orders[opts.order ?? ""] ?? "i.ord");
     const from = "FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
     const total = this.db.get(`SELECT COUNT(DISTINCT i.id) AS n ${from} WHERE ${c.where}`, ...c.params)!.n;
     const rows = this.db.all(
-      `SELECT i.id, i.type, i.fields, i.tags, i.source, i.archived, i.updated, d.name AS deck, COUNT(c.id) AS cards, SUM(c.suspended) AS suspended ${from} WHERE ${c.where} GROUP BY i.id ORDER BY ${({ deck: "d.name, i.ord", updated: "i.updated DESC", created: "i.created DESC", due: "MIN(CASE WHEN c.state = 0 THEN '9999' ELSE c.due END), i.ord", lapses: "MAX(c.lapses) DESC, i.ord", id: "i.id" } as Record<string, string>)[opts.order ?? ""] ?? "i.ord"} LIMIT ? OFFSET ?`,
+      `SELECT i.id, i.type, i.fields, i.tags, i.source, i.archived, i.updated, i.title, d.name AS deck, COUNT(c.id) AS cards, SUM(c.suspended) AS suspended ${from} WHERE ${c.where} GROUP BY i.id ORDER BY ${order} LIMIT ? OFFSET ?`,
       ...c.params,
+      ...(ranked ? c.rank!.params : []),
       opts.limit ?? 100,
       opts.offset ?? 0,
     );
@@ -1453,7 +1542,7 @@ export class Etude {
           type: r.type,
           deck: r.deck,
           tags: parse<string[]>(r.tags, []),
-          title: this.titleOf(r.type, fields),
+          title: r.title,
           source: r.source,
           cards: r.cards,
           suspended: Number(r.suspended ?? 0),
@@ -1478,15 +1567,9 @@ export class Etude {
     return target;
   }
 
-  /** Browse: cards matching a search, with their item. */
+  /** Browse: cards matching a search, with their item. "relevance" (the default) is the order added unless there's free text. */
   search(query: string, opts: { limit?: number; offset?: number; order?: string } = {}) {
-    let c;
-    try {
-      c = compile(query);
-    } catch (e) {
-      if (e instanceof QueryError) throw new EtudeError(`search: ${e.message}`);
-      throw e;
-    }
+    const c = this.compileSearch(query);
     const orders: Record<string, string> = {
       added: "i.ord, c.id",
       due: "CASE WHEN c.state = 0 THEN 1 ELSE 0 END, c.due",
@@ -1495,12 +1578,14 @@ export class Etude {
       difficulty: "c.difficulty DESC, i.ord",
       updated: "i.updated DESC",
     };
-    const order = orders[opts.order ?? "added"] ?? orders.added;
+    const ranked = (opts.order ?? "relevance") === "relevance" && c.rank;
+    const order = ranked ? `${c.rank!.sql}, ${orders.added}` : (orders[opts.order ?? ""] ?? orders.added);
     const from = "FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
     const total = this.db.get(`SELECT COUNT(*) AS n ${from} WHERE ${c.where}`, ...c.params)!.n;
     const rows = this.db.all(
-      `SELECT c.*, i.type, i.fields, i.tags, i.source, i.archived, d.name AS deck ${from} WHERE ${c.where} ORDER BY ${order} LIMIT ? OFFSET ?`,
+      `SELECT c.*, i.type, i.fields, i.tags, i.source, i.archived, i.title, d.name AS deck ${from} WHERE ${c.where} ORDER BY ${order} LIMIT ? OFFSET ?`,
       ...c.params,
+      ...(ranked ? c.rank!.params : []),
       opts.limit ?? 100,
       opts.offset ?? 0,
     );
@@ -1518,7 +1603,7 @@ export class Etude {
           type: r.type,
           deck: r.deck,
           tags: parse(r.tags, []),
-          title: this.titleOf(r.type, fields),
+          title: r.title,
           state: r.state,
           due: r.due,
           reps: r.reps,
@@ -1534,15 +1619,13 @@ export class Etude {
     };
   }
 
-  /** A one-line label for lists: the first markdown field, stripped. */
-  titleOf(typeId: string, fields: Record<string, unknown>): string {
+  /** A one-line label for an item (see `itemTitle`). Public fields only unless `private` is set. */
+  titleOf(typeId: string, fields: Record<string, unknown>, opts: { private?: boolean } = {}): string {
     let def: CardTypeDef | null = null;
     try {
       def = this.type(typeId);
     } catch {}
-    const name = def?.fields.find((f) => f.kind === "markdown" && !f.private && typeof fields[f.name] === "string")?.name;
-    const text = String((name ? fields[name] : Object.values(fields).find((v) => typeof v === "string")) ?? "");
-    return plainLabel(text);
+    return itemTitle(def, fields, !!opts.private);
   }
 
   // ------------------------------------------------------------ preparation
@@ -1640,14 +1723,9 @@ export class Etude {
       cfg = this.configFor(d.name);
     } else cfg = sched.resolveConfig({ newPerDay: 1e9, reviewsPerDay: 1e9 });
     if (scope.query?.trim()) {
-      try {
-        const c = compile(scope.query);
-        parts.push(`(${c.where})`);
-        params.push(...c.params);
-      } catch (e) {
-        if (e instanceof QueryError) throw new EtudeError(`search: ${e.message}`);
-        throw e;
-      }
+      const c = this.compileSearch(scope.query);
+      parts.push(`(${c.where})`);
+      params.push(...c.params);
     }
     return { where: parts.join(" AND "), params, cfg };
   }
@@ -2791,7 +2869,7 @@ export class Etude {
         itemId: c.item_id,
         deck: c.deck,
         type: c.type,
-        title: this.titleOf(c.type, parse<Record<string, unknown>>(c.fields, {})),
+        title: this.titleOf(c.type, parse<Record<string, unknown>>(c.fields, {}), { private: true }),
         scheduler: this.configFor(c.deck).scheduler,
         sessions: grades.length,
         metrics,

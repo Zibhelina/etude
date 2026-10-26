@@ -187,9 +187,10 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   // The definition without asset bytes; `assetFiles` lists them (name, size, hash).
   app.get("/api/types/:id", (c) => c.json({ ...etude.type(c.req.param("id")), assetFiles: etude.typeAssets(c.req.param("id")) }));
   app.put("/api/types/:id", async (c) => c.json(etude.saveType({ ...(await body(c)), id: c.req.param("id") })));
-  app.delete("/api/types/:id", (c) => {
-    etude.deleteType(c.req.param("id"));
-    return c.json({ ok: true });
+  app.get("/api/types/:id/usage", (c) => c.json(etude.typeUsage(c.req.param("id"))));
+  app.delete("/api/types/:id", async (c) => {
+    const r = etude.deleteType(c.req.param("id"), { items: !!(await body(c)).items });
+    return c.json({ ok: true, ...r });
   });
   app.post("/api/types/:id/reset", (c) => {
     etude.resetType(c.req.param("id"));

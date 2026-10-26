@@ -685,10 +685,9 @@ h1, h2, h3 { margin: 0; font-family: var(--font-serif); font-weight: 400; letter
 .tempo-stats { display: grid; gap: 2rem; margin-top: 3rem; align-items: start; }
 /* one panel per row: side by side they shrink below readable */
 /* the app's own Stats panels, live, on the page's background, centred */
-.tempo-stats { max-width: 760px; margin-inline: auto; gap: 3rem; }
+.tempo-stats { gap: 3rem; }
 .tempo-shot { margin: 0; display: flex; flex-direction: column; gap: 0.85rem; }
-.tempo-live { min-width: 0; padding-inline: 0.75rem; }
-.tempo-shot figcaption, .tempo-src { padding-inline: 0.75rem; }
+.tempo-live { min-width: 0; }
 .tempo-shot figcaption { font-size: 0.9rem; color: var(--muted-foreground); max-width: 34rem; }
 .tempo-shot figcaption b { color: var(--foreground); font-weight: 500; }
 .tempo-src { margin-top: 1.5rem; }

@@ -1190,7 +1190,7 @@ if (rep && GALLERY?.length) {
   if (box) {
     const grid = $("[data-market-grid]", box), count = $("[data-market-count]", box), tabs = $$("[data-kind]", box);
     const RAW = "https://raw.githubusercontent.com/Zibhelina/etude-market/main";
-    let entries = [], kind = "type";
+    let entries = [], kind = "deck";
     const v = (t, k, d) => t?.vars?.[k] ?? d;
     const themeTile = (t) => {
       const s = [["--t-bg", v(t, "--background", "#111")], ["--t-side", v(t, "--sidebar", v(t, "--background"))], ["--t-card", v(t, "--card", "#222")], ["--t-fg", v(t, "--foreground", "#eee")],
@@ -1206,7 +1206,7 @@ if (rep && GALLERY?.length) {
       grid.innerHTML = shown.map(tile).join("");
       const k = { type: ["card type", "card types"], deck: ["deck", "decks"], theme: ["theme", "themes"] };
       const c = (x) => entries.filter((e) => e.kind === x).length;
-      count.textContent = `${c("type")} ${k.type[+(c("type") !== 1)]}, ${c("deck")} ${k.deck[+(c("deck") !== 1)]} and ${c("theme")} ${k.theme[+(c("theme") !== 1)]} so far.`;
+      count.textContent = `${c("deck")} ${k.deck[+(c("deck") !== 1)]}, ${c("type")} ${k.type[+(c("type") !== 1)]} and ${c("theme")} ${k.theme[+(c("theme") !== 1)]} so far.`;
       tabs.forEach((b) => b.setAttribute("aria-selected", String(b.dataset.kind === kind)));
     };
     box.addEventListener("click", (e) => { const b = e.target.closest("[data-kind]"); if (b) { kind = b.dataset.kind; render(); } });

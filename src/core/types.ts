@@ -10,6 +10,8 @@ export const TYPE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 export const ITEM_ID = /^[A-Za-z0-9][\w.:-]{0,199}$/;
 const FIELD_KINDS = new Set(["markdown", "text", "number", "boolean", "list", "json", "code", "html"]);
 const GRADER_KINDS = new Set(["self", "script", "ai", "hybrid"]);
+/** Field kinds that can name an item in lists. */
+export const TITLE_KINDS = new Set(["markdown", "text", "html", "code"]);
 
 const read = (dir: string, file: string) => {
   const p = join(dir, file);
@@ -65,6 +67,8 @@ export function validateType(def: unknown): string[] {
       if (!FIELD_KINDS.has(f?.kind)) errors.push(`fields[${i}].kind must be one of ${[...FIELD_KINDS].join(", ")}`);
     });
   }
+  if (t.titleField !== undefined && Array.isArray(t.fields) && !t.fields.some((f) => f?.name === t.titleField && TITLE_KINDS.has(f.kind)))
+    errors.push(`titleField must name a ${[...TITLE_KINDS].join(", ")} field of the type`);
   if (t.faces !== undefined && (!Array.isArray(t.faces) || !t.faces.length || !t.faces.every((f) => typeof f === "string" && /^[\w-]+$/.test(f))))
     errors.push("faces must be a non-empty list of simple names");
   if (t.facesWhen !== undefined && typeof t.facesWhen !== "string") errors.push("facesWhen must be a script");

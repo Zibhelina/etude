@@ -91,7 +91,7 @@ command({
   args: [{ name: "query", description: "Search (see `Search language`); several words are joined.", variadic: true }],
   flags: [
     DECK_FLAG,
-    { name: "order", type: "string", description: "Sort order (due: soonest due card first, new cards last).", values: ["added", "deck", "updated", "created", "due", "lapses", "id"], default: "added" },
+    { name: "order", type: "string", description: "Sort order (relevance: with free text, items whose title is or starts with a word first, otherwise the order added; due: soonest due card first, new cards last).", values: ["relevance", "added", "deck", "updated", "created", "due", "lapses", "id"], default: "relevance" },
     LIMIT_FLAG,
     OFFSET_FLAG,
     { name: "ids", type: "boolean", description: "Print only item ids, one per line (handy for piping into bulk commands)." },

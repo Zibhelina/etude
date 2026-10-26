@@ -93,11 +93,11 @@ command({
   summary: "Find cards with the search language (one row per card). Same as `etude card list`.",
   args: [{ name: "query", description: "Search; words are joined.", variadic: true }],
   flags: [
-    { name: "order", type: "string", description: "Sort order.", values: ["added", "due", "deck", "lapses", "difficulty", "updated"], default: "added" },
+    { name: "order", type: "string", description: "Sort order. relevance: with free text, items whose title is or starts with a word come first; otherwise the order added.", values: ["relevance", "added", "due", "deck", "lapses", "difficulty", "updated"], default: "relevance" },
     { ...LIMIT_FLAG, default: 50 },
     OFFSET_FLAG,
   ],
-  examples: ['etude search deck:"Networks" is:due', 'etude search "tag:delay prop:lapses>=2" --order lapses'],
+  examples: ['etude search deck:"Networks" is:due', 'etude search "tag:delay prop:lapses>=2" --order lapses', "etude search front:router"],
   output: "{ total, rows: [...] }",
   run: (ctx) => ctx.e.search(ctx.args.query.join(" "), { limit: ctx.flags.limit, offset: ctx.flags.offset, order: ctx.flags.order }),
 });

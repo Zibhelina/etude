@@ -79,6 +79,7 @@ export function exportShape(def: CardType): CardType {
     ...(def.faces?.length ? { faces: def.faces } : {}),
     ...(def.facesWhen?.trim() ? { facesWhen: def.facesWhen } : {}),
     fields: def.fields.map(cleanField),
+    ...(def.titleField ? { titleField: def.titleField } : {}),
     ...(def.prepare?.trim() ? { prepare: def.prepare } : {}),
     template: { html: def.template.html, css: def.template.css ?? "", js: def.template.js ?? "" },
     grader: g,

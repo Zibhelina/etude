@@ -157,7 +157,7 @@ const CARDS_PAGE = 200;
 /** Every card in the deck and its subdecks, with the same rows, filters and editor as Browse. */
 function DeckCards({ deck, hasChildren, active, onChanged }: { deck: string; hasChildren: boolean; active: boolean; onChanged(): void }) {
   const [query, setQuery] = useState("");
-  const [order, setOrder] = useState("added");
+  const [order, setOrder] = useState("relevance");
   const [limit, setLimit] = useState(CARDS_PAGE);
   const [rows, setRows] = useState<SearchRow[]>([]);
   const [total, setTotal] = useState<number | null>(null);

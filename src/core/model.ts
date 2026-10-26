@@ -42,6 +42,12 @@ export interface CardTypeDef {
    */
   facesWhen?: string;
   fields: FieldSpec[];
+  /**
+   * The field that names an item in lists (Browse, search results). Without it, the first public
+   * markdown field, then the first other public text field without a default (one with a default is
+   * a setting). Studying never shows a private one.
+   */
+  titleField?: string;
   /** Body of `function (fields, face, rng)` returning `{ view, key }`. Runs sandboxed on the server. */
   prepare?: string;
   template: Template;

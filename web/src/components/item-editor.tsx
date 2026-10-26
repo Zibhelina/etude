@@ -34,6 +34,7 @@ export function groupItems(rows: SearchRow[]): ItemRowData[] {
 }
 
 export const ORDERS = [
+  ["relevance", "Best match"],
   ["added", "Order added"],
   ["deck", "Deck"],
   ["due", "Due"],

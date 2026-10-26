@@ -1077,7 +1077,7 @@ etude item list [query...] [flags]
 | Flag | Type | Description |
 | --- | --- | --- |
 | `--deck <NAME>` | string | Limit to this deck and its subdecks. |
-| `--order <added\|deck\|updated\|created\|due\|lapses\|id>` | string | Sort order (due: soonest due card first, new cards last). Default `"added"`. |
+| `--order <relevance\|added\|deck\|updated\|created\|due\|lapses\|id>` | string | Sort order (relevance: with free text, items whose title is or starts with a word first, otherwise the order added; due: soonest due card first, new cards last). Default `"relevance"`. |
 | `--limit <N>` | number | Maximum rows to return. Default `100`. |
 | `--offset <N>` | number | Rows to skip (for paging). Default `0`. |
 | `--ids` | boolean | Print only item ids, one per line (handy for piping into bulk commands). |
@@ -1586,7 +1586,7 @@ etude card list [query...] [flags]
 | Flag | Type | Description |
 | --- | --- | --- |
 | `--deck <NAME>` | string | Limit to this deck and its subdecks. |
-| `--order <added\|due\|deck\|lapses\|difficulty\|updated>` | string | Sort order. Default `"added"`. |
+| `--order <relevance\|added\|due\|deck\|lapses\|difficulty\|updated>` | string | Sort order. relevance: with free text, items whose title is or starts with a word come first; otherwise the order added. Default `"relevance"`. |
 | `--limit <N>` | number | Maximum rows. Default `100`. |
 | `--offset <N>` | number | Rows to skip. Default `0`. |
 | `--ids` | boolean | Print only card ids, one per line. |
@@ -4129,7 +4129,7 @@ etude search [query...] [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
-| `--order <added\|due\|deck\|lapses\|difficulty\|updated>` | string | Sort order. Default `"added"`. |
+| `--order <relevance\|added\|due\|deck\|lapses\|difficulty\|updated>` | string | Sort order. relevance: with free text, items whose title is or starts with a word come first; otherwise the order added. Default `"relevance"`. |
 | `--limit <N>` | number | Maximum rows to return. Default `50`. |
 | `--offset <N>` | number | Rows to skip (for paging). Default `0`. |
 
@@ -4138,6 +4138,7 @@ Output: { total, rows: [...] }
 ```sh
 etude search deck:"Networks" is:due
 etude search "tag:delay prop:lapses>=2" --order lapses
+etude search front:router
 ```
 
 ### etude commands

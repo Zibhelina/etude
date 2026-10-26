@@ -426,7 +426,7 @@ export const api = {
   saveType: (def: CardType) => call<CardType & { leftover: { cards: number; reviews: number } | null }>("PUT", `/api/types/${encodeURIComponent(def.id)}`, def),
   typeLeftover: (id: string) => call<LeftoverReport>("GET", `/api/types/${encodeURIComponent(id)}/leftover`),
   cleanup: () => call<CleanupReport>("GET", "/api/cleanup"),
-  deleteLeftoverCards: (type?: string) => call<{ cards: number; reviews: number }>("POST", "/api/cleanup/cards", { type }),
+  deleteLeftoverCards: (only: { type?: string; face?: string } = {}) => call<{ cards: number; reviews: number }>("POST", "/api/cleanup/cards", only),
   deleteUnusedMedia: () => call<{ files: number; bytes: number }>("POST", "/api/cleanup/media", {}),
   deleteType: (id: string) => call("DELETE", `/api/types/${encodeURIComponent(id)}`),
   typeFolders: () => call<string[]>("GET", "/api/type-folders"),

@@ -1756,7 +1756,7 @@ etude card reset --query "deck:Physics prop:lapses>=4"
 
 Delete leftover cards: cards on faces their type no longer makes, after a face was removed or `facesWhen` changed.
 
-Saving a type never deletes cards, so their history isn't lost by accident; this does, with their review history. An item keeps every card when its type's `facesWhen` fails for it or when it would be left without one. Preview with --dry-run.
+Saving a type never deletes cards, so their history isn't lost by accident; this does, with their review history. An item keeps every card when its type's `facesWhen` fails for it or when it would be left without one. See the cards first with `etude card list is:leftover` (add type: and face: to narrow it), or preview with --dry-run.
 
 ```
 etude card prune [flags]
@@ -1767,13 +1767,15 @@ etude card prune [flags]
 | Flag | Type | Description |
 | --- | --- | --- |
 | `--type <ID>` | string | Only this type's leftover cards. |
+| `--face <FACE>` | string | Only leftover cards on this face. |
 | `--dry-run` | boolean | Show what would change without writing anything. |
 | `-y, --yes` | boolean | Confirm a destructive operation. |
 
 Output: { cards, reviewed, reviews, faces: [{ type, typeName, face, cards, reviews }] }
 
 ```sh
-etude card prune --type de-vocab --dry-run
+etude card list is:leftover type:de-vocab
+etude card prune --type de-vocab --face t2 --dry-run
 etude card prune --type de-vocab --yes
 ```
 

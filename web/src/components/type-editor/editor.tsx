@@ -253,7 +253,7 @@ export function TypeEditor({ id }: { id: string }) {
 
   const prune = async () => {
     try {
-      const r = await api.deleteLeftoverCards(id);
+      const r = await api.deleteLeftoverCards({ type: id });
       toast.success(`Deleted ${cardCount(r.cards)}`);
       setLeftover(await api.typeLeftover(id));
     } catch (e) {
@@ -282,13 +282,15 @@ export function TypeEditor({ id }: { id: string }) {
   const [dupOpen, setDupOpen] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmLeave, setConfirmLeave] = useState(false);
+  // Where to go once the user agrees to drop unsaved changes.
+  const [leaveTo, setLeaveTo] = useState<string | null>(null);
   const [view, setView] = useState<"edit" | "preview">("edit");
   const [tab, setTab] = useState("info");
 
   // Back to the folder the type lives in.
   const home = summary?.folder ? `/types?folder=${encodeURIComponent(summary.folder)}` : "/types";
-  const back = () => (dirty ? setConfirmLeave(true) : navigate(home));
+  const go = (to: string) => (dirty ? setLeaveTo(to) : navigate(to));
+  const back = () => go(home);
   const reset = async () => {
     try {
       const fresh = await api.resetType(id);
@@ -442,7 +444,10 @@ export function TypeEditor({ id }: { id: string }) {
                     {cardCount(leftover.cards)} {leftover.cards === 1 ? "is" : "are"} on {leftover.faces.length === 1 ? "a face" : "faces"} this type no longer makes ({leftover.faces.map((f) => f.face).join(", ")})
                     {leftover.reviews ? `, with ${leftover.reviews.toLocaleString()} review${leftover.reviews === 1 ? "" : "s"} of history` : ""}. {leftover.cards === 1 ? "It still comes" : "They still come"} up in study unless suspended.
                   </span>
-                  <Button variant="outline" size="sm" className="shrink-0 self-start sm:self-auto" onClick={() => setAskPrune(leftover)}>Delete them</Button>
+                  <div className="flex shrink-0 gap-1.5 self-start sm:self-auto">
+                    <Button variant="ghost" size="sm" onClick={() => go(`/browse?q=${encodeURIComponent(`is:leftover type:${id}`)}`)}>View</Button>
+                    <Button variant="outline" size="sm" onClick={() => setAskPrune(leftover)}>Delete them</Button>
+                  </div>
                 </div>
               )}
               <Field label="List title" hint="The field that names an item in Browse and search results. Automatic uses the first public markdown field. Private fields are never shown while studying.">
@@ -684,7 +689,7 @@ export function TypeEditor({ id }: { id: string }) {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
+      <AlertDialog open={!!leaveTo} onOpenChange={(open) => !open && setLeaveTo(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
@@ -692,7 +697,7 @@ export function TypeEditor({ id }: { id: string }) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep editing</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { if (isNew) clearPending(id); navigate(home); }}>Leave</AlertDialogAction>
+            <AlertDialogAction onClick={() => { if (isNew) clearPending(id); navigate(leaveTo ?? home); }}>Leave</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

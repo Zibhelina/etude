@@ -430,6 +430,7 @@ export const api = {
   bulkCards: (action: string, cardIds: number[]) => call("POST", "/api/cards-bulk", { action, cardIds }),
   /** Buries cards or whole notes; returns only newly buried ids so Undo preserves existing burials. */
   buryCards: (cardIds: number[], note: boolean) => call<{ count: number; cardIds: number[] }>("POST", "/api/cards-bulk", { action: note ? "bury-note" : "bury", cardIds }),
+  suspendCards: (cardIds: number[], note: boolean) => call<{ count: number; cardIds: number[] }>("POST", "/api/cards-bulk", { action: note ? "suspend-note" : "suspend", cardIds }),
 
   counts: (s: Scope) => call<Counts>("GET", `/api/study/counts${qs({ deck: s.deck, q: s.q, ahead: s.ahead ? 1 : undefined })}`),
   next: (s: Scope, exclude?: number) => call<{ card: StudyCard | null; counts: Counts }>("GET", `/api/study/next${qs({ deck: s.deck, q: s.q, ahead: s.ahead ? 1 : undefined, exclude })}`),

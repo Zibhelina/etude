@@ -1645,12 +1645,14 @@ etude card suspend [refs...] [flags]
 | `--deck <NAME>` | string | Limit to this deck and its subdecks. |
 | `--query <SEARCH>` | string | Limit to cards matching a search (see `Search language`). Also `--q`. |
 | `--face <VALUE>` | string | With item ids: only the card for this face. |
+| `--note` | boolean | Suspend every card of the selected cards' items. |
 | `--dry-run` | boolean | Show what would change without writing anything. |
 
 Output: { count, cards: [{ cardId, itemId, face, state, due, suspended, buriedUntil }] }
 
 ```sh
 etude card suspend 42 43
+etude card suspend 42 --note
 etude card suspend --query "deck:Physics prop:lapses>=4"
 ```
 
@@ -1675,12 +1677,14 @@ etude card unsuspend [refs...] [flags]
 | `--deck <NAME>` | string | Limit to this deck and its subdecks. |
 | `--query <SEARCH>` | string | Limit to cards matching a search (see `Search language`). Also `--q`. |
 | `--face <VALUE>` | string | With item ids: only the card for this face. |
+| `--note` | boolean | Unsuspend every card of the selected cards' items. |
 | `--dry-run` | boolean | Show what would change without writing anything. |
 
 Output: { count, cards: [{ cardId, itemId, face, state, due, suspended, buriedUntil }] }
 
 ```sh
 etude card unsuspend 42 43
+etude card unsuspend 42 --note
 etude card unsuspend --query "deck:Physics prop:lapses>=4"
 ```
 

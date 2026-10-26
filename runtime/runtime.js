@@ -245,8 +245,8 @@ function forwardKeys() {
     }
     if (typing) return;
     const result = document.body.dataset.mode === "result";
-    if (e.repeat && ["u", "U", "=", "-"].includes(e.key)) return;
-    const keys = result ? ["1", "2", "3", "4", " ", "Enter", "u", "U", "=", "-"] : [" ", "Enter", "u", "U", "=", "-"];
+    if (e.repeat && ["u", "U", "=", "-", "@", "!"].includes(e.key)) return;
+    const keys = result ? ["1", "2", "3", "4", " ", "Enter", "u", "U", "=", "-", "@", "!"] : [" ", "Enter", "u", "U", "=", "-", "@", "!"];
     if (!keys.includes(e.key)) return;
     // Let the card's own handlers run first; forward only keys the card didn't use.
     setTimeout(() => {

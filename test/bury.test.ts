@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Etude } from "../src/core/engine.ts";
 import { createApp } from "../src/server/app.ts";
+import { run } from "../src/cli/run.ts";
 
 const dirs: string[] = [];
 process.on("exit", () => {
@@ -90,4 +91,41 @@ test("expired burials re-enter the study queue and can be buried again", async (
   assert.deepEqual((await post({ action: "bury", cardIds: [fwd.id] })).cardIds, [fwd.id]);
   assert.equal(e.counts({ deck: "German" }).new, 3);
   assert.deepEqual((await post({ action: "bury-note", cardIds: [] })).cardIds, []);
+});
+
+test("suspending a card (@) leaves its sibling; suspending the note (!) takes every card of the item", async (t) => {
+  const { e, post, cards } = await setup(t);
+  const [fwd, rev] = cards("w.hund");
+  const suspended = (item: string) => e.db.all<{ suspended: number }>("SELECT suspended FROM cards WHERE item_id = ? ORDER BY id", item).map((c) => c.suspended);
+  assert.deepEqual((await post({ action: "suspend", cardIds: [fwd.id] })).cardIds, [fwd.id]);
+  assert.deepEqual(suspended("w.hund"), [1, 0]);
+  assert.equal(e.counts({ deck: "German" }).new, 3);
+  await post({ action: "unsuspend", cardIds: [fwd.id] });
+  const r = await post({ action: "suspend-note", cardIds: [rev.id] });
+  assert.deepEqual(r.cardIds, [fwd.id, rev.id]);
+  assert.deepEqual(suspended("w.hund"), [1, 1]);
+  assert.deepEqual(suspended("w.katze"), [0, 0], "other items are untouched");
+  assert.equal(e.db.get("SELECT COUNT(*) AS n FROM reviews")!.n, 0);
+  await post({ action: "unsuspend", cardIds: r.cardIds });
+  assert.equal(e.counts({ deck: "German" }).new, 4);
+});
+
+test("undoing a note suspension keeps a sibling that was already suspended", async (t) => {
+  const { e, post, cards } = await setup(t);
+  const [fwd, rev] = cards("w.hund");
+  e.setSuspended([rev.id], true);
+  const r = await post({ action: "suspend-note", cardIds: [fwd.id, fwd.id] });
+  assert.deepEqual(r.cardIds, [fwd.id]);
+  assert.deepEqual((await post({ action: "suspend-note", cardIds: [fwd.id] })).cardIds, []);
+  await post({ action: "unsuspend", cardIds: r.cardIds });
+  assert.deepEqual(e.db.all<{ suspended: number }>("SELECT suspended FROM cards WHERE item_id = 'w.hund' ORDER BY id").map((c) => c.suspended), [0, 1]);
+});
+
+test("CLI: card suspend --note takes the selected cards' items", async (t) => {
+  const { e, cards } = await setup(t);
+  const [fwd] = cards("w.hund");
+  let out = "";
+  const code = await run(["--db", e.path, "card", "suspend", String(fwd.id), "--note"], { stdout: (s) => (out += s), stderr: () => {}, stdin: () => "", isTTY: false, env: {} });
+  assert.equal(code, 0);
+  assert.deepEqual(JSON.parse(out).cards.map((c: { suspended: boolean }) => c.suspended), [true, true]);
 });

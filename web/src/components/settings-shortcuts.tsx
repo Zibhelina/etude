@@ -17,6 +17,8 @@ const GROUPS: { title: string; description?: string; rows: Row[] }[] = [
       { keys: ["Space", "Enter"], what: "After grading: take the suggested rating (Good if there is none)" },
       { keys: ["="], what: "Bury all cards of the current note until the next study day" },
       { keys: ["-"], what: "Bury only the current card until the next study day" },
+      { keys: ["!"], what: "Suspend all cards of the current note" },
+      { keys: ["@"], what: "Suspend only the current card" },
       { keys: ["U", `${mod}+Z`], what: "Undo the last rating, including after advancing to the next card (outside answer fields)" },
       { keys: ["Esc"], what: "Back to decks" },
     ],

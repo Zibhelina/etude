@@ -64,23 +64,24 @@ command({
   },
 });
 
-for (const [verb, summary, act] of [
-  ["suspend", "Suspend cards: they never come up until unsuspended.", (e: any, ids: number[]) => e.setSuspended(ids, true)],
-  ["unsuspend", "Unsuspend cards.", (e: any, ids: number[]) => e.setSuspended(ids, false)],
-  ["unbury", "Unbury cards so they can come up today.", (e: any, ids: number[]) => e.setBuried(ids, null)],
-  ["reset", "Forget cards: back to new, as if never studied. Review history is kept (and `card reschedule` would rebuild from it).", (e: any, ids: number[]) => e.resetCards(ids)],
+for (const [verb, summary, act, note] of [
+  ["suspend", "Suspend cards: they never come up until unsuspended.", (e: any, ids: number[]) => e.setSuspended(ids, true), true],
+  ["unsuspend", "Unsuspend cards.", (e: any, ids: number[]) => e.setSuspended(ids, false), true],
+  ["unbury", "Unbury cards so they can come up today.", (e: any, ids: number[]) => e.setBuried(ids, null), false],
+  ["reset", "Forget cards: back to new, as if never studied. Review history is kept (and `card reschedule` would rebuild from it).", (e: any, ids: number[]) => e.resetCards(ids), false],
 ] as const) {
   command({
     name: `card ${verb}`,
     summary,
     args: [refsArg],
-    flags: BULK,
+    flags: note ? [...BULK, { name: "note", type: "boolean", description: `${verb[0].toUpperCase()}${verb.slice(1)} every card of the selected cards' items.` }] : BULK,
     writes: true,
     dryRun: true,
-    examples: [`etude card ${verb} 42 43`, `etude card ${verb} --query "deck:Physics prop:lapses>=4"`],
+    examples: [`etude card ${verb} 42 43`, ...(note ? [`etude card ${verb} 42 --note`] : []), `etude card ${verb} --query "deck:Physics prop:lapses>=4"`],
     output: "{ count, cards: [{ cardId, itemId, face, state, due, suspended, buriedUntil }] }",
     run(ctx) {
-      const ids = resolveCards(ctx, ctx.args.refs);
+      const selected = resolveCards(ctx, ctx.args.refs);
+      const ids = ctx.flags.note ? ctx.e.noteCards(selected) : selected;
       act(ctx.e, ids);
       return { count: ids.length, cards: brief(ctx.e, ids) };
     },

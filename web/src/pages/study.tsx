@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, FastForward, CornerDownLeft, Dices, EyeOff, Loader2, MessageSquareText, Pencil, RotateCcw, Undo2 } from "lucide-react";
+import { ArrowLeft, FastForward, CornerDownLeft, Dices, EyeOff, Loader2, MessageSquareText, Pause, Pencil, RotateCcw, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { CardFrame, type CardFrameHandle, type CardResult } from "@/components/card-frame";
 import { Markdown } from "@/components/markdown";
 import { api, humanInterval, relative, RATING_LABEL, type Counts, type Rating, type Scope, type StudyCard } from "@/lib/api";
@@ -191,22 +192,23 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     setPhase("answer");
   }, [card]);
 
-  /** Bury the card or its whole note, then move on without rating. */
-  const bury = useCallback(async (note: boolean) => {
+  /** Bury or suspend the card or its whole note, then move on without rating. Undo restores only what this changed. */
+  const setAside = useCallback(async (how: "bury" | "suspend", note: boolean) => {
     if (!card || busy.current || (phase !== "answer" && phase !== "result")) return;
     busy.current = true;
     const shown = card.cardId;
     try {
-      const r = await api.buryCards([shown], note);
+      const r = how === "bury" ? await api.buryCards([shown], note) : await api.suspendCards([shown], note);
       await load();
-      toast(`Buried ${note ? "this note" : "this card"} until tomorrow`, {
+      const what = note ? "this note" : "this card";
+      toast(how === "bury" ? `Buried ${what} until tomorrow` : `Suspended ${what}`, {
         action: r.cardIds.length ? {
           label: "Undo",
           onClick: async () => {
             if (busy.current) return;
             busy.current = true;
             try {
-              await api.bulkCards("unbury", r.cardIds);
+              await api.bulkCards(how === "bury" ? "unbury" : "unsuspend", r.cardIds);
               const [c, cnt] = await Promise.all([api.card(shown), api.counts(scope)]);
               setCard(c);
               setCounts(cnt);
@@ -233,7 +235,11 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   }, [card, phase, load, scope.deck, scope.q, scope.ahead]);
 
   const onKey = useCallback((key: string) => {
-    if ((key === "=" || key === "-") && (phase === "answer" || phase === "result")) return void bury(key === "=");
+    if (phase === "answer" || phase === "result") {
+      // As in Anki: - and = bury the card or the note, @ and ! suspend them.
+      if (key === "-" || key === "=") return void setAside("bury", key === "=");
+      if (key === "@" || key === "!") return void setAside("suspend", key === "!");
+    }
     if ((key === "Undo" || key.toLowerCase() === "u") && (phase === "answer" || phase === "result" || phase === "done")) return void undo();
     if (phase === "answer") {
       if (key === "Mod+Enter" || ((key === " " || key === "Enter") && card?.grader === "self")) reveal();
@@ -251,11 +257,11 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
         rate(s);
       }
     }
-  }, [phase, card, reveal, rate, result, undo, bury, again]);
+  }, [phase, card, reveal, rate, result, undo, setAside, again]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.repeat && (["u", "U", "=", "-"].includes(e.key) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z"))) return;
+      if (e.repeat && (["u", "U", "=", "-", "@", "!"].includes(e.key) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z"))) return;
       const t = e.target as HTMLElement;
       if (t?.closest("input, textarea, [contenteditable]")) return;
       if (e.key === "Escape") return navigate("/");
@@ -294,10 +300,26 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
         {card && (phase === "answer" || phase === "result") && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => bury(true)} aria-label="Bury note until tomorrow" aria-keyshortcuts="="><EyeOff /></Button>
+              <Button variant="ghost" size="icon" onClick={() => setAside("bury", true)} aria-label="Bury note until tomorrow" aria-keyshortcuts="="><EyeOff /></Button>
             </TooltipTrigger>
             <TooltipContent>Bury until tomorrow: <kbd className="opacity-70">=</kbd> the note, <kbd className="opacity-70">-</kbd> just this card</TooltipContent>
           </Tooltip>
+        )}
+        {card && (phase === "answer" || phase === "result") && (
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label="Suspend"><Pause /></Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Suspend: <kbd className="opacity-70">@</kbd> just this card, <kbd className="opacity-70">!</kbd> the note</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setAside("suspend", false)}>Suspend this card<kbd className="ml-auto pl-4 text-xs opacity-60">@</kbd></DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setAside("suspend", true)}>Suspend the whole note<kbd className="ml-auto pl-4 text-xs opacity-60">!</kbd></DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
         <Tooltip>
           <TooltipTrigger asChild>

@@ -130,7 +130,7 @@ The Market also has a Morse code deck, the Showcase, single card types and 22 th
 - **AI providers you choose.** Sign in with ChatGPT to grade with your Plus or Pro plan, or use an API key. The API defaults use OpenRouter: `liquid/d1-ultra` for the verdict, a fast chat model for feedback and a vision model for drawings. Any OpenAI-compatible endpoint works, including a local llama.cpp or Ollama server. AI stays off until you add a key.
 - **FSRS-6 scheduling** with learning steps, fuzz, per-deck daily limits, new and review ordering, sibling burying, a suggested rating from the grade, undo, and replaying history after a settings change. **Optimize** fits the FSRS weights to your own review history, as in Anki.
 - **Pluggable schedulers.** Each deck picks FSRS, `drill` (for skills you measure), `leitner` (classic boxes) or a `schedule.js` of your own.
-- **Practice ahead** when nothing is due, **bury** a card with one key, and **undo** even after you've moved on to the next card.
+- **Practice ahead** when nothing is due, **bury** or **suspend** a card or its whole note with one key, and **undo** even after you've moved on to the next card.
 - **Settings that inherit down the deck tree.** A preset on `Physics` applies to `Physics::Waves` unless that deck overrides it.
 - **Exam deadlines** per deck.
 - **A deck tree you can rearrange.** Drag a deck anywhere: onto another deck to put it inside, between rows to reorder it, or out to the top level. Each row shows its total cards next to New, Learn and Due.

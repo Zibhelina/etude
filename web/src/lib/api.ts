@@ -432,7 +432,9 @@ export const api = {
   cleanup: () => call<CleanupReport>("GET", "/api/cleanup"),
   deleteLeftoverCards: (only: { type?: string; face?: string } = {}) => call<{ cards: number; reviews: number }>("POST", "/api/cleanup/cards", only),
   deleteUnusedMedia: () => call<{ files: number; bytes: number }>("POST", "/api/cleanup/media", {}),
-  deleteType: (id: string) => call("DELETE", `/api/types/${encodeURIComponent(id)}`),
+  /** `items`: also delete the items using the type (archived ones too), with their cards and history. */
+  deleteType: (id: string, opts: { items?: boolean } = {}) => call<{ ok: true; items: number; cards: number; reviews: number }>("DELETE", `/api/types/${encodeURIComponent(id)}`, opts),
+  typeUsage: (id: string) => call<{ items: number; archived: number; cards: number; reviews: number }>("GET", `/api/types/${encodeURIComponent(id)}/usage`),
   typeFolders: () => call<string[]>("GET", "/api/type-folders"),
   createTypeFolder: (path: string) => call<{ path: string }>("POST", "/api/type-folders", { path }),
   renameTypeFolder: (from: string, to: string) => call<{ from: string; to: string }>("POST", "/api/type-folders/rename", { from, to }),

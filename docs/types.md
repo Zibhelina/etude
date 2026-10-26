@@ -72,7 +72,7 @@ Files win over the same keys inside `type.json`. The built-in types in `types/` 
 
 ### Built-in, edited and custom
 
-Built-in types are loaded from `types/` at startup and kept up to date with the shipped files. Saving a built-in makes it the user's own version: the stored row is marked `builtin = 0`, later Etude updates leave it alone, and `GET /api/types` reports it with `edited: true`. `POST /api/types/:id/reset` (Reset to shipped version) restores the shipped files. Custom types can be deleted when no items use them; built-ins can't be deleted.
+Built-in types are loaded from `types/` at startup and kept up to date with the shipped files. Saving a built-in makes it the user's own version: the stored row is marked `builtin = 0`, later Etude updates leave it alone, and `GET /api/types` reports it with `edited: true`. `POST /api/types/:id/reset` (Reset to shipped version) restores the shipped files. Custom types can be deleted; built-ins can't. When items use the type (archived ones count), deleting it deletes them too, with their cards and review history, after a confirmation that offers to view them first (`etude type delete <id> --items` in the CLI).
 
 ## Template syntax
 

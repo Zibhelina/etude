@@ -1214,6 +1214,15 @@ export function consequence(e: Etude, name: string, argv: string[], dry: any, fa
         try {
           n = e.type(arg).name;
         } catch {}
+        if (argv.includes("--items")) {
+          const u = e.typeUsage(arg);
+          if (u.items)
+            return {
+              summary: `Deletes the card type ${n} and its ${plural(u.items, "item")}${u.archived ? ` (${u.archived} archived)` : ""}, with ${plural(u.cards, "card")} and ${plural(u.reviews, "review")} of history.`,
+              action: "Delete type and items",
+              target: n,
+            };
+        }
         return { summary: `Deletes the card type ${n}. No items use it.`, action: "Delete type", target: n };
       }
       case "type reset":

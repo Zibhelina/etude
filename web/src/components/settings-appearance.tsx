@@ -273,7 +273,7 @@ export function AppearanceSection() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90" onClick={() => deleting && remove(deleting)}>Delete</AlertDialogAction>
+            <AlertDialogAction variant="destructive" onClick={() => deleting && remove(deleting)}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

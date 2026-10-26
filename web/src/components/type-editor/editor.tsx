@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -14,7 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { CodeEditor } from "@/components/code-editor";
 import { CardPreview } from "@/components/card-preview";
 import { AutoTextarea, FieldEditor } from "@/components/field-editor";
-import { api, ApiError, type CardType, type TypeSummary } from "@/lib/api";
+import { api, ApiError, type CardType, type FieldSpec, type TypeSummary } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { FieldsSchema } from "./fields-schema";
@@ -417,6 +418,17 @@ export function TypeEditor({ id }: { id: string }) {
                 <AutoTextarea value={draft.description ?? ""} onChange={(v) => set({ description: v })} placeholder="What the learner does and how it's graded." />
               </Field>
               <FacesEditor faces={draft.faces} onChange={(faces) => set({ faces })} />
+              <Field label="List title" hint="The field that names an item in Browse and search results. Automatic uses the first public markdown field. Private fields are never shown while studying.">
+                <Select value={draft.titleField ?? AUTO_TITLE} onValueChange={(v) => set({ titleField: v === AUTO_TITLE ? undefined : v })}>
+                  <SelectTrigger className="h-10 w-full sm:w-72"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={AUTO_TITLE}>Automatic</SelectItem>
+                    {draft.fields.filter((f) => TITLE_KINDS.has(f.kind) && f.name).map((f) => (
+                      <SelectItem key={f.name} value={f.name}>{f.label || f.name}{f.private ? " (private)" : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
               {!!saved?.assetFiles?.length && <AssetList files={saved.assetFiles} />}
             </TabsContent>
 
@@ -436,7 +448,10 @@ export function TypeEditor({ id }: { id: string }) {
                     }
                   }
                   if (changed) setSample(next);
-                  set({ fields });
+                  // The list title follows its field through a rename. Removing the field, or a kind that can't be a title, goes back to automatic.
+                  const at = draft.fields.findIndex((f) => f.name === draft.titleField);
+                  const title = draft.titleField === undefined ? undefined : fields.find((f) => f.name === draft.titleField) ?? (at >= 0 && fields.length === draft.fields.length ? fields[at] : undefined);
+                  set({ fields, titleField: title && TITLE_KINDS.has(title.kind) ? title.name : undefined });
                 }}
                 onRename={(from, to) => {
                   if (from === to || !(from in sample)) return;
@@ -681,6 +696,9 @@ function formatBytes(n: number) {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
+
+const AUTO_TITLE = "__auto__";
+const TITLE_KINDS = new Set<FieldSpec["kind"]>(["markdown", "text", "html", "code"]);
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (

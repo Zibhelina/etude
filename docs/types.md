@@ -25,6 +25,7 @@ This is the JSON that `PUT /api/types/:id` accepts and the editor exports:
     { "name": "claim", "kind": "markdown", "required": true },
     { "name": "answer", "kind": "boolean", "required": true, "private": true }
   ],
+  "titleField": "claim",
   "prepare": "return { view: {...}, key: {...} };",
   "template": { "html": "...", "css": "...", "js": "..." },
   "grader": { "kind": "script", "code": "return { score: 1 };" },
@@ -47,6 +48,7 @@ This is the JSON that `PUT /api/types/:id` accepts and the editor exports:
   - `editor` asks for a structured form: `choices` (`[{ text, correct, why }]`), `pairs` (`[[left, right]]`), `parts` (`[{ label, answer, unit, tolerance }]`) or `occlusion` (`[{ id, x, y, w, h, label, group }]`, drawn on the image in the sibling `image` field; see [Image occlusion](#image-occlusion)).
   - `language` (for `code` fields) is the language the editor highlights: a name (`"python"`) or `"field:<name>"` to follow another field, like the `code` type's `language`.
   - In the item editor, `markdown` fields are live markdown editors and `code` fields are code editors.
+- `titleField` (optional) names the `markdown`, `text`, `html` or `code` field that labels an item in Browse, search results and Stats, and what search ranks first. Without it, the label is the first non-private markdown field, then the first other non-private text field, in the order the type lists them. Fields with a `default` are settings (a mode, a language) and are never picked automatically. A private title field is used in those lists only: anything sent with a card being studied falls back to the automatic label. In the type editor it's **List title** on the Info tab.
 - `template.html` is required; `css` and `js` may be empty.
 
 Saving validates all of this. Script bodies (`prepare`, `grader.code`) are compiled in the sandbox and `template.js` is compiled as a function, so syntax errors come back from the save as messages like `true-or-false/grade: SyntaxError: ...`.

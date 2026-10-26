@@ -36,7 +36,7 @@ command({
   args: [{ name: "query", description: "Search; words are joined.", variadic: true }],
   flags: [
     DECK_FLAG,
-    { name: "order", type: "string", description: "Sort order.", values: ["added", "due", "deck", "lapses", "difficulty", "updated"], default: "added" },
+    { name: "order", type: "string", description: "Sort order. relevance: with free text, items whose title is or starts with a word come first; otherwise the order added.", values: ["relevance", "added", "due", "deck", "lapses", "difficulty", "updated"], default: "relevance" },
     { name: "limit", type: "number", description: "Maximum rows.", default: 100 },
     { name: "offset", type: "number", description: "Rows to skip.", default: 0 },
     { name: "ids", type: "boolean", description: "Print only card ids, one per line." },

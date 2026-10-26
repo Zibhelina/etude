@@ -164,11 +164,17 @@ export interface CardType {
   faces?: string[];
   facesWhen?: string;
   fields: FieldSpec[];
+  /** The field that names an item in lists; without it, the first public markdown field. */
+  titleField?: string;
   prepare?: string;
   template: { html: string; css?: string; js?: string };
   grader: { kind: "self" } | { kind: "script"; code: string } | { kind: "ai"; vision?: boolean; instructions?: string } | { kind: "hybrid"; code: string; vision?: boolean; instructions?: string };
   instructions?: string;
   showVerdict?: boolean;
+  /** Body of the script that makes watch mode's example answer. */
+  demo?: string;
+  /** Grader numbers worth tracking over time. */
+  metrics?: { key: string; label?: string; unit?: string; better?: "higher" | "lower"; digits?: number }[];
   updated?: string;
   builtin?: boolean;
   /** Files the type ships with (read-only here; packs and `etude type import` set them). */

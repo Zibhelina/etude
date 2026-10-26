@@ -12,7 +12,7 @@ const PAGE = 200;
 
 export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; openItem: string | null }) {
   const [query, setQuery] = useState(initialQuery);
-  const [order, setOrder] = useState("added");
+  const [order, setOrder] = useState("relevance");
   const [rows, setRows] = useState<SearchRow[]>([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);

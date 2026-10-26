@@ -125,7 +125,7 @@ The Market also has a Morse code deck, the Showcase, single card types and 22 th
 
 ## Features
 
-- **Programmable card types.** Eleven built-in types ship as editable files: basic, typed answer, cloze, numeric, multiple choice, match, order, free answer, math, code and drawing. Custom types are written the same way and edited in the app with a live preview.
+- **Programmable card types.** Twelve built-in types ship as editable files: basic, typed answer, cloze, numeric, multiple choice, match, order, free answer, math, code, drawing and image occlusion. Custom types are written the same way and edited in the app with a live preview.
 - **Four kinds of grader.** `self` (you rate), `script` (checked by code, with partial credit), `ai` (a decision model plus feedback) and `hybrid` (a script that hands the cases it can't decide to the AI). Grading instructions cascade from the item's rubric through its tags, decks and type.
 - **AI providers you choose.** Sign in with ChatGPT to grade with your Plus or Pro plan, or use an API key. The API defaults use OpenRouter: `liquid/d1-ultra` for the verdict, a fast chat model for feedback and a vision model for drawings. Any OpenAI-compatible endpoint works, including a local llama.cpp or Ollama server. AI stays off until you add a key.
 - **FSRS-6 scheduling** with learning steps, fuzz, per-deck daily limits, new and review ordering, sibling burying, a suggested rating from the grade, undo, and replaying history after a settings change. **Optimize** fits the FSRS weights to your own review history, as in Anki.
@@ -164,7 +164,7 @@ Open http://127.0.0.1:4610. Your collection lives in `~/.etude/etude.db`.
 
 Paste an image, audio or video file into a card field and Etude copies it into its own media folder, normally `~/.etude/media`. Pasted local file paths and `file://` URLs are copied too; the card uses the copy even after the original is moved or deleted. Settings → Data shows the folder, and `etude media add ./picture.png` imports a file from the terminal. When Etude runs on another computer, paste the file itself; local paths refer to the computer running Etude. Back up the media folder along with the database.
 
-To see what cards can be, import the showcase: one card for each of the 27 card types. It opens in Watch mode, a tour where each card can show an example answer, graded, so you see how it works without answering anything:
+To see what cards can be, import the showcase: one card for each of the 28 card types. It opens in Watch mode, a tour where each card can show an example answer, graded, so you see how it works without answering anything:
 
 ```sh
 node src/cli/main.ts pack import examples/showcase.pack.json

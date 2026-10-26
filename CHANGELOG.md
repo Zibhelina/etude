@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Image occlusion, a built-in card type. Drop, paste or pick an image (a diagram, a slide, an atlas page), drag boxes over the parts to hide and name them; every box, or group of boxes, becomes its own card. On the card you type the name under the image and the box opens with its name; small typos pass, another box's name never does (the feedback tells you which part you named), and an empty answer shows it. Pinch, Ctrl + scroll or double-click zooms big images. The editor has move, resize, duplicate, nudge, group, undo and redo, and works with touch. Boxes without a label are revealed and self-graded. Anki imports convert the built-in Image Occlusion notetype and the Image Occlusion Enhanced add-on (as self-graded boxes: Anki doesn't store names). CLI: `etude occlusion add <image> --box "x,y,w,h=Label" [--px]`; API: `POST /api/occlusion`. The Showcase gains a Gray's Anatomy heart.
+- Packs can carry their own images: an item field holding a base64 `data:` URL is copied into media on import.
+
 ## 2.2.0
 
 - **Ask Etude**, an assistant inside the app. The round button in the bottom-right corner (or Ctrl/⌘+J) opens a chat on the right that can do anything the CLI can: make a deck from attached notes or PDFs, move and rename decks, switch or install themes, import Anki packages. It uses your configured AI (ChatGPT plan, OpenRouter or a custom endpoint) and you pick the model per chat. Deletes and other destructive commands wait for **Allow**, and every reply that changed something has **Undo these changes**. CLI: `etude agent ask|list|show|undo|delete|models`; API: `/api/agent/*`. See docs/agent.md.

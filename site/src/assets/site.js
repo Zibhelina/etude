@@ -860,3 +860,120 @@ if (rep && GALLERY?.length) {
   window.__rep = () => cur && { type: cur.entry.type, view: cur.prep.view, key: cur.prep.key, fields: cur.prep.fields, phase: cur.phase };
   whenVisible(rep, () => open(0), "0px 0px 40% 0px");
 }
+
+// ------------------------------------------------------- turning the page
+// The film is a card dealt onto the page: the one turn on the page, between the hero and the rest.
+// Each movement is a card. As it scrolls in it swings up on its top edge, from lying back to flat
+// on the page; as it scrolls out it tips back on its bottom edge. The edge that moves always goes
+// away from you, so nothing grows past the page. The turn follows the scroll position, so it goes as fast
+// as you scroll and runs backwards when you scroll back.
+{
+  const cards = reduced ? [] : $$(".film > .wrap");
+  const ease = (t) => 1 - (1 - t) ** 3;
+  const clamp = (x) => Math.max(0, Math.min(1, x));
+  let ticking = false;
+  const frame = () => {
+    ticking = false;
+    const vh = innerHeight, narrow = innerWidth < 700;
+    const IN = narrow ? 40 : 60, OUT = narrow ? 8 : 12;
+    for (const el of cards) {
+      const r = el.getBoundingClientRect();
+      if (r.bottom < -vh * 0.5 || r.top > vh * 1.5) continue;
+      // arriving: its top climbs from the bottom of the screen to 40% of the way up
+      const a = ease(clamp((vh - r.top) / (vh * 0.75)));
+      // leaving: its bottom passes the top third of the screen
+      const l = clamp((vh * 0.3 - r.bottom) / (vh * 0.3));
+      let rx = 0, ty = 0, o = 1, face = 0;
+      // arriving: lies back on its top edge and swings up flat; leaving: only a slight tip and fade
+      if (a < 1) { rx = -(1 - a) * IN; ty = (1 - a) * 3; o = 0.35 + 0.65 * a; face = Math.min(1, (1 - a) * 2.2); }
+      else if (l > 0) { rx = l * OUT; o = 1 - l * 0.5; el.style.transformOrigin = "50% 100%"; }
+      if (!(l > 0)) el.style.transformOrigin = "";
+      if (rx === 0) { el.style.transform = ""; el.style.opacity = ""; el.style.setProperty("--face", "0"); continue; }
+      el.style.transform = `perspective(${narrow ? 900 : 1500}px) translateY(${ty}rem) rotateX(${rx.toFixed(2)}deg)`;
+      el.style.opacity = o.toFixed(3);
+      el.style.setProperty("--face", Math.min(1, face).toFixed(3));
+    }
+  };
+  if (cards.length) {
+    cards.forEach((el) => el.classList.add("turn"));
+    const kick = () => { if (!ticking) { ticking = true; requestAnimationFrame(frame); } };
+    addEventListener("scroll", kick, { passive: true });
+    addEventListener("resize", kick);
+    frame();
+  }
+}
+
+// ------------------------------------------------------------- the film
+{
+  const v = $("#film-video"), wrap = v?.closest(".film-frame"), play = $(".film-play");
+  if (v && play) {
+    play.addEventListener("click", () => { v.preload = "auto"; v.controls = true; v.play().catch(() => {}); });
+    v.addEventListener("play", () => { v.controls = true; wrap.classList.add("playing"); });
+    v.addEventListener("ended", () => wrap.classList.remove("playing"));
+    // A film playing off screen keeps talking: pause it when it scrolls away.
+    new IntersectionObserver((es) => es.forEach((e) => !e.isIntersecting && !v.paused && v.pause()), { threshold: 0.15 }).observe(v);
+  }
+}
+
+// ----------------------------------------------------------------- stats
+{
+  const box = $("[data-plates]");
+  if (box) {
+    const btns = $$("[data-plate]", box), imgs = $$("[data-plate-img]", box);
+    let auto = true, i = 0;
+    const show = (name) => {
+      i = btns.findIndex((b) => b.dataset.plate === name);
+      btns.forEach((b) => b.setAttribute("aria-selected", String(b.dataset.plate === name)));
+      const img = imgs.find((m) => m.dataset.plateImg === name);
+      img.loading = "eager";
+      img.decode().catch(() => {}).then(() => imgs.forEach((m) => m.classList.toggle("on", m === img)));
+      const b = btns[i];
+      const list = b.parentElement;
+      if (list.scrollWidth > list.clientWidth + 2) list.scrollTo({ left: b.offsetLeft - 16, behavior: reduced ? "auto" : "smooth" });
+    };
+    box.addEventListener("click", (e) => { const b = e.target.closest("[data-plate]"); if (b) { auto = false; show(b.dataset.plate); } });
+    const vis = visibility(box);
+    setInterval(() => auto && vis.on && !reduced && show(btns[(i + 1) % btns.length].dataset.plate), 4800);
+  }
+}
+
+// ---------------------------------------------------------------- market
+// The section is filled from a snapshot of the catalogue shipped with the site, then refreshed
+// from the live index if it answers, so new entries show up without rebuilding the site.
+{
+  const box = $("[data-market]");
+  if (box) {
+    const grid = $("[data-market-grid]", box), count = $("[data-market-count]", box), tabs = $$("[data-kind]", box);
+    const RAW = "https://raw.githubusercontent.com/Zibhelina/etude-market/main";
+    let entries = [], kind = "type";
+    const v = (t, k, d) => t?.vars?.[k] ?? d;
+    const themeTile = (t) => {
+      const s = [["--t-bg", v(t, "--background", "#111")], ["--t-side", v(t, "--sidebar", v(t, "--background"))], ["--t-card", v(t, "--card", "#222")], ["--t-fg", v(t, "--foreground", "#eee")],
+        ["--t-muted", v(t, "--muted-foreground", "#999")], ["--t-hl", v(t, "--highlight", v(t, "--primary", "#f6a"))], ["--t-border", v(t, "--border", "#ffffff22")]]
+        .map(([k, val]) => `${k}:${val}`).join(";");
+      const rate = ["--again", "--hard", "--good", "--easy"].map((k) => `<i style="background:${v(t, k, "#888")}"></i>`).join("");
+      const chips = ["--highlight", "--chart-2", "--chart-3", "--chart-4"].map((k) => `<i style="background:${v(t, k, v(t, "--highlight", "#f6a"))}"></i>`).join("");
+      return `<div class="mk-theme" style="${esc(s)}" aria-hidden="true"><div class="rail"><i></i><i></i><i></i><i></i></div><div class="pane"><div class="t1"><b>ε</b>tude</div><div class="t2">Mate in <b>one</b></div><div class="chips">${chips}</div><div class="rates">${rate}</div></div></div>`;
+    };
+    const tile = (e, n) => `<article class="mk" style="--i:${n}">${e.kind === "theme" ? themeTile(e.theme) : e.cover ? `<div class="mk-cover"><img src="${esc(e.cover)}" alt="" loading="lazy"></div>` : ""}<div class="mk-body"><h3 class="mk-name">${esc(e.name)}</h3><p class="mk-desc">${esc(e.description)}</p>${e.tags?.length ? `<div class="mk-tags">${e.tags.slice(0, 3).map((t) => `<span>${esc(t)}</span>`).join("")}</div>` : ""}</div></article>`;
+    const render = () => {
+      const shown = entries.filter((e) => e.kind === kind);
+      grid.innerHTML = shown.map(tile).join("");
+      const k = { type: ["card type", "card types"], deck: ["deck", "decks"], theme: ["theme", "themes"] };
+      const c = (x) => entries.filter((e) => e.kind === x).length;
+      count.textContent = `${c("type")} ${k.type[+(c("type") !== 1)]}, ${c("deck")} ${k.deck[+(c("deck") !== 1)]} and ${c("theme")} ${k.theme[+(c("theme") !== 1)]} so far.`;
+      tabs.forEach((b) => b.setAttribute("aria-selected", String(b.dataset.kind === kind)));
+    };
+    box.addEventListener("click", (e) => { const b = e.target.closest("[data-kind]"); if (b) { kind = b.dataset.kind; render(); } });
+    whenVisible(box, async () => {
+      try { entries = (await (await fetch("assets/market/market.json")).json()).entries; render(); } catch {}
+      // live index: only adopt entries without a local cover through the raw URL
+      try {
+        const live = await (await fetch(`${RAW}/index.json`, { cache: "no-cache" })).json();
+        const known = new Map(entries.map((e) => [`${e.kind}:${e.id}`, e]));
+        const next = live.entries.map((e) => known.get(`${e.kind}:${e.id}`) ?? { id: e.id, kind: e.kind, name: e.name, description: e.description, tags: e.tags ?? [], theme: e.kind === "theme" ? e.summary?.theme : undefined, cover: e.cover ? `${RAW}/${e.cover}` : undefined });
+        if (next.length && next.length !== entries.length) { entries = next; render(); }
+      } catch {}
+    }, "0px 0px 30% 0px");
+  }
+}

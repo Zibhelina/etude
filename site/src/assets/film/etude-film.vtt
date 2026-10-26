@@ -1,0 +1,196 @@
+WEBVTT
+
+00:00:02.484 --> 00:00:04.514
+Okay, so let me show you something.
+
+00:00:04.564 --> 00:00:05.794
+You know flashcards?
+
+00:00:05.844 --> 00:00:08.104
+Question on the front, answer on the back.
+
+00:00:08.124 --> 00:00:10.624
+You quiz yourself, and the app brings each card
+
+00:00:10.644 --> 00:00:12.314
+back right before you'd forget it.
+
+00:00:12.973 --> 00:00:14.393
+You tell it how well you knew it,
+
+00:00:14.413 --> 00:00:16.580
+and that decides when you see it again.
+
+00:00:16.600 --> 00:00:18.803
+And honestly, that part works great.
+
+00:00:19.846 --> 00:00:22.476
+The catch is, a card is pretty much just
+
+00:00:22.726 --> 00:00:23.266
+text.
+
+00:00:23.286 --> 00:00:25.596
+And so much of what we actually learn isn't
+
+00:00:25.846 --> 00:00:26.306
+text.
+
+00:00:26.326 --> 00:00:26.946
+So...
+
+00:00:26.966 --> 00:00:29.036
+what if a card could be anything?
+
+00:00:29.440 --> 00:00:30.990
+Like, learning chess?
+
+00:00:31.040 --> 00:00:33.150
+Find the checkmate, right there on the board.
+
+00:00:33.474 --> 00:00:34.174
+Piano?
+
+00:00:34.194 --> 00:00:35.784
+Play the chord it asks for.
+
+00:00:36.377 --> 00:00:37.287
+Japanese?
+
+00:00:37.337 --> 00:00:38.917
+Draw the character with your finger,
+
+00:00:38.937 --> 00:00:41.287
+and the AI tells you how your strokes look.
+
+00:00:41.694 --> 00:00:42.954
+Got a coding interview?
+
+00:00:42.974 --> 00:00:45.194
+Solve the problem, and the tests run the second
+
+00:00:45.214 --> 00:00:46.620
+you hit check.
+
+00:00:46.640 --> 00:00:47.420
+Chemistry?
+
+00:00:47.440 --> 00:00:48.942
+Balance the equation.
+
+00:00:48.962 --> 00:00:51.142
+Math gives you new numbers every time,
+
+00:00:51.162 --> 00:00:52.382
+so you learn the method,
+
+00:00:52.402 --> 00:00:53.772
+not the answer.
+
+00:00:53.792 --> 00:00:54.572
+History?
+
+00:00:54.592 --> 00:00:57.185
+Put the events in order on a timeline.
+
+00:00:57.205 --> 00:00:58.105
+Ear training?
+
+00:00:58.125 --> 00:01:00.225
+Listen to two notes and say how far apart
+
+00:01:00.245 --> 00:01:01.641
+they are.
+
+00:01:01.661 --> 00:01:02.601
+Even trivia:
+
+00:01:02.621 --> 00:01:04.241
+how many times does your heart beat in a
+
+00:01:04.261 --> 00:01:05.211
+lifetime?
+
+00:01:16.001 --> 00:01:18.141
+And all of it runs on FSRS,
+
+00:01:18.161 --> 00:01:20.341
+the same scheduler modern Anki uses,
+
+00:01:20.361 --> 00:01:22.461
+so every card comes back right when you need
+
+00:01:22.481 --> 00:01:22.951
+it.
+
+00:01:23.461 --> 00:01:25.604
+And it's built to work really well with AI
+
+00:01:25.624 --> 00:01:26.457
+agents.
+
+00:01:26.477 --> 00:01:28.524
+You don't need one, most cards are checked by
+
+00:01:28.544 --> 00:01:29.614
+little scripts right on your
+
+00:01:29.904 --> 00:01:30.404
+computer.
+
+00:01:30.424 --> 00:01:31.497
+But if you have one,
+
+00:01:31.517 --> 00:01:33.444
+it can do everything you can:
+
+00:01:33.464 --> 00:01:35.324
+turn your lecture notes into cards,
+
+00:01:35.344 --> 00:01:38.084
+grade your explanations, read your stats and tell you
+
+00:01:38.104 --> 00:01:39.524
+what to review next.
+
+00:01:39.544 --> 00:01:42.684
+Sign in with ChatGPT, bring your own API key,
+
+00:01:42.704 --> 00:01:44.364
+or just let your agent drive it from the
+
+00:01:44.384 --> 00:01:45.214
+command line.
+
+00:01:46.767 --> 00:01:48.677
+And this is my favorite part.
+
+00:01:48.767 --> 00:01:51.147
+Every card is a little program you can open
+
+00:01:51.167 --> 00:01:52.267
+and change.
+
+00:01:52.287 --> 00:01:53.707
+Or just ask your agent:
+
+00:01:53.727 --> 00:01:55.840
+make me a card that teaches Morse code.
+
+00:01:55.860 --> 00:01:57.797
+A minute later, it's in your deck.
+
+00:01:57.847 --> 00:01:59.957
+Oh, and you can change the themes too.
+
+00:02:01.270 --> 00:02:02.580
+It's called Etude.
+
+00:02:02.630 --> 00:02:04.370
+It's free, it's open source,
+
+00:02:04.390 --> 00:02:05.490
+and it's on GitHub.
+
+00:02:05.510 --> 00:02:06.380
+Go try it.

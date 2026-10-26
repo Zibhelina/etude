@@ -62,9 +62,13 @@ const cards = (etude.search("-deck:\"Etude Showcase\"", { limit: 1000 }) as any)
 const showcase = (etude.search("deck:\"Etude Showcase\"", { limit: 1000 }) as any).rows as { cardId: number }[];
 const pool = [...cards, ...showcase];
 const intro = new Map(pool.map((c) => [c.cardId, start + Math.floor(rand() * 80) * DAY + Math.floor(rand() * 10) * 3600_000]));
-for (let day = 0; day < 90; day++) {
-  const t0 = start + day * DAY + 15 * 3600_000;
-  if (rand() < 0.1) continue; // a few days off
+// Study happens at a few different times of day (mostly evenings), so the study clock has a shape.
+const HOURS = [8, 9, 12, 17, 19, 20, 20, 21, 21, 22, 22, 23];
+for (let day = 0; day <= 92; day++) {
+  if (day < 86 && rand() < 0.1) continue; // a few days off, but the last week is a streak
+  const midnight = new Date(start + day * DAY);
+  midnight.setHours(0, 0, 0, 0);
+  const t0 = midnight.getTime() + HOURS[Math.floor(rand() * HOURS.length)] * 3600_000 + Math.floor(rand() * 40) * 60_000;
   let k = 0;
   for (const c of pool) {
     const row = etude.cardSchedule(c.cardId) as any;

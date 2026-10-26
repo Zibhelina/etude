@@ -30,11 +30,12 @@
   <div class="wrap">
     <a href="./" class="wordmark" aria-label="Etude home"><span class="eps">ε</span>tude</a>
     <nav class="nav-links" aria-label="Sections">
+      <a href="#film">Film</a>
       <a href="#cards">Cards</a>
       <a href="#grading">Grading</a>
-      <a href="#exams">Exams</a>
-      <a href="#agents">Agents</a>
-      <a href="#app">The app</a>
+      <a href="#stats">Stats</a>
+      <a href="#anki">Anki</a>
+      <a href="#market">Market</a>
     </nav>
     <div class="nav-end">
       <a class="nav-gh" href="https://github.com/Zibhelina/etude" aria-label="Etude on GitHub">
@@ -76,6 +77,39 @@
         </div>
       </div>
       <p class="note note-stage" aria-hidden="true">it plays the deck by itself. click any card to take over</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ the film -->
+<section class="film" id="film" aria-label="The Etude film">
+  <div class="wrap">
+    <p class="opus">Overture <span>two minutes, sound on</span></p>
+    <div class="sheet film-frame">
+      <video id="film-video" playsinline preload="none" poster="assets/film/poster.webp" width="1920" height="1080">
+        <source src="assets/film/etude-film.mp4" type="video/mp4">
+        <track kind="captions" srclang="en" label="English" src="assets/film/etude-film.vtt">
+      </video>
+      <button class="film-play" type="button" aria-label="Play the film"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg><span>Watch the film <small class="tabular">2:08</small></span></button>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================== prelude: why -->
+<section class="section prelude" id="why">
+  <div class="wrap">
+    <header class="head" data-reveal>
+      <p class="opus">Prelude <span>why it exists</span></p>
+    </header>
+    <div class="prelude-grid">
+      <div class="letter" data-reveal>
+        <p>Learning has always been a big part of my life, and I've always looked for ways to make it more effective, and more fun. Apps like Anki and RemNote showed me how powerful spaced practice is. But I kept running into the limits of how flashcard apps work. Making a deck takes a long time, and whatever you want to learn has to fit the format the app gives you: a front and a back.</p>
+        <p>Etude is my attempt to take that idea further. It isn't really a flashcard app. It's a practice app. The scheduling stays, but a card can be a chess position, a chord, a proof or a piece of code, checked the way it should be. And every part of it can be extended, swapped or rewritten, so the app bends around what you're learning instead of the other way around.</p>
+        <p>It's also my take on what learning should put first: systematic practice. A lot of people treat learning as something a bit mystical, as if some people just get it and you have to be smart to memorize things. I don't think that's true. Most of it is memory and repetition: practice.</p>
+        <p>That's why I'd like Etude to be used by students, by schools, and by anyone who wants learning to be easier. Its whole point is to show that your mind can do a lot more than you think, once you give it the right system.</p>
+        <p class="letter-sign"><span class="wordmark"><span class="eps">ε</span></span> João Henrique Costa Araujo <small>who made Etude</small></p>
+      </div>
+      <blockquote class="pull" data-reveal style="--d:.15s" aria-hidden="true">Your mind can do more than you think, with the right <em>system.</em></blockquote>
     </div>
   </div>
 </section>
@@ -214,11 +248,45 @@
   </div>
 </section>
 
+<!-- =========================================================== no. 5: stats -->
+<section class="section" id="stats">
+  <div class="wrap">
+    <header class="head" data-reveal>
+      <p class="opus">No.&thinsp;5 <span>the record</span></p>
+      <div>
+        <h2>See what you know, and what's about to&nbsp;slip.</h2>
+        <p class="sub">Every review feeds the same FSRS model that schedules your cards, so Stats can tell you more than a streak: how much you'd remember if you stopped today, which tags are slipping and when in the day you study best.</p>
+      </div>
+    </header>
+    <div class="plates" data-plates data-reveal>
+      <div class="plate-list" role="tablist" aria-label="Stats panels">
+        <button role="tab" aria-selected="true" data-plate="overview"><b>Recall against your target</b><span>Predicted recall right now, true retention, the week's reviews and your streak.</span></button>
+        <button role="tab" aria-selected="false" data-plate="curve"><b>If you stopped today</b><span>The forgetting curve of your whole collection, and the day it crosses your target.</span></button>
+        <button role="tab" aria-selected="false" data-plate="memory"><b>Memory strength</b><span>How many days each card holds before it falls to 90%.</span></button>
+        <button role="tab" aria-selected="false" data-plate="clock"><b>When you study</b><span>A 24-hour clock of your reviews, coloured by how often you passed.</span></button>
+        <button role="tab" aria-selected="false" data-plate="tags"><b>Weakest tags</b><span>Recall per tag against your target, so you know what to review next.</span></button>
+        <button role="tab" aria-selected="false" data-plate="forecast"><b>Forecast</b><span>What's due for the next 30 days, up to your exam date.</span></button>
+      </div>
+      <figure class="plate">
+        <div class="plate-view">
+          <img class="on" data-plate-img="overview" src="assets/stats/overview.webp" alt="Recall now 94.5% against a 90% target, true retention, reviews, streak and time" width="1924" height="546">
+          <img data-plate-img="curve" src="assets/stats/curve.webp" alt="If you stopped today: recall falls under 90% in about 22 days" width="1924" height="664" loading="lazy">
+          <img data-plate-img="memory" src="assets/stats/memory.webp" alt="Memory strength histogram: most cards hold 21 to 60 days" width="940" height="484" loading="lazy">
+          <img data-plate-img="clock" src="assets/stats/clock.webp" alt="When you study: a 24-hour clock, busiest at 20:00" width="940" height="624" loading="lazy">
+          <img data-plate-img="tags" src="assets/stats/tags.webp" alt="Weakest tags with their recall and the target line" width="1924" height="1256" loading="lazy">
+          <img data-plate-img="forecast" src="assets/stats/forecast.webp" alt="Forecast: cards due per day for the next 30 days" width="1924" height="768" loading="lazy">
+        </div>
+        <figcaption class="fineprint">The Stats page of a demo collection with three months of reviews.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
 <!-- ========================================================== no. 6: agents -->
 <section class="section" id="agents">
   <div class="wrap">
     <header class="head" data-reveal>
-      <p class="opus">No.&thinsp;5 <span>for four hands</span></p>
+      <p class="opus">No.&thinsp;6 <span>for four hands</span></p>
       <div>
         <h2>Your agent can use it&nbsp;too.</h2>
         <p class="sub">Every action in the app is also a command with JSON output. Give an agent your notes and it can write the deck, set the exam date, quiz you in a chat and read back what you keep missing.</p>
@@ -238,11 +306,68 @@
   </div>
 </section>
 
+<!-- ============================================================ anki -->
+<section class="section" id="anki">
+  <div class="wrap">
+    <header class="head" data-reveal>
+      <p class="opus">Transcription <span>from Anki</span></p>
+      <div>
+        <h2>Bring your Anki decks, history&nbsp;included.</h2>
+        <p class="sub">Import an <code>.apkg</code> or a whole <code>.colpkg</code> collection and keep going where you were. Your notetypes, styling, media and review history come across, and FSRS carries on from Anki's memory state instead of starting you over.</p>
+      </div>
+    </header>
+    <div class="anki">
+      <div class="anki-copy" data-reveal>
+        <dl class="anki-map">
+          <div><dt>Notetypes</dt><dd>become card types, with their templates and CSS</dd></div>
+          <div><dt>Notes and cards</dt><dd>become items and cards, one per template or cloze</dd></div>
+          <div><dt>Review log</dt><dd>keeps every review with its original date and rating</dd></div>
+          <div><dt>FSRS state</dt><dd>stability and difficulty carry over as they were</dd></div>
+          <div><dt>Media</dt><dd>images, sounds and fonts are copied into your collection</dd></div>
+          <div><dt>Decks and tags</dt><dd>keep their <code>::</code> hierarchy and deck options</dd></div>
+        </dl>
+        <div class="cmd anki-cmd"><pre><span class="ps">$</span> etude anki import "Ultimate Geography.apkg"
+<span class="out">319 notes · 978 cards · 546 media files</span></pre></div>
+        <p class="fineprint">Or press <b>Import</b> on the Decks page. Import again later and it updates in place without duplicating anything. Re-importing never overwrites progress you made in Etude. <a href="https://github.com/Zibhelina/etude/blob/main/docs/anki.md">What comes across, and what doesn't</a></p>
+      </div>
+      <figure class="anki-shot" data-reveal style="--d:.1s">
+        <div class="anki-card"><img src="assets/anki/ultimate-geography.webp" alt="A flag card from Ultimate Geography, imported from Anki, studied in Etude" width="1100" height="1252" loading="lazy"></div>
+        <figcaption class="fineprint"><a href="https://github.com/anki-geo/ultimate-geography">Ultimate Geography</a>, one of Anki's best-known shared decks, imported and studied in Etude with its own styling. Flag images belong to their authors.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ market -->
+<section class="section" id="market">
+  <div class="wrap">
+    <header class="head" data-reveal>
+      <p class="opus">Ensemble <span>the market</span></p>
+      <div>
+        <h2>Card types, decks and themes, shared by the people who use&nbsp;them.</h2>
+        <p class="sub">The Market tab browses a public catalogue on GitHub. Try a card type live before you install it, install a deck with its types in one click, or pick a theme. When you make something good, <b>Publish</b> opens a pull request for you.</p>
+      </div>
+    </header>
+    <div class="market" data-market data-reveal>
+      <div class="market-tabs shots-tabs" role="tablist" aria-label="Market sections">
+        <button role="tab" aria-selected="true" data-kind="type">Card types</button>
+        <button role="tab" aria-selected="false" data-kind="deck">Decks</button>
+        <button role="tab" aria-selected="false" data-kind="theme">Themes</button>
+      </div>
+      <div class="market-grid" data-market-grid></div>
+      <div class="market-foot">
+        <p class="fineprint" data-market-count></p>
+        <a class="textlink" href="https://github.com/Zibhelina/etude-market">Browse the catalogue on GitHub <span aria-hidden="true">→</span></a>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============================================================= no. 7: app -->
 <section class="section" id="app">
   <div class="wrap">
     <header class="head" data-reveal>
-      <p class="opus">No.&thinsp;6 <span>quietly</span></p>
+      <p class="opus">No.&thinsp;7 <span>quietly</span></p>
       <div>
         <h2>A calm, keyboard‑first app on your own&nbsp;computer.</h2>
         <p class="sub">Open it in a browser, or on your phone over your own network. There's nothing to sign up for.</p>
@@ -285,7 +410,7 @@
 <section class="section" id="types">
   <div class="wrap">
     <header class="head" data-reveal>
-      <p class="opus">No.&thinsp;7 <span>open score</span></p>
+      <p class="opus">No.&thinsp;8 <span>open score</span></p>
       <div>
         <h2>Every card type is a folder of code you can&nbsp;read.</h2>
         <p class="sub">A template, a stylesheet, a script for the card and optional scripts that prepare and grade it. The included types are written exactly this way, so you can open one, copy it and make it yours, in the app with a live preview or in your own editor.</p>
@@ -340,7 +465,7 @@
 <section class="section" id="more">
   <div class="wrap">
     <header class="head" data-reveal>
-      <p class="opus">No.&thinsp;8 <span>the accompaniment</span></p>
+      <p class="opus">No.&thinsp;9 <span>the accompaniment</span></p>
       <div>
         <h2>And the parts a study app should have.</h2>
       </div>
@@ -379,10 +504,10 @@
       <a href="./" class="wordmark"><span class="eps">ε</span>tude</a>
       <p>Spaced-repetition practice with programmable card types and AI grading.</p>
     </div>
-    <div><h4>Product</h4><ul><li><a href="#cards">Cards</a></li><li><a href="#grading">Grading</a></li><li><a href="#exams">Exams</a></li><li><a href="#agents">Agents</a></li><li><a href="download.html">Download</a></li></ul></div>
+    <div><h4>Product</h4><ul><li><a href="#why">Why Etude</a></li><li><a href="#cards">Cards</a></li><li><a href="#grading">Grading</a></li><li><a href="#exams">Exams</a></li><li><a href="#stats">Stats</a></li><li><a href="#anki">Anki import</a></li><li><a href="#market">Market</a></li><li><a href="#agents">Agents</a></li><li><a href="download.html">Download</a></li></ul></div>
     <div><h4>Docs</h4><ul><li><a href="https://github.com/Zibhelina/etude#readme">README</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/docs/packs.md">Packs</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/docs/types.md">Card types</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/docs/cli.md">CLI reference</a></li></ul></div>
     <div><h4>Project</h4><ul><li><a href="https://github.com/Zibhelina/etude">GitHub</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/SECURITY.md">Security</a></li><li><a href="https://github.com/Zibhelina/etude/issues">Issues</a></li><li><a href="https://ko-fi.com/jhca">Ko-fi</a></li></ul></div>
-    <div class="fine"><span>MIT License · © 2026 Joao Araujo</span><span>Made with <span class="wordmark" style="font-size:1em"><span class="eps">ε</span>tude</span> cards, of course.</span></div>
+    <div class="fine"><span>MIT License · © 2026 João Henrique Costa Araujo</span><span>Made with <span class="wordmark" style="font-size:1em"><span class="eps">ε</span>tude</span> cards, of course.</span></div>
   </div>
 </footer>
 </body>

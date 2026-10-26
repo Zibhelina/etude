@@ -38,6 +38,58 @@ function visibility(el) {
   return state;
 }
 
+/**
+ * Card frames load without a blank flash: the card on screen stays (and stops taking input) while
+ * the next one loads out of sight, and the skeleton only shows when loading takes long enough to
+ * notice, as it does on a first visit or a slow connection. Switching between cached cards is a
+ * crossfade.
+ */
+function frameSwapper(body, loader) {
+  let timer = null, shown = null;
+  return {
+    add(frame) {
+      clearTimeout(timer);
+      for (const f of $$("iframe", body)) if (f !== shown) f.remove();
+      if (shown) {
+        // Lift the old card out of the flow where it is, so the new one can take its place.
+        const { offsetTop: top, offsetLeft: left, offsetWidth: width } = shown;
+        Object.assign(shown.style, { position: "absolute", top: `${top}px`, left: `${left}px`, width: `${width}px` });
+        shown.classList.add("leaving");
+      }
+      body.appendChild(frame);
+      const slow = () => { shown?.classList.add("gone"); loader.classList.remove("hide"); };
+      if (shown) timer = setTimeout(slow, 220); else slow();
+    },
+    mounted(frame) {
+      clearTimeout(timer);
+      if (shown && shown !== frame) shown.remove();
+      shown = frame;
+      frame.classList.remove("loading");
+      frame.classList.add("enter");
+      loader.classList.add("hide");
+    },
+  };
+}
+// Card frames on this site are same-origin (allow-same-origin): every card here is one of
+// Etude's own types, and a same-origin frame shares the page's HTTP cache, so KaTeX, the runtime
+// and the fonts download once instead of once per card. The app keeps its frames opaque-origin,
+// because there a card can come from anyone.
+const SANDBOX = "allow-scripts allow-same-origin";
+// The scheduler is small and every rating needs it: fetch it once the page is idle.
+const idle = (fn) => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 4000 }) : setTimeout(fn, 1500));
+let prefetched = false;
+/** Once the first card is up: the scheduler and the other hero cards, so the next ones open at once. */
+function prefetchFrames() {
+  if (prefetched || navigator.connection?.saveData) return;
+  prefetched = true;
+  loadFsrs();
+  for (const d of DEMOS) {
+    const l = document.createElement("link");
+    l.rel = "prefetch"; l.href = `frames/${d.type}.html`;
+    document.head.appendChild(l);
+  }
+}
+
 // ------------------------------------------------------------------ page chrome
 const nav = $("#nav");
 const onScroll = () => nav.classList.toggle("scrolled", scrollY > 8);
@@ -131,9 +183,10 @@ if (stage) {
   const checkBtn = $("[data-check]", stage), verdictEl = $(".verdict", stage), ratings = $(".ratings", stage);
   let cur = null; // { demo, prep, seed, frame, phase, result }
   const stageVis = visibility(stage);
+  const swap = frameSwapper(body, loader);
   let index = 0;
 
-  tabs.innerHTML = DEMOS.map((d, i) => `<button class="stage-tab" role="tab" type="button" aria-selected="${i === 0}" data-i="${i}">${esc(d.label)}</button>`).join("");
+  if (!tabs.children.length) tabs.innerHTML = DEMOS.map((d, i) => `<button class="stage-tab" role="tab" type="button" aria-selected="${i === 0}" data-i="${i}">${esc(d.label)}</button>`).join("");
   tabs.addEventListener("click", (e) => {
     const b = e.target.closest("[data-i]");
     if (b) open(Number(b.dataset.i));
@@ -165,15 +218,13 @@ if (stage) {
     const old = cur?.frame;
     const frame = document.createElement("iframe");
     frame.title = `${demo.name} card`;
-    frame.setAttribute("sandbox", "allow-scripts");
+    frame.setAttribute("sandbox", SANDBOX);
     frame.className = "loading";
     frame.style.height = old ? old.style.height : "380px";
     frame.src = `frames/${demo.type}.html`;
     cur = { demo, prep, seed, frame, phase: "loading", ready: true };
-    if (old) old.remove();
-    loader.classList.remove("hide");
+    swap.add(frame);
     body.scrollTop = 0;
-    body.appendChild(frame);
   }
 
   addEventListener("message", (e) => {
@@ -186,9 +237,9 @@ if (stage) {
         break;
       case "mounted":
         cur.phase = "answer";
-        cur.frame.classList.remove("loading");
-        loader.classList.add("hide");
+        swap.mounted(cur.frame);
         checkBtn.disabled = !cur.ready;
+        idle(prefetchFrames);
         break;
       case "size":
         if (typeof msg.height === "number") cur.frame.style.height = `${Math.max(120, Math.min(msg.height + 4, 2000))}px`;
@@ -349,7 +400,7 @@ if (stage) {
     auto = on; gen++;
     toggle.innerHTML = on ? `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg><span class="dt-label">Playing the deck</span>` : `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5v14l12-7z"/></svg><span class="dt-label">Play the deck</span>`;
     toggle.setAttribute("aria-label", on ? "Pause the deck" : "Play the deck");
-    if (!on) cursor.classList.remove("on");
+    if (!on) { cursor.classList.remove("on"); if (!cur) open(index); }
     else { if (touched || cur?.phase !== "answer") open((index + 1) % DEMOS.length); touched = false; play(gen); }
   }
   // A real person takes over: stop the demo where it is and let them finish the card.
@@ -591,11 +642,20 @@ if (shotTabs) {
   const cap = $("[data-shot-caption]");
   let auto = true, i = 0;
   const names = $$("[data-shot]", shotTabs).map((b) => b.dataset.shot);
-  const show = (name) => {
+  const imgs = $$("[data-shot-img]");
+  const img = (name) => imgs.find((el) => el.dataset.shotImg === name);
+  // Load a screenshot ahead of time, so the crossfade never fades into an empty frame.
+  const warm = (name) => { const el = img(name); if (!el) return Promise.resolve(); el.loading = "eager"; return el.decode().catch(() => {}); };
+  let showing = 0;
+  const show = async (name) => {
+    const t = ++showing;
     i = names.indexOf(name);
     $$("[data-shot]", shotTabs).forEach((b) => b.setAttribute("aria-selected", String(b.dataset.shot === name)));
-    $$("[data-shot-img]").forEach((img) => img.classList.toggle("on", img.dataset.shotImg === name));
     cap.innerHTML = CAPTIONS[name];
+    await warm(name);
+    if (t !== showing) return;
+    imgs.forEach((el) => el.classList.toggle("on", el.dataset.shotImg === name));
+    warm(names[(i + 1) % names.length]);
   };
   shotTabs.addEventListener("click", (e) => {
     const b = e.target.closest("[data-shot]");
@@ -660,6 +720,7 @@ if (rep && GALLERY?.length) {
 
   let cur = null; // { entry, i, k, seed, prep, frame, phase }
   const variant = new Map(); // which item of an entry was shown last
+  const swap = frameSwapper(body, loader);
   const post = (msg) => cur?.frame.contentWindow?.postMessage({ etude: 1, ...msg }, "*");
 
   function open(i, { fresh = false, focus = false } = {}) {
@@ -690,14 +751,12 @@ if (rep && GALLERY?.length) {
     const old = cur?.frame;
     const frame = document.createElement("iframe");
     frame.title = `${entry.name} card`;
-    frame.setAttribute("sandbox", "allow-scripts");
+    frame.setAttribute("sandbox", SANDBOX);
     frame.className = "loading";
     frame.style.height = old ? old.style.height : "420px";
     frame.src = `frames/gallery/${entry.type}.html`;
     cur = { entry, i, k, item, seed, prep, frame, phase: "loading", ready: true, focus };
-    old?.remove();
-    loader.classList.remove("hide");
-    body.appendChild(frame);
+    swap.add(frame);
   }
 
   addEventListener("message", (e) => {
@@ -712,8 +771,7 @@ if (rep && GALLERY?.length) {
         break;
       case "mounted":
         cur.phase = "answer";
-        cur.frame.classList.remove("loading");
-        loader.classList.add("hide");
+        swap.mounted(cur.frame);
         checkBtn.disabled = !cur.ready;
         break;
       case "size":

@@ -188,7 +188,7 @@ DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 
-KaTeX fonts (assets/fonts/KaTeX_*.woff2): MIT, see node_modules/katex/LICENSE
+KaTeX fonts: the page uses the copies in runtime/vendor/fonts (MIT, see node_modules/katex/LICENSE)
 
 
 Caveat (assets/fonts/caveat.woff2, Latin subset):

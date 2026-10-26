@@ -13,7 +13,12 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="preload" href="assets/fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="assets/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="runtime/vendor/fonts/KaTeX_Main-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="modulepreload" href="runtime/vendor/katex.js">
+<link rel="modulepreload" href="runtime/mathexpr.js">
+<link rel="modulepreload" href="data.js">
+<link rel="modulepreload" href="runtime/runtime.js">
+<link rel="modulepreload" href="runtime/vendor/marked.js">
 <link rel="stylesheet" href="runtime/vendor/katex.css">
 <link rel="stylesheet" href="runtime/code.css">
 <link rel="stylesheet" href="assets/site.css">
@@ -59,10 +64,10 @@
     <div class="stage-wrap fade-up" style="animation-delay:.2s">
             <div class="sheet stage" id="stage">
         <div class="window-bar">
-          <div class="stage-tabs" role="tablist" aria-label="Card types"></div>
+          <div class="stage-tabs" role="tablist" aria-label="Card types">{{STAGE_TABS}}</div>
         </div>
         <div class="stage-body">
-          <div class="stage-loader">Loading card…</div>
+          <div class="stage-loader" role="status"><div class="sk" aria-hidden="true"><i class="sk-eyebrow"></i><i class="sk-line"></i><i class="sk-line short"></i><i class="sk-block"></i></div><span class="sr-only">Loading card…</span></div>
         </div>
         <div class="stage-foot">
           <div class="verdict" aria-live="polite"></div>
@@ -317,7 +322,7 @@
           <p class="rep-grader" data-rep-grader></p>
         </div>
         <div class="sheet rep-card" role="region" aria-label="The card" id="rep-panel" data-rep-card>
-          <div class="rep-body"><div class="rep-loader">Loading card…</div></div>
+          <div class="rep-body"><div class="rep-loader" role="status"><div class="sk" aria-hidden="true"><i class="sk-eyebrow"></i><i class="sk-line"></i><i class="sk-line short"></i><i class="sk-block"></i></div><span class="sr-only">Loading card…</span></div></div>
           <div class="rep-foot">
             <div class="verdict rep-verdict" aria-live="polite"></div>
             <div class="rep-actions">

@@ -93,6 +93,12 @@ test("an item keeps every card when facesWhen fails for it or would leave it wit
   for (const id of ["ok", "boom", "empty"]) e.upsertItem({ id, type: "two-way", deck: "D", fields: { front: id, back: id } });
   e.saveType({ ...twoWay, facesWhen: 'if (fields.front === "boom") throw new Error("no"); return fields.front === "empty" ? [] : ["forward"];' });
   assert.deepEqual(e.leftoverCards().map((c) => `${c.itemId}/${c.face}`), ["ok/reverse"]);
+  // Archived items are left alone, as Browse and study leave them out; unarchiving brings the card back.
+  e.setArchived(["ok"], true);
+  assert.deepEqual(e.leftoverCards(), []);
+  assert.equal(e.search("is:leftover is:archived").total, 0);
+  e.setArchived(["ok"], false);
+  assert.deepEqual(e.leftoverCards().map((c) => `${c.itemId}/${c.face}`), ["ok/reverse"]);
   // Another type's leftovers are untouched when pruning one type.
   e.saveType({ ...twoWay, id: "other" });
   e.upsertItem({ id: "o", type: "other", deck: "D", fields: { front: "o", back: "o" } });

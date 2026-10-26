@@ -1098,10 +1098,10 @@ export class Etude {
     const def = this.type(typeId);
     const ts = iso();
     const gone: number[] = [];
-    for (const it of this.db.all("SELECT id, fields FROM items WHERE type = ?", typeId)) {
+    for (const it of this.db.all("SELECT id, fields, archived FROM items WHERE type = ?", typeId)) {
       const faces = this.facesMade(def, parse<Record<string, unknown>>(it.fields, {}));
       for (const face of faces ?? def.faces ?? ["main"]) this.db.run("INSERT OR IGNORE INTO cards (item_id, face, due) VALUES (?, ?, ?)", it.id, face, ts);
-      for (const c of leftoversOf(this.db.all<{ id: number; face: string }>("SELECT id, face FROM cards WHERE item_id = ?", it.id), faces)) gone.push(c.id);
+      if (!it.archived) for (const c of leftoversOf(this.db.all<{ id: number; face: string }>("SELECT id, face FROM cards WHERE item_id = ?", it.id), faces)) gone.push(c.id);
     }
     const reviews = gone.length ? this.reviewsPerCard() : new Map<number, number>();
     return { cards: gone.length, reviews: gone.reduce((n, id) => n + (reviews.get(id) ?? 0), 0) };
@@ -1131,7 +1131,8 @@ export class Etude {
   /**
    * Cards on faces their item's type no longer makes, after its `faces` or `facesWhen` changed. Saving a
    * type never removes them, so their history isn't lost by accident. An item keeps every card when its
-   * faces can't be worked out (a failing `facesWhen`) or when it would be left with none.
+   * faces can't be worked out (a failing `facesWhen`) or when it would be left with none. Archived items
+   * are left alone, like everywhere else: their cards never come up anyway.
    */
   leftoverCards(opts: { type?: string; face?: string } = {}): LeftoverCard[] {
     // Finding them runs facesWhen for every item, so the answer is kept until items, cards, reviews or types change.
@@ -1144,7 +1145,7 @@ export class Etude {
 
   private findLeftoverCards(): LeftoverCard[] {
     const rows = this.db.all<{ id: number; item_id: string; face: string; type: string; fields: string }>(
-      "SELECT c.id, c.item_id, c.face, i.type, i.fields FROM cards c JOIN items i ON i.id = c.item_id ORDER BY i.ord, i.id, c.id",
+      "SELECT c.id, c.item_id, c.face, i.type, i.fields FROM cards c JOIN items i ON i.id = c.item_id WHERE i.archived = 0 ORDER BY i.ord, i.id, c.id",
     );
     const defs = new Map<string, CardTypeDef | null>();
     const defFor = (id: string) => {

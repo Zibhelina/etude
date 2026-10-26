@@ -243,7 +243,8 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const b = await body(c);
     let ids: number[] = (b.cardIds ?? []).map(Number);
     switch (b.action) {
-      case "suspend": etude.setSuspended(ids, true); break;
+      case "suspend": ids = etude.setSuspended(ids, true); break;
+      case "suspend-note": ids = etude.setSuspended(etude.noteCards(ids), true); break;
       case "unsuspend": etude.setSuspended(ids, false); break;
       case "reset": etude.resetCards(ids); break;
       case "bury": ids = etude.setBuried(ids, undefined, { preserveExisting: true }); break;

@@ -1346,10 +1346,13 @@ export class Etude {
     });
   }
 
-  setSuspended(cardIds: number[], suspended: boolean) {
+  /** Suspends or unsuspends cards. Returns the ids that changed, so an undo leaves the others as they were. */
+  setSuspended(cardIds: number[], suspended: boolean): number[] {
+    const changed: number[] = [];
     this.db.tx(() => {
-      for (const id of cardIds) this.db.run("UPDATE cards SET suspended = ? WHERE id = ?", Number(suspended), id);
+      for (const id of new Set(cardIds)) if (this.db.run("UPDATE cards SET suspended = ? WHERE id = ? AND suspended != ?", Number(suspended), id, Number(suspended)).changes) changed.push(id);
     });
+    return changed;
   }
 
   /** Forgets scheduling for cards (they become new again). History stays. */

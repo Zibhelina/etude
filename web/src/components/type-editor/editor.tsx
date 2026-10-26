@@ -15,7 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { CodeEditor } from "@/components/code-editor";
 import { CardPreview } from "@/components/card-preview";
 import { AutoTextarea, FieldEditor } from "@/components/field-editor";
-import { api, ApiError, type CardType, type FieldSpec, type TypeSummary } from "@/lib/api";
+import { api, ApiError, type CardType, type FieldSpec, type LeftoverReport, type TypeSummary } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { FieldsSchema } from "./fields-schema";
@@ -35,6 +35,9 @@ export function TypeEditor({ id }: { id: string }) {
   const [allTypes, setAllTypes] = useState<TypeSummary[]>([]);
   const [missing, setMissing] = useState(false);
   const [sampleFrom, setSampleFrom] = useState<string>("");
+  // Cards on faces this type no longer makes; checked in the background (it runs facesWhen per item).
+  const [leftover, setLeftover] = useState<LeftoverReport | null>(null);
+  const [askPrune, setAskPrune] = useState<{ cards: number; reviews: number } | null>(null);
 
   const isNew = !saved;
 
@@ -73,6 +76,7 @@ export function TypeEditor({ id }: { id: string }) {
         clearPending(id);
         setSaved(def);
         setDraft(def);
+        api.typeLeftover(id).then((r) => live && setLeftover(r), () => {});
         const s = await pickSample(id, def);
         if (!live) return;
         setSample(s.fields);
@@ -215,7 +219,7 @@ export function TypeEditor({ id }: { id: string }) {
     }
     setSaving(true);
     try {
-      await api.saveType(exportShape(draft));
+      const result = await api.saveType(exportShape(draft));
       // A type made with "New type here" in a folder lands in that folder.
       const folder = isNew ? readPending(id)?.folder : undefined;
       if (folder) await api.moveType(draft.id, folder).catch(() => {});
@@ -235,6 +239,9 @@ export function TypeEditor({ id }: { id: string }) {
       setSaved(fresh);
       setDraft(fresh);
       toast.success(isNew ? `Created ${draft.name}` : "Saved");
+      // A save that leaves more cards on faces the type no longer makes asks whether to delete them.
+      if (result.leftover && leftover && result.leftover.cards > leftover.cards) setAskPrune(result.leftover);
+      api.typeLeftover(draft.id).then(setLeftover, () => {});
     } catch (e) {
       const msg = (e as Error).message.replace(/^invalid type:\s*/, "");
       setSaveErrors(msg.split(/;\s+/));
@@ -242,7 +249,17 @@ export function TypeEditor({ id }: { id: string }) {
     } finally {
       setSaving(false);
     }
-  }, [draft, isNew, allTypes, id]);
+  }, [draft, isNew, allTypes, id, leftover]);
+
+  const prune = async () => {
+    try {
+      const r = await api.deleteLeftoverCards(id);
+      toast.success(`Deleted ${cardCount(r.cards)}`);
+      setLeftover(await api.typeLeftover(id));
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
 
   const save = useCallback(() => {
     if (!dirty || saving) return;
@@ -280,6 +297,7 @@ export function TypeEditor({ id }: { id: string }) {
       const types = await api.types();
       setAllTypes(types);
       setSummary(types.find((t) => t.id === id) ?? null);
+      api.typeLeftover(id).then(setLeftover, () => {});
       toast.success("Restored the shipped version");
     } catch (e) {
       toast.error((e as Error).message);
@@ -418,6 +436,15 @@ export function TypeEditor({ id }: { id: string }) {
                 <AutoTextarea value={draft.description ?? ""} onChange={(v) => set({ description: v })} placeholder="What the learner does and how it's graded." />
               </Field>
               <FacesEditor faces={draft.faces} onChange={(faces) => set({ faces })} />
+              {!!leftover?.cards && (
+                <div className="flex flex-col gap-3 rounded-lg border px-3.5 py-3 text-sm sm:flex-row sm:items-center">
+                  <span className="min-w-0 flex-1 text-muted-foreground">
+                    {cardCount(leftover.cards)} {leftover.cards === 1 ? "is" : "are"} on {leftover.faces.length === 1 ? "a face" : "faces"} this type no longer makes ({leftover.faces.map((f) => f.face).join(", ")})
+                    {leftover.reviews ? `, with ${leftover.reviews.toLocaleString()} review${leftover.reviews === 1 ? "" : "s"} of history` : ""}. {leftover.cards === 1 ? "It still comes" : "They still come"} up in study unless suspended.
+                  </span>
+                  <Button variant="outline" size="sm" className="shrink-0 self-start sm:self-auto" onClick={() => setAskPrune(leftover)}>Delete them</Button>
+                </div>
+              )}
               <Field label="List title" hint="The field that names an item in Browse and search results. Automatic uses the first public markdown field. Private fields are never shown while studying.">
                 <Select value={draft.titleField ?? AUTO_TITLE} onValueChange={(v) => set({ titleField: v === AUTO_TITLE ? undefined : v })}>
                   <SelectTrigger className="h-10 w-full sm:w-72"><SelectValue /></SelectTrigger>
@@ -614,6 +641,23 @@ export function TypeEditor({ id }: { id: string }) {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog open={!!askPrune} onOpenChange={(open) => !open && setAskPrune(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {cardCount(askPrune?.cards ?? 0)} this type no longer makes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {askPrune?.cards === 1
+                ? `It's on a face you removed, or that the faces script no longer returns for its item. ${askPrune.reviews ? `Its ${askPrune.reviews.toLocaleString()} review${askPrune.reviews === 1 ? "" : "s"} of history go with it.` : "It has no review history."} Kept, it still comes up in study unless suspended, and Settings → Clean up can delete it later.`
+                : `They're on faces you removed, or that the faces script no longer returns for their items. ${askPrune?.reviews ? `Their ${askPrune.reviews.toLocaleString()} review${askPrune.reviews === 1 ? "" : "s"} of history go with them.` : "None of them has review history."} Kept, they still come up in study unless suspended, and Settings → Clean up can delete them later.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{askPrune?.cards === 1 ? "Keep it" : "Keep them"}</AlertDialogCancel>
+            <AlertDialogAction onClick={prune}>Delete {cardCount(askPrune?.cards ?? 0)}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={confirmReset} onOpenChange={setConfirmReset}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -690,6 +734,8 @@ function AssetList({ files }: { files: { name: string; size: number }[] }) {
     </div>
   );
 }
+
+const cardCount = (n: number) => `${n.toLocaleString()} card${n === 1 ? "" : "s"}`;
 
 function formatBytes(n: number) {
   if (n < 1024) return `${n} B`;

@@ -14,6 +14,36 @@ const TYPES: Record<string, [string, MediaKind, string?]> = {
   ".ogv": ["video/ogg", "video"], ".mov": ["video/quicktime", "video"],
 };
 
+// Where a file name mentioned in text can start: after a quote, bracket, slash, colon or equals sign.
+const NAME_START = new Set(['"', "'", "<", ">", "(", ")", "[", "]", "{", "}", "/", "\\", ":", "=", "\n", "\r", "\t"]);
+// A name may also start after one of these inside such a run ("see my file.mp3" names "file.mp3" too).
+const NAME_SPLIT = /[ ,;|*`]/g;
+
+/**
+ * Adds every file name `text` mentions that ends in one of `exts` (lowercase, no dot), lowercased and
+ * URL-decoded: "/media/anki/my%20file.mp3", "[sound:my file.mp3]" and "url(file.mp3)" all count. It errs
+ * towards finding too many names, so a file it misses is one nothing names.
+ */
+export function collectFileNames(text: string, exts: Set<string>, into: Set<string>) {
+  const ext = /\.([A-Za-z0-9]{1,8})(?![A-Za-z0-9])/g;
+  for (let m: RegExpExecArray | null; (m = ext.exec(text)); ) {
+    if (!exts.has(m[1].toLowerCase())) continue;
+    const end = m.index + m[0].length;
+    let start = m.index;
+    while (start > 0 && end - start < 300 && !NAME_START.has(text[start - 1])) start--;
+    const run = text.slice(start, end);
+    for (const name of [run, ...[...run.matchAll(NAME_SPLIT)].map((s) => run.slice(s.index + 1))]) {
+      const n = name.trim().toLowerCase();
+      if (!n) continue;
+      into.add(n);
+      into.add(n.replace(/&amp;/g, "&"));
+      try {
+        into.add(decodeURIComponent(n));
+      } catch {}
+    }
+  }
+}
+
 export function mediaType(name: string) {
   const ext = extname(name).toLowerCase();
   const type = TYPES[ext];

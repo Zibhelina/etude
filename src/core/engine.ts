@@ -1,9 +1,9 @@
 // The engine: one object that owns the database and every operation on it.
 // The HTTP server and the CLI are thin layers over this class.
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Db, type Row } from "./db.ts";
 import {
@@ -58,7 +58,7 @@ import { BUILTIN_THEMES, DEFAULT_THEME, MAX_CUSTOM_THEMES, ThemeError, builtinTh
 import { openPackage } from "./anki/package.ts";
 import { readCollection } from "./anki/collection.ts";
 import { convertCollection, type PlannedCard } from "./anki/convert.ts";
-import { MAX_MEDIA_BYTES, mediaType } from "./media.ts";
+import { collectFileNames, MAX_MEDIA_BYTES, mediaType } from "./media.ts";
 import { decodeAssets, hashBytes, type AssetInfo } from "./assets.ts";
 import { imagePixels, normalizeBoxes, OcclusionError } from "./occlusion.ts";
 
@@ -105,6 +105,23 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" } };
+
+/** A card on a face its item's type no longer makes. */
+export interface LeftoverCard {
+  cardId: number;
+  itemId: string;
+  type: string;
+  face: string;
+  reviews: number;
+}
+
+export interface LeftoverReport {
+  cards: number;
+  /** Cards with at least one review, and how many reviews they hold: history that goes with them. */
+  reviewed: number;
+  reviews: number;
+  faces: { type: string; typeName: string; face: string; cards: number; reviews: number }[];
+}
 
 export interface StudyScope {
   deck?: string;
@@ -213,6 +230,16 @@ export function itemTitle(def: CardTypeDef | null, fields: Record<string, unknow
     if (t) return t;
   }
   return "";
+}
+
+/**
+ * An item's cards on faces its type no longer makes. None when those faces are unknown (`null`, a
+ * failing `facesWhen`) or when the item would be left without a card.
+ */
+function leftoversOf<T extends { face: string }>(cards: T[], faces: string[] | null): T[] {
+  if (!faces) return [];
+  const gone = cards.filter((c) => !faces.includes(c.face));
+  return gone.length === cards.length ? [] : gone;
 }
 
 /** Bump when `itemTitle` or `itemSearchText` change, so collections rebuild the stored columns on open. */
@@ -391,6 +418,44 @@ export class Etude {
   importMedia(input: string, opts: { dryRun?: boolean } = {}) {
     const { path, data } = this.readLocalMedia(input);
     return this.storeMedia(basename(path), data, opts);
+  }
+
+  /**
+   * Files in the media folder that nothing in the collection names: no field, template, deck or tag
+   * text, setting, past attempt or conversation. Hidden files, files without an extension, names
+   * starting with `_` (Anki's mark for files a template loads itself) and files changed in the last hour
+   * (a paste whose card isn't saved yet) are always kept.
+   */
+  unusedMedia(): { path: string; bytes: number }[] {
+    if (!existsSync(this.mediaDir)) return [];
+    const files = readdirSync(this.mediaDir, { recursive: true, withFileTypes: true })
+      .filter((d) => d.isFile())
+      .map((d) => relative(this.mediaDir, join(d.parentPath, d.name)))
+      .filter((rel) => !rel.split(/[\\/]/).some((part) => part.startsWith(".")) && extname(rel).length > 1 && !basename(rel).startsWith("_"));
+    if (!files.length) return [];
+    const exts = new Set(files.map((f) => extname(f).slice(1).toLowerCase()));
+    const named = new Set<string>();
+    const recent = Date.now() - 3600_000;
+    const tables = this.db.all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").map((t) => t.name);
+    for (const t of tables)
+      for (const row of this.db.sql.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).iterate() as Iterable<Record<string, unknown>>)
+        for (const v of Object.values(row)) {
+          if (typeof v === "string") collectFileNames(v, exts, named);
+          else if (v instanceof Uint8Array) collectFileNames(Buffer.from(v).toString("latin1"), exts, named);
+        }
+    return files
+      .filter((f) => !named.has(basename(f).toLowerCase()))
+      .map((f) => ({ f, stat: statSync(join(this.mediaDir, f)) }))
+      .filter(({ stat }) => stat.mtimeMs < recent)
+      .map(({ f, stat }) => ({ path: f.split("\\").join("/"), bytes: stat.size }))
+      .sort((a, b) => a.path.localeCompare(b.path));
+  }
+
+  /** Deletes the media files `unusedMedia` finds. Nothing can bring them back: they aren't in database backups. */
+  deleteUnusedMedia(): { files: number; bytes: number } {
+    const doomed = this.unusedMedia();
+    for (const f of doomed) rmSync(join(this.mediaDir, f.path), { force: true });
+    return { files: doomed.length, bytes: doomed.reduce((n, f) => n + f.bytes, 0) };
   }
 
   private readLocalMedia(input: string): { path: string; data: Buffer } {
@@ -886,7 +951,7 @@ export class Etude {
    * Saves a type and says what changed. `def.assets` replaces the type's asset set (names left out
    * are removed); without `assets` the stored assets stay as they are.
    */
-  saveTypeReport(def: CardTypeDef): { type: CardTypeDef; result: "created" | "updated" | "unchanged"; assets: AssetDelta | null } {
+  saveTypeReport(def: CardTypeDef): { type: CardTypeDef; result: "created" | "updated" | "unchanged"; assets: AssetDelta | null; leftover: { cards: number; reviews: number } | null } {
     const errors = validateType(def);
     if (errors.length) throw new EtudeError(`invalid type: ${errors.join("; ")}`);
     const clean: CardTypeDef = {
@@ -908,9 +973,10 @@ export class Etude {
     const old = this.db.get("SELECT def FROM types WHERE id = ?", def.id);
     const sameDef = !!old && old.def === json(clean);
     if (sameDef && (def.assets === undefined || !this.assetsDiffer(def.id, def.assets))) {
-      return { type: clean, result: "unchanged", assets: def.assets === undefined ? null : this.unchangedDelta(def.id) };
+      return { type: clean, result: "unchanged", assets: def.assets === undefined ? null : this.unchangedDelta(def.id), leftover: null };
     }
     let assets: AssetDelta | null = null;
+    let leftover: { cards: number; reviews: number } | null = null;
     this.db.tx(() => {
       this.db.run(
         "INSERT INTO types (id, def, builtin, updated) VALUES (?, ?, 0, ?) ON CONFLICT(id) DO UPDATE SET def = excluded.def, builtin = 0, updated = excluded.updated",
@@ -920,12 +986,12 @@ export class Etude {
       );
       if (def.assets !== undefined) assets = this.writeAssets(clean.id, def.assets);
       if (!sameDef) {
-        this.ensureCardsForType(clean.id);
+        leftover = this.ensureCardsForType(clean.id);
         this.reindexItems({ type: clean });
       }
     });
     this.typeCache.delete(def.id);
-    return { type: clean, result: old ? "updated" : "created", assets };
+    return { type: clean, result: old ? "updated" : "created", assets, leftover };
   }
 
   // ------------------------------------------------------------ type assets
@@ -1022,10 +1088,21 @@ export class Etude {
     this.typeCache.delete(id);
   }
 
-  private ensureCardsForType(typeId: string) {
+  /**
+   * Creates the cards a type's items are missing, and counts the leftovers: cards on faces it no longer
+   * makes, which stay until deleted (see `leftoverCards`).
+   */
+  private ensureCardsForType(typeId: string): { cards: number; reviews: number } {
     const def = this.type(typeId);
-    const items = this.db.all("SELECT id, fields FROM items WHERE type = ?", typeId);
-    for (const it of items) this.ensureCards(it.id, def, parse<Record<string, unknown>>(it.fields, {}));
+    const ts = iso();
+    const gone: number[] = [];
+    for (const it of this.db.all("SELECT id, fields FROM items WHERE type = ?", typeId)) {
+      const faces = this.facesMade(def, parse<Record<string, unknown>>(it.fields, {}));
+      for (const face of faces ?? def.faces ?? ["main"]) this.db.run("INSERT OR IGNORE INTO cards (item_id, face, due) VALUES (?, ?, ?)", it.id, face, ts);
+      for (const c of leftoversOf(this.db.all<{ id: number; face: string }>("SELECT id, face FROM cards WHERE item_id = ?", it.id), faces)) gone.push(c.id);
+    }
+    const reviews = gone.length ? this.reviewsPerCard() : new Map<number, number>();
+    return { cards: gone.length, reviews: gone.reduce((n, id) => n + (reviews.get(id) ?? 0), 0) };
   }
 
   /**
@@ -1034,16 +1111,90 @@ export class Etude {
    * note that gained a fourth cloze). Cards that already exist are never removed.
    */
   facesFor(def: CardTypeDef, fields: Record<string, unknown>): string[] {
-    const declared = def.faces ?? ["main"];
-    if (!def.facesWhen) return declared;
+    // A broken script must not stop items from being saved; fall back to every face.
+    return this.facesMade(def, fields) ?? def.faces ?? ["main"];
+  }
+
+  /** The faces a type makes for an item, or null when its `facesWhen` fails or doesn't return a list. */
+  private facesMade(def: CardTypeDef, fields: Record<string, unknown>): string[] | null {
+    if (!def.facesWhen) return def.faces ?? ["main"];
     try {
-      const out = runScript<string[]>(def.facesWhen, { params: ["fields"], args: { fields }, where: `${def.id}/facesWhen` });
-      if (!Array.isArray(out)) return declared;
-      return [...new Set(out.filter((f) => typeof f === "string" && /^[\w-]+$/.test(f)))];
+      const out = runScript<string[]>(def.facesWhen!, { params: ["fields"], args: { fields }, where: `${def.id}/facesWhen` });
+      return Array.isArray(out) ? [...new Set(out.filter((f) => typeof f === "string" && /^[\w-]+$/.test(f)))] : null;
     } catch {
-      // A broken script must not stop items from being saved; fall back to every face.
-      return declared;
+      return null;
     }
+  }
+
+  /**
+   * Cards on faces their item's type no longer makes, after its `faces` or `facesWhen` changed. Saving a
+   * type never removes them, so their history isn't lost by accident. An item keeps every card when its
+   * faces can't be worked out (a failing `facesWhen`) or when it would be left with none.
+   */
+  leftoverCards(opts: { type?: string } = {}): LeftoverCard[] {
+    const rows = this.db.all<{ id: number; item_id: string; face: string; type: string; fields: string }>(
+      `SELECT c.id, c.item_id, c.face, i.type, i.fields FROM cards c JOIN items i ON i.id = c.item_id${opts.type ? " WHERE i.type = ?" : ""} ORDER BY i.ord, i.id, c.id`,
+      ...(opts.type ? [opts.type] : []),
+    );
+    const defs = new Map<string, CardTypeDef | null>();
+    const defFor = (id: string) => {
+      if (!defs.has(id)) {
+        let def: CardTypeDef | null = null;
+        try {
+          def = this.type(id);
+        } catch {}
+        defs.set(id, def);
+      }
+      return defs.get(id)!;
+    };
+    const out: LeftoverCard[] = [];
+    for (let i = 0; i < rows.length; ) {
+      let j = i;
+      while (j < rows.length && rows[j].item_id === rows[i].item_id) j++;
+      const cards = rows.slice(i, j);
+      i = j;
+      const def = defFor(cards[0].type);
+      if (!def) continue;
+      for (const c of leftoversOf(cards, this.facesMade(def, parse<Record<string, unknown>>(cards[0].fields, {})))) out.push({ cardId: c.id, itemId: c.item_id, type: c.type, face: c.face, reviews: 0 });
+    }
+    if (out.length) {
+      const reviews = this.reviewsPerCard();
+      for (const c of out) c.reviews = reviews.get(c.cardId) ?? 0;
+    }
+    return out;
+  }
+
+  private reviewsPerCard(): Map<number, number> {
+    return new Map(this.db.all<{ card_id: number; n: number }>("SELECT card_id, COUNT(*) AS n FROM reviews GROUP BY card_id").map((r) => [r.card_id, r.n]));
+  }
+
+  /** Leftover cards counted per type and face, with the history that would go with them. */
+  leftoverReport(opts: { type?: string } = {}): LeftoverReport {
+    const cards = this.leftoverCards(opts);
+    const faces = new Map<string, LeftoverReport["faces"][number]>();
+    for (const c of cards) {
+      const key = `${c.type}\u0000${c.face}`;
+      let f = faces.get(key);
+      if (!f) {
+        let typeName = c.type;
+        try {
+          typeName = this.type(c.type).name;
+        } catch {}
+        faces.set(key, (f = { type: c.type, typeName, face: c.face, cards: 0, reviews: 0 }));
+      }
+      f.cards++;
+      f.reviews += c.reviews;
+    }
+    return { cards: cards.length, reviewed: cards.filter((c) => c.reviews).length, reviews: cards.reduce((n, c) => n + c.reviews, 0), faces: [...faces.values()] };
+  }
+
+  /** Deletes leftover cards (every one, or one type's) with their review history. */
+  deleteLeftoverCards(opts: { type?: string } = {}): { cards: number; reviews: number } {
+    const doomed = this.leftoverCards(opts);
+    this.db.tx(() => {
+      for (const c of doomed) this.db.run("DELETE FROM cards WHERE id = ?", c.cardId);
+    });
+    return { cards: doomed.length, reviews: doomed.reduce((n, c) => n + c.reviews, 0) };
   }
 
   private ensureCards(itemId: string, def: CardTypeDef, fields: Record<string, unknown>) {

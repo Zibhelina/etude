@@ -146,6 +146,14 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     return c.json(etude.storeMedia(name, Buffer.concat(chunks)));
   });
   app.post("/api/media/import", async (c) => c.json(etude.importMedia((await body(c)).path)));
+
+  // ------------------------------------------------------------- clean up
+  app.get("/api/cleanup", (c) => {
+    const media = etude.unusedMedia();
+    return c.json({ leftover: etude.leftoverReport(), media: { count: media.length, bytes: media.reduce((n, f) => n + f.bytes, 0), files: media.slice(0, 200) } });
+  });
+  app.post("/api/cleanup/cards", async (c) => c.json(etude.deleteLeftoverCards({ type: (await body(c)).type || undefined })));
+  app.post("/api/cleanup/media", (c) => c.json(etude.deleteUnusedMedia()));
   app.post("/api/occlusion", async (c) => {
     const b = await body(c);
     return c.json(etude.addOcclusion(b, { dryRun: !!b.dryRun || c.req.query("dryRun") === "1" }));
@@ -186,7 +194,11 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.get("/api/types", (c) => c.json(etude.listTypes()));
   // The definition without asset bytes; `assetFiles` lists them (name, size, hash).
   app.get("/api/types/:id", (c) => c.json({ ...etude.type(c.req.param("id")), assetFiles: etude.typeAssets(c.req.param("id")) }));
-  app.put("/api/types/:id", async (c) => c.json(etude.saveType({ ...(await body(c)), id: c.req.param("id") })));
+  app.put("/api/types/:id", async (c) => {
+    const r = etude.saveTypeReport({ ...(await body(c)), id: c.req.param("id") });
+    return c.json({ ...r.type, leftover: r.leftover });
+  });
+  app.get("/api/types/:id/leftover", (c) => c.json(etude.leftoverReport({ type: c.req.param("id") })));
   app.delete("/api/types/:id", (c) => {
     etude.deleteType(c.req.param("id"));
     return c.json({ ok: true });

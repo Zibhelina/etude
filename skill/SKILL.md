@@ -75,6 +75,7 @@ etude deck set "Networks" newPerDay=40           # this deck only; --to-preset w
 etude deck unset "Networks" newPerDay            # back to inherited
 etude card due --query 'tag:http is:due' --in 1d # push to tomorrow without faking a review
 etude card suspend --query 'deck:"Networks" prop:lapses>=4'
+etude card prune --type vocab --dry-run          # cards on faces the type no longer makes (after removing a face)
 ```
 
 **Themes.** `etude theme list`, then `etude theme set paper`. Make one with `etude theme create sea --from midnight --var highlight="oklch(0.7 0.12 210)" --use`, and change it later with `theme edit` (variables, scheme, `--css-file`). `theme export`/`import` move themes between collections.

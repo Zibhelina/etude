@@ -162,7 +162,7 @@ npm start            # same as: node src/cli/main.ts serve
 
 Open http://127.0.0.1:4610. Your collection lives in `~/.etude/etude.db`.
 
-Paste an image, audio or video file into a card field and Etude copies it into its own media folder, normally `~/.etude/media`. Pasted local file paths and `file://` URLs are copied too; the card uses the copy even after the original is moved or deleted. Settings → Data shows the folder, and `etude media add ./picture.png` imports a file from the terminal. When Etude runs on another computer, paste the file itself; local paths refer to the computer running Etude. Back up the media folder along with the database.
+Paste an image, audio or video file into a card field and Etude copies it into its own media folder, normally `~/.etude/media`. Pasted local file paths and `file://` URLs are copied too; the card uses the copy even after the original is moved or deleted. Settings → Data shows the folder, and `etude media add ./picture.png` imports a file from the terminal. When Etude runs on another computer, paste the file itself; local paths refer to the computer running Etude. Back up the media folder along with the database. Settings → Clean up (or `etude media prune`) deletes media files nothing names any more, and cards on faces their type no longer makes.
 
 To see what cards can be, import the showcase: one card for each of the 28 card types. It opens in Watch mode, a tour where each card can show an example answer, graded, so you see how it works without answering anything:
 

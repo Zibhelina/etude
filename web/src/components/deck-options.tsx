@@ -12,7 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { StepsInput } from "@/components/deck-steps-input";
-import { api, type DeckNode, type OptimizeResult, type PresetConfig, type Preset } from "@/lib/api";
+import { api, type DeckNode, type OptimizeResult, type PresetConfig, type Preset, type SchedulerSummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export type DeckFull = DeckNode & { resolved: PresetConfig; inherited: PresetConfig; presetBase: PresetConfig };
@@ -22,7 +22,7 @@ type Key = keyof PresetConfig;
 const DEFAULT_WEIGHTS = [0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722, 0.1666, 0.796, 1.4835, 0.0614, 0.2629, 1.6483, 0.6014, 1.8729, 0.5425, 0.0912, 0.0658, 0.1542];
 
 /** Settings whose change moves existing due dates only after a reschedule. */
-const RESCHEDULE_KEYS: Key[] = ["desiredRetention", "learningSteps", "relearningSteps", "maximumInterval", "weights", "deadline", "deadlineMargin"];
+const RESCHEDULE_KEYS: Key[] = ["desiredRetention", "learningSteps", "relearningSteps", "maximumInterval", "weights", "deadline", "deadlineMargin", "scheduler", "schedulerOptions"];
 
 const LABELS: Record<Key, string> = {
   desiredRetention: "Desired retention",
@@ -43,6 +43,8 @@ const LABELS: Record<Key, string> = {
   autoApply: "Apply suggested rating",
   burySiblings: "Bury siblings",
   mode: "Mode",
+  scheduler: "Schedule with",
+  schedulerOptions: "Scheduler settings",
 };
 
 const norm = (v: unknown) => JSON.stringify(v ?? null);
@@ -71,6 +73,10 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
   const [presetDialog, setPresetDialog] = useState<null | "create" | "rename">(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmPresetSave, setConfirmPresetSave] = useState(false);
+  const [schedulers, setSchedulers] = useState<SchedulerSummary[]>([]);
+  useEffect(() => {
+    api.schedulers().then(setSchedulers).catch(() => {});
+  }, []);
 
   const preset = presets.find((p) => p.id === deck.presetId) ?? null;
   const usage = (id: string) => decks.filter((d) => d.presetId === id);
@@ -222,6 +228,10 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
     </SettingRow>
   );
 
+  const schedulerId = value("scheduler") ?? "fsrs";
+  const current = schedulers.find((x) => x.id === schedulerId);
+  const fsrs = schedulerId === "fsrs";
+  const schedOpts = value("schedulerOptions") ?? {};
   const retention = value("desiredRetention");
   const deadline = value("deadline");
   const autoRate = value("autoRate");
@@ -290,6 +300,55 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
         </div>
       )}
 
+      <Group title="Scheduler" description="Who decides when a card comes back. FSRS is for things you want to remember; a drill is for skills you train and measure.">
+        {row(
+          "scheduler",
+          <ChoiceSelect
+            value={schedulerId}
+            onChange={(v) => {
+              set("scheduler", v);
+              if (!same(schedOpts, deck.resolved.schedulerOptions)) set("schedulerOptions", deck.resolved.schedulerOptions);
+            }}
+            options={(schedulers.length ? schedulers : [{ id: "fsrs", name: "FSRS" } as SchedulerSummary]).map((x) => [x.id, x.name])}
+            ariaLabel="Scheduler"
+          />,
+          current?.description || (fsrs ? "Spaced repetition." : schedulerId),
+          { wide: true },
+        )}
+        {!fsrs &&
+          (current?.options ?? []).map((o) => {
+            const v = o.name in schedOpts ? schedOpts[o.name] : o.default;
+            const put = (x: unknown) => set("schedulerOptions", { ...schedOpts, [o.name]: x });
+            return (
+              <SettingRow
+                key={o.name}
+                k="schedulerOptions"
+                label={o.label ?? o.name}
+                source={deck.config.schedulerOptions?.[o.name] !== undefined ? { kind: "deck", label: "This deck" } : source("schedulerOptions").kind === "deck" ? { kind: "default", label: "Default" } : source("schedulerOptions")}
+                dirty={"schedulerOptions" in draft && !same((draft.schedulerOptions ?? {})[o.name], deck.resolved.schedulerOptions?.[o.name])}
+                help={o.description}
+                inline={o.kind === "boolean"}
+                onReset={deck.config.schedulerOptions?.[o.name] !== undefined ? () => {
+                  const own = { ...(deck.config.schedulerOptions ?? {}) };
+                  delete own[o.name];
+                  const config: Partial<PresetConfig> = { ...deck.config, schedulerOptions: own };
+                  if (!Object.keys(own).length) delete config.schedulerOptions;
+                  api.updateDeck(deck.name, { config }).then(() => afterSave(["schedulerOptions"], [deck.name])).catch((e) => toast.error((e as Error).message));
+                } : undefined}
+              >
+                {o.kind === "boolean" ? (
+                  <Switch checked={v === true} onCheckedChange={put} aria-label={o.label ?? o.name} />
+                ) : o.kind === "number" ? (
+                  <NumberField value={Number(v ?? 0)} min={o.min} max={o.max} onChange={put} suffix={o.suffix} ariaLabel={o.label ?? o.name} />
+                ) : (
+                  <Input value={String(v ?? "")} onChange={(e) => put(e.target.value)} aria-label={o.label ?? o.name} className="h-10" />
+                )}
+              </SettingRow>
+            );
+          })}
+      </Group>
+
+      {fsrs && <>
       <Group title="Memory" description="How hard FSRS works to keep cards in memory.">
         {row(
           "desiredRetention",
@@ -323,6 +382,8 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
         )}
       </Group>
 
+      </>}
+
       <Group title="Daily limits" description="Counted across this deck and its subdecks, custom study included.">
         {row("newPerDay", <NumberField value={value("newPerDay")} min={0} onChange={(v) => set("newPerDay", v)} suffix="cards" ariaLabel="New cards per day" />, "New cards introduced per study day, across this deck and its subdecks.")}
         {row("reviewsPerDay", <NumberField value={value("reviewsPerDay")} min={0} onChange={(v) => set("reviewsPerDay", v)} suffix="cards" ariaLabel="Reviews per day" />, "Due reviews shown per day. The rest wait until tomorrow.")}
@@ -352,6 +413,7 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
         {row("burySiblings", <Switch checked={value("burySiblings")} onCheckedChange={(v) => set("burySiblings", v)} aria-label="Bury siblings" />, "After you study one face of an item, hide its other new faces until tomorrow.", { inline: true })}
       </Group>
 
+      {fsrs && <>
       <Group title="Exam" description="Exam mode pulls every interval in so each card gets a last look before the deadline.">
         {row(
           "deadline",
@@ -380,7 +442,9 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
         {row("deadlineMargin", <NumberField value={value("deadlineMargin")} min={0} step={0.5} onChange={(v) => set("deadlineMargin", v)} suffix="hours" ariaLabel="Deadline margin in hours" />, "The last review is scheduled at least this long before the deadline.")}
       </Group>
 
-      <Group title="Grading" description="How a graded score turns into a suggested rating.">
+      </>}
+
+      {(fsrs || current?.ratings !== false) && <Group title="Grading" description="How a graded score turns into a suggested rating.">
         {row(
           "autoRate",
           <div className="grid grid-cols-2 gap-3">
@@ -397,9 +461,9 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
           { wide: true },
         )}
         {row("autoApply", <Switch checked={value("autoApply")} onCheckedChange={(v) => set("autoApply", v)} aria-label="Apply suggested rating" />, "Rate automatically after grading instead of waiting for you to confirm.", { inline: true })}
-      </Group>
+      </Group>}
 
-      <WeightsGroup
+      {fsrs && <WeightsGroup
         deck={deck.name}
         value={weights ?? null}
         inherited={deck.inherited.weights ?? null}
@@ -407,7 +471,7 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
         dirty={"weights" in draft}
         onChange={(w) => set("weights", (w ?? (deck.inherited.weights ? null : undefined)) as PresetConfig["weights"])}
         onReset={deck.config.weights !== undefined ? () => resetKeys(["weights"]) : undefined}
-      />
+      />}
 
       {changed.length > 0 && (
         <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 md:bottom-4">
@@ -536,14 +600,14 @@ function SourceTag({ source }: { source: Source }) {
   );
 }
 
-function SettingRow({ k, source, dirty, help, wide, inline, onReset, children }: { k: Key; source: Source; dirty: boolean; help?: ReactNode; wide?: boolean; inline?: boolean; onReset?: () => void; children: ReactNode }) {
+function SettingRow({ k, label, source, dirty, help, wide, inline, onReset, children }: { k: Key; label?: string; source: Source; dirty: boolean; help?: ReactNode; wide?: boolean; inline?: boolean; onReset?: () => void; children: ReactNode }) {
   // Switches sit beside the label at every width; other controls drop below it on small screens.
   if (inline)
     return (
       <div className="flex items-start gap-4 px-4 py-4 sm:px-5">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            <span className="text-sm font-medium">{LABELS[k]}</span>
+            <span className="text-sm font-medium">{label ?? LABELS[k]}</span>
             {dirty ? <EditedTag /> : <SourceTag source={source} />}
             {onReset && !dirty && <ResetButton onClick={onReset} />}
           </div>
@@ -556,7 +620,7 @@ function SettingRow({ k, source, dirty, help, wide, inline, onReset, children }:
     <div className={cn("grid gap-3 px-4 py-4 sm:px-5", wide ? "md:grid-cols-[minmax(0,1fr)_22rem]" : "md:grid-cols-[minmax(0,1fr)_16rem]", "md:items-start md:gap-8")}>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          <span className="text-sm font-medium">{LABELS[k]}</span>
+          <span className="text-sm font-medium">{label ?? LABELS[k]}</span>
           {dirty ? <EditedTag /> : <SourceTag source={source} />}
           {onReset && !dirty && <ResetButton onClick={onReset} />}
         </div>

@@ -4,8 +4,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BarChart, Heatmap, ShareBar, fmtDay, fmtDuration, parseDay } from "@/components/stats-charts";
-import { Donut, ForgettingCurve, Histogram, RecallRing, SERIF, Sparkline, StudyClock, recallColor } from "@/components/stats-viz";
-import { api, type DeckNode, type Stats } from "@/lib/api";
+import { Donut, ForgettingCurve, Histogram, ProgressChart, RecallRing, SERIF, Sparkline, StudyClock, recallColor } from "@/components/stats-viz";
+import { api, type DeckNode, type PracticeCard, type Stats } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 
@@ -113,6 +113,23 @@ function Body({ stats, deck }: { stats: Stats; deck?: string }) {
   const first = s.days.find((d) => d.reviews > 0)?.day;
   const activeWeeks = first ? Math.min(WEEKS, Math.max(16, Math.ceil((parseDay(s.today.day).getTime() - parseDay(first).getTime()) / (7 * 86400_000)) + 2)) : WEEKS;
 
+  // A deck on a drill (or any non-FSRS scheduler) has no memory model: its stats are what it measured.
+  if (s.scheduler && s.scheduler !== "fsrs")
+    return (
+      <div className="flex flex-col gap-6">
+        {s.practice.length ? s.practice.map((p) => <PracticePanel key={p.cardId} card={p} />) : <Empty>Every run you do here is measured. Practice once and your results show up.</Empty>}
+        <Panel title="Practice days" aside={totalReviews ? "Sessions per day" : undefined}>
+          {totalReviews ? <Heatmap days={s.days} weeks={activeWeeks} today={s.today.day} /> : <Empty>Each practice day fills a square here.</Empty>}
+          {totalMs > 0 && <TimeSpent days={s.days} today={s.today.day} />}
+        </Panel>
+        {totalReviews > 0 && (
+          <Panel title="When you practice" aside={`Last ${WEEKS} weeks`}>
+            <StudyClock hours={s.hours} target={target} />
+          </Panel>
+        )}
+      </div>
+    );
+
   return (
     <div className="flex flex-col gap-6">
       {/* Hero: memory now, what's due, and the trend tiles. */}
@@ -149,6 +166,12 @@ function Body({ stats, deck }: { stats: Stats; deck?: string }) {
           </div>
         </div>
       </section>
+
+      {s.practice.length > 0 && (
+        <div className="flex flex-col gap-6">
+          {s.practice.slice(0, 4).map((p) => <PracticePanel key={p.cardId} card={p} />)}
+        </div>
+      )}
 
       {s.curve.length > 0 && (
         <Panel title="If you stopped today" aside="Average predicted recall, no more reviews">
@@ -294,6 +317,53 @@ function StreakDots({ days, today }: { days: Stats["days"]; today: string }) {
         <span key={c.key} title={fmtDay(c.key)} className={cn("h-3.5 flex-1 rounded-[3px]", c.today && "ring-1 ring-foreground/60")} style={{ background: c.on ? "var(--highlight)" : "var(--muted)", opacity: c.on ? 0.9 : 0.6 }} />
       ))}
     </div>
+  );
+}
+
+/** One measured card: pick a metric, see it over every session. */
+function PracticePanel({ card }: { card: PracticeCard }) {
+  const [key, setKey] = useState(card.metrics[0]?.key);
+  const m = card.metrics.find((x) => x.key === key) ?? card.metrics[0];
+  if (!m) return null;
+  const fmt = (v: number | null) => (v == null ? "—" : `${v.toFixed(m.digits)}${m.unit === "%" ? "%" : m.unit ? ` ${m.unit}` : ""}`);
+  const shown = (v: number) => Number(v.toFixed(m.digits));
+  const delta = m.first != null && m.last != null && m.points.length > 1 ? shown(m.last) - shown(m.first) : null;
+  const up = delta != null && (m.better === "lower" ? delta < 0 : delta > 0);
+  return (
+    <Panel title={card.title} aside={<span className="tabular">{card.sessions} session{card.sessions === 1 ? "" : "s"} · {card.deck.split("::").pop()}</span>}>
+      {card.metrics.length > 1 && (
+        <div className="-mt-1 mb-4 flex flex-wrap gap-1.5" role="tablist" aria-label="Metric">
+          {card.metrics.map((x) => (
+            <button
+              key={x.key}
+              role="tab"
+              aria-selected={x.key === m.key}
+              onClick={() => setKey(x.key)}
+              className={cn("h-8 rounded-md border px-2.5 text-xs", x.key === m.key ? "border-foreground/25 bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/50")}
+            >
+              {x.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="mb-4 grid grid-cols-3 gap-4">
+        <div>
+          <div className="text-xs text-muted-foreground">Last</div>
+          <div className="tabular text-3xl leading-tight tracking-tight" style={SERIF}>{fmt(m.last)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Best</div>
+          <div className="tabular text-3xl leading-tight tracking-tight text-good" style={SERIF}>{fmt(m.best)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Since the first</div>
+          <div className={cn("tabular text-3xl leading-tight tracking-tight", delta == null ? "text-muted-foreground/50" : up ? "text-good" : delta === 0 ? "" : "text-again")} style={SERIF}>
+            {delta == null ? "—" : `${delta > 0 ? "+" : delta < 0 ? "−" : ""}${Math.abs(delta).toFixed(m.digits)}`}
+          </div>
+        </div>
+      </div>
+      <ProgressChart points={m.points} better={m.better} unit={m.unit} digits={m.digits} />
+    </Panel>
   );
 }
 

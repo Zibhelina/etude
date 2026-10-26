@@ -39,5 +39,33 @@
   ],
   "grader": {
     "kind": "script"
-  }
+  },
+  "metrics": [
+    {
+      "key": "wpm",
+      "label": "WPM",
+      "better": "higher",
+      "digits": 0
+    },
+    {
+      "key": "acc",
+      "label": "Accuracy",
+      "unit": "%",
+      "better": "higher",
+      "digits": 0
+    },
+    {
+      "key": "raw",
+      "label": "Raw",
+      "better": "higher",
+      "digits": 0
+    },
+    {
+      "key": "consistency",
+      "label": "Consistency",
+      "unit": "%",
+      "better": "higher",
+      "digits": 0
+    }
+  ]
 }

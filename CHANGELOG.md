@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Pluggable schedulers. FSRS stays the default, and a deck can pick another scheduler in its Options (or `etude deck set "Deck" scheduler=drill`). **Drill** is for skills you train and measure: no rating buttons, the card comes back as many times a day as you set, **Go again** starts another run, and Stats charts every result (WPM, accuracy… from the type's new `metrics`). **Leitner boxes** ship too, and you can write your own as a small `schedule.js` that gets the grade's details and returns the next due date. Switching schedulers replays the review history. CLI: `etude scheduler list|show|export|import|validate|reset|delete`; API: `/api/schedulers`. See docs/schedulers.md.
+
 ## 2.1.0
 
 - Update from GitHub in one click. A small control in the bottom-right corner of Decks shows a check mark when Etude is current and a pink **N updates** when the repository has new commits; its popover lists them and **Update** pulls, reinstalls dependencies when they changed, rebuilds the app and restarts it. It refuses when the checkout has local changes or commits of its own. Installs that aren't a git checkout (the Mac app, npm) show the latest release with a link instead. CLI: `etude update`, `etude update --check`; API: `GET/POST /api/update`.

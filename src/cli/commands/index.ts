@@ -5,6 +5,7 @@ import "./item.ts";
 import "./card.ts";
 import "./tag.ts";
 import "./type.ts";
+import "./scheduler.ts";
 import "./study.ts";
 import "./stats.ts";
 import "./settings.ts";

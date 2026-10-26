@@ -251,7 +251,18 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.post("/api/study/feedback", async (c) => c.json(await etude.feedback(Number((await body(c)).attemptId))));
   app.post("/api/study/rate", async (c) => {
     const b = await body(c);
-    return c.json(etude.rate(Number(b.cardId), Number(b.rating) as Rating, { attemptId: b.attemptId ? Number(b.attemptId) : undefined, durationMs: b.durationMs, practice: !!b.practice }));
+    return c.json(etude.rate(Number(b.cardId), Number(b.rating ?? 0) as Rating | 0, { attemptId: b.attemptId ? Number(b.attemptId) : undefined, durationMs: b.durationMs, practice: !!b.practice }));
+  });
+  app.get("/api/schedulers", (c) => c.json(etude.listSchedulers()));
+  app.get("/api/schedulers/:id", (c) => c.json(etude.scheduler(c.req.param("id"))));
+  app.put("/api/schedulers/:id", async (c) => c.json(etude.saveScheduler({ ...(await body(c)), id: c.req.param("id") })));
+  app.delete("/api/schedulers/:id", (c) => {
+    etude.deleteScheduler(c.req.param("id"));
+    return c.json({ deleted: c.req.param("id") });
+  });
+  app.post("/api/schedulers/:id/reset", (c) => {
+    etude.resetScheduler(c.req.param("id"));
+    return c.json({ reset: c.req.param("id") });
   });
   app.post("/api/study/undo", (c) => c.json(etude.undo()));
   app.get("/api/watch/list", (c) => c.json({ cards: etude.watchList(scopeOf(c)) }));

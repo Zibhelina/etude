@@ -13,7 +13,7 @@ type Phase = "loading" | "answer" | "grading" | "result" | "done";
 interface Done {
   itemId: string;
   title: string;
-  rating: Rating;
+  rating: Rating | 0;
   verdict?: string;
 }
 
@@ -166,7 +166,7 @@ export function EmbedStudy({ scope, limit, cardId, title }: { scope: Scope; limi
     frame.current?.collect();
   }, [card, phase, ready]);
 
-  const rate = useCallback(async (rating: Rating) => {
+  const rate = useCallback(async (rating: Rating | 0) => {
     if (!card || phase !== "result" || busy.current) return;
     busy.current = true;
     try {
@@ -185,7 +185,9 @@ export function EmbedStudy({ scope, limit, cardId, title }: { scope: Scope; limi
   const onKey = useCallback((key: string) => {
     if (phase === "answer" && (key === "Mod+Enter" || ((key === " " || key === "Enter") && card?.grader === "self"))) check();
     else if (phase === "result") {
-      if (["1", "2", "3", "4"].includes(key)) rate(Number(key) as Rating);
+      if (card && !card.scheduler.ratings) {
+        if (key === " " || key === "Enter" || key === "Mod+Enter") rate(0);
+      } else if (["1", "2", "3", "4"].includes(key)) rate(Number(key) as Rating);
       else if (key === " " || key === "Enter" || key === "Mod+Enter") rate(result?.grade.suggested ?? 3);
     }
   }, [phase, card, check, rate, result]);
@@ -297,6 +299,8 @@ export function EmbedStudy({ scope, limit, cardId, title }: { scope: Scope; limi
               <Button className="h-10 w-full sm:w-auto sm:min-w-40" disabled={phase === "grading" || (!ready && card.grader !== "self")} onClick={check}>
                 {phase === "grading" ? <><Loader2 className="size-4 animate-spin" /> Grading…</> : card.grader === "self" ? "Show answer" : "Check"}
               </Button>
+            ) : !card.scheduler.ratings ? (
+              <Button className="h-10 w-full sm:w-auto sm:min-w-40" onClick={() => rate(0)}>Next</Button>
             ) : (
               ([1, 2, 3, 4] as Rating[]).map((r) => (
                 <button

@@ -3,6 +3,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadBuiltinTypes, validateType, ITEM_ID } from "../core/types.ts";
+import { loadBuiltinSchedulers, validateScheduler } from "../core/schedulers.ts";
 import { runScript } from "../core/sandbox.ts";
 import math from "../../runtime/mathexpr.js";
 
@@ -53,6 +54,7 @@ const isStr = (v: unknown) => typeof v === "string" && v.trim().length > 0;
 const isNum = (v: unknown) => typeof v === "number" && Number.isFinite(v);
 
 const BUILTIN_TYPES = loadBuiltinTypes(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "types"));
+const BUILTIN_SCHEDULER_IDS = loadBuiltinSchedulers(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "schedulers")).map((sc) => sc.id);
 export const BUILTIN_TYPE_IDS = BUILTIN_TYPES.map((t) => t.id);
 
 function checkFields(err: (m: string) => void, warn: (m: string) => void, type: string, f: Json, customTypes: Map<string, Json>, knownTypes: Set<string>) {
@@ -183,6 +185,12 @@ export function checkPack(pack: Json, file = "pack", opts: { knownTypes?: string
   if (pack.etude !== "pack/1") errors.push(`${file}: "etude" must be "pack/1"`);
   const customTypes = new Map<string, Json>((pack.types ?? []).map((t: Json) => [t?.id, t]));
   for (const t of pack.types ?? []) for (const e of validateType(t)) errors.push(`${file} type ${t?.id ?? "?"}: ${e}`);
+  for (const sc of pack.schedulers ?? []) for (const e of validateScheduler(sc)) errors.push(`${file} scheduler ${sc?.id ?? "?"}: ${e}`);
+  const knownSchedulers = new Set(["fsrs", ...BUILTIN_SCHEDULER_IDS, ...(pack.schedulers ?? []).map((sc: Json) => sc?.id)]);
+  for (const d of [...(pack.decks ?? []), ...(pack.presets ?? [])]) {
+    const id = d?.config?.scheduler;
+    if (id && !knownSchedulers.has(id)) warnings.push(`${file} ${d.name ? `deck ${d.name}` : `preset ${d.id}`}: scheduler "${id}" isn't built in or in this pack (it must already exist where you import)`);
+  }
   const known = new Set([...BUILTIN_TYPE_IDS, ...(opts.knownTypes ?? [])]);
   const presetIds = new Set((pack.presets ?? []).map((p: Json) => p?.id));
   for (const d of pack.decks ?? []) {

@@ -285,6 +285,14 @@ These work on every command, before or after the command words.
   - [`type copy`](#type-copy) Copy a type (built-in or custom) under a new id, as a starting point.
   - [`type new`](#type-new) Scaffold a minimal working type directory to edit and then `etude type import`.
   - [`type frame`](#type-frame) The HTML document a card of this type renders in (what the app loads into its sandboxed iframe).
+- **scheduler**: Schedulers: who decides when a card comes back (FSRS, a drill, Leitner boxes, or your own script) (`etude scheduler` alone runs `list`)
+  - [`scheduler list`](#scheduler-list) Every scheduler: FSRS (built in) and the script ones, with whether they ask for ratings, their options and how many decks use them.
+  - [`scheduler show`](#scheduler-show) A script scheduler's definition, including its schedule.js.
+  - [`scheduler export`](#scheduler-export) Write a script scheduler as editable files (scheduler.json + schedule.js), or print it as JSON.
+  - [`scheduler import`](#scheduler-import) Create or update a scheduler from a directory (scheduler.json + schedule.js), a JSON file, or `-`.
+  - [`scheduler validate`](#scheduler-validate) Check a scheduler definition without saving it. Exits 4 when it has problems.
+  - [`scheduler reset`](#scheduler-reset) Restore an edited built-in scheduler to the shipped version.
+  - [`scheduler delete`](#scheduler-delete) Delete a custom scheduler no deck or preset uses.
 - **study**: Studying: the queue, presenting a card, submitting answers, ratings, undo
   - [`study counts`](#study-counts) Today's queue for a scope: new, learning, review, done today, next due.
   - [`study next`](#study-next) The next card to study in a scope, with its view and how to answer it. Private fields are never included.
@@ -640,7 +648,7 @@ etude deck instructions "Networks" --file notes.md
 
 Override settings on this deck (they win over its preset and parents).
 
-Values are JSON when they parse, text otherwise. Steps accept "1m 10m" or '["1m","10m"]'. Dates accept anything Date can read. Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, weights; also autoRate.good and autoRate.hard.
+Values are JSON when they parse, text otherwise. Steps accept "1m 10m" or '["1m","10m"]'. Dates accept anything Date can read. Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, scheduler, schedulerOptions, weights; also autoRate.good and autoRate.hard.
 
 ```
 etude deck set <deck> <pairs...> [flags]
@@ -665,6 +673,7 @@ Output: { deck, config (own overrides), changed: { key: { from, to } } (effectiv
 etude deck set "Networks" deadline=2026-10-23T16:30:00-07:00 desiredRetention=0.92 --reschedule
 etude deck set "Spanish" newPerDay=30 learningSteps="1m 10m 1h"
 etude deck set "Networks" newPerDay=40 --to-preset
+etude deck set "Typing" scheduler=drill schedulerOptions.perDay=3
 ```
 
 ### etude deck unset
@@ -833,7 +842,7 @@ etude preset create net --from-deck "Networks" --apply
 
 Change settings in a preset. Every deck using it is affected.
 
-Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, weights; also autoRate.good / autoRate.hard. Use `--name` to rename.
+Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, scheduler, schedulerOptions, weights; also autoRate.good / autoRate.hard. Use `--name` to rename.
 
 ```
 etude preset set <id> [pairs...] [flags]
@@ -2342,6 +2351,170 @@ Output: the HTML, or { written } with --out
 etude type frame numeric -o numeric.html
 ```
 
+## scheduler
+
+Schedulers: who decides when a card comes back (FSRS, a drill, Leitner boxes, or your own script).
+
+### etude scheduler list
+
+<a id="scheduler-list"></a>
+
+Every scheduler: FSRS (built in) and the script ones, with whether they ask for ratings, their options and how many decks use them.
+
+```
+etude scheduler list
+```
+
+*read-only*
+
+Output: array of { id, name, description, ratings, options, builtin, shipped, edited, script, updated, decks }
+
+### etude scheduler show
+
+<a id="scheduler-show"></a>
+
+A script scheduler's definition, including its schedule.js.
+
+```
+etude scheduler show <id>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Scheduler id. |
+
+```sh
+etude scheduler show drill
+```
+
+### etude scheduler export
+
+<a id="scheduler-export"></a>
+
+Write a script scheduler as editable files (scheduler.json + schedule.js), or print it as JSON.
+
+```
+etude scheduler export <id> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Scheduler id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-o, --out <DIR>` | string | Directory to write. Default: ./<id>. |
+| `--json` | boolean | Print the definition as one JSON object instead of writing files. |
+
+Output: { written: dir, files } or the definition with --json
+
+```sh
+etude scheduler export drill -o my-drill
+etude scheduler export leitner --json
+```
+
+### etude scheduler import
+
+<a id="scheduler-import"></a>
+
+Create or update a scheduler from a directory (scheduler.json + schedule.js), a JSON file, or `-`.
+
+schedule.js is the body of `function (card, attempt, options, ctx)` and returns `{ due, state }`. `card.state` is what it returned last time; `attempt` has the rating (when the scheduler asks for ratings), the grader's score and its `details`; `ctx.day[n]` is the start of the study day n days from today. See docs/schedulers.md.
+
+```
+etude scheduler import <source> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `source` | Directory, JSON file, or `-`. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id <VALUE>` | string | Save under this id instead of the one in the source. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { result: created|updated|unchanged, scheduler: { id, name, ratings } }
+
+```sh
+etude scheduler import ./every-monday
+etude scheduler export drill --json | jq '.id="drill2"' | etude scheduler import -
+```
+
+### etude scheduler validate
+
+<a id="scheduler-validate"></a>
+
+Check a scheduler definition without saving it. Exits 4 when it has problems.
+
+```
+etude scheduler validate <source>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `source` | Directory, JSON file, or `-`. |
+
+Output: { id, ok, errors }
+
+### etude scheduler reset
+
+<a id="scheduler-reset"></a>
+
+Restore an edited built-in scheduler to the shipped version.
+
+```
+etude scheduler reset <id> [flags]
+```
+
+*writes · `--dry-run` · needs `--yes`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Built-in scheduler id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+```sh
+etude scheduler reset drill --yes
+```
+
+### etude scheduler delete
+
+<a id="scheduler-delete"></a>
+
+Delete a custom scheduler no deck or preset uses.
+
+```
+etude scheduler delete <id> [flags]
+```
+
+*writes · `--dry-run` · needs `--yes`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Scheduler id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+```sh
+etude scheduler delete every-monday --yes
+```
+
 ## study
 
 Studying: the queue, presenting a card, submitting answers, ratings, undo.
@@ -2493,7 +2666,7 @@ etude study rate <ref> <rating> [flags]
 | Argument | Description |
 | --- | --- |
 | `ref` | Card id (or item id with one card). |
-| `rating` | 1-4 or again, hard, good, easy. |
+| `rating` | 1-4 or again, hard, good, easy. On a scheduler without ratings (a drill) use `next`. |
 
 | Flag | Type | Description |
 | --- | --- | --- |

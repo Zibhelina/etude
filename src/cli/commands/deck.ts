@@ -213,6 +213,7 @@ command({
     'etude deck set "Networks" deadline=2026-10-23T16:30:00-07:00 desiredRetention=0.92 --reschedule',
     'etude deck set "Spanish" newPerDay=30 learningSteps="1m 10m 1h"',
     'etude deck set "Networks" newPerDay=40 --to-preset',
+    'etude deck set "Typing" scheduler=drill schedulerOptions.perDay=3',
   ],
   output: "{ deck, config (own overrides), changed: { key: { from, to } } (effective values), rescheduled? }",
   run(ctx) {

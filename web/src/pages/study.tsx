@@ -117,7 +117,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     frame.current?.collect();
   }, [card, phase, ready]);
 
-  const rate = useCallback(async (rating: Rating) => {
+  const rate = useCallback(async (rating: Rating | 0) => {
     if (!card || phase !== "result" || busy.current) return;
     busy.current = true;
     try {
@@ -155,6 +155,29 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       busy.current = false;
     }
   }, [scope.deck, scope.q, scope.ahead]);
+
+  /** A drill: record this result, then go straight into another run of the same card. */
+  const again = useCallback(async () => {
+    if (!card || phase !== "result" || busy.current) return;
+    busy.current = true;
+    try {
+      await api.rate(card.cardId, 0, { attemptId: attemptId ?? undefined, durationMs: Date.now() - shownAt.current, practice });
+      const [c, cnt] = await Promise.all([api.card(card.cardId), api.counts(scope)]);
+      setCounts(cnt);
+      setCard(c);
+      setResult(null);
+      setAttemptId(null);
+      setFeedback(null);
+      setReady(false);
+      setPractice(false);
+      setPhase("answer");
+      shownAt.current = Date.now();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      busy.current = false;
+    }
+  }, [card, phase, attemptId, practice, scope.deck, scope.q, scope.ahead]);
 
   /** Same card, a new random variant, as practice: logged but doesn't move the schedule. */
   const anotherVariant = useCallback(async () => {
@@ -217,13 +240,18 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       return;
     }
     if (phase === "result") {
+      if (card && !card.scheduler.ratings) {
+        if (key === " " || key === "Enter" || key === "Mod+Enter") rate(0);
+        else if (key.toLowerCase() === "r") again();
+        return;
+      }
       if (key === "1" || key === "2" || key === "3" || key === "4") rate(Number(key) as Rating);
       else if (key === " " || key === "Enter" || key === "Mod+Enter") {
         const s = result?.grade.suggested ?? 3;
         rate(s);
       }
     }
-  }, [phase, card, reveal, rate, result, undo, bury]);
+  }, [phase, card, reveal, rate, result, undo, bury, again]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -285,6 +313,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
         <main className="flex flex-1 flex-col gap-6 pt-6">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <Badge variant="outline" className="font-normal">{card.type}</Badge>
+            {card.scheduler.id !== "fsrs" && <Badge variant="outline" className="font-normal">{card.scheduler.name.toLowerCase()}</Badge>}
             {card.state === 0 && <Badge variant="outline" className="border-new/30 font-normal text-new">new</Badge>}
             {card.generated && (
               <Tooltip>
@@ -357,6 +386,16 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
               <Button size="lg" className="h-12 w-full gap-2 sm:h-10 sm:w-auto sm:min-w-48" disabled={phase === "grading" || (!ready && card.grader !== "self")} onClick={reveal}>
                 {phase === "grading" ? <><Loader2 className="size-4 animate-spin" /> Grading…</> : card.grader === "self" ? <>Show answer <kbd className="hidden text-xs opacity-60 sm:inline">Space</kbd></> : <>Check <span className="hidden items-center gap-0.5 text-xs opacity-60 sm:flex"><kbd>Ctrl</kbd><CornerDownLeft className="size-3" /></span></>}
               </Button>
+            ) : !card.scheduler.ratings ? (
+              <>
+                <Button variant="outline" size="lg" className="h-12 flex-1 gap-2 sm:h-10 sm:max-w-44 sm:flex-none" onClick={again}>
+                  <RotateCcw className="size-4" /> Go again <kbd className="hidden text-xs opacity-60 sm:inline">R</kbd>
+                </Button>
+                <Button size="lg" className="h-12 flex-1 gap-2 sm:h-10 sm:max-w-56 sm:flex-none" onClick={() => rate(0)}>
+                  Next
+                  <span className="text-xs font-normal opacity-70">{practice ? "practice" : card.scheduler.next ? (new Date(card.scheduler.next).getTime() <= Date.now() + 60_000 ? "again today" : `back ${relative(card.scheduler.next)}`) : ""}</span>
+                </Button>
+              </>
             ) : (
               ([1, 2, 3, 4] as Rating[]).map((r) => (
                 <button
@@ -376,7 +415,11 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
           </div>
           {phase === "result" && (
             <div className="hidden pb-3 text-center text-xs text-muted-foreground sm:block">
-              <kbd>1</kbd>–<kbd>4</kbd> to rate{suggested ? <>, <kbd>Space</kbd> for {RATING_LABEL[suggested]}</> : null}
+              {card.scheduler.ratings ? (
+                <><kbd>1</kbd>–<kbd>4</kbd> to rate{suggested ? <>, <kbd>Space</kbd> for {RATING_LABEL[suggested]}</> : null}</>
+              ) : (
+                <>Your result is saved either way. <kbd>Space</kbd> for next, <kbd>R</kbd> to go again</>
+              )}
             </div>
           )}
         </footer>

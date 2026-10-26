@@ -11,6 +11,8 @@ import {
   type CardRow,
   type CardTypeDef,
   type Deck,
+  type MetricSpec,
+  type SchedulerDef,
   type Grade,
   type Item,
   type Prepared,
@@ -22,6 +24,19 @@ import {
 import { initSandbox, runScript, ScriptError } from "./sandbox.ts";
 import { fieldDefaults, loadBuiltinTypes, validateFields, validateType, ITEM_ID, TYPE_ID } from "./types.ts";
 import * as sched from "./scheduler.ts";
+import {
+  DAY_HORIZON,
+  FSRS,
+  FSRS_SUMMARY,
+  loadBuiltinSchedulers,
+  resolveOptions,
+  runSchedule,
+  SchedulerError,
+  validateScheduler,
+  type ScriptAttempt,
+  type ScriptCard,
+  type ScriptCtx,
+} from "./schedulers.ts";
 import { fitWeights, MIN_REVIEWS, OptimizerMissing, type Fit } from "./optimize.ts";
 import { compile, QueryError } from "./query.ts";
 import { aiEditFields, aiFeedback, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type GradingContext } from "./ai.ts";
@@ -55,6 +70,7 @@ export class EtudeError extends Error {
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const BUILTIN_TYPES_DIR = join(ROOT, "types");
+export const BUILTIN_SCHEDULERS_DIR = join(ROOT, "schedulers");
 
 const now = () => new Date();
 const iso = (d = now()) => d.toISOString();
@@ -128,6 +144,8 @@ export interface StudyCard {
   seed: number;
   view: Record<string, unknown>;
   intervals: Record<Rating, string>;
+  /** Who decides when the card comes back. `ratings: false`: no Again/Hard/Good/Easy, the result is what's recorded and `next` is when it returns. */
+  scheduler: { id: string; name: string; ratings: boolean; next: string | null };
   /** How this card is graded: "self" cards show a reveal button instead of Submit. */
   grader: string;
   generated: boolean;
@@ -197,13 +215,14 @@ export class Etude {
     this.home = home;
   }
 
-  static async open(path: string, opts: { builtinTypesDir?: string; home?: string } = {}): Promise<Etude> {
+  static async open(path: string, opts: { builtinTypesDir?: string; builtinSchedulersDir?: string; home?: string } = {}): Promise<Etude> {
     await initSandbox();
     const db = new Db(path);
     const media = path === ":memory:" ? join(process.env.TMPDIR ?? "/tmp", `etude-media-${process.pid}`) : join(dirname(path), "media");
     const home = resolve(opts.home ?? process.env.ETUDE_HOME ?? join(homedir(), ".etude"));
     const e = new Etude(db, media, path, home);
     e.syncBuiltinTypes(opts.builtinTypesDir ?? BUILTIN_TYPES_DIR);
+    e.syncBuiltinSchedulers(opts.builtinSchedulersDir ?? BUILTIN_SCHEDULERS_DIR);
     return e;
   }
 
@@ -363,6 +382,183 @@ export class Etude {
     d.setHours(h, 0, 0, 0);
     if (d > at) d.setDate(d.getDate() - 1);
     return d;
+  }
+
+  // -------------------------------------------------------------- schedulers
+  // FSRS lives in scheduler.ts. Every other scheduler is a script stored here, like a card type.
+
+  private syncBuiltinSchedulers(dir: string) {
+    const defs = loadBuiltinSchedulers(dir);
+    const stale = defs.filter((def) => {
+      const row = this.db.get("SELECT def, builtin FROM schedulers WHERE id = ?", def.id);
+      return !row || (row.builtin !== 0 && row.def !== json(def));
+    });
+    if (stale.length) this.db.tx(() => {
+      for (const def of stale) {
+        const row = this.db.get("SELECT builtin FROM schedulers WHERE id = ?", def.id);
+        if (row && row.builtin === 0) continue;
+        this.db.run(
+          "INSERT INTO schedulers (id, def, builtin, updated) VALUES (?, ?, 1, ?) ON CONFLICT(id) DO UPDATE SET def = excluded.def, updated = excluded.updated",
+          def.id,
+          json(def),
+          iso(),
+        );
+      }
+    });
+    this.schedulerCache.clear();
+    this.builtinSchedulersDir = dir;
+  }
+  private builtinSchedulersDir = BUILTIN_SCHEDULERS_DIR;
+  private schedulerCache = new Map<string, SchedulerDef & { builtin: boolean; updated: string }>();
+
+  /** FSRS first, then every stored scheduler, with how many decks set each one. */
+  listSchedulers() {
+    const uses = new Map<string, number>();
+    for (const d of this.db.all("SELECT name FROM decks WHERE archived = 0")) {
+      const id = this.configFor(d.name).scheduler;
+      uses.set(id, (uses.get(id) ?? 0) + 1);
+    }
+    let shipped: Set<string>;
+    try {
+      shipped = new Set(loadBuiltinSchedulers(this.builtinSchedulersDir).map((s) => s.id));
+    } catch {
+      shipped = new Set();
+    }
+    const stored = this.db.all("SELECT id, def, builtin, updated FROM schedulers ORDER BY builtin DESC, id").map((r) => {
+      const def = parse<SchedulerDef>(r.def, {} as SchedulerDef);
+      return {
+        id: r.id as string,
+        name: def.name,
+        description: def.description ?? "",
+        ratings: def.ratings !== false,
+        options: def.options ?? [],
+        builtin: !!r.builtin,
+        shipped: shipped.has(r.id),
+        edited: shipped.has(r.id) && !r.builtin,
+        script: true,
+        updated: r.updated as string,
+        decks: uses.get(r.id) ?? 0,
+      };
+    });
+    return [{ ...FSRS_SUMMARY, shipped: true, edited: false, updated: null as string | null, decks: uses.get(FSRS) ?? 0 }, ...stored];
+  }
+
+  /** A script scheduler's definition. FSRS has no script; asking for it is an error. */
+  scheduler(id: string): SchedulerDef & { builtin: boolean; updated: string } {
+    const row = this.db.get("SELECT def, updated, builtin FROM schedulers WHERE id = ?", id);
+    if (!row) throw new EtudeError(id === FSRS ? "FSRS is built in and has no script" : `unknown scheduler "${id}"`, 404);
+    const cached = this.schedulerCache.get(id);
+    if (cached && cached.updated === row.updated) return cached;
+    const def = { ...parse<SchedulerDef>(row.def, {} as SchedulerDef), builtin: !!row.builtin, updated: row.updated as string };
+    this.schedulerCache.set(id, def);
+    return def;
+  }
+
+  saveScheduler(def: SchedulerDef): { result: "created" | "updated" | "unchanged"; scheduler: SchedulerDef } {
+    const errors = validateScheduler(def);
+    if (errors.length) throw new EtudeError(`invalid scheduler: ${errors.join("; ")}`);
+    const clean: SchedulerDef = {
+      id: def.id,
+      name: def.name,
+      ...(def.description ? { description: def.description } : {}),
+      ratings: def.ratings !== false,
+      ...(def.options?.length ? { options: def.options } : {}),
+      schedule: def.schedule,
+    };
+    const old = this.db.get("SELECT def FROM schedulers WHERE id = ?", def.id);
+    if (old && old.def === json(clean)) return { result: "unchanged", scheduler: clean };
+    this.db.run(
+      "INSERT INTO schedulers (id, def, builtin, updated) VALUES (?, ?, 0, ?) ON CONFLICT(id) DO UPDATE SET def = excluded.def, builtin = 0, updated = excluded.updated",
+      clean.id,
+      json(clean),
+      iso(),
+    );
+    this.schedulerCache.delete(def.id);
+    return { result: old ? "updated" : "created", scheduler: clean };
+  }
+
+  /** Puts an edited built-in scheduler back to the shipped version. */
+  resetScheduler(id: string) {
+    const shipped = loadBuiltinSchedulers(this.builtinSchedulersDir).find((s) => s.id === id);
+    if (!shipped) throw new EtudeError(`"${id}" is not a built-in scheduler`);
+    this.db.run("UPDATE schedulers SET def = ?, builtin = 1, updated = ? WHERE id = ?", json(shipped), iso(), id);
+    this.schedulerCache.delete(id);
+  }
+
+  deleteScheduler(id: string) {
+    const row = this.db.get("SELECT builtin FROM schedulers WHERE id = ?", id);
+    if (!row) throw new EtudeError(`unknown scheduler "${id}"`, 404);
+    if (row.builtin) throw new EtudeError("built-in schedulers can't be deleted");
+    const users = [
+      ...this.db.all("SELECT name, config FROM decks").filter((d) => parse<Partial<PresetConfig>>(d.config, {}).scheduler === id).map((d) => `deck ${d.name}`),
+      ...this.db.all("SELECT id, config FROM presets").filter((p) => parse<Partial<PresetConfig>>(p.config, {}).scheduler === id).map((p) => `preset ${p.id}`),
+    ];
+    if (users.length) throw new EtudeError(`scheduler "${id}" is used by ${users.slice(0, 5).join(", ")}${users.length > 5 ? ", …" : ""}`, 409);
+    this.db.run("DELETE FROM schedulers WHERE id = ?", id);
+    this.schedulerCache.delete(id);
+  }
+
+  /** The script scheduler a config uses, or null for FSRS (and for a scheduler that no longer exists). */
+  private scriptFor(cfg: PresetConfig): SchedulerDef | null {
+    if (!cfg.scheduler || cfg.scheduler === FSRS) return null;
+    try {
+      return this.scheduler(cfg.scheduler);
+    } catch {
+      return null;
+    }
+  }
+
+  private checkSchedulerRef(config: Partial<PresetConfig> | undefined) {
+    const id = config?.scheduler;
+    if (!id || id === FSRS) return;
+    if (!this.db.get("SELECT 1 AS x FROM schedulers WHERE id = ?", id)) throw new EtudeError(`unknown scheduler "${id}" (see \`etude scheduler list\`)`);
+  }
+
+  /** Day starts from `at`'s study day onward: what a scheduler script gets as `ctx.day`. */
+  private dayStarts(at: Date): string[] {
+    const first = this.dayStart(at);
+    const out: string[] = [];
+    for (let i = 0; i <= DAY_HORIZON; i++) {
+      const d = new Date(first);
+      d.setDate(d.getDate() + i);
+      out.push(d.toISOString());
+    }
+    return out;
+  }
+
+  /** Runs a card's script scheduler for one answer. */
+  private runScheduler(def: SchedulerDef, cfg: PresetConfig, card: CardRow & { created?: string }, attempt: ScriptAttempt, t: Date) {
+    const dayStart = iso(this.dayStart(t));
+    const history = this.db
+      .all<{ ts: string; rating: number; score: number | null }>("SELECT ts, rating, score FROM reviews WHERE card_id = ? AND practice = 0 AND ts <= ? ORDER BY ts DESC LIMIT 50", card.id, iso(t))
+      .reverse();
+    const doneToday = history.filter((h) => h.ts >= dayStart).length;
+    const sc: ScriptCard = { state: parse(card.sched_state ?? null, null), reps: card.reps, due: card.due, lastReview: card.last_review, created: card.created ?? card.due };
+    const ctx: ScriptCtx = { now: iso(t), day: this.dayStarts(t), doneToday, history: history.map((h) => ({ at: h.ts, rating: h.rating || null, score: h.score })) };
+    try {
+      return runSchedule(def, sc, attempt, resolveOptions(def, cfg.schedulerOptions), ctx);
+    } catch (e) {
+      if (e instanceof SchedulerError || e instanceof ScriptError) throw new EtudeError(`scheduler "${def.id}": ${e.message}`);
+      throw e;
+    }
+  }
+
+  /** What the rating buttons (or the single Next) would do for a card right now. */
+  private previewFor(c: CardRow & { deck: string; created?: string }, cfg: PresetConfig, t: Date): { intervals: Record<Rating, string>; scheduler: StudyCard["scheduler"] } {
+    const def = this.scriptFor(cfg);
+    if (!def) return { intervals: sched.preview(c, t, cfg), scheduler: { id: FSRS, name: "FSRS", ratings: true, next: null } };
+    const out = {} as Record<Rating, string>;
+    let next: string | null = null;
+    try {
+      if (def.ratings !== false) for (const r of [1, 2, 3, 4] as Rating[]) out[r] = this.runScheduler(def, cfg, c, { rating: r, score: null, verdict: null, details: null, ms: null, at: iso(t) }, t).due;
+      else {
+        next = this.runScheduler(def, cfg, c, { rating: null, score: null, verdict: null, details: null, ms: null, at: iso(t) }, t).due;
+        for (const r of [1, 2, 3, 4] as Rating[]) out[r] = next;
+      }
+    } catch {
+      for (const r of [1, 2, 3, 4] as Rating[]) out[r] ??= iso(t);
+    }
+    return { intervals: out, scheduler: { id: def.id, name: def.name, ratings: def.ratings !== false, next } };
   }
 
   // ------------------------------------------------------------------- types
@@ -545,6 +741,7 @@ export class Etude {
       grader: def.grader,
       ...(def.instructions ? { instructions: def.instructions } : {}),
       ...(def.demo ? { demo: def.demo } : {}),
+      ...(def.metrics?.length ? { metrics: def.metrics } : {}),
     };
     const old = this.db.get("SELECT def FROM types WHERE id = ?", def.id);
     if (old && old.def === json(clean)) return clean;
@@ -662,6 +859,7 @@ export class Etude {
     if (patch.config) {
       const e = sched.validateConfig(patch.config);
       if (e.length) throw new EtudeError(e.join("; "));
+      this.checkSchedulerRef(patch.config);
     }
     if (patch.presetId) this.preset(patch.presetId);
     this.db.tx(() => {
@@ -724,6 +922,7 @@ export class Etude {
     if (!TYPE_ID.test(p.id ?? "")) throw new EtudeError("preset id must be a lowercase slug");
     const e = sched.validateConfig(p.config ?? {});
     if (e.length) throw new EtudeError(e.join("; "));
+    this.checkSchedulerRef(p.config);
     this.db.run(
       "INSERT INTO presets (id, name, config) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, config = excluded.config",
       p.id,
@@ -817,7 +1016,7 @@ export class Etude {
     const t = now();
     return {
       ...this.itemFromRow(r),
-      cards: cards.map((c) => ({ ...c, retrievability: sched.retrievability(c, t, cfg) })),
+      cards: cards.map((c) => ({ ...c, retrievability: this.scriptFor(cfg) ? null : sched.retrievability(c, t, cfg) })),
       reviews: this.db.all(
         "SELECT r.id, r.card_id, r.ts, r.rating, r.state, r.due_after, r.duration_ms, r.score, r.practice FROM reviews r JOIN cards c ON c.id = r.card_id WHERE c.item_id = ? ORDER BY r.ts DESC LIMIT 200",
         id,
@@ -959,7 +1158,7 @@ export class Etude {
     this.db.tx(() => {
       for (const id of cardIds)
         this.db.run(
-          "UPDATE cards SET state = 0, due = ?, stability = 0, difficulty = 0, elapsed_days = 0, scheduled_days = 0, reps = 0, lapses = 0, learning_steps = 0, last_review = NULL, buried_until = NULL WHERE id = ?",
+          "UPDATE cards SET state = 0, due = ?, stability = 0, difficulty = 0, elapsed_days = 0, scheduled_days = 0, reps = 0, lapses = 0, learning_steps = 0, last_review = NULL, buried_until = NULL, sched_state = NULL WHERE id = ?",
           ts,
           id,
         );
@@ -1020,9 +1219,11 @@ export class Etude {
       lastReview: c.last_review,
       suspended: !!c.suspended,
       buriedUntil: c.buried_until && c.buried_until > iso(t) ? c.buried_until : null,
-      retrievability: sched.retrievability(row, t, cfg),
-      intervals: sched.preview(row, t, cfg),
-      deadline: cfg.deadline ?? null,
+      ...(() => {
+        const p = this.previewFor({ ...row, deck: c.deck }, cfg, t);
+        return { scheduler: p.scheduler, retrievability: p.scheduler.id === FSRS ? sched.retrievability(row, t, cfg) : null, intervals: p.intervals, schedulerState: parse(c.sched_state ?? null, null) };
+      })(),
+      deadline: this.scriptFor(cfg) ? null : (cfg.deadline ?? null),
     };
   }
 
@@ -1287,7 +1488,8 @@ export class Etude {
     const learning = rows.filter((c) => (c.state === 1 || c.state === 3) && c.due <= aheadIso).sort((a, b) => a.due.localeCompare(b.due));
     let reviews = rows.filter((c) => c.state === 2 && c.due <= nowIso);
     if (cfg.reviewOrder === "retrievability") {
-      const R = new Map(reviews.map((c) => [c.id, sched.retrievability(c, t, cfg) ?? 1]));
+      // Cards on a script scheduler have no predicted recall; they sort after the weakest FSRS cards, by due.
+      const R = new Map(reviews.map((c) => [c.id, this.scriptFor(this.configFor(c.deck)) ? 2 : (sched.retrievability(c, t, this.configFor(c.deck)) ?? 1)]));
       reviews.sort((a, b) => R.get(a.id)! - R.get(b.id)!);
     } else if (cfg.reviewOrder === "random") {
       const day = dayStart.slice(0, 10);
@@ -1379,7 +1581,7 @@ export class Etude {
       state: c.state,
       seed: s,
       view: p.view,
-      intervals: sched.preview(c, now(), this.configFor(c.deck)),
+      ...this.previewFor(c, this.configFor(c.deck), now()),
       grader: def.grader.kind,
       generated: typeof p.fields.generator === "string" || typeof parse<Record<string, unknown>>(this.db.get("SELECT fields FROM items WHERE id = ?", c.item_id)!.fields, {}).generator === "string",
       title: this.titleOf(c.type, p.fields),
@@ -1664,29 +1866,48 @@ export class Etude {
   }
 
   /** Records a rating and reschedules the card. Practice ratings are logged but don't move the schedule. */
-  rate(cardId: number, rating: Rating, opts: { attemptId?: number; durationMs?: number; practice?: boolean; at?: Date } = {}) {
-    if (![1, 2, 3, 4].includes(rating)) throw new EtudeError("rating must be 1 (again), 2 (hard), 3 (good) or 4 (easy)");
+  /**
+   * Records a rating and reschedules the card. Practice ratings are logged but don't move the schedule.
+   * A scheduler without ratings (a drill) takes `0`: the graded result is what's recorded.
+   */
+  rate(cardId: number, rating: Rating | 0, opts: { attemptId?: number; durationMs?: number; practice?: boolean; at?: Date } = {}) {
     const c = this.cardWithDeck(cardId);
     const t = opts.at ?? now();
     const cfg = this.configFor(c.deck);
+    const script = this.scriptFor(cfg);
+    const rated = !script || script.ratings !== false;
+    if (rated && ![1, 2, 3, 4].includes(rating)) throw new EtudeError("rating must be 1 (again), 2 (hard), 3 (good) or 4 (easy)");
+    if (!rated) rating = 0;
     const before: CardRow = { ...c };
     for (const k of ["deck", "type", "tags", "item_fields"]) delete (before as any)[k];
-    let score: number | null = null;
+    let grade: Grade | null = null;
     if (opts.attemptId) {
       const a = this.db.get("SELECT grade, card_id, review_id FROM attempts WHERE id = ?", opts.attemptId);
       if (!a || a.card_id !== cardId) throw new EtudeError("attempt does not belong to this card");
       if (a.review_id) throw new EtudeError("this attempt was already rated", 409);
-      score = parse<Grade>(a.grade, {} as Grade).score ?? null;
+      grade = parse<Grade>(a.grade, {} as Grade);
     }
+    const score = grade?.score ?? null;
     return this.db.tx(() => {
       let dueAfter = c.due;
-      if (!opts.practice) {
-        const { next } = sched.schedule(c, rating, t, cfg);
+      if (!opts.practice && script) {
+        const created = this.db.get("SELECT created FROM items WHERE id = ?", c.item_id)?.created;
+        const out = this.runScheduler(script, cfg, { ...c, created }, { rating: rating || null, score, verdict: grade?.verdict ?? null, details: grade?.details ?? null, ms: opts.durationMs ?? null, at: iso(t) }, t);
+        dueAfter = out.due;
+        const days = (a: string | null, b: string) => (a ? Math.max(0, (new Date(b).getTime() - new Date(a).getTime()) / 86400_000) : 0);
+        this.db.run(
+          "UPDATE cards SET state = 2, due = ?, elapsed_days = ?, scheduled_days = ?, reps = reps + 1, lapses = lapses + ?, last_review = ?, sched_state = ? WHERE id = ?",
+          out.due, days(c.last_review, iso(t)), days(iso(t), out.due), rating === 1 ? 1 : 0, iso(t), json(out.state), cardId,
+        );
+      } else if (!opts.practice) {
+        const { next } = sched.schedule(c, rating as Rating, t, cfg);
         dueAfter = next.due;
         this.db.run(
-          "UPDATE cards SET state = ?, due = ?, stability = ?, difficulty = ?, elapsed_days = ?, scheduled_days = ?, reps = ?, lapses = ?, learning_steps = ?, last_review = ? WHERE id = ?",
+          "UPDATE cards SET state = ?, due = ?, stability = ?, difficulty = ?, elapsed_days = ?, scheduled_days = ?, reps = ?, lapses = ?, learning_steps = ?, last_review = ?, sched_state = NULL WHERE id = ?",
           next.state, next.due, next.stability, next.difficulty, next.elapsed_days, next.scheduled_days, next.reps, next.lapses, next.learning_steps, next.last_review, cardId,
         );
+      }
+      if (!opts.practice) {
         if (cfg.burySiblings) {
           const tomorrow = new Date(this.dayStart(t).getTime() + 86400_000);
           this.db.run("UPDATE cards SET buried_until = ? WHERE item_id = ? AND id != ? AND state = 0", iso(tomorrow), c.item_id, cardId);
@@ -1711,8 +1932,8 @@ export class Etude {
       if (!r.practice) {
         const b = parse<CardRow>(r.card_before, {} as CardRow);
         this.db.run(
-          "UPDATE cards SET state = ?, due = ?, stability = ?, difficulty = ?, elapsed_days = ?, scheduled_days = ?, reps = ?, lapses = ?, learning_steps = ?, last_review = ? WHERE id = ?",
-          b.state, b.due, b.stability, b.difficulty, b.elapsed_days, b.scheduled_days, b.reps, b.lapses, b.learning_steps, b.last_review, r.card_id,
+          "UPDATE cards SET state = ?, due = ?, stability = ?, difficulty = ?, elapsed_days = ?, scheduled_days = ?, reps = ?, lapses = ?, learning_steps = ?, last_review = ?, sched_state = ? WHERE id = ?",
+          b.state, b.due, b.stability, b.difficulty, b.elapsed_days, b.scheduled_days, b.reps, b.lapses, b.learning_steps, b.last_review, b.sched_state ?? null, r.card_id,
         );
         const item = this.db.get("SELECT item_id FROM cards WHERE id = ?", r.card_id)!.item_id;
         this.db.run("UPDATE cards SET buried_until = NULL WHERE item_id = ? AND id != ?", item, r.card_id);
@@ -1733,13 +1954,36 @@ export class Etude {
     let n = 0;
     this.db.tx(() => {
       for (const c of cards) {
-        const reviews = this.db.all<{ ts: string; rating: number }>("SELECT ts, rating FROM reviews WHERE card_id = ? AND practice = 0 ORDER BY ts", c.id);
-        if (!reviews.length) continue;
-        const s = sched.replay(reviews, new Date(c.created), this.configFor(c.deck));
-        this.db.run(
-          "UPDATE cards SET state = ?, due = ?, stability = ?, difficulty = ?, elapsed_days = ?, scheduled_days = ?, reps = ?, lapses = ?, learning_steps = ?, last_review = ? WHERE id = ?",
-          s.state, s.due, s.stability, s.difficulty, s.elapsed_days, s.scheduled_days, s.reps, s.lapses, s.learning_steps, s.last_review, c.id,
+        const reviews = this.db.all<{ ts: string; rating: number; score: number | null; duration_ms: number | null; grade: string | null }>(
+          "SELECT r.ts, r.rating, r.score, r.duration_ms, a.grade FROM reviews r LEFT JOIN attempts a ON a.id = r.attempt_id WHERE r.card_id = ? AND r.practice = 0 ORDER BY r.ts",
+          c.id,
         );
+        if (!reviews.length) continue;
+        const cfg = this.configFor(c.deck);
+        const script = this.scriptFor(cfg);
+        if (script) {
+          // Same script, same history: run it again answer by answer.
+          let row: CardRow = { ...(sched.emptyCard(new Date(c.created)) as any), id: c.id, item_id: c.item_id, face: "", suspended: 0, buried_until: null, sched_state: null };
+          // runScheduler reads earlier results from the table, so each step looks just before its own review.
+          for (const r of reviews) {
+            const g = parse<Grade | null>(r.grade, null);
+            const at = new Date(r.ts);
+            const out = this.runScheduler(script, cfg, { ...row, created: c.created }, { rating: script.ratings === false ? null : r.rating || null, score: r.score, verdict: g?.verdict ?? null, details: g?.details ?? null, ms: r.duration_ms, at: r.ts }, new Date(at.getTime() - 1));
+            row = { ...row, state: 2, due: out.due, reps: row.reps + 1, lapses: row.lapses + (r.rating === 1 ? 1 : 0), last_review: r.ts, sched_state: json(out.state) };
+          }
+          this.db.run(
+            "UPDATE cards SET state = 2, due = ?, stability = 0, difficulty = 0, elapsed_days = 0, scheduled_days = 0, reps = ?, lapses = ?, learning_steps = 0, last_review = ?, sched_state = ? WHERE id = ?",
+            row.due, row.reps, row.lapses, row.last_review, row.sched_state ?? null, c.id,
+          );
+        } else {
+          // A drill's unrated answers count as the rating their score suggests.
+          const rated = reviews.map((r) => ({ ts: r.ts, rating: r.rating >= 1 ? r.rating : (sched.suggestRating(r.score, cfg) ?? 3) }));
+          const s = sched.replay(rated, new Date(c.created), cfg);
+          this.db.run(
+            "UPDATE cards SET state = ?, due = ?, stability = ?, difficulty = ?, elapsed_days = ?, scheduled_days = ?, reps = ?, lapses = ?, learning_steps = ?, last_review = ?, sched_state = NULL WHERE id = ?",
+            s.state, s.due, s.stability, s.difficulty, s.elapsed_days, s.scheduled_days, s.reps, s.lapses, s.learning_steps, s.last_review, c.id,
+          );
+        }
         n++;
       }
     });
@@ -1781,8 +2025,10 @@ export class Etude {
     } else source = this.weightsSource(this.deck(target.deck).name);
     if (source.kind === "defaults") throw new EtudeError("this deck uses no preset and no weights of its own: attach a preset first (etude deck preset)");
     const key = JSON.stringify(source);
-    const decks = this.db.all<{ id: number; name: string }>("SELECT id, name FROM decks ORDER BY name").filter((d) => JSON.stringify(this.weightsSource(d.name)) === key);
-    if (!decks.length) throw new EtudeError(`no deck takes its weights from preset "${(source as { id: string }).id}"`);
+    const decks = this.db
+      .all<{ id: number; name: string }>("SELECT id, name FROM decks ORDER BY name")
+      .filter((d) => JSON.stringify(this.weightsSource(d.name)) === key && !this.scriptFor(this.configFor(d.name)));
+    if (!decks.length) throw new EtudeError(`no FSRS deck takes its weights from ${source.kind === "preset" ? `preset "${source.id}"` : `deck "${source.name}"`}`);
     const ids = decks.map((d) => d.id);
     const marks = ids.map(() => "?").join(", ");
     const reviews = this.db
@@ -1938,6 +2184,7 @@ export class Etude {
     const rvFrom = `FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id`;
     const windowStart = since < since30 ? since : since30;
     const rv = this.db.all(`SELECT r.ts, r.rating, r.state, r.duration_ms ${rvFrom} WHERE r.ts >= ? AND r.practice = 0 AND ${where}`, iso(windowStart), ...params);
+    // Pass rates only count rated reviews; a drill's answers (rating 0) are measured in its own metrics.
     const byDay = new Map<string, { reviews: number; again: number; ms: number }>();
     const ratings = { again: 0, hard: 0, good: 0, easy: 0 };
     const RN = ["", "again", "hard", "good", "easy"] as const;
@@ -1945,14 +2192,14 @@ export class Etude {
     let reviewed = 0, passed = 0, reviewed30 = 0, passed30 = 0;
     const sinceIso = iso(since), since30Iso = iso(since30), todayIso = iso(today);
     for (const r of rv) {
-      if (r.ts >= since30Iso && r.state === 2) {
+      if (r.ts >= since30Iso && r.state === 2 && r.rating >= 1) {
         reviewed30++;
         if (r.rating > 1) passed30++;
       }
       if (r.ts >= todayIso) {
         todayStats.reviews++;
         if (r.rating === 1) todayStats.again++;
-        if (r.state === 0) todayStats.new++;
+        if (r.state === 0 && r.rating >= 1) todayStats.new++;
         todayStats.ms += r.duration_ms ?? 0;
       }
       if (r.ts < sinceIso) continue;
@@ -1963,7 +2210,7 @@ export class Etude {
       e.ms += r.duration_ms ?? 0;
       byDay.set(k, e);
       if (r.rating >= 1 && r.rating <= 4) ratings[RN[r.rating] as keyof typeof ratings]++;
-      if (r.state === 2) {
+      if (r.state === 2 && r.rating >= 1) {
         reviewed++;
         if (r.rating > 1) passed++;
       }
@@ -2001,7 +2248,14 @@ export class Etude {
       if (!cfgs.has(deck)) cfgs.set(deck, this.configFor(deck));
       return cfgs.get(deck)!;
     };
-    const all = this.db.all<CardRow & { deck: string; tags: string }>(`SELECT c.*, d.name AS deck, i.tags ${from} WHERE ${where}`, ...params);
+    const scriptDeck = new Map<string, boolean>();
+    const onScript = (deck: string) => {
+      if (!scriptDeck.has(deck)) scriptDeck.set(deck, !!this.scriptFor(cfgOf(deck)));
+      return scriptDeck.get(deck)!;
+    };
+    const everything = this.db.all<CardRow & { deck: string; tags: string; item_id: string; type: string; fields: string }>(`SELECT c.*, d.name AS deck, i.tags, i.type, i.fields ${from} WHERE ${where}`, ...params);
+    // Recall, stability and the forgetting curve are FSRS's predictions; cards on another scheduler have none.
+    const all = everything.filter((c) => !onScript(c.deck));
     const byTag = new Map<string, { n: number; r: number }>();
     const tree = new Map<string, { cards: number; seen: number; r: number; direct: boolean }>();
     let rSum = 0, seenN = 0;
@@ -2083,12 +2337,12 @@ export class Etude {
       const at = new Date(r.ts);
       const h = hours[at.getHours()];
       h.reviews++;
-      if (r.rating > 1) h.passed++;
+      if (r.rating > 1 || (r.rating === 0 && r.state !== 0)) h.passed++;
       const w = weekCount - 1 - Math.floor((end - 1 - at.getTime()) / weekMs);
       if (w < 0 || w >= weekCount) continue;
       weeks[w].reviews++;
       weeks[w].ms += r.duration_ms ?? 0;
-      if (r.state === 2) {
+      if (r.state === 2 && r.rating >= 1) {
         weeks[w].reviewed++;
         if (r.rating > 1) weeks[w].passed++;
       }
@@ -2133,15 +2387,106 @@ export class Etude {
       window: { days, from: dayKey(since), to: dayKey(today) },
       deadline: scope.deck ? (cfg.deadline ?? null) : null,
       deadlineMargin: cfg.deadlineMargin,
+      /** The scope's own scheduler (a deck's), or null for "all decks". */
+      scheduler: scope.deck ? cfg.scheduler : null,
+      /** Cards whose results are measurements: every graded attempt's numbers over time. */
+      practice: this.practiceStats(everything.filter((c) => onScript(c.deck) || !!this.typeMetrics(c.type)), sinceIso),
     };
+  }
+
+  /** The metrics a type declares, or null when it declares none. */
+  private typeMetrics(typeId: string): MetricSpec[] | null {
+    try {
+      const m = this.type(typeId).metrics;
+      return m?.length ? m : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Per-card time series of the grader's numbers: what a drill is for. Each point is one graded
+   * attempt (practice ones too: a result is a result). Metrics come from the type's `metrics`, or else
+   * every top-level number the grader put in `details`, plus the score.
+   */
+  private practiceStats(cards: (CardRow & { deck: string; item_id: string; type: string; fields: string })[], sinceIso: string) {
+    const out: {
+      cardId: number;
+      itemId: string;
+      deck: string;
+      type: string;
+      title: string;
+      scheduler: string;
+      sessions: number;
+      metrics: { key: string; label: string; unit: string; better: "higher" | "lower"; digits: number; first: number | null; last: number | null; best: number | null; mean: number | null; points: { at: string; value: number }[] }[];
+      days: { day: string; sessions: number }[];
+    }[] = [];
+    const pick = (obj: unknown, path: string): number | null => {
+      let v: any = obj;
+      for (const k of path.split(".")) v = v == null ? undefined : v[k];
+      const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+      return Number.isFinite(n) ? n : null;
+    };
+    for (const c of cards.slice(0, 60)) {
+      const attempts = this.db.all<{ ts: string; grade: string }>("SELECT ts, grade FROM attempts WHERE card_id = ? AND ts >= ? ORDER BY ts", c.id, sinceIso);
+      if (!attempts.length) continue;
+      const grades = attempts.map((a) => ({ at: a.ts, g: parse<Grade>(a.grade, {} as Grade) })).filter((x) => x.g && x.g.verdict !== "ungraded");
+      if (!grades.length) continue;
+      let specs = this.typeMetrics(c.type);
+      if (!specs) {
+        const keys = new Set<string>();
+        for (const { g } of grades) if (g.details && typeof g.details === "object" && !Array.isArray(g.details)) for (const [k, v] of Object.entries(g.details)) if (typeof v === "number") keys.add(k);
+        specs = [...keys].slice(0, 6).map((key) => ({ key }));
+        specs.push({ key: "score", label: "Score", unit: "%" });
+      }
+      const metrics = specs.map((m) => {
+        const points = grades
+          .map(({ at, g }) => ({ at, value: m.key === "score" ? (g.score == null ? null : g.score * (m.unit === "%" ? 100 : 1)) : pick(g.details, m.key) }))
+          .filter((p): p is { at: string; value: number } => p.value != null);
+        const vals = points.map((p) => p.value);
+        const better = m.better ?? "higher";
+        return {
+          key: m.key,
+          label: m.label ?? m.key,
+          unit: m.unit ?? "",
+          better,
+          digits: m.digits ?? (vals.some((v) => !Number.isInteger(v)) ? 1 : 0),
+          first: vals.length ? vals[0] : null,
+          last: vals.length ? vals[vals.length - 1] : null,
+          best: vals.length ? (better === "lower" ? Math.min(...vals) : Math.max(...vals)) : null,
+          mean: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null,
+          points,
+        };
+      }).filter((m) => m.points.length);
+      const byDay = new Map<string, number>();
+      for (const { at } of grades) {
+        const ds = this.dayStart(new Date(at));
+        const k = `${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, "0")}-${String(ds.getDate()).padStart(2, "0")}`;
+        byDay.set(k, (byDay.get(k) ?? 0) + 1);
+      }
+      out.push({
+        cardId: c.id,
+        itemId: c.item_id,
+        deck: c.deck,
+        type: c.type,
+        title: this.titleOf(c.type, parse<Record<string, unknown>>(c.fields, {})),
+        scheduler: this.configFor(c.deck).scheduler,
+        sessions: grades.length,
+        metrics,
+        days: [...byDay.entries()].sort().map(([day, sessions]) => ({ day, sessions })),
+      });
+    }
+    return out.sort((a, b) => b.sessions - a.sessions);
   }
 
   // ------------------------------------------------------------- packs
 
   importPack(pack: any, opts: { dryRun?: boolean } = {}) {
     if (!pack || pack.etude !== "pack/1") throw new EtudeError('not an Etude pack (expected "etude": "pack/1")');
-    const report = { presets: 0, decks: 0, types: { created: 0, updated: 0, unchanged: 0 }, items: { created: 0, updated: 0, unchanged: 0 }, tags: 0, errors: [] as string[] };
+    const report = { presets: 0, decks: 0, schedulers: { created: 0, updated: 0, unchanged: 0 }, types: { created: 0, updated: 0, unchanged: 0 }, items: { created: 0, updated: 0, unchanged: 0 }, tags: 0, errors: [] as string[] };
     const run = () => {
+      // Schedulers first: presets and decks may name them.
+      for (const sc of pack.schedulers ?? []) report.schedulers[this.saveScheduler(sc).result]++;
       for (const p of pack.presets ?? []) {
         this.savePreset({ id: p.id, name: p.name ?? p.id, config: p.config ?? {} });
         report.presets++;
@@ -2342,6 +2687,11 @@ export class Etude {
     const presetIds = new Set(decks.map((d) => d.presetId).filter(Boolean) as string[]);
     const typeIds = new Set(items.map((i) => i.type));
     const custom = this.db.all("SELECT id, def FROM types WHERE builtin = 0").filter((t) => typeIds.has(t.id)).map((t) => parse(t.def, {}));
+    // Script schedulers the exported decks or presets use, unless they ship with Etude unchanged.
+    const schedulerIds = new Set(
+      [...decks.map((d) => d.config.scheduler), ...[...presetIds].map((id) => this.preset(id).config.scheduler)].filter((x): x is string => !!x && x !== FSRS),
+    );
+    const schedulers = this.db.all("SELECT id, def FROM schedulers WHERE builtin = 0").filter((r) => schedulerIds.has(r.id)).map((r) => parse(r.def, {}));
     const tagSet = new Set(items.flatMap((i) => parse<string[]>(i.tags, [])));
     const tags = this.db.all("SELECT * FROM tag_meta").filter((t) => tagSet.has(t.tag) && (t.instructions || t.description));
     return {
@@ -2351,6 +2701,7 @@ export class Etude {
       presets: [...presetIds].map((id) => this.preset(id)),
       decks: decks.map((d) => ({ name: d.name, ...(d.presetId ? { preset: d.presetId } : {}), ...(Object.keys(d.config).length ? { config: d.config } : {}), description: d.description, instructions: d.instructions })),
       tags: tags.map((t) => ({ name: t.tag, instructions: t.instructions, description: t.description })),
+      ...(schedulers.length ? { schedulers } : {}),
       types: custom,
       items: items.map((i) => ({ id: i.id, type: i.type, deck: i.deck, tags: parse(i.tags, []), fields: parse(i.fields, {}), source: i.source, notes: i.notes, ...(i.archived ? { archived: true } : {}) })),
     };

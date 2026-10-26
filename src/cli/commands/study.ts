@@ -31,7 +31,10 @@ function presented(c: EngineCard, ctx: Ctx) {
     generated: c.generated,
     view: c.view,
     answerFormat: answerFormat(c, ctx),
-    intervals: Object.fromEntries(([1, 2, 3, 4] as Rating[]).map((r) => [RATING_NAMES[r], humanSpan(now, new Date(c.intervals[r]).getTime())])),
+    scheduler: c.scheduler.id,
+    ...(c.scheduler.ratings
+      ? { intervals: Object.fromEntries(([1, 2, 3, 4] as Rating[]).map((r) => [RATING_NAMES[r], humanSpan(now, new Date(c.intervals[r]).getTime())])) }
+      : { next: c.scheduler.next ? humanSpan(now, new Date(c.scheduler.next).getTime()) : null, rating: "none: submit, then `study rate <card> next` (or use `study answer`)" }),
   };
 }
 
@@ -163,7 +166,7 @@ command({
   summary: "Record a rating and reschedule the card. Pass --attempt to link the graded attempt.",
   args: [
     { name: "ref", description: "Card id (or item id with one card).", required: true },
-    { name: "rating", description: "1-4 or again, hard, good, easy.", required: true },
+    { name: "rating", description: "1-4 or again, hard, good, easy. On a scheduler without ratings (a drill) use `next`.", required: true },
   ],
   flags: [
     { name: "attempt", type: "number", description: "Attempt id from `study submit`." },
@@ -177,10 +180,11 @@ command({
   output: "{ reviewId, cardId, rating, due, in, state }",
   run(ctx) {
     const cardId = oneCard(ctx, ctx.args.ref);
-    const rating = parseRating(ctx.args.rating);
+    const unrated = !ctx.e.cardSchedule(cardId).scheduler.ratings;
+    const rating = unrated || /^(next|0)$/i.test(ctx.args.rating) ? 0 : parseRating(ctx.args.rating);
     const practice = ctx.flags.practice ?? (ctx.flags.attempt ? !!ctx.e.db.get("SELECT practice FROM attempts WHERE id = ?", ctx.flags.attempt)?.practice : false);
     const r = ctx.e.rate(cardId, rating, { attemptId: ctx.flags.attempt, durationMs: ctx.flags.duration, practice });
-    return { reviewId: r.reviewId, cardId, rating: RATING_NAMES[rating], practice, due: r.due, in: humanSpan(Date.now(), new Date(r.due).getTime()), state: stateName(r.state) };
+    return { reviewId: r.reviewId, cardId, rating: rating ? RATING_NAMES[rating] : "next", practice, due: r.due, in: humanSpan(Date.now(), new Date(r.due).getTime()), state: stateName(r.state) };
   },
 });
 
@@ -206,8 +210,13 @@ command({
     const cardId = oneCard(ctx, ctx.args.ref);
     const answer = shaped(ctx, cardId, ctx.flags.seed, answerOf(ctx, false));
     const r = await ctx.e.submit(cardId, ctx.flags.seed, answer, { practice: ctx.flags.practice });
-    const rating: Rating | null = ctx.flags.rate === "auto" ? r.grade.suggested : parseRating(ctx.flags.rate);
     const base = { attemptId: r.attemptId, cardId, answer, grade: r.grade, key: r.key };
+    if (!ctx.e.cardSchedule(cardId).scheduler.ratings) {
+      // A drill records the result itself; there's nothing to choose.
+      const rv = ctx.e.rate(cardId, 0, { attemptId: r.attemptId, durationMs: ctx.flags.duration, practice: ctx.flags.practice });
+      return { ...base, rated: { reviewId: rv.reviewId, rating: "next", due: rv.due, in: humanSpan(Date.now(), new Date(rv.due).getTime()), state: stateName(rv.state) } };
+    }
+    const rating: Rating | null = ctx.flags.rate === "auto" ? r.grade.suggested : parseRating(ctx.flags.rate);
     if (!rating) return { ...base, rated: null, needsRating: true, hint: `no suggested rating (${r.grade.grader.error ? "grading failed" : r.grade.grader.kind + " grader"}); ask the learner, then: etude study rate ${cardId} <1-4> --attempt ${r.attemptId}` };
     const rv = ctx.e.rate(cardId, rating, { attemptId: r.attemptId, durationMs: ctx.flags.duration, practice: ctx.flags.practice });
     return { ...base, rated: { reviewId: rv.reviewId, rating: RATING_NAMES[rating], due: rv.due, in: humanSpan(Date.now(), new Date(rv.due).getTime()), state: stateName(rv.state) } };

@@ -21,7 +21,7 @@ if [ ! -f "$ROOT/web/dist/index.html" ] || [ "${REBUILD_WEB:-0}" = 1 ]; then (cd
 
 # 2. The Etude server, with only its runtime dependencies (the web app is prebuilt).
 mkdir -p "$RES/app/web"
-cp -R "$ROOT/bin" "$ROOT/src" "$ROOT/runtime" "$ROOT/types" "$ROOT/examples" "$ROOT/LICENSE" "$RES/app/"
+cp -R "$ROOT/bin" "$ROOT/src" "$ROOT/runtime" "$ROOT/types" "$ROOT/schedulers" "$ROOT/examples" "$ROOT/LICENSE" "$RES/app/"
 cp -R "$ROOT/web/dist" "$RES/app/web/"
 node -e '
   const p = require(process.argv[1]);

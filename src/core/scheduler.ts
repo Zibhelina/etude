@@ -119,10 +119,15 @@ export function replay(reviews: { ts: string; rating: number }[], created: Date,
 }
 
 export function resolveConfig(...layers: (Partial<PresetConfig> | undefined | null)[]): PresetConfig {
-  const out: PresetConfig = { ...DEFAULT_PRESET, autoRate: { ...DEFAULT_PRESET.autoRate } };
+  const out: PresetConfig = { ...DEFAULT_PRESET, autoRate: { ...DEFAULT_PRESET.autoRate }, schedulerOptions: {} };
   for (const l of layers) {
     if (!l) continue;
-    for (const [k, v] of Object.entries(l)) if (v !== undefined) (out as any)[k] = v;
+    for (const [k, v] of Object.entries(l)) {
+      if (v === undefined) continue;
+      // Scheduler options merge key by key, so a subdeck can change one and inherit the rest.
+      if (k === "schedulerOptions" && v && typeof v === "object") out.schedulerOptions = { ...out.schedulerOptions, ...(v as Record<string, unknown>) };
+      else (out as any)[k] = v;
+    }
   }
   return out;
 }
@@ -145,5 +150,7 @@ export function validateConfig(c: Partial<PresetConfig>): string[] {
     e.push("weights must have 17, 19 or 21 numbers");
   if (c.deadline && Number.isNaN(new Date(c.deadline).getTime())) e.push("deadline must be an ISO date");
   if (c.mode !== undefined && c.mode !== "study" && c.mode !== "watch") e.push('mode must be "study" or "watch"');
+  if (c.scheduler !== undefined && (typeof c.scheduler !== "string" || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(c.scheduler))) e.push('scheduler must be "fsrs" or a scheduler id');
+  if (c.schedulerOptions !== undefined && (c.schedulerOptions === null || typeof c.schedulerOptions !== "object" || Array.isArray(c.schedulerOptions))) e.push("schedulerOptions must be an object");
   return e;
 }

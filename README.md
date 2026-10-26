@@ -226,6 +226,8 @@ The Card types page does the same in the browser, with an editor and a live prev
 
 Cards are scheduled with FSRS-6 (via [ts-fsrs](https://github.com/open-spaced-repetition/ts-fsrs)). Settings come in layers: the defaults, then for each deck from the root down, its preset and its own overrides. Retention, learning steps, limits, ordering, FSRS weights and how scores turn into suggested ratings are all set per layer.
 
+FSRS is the default, not the only choice. Each deck picks a scheduler: `drill` for skills you train and measure (a typing test comes back every day and keeps every WPM, with no rating buttons), `leitner` for classic boxes, or your own few lines of JavaScript. Stats charts what a drill measured instead of predicting recall. See [docs/schedulers.md](docs/schedulers.md).
+
 A deck can have an exam `deadline`. No card in it is scheduled after the deadline minus a margin (12 hours by default). A card that would come back later is pulled in, usually to halfway between now and the deadline, so even a well-known card gets one more look. After changing retention, steps or a deadline, `etude card reschedule --deck NAME` replays the review history with the new settings; the deck page offers the same when you save such a change.
 
 ## Search

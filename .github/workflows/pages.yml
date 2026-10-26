@@ -3,7 +3,7 @@ name: Website
 on:
   push:
     branches: [main]
-    paths: ["site/**", "examples/showcase/**", "runtime/**", "types/**", "web/**", "package.json", ".github/workflows/pages.yml"]
+    paths: ["site/**", "examples/showcase/**", "runtime/**", "types/**", "schedulers/**", "web/**", "package.json", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:

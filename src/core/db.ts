@@ -35,6 +35,14 @@ CREATE TABLE IF NOT EXISTS types (
   updated TEXT NOT NULL
 );
 
+-- Schedulers other than FSRS: scripts that decide when a card comes back.
+CREATE TABLE IF NOT EXISTS schedulers (
+  id      TEXT PRIMARY KEY,
+  def     TEXT NOT NULL,
+  builtin INTEGER NOT NULL DEFAULT 0,
+  updated TEXT NOT NULL
+);
+
 -- Folders that organize card types in the Types page. A path is "A::B", like a deck name.
 -- Folders exist on their own (they can be empty); a type sits in at most one folder.
 CREATE TABLE IF NOT EXISTS type_folders (
@@ -90,6 +98,8 @@ CREATE TABLE IF NOT EXISTS cards (
   last_review    TEXT,
   suspended      INTEGER NOT NULL DEFAULT 0,
   buried_until   TEXT,
+  -- State a non-FSRS scheduler keeps for this card (JSON). NULL for FSRS.
+  sched_state    TEXT,
   UNIQUE (item_id, face)
 );
 CREATE INDEX IF NOT EXISTS cards_due ON cards(state, due);
@@ -142,6 +152,7 @@ export class Db {
     this.sql.exec(SCHEMA);
     // Columns added after a table first shipped.
     if (!this.all("PRAGMA table_info(decks)").some((c) => c.name === "position")) this.sql.exec("ALTER TABLE decks ADD COLUMN position INTEGER");
+    if (!this.all("PRAGMA table_info(cards)").some((c) => c.name === "sched_state")) this.sql.exec("ALTER TABLE cards ADD COLUMN sched_state TEXT");
     const v = this.get("SELECT value FROM meta WHERE key = 'schema_version'");
     if (!v) this.run("INSERT INTO meta (key, value) VALUES ('schema_version', ?)", String(SCHEMA_VERSION));
   }

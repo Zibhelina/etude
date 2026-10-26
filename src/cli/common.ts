@@ -114,7 +114,7 @@ export const FACE_FLAG: FlagSpec = { name: "face", type: "string", description: 
 // ------------------------------------------------------------- config
 
 export const CONFIG_KEYS = Object.keys({ ...DEFAULT_PRESET, weights: null }) as (keyof PresetConfig)[];
-export const RESCHEDULE_KEYS: (keyof PresetConfig)[] = ["desiredRetention", "learningSteps", "relearningSteps", "maximumInterval", "weights", "deadline", "deadlineMargin"];
+export const RESCHEDULE_KEYS: (keyof PresetConfig)[] = ["desiredRetention", "learningSteps", "relearningSteps", "maximumInterval", "weights", "deadline", "deadlineMargin", "scheduler", "schedulerOptions"];
 
 function configValue(key: string, raw: string): unknown {
   const v = looseValue(raw);
@@ -140,8 +140,9 @@ export function applyConfigPairs(layer: Partial<PresetConfig>, pairs: string[], 
     const top = key.split(".")[0];
     if (!CONFIG_KEYS.includes(top as keyof PresetConfig)) throw new CliError(`unknown setting "${top}". Settings: ${CONFIG_KEYS.join(", ")}`, "validation");
     if (key.includes(".")) {
-      if (top !== "autoRate") throw new CliError(`"${top}" has no sub-keys`, "validation");
-      next.autoRate = { ...base.autoRate, ...(next.autoRate ?? {}) };
+      if (top !== "autoRate" && top !== "schedulerOptions") throw new CliError(`"${top}" has no sub-keys`, "validation");
+      if (top === "autoRate") next.autoRate = { ...base.autoRate, ...(next.autoRate ?? {}) };
+      else next.schedulerOptions = { ...(next.schedulerOptions ?? {}) };
       deepSet(next, key, looseValue(raw));
     } else next[key] = configValue(key, raw);
   }

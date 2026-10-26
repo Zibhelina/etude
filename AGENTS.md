@@ -8,7 +8,7 @@ Notes for coding agents. Two different jobs:
 ## Layout
 
 ```
-src/core/      engine.ts (every operation), model.ts, scheduler.ts (FSRS-6, deadlines), optimize.ts (FSRS weights
+src/core/      engine.ts (every operation), model.ts, scheduler.ts (FSRS-6, deadlines), schedulers.ts (script schedulers; built-ins in schedulers/), optimize.ts (FSRS weights
                from review history), query.ts (search language), sandbox.ts (QuickJS), ai.ts (grading providers),
                types.ts (type loading/validation)
 src/server/    app.ts: the HTTP API the web app uses. Each route maps to an engine call.

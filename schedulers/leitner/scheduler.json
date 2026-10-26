@@ -1,0 +1,9 @@
+{
+  "id": "leitner",
+  "name": "Leitner boxes",
+  "description": "The classic paper system. Each card lives in a box; a right answer moves it up one box (Easy moves it two), a miss sends it back to the first. Each box has its own gap in days.",
+  "ratings": true,
+  "options": [
+    { "name": "boxes", "kind": "text", "label": "Days per box", "description": "Gap in days for box 1, 2, 3… separated by commas.", "default": "1, 2, 4, 8, 16, 32" }
+  ]
+}

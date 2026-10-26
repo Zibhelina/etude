@@ -34,6 +34,56 @@ export interface PresetConfig {
   burySiblings: boolean;
   /** "watch": a tour deck, shown card by card with example answers and never scheduled. */
   mode: "study" | "watch";
+  /** Who decides when cards come back: "fsrs" or a scheduler id. */
+  scheduler: string;
+  schedulerOptions: Record<string, unknown>;
+}
+
+export interface SchedulerOption {
+  name: string;
+  kind: "number" | "boolean" | "text";
+  label?: string;
+  description?: string;
+  default?: unknown;
+  min?: number;
+  max?: number;
+  suffix?: string;
+}
+
+export interface SchedulerSummary {
+  id: string;
+  name: string;
+  description: string;
+  ratings: boolean;
+  options: SchedulerOption[];
+  builtin: boolean;
+  script: boolean;
+  decks: number;
+}
+
+export interface PracticeMetric {
+  key: string;
+  label: string;
+  unit: string;
+  better: "higher" | "lower";
+  digits: number;
+  first: number | null;
+  last: number | null;
+  best: number | null;
+  mean: number | null;
+  points: { at: string; value: number }[];
+}
+
+export interface PracticeCard {
+  cardId: number;
+  itemId: string;
+  deck: string;
+  type: string;
+  title: string;
+  scheduler: string;
+  sessions: number;
+  metrics: PracticeMetric[];
+  days: { day: string; sessions: number }[];
 }
 
 export interface DeckNode {
@@ -87,6 +137,7 @@ export interface StudyCard {
   seed: number;
   view: Record<string, unknown>;
   intervals: Record<Rating, string>;
+  scheduler: { id: string; name: string; ratings: boolean; next: string | null };
   grader: string;
   generated: boolean;
   title: string;
@@ -221,6 +272,8 @@ export interface Stats {
   window: { days: number; from: string; to: string };
   deadline: string | null;
   deadlineMargin: number;
+  scheduler: string | null;
+  practice: PracticeCard[];
 }
 
 export interface Preset {
@@ -350,7 +403,7 @@ export const api = {
   submit: (cardId: number, seed: number, answer: unknown, practice = false) =>
     call<{ attemptId: number; grade: Grade; key: Record<string, unknown>; wantsFeedback: boolean }>("POST", "/api/study/submit", { cardId, seed, answer, practice }),
   feedback: (attemptId: number) => call<{ feedback: string; model?: string; ms?: number }>("POST", "/api/study/feedback", { attemptId }),
-  rate: (cardId: number, rating: Rating, opts: { attemptId?: number; durationMs?: number; practice?: boolean } = {}) =>
+  rate: (cardId: number, rating: Rating | 0, opts: { attemptId?: number; durationMs?: number; practice?: boolean } = {}) =>
     call<{ reviewId: number; due: string; state: number }>("POST", "/api/study/rate", { cardId, rating, ...opts }),
   watchList: (s: Scope) => call<{ cards: WatchEntry[] }>("GET", `/api/watch/list${qs({ deck: s.deck, q: s.q })}`),
   watchCard: (cardId: number, seed?: number) => call<{ card: StudyCard; demo: { answer: unknown; grade: Grade | null } }>("GET", `/api/watch/card/${cardId}${qs({ seed })}`),
@@ -375,6 +428,7 @@ export const api = {
   exportUrl: (s: Scope) => `/api/export${qs({ deck: s.deck, q: s.q })}`,
   settings: () => call<any>("GET", "/api/settings"),
   defaults: () => call<PresetConfig>("GET", "/api/defaults"),
+  schedulers: () => call<SchedulerSummary[]>("GET", "/api/schedulers"),
   testAi: () => call<any>("POST", "/api/ai/test", {}),
   saveSettings: (patch: unknown) => call<any>("PATCH", "/api/settings", patch),
   chatgptStatus: () => call<any>("GET", "/api/chatgpt/status"),

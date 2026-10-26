@@ -23,7 +23,7 @@ Read `docs/cli.md` in the repo for the full reference and recipes. Don't guess f
 ## Mental model
 
 - **Item**: one piece of content with a `type`, `fields`, a deck, tags, `source` and `notes`. Ids are stable strings (`net.w1.dtrans-1`); choose readable ones.
-- **Card**: each item has one card per face of its type (usually just `main`). Cards carry the FSRS state (new, learning, review, relearning), due date, stability and difficulty. Card commands take numeric `cardId`s or item ids.
+- **Card**: each item has one card per face of its type (usually just `main`). Cards carry the FSRS state (new, learning, review, relearning), due date, stability and difficulty. A deck can use another scheduler (`etude scheduler list`): on one without ratings (`drill`), submit and then `study rate <card> next`, or use `study answer`. Card commands take numeric `cardId`s or item ids.
 - **Deck**: a tree named with `::` (`"Networks::Week 1"`). Settings resolve as built-in defaults → parent decks → the deck's preset → the deck's own overrides. `etude deck show <deck>` reports each value and where it comes from.
 - **Preset**: named settings shared by several decks (retention, steps, daily limits, an exam `deadline`).
 - **Tag**: hierarchical with `::`. `tag:a::b` matches `a::b` and everything below it. Tags and decks can carry AI grading instructions.

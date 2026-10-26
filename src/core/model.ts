@@ -53,6 +53,48 @@ export interface CardTypeDef {
    * card's `getAnswer` produces. Watch mode shows it, graded, so a reader sees how the card works.
    */
   demo?: string;
+  /**
+   * Numbers the grader puts in `details` that are worth tracking over time (WPM, accuracy...).
+   * Practice decks chart them. Without it, every top-level numeric detail is tracked.
+   */
+  metrics?: MetricSpec[];
+}
+
+export interface MetricSpec {
+  /** Key in the grade's `details` (dots reach nested values), or `score`. */
+  key: string;
+  label?: string;
+  unit?: string;
+  /** Which way is progress. Default higher. */
+  better?: "higher" | "lower";
+  digits?: number;
+}
+
+/**
+ * When a card comes back. FSRS is built in; any other scheduler is a script, like a grader.
+ * `schedule` is the body of `function (card, attempt, options, ctx)` returning `{ due, state }`.
+ */
+export interface SchedulerDef {
+  id: string;
+  name: string;
+  description?: string;
+  /** Offer Again/Hard/Good/Easy after an answer. Off: the result itself is what's recorded, and the learner picks Again or Next. */
+  ratings?: boolean;
+  /** Settings a deck can give this scheduler, shown in the deck's Options. */
+  options?: SchedulerOption[];
+  schedule: string;
+}
+
+export interface SchedulerOption {
+  name: string;
+  kind: "number" | "boolean" | "text";
+  label?: string;
+  description?: string;
+  default?: unknown;
+  min?: number;
+  max?: number;
+  /** Unit shown after a number, e.g. "days". */
+  suffix?: string;
 }
 
 export interface PresetConfig {
@@ -81,6 +123,10 @@ export interface PresetConfig {
   burySiblings: boolean;
   /** "watch": a tour deck. Every card is shown once with an example answer and nothing is scheduled. */
   mode: "study" | "watch";
+  /** Which scheduler decides when cards come back: "fsrs" (spaced repetition) or another scheduler's id. */
+  scheduler: string;
+  /** Settings for a non-FSRS scheduler, by option name. */
+  schedulerOptions: Record<string, unknown>;
 }
 
 export const DEFAULT_PRESET: PresetConfig = {
@@ -101,6 +147,8 @@ export const DEFAULT_PRESET: PresetConfig = {
   autoApply: false,
   burySiblings: true,
   mode: "study",
+  scheduler: "fsrs",
+  schedulerOptions: {},
 };
 
 export interface Preset {
@@ -154,6 +202,8 @@ export interface CardRow {
   last_review: string | null;
   suspended: number;
   buried_until: string | null;
+  /** State owned by a non-FSRS scheduler (JSON), null for FSRS cards. */
+  sched_state?: string | null;
 }
 
 export type Rating = 1 | 2 | 3 | 4;

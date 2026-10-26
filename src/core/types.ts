@@ -85,6 +85,14 @@ export function validateType(def: unknown): string[] {
       if (e) errors.push(e);
     }
   }
+  if (t.metrics !== undefined) {
+    if (!Array.isArray(t.metrics)) errors.push("metrics must be an array");
+    else
+      t.metrics.forEach((m, i) => {
+        if (!m || typeof m.key !== "string" || !/^[\w.]+$/.test(m.key)) errors.push(`metrics[${i}].key must name a value in the grade's details`);
+        if (m?.better !== undefined && m.better !== "higher" && m.better !== "lower") errors.push(`metrics[${i}].better must be "higher" or "lower"`);
+      });
+  }
   if (g && "code" in g && g.code) {
     const e = checkSyntax(g.code, ["answer", "view", "key", "fields"], `${t.id}/grade`);
     if (e) errors.push(e);

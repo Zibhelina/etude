@@ -432,3 +432,59 @@ export function Donut({ parts, center, sub, size = 132, onPick }: { parts: { key
     </div>
   );
 }
+
+// ------------------------------------------------------------ practice progress
+
+/**
+ * One measured number over a card's sessions (WPM, accuracy...), oldest left. Sessions are evenly
+ * spaced so a burst of runs on one day reads as clearly as one run a week; the best one is ringed.
+ */
+export function ProgressChart({ points, better, unit, digits, height = 168 }: { points: { at: string; value: number }[]; better: "higher" | "lower"; unit: string; digits: number; height?: number }) {
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const W = Math.max(240, width || 480);
+  const padL = 36, padR = 12, padT = 12, padB = 22;
+  const vals = points.map((p) => p.value);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi - lo < 1e-9) {
+    lo -= 1;
+    hi += 1;
+  }
+  const pad = (hi - lo) * 0.12;
+  lo -= pad;
+  hi += pad;
+  const n = points.length;
+  const x = (i: number) => padL + (n === 1 ? (W - padL - padR) / 2 : (i / (n - 1)) * (W - padL - padR));
+  const y = (v: number) => padT + (height - padT - padB) * (1 - (v - lo) / (hi - lo));
+  const fmt = (v: number) => `${v.toFixed(digits)}${unit === "%" ? "%" : ""}`;
+  const best = better === "lower" ? Math.min(...vals) : Math.max(...vals);
+  const bestAt = vals.lastIndexOf(best);
+  const line = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join("");
+  const ticks = [lo + pad, (lo + hi) / 2, hi - pad];
+  const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const labels = n > 1 ? [0, n - 1] : [0];
+  // Runs on the same day read better as session numbers than as one repeated date.
+  const sameDay = n > 1 && day(points[0].at) === day(points[n - 1].at);
+  const xLabel = (i: number) => (sameDay ? `#${i + 1}` : day(points[i].at));
+  return (
+    <div ref={ref} className="w-full">
+      <svg width={W} height={height} className="block max-w-full" role="img" aria-label={`${n} sessions, best ${fmt(best)}`}>
+        {ticks.map((t, i) => (
+          <g key={i}>
+            <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="var(--border)" strokeDasharray={i === 1 ? "2 4" : undefined} />
+            <text x={padL - 6} y={y(t) + 3.5} textAnchor="end" className="tabular fill-muted-foreground text-[10px]">{t.toFixed(digits && hi - lo < 10 ? 1 : 0)}</text>
+          </g>
+        ))}
+        {n > 1 && <path d={line} fill="none" stroke="var(--highlight)" strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />}
+        {points.map((p, i) => (
+          <circle key={i} cx={x(i)} cy={y(p.value)} r={n > 40 ? 1.8 : 3} fill={i === bestAt ? "var(--good)" : "var(--highlight)"}>
+            <title>{`${day(p.at)} ${new Date(p.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })} · ${fmt(p.value)}`}</title>
+          </circle>
+        ))}
+        <circle cx={x(bestAt)} cy={y(best)} r={7} fill="none" stroke="var(--good)" strokeWidth={1.4} />
+        {labels.map((i) => (
+          <text key={i} x={x(i)} y={height - 6} textAnchor={n === 1 ? "middle" : i === 0 ? "start" : "end"} className="fill-muted-foreground text-[10px]">{xLabel(i)}</text>
+        ))}
+      </svg>
+    </div>
+  );
+}

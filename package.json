@@ -27,6 +27,7 @@
     "src/",
     "runtime/",
     "types/",
+    "schedulers/",
     "web/dist/",
     "examples/",
     "docs/",

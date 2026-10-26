@@ -126,7 +126,7 @@ export function CleanupSection() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => confirm && remove(confirm)}>Delete</AlertDialogAction>
+            <AlertDialogAction variant="destructive" onClick={() => confirm && remove(confirm)}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

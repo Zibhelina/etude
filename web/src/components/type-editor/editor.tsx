@@ -673,7 +673,7 @@ export function TypeEditor({ id }: { id: string }) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{askPrune?.cards === 1 ? "Keep it" : "Keep them"}</AlertDialogCancel>
-            <AlertDialogAction onClick={prune}>Delete {cardCount(askPrune?.cards ?? 0)}</AlertDialogAction>
+            <AlertDialogAction variant="destructive" onClick={prune}>Delete {cardCount(askPrune?.cards ?? 0)}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

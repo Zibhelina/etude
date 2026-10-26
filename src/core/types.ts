@@ -85,6 +85,7 @@ export function validateType(def: unknown): string[] {
       if (e) errors.push(e);
     }
   }
+  if (t.showVerdict !== undefined && typeof t.showVerdict !== "boolean") errors.push("showVerdict must be true or false");
   if (t.metrics !== undefined) {
     if (!Array.isArray(t.metrics)) errors.push("metrics must be an array");
     else

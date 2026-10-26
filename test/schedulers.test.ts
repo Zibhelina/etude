@@ -198,3 +198,16 @@ return { due: ctx.day[n], state: { runs: (card.state?.runs ?? 0) + 1 } };`;
   assert.equal(out.schedulers?.[0]?.id, "every-monday");
   assert.equal(e.importPack(out).schedulers.unchanged, 1);
 });
+
+test("showVerdict: false reaches the study card and survives a save", async (t) => {
+  const e = await open(t);
+  const def = loadTypeDir(TYPING);
+  assert.equal(def.showVerdict, false);
+  e.saveType(def);
+  assert.equal(e.type("typing").showVerdict, false);
+  e.upsertItem({ id: "ty", type: "typing", deck: "T", fields: {} });
+  assert.equal(e.next({ deck: "T" }).card!.showVerdict, false);
+  e.upsertItem({ id: "b", type: "basic", deck: "B", fields: { front: "b", back: "B" } });
+  assert.equal(e.next({ deck: "B" }).card!.showVerdict, true);
+  assert.throws(() => e.saveType({ ...def, showVerdict: "no" as any }), /showVerdict/);
+});

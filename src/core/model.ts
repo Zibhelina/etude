@@ -54,6 +54,11 @@ export interface CardTypeDef {
    */
   demo?: string;
   /**
+   * Show "Correct / Not quite" and the grader's feedback after an answer. Default true. Off for cards
+   * whose result is a measurement (a typing test), where the card's own result screen says it all.
+   */
+  showVerdict?: boolean;
+  /**
    * Numbers the grader puts in `details` that are worth tracking over time (WPM, accuracy...).
    * Practice decks chart them. Without it, every top-level numeric detail is tracked.
    */

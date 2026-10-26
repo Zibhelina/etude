@@ -144,7 +144,7 @@ export function WatchPage({ scope, title }: { scope: Scope; title: string }) {
   const card = shown?.card;
   const total = list?.length ?? 0;
   const entry = list?.[index];
-  const verdict = result?.grade.verdict ? VERDICT[result.grade.verdict] : undefined;
+  const verdict = card?.showVerdict !== false && result?.grade.verdict ? VERDICT[result.grade.verdict] : undefined;
   const ai = card && (card.grader === "ai" || result?.grade.grader.kind === "ai");
   const last = index + 1 >= total;
   const filled = phase === "result" && by === "example";
@@ -238,7 +238,7 @@ export function WatchPage({ scope, title }: { scope: Scope; title: string }) {
                   <span className="truncate text-xs text-muted-foreground">· a real grade by {result.grade.grader.model.split(" + ").map((m) => m.split("/").pop()).join(" + ")}</span>
                 )}
               </div>
-              {result.grade.feedback && (
+              {result.grade.feedback && card?.showVerdict !== false && (
                 <div className="rounded-lg border bg-card/60 px-4 py-3">
                   <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">Feedback</div>
                   <Markdown className="text-[0.95rem]">{result.grade.feedback}</Markdown>

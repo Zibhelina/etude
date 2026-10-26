@@ -99,7 +99,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       setAttemptId(r.attemptId);
       frame.current?.showResult(res);
       setPhase("result");
-      if (r.grade.feedback) setFeedback({ text: r.grade.feedback });
+      if (r.grade.feedback && card.showVerdict !== false) setFeedback({ text: r.grade.feedback });
       else if (r.wantsFeedback) askFeedback(r.attemptId);
       if (r.grade.grader.error) toast.warning("Couldn't grade automatically", { description: r.grade.grader.error.slice(0, 200) });
     } catch (e) {
@@ -271,7 +271,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   }, [onKey]);
 
   const suggested = result?.grade.suggested ?? null;
-  const verdict = result?.grade.verdict && VERDICT_TEXT[result.grade.verdict];
+  const verdict = card?.showVerdict !== false && result?.grade.verdict && VERDICT_TEXT[result.grade.verdict];
   const total = counts ? counts.new + counts.learning + counts.review : 0;
 
   return (
@@ -362,7 +362,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
               )}
               {feedback?.error && <div className="text-sm text-destructive">Feedback failed: {feedback.error}</div>}
               <div className="flex flex-wrap items-center gap-2">
-                {!feedback && attemptId && (
+                {!feedback && attemptId && card.showVerdict !== false && (
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => askFeedback(attemptId)}>
                     <MessageSquareText className="size-4" /> Explain my answer
                   </Button>

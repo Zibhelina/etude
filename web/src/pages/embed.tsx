@@ -151,7 +151,7 @@ export function EmbedStudy({ scope, limit, cardId, title }: { scope: Scope; limi
       setAttemptId(r.attemptId);
       frame.current?.showResult(res);
       setPhase("result");
-      if (r.grade.feedback) setFeedback({ text: r.grade.feedback });
+      if (r.grade.feedback && card.showVerdict !== false) setFeedback({ text: r.grade.feedback });
       else if (r.wantsFeedback) askFeedback(r.attemptId);
     } catch {
       setPhase("answer");
@@ -216,7 +216,7 @@ export function EmbedStudy({ scope, limit, cardId, title }: { scope: Scope; limi
   };
 
   const suggested = result?.grade.suggested ?? null;
-  const verdict = result?.grade.verdict && VERDICT[result.grade.verdict];
+  const verdict = card?.showVerdict !== false && result?.grade.verdict && VERDICT[result.grade.verdict];
   const progress = cardId ? null : `${Math.min(done.length - doneBefore.current + (phase === "done" ? 0 : 1), limit)} / ${limit}`;
 
   return (
@@ -287,7 +287,7 @@ export function EmbedStudy({ scope, limit, cardId, title }: { scope: Scope; limi
                   <Markdown className="text-[0.93rem]">{feedback.text}</Markdown>
                 </div>
               )}
-              {!feedback && attemptId && (
+              {!feedback && attemptId && card.showVerdict !== false && (
                 <Button variant="ghost" size="sm" className="self-start gap-1.5 text-muted-foreground" onClick={() => askFeedback(attemptId)}>
                   <MessageSquareText className="size-4" /> Explain my answer
                 </Button>

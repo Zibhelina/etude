@@ -500,6 +500,13 @@ export function TypeEditor({ id }: { id: string }) {
                   </label>
                 </>
               )}
+              <label className="flex min-h-10 items-start gap-3 text-sm">
+                <Switch className="mt-0.5" checked={draft.showVerdict !== false} onCheckedChange={(v) => set({ showVerdict: v ? undefined : false })} />
+                <span>
+                  Show the verdict and feedback after an answer
+                  <span className="block text-xs text-muted-foreground">"Correct", "Not quite" and the grader's comments. Turn it off when the card's own result says it all, like a typing test. The score is still recorded.</span>
+                </span>
+              </label>
               <Field
                 label="AI grading instructions"
                 hint="The most general layer: the item's rubric, its tags' and its deck's instructions come first and win on conflict."

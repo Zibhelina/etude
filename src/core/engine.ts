@@ -148,6 +148,8 @@ export interface StudyCard {
   scheduler: { id: string; name: string; ratings: boolean; next: string | null };
   /** How this card is graded: "self" cards show a reveal button instead of Submit. */
   grader: string;
+  /** Show the verdict and feedback after an answer (the type's `showVerdict`). */
+  showVerdict: boolean;
   generated: boolean;
   /** One-line plain-text label (for lists and summaries). */
   title: string;
@@ -742,6 +744,7 @@ export class Etude {
       ...(def.instructions ? { instructions: def.instructions } : {}),
       ...(def.demo ? { demo: def.demo } : {}),
       ...(def.metrics?.length ? { metrics: def.metrics } : {}),
+      ...(def.showVerdict === false ? { showVerdict: false } : {}),
     };
     const old = this.db.get("SELECT def FROM types WHERE id = ?", def.id);
     if (old && old.def === json(clean)) return clean;
@@ -1610,6 +1613,7 @@ export class Etude {
       view: p.view,
       ...this.previewFor(c, this.configFor(c.deck), now()),
       grader: def.grader.kind,
+      showVerdict: def.showVerdict !== false,
       generated: typeof p.fields.generator === "string" || typeof parse<Record<string, unknown>>(this.db.get("SELECT fields FROM items WHERE id = ?", c.item_id)!.fields, {}).generator === "string",
       title: this.titleOf(c.type, p.fields),
     };
@@ -1730,8 +1734,9 @@ export class Etude {
       this.db.run("INSERT INTO attempts (card_id, ts, seed, view, answer, grade, practice) VALUES (?, ?, ?, ?, ?, ?, ?)", cardId, iso(), seed, json(prep.view), json(stored), json(grade), Number(!!opts.practice))
         .lastInsertRowid,
     );
-    const wantsFeedback = !grade.feedback && grade.grader.kind === "ai" && !grade.grader.error && this.settings().ai.autoFeedback !== "never";
-    return { attemptId: id, grade, key: prep.key, wantsFeedback: wantsFeedback || (this.settings().ai.autoFeedback === "always" && !grade.feedback) };
+    const quiet = this.type(this.cardWithDeck(cardId).type).showVerdict === false;
+    const wantsFeedback = !quiet && !grade.feedback && grade.grader.kind === "ai" && !grade.grader.error && this.settings().ai.autoFeedback !== "never";
+    return { attemptId: id, grade, key: prep.key, wantsFeedback: wantsFeedback || (!quiet && this.settings().ai.autoFeedback === "always" && !grade.feedback) };
   }
 
   /** Grades an answer against a card variant without storing anything. */

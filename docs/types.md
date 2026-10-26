@@ -178,6 +178,8 @@ A script-graded example is graded on the spot. AI-graded items can ship a record
 
 If a script or AI grader fails, the attempt is kept as ungraded and the learner rates it themselves.
 
+`showVerdict: false` hides "Correct / Not quite" and the grader's feedback after an answer (and skips automatic AI feedback). Use it when the card's own result screen is the answer, like a typing test. The score and details are still recorded. In the type editor it's the **Show the verdict and feedback** switch on the Grader tab.
+
 ### What the AI grader reads
 
 - **The card's fields**, each labelled with its `label` or name. Private fields are marked "hidden from the student". Empty fields and `generator` are left out.

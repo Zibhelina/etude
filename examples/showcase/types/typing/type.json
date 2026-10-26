@@ -67,5 +67,6 @@
       "better": "higher",
       "digits": 0
     }
-  ]
+  ],
+  "showVerdict": false
 }

@@ -139,6 +139,7 @@ export interface StudyCard {
   intervals: Record<Rating, string>;
   scheduler: { id: string; name: string; ratings: boolean; next: string | null };
   grader: string;
+  showVerdict: boolean;
   generated: boolean;
   title: string;
 }
@@ -167,6 +168,7 @@ export interface CardType {
   template: { html: string; css?: string; js?: string };
   grader: { kind: "self" } | { kind: "script"; code: string } | { kind: "ai"; vision?: boolean; instructions?: string } | { kind: "hybrid"; code: string; vision?: boolean; instructions?: string };
   instructions?: string;
+  showVerdict?: boolean;
   updated?: string;
   builtin?: boolean;
 }

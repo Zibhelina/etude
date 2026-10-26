@@ -89,7 +89,6 @@ function Body({ stats, deck }: { stats: Stats; deck?: string }) {
   const allCards = s.schedulers.reduce((a, x) => a + x.cards, 0);
   const kind = s.scheduler ? (s.schedulers.find((x) => x.id === s.scheduler)?.kind ?? (s.scheduler === "fsrs" ? "fsrs" : null)) : null;
   const others = s.schedulers.filter((x) => x.kind !== "fsrs");
-  const drillsReady = others.filter((x) => x.kind === "drill").reduce((a, x) => a + x.due, 0);
 
   if (allCards === 0)
     return (
@@ -101,21 +100,6 @@ function Body({ stats, deck }: { stats: Stats; deck?: string }) {
     );
 
   const studied = s.cards.total - s.cards.new;
-  const recent = s.weeks.slice(-12);
-  // Weekly retention only says something once a few weeks have review answers.
-  const rateWeeks = recent.filter((w) => w.reviewed > 0).length;
-  // Volume and time read best per day over the last two weeks.
-  const daily = (() => {
-    const by = new Map(s.days.map((d) => [d.day, d]));
-    const end = parseDay(s.today.day);
-    return Array.from({ length: 14 }, (_, k) => {
-      const d = new Date(end);
-      d.setDate(d.getDate() - (13 - k));
-      return by.get(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`) ?? { reviews: 0, ms: 0 };
-    });
-  })();
-  const week = daily.slice(7).reduce((a, d) => ({ reviews: a.reviews + d.reviews, ms: a.ms + d.ms }), { reviews: 0, ms: 0 });
-  const dueToday = s.forecast[0]?.due ?? 0;
   const young = s.cards.review - s.cards.mature;
   // The heatmap starts a little before the first study day instead of showing months of nothing.
   const first = s.days.find((d) => d.reviews + (d.runs ?? 0) > 0)?.day;
@@ -144,41 +128,7 @@ function Body({ stats, deck }: { stats: Stats; deck?: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Hero: memory now, what's due, and the trend tiles. */}
-      <section aria-label="Overview" className="rounded-xl border bg-card/40">
-        <div className="flex flex-col gap-6 p-4 sm:p-5 lg:flex-row lg:items-center">
-          <div className="flex items-center gap-5 sm:gap-6">
-            <RecallRing value={s.recall} target={target} label="Recall now" sub={s.recall == null ? undefined : `target ${Math.round(target * 100)}%`} />
-            <div className="min-w-0">
-              <div className="text-xs text-muted-foreground">Due today</div>
-              <div className="tabular text-5xl leading-none tracking-tight" style={SERIF}>{dueToday}</div>
-              <div className="mt-1.5 text-xs text-muted-foreground">
-                {s.overdue ? <span className="text-again">{s.overdue} overdue</span> : dueToday ? "all on time" : "nothing waiting"}
-                {s.today.reviews > 0 && <> · {s.today.reviews} done today</>}
-                {drillsReady > 0 && <> · {drillsReady} drill{drillsReady === 1 ? "" : "s"} ready</>}
-              </div>
-              <Button size="sm" className="mt-3 h-9 gap-1.5" disabled={!dueToday} onClick={() => navigate(deck ? `/study?deck=${encodeURIComponent(deck)}` : "/study")}>
-                <Play className="size-3.5" />Review now
-              </Button>
-            </div>
-          </div>
-          <div className="grid flex-1 grid-cols-2 gap-x-5 gap-y-5 lg:border-l lg:pl-6">
-            <Trend
-              label="True retention"
-              value={pct(s.trueRetention.rate, 1)}
-              tone={tone(s.trueRetention.rate)}
-              sub={s.trueRetention.reviewed ? `${s.trueRetention.passed}/${s.trueRetention.reviewed} passed · 30 days` : "No review answers in 30 days"}
-              spark={rateWeeks >= 3 ? recent.map((w) => w.rate) : undefined}
-              note={rateWeeks >= 3 ? undefined : "Trend after 3 weeks of reviews"}
-              color={s.trueRetention.rate == null ? undefined : recallColor(s.trueRetention.rate, target)}
-              domain={[0.5, 1]}
-            />
-            <Trend label="Reviews, last 7 days" value={String(week.reviews)} sub={`${totalReviews} in ${WEEKS} weeks`} bars={daily.map((d) => d.reviews)} color="var(--chart-2)" />
-            <Trend label="Streak" value={`${s.streak} day${s.streak === 1 ? "" : "s"}`} sub={s.bestStreak ? `Best ${s.bestStreak} in ${WEEKS} weeks` : "Study today to start one"} streak={s.days} today={s.today.day} />
-            <Trend label="Time, last 7 days" value={fmtDuration(week.ms)} sub={totalMs ? `${fmtDuration(totalMs)} in ${WEEKS} weeks` : "Time per answer is recorded as you study"} bars={daily.map((d) => d.ms)} color="var(--chart-3)" />
-          </div>
-        </div>
-      </section>
+      <Overview stats={s} deck={deck} />
 
       {others.length > 0 && <Schedulers list={s.schedulers} />}
 
@@ -288,8 +238,67 @@ function Body({ stats, deck }: { stats: Stats; deck?: string }) {
   );
 }
 
+/** Hero: memory now, what's due, and the trend tiles. */
+export function Overview({ stats: s, deck, ring }: { stats: Stats; deck?: string; ring?: number }) {
+  const target = s.desiredRetention ?? 0.9;
+  const totalReviews = s.days.reduce((a, d) => a + d.reviews, 0);
+  const totalMs = s.days.reduce((a, d) => a + d.ms, 0);
+  const drillsReady = s.schedulers.filter((x) => x.kind === "drill").reduce((a, x) => a + x.due, 0);
+  const recent = s.weeks.slice(-12);
+  // Weekly retention only says something once a few weeks have review answers.
+  const rateWeeks = recent.filter((w) => w.reviewed > 0).length;
+  // Volume and time read best per day over the last two weeks.
+  const daily = (() => {
+    const by = new Map(s.days.map((d) => [d.day, d]));
+    const end = parseDay(s.today.day);
+    return Array.from({ length: 14 }, (_, k) => {
+      const d = new Date(end);
+      d.setDate(d.getDate() - (13 - k));
+      return by.get(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`) ?? { reviews: 0, ms: 0 };
+    });
+  })();
+  const week = daily.slice(7).reduce((a, d) => ({ reviews: a.reviews + d.reviews, ms: a.ms + d.ms }), { reviews: 0, ms: 0 });
+  const dueToday = s.forecast[0]?.due ?? 0;
+  return (
+    <section aria-label="Overview" className="rounded-xl border bg-card/40">
+      <div className="flex flex-col gap-6 p-4 sm:p-5 lg:flex-row lg:items-center">
+        <div className="flex items-center gap-5 sm:gap-6">
+          <RecallRing value={s.recall} target={target} size={ring} label="Recall now" sub={s.recall == null ? undefined : `target ${Math.round(target * 100)}%`} />
+          <div className="min-w-0">
+            <div className="text-xs text-muted-foreground">Due today</div>
+            <div className="tabular text-5xl leading-none tracking-tight" style={SERIF}>{dueToday}</div>
+            <div className="mt-1.5 text-xs text-muted-foreground">
+              {s.overdue ? <span className="text-again">{s.overdue} overdue</span> : dueToday ? "all on time" : "nothing waiting"}
+              {s.today.reviews > 0 && <> · {s.today.reviews} done today</>}
+              {drillsReady > 0 && <> · {drillsReady} drill{drillsReady === 1 ? "" : "s"} ready</>}
+            </div>
+            <Button size="sm" className="mt-3 h-9 gap-1.5" disabled={!dueToday} onClick={() => navigate(deck ? `/study?deck=${encodeURIComponent(deck)}` : "/study")}>
+              <Play className="size-3.5" />Review now
+            </Button>
+          </div>
+        </div>
+        <div className="grid flex-1 grid-cols-2 gap-x-5 gap-y-5 lg:border-l lg:pl-6">
+          <Trend
+            label="True retention"
+            value={pct(s.trueRetention.rate, 1)}
+            tone={tone(s.trueRetention.rate)}
+            sub={s.trueRetention.reviewed ? `${s.trueRetention.passed}/${s.trueRetention.reviewed} passed · 30 days` : "No review answers in 30 days"}
+            spark={rateWeeks >= 3 ? recent.map((w) => w.rate) : undefined}
+            note={rateWeeks >= 3 ? undefined : "Trend after 3 weeks of reviews"}
+            color={s.trueRetention.rate == null ? undefined : recallColor(s.trueRetention.rate, target)}
+            domain={[0.5, 1]}
+          />
+          <Trend label="Reviews, last 7 days" value={String(week.reviews)} sub={`${totalReviews} in ${WEEKS} weeks`} bars={daily.map((d) => d.reviews)} color="var(--chart-2)" />
+          <Trend label="Streak" value={`${s.streak} day${s.streak === 1 ? "" : "s"}`} sub={s.bestStreak ? `Best ${s.bestStreak} in ${WEEKS} weeks` : "Study today to start one"} streak={s.days} today={s.today.day} />
+          <Trend label="Time, last 7 days" value={fmtDuration(week.ms)} sub={totalMs ? `${fmtDuration(totalMs)} in ${WEEKS} weeks` : "Time per answer is recorded as you study"} bars={daily.map((d) => d.ms)} color="var(--chart-3)" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /** A headline number with a 12-week sparkline, or, for the streak, the last 14 days as dots. */
-function Trend({ label, value, sub, tone: t, spark, bars, note, color, domain, streak, today }: { label: string; value: string; sub: string; tone?: keyof typeof TONE; spark?: (number | null)[]; bars?: number[]; note?: string; color?: string; domain?: [number, number]; streak?: Stats["days"]; today?: string }) {
+export function Trend({ label, value, sub, tone: t, spark, bars, note, color, domain, streak, today }: { label: string; value: string; sub: string; tone?: keyof typeof TONE; spark?: (number | null)[]; bars?: number[]; note?: string; color?: string; domain?: [number, number]; streak?: Stats["days"]; today?: string }) {
   return (
     <div className="min-w-0">
       <div className="truncate text-xs text-muted-foreground">{label}</div>
@@ -336,7 +345,7 @@ function StreakDots({ days, today }: { days: Stats["days"]; today: string }) {
 }
 
 /** Cards on schedulers other than FSRS, one row each: they have no memory model, so they're counted apart. */
-function Schedulers({ list }: { list: StatsScheduler[] }) {
+export function Schedulers({ list }: { list: StatsScheduler[] }) {
   const max = Math.max(1, ...list.map((x) => x.cards));
   const word = { fsrs: "Memory model", rated: "Rated, no recall model", drill: "Measured, always ready" } as const;
   return (
@@ -464,7 +473,7 @@ function Stat({ label, value, sub, tone: t }: { label: string; value: string; su
 }
 
 /** One measured card: pick a metric, see it over every session. */
-function PracticePanel({ card }: { card: PracticeCard }) {
+export function PracticePanel({ card }: { card: PracticeCard }) {
   const [key, setKey] = useState(card.metrics[0]?.key);
   const m = card.metrics.find((x) => x.key === key) ?? card.metrics[0];
   if (!m) return null;
@@ -527,7 +536,7 @@ function Empty({ children }: { children: ReactNode }) {
 }
 
 const TONE = { good: "text-good", hard: "text-hard", again: "text-again" } as const;
-const tone = (v: number | null): keyof typeof TONE | undefined => (v == null ? undefined : v >= 0.85 ? "good" : v >= 0.7 ? "hard" : "again");
+export const tone = (v: number | null): keyof typeof TONE | undefined => (v == null ? undefined : v >= 0.85 ? "good" : v >= 0.7 ? "hard" : "again");
 
 function TimeSpent({ days, today }: { days: Stats["days"]; today: string }) {
   const series = useMemo(() => {
@@ -565,7 +574,7 @@ function TimeSpent({ days, today }: { days: Stats["days"]; today: string }) {
   );
 }
 
-function Forecast({ stats, deck }: { stats: Stats; deck?: string }) {
+export function Forecast({ stats, deck, height = 170 }: { stats: Stats; deck?: string; height?: number }) {
   const f = stats.forecast;
   const total = f.reduce((a, d) => a + d.due, 0);
   const data = f.map((d, i) => ({ key: d.day, value: d.due, label: i === 0 ? "today" : fmtDay(d.day, { month: "short", day: "numeric" }) }));
@@ -604,7 +613,7 @@ function Forecast({ stats, deck }: { stats: Stats; deck?: string }) {
       {total ? (
         <BarChart
           data={shown}
-          height={170}
+          height={height}
           color="var(--review)"
           highlight={0}
           ticks={ticks}
@@ -643,7 +652,7 @@ function Mini({ label, value, sub }: { label: string; value: number; sub?: strin
   );
 }
 
-function WeakTags({ tree, target }: { tree: Stats["tagTree"]; target: number }) {
+export function WeakTags({ tree, target, limit = 10 }: { tree: Stats["tagTree"]; target: number; limit?: number }) {
   const roots = useMemo(() => tree.filter((t) => t.depth === 0).sort((a, b) => b.cards - a.cards), [tree]);
   const [group, setGroup] = useState<string>("__leaf");
   const [all, setAll] = useState(false);
@@ -653,7 +662,7 @@ function WeakTags({ tree, target }: { tree: Stats["tagTree"]; target: number }) 
   const inGroup = group === "__leaf" ? tree.filter((t) => t.direct) : tree.filter((t) => t.tag.startsWith(group + "::"));
   const seen = inGroup.filter((t) => t.seen > 0).sort((a, b) => a.recall! - b.recall! || b.seen - a.seen);
   const unseen = inGroup.filter((t) => t.seen === 0);
-  const shown = all ? seen : seen.slice(0, 10);
+  const shown = all ? seen : seen.slice(0, limit);
   // The meters share one scale that starts a little under the weakest tag, so 89% and 95% look different.
   const lo = Math.max(0, Math.min(0.6, Math.floor(((seen[0]?.recall ?? 0.6) - 0.05) * 20) / 20));
   const head = group === "__leaf" ? null : tree.find((t) => t.tag === group);
@@ -703,7 +712,7 @@ function WeakTags({ tree, target }: { tree: Stats["tagTree"]; target: number }) 
         </ul>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-        {seen.length > 10 && (
+        {seen.length > limit && (
           <button className="h-10 rounded-md border px-3 text-foreground hover:bg-accent/50" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${seen.length}`}</button>
         )}
         {unseen.length > 0 && <span>{unseen.length} tag{unseen.length === 1 ? "" : "s"} not studied yet</span>}

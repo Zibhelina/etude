@@ -4,7 +4,9 @@
 // The landing page runs real Etude card types with no server: the card frames, runtime and
 // vendor files are copied here, and each demo's prepare and grade scripts run in the page with
 // the same helpers (`std`, `rng`) the server's sandbox gives them.
+import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -136,6 +138,28 @@ const REPERTOIRE: [string, [string, string, string, string[]][]][] = [
     ["draw", "Write it by hand", "Draw or write it with your finger or mouse. A vision model reads the strokes.", ["showcase.draw.kanji-water", "showcase.draw.parabola"]],
   ]],
 ];
+// The new Market decks (site/tools/new-decks.mjs copies their types and a few real items into
+// site/decks/). They live in the Market, not in examples/, so they're loaded from there.
+type DeckFile = { type: any; items: { id: string; type: string; deck: string; fields: Record<string, unknown> }[]; assets: string[]; deck: { name: string; cards: number; decks: number } };
+const deckFiles = new Map<string, DeckFile>(
+  readdirSync(join(here, "decks")).filter((f) => f.endsWith(".json")).map((f) => [f.replace(/\.json$/, ""), JSON.parse(readFileSync(join(here, "decks", f), "utf8"))]),
+);
+REPERTOIRE.find(([g]) => g === "Play & listen")![1].push(["flippy", "Shoot the invaders", "Flippy Bit: flip eight bits until they spell the hex number falling at you. A drill, measured in invaders.", ["flippy.hex"]]);
+REPERTOIRE.splice(REPERTOIRE.findIndex(([g]) => g === "Code"), 0, ["Explore", [
+  ["country-map", "Find it on the map", "Name the country that's lit up, or find the one that's named. Zoom and pan like a real map.", ["geo.country.can", "geo.country.jpn", "geo.country.ita", "geo.country.egy", "geo.country.per", "geo.country.mng"]],
+  ["element", "Read the table", "Tap an element on a blank periodic table, name a lit cell, or give its family and configuration.", ["pt.locate.fe", "pt.identify.ne", "pt.name.au", "pt.family.w", "pt.config.c", "pt.numbers.c"]],
+]]);
+const deckItem = (id: string) => [...deckFiles.values()].flatMap((d) => d.items).find((i) => i.id === id);
+// A type from the examples folder or from site/decks/, with the asset hashes its frame needs.
+function loadSiteType(type: string): { def: any; assets?: { type: string; files: { name: string; hash: string }[] } } {
+  const d = deckFiles.get(type);
+  if (!d) return { def: loadTypeDir(typeDir(type), { assets: false }) };
+  const files = d.assets.map((name) => ({ name, hash: createHash("sha256").update(readFileSync(join(here, "src/type-assets", type, name))).digest("hex") }));
+  return { def: d.type, assets: { type, files } };
+}
+// The country map has two faces (name it / find it); the site picks one per item.
+const FACE: Record<string, string> = { "geo.country.jpn": "locate", "geo.country.egy": "locate", "geo.country.mng": "locate" };
+
 // In the repertoire the card has most of the content width, so only the tallest pieces are capped.
 const galleryFit = `<style>.ch-board svg{max-width:21rem}.uc-stage{max-width:300px}.gw-svg{max-width:340px}.pl-stage{max-width:330px}.st-staff svg{max-width:20rem}body[data-mode=result] .ch-board svg{max-width:15rem}</style>`;
 // A card focuses its first input when it mounts. Down here that would pull the keyboard (and on a
@@ -144,20 +168,19 @@ const galleryFit = `<style>.ch-board svg{max-width:21rem}.uc-stage{max-width:300
 const holdFocus = `<script>(() => { let ok = false; const f = HTMLElement.prototype.focus; HTMLElement.prototype.focus = function (o) { if (ok) return f.call(this, { ...(o ?? {}), preventScroll: true }); }; addEventListener("message", (e) => { if (e.source === parent && e.data?.etude === 1 && e.data.type === "rep-focus") ok = true; }); })();</script>`;
 mkdirSync(join(out, "frames/gallery"), { recursive: true });
 const gallery = REPERTOIRE.flatMap(([group, entries]) => entries.map(([type, label, desc, ids]) => {
-  const dir = typeDir(type);
-  const def = loadTypeDir(dir);
-  const html = cardFrame(def, "__BASE__")
+  const { def, assets } = loadSiteType(type);
+  const html = cardFrame(def, "__BASE__", assets)
     .replace('<base href="__BASE__">', `<base href="../../">${fontFace}`)
     .replace("</head>", `${galleryFit}\n<script src="assets/demo-driver.js"></script>\n${holdFocus}\n</head>`)
     .replaceAll("__BASE__", "./");
   writeFileSync(join(out, "frames/gallery", `${def.id}.html`), html);
   const items = ids.map((id) => {
-    const item = itemById(id);
+    const item = itemById(id) ?? deckItem(id);
     if (!item) throw new Error(`repertoire: no item ${id}`);
     if (item.type !== type) throw new Error(`repertoire: ${id} is a ${item.type} item, not ${type}`);
     // Watch-mode example answers stay in the app.
     const { demo: _d, demoGrade: _g, ...own } = item.fields as Record<string, unknown>;
-    return { id, fields: { ...fieldDefaults(def), ...own } };
+    return { id, fields: { ...fieldDefaults(def), ...own }, ...(FACE[id] ? { face: FACE[id] } : {}) };
   });
   const g = def.grader as { kind: string; code?: string };
   const prep = def.prepare ?? "";
@@ -169,9 +192,14 @@ const gallery = REPERTOIRE.flatMap(([group, entries]) => entries.map(([type, lab
     desc,
     // script, hybrid (a script that may hand the answer to AI), ai or self
     grader: g.kind,
+    // A type that hides its verdict (a drill like Flippy Bit) reports its numbers instead.
+    quiet: def.showVerdict === false,
+    metrics: def.metrics ?? null,
+    // Ends itself (game over): no Check button while it runs.
+    auto: type === "flippy",
     grade: g.code ?? null,
     prepare: def.prepare ?? null,
-    private: def.fields.filter((f) => f.private).map((f) => f.name),
+    private: def.fields.filter((f: { private?: boolean }) => f.private).map((f: { name: string }) => f.name),
     // What another go gives you: a new variant (a generator, random picks or another item), the
     // same card reshuffled, or the same card again.
     again: items.length > 1 || items.some((i) => typeof i.fields.generator === "string") || /\brng\.(int|float|pick|bool|next)\b/.test(prep) ? "variant" : /\brng\.shuffle\b/.test(prep) ? "shuffle" : "reset",
@@ -212,12 +240,21 @@ const files = FILES.map(([name, lang, note]) => {
   const src = readFileSync(join(showType, name), "utf8");
   return { name, note, lines: src.split("\n").length, html: highlight(src.replace(/\n$/, ""), lang) };
 });
+// The schedulers that ship with Etude, run in the Tempo section exactly as the engine runs them,
+// plus the example a user writes in docs/schedulers.md.
+const schedDoc = readFileSync(join(root, "docs/schedulers.md"), "utf8");
+const SCHEDULERS = {
+  drill: readFileSync(join(root, "schedulers/drill/schedule.js"), "utf8"),
+  leitner: readFileSync(join(root, "schedulers/leitner/schedule.js"), "utf8"),
+  monday: /```js\n(\/\/ Next Monday[\s\S]*?)```/.exec(schedDoc)?.[1] ?? "",
+};
+if (!SCHEDULERS.monday) throw new Error("couldn't find the every-monday example in docs/schedulers.md");
 const derivative = itemById("showcase.math.derivative")!;
 const generator = { code: derivative.fields.generator as string, html: highlight(derivative.fields.generator, "js") };
 
 writeFileSync(
   join(out, "data.js"),
-  `// Generated by site/build.ts.\nexport const PRELUDE = ${JSON.stringify(prelude)};\nexport const DEMOS = ${JSON.stringify(demos)};\nexport const TYPE_FILES = ${JSON.stringify(files)};\nexport const GENERATOR = ${JSON.stringify(generator)};\nexport const GALLERY = ${JSON.stringify(gallery)};\n`,
+  `// Generated by site/build.ts.\nexport const PRELUDE = ${JSON.stringify(prelude)};\nexport const DEMOS = ${JSON.stringify(demos)};\nexport const TYPE_FILES = ${JSON.stringify(files)};\nexport const GENERATOR = ${JSON.stringify(generator)};\nexport const GALLERY = ${JSON.stringify(gallery)};\nexport const SCHEDULERS = ${JSON.stringify(SCHEDULERS)};\n`,
 );
 
 // The hero's tab strip is in the HTML from the start, so the window isn't empty before the script runs.
@@ -226,5 +263,8 @@ writeFileSync(
   const tabs = demos.map((d, i) => `<button class="stage-tab" role="tab" type="button" aria-selected="${i === 0}" data-i="${i}">${escapeHtml(d.label)}</button>`).join("");
   writeFileSync(p, readFileSync(p, "utf8").replace("{{STAGE_TABS}}", tabs));
 }
+
+// The live Stats panels: the app's own React components with the demo snapshots, into dist/live/.
+execFileSync(process.execPath, [join(root, "node_modules/vite/bin/vite.js"), "build", "--config", join(here, "stats-embed/vite.config.ts")], { cwd: root, stdio: "inherit" });
 
 console.log(JSON.stringify({ out, version: pkg.version, demos: demos.map((d) => d.type), gallery: gallery.length }));

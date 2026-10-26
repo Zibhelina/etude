@@ -2,7 +2,7 @@
 // card runtime and grades them with the types' own scripts; the deadline chart runs ts-fsrs.
 import katex from "../runtime/vendor/katex.js";
 import math from "../runtime/mathexpr.js";
-import { DEMOS, PRELUDE, TYPE_FILES, GENERATOR, GALLERY } from "../data.js";
+import { DEMOS, PRELUDE, TYPE_FILES, GENERATOR, GALLERY, SCHEDULERS } from "../data.js";
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -172,6 +172,10 @@ function humanInterval(ms) {
 }
 const RATING = { 1: "Again", 2: "Hard", 3: "Good", 4: "Easy" };
 const VERDICT = { correct: "Correct", partial: "Partly right", incorrect: "Not quite" };
+/** A drill's numbers, the way the app shows them after a run: "5 invaders · 0.74 s per invader". */
+const metricLine = (metrics, details) => metrics
+  .map((m) => { const v = details?.[m.key]; return v == null ? null : `<b class="tabular">${Number(v).toFixed(m.digits ?? 0)}${m.unit === "%" ? "%" : m.unit ? ` ${m.unit}` : ""}</b> ${esc(m.label.toLowerCase().replace(m.unit === "s" ? /^seconds\s+/ : /^$/, ""))}`; })
+  .filter(Boolean).join(" · ");
 
 let fsrsMod = null;
 const loadFsrs = () => (fsrsMod ??= import("../vendor/ts-fsrs.js"));
@@ -746,7 +750,7 @@ if (rep && GALLERY?.length) {
     againBtn.classList.remove("btn-primary");
     againBtn.classList.add("btn-ghost");
     let prep;
-    try { prep = prepare({ id: item.id, fields: item.fields, prepare: entry.prepare, private: entry.private }, seed); }
+    try { prep = prepare({ id: item.id, fields: item.fields, prepare: entry.prepare, private: entry.private }, seed, item.face ?? "main"); }
     catch (e) { verdictEl.textContent = `Couldn't prepare the card: ${e.message}`; return; }
     const old = cur?.frame;
     const frame = document.createElement("iframe");
@@ -806,6 +810,11 @@ if (rep && GALLERY?.length) {
         const out = runScript(entry.grade, ["answer", "view", "key", "fields"], { answer, view: prep.view, key: prep.key, fields: prep.fields }) ?? {};
         const ms = Math.max(1, Math.round(performance.now() - t0));
         if (out.defer) line = `<span class="v">Not graded here</span><span class="m">· with no tests, the app hands this to AI</span>`;
+        else if (entry.quiet && entry.metrics) {
+          // A drill (Flippy Bit) hides its verdict in the app and shows what it measured instead.
+          g = { score: out.score ?? null, verdict: verdictOf(out.score), details: out.details, grader: { kind: "script", ms } };
+          line = `<span class="v">Run over</span><span class="m">${metricLine(entry.metrics, out.details)}</span>`;
+        }
         else {
           const score = out.score == null ? null : Math.max(0, Math.min(1, Number(out.score)));
           g = { score, verdict: verdictOf(score), feedback: out.feedback, details: out.details, suggested: suggest(score), grader: { kind: "script", ms } };
@@ -861,45 +870,273 @@ if (rep && GALLERY?.length) {
   whenVisible(rep, () => open(0), "0px 0px 40% 0px");
 }
 
-// ------------------------------------------------------- turning the page
-// The film is a card dealt onto the page: the one turn on the page, between the hero and the rest.
-// Each movement is a card. As it scrolls in it swings up on its top edge, from lying back to flat
-// on the page; as it scrolls out it tips back on its bottom edge. The edge that moves always goes
-// away from you, so nothing grows past the page. The turn follows the scroll position, so it goes as fast
-// as you scroll and runs backwards when you scroll back.
+// --------------------------------------------------------------- tempo: schedulers
+// One card over six weeks under four schedulers. FSRS runs through ts-fsrs; drill, Leitner and
+// the docs' every-Monday example are the real schedule.js scripts, called with the same
+// (card, attempt, options, ctx) the engine gives them.
 {
-  const cards = reduced ? [] : $$(".film > .wrap");
-  const ease = (t) => 1 - (1 - t) ** 3;
-  const clamp = (x) => Math.max(0, Math.min(1, x));
-  let ticking = false;
-  const frame = () => {
-    ticking = false;
-    const vh = innerHeight, narrow = innerWidth < 700;
-    const IN = narrow ? 40 : 60, OUT = narrow ? 8 : 12;
-    for (const el of cards) {
-      const r = el.getBoundingClientRect();
-      if (r.bottom < -vh * 0.5 || r.top > vh * 1.5) continue;
-      // arriving: its top climbs from the bottom of the screen to 40% of the way up
-      const a = ease(clamp((vh - r.top) / (vh * 0.75)));
-      // leaving: its bottom passes the top third of the screen
-      const l = clamp((vh * 0.3 - r.bottom) / (vh * 0.3));
-      let rx = 0, ty = 0, o = 1, face = 0;
-      // arriving: lies back on its top edge and swings up flat; leaving: only a slight tip and fade
-      if (a < 1) { rx = -(1 - a) * IN; ty = (1 - a) * 3; o = 0.35 + 0.65 * a; face = Math.min(1, (1 - a) * 2.2); }
-      else if (l > 0) { rx = l * OUT; o = 1 - l * 0.5; el.style.transformOrigin = "50% 100%"; }
-      if (!(l > 0)) el.style.transformOrigin = "";
-      if (rx === 0) { el.style.transform = ""; el.style.opacity = ""; el.style.setProperty("--face", "0"); continue; }
-      el.style.transform = `perspective(${narrow ? 900 : 1500}px) translateY(${ty}rem) rotateX(${rx.toFixed(2)}deg)`;
-      el.style.opacity = o.toFixed(3);
-      el.style.setProperty("--face", Math.min(1, face).toFixed(3));
+  const box = $("[data-tempo]");
+  if (box) {
+    const chart = $("[data-tempo-chart]", box), missBox = $("[data-tempo-miss]", box), missNote = $("[data-tempo-miss-note]", box);
+    const DAY = 864e5, SPAN = 42;
+    // Day 0 is a Monday, so the weeks on the chart are real weeks; everyone studies at 7 pm.
+    const day0 = new Date(2026, 10, 2);
+    const dayStart = (n) => new Date(day0.getFullYear(), day0.getMonth(), day0.getDate() + n);
+    const at = (n) => new Date(dayStart(n).getTime() + 19 * 36e5);
+    const dayOf = (iso) => Math.round((new Date(iso).setHours(0, 0, 0, 0) - day0.getTime()) / DAY);
+    function script(body, options, miss) {
+      const out = [];
+      let card = { state: null, reps: 0, due: null, lastReview: null, created: at(0).toISOString() }, d = 0;
+      const history = [];
+      for (let k = 0; d < SPAN && k < 200; k++) {
+        const now = at(d), bad = miss && out.length === 2;
+        const attempt = { rating: bad ? 1 : 3, score: bad ? 0 : 1, verdict: bad ? "incorrect" : "correct", details: {}, ms: 8000, at: now.toISOString() };
+        const ctx = { now: now.toISOString(), day: Array.from({ length: 400 }, (_, i) => dayStart(d + i).toISOString()), doneToday: out.filter((o) => o.d === d).length, history: history.slice(-50) };
+        const r = runScript(body, ["card", "attempt", "options", "ctx"], { card, attempt, options, ctx });
+        out.push({ d, bad, state: r.state });
+        history.push({ at: now.toISOString(), rating: attempt.rating, score: attempt.score });
+        card = { ...card, state: r.state, reps: card.reps + 1, due: r.due, lastReview: now.toISOString() };
+        d = Math.max(d + (dayOf(r.due) > d ? 0 : 1), dayOf(r.due));
+      }
+      out.next = d;
+      return out;
     }
-  };
-  if (cards.length) {
-    cards.forEach((el) => el.classList.add("turn"));
+    async function fsrsRow(miss) {
+      const { fsrs, generatorParameters, createEmptyCard, Rating } = await loadFsrs();
+      const f = fsrs(generatorParameters({ enable_fuzz: false, learning_steps: ["1m", "10m"], relearning_steps: ["10m"], request_retention: 0.9 }));
+      let now = at(0), card = createEmptyCard(now);
+      const out = [];
+      while (out.length < 60) {
+        const d = Math.round((new Date(now).setHours(0, 0, 0, 0) - day0.getTime()) / DAY);
+        if (d >= SPAN) break;
+        const days = new Set(out.map((o) => o.d));
+        const bad = miss && days.size === 2 && !days.has(d);
+        card = f.next(card, now, bad ? Rating.Again : Rating.Good).card;
+        if (!out.some((o) => o.d === d)) out.push({ d, bad, state: null });
+        const o = out[out.length - 1];
+        o.state = { ivl: Math.max(0, Math.round((new Date(card.due).setHours(0, 0, 0, 0) - new Date(now).setHours(0, 0, 0, 0)) / DAY)) };
+        // Learning steps finish in the same sitting.
+        now = card.due - now < 36e5 ? card.due : at(Math.round((new Date(card.due).setHours(0, 0, 0, 0) - day0.getTime()) / DAY));
+      }
+      out.next = Math.round((new Date(card.due).setHours(0, 0, 0, 0) - day0.getTime()) / DAY);
+      return out;
+    }
+    const ROWS = [
+      { id: "fsrs", name: "FSRS", note: "right before you'd forget it", run: fsrsRow, tag: (o) => (o.state?.ivl ? `+${o.state.ivl}d` : null) },
+      { id: "drill", name: "Drill", note: "every day, nothing to rate", run: (m) => script(SCHEDULERS.drill, { perDay: 1, everyDays: 1 }, m) },
+      { id: "leitner", name: "Leitner", note: "up a box if right, box 1 if wrong", run: (m) => script(SCHEDULERS.leitner, { boxes: "1, 2, 4, 8, 16, 32" }, m), tag: (o) => o.state?.box },
+      { id: "monday", name: "Your own", note: "a few lines of JS: Mondays", run: (m) => script(SCHEDULERS.monday, { weeks: 1 }, m) },
+    ];
+    async function draw() {
+      const miss = missBox.checked;
+      missNote.hidden = !miss;
+      const rows = [];
+      for (const r of ROWS) rows.push({ ...r, pts: await r.run(miss) });
+      const W = Math.max(300, Math.round(chart.clientWidth || 900)), small = W < 640;
+      const L = small ? 8 : 230, R = small ? 8 : 64, rowH = small ? 74 : 62, top = 8, H = top + rows.length * rowH + 30;
+      const x = (d) => L + ((W - L - R) * (d + 0.5)) / SPAN;
+      let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="When the card comes back under each scheduler">`;
+      // weeks
+      const rowY = (i) => top + i * rowH + (small ? 46 : rowH / 2);
+      for (let w = 0; w <= 6; w++) {
+        const gx = L + ((W - L - R) * w * 7) / SPAN;
+        // On a phone the row names sit above the dots, so the week lines only cross the dot rows.
+        if (small) rows.forEach((_, i) => (s += `<line class="grid" x1="${gx}" x2="${gx}" y1="${rowY(i) - 9}" y2="${rowY(i) + 9}"/>`));
+        else s += `<line class="grid" x1="${gx}" x2="${gx}" y1="${top}" y2="${H - 26}"/>`;
+        if (w < 6) s += `<text x="${gx + 4}" y="${H - 8}">${small ? `w${w + 1}` : `week ${w + 1}`}</text>`;
+      }
+      rows.forEach((r, i) => {
+        const y = rowY(i);
+        if (small) s += `<text class="serif" x="${L}" y="${y - 24}">${r.name} <tspan class="dim">· ${esc(r.note)}</tspan></text>`;
+        else s += `<text class="serif" x="0" y="${y - 2}">${r.name}</text><text class="dim small" x="0" y="${y + 15}">${esc(r.note)}</text>`;
+        s += `<line class="axis" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/>`;
+        const pts = r.pts.filter((p) => p.d < SPAN);
+        for (const p of pts) {
+          s += `<circle class="${p.bad ? "miss" : i === 1 ? "run" : "rev"}" cx="${x(p.d).toFixed(1)}" cy="${y}" r="${small ? 2.7 : 4.6}"/>`;
+          const t = r.tag?.(p);
+          if (t && !small) s += `<text class="tag" x="${x(p.d).toFixed(1)}" y="${y - 10}" text-anchor="middle">${t}</text>`;
+        }
+        // A long gap at the end is the point, not missing data: say when the card comes back.
+        const last = pts[pts.length - 1]?.d ?? 0;
+        if (r.pts.next >= SPAN && SPAN - last > 6) s += `<text class="next" x="${W - R - 4}" y="${y + (small ? 19 : -9)}" text-anchor="end">next: day ${r.pts.next} →</text>`;
+        if (!small) s += `<text class="count" x="${W - R + 14}" y="${y + 5}">${pts.length}×</text>`;
+      });
+      chart.innerHTML = s + "</svg>";
+      window.__tempo = rows.map((r) => ({ id: r.id, days: r.pts.map((p) => p.d) }));
+    }
+    missBox.addEventListener("change", draw);
+    let w = 0;
+    new ResizeObserver(() => { const n = chart.clientWidth; if (Math.abs(n - w) > 4) { w = n; draw(); } }).observe(chart);
+    whenVisible(box, draw, "0px 0px 30% 0px");
+  }
+}
+
+// ------------------------------------------------------------- suite: new decks
+// The new Market decks, live. Same frames and scripts as the repertoire, one deck per tab.
+{
+  const box = $("[data-suite]");
+  const entries = Object.fromEntries((GALLERY ?? []).filter((e) => ["country-map", "element", "flippy"].includes(e.type)).map((e) => [e.type, e]));
+  if (box && Object.keys(entries).length) {
+    const tabs = $$("[data-suite-type]", box), body = $(".suite-body", box), loader = $(".suite-loader", box);
+    const checkBtn = $("[data-suite-check]", box), nextBtn = $("[data-suite-next]", box), verdictEl = $(".suite-verdict", box), noteEl = $("[data-suite-note]", box);
+    const coarse = matchMedia("(pointer: coarse)").matches;
+    const NOTES = {
+      "country-map": "Natural Earth borders, drawn by the card itself. It takes English, Portuguese, Spanish and French names, and forgives typos.",
+      element: "Data from PubChem. Every answer ends on the element's place in the coloured table.",
+      flippy: "Keys 1 to 8 flip the bits, or tap them. It's a drill: no rating, every run is kept, and Stats charts invaders per run. After Q42's Flippy Bit.",
+    };
+    // The heading follows the deck you pick.
+    const head = box.closest("section")?.querySelector(".head h2");
+    const HEADS = {
+      "country-map": "Learning the map? Name the country that's lit&nbsp;up.",
+      element: "Taking chemistry? Find iron on a blank&nbsp;table.",
+      flippy: "Learning binary? Shoot the invaders&nbsp;down.",
+    };
+    const setHead = (type) => {
+      if (!head || !HEADS[type] || head.dataset.type === type) return;
+      head.dataset.type = type;
+      head.classList.remove("swap"); void head.offsetWidth;
+      head.innerHTML = HEADS[type];
+      head.classList.add("swap");
+    };
+    const swap = frameSwapper(body, loader);
+    const k = {};
+    let cur = null;
+    const post = (msg) => cur?.frame.contentWindow?.postMessage({ etude: 1, ...msg }, "*");
+    function open(type, { next = false, focus = false } = {}) {
+      const entry = entries[type];
+      k[type] = next ? ((k[type] ?? 0) + 1) % entry.items.length : (k[type] ?? 0);
+      const item = entry.items[k[type]];
+      tabs.forEach((b) => b.setAttribute("aria-selected", String(b.dataset.suiteType === type)));
+      setHead(type);
+      noteEl.textContent = NOTES[type] ?? "";
+      verdictEl.innerHTML = "";
+      checkBtn.hidden = !!entry.auto;
+      checkBtn.disabled = true;
+      nextBtn.innerHTML = `${entry.auto ? "Play again" : "Another card"} <span aria-hidden="true">↻</span>`;
+      nextBtn.classList.replace("btn-primary", "btn-ghost");
+      const seed = (Math.random() * 2 ** 32) >>> 0;
+      let prep;
+      try { prep = prepare({ id: item.id, fields: item.fields, prepare: entry.prepare, private: entry.private }, seed, item.face ?? "main"); }
+      catch (e) { verdictEl.textContent = `Couldn't prepare the card: ${e.message}`; return; }
+      const old = cur?.frame;
+      const frame = document.createElement("iframe");
+      frame.title = `${entry.name} card`;
+      frame.setAttribute("sandbox", SANDBOX);
+      frame.className = "loading";
+      frame.style.height = old ? old.style.height : "480px";
+      frame.src = `frames/gallery/${type}.html`;
+      cur = { type, entry, item, prep, frame, phase: "loading", ready: true, focus };
+      swap.add(frame);
+    }
+    addEventListener("message", (e) => {
+      if (!cur || e.source !== cur.frame.contentWindow) return;
+      const msg = e.data;
+      if (!msg || msg.etude !== 1) return;
+      if (msg.type === "loaded") {
+        if (cur.focus && !coarse) post({ type: "rep-focus" });
+        post({ type: "init", view: cur.prep.view, mode: "answer", answer: null, result: null, theme: theme() });
+      } else if (msg.type === "mounted") { cur.phase = "answer"; swap.mounted(cur.frame); checkBtn.disabled = !cur.ready; }
+      else if (msg.type === "size" && typeof msg.height === "number") cur.frame.style.height = `${Math.max(160, Math.min(msg.height + 4, 2400))}px`;
+      else if (msg.type === "ready-state") { cur.ready = !!msg.ready; if (cur.phase === "answer") checkBtn.disabled = !cur.ready; }
+      else if (msg.type === "submit") onSubmit(msg.answer);
+      else if (msg.type === "key" && msg.key === "Mod+Enter") cur.phase === "answer" ? post({ type: "collect" }) : cur.phase === "result" && open(cur.type, { next: !cur.entry.auto, focus: true });
+      else if (msg.type === "error") verdictEl.textContent = `Card error: ${msg.message}`;
+    });
+    function onSubmit(answer) {
+      if (cur.phase !== "answer") return;
+      cur.phase = "result";
+      const { entry, prep } = cur;
+      let g, line;
+      const t0 = performance.now();
+      try {
+        const out = runScript(entry.grade, ["answer", "view", "key", "fields"], { answer, view: prep.view, key: prep.key, fields: prep.fields }) ?? {};
+        const ms = Math.max(1, Math.round(performance.now() - t0));
+        const score = out.score == null ? null : Math.max(0, Math.min(1, Number(out.score)));
+        g = { score, verdict: verdictOf(score), feedback: out.feedback, details: out.details, suggested: suggest(score), grader: { kind: "script", ms } };
+        if (entry.quiet && entry.metrics) {
+          // A drill shows what it measured, as the app does.
+          line = `<span class="v">Run over</span><span class="m">${metricLine(entry.metrics, out.details)}</span>`;
+        } else {
+          const pct = g.verdict === "partial" ? `<span class="m tabular">${Math.round(score * 100)}%</span>` : "";
+          line = `<span class="v ${g.verdict}">${VERDICT[g.verdict] ?? "Graded"}</span>${pct}<span class="m">· by the card's script in ${ms} ms</span>`;
+        }
+      } catch (err) {
+        g = { score: null, verdict: "ungraded", grader: { kind: "script" } };
+        line = `<span class="v incorrect">Grader error</span><span class="m">${esc(err.message)}</span>`;
+      }
+      post({ type: "result", result: { grade: g, key: prep.key, answer } });
+      verdictEl.innerHTML = line;
+      verdictEl.classList.remove("pop"); void verdictEl.offsetWidth; verdictEl.classList.add("pop");
+      checkBtn.hidden = true;
+      nextBtn.classList.replace("btn-ghost", "btn-primary");
+      cur.grade = g;
+    }
+    checkBtn.addEventListener("click", () => cur?.phase === "answer" && post({ type: "collect" }));
+    nextBtn.addEventListener("click", () => cur && open(cur.type, { next: !cur.entry.auto || cur.phase !== "result" ? true : false, focus: true }));
+    box.addEventListener("click", (e) => { const b = e.target.closest("[data-suite-type]"); if (b && b.dataset.suiteType !== cur?.type) open(b.dataset.suiteType, { focus: e.detail > 0 }); });
+    window.__suiteCount = (t) => entries[t]?.items.length;
+    window.__suite = () => cur && { type: cur.type, item: cur.item.id, face: cur.item.face ?? "main", view: cur.prep.view, key: cur.prep.key, phase: cur.phase, grade: cur.grade ?? null };
+    whenVisible(box, () => open("country-map"), "0px 0px 40% 0px");
+  }
+}
+
+// ------------------------------------------------------- lifting the hero off the film
+// The hero and the film are two cards in a stack, the hero on top. The film waits underneath it,
+// pinned under the nav. Once the hero's bottom reaches the bottom of the screen, scrolling lifts
+// the hero off: it becomes a card, turns counter-clockwise and flies away up and to the left,
+// uncovering the film. Then the film scrolls on. It follows the scroll position, so it runs
+// backwards when you scroll back. Phones just scroll: there the hero is two screens tall.
+{
+  const deal = $(".deal"), hero = $(".deal > .hero"), film = $(".deal > .film");
+  // sticky can't move into its parent's padding, so the pinned stretch is an empty block after the film
+  const room = deal && document.createElement("div");
+  if (room) { room.className = "deal-room"; room.setAttribute("aria-hidden", "true"); deal.append(room); }
+  const wide = matchMedia("(min-width: 700px)");
+  if (deal && hero && film && !reduced) {
+    const ease = (t) => t * t;
+    const clamp = (x) => Math.max(0, Math.min(1, x));
+    let ticking = false, start = 0, T = 0;
+    const layout = () => {
+      if (!wide.matches) {
+        deal.classList.remove("on");
+        film.style.marginTop = room.style.height = film.style.top = "";
+        return false;
+      }
+      deal.classList.add("on");
+      const vh = innerHeight, H = hero.offsetHeight, nav = $("#nav")?.offsetHeight ?? 64;
+      start = Math.max(0, deal.offsetTop + H - vh);               // the hero's bottom reaches the screen's bottom
+      T = vh * 0.85;                                               // how far you scroll while it flies off
+      const F = film.offsetHeight;
+      film.style.top = `${nav + Math.max(0, (vh - nav - F) / 2)}px`;  // centred in the screen below the nav
+      film.style.marginTop = `${-H}px`;                            // the film starts right under the hero
+      room.style.height = `${T + vh * 0.2 + Math.max(0, (vh - nav - F) / 2)}px`;  // pinned while the hero leaves, plus a short beat
+      return true;
+    };
+    const frame = () => {
+      ticking = false;
+      if (!layout()) { hero.style.transform = ""; hero.classList.remove("lifting"); return; }
+      const raw = clamp((scrollY - start) / T), p = ease(raw);
+      window.__deal = { start, T };
+      hero.style.setProperty("--lift", clamp(raw * 5).toFixed(3));
+      if (raw === 0) { hero.style.transform = ""; hero.classList.remove("lifting"); return; }
+      hero.classList.add("lifting");
+      const vw = innerWidth, vh = innerHeight;
+      const tx = -p * vw * 0.95, ty = -p * vh * 0.75, rot = -28 * ease(clamp(raw * 1.4)), sc = 1 - 0.12 * clamp(raw * 2);
+      hero.style.transform = `translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, 0) rotate(${rot.toFixed(2)}deg) scale(${sc.toFixed(3)})`;
+    };
     const kick = () => { if (!ticking) { ticking = true; requestAnimationFrame(frame); } };
     addEventListener("scroll", kick, { passive: true });
     addEventListener("resize", kick);
     frame();
+    // the Film link goes to the moment the film is uncovered
+    document.addEventListener("click", (e) => {
+      const a = e.target.closest('a[href="#film"]');
+      if (!a || !deal.classList.contains("on")) return;
+      e.preventDefault();
+      scrollTo({ top: start + T, behavior: "smooth" });
+      history.replaceState(null, "", "#film");
+    });
   }
 }
 
@@ -919,21 +1156,29 @@ if (rep && GALLERY?.length) {
 {
   const box = $("[data-plates]");
   if (box) {
-    const btns = $$("[data-plate]", box), imgs = $$("[data-plate-img]", box);
-    let auto = true, i = 0;
+    const btns = $$("[data-plate]", box), panes = $$("[data-plate-pane]", box);
+    const list = $(".plate-list", box), view = $("[data-plate-view]", box);
+    let auto = true, i = 0, hold = 0;
+    // The panes share one grid cell, so the tallest sets the height; on wide screens it's at least the
+    // tab list's, so switching tabs never moves the page.
+    const fit = () => {
+      const wide = matchMedia("(min-width: 1000px)").matches;
+      view.style.setProperty("--plate-h", wide ? `${Math.ceil(list.offsetHeight)}px` : "0px");
+    };
+    new ResizeObserver(fit).observe(list);
     const show = (name) => {
       i = btns.findIndex((b) => b.dataset.plate === name);
       btns.forEach((b) => b.setAttribute("aria-selected", String(b.dataset.plate === name)));
-      const img = imgs.find((m) => m.dataset.plateImg === name);
-      img.loading = "eager";
-      img.decode().catch(() => {}).then(() => imgs.forEach((m) => m.classList.toggle("on", m === img)));
+      panes.forEach((p) => p.classList.toggle("on", p.dataset.platePane === name));
       const b = btns[i];
-      const list = b.parentElement;
       if (list.scrollWidth > list.clientWidth + 2) list.scrollTo({ left: b.offsetLeft - 16, behavior: reduced ? "auto" : "smooth" });
     };
     box.addEventListener("click", (e) => { const b = e.target.closest("[data-plate]"); if (b) { auto = false; show(b.dataset.plate); } });
+    // someone using a panel shouldn't have it switch under them
+    view.addEventListener("pointerdown", () => (auto = false));
+    view.addEventListener("pointermove", () => (hold = Date.now()));
     const vis = visibility(box);
-    setInterval(() => auto && vis.on && !reduced && show(btns[(i + 1) % btns.length].dataset.plate), 4800);
+    setInterval(() => auto && vis.on && !reduced && Date.now() - hold > 6000 && show(btns[(i + 1) % btns.length].dataset.plate), 4800);
   }
 }
 

@@ -1,0 +1,99 @@
+/* Tailwind for the live Stats panels, compiled from the app's components only. vite.config.ts scopes
+   every rule under .lv afterwards, so none of this reaches the rest of the site. */
+@import "tailwindcss" source(none);
+@source "./main.tsx";
+@source "../../web/src/pages/stats.tsx";
+@source "../../web/src/components/stats-viz.tsx";
+@source "../../web/src/components/stats-charts.tsx";
+@source "../../web/src/components/ui/button.tsx";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+
+/* The app's colour tokens, read from the site's own palette (site.css :root). */
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-highlight: var(--highlight);
+  --color-again: var(--again);
+  --color-hard: var(--hard);
+  --color-good: var(--good);
+  --color-easy: var(--easy);
+  --color-new: var(--new);
+  --color-learn: var(--learn);
+  --color-review: var(--review);
+}
+
+:root {
+  /* the site has no chart tokens; these are the app's */
+  --chart-2: oklch(0.72 0.12 250);
+  --chart-3: oklch(0.8 0.14 85);
+  container-type: inline-size;
+  display: block;
+  color: var(--foreground);
+  font: 400 16px/1.5 var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  text-align: left;
+}
+
+@layer base {
+  * { border-color: var(--border); }
+}
+
+.tabular { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .viz-anim { transition: none !important; } }
+
+/* On the page, a panel is its content: no card box, no header, nothing between it and the page. */
+section { border: 0 !important; background: none !important; border-radius: 0 !important; padding: 0 !important; }
+section > div:first-child:has(> h2) { display: none !important; }
+section[aria-label="Overview"] > div { padding: 0 !important; }
+
+/* The overview stacks on the website: ring and due count above, the four trends in a row below, so
+   it fills the column like the other panels instead of leaving a void under a short row. */
+section[aria-label="Overview"] > div { flex-direction: column !important; align-items: stretch !important; gap: 1.75rem !important; }
+section[aria-label="Overview"] > div > div:first-child { gap: 2.75rem; }
+section[aria-label="Overview"] > div > div:last-child { border-left: 0 !important; padding-left: 0 !important; border-top: 1px solid var(--border); padding-top: 1.6rem; column-gap: 1.75rem !important; row-gap: 1.6rem !important; }
+@container (min-width: 34rem) {
+  section[aria-label="Overview"] > div > div:last-child { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  /* the ring starts on the first trend's edge and the due count on the third's, same gutter as the tiles */
+  section[aria-label="Overview"] > div > div:first-child { display: grid; grid-template-columns: 1fr 1fr; column-gap: 1.75rem; align-items: center; }
+}
+@container (max-width: 26rem) {
+  section[aria-label="Overview"] > div > div:first-child { gap: 1.25rem; }
+}
+
+/* The tag chips and rows bleed a few pixels past their box in the app; here they stay inside it, so
+   nothing touches the column edge. */
+[role="radiogroup"], ul.-mx-2 { margin-inline: 0 !important; }
+
+/* By scheduler on a phone: the app's fixed number columns are a little narrow for "none ready". */
+@container (max-width: 26rem) {
+  li > button > div.tabular.grid { grid-template-columns: 3.9rem 4.6rem 3.9rem !important; column-gap: 0.35rem; }
+}

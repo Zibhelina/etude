@@ -22,7 +22,9 @@
 <link rel="stylesheet" href="runtime/vendor/katex.css">
 <link rel="stylesheet" href="runtime/code.css">
 <link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="live/stats.css">
 <script type="module" src="assets/site.js"></script>
+<script type="module" src="live/stats.js"></script>
 </head>
 <body>
 
@@ -33,7 +35,9 @@
       <a href="#film">Film</a>
       <a href="#cards">Cards</a>
       <a href="#grading">Grading</a>
+      <a href="#tempo">Tempo</a>
       <a href="#stats">Stats</a>
+      <a href="#decks">Decks</a>
       <a href="#anki">Anki</a>
       <a href="#market">Market</a>
     </nav>
@@ -49,6 +53,7 @@
 </header>
 
 <main>
+<div class="deal">
 <!-- ============================================================ hero -->
 <section class="hero">
   <div class="wrap hero-grid">
@@ -95,6 +100,8 @@
     </div>
   </div>
 </section>
+
+</div>
 
 <!-- ======================================================== prelude: why -->
 <section class="section prelude" id="why">
@@ -249,6 +256,38 @@
   </div>
 </section>
 
+<!-- =========================================================== tempo: schedulers -->
+<section class="section" id="tempo">
+  <div class="wrap">
+    <header class="head" data-reveal>
+      <p class="opus">Tempo <span>how a card comes back</span></p>
+      <div>
+        <h2>Each deck keeps its own&nbsp;time.</h2>
+        <p class="sub">FSRS is the default: a card comes back right before you'd forget it. But a typing test or a game of Flippy Bit has nothing to forget. You want to play it every day and watch the number go up. So a deck can switch to a drill, to Leitner boxes, or to a few lines of JavaScript you write.</p>
+      </div>
+    </header>
+    <div class="tempo" data-tempo data-reveal>
+      <div class="tempo-top">
+        <p class="tempo-q">One card over six weeks, answered right every time<span data-tempo-miss-note>, except one miss</span>.</p>
+        <label class="tempo-toggle"><input type="checkbox" data-tempo-miss> Miss the third answer</label>
+      </div>
+      <div class="tempo-chart" data-tempo-chart></div>
+      <p class="fineprint">Each row runs the real scheduler in your browser: FSRS-6 through ts-fsrs, and the <code>drill</code> and <code>leitner</code> scripts that ship with Etude. The last row is the example from <a href="https://github.com/Zibhelina/etude/blob/main/docs/schedulers.md">docs/schedulers.md</a>.</p>
+    </div>
+    <div class="tempo-stats">
+      <figure class="tempo-shot" data-reveal>
+        <div class="tempo-live" data-live="drill"></div>
+        <figcaption><b>A drill keeps every result.</b> No ratings, no forgetting curve. Stats charts what the grader measured, run by run: WPM, accuracy, consistency.</figcaption>
+      </figure>
+      <figure class="tempo-shot tempo-by" data-reveal style="--d:.1s">
+        <div class="tempo-live" data-live="schedulers"></div>
+        <figcaption><b>Stats follows each deck.</b> FSRS decks get recall and a forecast, Leitner decks get their boxes, drills get their runs.</figcaption>
+        <p class="fineprint tempo-src">The real Stats panels, running on a demo collection: 53 typing runs, each scored by the typing card's own grade script.</p>
+      </figure>
+    </div>
+  </div>
+</section>
+
 <!-- =========================================================== no. 5: stats -->
 <section class="section" id="stats">
   <div class="wrap">
@@ -269,15 +308,15 @@
         <button role="tab" aria-selected="false" data-plate="forecast"><b>Forecast</b><span>What's due for the next 30 days, up to your exam date.</span></button>
       </div>
       <figure class="plate">
-        <div class="plate-view">
-          <img class="on" data-plate-img="overview" src="assets/stats/overview.webp" alt="Recall now 94.5% against a 90% target, true retention, reviews, streak and time" width="1924" height="546">
-          <img data-plate-img="curve" src="assets/stats/curve.webp" alt="If you stopped today: recall falls under 90% in about 22 days" width="1924" height="664" loading="lazy">
-          <img data-plate-img="memory" src="assets/stats/memory.webp" alt="Memory strength histogram: most cards hold 21 to 60 days" width="940" height="484" loading="lazy">
-          <img data-plate-img="clock" src="assets/stats/clock.webp" alt="When you study: a 24-hour clock, busiest at 20:00" width="940" height="624" loading="lazy">
-          <img data-plate-img="tags" src="assets/stats/tags.webp" alt="Weakest tags with their recall and the target line" width="1924" height="1256" loading="lazy">
-          <img data-plate-img="forecast" src="assets/stats/forecast.webp" alt="Forecast: cards due per day for the next 30 days" width="1924" height="768" loading="lazy">
+        <div class="plate-view" data-plate-view>
+          <div class="plate-pane on" data-plate-pane="overview"><div data-live="overview"></div></div>
+          <div class="plate-pane" data-plate-pane="curve"><div data-live="curve"></div></div>
+          <div class="plate-pane" data-plate-pane="memory"><div data-live="memory"></div></div>
+          <div class="plate-pane" data-plate-pane="clock"><div data-live="clock"></div></div>
+          <div class="plate-pane" data-plate-pane="tags"><div data-live="tags"></div></div>
+          <div class="plate-pane" data-plate-pane="forecast"><div data-live="forecast"></div></div>
         </div>
-        <figcaption class="fineprint">The Stats page of a demo collection with three months of reviews.</figcaption>
+        <figcaption class="fineprint">The real Stats panels, running on a demo collection with three months of reviews. Hover and tap them like in the app.</figcaption>
       </figure>
     </div>
   </div>
@@ -335,6 +374,39 @@
         <div class="anki-card"><img src="assets/anki/ultimate-geography.webp" alt="A flag card from Ultimate Geography, imported from Anki, studied in Etude" width="1100" height="1252" loading="lazy"></div>
         <figcaption class="fineprint"><a href="https://github.com/anki-geo/ultimate-geography">Ultimate Geography</a>, one of Anki's best-known shared decks, imported and studied in Etude with its own styling. Flag images belong to their authors.</figcaption>
       </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ suite: new decks -->
+<section class="section" id="decks">
+  <div class="wrap">
+    <header class="head" data-reveal>
+      <p class="opus">Suite <span>new in the market</span></p>
+      <div>
+        <h2>Learning the map? Name the country that's lit&nbsp;up.</h2>
+        <p class="sub">Three new decks, each with a card type that couldn't be a front and a back. They're the real cards from the Market, running here. Tap the map, explore the table, play the game.</p>
+      </div>
+    </header>
+    <div class="suite" data-suite data-reveal>
+      <div class="suite-list" role="tablist" aria-label="New decks">
+        <button role="tab" aria-selected="true" data-suite-type="country-map"><span class="suite-goal">Learning the map?</span><b>Countries of the world</b><span class="suite-meta">197 countries · name it, or find it</span></button>
+        <button role="tab" aria-selected="false" data-suite-type="element"><span class="suite-goal">Taking chemistry?</span><b>Periodic table</b><span class="suite-meta">118 elements, eight ways each</span></button>
+        <button role="tab" aria-selected="false" data-suite-type="flippy"><span class="suite-goal">Learning binary?</span><b>Flippy Bit</b><span class="suite-meta">hex invaders · a drill, counted in kills</span></button>
+      </div>
+      <div class="suite-stage">
+        <div class="sheet suite-card" id="suite-panel">
+          <div class="suite-body"><div class="rep-loader suite-loader" role="status"><div class="sk" aria-hidden="true"><i class="sk-eyebrow"></i><i class="sk-line"></i><i class="sk-line short"></i><i class="sk-block"></i></div><span class="sr-only">Loading card…</span></div></div>
+          <div class="rep-foot">
+            <div class="verdict suite-verdict" aria-live="polite"></div>
+            <div class="rep-actions">
+              <button class="btn btn-ghost" type="button" data-suite-next>Another card <span aria-hidden="true">↻</span></button>
+              <button class="btn btn-primary" type="button" data-suite-check disabled>Check <kbd>Ctrl ↵</kbd></button>
+            </div>
+          </div>
+        </div>
+        <p class="fineprint suite-note" data-suite-note></p>
+      </div>
     </div>
   </div>
 </section>
@@ -505,7 +577,7 @@
       <a href="./" class="wordmark"><span class="eps">ε</span>tude</a>
       <p>Spaced-repetition practice with programmable card types and AI grading.</p>
     </div>
-    <div><h4>Product</h4><ul><li><a href="#why">Why Etude</a></li><li><a href="#cards">Cards</a></li><li><a href="#grading">Grading</a></li><li><a href="#exams">Exams</a></li><li><a href="#stats">Stats</a></li><li><a href="#anki">Anki import</a></li><li><a href="#market">Market</a></li><li><a href="#agents">Agents</a></li><li><a href="download.html">Download</a></li></ul></div>
+    <div><h4>Product</h4><ul><li><a href="#why">Why Etude</a></li><li><a href="#cards">Cards</a></li><li><a href="#grading">Grading</a></li><li><a href="#exams">Exams</a></li><li><a href="#tempo">Schedulers</a></li><li><a href="#stats">Stats</a></li><li><a href="#decks">New decks</a></li><li><a href="#anki">Anki import</a></li><li><a href="#market">Market</a></li><li><a href="#agents">Agents</a></li><li><a href="download.html">Download</a></li></ul></div>
     <div><h4>Docs</h4><ul><li><a href="https://github.com/Zibhelina/etude#readme">README</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/docs/packs.md">Packs</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/docs/types.md">Card types</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/docs/cli.md">CLI reference</a></li></ul></div>
     <div><h4>Project</h4><ul><li><a href="https://github.com/Zibhelina/etude">GitHub</a></li><li><a href="https://www.youtube.com/@etudeapp">YouTube</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/Zibhelina/etude/blob/main/SECURITY.md">Security</a></li><li><a href="https://github.com/Zibhelina/etude/issues">Issues</a></li><li><a href="https://ko-fi.com/jhca">Ko-fi</a></li></ul></div>
     <div class="fine"><span>MIT License · © 2026 João Henrique Costa Araujo</span><span>Made with <span class="wordmark" style="font-size:1em"><span class="eps">ε</span>tude</span> cards, of course.</span></div>

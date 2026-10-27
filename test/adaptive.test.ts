@@ -327,7 +327,13 @@ test("goals: a first showing teaches, reviews and placement measure, drill decks
   const r = await e.submit(c.cardId, c.seed, "nope", { asOf: c.asOf });
   e.rate(c.cardId, 1, { attemptId: r.attemptId! });
   assert.equal(r.grade.adaptive?.goal, "teach");
-  assert.equal((e.learnerSummary("Course") as any).skills.find((k: any) => k.skill === "reading").answers, 0, "teaching answers don't feed the skill estimates");
+  const reading = () => (e.learnerSummary("Course") as any).skills.find((k: any) => k.skill === "reading").answers;
+  assert.equal(reading(), 0, "teaching answers don't feed the skill estimates");
+  // Unless rated Easy: the learner already knew the word.
+  const k = e.present(cardOf(e, "w4"), 1);
+  const rk = await e.submit(k.cardId, k.seed, "w4", { asOf: k.asOf });
+  e.rate(k.cardId, 4, { attemptId: rk.attemptId! });
+  assert.equal(reading(), 1, "a first showing rated Easy counts");
   assert.equal(ctx("w1").learner.goal, "measure", "learning");
   // Variants carry their offset from the item's usual difficulty.
   const f = e.prepare("w2", "read", 1, ctx("w2")).fields.sentences as any[];

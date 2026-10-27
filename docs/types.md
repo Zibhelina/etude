@@ -284,7 +284,7 @@ FSRS already sets how hard a review is, through timing: it brings a card back wh
 
 | goal | when | pick |
 |---|---|---|
-| `teach` | a new card's first showing in normal study | the clearest version: the most `_known`, then the lowest `_difficulty`. A first showing is encoding, not recall, and its answer doesn't feed the skill estimates. |
+| `teach` | a new card's first showing in normal study | the clearest version: the most `_known`, then the lowest `_difficulty`. A first showing is encoding, not recall, so its answer doesn't feed the skill estimates, unless the learner rates it Easy (they already knew it). |
 | `measure` | learning steps, reviews and relapses on a scheduler with a memory model; placement probes; quick checks | a version of the item's usual difficulty, whatever the learner's state: the most `_known`, then the smallest `_offset`, rotating through unseen ones (`_seen`). Vary the context, not the difficulty, so FSRS sees comparable evidence. |
 | `practice` | decks whose scheduler has no memory model (drill) | the version closest to `learner.target` (`_p`): adapt the challenge freely, nothing is being measured |
 

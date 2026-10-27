@@ -2144,7 +2144,8 @@ export class Etude {
           if (c.state === 2 && c.stability >= learn.KNOWN_STABILITY) counts[c.level].stable++;
         }
         const p = placement.get(skill);
-        const floor = p && p.state.probes > 0 ? (p.bands[p.state.frontier] ?? cfg.levels.length - 1) : 0;
+        // Past every band: the highest level that has cards, not the last level of the list.
+        const floor = p && p.state.probes > 0 ? (p.bands[p.state.frontier] ?? p.bands.at(-1) ?? 0) : 0;
         levels.set(skill, learn.levelState(cfg.levels, counts, cfg, floor));
       }
     }

@@ -162,7 +162,8 @@ export interface PlacementState {
 }
 
 const PASS = 0.8;
-const PER_BAND = 2;
+// Three answers per band before it counts as passed or failed: two let a lucky streak skip a level.
+const PER_BAND = 3;
 const MAX_PROBES = 24;
 
 /**

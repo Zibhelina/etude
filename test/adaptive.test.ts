@@ -153,10 +153,11 @@ test("learner math: Elo-style skills, pace, placement bisection and levels", () 
   assert.ok(busy.value < 10, `right answers don't outweigh being over the time budget: ${JSON.stringify(busy)}`);
 
   assert.deepEqual(placementState(6, []), { bands: 6, probes: 0, frontier: 0, next: 2 });
-  const passLow = placementState(6, [{ band: 2, score: 1 }, { band: 2, score: 1 }]);
+  assert.equal(placementState(6, [{ band: 2, score: 1 }, { band: 2, score: 1 }]).frontier, 0, "two answers aren't enough to pass a band");
+  const passLow = placementState(6, [{ band: 2, score: 1 }, { band: 2, score: 1 }, { band: 2, score: 1 }]);
   assert.equal(passLow.frontier, 3);
   assert.equal(passLow.next, 4);
-  const settled = placementState(6, [2, 2, 4, 4, 3, 3].map((band, i) => ({ band, score: band >= 4 ? 0 : 1 })).concat([]));
+  const settled = placementState(6, [2, 2, 2, 4, 4, 4, 3, 3, 3].map((band) => ({ band, score: band >= 4 ? 0 : 1 })));
   assert.equal(settled.frontier, 4);
   assert.equal(settled.next, null);
   void settled;

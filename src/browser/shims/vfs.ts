@@ -126,6 +126,13 @@ export function existsSync(path: string) {
   return files.has(p) || dirs.has(p);
 }
 
+/** There are no symlinks here, so the real path is the normalized one. */
+export function realpathSync(path: string) {
+  const p = norm(path);
+  if (!files.has(p) && !dirs.has(p)) throw err("ENOENT", "realpath", p);
+  return p;
+}
+
 export function mkdirSync(path: string, _opts?: unknown) {
   ensureDir(path);
 }
@@ -232,4 +239,4 @@ export function closeSync(fd: number) {
   writeFileSync(f.path, all);
 }
 
-export default { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, unlinkSync, statSync, readdirSync, copyFileSync, mkdtempSync, chmodSync, openSync, writeSync, fsyncSync, closeSync, readSync };
+export default { existsSync, realpathSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, unlinkSync, statSync, readdirSync, copyFileSync, mkdtempSync, chmodSync, openSync, writeSync, fsyncSync, closeSync, readSync };

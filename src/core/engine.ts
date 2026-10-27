@@ -2117,7 +2117,10 @@ export class Etude {
     // Probes per placement session (answers from before sessions had names count as one session).
     const sessions = new Map<string, { first: string; probes: Map<string, { band: number; score: number }[]> }>();
     let maxTs = "";
-    for (const r of this.db.all(`SELECT a.ts, a.card_id, a.grade, a.review_id FROM attempts a JOIN cards c ON c.id = a.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${scope} ORDER BY a.ts, a.id`, ...sp)) {
+    for (const r of this.db.all(
+      `SELECT a.ts, a.card_id, a.grade, a.review_id, rv.rating FROM attempts a JOIN cards c ON c.id = a.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id LEFT JOIN reviews rv ON rv.id = a.review_id WHERE ${scope} ORDER BY a.ts, a.id`,
+      ...sp,
+    )) {
       if (r.ts > maxTs) maxTs = r.ts;
       const g = parse<Partial<Grade>>(r.grade, {});
       const card = cards.get(r.card_id);
@@ -2126,8 +2129,9 @@ export class Etude {
       // Only rated answers count: burying or suspending a card instead of rating it, or undoing the rating, leaves the answer out.
       if (typeof g.score !== "number" || !card || r.review_id == null) continue;
       (scores.get(r.card_id) ?? scores.set(r.card_id, []).get(r.card_id)!).push({ ts: r.ts, score: g.score });
-      // A first showing is encoding, not recall: it would only pull the skill estimates down.
-      if (ad?.goal === "teach") continue;
+      // A first showing is encoding, not recall, so it would only pull the skill estimates down; unless
+      // the learner rated it Easy: they already knew the word, and that is evidence like any review.
+      if (ad?.goal === "teach" && r.rating !== 4) continue;
       attempts.push({ ts: r.ts, a: { cardId: r.card_id, key: ad?.variant ? `${card.itemId}#${ad.variant}` : `card:${r.card_id}`, skills: card.skills, score: g.score, prior: ad?.difficulty } });
       if (ad?.placement) {
         const key = String(ad.placement);

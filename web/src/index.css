@@ -55,7 +55,7 @@
 }
 
 /* Layout, not theme: the height of the phone tab bar, home indicator included. Sticky bars sit on top of it; pages end above it. */
-:root { --tabbar-h: calc(4rem + env(safe-area-inset-bottom)); }
+:root { --tabbar-h: calc(4.25rem + env(safe-area-inset-bottom)); }
 @media (min-width: 768px) {
   :root { --tabbar-h: 0px; }
 }
@@ -189,21 +189,28 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
   text-transform: uppercase;
   color: var(--muted-foreground);
 }
-.score-tabbar {
-  background: color-mix(in oklab, var(--sidebar) 97%, transparent);
+/* The floating tab capsule and the ε disc: a frosted card surface with a soft drop, over a short fade
+   so rows scrolling underneath don't read through the gaps. */
+.score-island::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: calc(100% + 2.25rem);
+  background: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--background) 85%, transparent) 45%, var(--background) 75%);
+  pointer-events: none;
+}
+.score-island > * { position: relative; }
+.score-capsule {
+  background: color-mix(in oklab, var(--card) 90%, transparent);
   backdrop-filter: blur(18px) saturate(1.2);
-  border-top: 1px solid var(--border);
-  box-shadow: 0 -10px 24px -18px rgb(0 0 0 / 0.35);
-  padding-bottom: env(safe-area-inset-bottom);
+  border-color: color-mix(in oklab, var(--foreground) 10%, transparent);
+  box-shadow: 0 12px 28px -14px rgb(0 0 0 / 0.55);
 }
 .score-fold {
   background: color-mix(in oklab, var(--background) 94%, transparent);
   backdrop-filter: blur(18px) saturate(1.2);
   border-bottom: 1px solid var(--border);
   padding-top: env(safe-area-inset-top);
-}
-.score-ask {
-  box-shadow: 0 0 0 5px var(--sidebar), 0 10px 22px -10px rgb(0 0 0 / 0.6);
 }
 @keyframes score-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes score-up { from { transform: translateY(100%); } to { transform: none; } }

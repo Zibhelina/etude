@@ -12,7 +12,7 @@ Desktop (768 px and up) is unchanged. Every phone-only branch goes through `useP
 - **Tap to open, hold for the rest.** Deck rows open on tap; press and hold (450 ms, `useLongPress`) opens an action sheet with Practice, Practice ahead, Rename, Move to…, Move up/down, Out one level, Make it a deck of its own. In Browse, holding a row starts selection; then taps select, and the bulk bar appears. No grips, ⋯ or checkboxes sit on rows by default.
 - **Thumb zone.** Primary actions are 52 px pills at the bottom: Practice everything, Check, the four ratings, Go again / Next. Undo sits beside Check. Bury, suspend and edit move from the study header into a sheet behind ⋯.
 - **Sheets, not menus.** `ActionSheet` is one rounded surface from the bottom: grab handle, serif title, a line of context, grouped rows. Swipe down or tap outside to close.
-- **Navigation.** Four tabs and the ε: Decks, Browse, Ask (the ε disc rises out of the bar and opens Ask Etude), Stats, More. More holds Card types, Market, Settings, import and the update. The active tab is a pink icon.
+- **Navigation.** A floating capsule with four tabs (Decks, Browse, Stats, More) and the ε in its own disc beside it, which opens Ask Etude. Inactive tabs are icons only; the active one opens up into a pill with a pink icon and its name. The list scrolls under both behind a short fade. More holds Card types, Market, Settings, import and the update.
 - **Titles fold.** `PhoneTitle` puts the big title in the page; when it scrolls away a slim bar fades in with the same title (and the back chevron on deck pages).
 - **Toasts** sit at the bottom above the tab bar or the study controls.
 

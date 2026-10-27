@@ -1,3 +1,4 @@
+import { autoSync } from "@/lib/sync";
 import { BarChart3, Blocks, Layers, Library, Settings, Store } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
@@ -54,6 +55,12 @@ export function App() {
   const { path, params } = useLocation();
   const [collapsed, setCollapsed] = useSidebarCollapsed();
   const studying = path === "/study" || path === "/watch";
+  useEffect(() => {
+    if (studying) return;
+    void autoSync();
+    const timer = setInterval(() => void autoSync(), 180_000);
+    return () => clearInterval(timer);
+  }, [studying]);
   const agent = useAgentPanel();
   const updateDot = useUpdateDot();
   const phone = usePhone();

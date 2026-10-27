@@ -1,3 +1,4 @@
+import { autoSync } from "@/lib/sync";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ChevronLeft, FastForward, CornerDownLeft, Dices, EyeOff, Loader2, MessageSquareText, MoreHorizontal, Pause, Pencil, RotateCcw, Undo2 } from "lucide-react";
 import { toast } from "sonner";
@@ -495,6 +496,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
 }
 
 function Done({ counts, scope }: { counts: Counts | null; scope: Scope }) {
+  useEffect(() => { void autoSync(); }, []);
   const aheadUrl = () => {
     const p = new URLSearchParams();
     if (scope.deck) p.set("deck", scope.deck);

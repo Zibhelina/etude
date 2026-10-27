@@ -166,6 +166,68 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
 .agent-prose th, .agent-prose td { border-bottom: 1px solid var(--border); padding: 0.3em 0.6em; text-align: left; }
 .agent-prose .katex { font-size: 1.05em; }
 
+/* ---------------------------------------------------------------- Score: the phone language
+   Etude is a practice piece, so the phone reads like a score: Computer Modern titles, hairline
+   staff rules, a pink note-head for "you are here", and counts whose meaning sits in their shape
+   (open ring = new, half ring = learning, filled = due). Colours stay theme tokens, so every theme
+   works. docs/mobile-design.md has the rules. */
+@utility score-serif {
+  font-family: "KaTeX_Main", "Latin Modern Roman", "CMU Serif", Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.012em;
+}
+/* Computer Modern's hairlines vanish on black at display sizes; a faint stroke gives them body. */
+@utility score-display {
+  -webkit-text-stroke: 0.014em currentColor;
+  paint-order: stroke fill;
+}
+@utility score-kicker {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.score-tabbar {
+  background: color-mix(in oklab, var(--sidebar) 97%, transparent);
+  backdrop-filter: blur(18px) saturate(1.2);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -10px 24px -18px rgb(0 0 0 / 0.35);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.score-fold {
+  background: color-mix(in oklab, var(--background) 94%, transparent);
+  backdrop-filter: blur(18px) saturate(1.2);
+  border-bottom: 1px solid var(--border);
+  padding-top: env(safe-area-inset-top);
+}
+.score-ask {
+  box-shadow: 0 0 0 5px var(--sidebar), 0 10px 22px -10px rgb(0 0 0 / 0.6);
+}
+@keyframes score-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes score-up { from { transform: translateY(100%); } to { transform: none; } }
+.score-scrim { background: rgb(0 0 0 / 0.62); animation: score-fade 180ms ease-out both; }
+.score-sheet { animation: score-up 260ms cubic-bezier(0.2, 0.85, 0.25, 1) both; transition: transform 200ms cubic-bezier(0.2, 0.85, 0.25, 1); }
+@keyframes score-rise { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+.score-rise { animation: score-rise 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .score-scrim, .score-sheet, .score-rise { animation: none; }
+}
+/* Small coloured counts lean a little toward the text colour so they stay readable on light themes too. */
+.score-ink-new { color: color-mix(in oklab, var(--new) 78%, var(--foreground)); }
+.score-ink-learn { color: color-mix(in oklab, var(--learn) 78%, var(--foreground)); }
+.score-ink-review { color: color-mix(in oklab, var(--review) 78%, var(--foreground)); }
+
+/* A list that runs edge to edge with inset hairlines, the phone replacement for a bordered card. */
+.score-list > * { position: relative; }
+.score-list > *::before { content: ""; position: absolute; top: 0; left: 1.25rem; right: 0; height: 1px; background: var(--border); pointer-events: none; }
+.score-list > *:last-child::after { content: ""; position: absolute; bottom: 0; left: 1.25rem; right: 0; height: 1px; background: var(--border); pointer-events: none; }
+.score-list > *:active { background: color-mix(in oklab, var(--accent) 60%, transparent); }
+
+/* Toasts use the app font, not Sonner's system stack. */
+[data-sonner-toaster] { font-family: var(--font-sans); }
+
 /* Embedded in another app: no page background, the host's surface shows through. */
 html.embed, html.embed body { background: transparent; }
 

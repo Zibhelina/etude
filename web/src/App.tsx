@@ -18,6 +18,9 @@ import { EmbedStudy } from "@/pages/embed";
 import { MarketPage } from "@/pages/market";
 import { AgentLauncher, AgentPanel, announceDataChange, useAgentPanel } from "@/components/agent-panel";
 import { SidebarUpdate, useUpdateDot } from "@/components/update-bar";
+import { PhoneTabBar } from "@/components/phone-shell";
+import { MorePage } from "@/pages/more";
+import { usePhone } from "@/lib/phone";
 
 const NAV = [
   { to: "/", label: "Decks", icon: Layers, match: (p: string) => p === "/" || p === "/deck" },
@@ -53,6 +56,7 @@ export function App() {
   const studying = path === "/study" || path === "/watch";
   const agent = useAgentPanel();
   const updateDot = useUpdateDot();
+  const phone = usePhone();
   // Bumped after the assistant changed something, so the page remounts and reloads its data.
   const [dataKey, setDataKey] = useState(0);
   if (path === "/embed") {
@@ -83,6 +87,7 @@ export function App() {
   else if (path === "/stats") page = <StatsPage deck={params.get("deck") ?? undefined} />;
   else if (path === "/settings") page = <SettingsPage />;
   else if (path === "/market") page = <MarketPage />;
+  else if (path === "/more") page = <MorePage />;
   else page = <DecksPage />;
 
   return (
@@ -154,7 +159,7 @@ export function App() {
             </div>
           </aside>
           {/* Room under the last row for the corner launcher, so it never sits on it for good. */}
-          <main key={dataKey} className="min-w-0 flex-1 pb-[calc(var(--tabbar-h)+4rem)] md:pb-16">{page}</main>
+          <main key={dataKey} className="min-w-0 flex-1 pb-[calc(var(--tabbar-h)+1.5rem)] md:pb-16">{page}</main>
           {agent.open ? (
             <AgentPanel
               width={agent.width}
@@ -165,28 +170,13 @@ export function App() {
                 if (final) setDataKey((k) => k + 1);
               }}
             />
-          ) : (
+          ) : phone ? null : (
             <AgentLauncher onOpen={() => agent.setOpen(true)} />
           )}
-          <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-20 flex border-t bg-sidebar/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-            {NAV.map((n) => (
-              <button
-                key={n.to}
-                onClick={() => navigate(n.to)}
-                aria-current={n.match(path) ? "page" : undefined}
-                className={cn("flex h-16 flex-1 flex-col items-center justify-center gap-1 text-[11px] text-muted-foreground", n.match(path) && "font-medium text-foreground")}
-              >
-                <span className="relative">
-                  <n.icon className={cn("size-5", n.match(path) && "text-highlight")} />
-                  {n.to === "/settings" && updateDot && <span data-update-dot aria-label="Update available" className="absolute -top-0.5 -right-1 size-2 rounded-full bg-highlight ring-2 ring-sidebar" />}
-                </span>
-                <span>{n.label === "Card types" ? "Types" : n.label}</span>
-              </button>
-            ))}
-          </nav>
+          <PhoneTabBar path={path} updateDot={updateDot} onAsk={() => agent.setOpen(true)} />
         </div>
       )}
-      <Toaster position="top-center" />
+      <Toaster position={phone ? "bottom-center" : "top-center"} mobileOffset={phone ? { bottom: studying ? 104 : 92, left: 12, right: 12 } : undefined} />
     </TooltipProvider>
   );
 }

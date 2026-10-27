@@ -10,11 +10,17 @@ import { cn } from "@/lib/utils";
 import { EmptyState, Page, PageHeader, Section } from "@/components/page";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { childrenOf, clashes, leafOf, moveDeck, MoveDeckDialog, parentOf } from "@/components/move-deck";
+import { usePhone } from "@/lib/phone";
+import { PhoneDecks } from "@/components/phone-decks";
 
 /** Where a dragged deck would land: between rows (`line`) or inside a deck (`into`). */
 type Drop = { kind: "line" | "into"; parent: string; index: number | undefined; y: number; depth: number };
 
 export function DecksPage() {
+  return usePhone() ? <PhoneDecks /> : <DesktopDecks />;
+}
+
+function DesktopDecks() {
   const [decks, setDecks] = useState<DeckNode[] | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(JSON.parse(localStorage.getItem("etude.collapsed") ?? "[]")));
   const [creating, setCreating] = useState(false);
@@ -390,7 +396,7 @@ export function TreeGuides({ depth }: { depth: number }) {
   );
 }
 
-function NewDeckDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChange(o: boolean): void; onDone(): void }) {
+export function NewDeckDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenChange(o: boolean): void; onDone(): void }) {
   const [name, setName] = useState("");
   const create = async () => {
     if (!name.trim()) return;
@@ -419,7 +425,19 @@ function NewDeckDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCh
   );
 }
 
-export function ImportButton({ onDone }: { onDone(): void }) {
+export function ImportButton({ onDone, phone }: { onDone(): void; phone?: boolean }) {
+  const pick = useImportPicker(onDone);
+  if (phone)
+    return (
+      <button onClick={pick} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border bg-card text-[15px] active:bg-accent"><Upload className="size-4" />Import a file</button>
+    );
+  return (
+    <Button variant="outline" size="sm" className="gap-1.5" onClick={pick}><Upload className="size-4" />Import</Button>
+  );
+}
+
+/** Opens a file picker and imports every pack or Anki file chosen, with a toast per file. */
+export function useImportPicker(onDone: () => void) {
   const pick = () => {
     const input = document.createElement("input");
     input.type = "file";
@@ -446,7 +464,5 @@ export function ImportButton({ onDone }: { onDone(): void }) {
     };
     input.click();
   };
-  return (
-    <Button variant="outline" size="sm" className="gap-1.5" onClick={pick}><Upload className="size-4" />Import</Button>
-  );
+  return pick;
 }

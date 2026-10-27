@@ -18,6 +18,9 @@ import { cn } from "@/lib/utils";
 import { Block, Breadcrumb, EmptyState, LinkRow, Page, Section } from "@/components/page";
 import { TreeGuides } from "@/pages/decks";
 import { childrenOf, clashes, leafOf, moveDeck, MoveDeckDialog, parentOf } from "@/components/move-deck";
+import { usePhone } from "@/lib/phone";
+import { DeckList } from "@/components/phone-decks";
+import { Mark, PhoneTitle } from "@/components/phone-shell";
 
 const enc = encodeURIComponent;
 
@@ -28,6 +31,7 @@ export function DeckPage({ name }: { name: string }) {
   const [tags, setTags] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState(() => new URLSearchParams(location.search).get("tab") ?? "overview");
+  const phone = usePhone();
 
   // Keep the open tab in the URL so reloads and links land on it.
   const switchTab = (t: string) => {
@@ -85,22 +89,9 @@ export function DeckPage({ name }: { name: string }) {
 
   const parts = deck.name.split("::");
   const work = node ? node.new + node.learning + node.review : 0;
-
-  return (
-    <Page>
-      <Breadcrumb items={[{ label: "Decks", onClick: () => navigate("/") }, ...parts.slice(0, -1).map((p, i) => ({ label: p, onClick: () => navigate(`/deck?name=${enc(parts.slice(0, i + 1).join("::"))}`) }))]} />
-      <Header deck={deck} node={node} work={work} tags={tags} onRenamed={(to) => navigate(`/deck?name=${enc(to)}`, { replace: true })} onAddCards={tab === "cards" ? undefined : () => switchTab("cards")} />
-
-      <Tabs value={tab} onValueChange={switchTab} className="mt-8">
-        <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="overview" className="px-4">Overview</TabsTrigger>
-          <TabsTrigger value="cards" className="px-4">Cards</TabsTrigger>
-          <TabsTrigger value="options" className="px-4">Options</TabsTrigger>
-          <TabsTrigger value="manage" className="px-4">Manage</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview" className="mt-6 flex flex-col gap-8">
-          {children.length > 0 && <Subdecks parent={deck.name} decks={children} />}
+  const back = parts.length > 1 ? parts.slice(0, -1).join("::") : "";
+  const overviewText = (
+    <>
           <TextSection
             title="Description"
             empty="No description. Add notes about what this deck covers, sources, or how to study it."
@@ -126,9 +117,9 @@ export function DeckPage({ name }: { name: string }) {
               await reload();
             }}
           />
-        </TabsContent>
-
-        <TabsContent value="cards" className="mt-6">
+    </>
+  );
+  const cardsTab = (
           <DeckCards
             deck={deck.name}
             hasChildren={children.length > 0}
@@ -138,14 +129,71 @@ export function DeckPage({ name }: { name: string }) {
               loadTags();
             }}
           />
+  );
+  const optionsTab = <DeckOptions deck={deck} decks={decks} presets={presets} onChanged={reload} />;
+  const manageTab = <DangerZone deck={deck} decks={decks} hasChildren={children.length > 0} cards={node?.cards ?? 0} onMoved={(to) => navigate(`/deck?name=${enc(to)}&tab=manage`, { replace: true })} />;
+
+  if (phone)
+    return (
+      <div>
+        <PhoneTitle
+          back={{ label: back ? leafOf(back) : "Decks", onClick: () => navigate(back ? `/deck?name=${enc(back)}` : "/") }}
+          kicker={parts.length > 2 ? parts.slice(0, -2).join(" › ") : undefined}
+          title={leafOf(deck.name)}
+          className="pb-3"
+        />
+        <div className="px-5">
+          <Header deck={deck} node={node} work={work} tags={tags} phone onRenamed={(to) => navigate(`/deck?name=${enc(to)}`, { replace: true })} onAddCards={tab === "cards" ? undefined : () => switchTab("cards")} />
+        </div>
+        <Tabs value={tab} onValueChange={switchTab} className="mt-7">
+          <div className="sticky top-[calc(3rem+env(safe-area-inset-top))] z-10 border-b bg-background/95 px-5 backdrop-blur">
+            <TabsList variant="line" className="h-11 w-full justify-start gap-5 bg-transparent p-0">
+              {(["overview", "cards", "options", "manage"] as const).map((t) => (
+                <TabsTrigger key={t} value={t} className="h-11 flex-none rounded-none border-0 px-0 text-[15px] capitalize shadow-none after:!bottom-0 after:bg-highlight data-[state=active]:bg-transparent data-[state=active]:shadow-none">{t}</TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+          <TabsContent value="overview" className="mt-0 flex flex-col gap-8 pb-4">
+            {children.length > 0 && <DeckList decks={decks} parent={deck.name} label="Subdecks" onChanged={reload} />}
+            <div className="flex flex-col gap-8 px-5">
+              {overviewText}
+            </div>
+          </TabsContent>
+          <TabsContent value="cards" className="mt-4 px-4">{cardsTab}</TabsContent>
+          <TabsContent value="options" className="mt-6 px-4">{optionsTab}</TabsContent>
+          <TabsContent value="manage" className="mt-6 px-4">{manageTab}</TabsContent>
+        </Tabs>
+      </div>
+    );
+
+  return (
+    <Page>
+      <Breadcrumb items={[{ label: "Decks", onClick: () => navigate("/") }, ...parts.slice(0, -1).map((p, i) => ({ label: p, onClick: () => navigate(`/deck?name=${enc(parts.slice(0, i + 1).join("::"))}`) }))]} />
+      <Header deck={deck} node={node} work={work} tags={tags} onRenamed={(to) => navigate(`/deck?name=${enc(to)}`, { replace: true })} onAddCards={tab === "cards" ? undefined : () => switchTab("cards")} />
+
+      <Tabs value={tab} onValueChange={switchTab} className="mt-8">
+        <TabsList className="w-full sm:w-auto">
+          <TabsTrigger value="overview" className="px-4">Overview</TabsTrigger>
+          <TabsTrigger value="cards" className="px-4">Cards</TabsTrigger>
+          <TabsTrigger value="options" className="px-4">Options</TabsTrigger>
+          <TabsTrigger value="manage" className="px-4">Manage</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="mt-6 flex flex-col gap-8">
+          {children.length > 0 && <Subdecks parent={deck.name} decks={children} />}
+          {overviewText}
+        </TabsContent>
+
+        <TabsContent value="cards" className="mt-6">
+          {cardsTab}
         </TabsContent>
 
         <TabsContent value="options" className="mt-6">
-          <DeckOptions deck={deck} decks={decks} presets={presets} onChanged={reload} />
+          {optionsTab}
         </TabsContent>
 
         <TabsContent value="manage" className="mt-6">
-          <DangerZone deck={deck} decks={decks} hasChildren={children.length > 0} cards={node?.cards ?? 0} onMoved={(to) => navigate(`/deck?name=${enc(to)}&tab=manage`, { replace: true })} />
+          {manageTab}
         </TabsContent>
       </Tabs>
     </Page>
@@ -340,7 +388,7 @@ function DeckCards({ deck, hasChildren, active, onChanged }: { deck: string; has
   );
 }
 
-function Header({ deck, node, work, tags, onRenamed, onAddCards }: { deck: DeckFull; node?: DeckNode; work: number; tags: string[]; onRenamed(to: string): void; onAddCards?(): void }) {
+function Header({ deck, node, work, tags, onRenamed, onAddCards, phone }: { deck: DeckFull; node?: DeckNode; work: number; tags: string[]; onRenamed(to: string): void; onAddCards?(): void; phone?: boolean }) {
   // The deck list's ⋯ → Rename lands here with ?rename=1.
   const [editing, setEditing] = useState(() => new URLSearchParams(location.search).has("rename"));
   useEffect(() => {
@@ -390,7 +438,7 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards }: { deck: DeckF
           <Button size="icon" className="size-10 shrink-0" onClick={rename} aria-label="Save name"><Check /></Button>
           <Button size="icon" variant="outline" className="size-10 shrink-0" onClick={() => { setText(leaf); setEditing(false); }} aria-label="Cancel"><X /></Button>
         </div>
-      ) : (
+      ) : phone ? null : (
         <div className="group flex items-start gap-1">
           <h1 className="min-w-0 py-0.5 text-2xl font-semibold tracking-tight break-words">{leaf}</h1>
           <Button variant="ghost" size="icon" className="-my-0.5 size-10 shrink-0 text-muted-foreground hover:text-foreground" onClick={() => setEditing(true)} aria-label="Rename deck">
@@ -399,8 +447,11 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards }: { deck: DeckF
         </div>
       )}
 
-      <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-        <div className="grid grid-cols-4 items-end gap-x-4 sm:flex sm:gap-x-8">
+      {phone && !editing && (
+        <PhoneDeckStats deck={deck} node={node} onRename={() => setEditing(true)} />
+      )}
+      <div className={cn("mt-5 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between", phone && "mt-4")}>
+        <div className={cn("grid grid-cols-4 items-end gap-x-4 sm:flex sm:gap-x-8", phone && "hidden")}>
           {deck.resolved.mode !== "watch" && (
             <>
               <Count label="New" value={node?.new ?? 0} cls="text-new" />
@@ -415,18 +466,18 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards }: { deck: DeckF
         </div>
         <div className="flex gap-2">
           {deck.resolved.mode === "watch" ? (
-            <Button size="lg" className="flex-1 gap-2 px-6 sm:flex-none" disabled={!node?.cards} title="A tour: each card can show an example answer, and nothing is scheduled" onClick={() => navigate(`/watch?deck=${enc(deck.name)}`)}>
+            <Button size="lg" className={cn("flex-1 gap-2 px-6 sm:flex-none", phone && "h-[3.25rem] rounded-full text-[16px] pointer-coarse:h-[3.25rem]")} disabled={!node?.cards} title="A tour: each card can show an example answer, and nothing is scheduled" onClick={() => navigate(`/watch?deck=${enc(deck.name)}`)}>
               <Eye className="size-4" />Watch
             </Button>
           ) : (
             <>
-              <CustomStudy deck={deck.name} tags={tags} disabled={!node?.cards} />
+              <CustomStudy deck={deck.name} tags={tags} disabled={!node?.cards} phone={phone} />
               {work || !node?.cards ? (
-                <Button size="lg" className="flex-1 gap-2 px-6 sm:flex-none" disabled={!work} onClick={() => navigate(`/study?deck=${enc(deck.name)}`)}>
+                <Button size="lg" className={cn("flex-1 gap-2 px-6 sm:flex-none", phone && "h-[3.25rem] rounded-full text-[16px] pointer-coarse:h-[3.25rem]")} disabled={!work} onClick={() => navigate(`/study?deck=${enc(deck.name)}`)}>
                   <Play className="size-4" />Practice
                 </Button>
               ) : (
-                <Button size="lg" className="flex-1 gap-2 px-6 sm:flex-none" title="Nothing due right now: review early. FSRS counts an early review for less." onClick={() => navigate(`/study?deck=${enc(deck.name)}&ahead=1`)}>
+                <Button size="lg" className={cn("flex-1 gap-2 px-6 sm:flex-none", phone && "h-[3.25rem] rounded-full text-[16px] pointer-coarse:h-[3.25rem]")} title="Nothing due right now: review early. FSRS counts an early review for less." onClick={() => navigate(`/study?deck=${enc(deck.name)}&ahead=1`)}>
                   <FastForward className="size-4" />Practice ahead
                 </Button>
               )}
@@ -445,6 +496,37 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards }: { deck: DeckF
         <p className="mt-4 text-sm text-muted-foreground">{node.nextDue ? `Nothing due now. Next card ${relativeShort(node.nextDue)}.` : "Nothing due now."} Custom study works any time.</p>
       )}
     </header>
+  );
+}
+
+/** Phone: the deck's counts as one quiet line with shape marks, and the total plus a rename button. */
+function PhoneDeckStats({ deck, node, onRename }: { deck: DeckFull; node?: DeckNode; onRename(): void }) {
+  const watch = deck.resolved.mode === "watch";
+  const parts = [
+    { v: node?.new ?? 0, label: "new", cls: "text-new", kind: "new" as const },
+    { v: node?.learning ?? 0, label: "learning", cls: "text-learn", kind: "learn" as const },
+    { v: node?.review ?? 0, label: "due", cls: "text-review", kind: "due" as const },
+  ];
+  return (
+    <div className="flex items-end justify-between gap-3">
+      {watch ? (
+        <div className="text-[15px] text-muted-foreground">A tour of {node?.cards ?? 0} cards. Nothing is scheduled.</div>
+      ) : (
+        <div className="flex gap-5 max-[359px]:gap-3.5">
+          {parts.map((p) => (
+            <div key={p.label}>
+              <div className={cn("inline-flex items-center gap-1.5 text-[1.5rem] leading-none font-medium tabular max-[359px]:text-[1.3rem]", p.v ? p.cls : "text-muted-foreground/45")}><Mark kind={p.kind} className="size-2.5" />{p.v}</div>
+              <div className="mt-1.5 text-[12.5px] text-muted-foreground">{p.label}</div>
+            </div>
+          ))}
+          <div className="border-l pl-5 max-[359px]:pl-3.5">
+            <div className="text-[1.5rem] leading-none font-medium tabular">{node?.cards ?? 0}</div>
+            <div className="mt-1.5 text-[12.5px] text-muted-foreground">cards</div>
+          </div>
+        </div>
+      )}
+      <button onClick={onRename} aria-label="Rename deck" className="-mr-2 flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent"><Pencil className="size-[18px]" /></button>
+    </div>
   );
 }
 
@@ -489,7 +571,7 @@ function Countdown({ deadline, margin }: { deadline: string; margin: number }) {
   );
 }
 
-function CustomStudy({ deck, tags, disabled }: { deck: string; tags: string[]; disabled?: boolean }) {
+function CustomStudy({ deck, tags, disabled, phone }: { deck: string; tags: string[]; disabled?: boolean; phone?: boolean }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [count, setCount] = useState<number | null>(null);
@@ -531,7 +613,7 @@ function CustomStudy({ deck, tags, disabled }: { deck: string; tags: string[]; d
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="lg" className="flex-1 gap-1.5 px-4 sm:flex-none" disabled={disabled}>Custom study<ChevronDown className="size-4" /></Button>
+          <Button variant="outline" size="lg" className={cn("flex-1 gap-1.5 px-4 sm:flex-none", phone && "h-[3.25rem] flex-none rounded-full px-5 text-[15px] pointer-coarse:h-[3.25rem]")} disabled={disabled}>{phone ? "Custom" : "Custom study"}<ChevronDown className="size-4" /></Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64 sm:w-64" collisionPadding={16}>
           <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Practice a slice of this deck</DropdownMenuLabel>

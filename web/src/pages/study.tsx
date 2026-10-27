@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, FastForward, CornerDownLeft, Dices, EyeOff, Loader2, MessageSquareText, Pause, Pencil, RotateCcw, Undo2 } from "lucide-react";
+import { ArrowLeft, ChevronLeft, FastForward, CornerDownLeft, Dices, EyeOff, Loader2, MessageSquareText, MoreHorizontal, Pause, Pencil, RotateCcw, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,8 @@ import { Markdown } from "@/components/markdown";
 import { api, humanInterval, relative, RATING_LABEL, type Counts, type Rating, type Scope, type StudyCard } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { navigate } from "@/lib/router";
+import { usePhone } from "@/lib/phone";
+import { ActionSheet, Tally } from "@/components/phone-shell";
 
 type Phase = "loading" | "answer" | "grading" | "result" | "done";
 
@@ -35,6 +37,8 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const [feedback, setFeedback] = useState<{ text?: string; loading?: boolean; error?: string } | null>(null);
   const [ready, setReady] = useState(true);
   const [practice, setPractice] = useState(false);
+  const phone = usePhone();
+  const [tools, setTools] = useState(false);
   const frame = useRef<CardFrameHandle>(null);
   const shownAt = useRef(Date.now());
   const lastCard = useRef<number | undefined>(undefined);
@@ -282,6 +286,20 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 pb-44 sm:px-8">
+      {phone ? (
+        <header className="sticky top-0 z-10 -mx-4 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-end bg-background/92 px-1 pt-[env(safe-area-inset-top)] backdrop-blur">
+          <div className="flex h-14 w-full items-center gap-1">
+            <button onClick={() => navigate("/")} className="flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent" aria-label="Back to decks"><ChevronLeft className="size-6" /></button>
+            <div className="min-w-0 flex-1">
+              <div className="score-serif truncate text-[1.15rem] leading-tight">{title}</div>
+              {counts && <Tally n={counts.new} l={counts.learning} r={counts.review} className="mt-0.5 text-[12px]" />}
+            </div>
+            {card && (phase === "answer" || phase === "result") && (
+              <button onClick={() => setTools(true)} className="flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent" aria-label="Card actions"><MoreHorizontal className="size-5" /></button>
+            )}
+          </div>
+        </header>
+      ) : (
       <header className="sticky top-0 z-10 -mx-4 flex items-center gap-2 bg-background/90 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur sm:-mx-8 sm:gap-3 sm:px-8 sm:py-4">
         <Button variant="ghost" size="icon" className="-ml-2" onClick={() => navigate("/")} aria-label="Back to decks">
           <ArrowLeft />
@@ -328,11 +346,12 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
           <TooltipContent>Undo last rating <kbd className="ml-1 opacity-70">Ctrl Z</kbd></TooltipContent>
         </Tooltip>
       </header>
+      )}
 
       {phase === "done" && <Done counts={counts} scope={scope} />}
 
       {card && phase !== "done" && (
-        <main className="flex flex-1 flex-col gap-6 pt-6">
+        <main className="flex flex-1 flex-col gap-5 pt-3 sm:gap-6 sm:pt-6">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <Badge variant="outline" className="font-normal">{card.type}</Badge>
             {card.scheduler.id !== "fsrs" && <Badge variant="outline" className="font-normal">{card.scheduler.name.toLowerCase()}</Badge>}
@@ -346,7 +365,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
             {scope.ahead && <Badge variant="outline" className="gap-1 font-normal"><FastForward className="size-3" />practicing ahead</Badge>}
             {practice && <Badge variant="outline" className="border-highlight/40 font-normal text-highlight">practice, not scheduled</Badge>}
             <div className="flex-1" />
-            <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs text-muted-foreground" onClick={() => navigate(`/browse?item=${encodeURIComponent(card.itemId)}`)}>
+            <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs text-muted-foreground max-md:hidden" onClick={() => navigate(`/browse?item=${encodeURIComponent(card.itemId)}`)}>
               <Pencil className="size-3.5" /> Edit
             </Button>
           </div>
@@ -402,18 +421,21 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       )}
 
       {card && (phase === "answer" || phase === "grading" || phase === "result") && (
-        <footer className="fixed inset-x-0 bottom-0 z-10 border-t bg-background pb-[env(safe-area-inset-bottom)]">
-          <div className="mx-auto flex max-w-3xl items-center justify-center gap-2 px-3 py-3 sm:px-8 sm:py-4">
+        <footer className="fixed inset-x-0 bottom-0 z-10 border-t bg-background pb-[env(safe-area-inset-bottom)] max-md:border-t-0 max-md:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+          <div className="mx-auto flex max-w-3xl items-center justify-center gap-2 px-3 py-3 max-md:px-4 sm:px-8 sm:py-4">
+            {phone && phase !== "result" && (
+              <button onClick={undo} disabled={phase === "grading"} aria-label="Undo last rating" className="flex size-[3.25rem] shrink-0 items-center justify-center rounded-full border bg-card text-muted-foreground active:bg-accent disabled:opacity-40"><Undo2 className="size-5" /></button>
+            )}
             {phase !== "result" ? (
-              <Button size="lg" className="h-12 w-full gap-2 sm:h-10 sm:w-auto sm:min-w-48" disabled={phase === "grading" || (!ready && card.grader !== "self")} onClick={reveal}>
+              <Button size="lg" className="h-[3.25rem] flex-1 gap-2 rounded-full text-[16px] pointer-coarse:h-[3.25rem] sm:h-10 sm:w-auto sm:min-w-48 sm:flex-none sm:rounded-md sm:text-sm" disabled={phase === "grading" || (!ready && card.grader !== "self")} onClick={reveal}>
                 {phase === "grading" ? <><Loader2 className="size-4 animate-spin" /> Grading…</> : card.grader === "self" ? <>Show answer <kbd className="hidden text-xs opacity-60 sm:inline">Space</kbd></> : <>Check <span className="hidden items-center gap-0.5 text-xs opacity-60 sm:flex"><kbd>Ctrl</kbd><CornerDownLeft className="size-3" /></span></>}
               </Button>
             ) : !card.scheduler.ratings ? (
               <>
-                <Button variant="outline" size="lg" className="h-12 flex-1 gap-2 sm:h-10 sm:max-w-44 sm:flex-none" onClick={again}>
+                <Button variant="outline" size="lg" className="h-[3.25rem] flex-1 gap-2 rounded-full pointer-coarse:h-[3.25rem] sm:h-10 sm:max-w-44 sm:flex-none sm:rounded-md" onClick={again}>
                   <RotateCcw className="size-4" /> Go again <kbd className="hidden text-xs opacity-60 sm:inline">R</kbd>
                 </Button>
-                <Button size="lg" className="h-12 flex-1 gap-2 sm:h-10 sm:max-w-56 sm:flex-none" onClick={() => rate(0)}>
+                <Button size="lg" className="h-[3.25rem] flex-1 gap-2 rounded-full pointer-coarse:h-[3.25rem] sm:h-10 sm:max-w-56 sm:flex-none sm:rounded-md" onClick={() => rate(0)}>
                   Next
                   <span className="text-xs font-normal opacity-70">{practice ? "practice" : card.scheduler.next ? (new Date(card.scheduler.next).getTime() <= Date.now() + 60_000 ? "again today" : `back ${relative(card.scheduler.next)}`) : ""}</span>
                 </Button>
@@ -424,9 +446,9 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
                   key={r}
                   onClick={() => rate(r)}
                   className={cn(
-                    "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg border px-2 py-2.5 text-sm font-medium transition-colors sm:max-w-36 sm:px-3 sm:py-2",
+                    "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-2xl border px-1 py-3 text-[15px] font-medium transition-[colors,transform] active:scale-95 sm:max-w-36 sm:rounded-lg sm:px-3 sm:py-2 sm:text-sm",
                     RATING_STYLE[r],
-                    suggested === r && "ring-2 ring-current/60",
+                    suggested === r && "ring-2 ring-current/60 max-sm:bg-current/10 max-md:ring-inset",
                   )}
                 >
                   <span>{RATING_LABEL[r]}</span>
@@ -445,6 +467,24 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
             </div>
           )}
         </footer>
+      )}
+      {phone && card && (
+        <ActionSheet
+          open={tools}
+          onClose={() => setTools(false)}
+          title={card.deck.split("::").pop()}
+          description={`${card.type}${card.generated ? " · a new variant each time" : ""}`}
+          groups={[
+            [{ label: "Undo last rating", icon: Undo2, onClick: undo }],
+            [
+              { label: "Bury this card", icon: EyeOff, hint: "until tomorrow", onClick: () => setAside("bury", false) },
+              { label: "Bury the whole note", icon: EyeOff, onClick: () => setAside("bury", true) },
+              { label: "Suspend this card", icon: Pause, onClick: () => setAside("suspend", false) },
+              { label: "Suspend the whole note", icon: Pause, onClick: () => setAside("suspend", true) },
+            ],
+            [{ label: "Edit card", icon: Pencil, onClick: () => navigate(`/browse?item=${encodeURIComponent(card.itemId)}`) }],
+          ]}
+        />
       )}
       {phase === "loading" && !card && (
         <div className="flex flex-1 items-center justify-center text-muted-foreground"><Loader2 className="animate-spin" /></div>

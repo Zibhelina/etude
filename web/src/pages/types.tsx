@@ -13,6 +13,7 @@ import { download, exportShape, GRADER_LABEL } from "@/components/type-editor/st
 import { api, type TypeSummary } from "@/lib/api";
 import { navigate, useLocation } from "@/lib/router";
 import { cn } from "@/lib/utils";
+import { PHONE_H1 } from "@/components/page";
 
 export function TypesPage({ id }: { id: string | null }) {
   if (id) return <TypeEditor key={id} id={id} />;
@@ -220,7 +221,7 @@ function TypeLibrary() {
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-4">
           <div className="min-w-0 flex-1 basis-56">
             <div className="flex min-w-0 items-center gap-1">
-              <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">{title}</h1>
+              <h1 className={cn("min-w-0 truncate text-2xl font-semibold tracking-tight", PHONE_H1)}>{title}</h1>
               {here && !inBuiltIn && <FolderMenu name={leaf(here)} {...folderActions(here)} className="size-9" />}
             </div>
             <p className="mt-1 max-w-xl text-sm text-pretty text-muted-foreground">

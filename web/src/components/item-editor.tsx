@@ -17,6 +17,7 @@ import { Markdown } from "@/components/markdown";
 import { api, humanInterval, relative, RATING_LABEL, STATE_NAMES, type CardType, type ItemDetail, type SearchRow, type TypeSummary } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
+import { useLongPress, usePhone } from "@/lib/phone";
 
 export const STATE_CLS = ["text-new", "text-learn", "text-review", "text-learn"];
 
@@ -66,28 +67,40 @@ export function CheckBox({ checked, onClick, label, className }: { checked: bool
   );
 }
 
-export function ItemRow({ row: r, active, checked, onOpen, onToggle, className, hideDeck }: { row: ItemRowData; active: boolean; checked: boolean; onOpen(): void; onToggle(): void; className?: string; hideDeck?: boolean }) {
+export function ItemRow({ row: r, active, checked, onOpen, onToggle, className, hideDeck, selecting }: { row: ItemRowData; active: boolean; checked: boolean; onOpen(): void; onToggle(): void; className?: string; hideDeck?: boolean; selecting?: boolean }) {
+  // Phones: no checkbox column until you press and hold a row; then taps select.
+  const phone = usePhone();
+  const { handlers, held } = useLongPress(onToggle);
+  const showBox = !phone || selecting;
   return (
     <div
       data-item-row
-      onClick={onOpen}
+      onClick={() => {
+        if (held()) return;
+        if (phone && selecting) onToggle();
+        else onOpen();
+      }}
+      {...(phone ? handlers : {})}
       className={cn(
-        "group flex cursor-pointer items-start gap-3 border-b px-3 py-3 transition-colors hover:bg-accent/40",
+        "group flex cursor-pointer items-start gap-3 border-b px-3 py-3 transition-colors hover:bg-accent/40 max-md:min-h-[4.25rem] max-md:select-none max-md:py-3.5 max-md:[-webkit-touch-callout:none]",
+        phone && checked && "bg-highlight/[0.07]",
         (r.suspended || r.archived) && "opacity-55",
         className,
       )}
     >
-      <CheckBox
-        checked={checked}
-        className="mt-0.5"
-        label="Select"
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle();
-        }}
-      />
+      {showBox && (
+        <CheckBox
+          checked={checked}
+          className="mt-0.5"
+          label="Select"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
+        />
+      )}
       <div className="min-w-0 flex-1">
-        <div className={cn("line-clamp-2 text-sm leading-snug", active && "font-medium text-highlight")} aria-current={active || undefined}>{r.title || <span className="text-muted-foreground">{r.itemId}</span>}</div>
+        <div className={cn("line-clamp-2 text-sm leading-snug max-md:text-[15px]", active && "font-medium text-highlight")} aria-current={active || undefined}>{r.title || <span className="text-muted-foreground">{r.itemId}</span>}</div>
         <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
           {!hideDeck && <><span className="truncate">{r.deck.split("::").slice(-1)[0]}</span><span>·</span></>}
           <span className="shrink-0">{r.type}</span>
@@ -173,8 +186,19 @@ export function BulkBar({ checked, rows, decks, tags, onClear, onDone, onDeleted
   );
 }
 
+const HINT_LABEL: Record<string, string> = { "is:due": "Due", "is:new": "New", "is:suspended": "Suspended", "prop:lapses>=2": "Often missed", "rated:1:1": "Missed today", "type:free": "Free answer" };
+
 export function SearchHints({ onPick }: { onPick(s: string): void }) {
   const hints = ["is:due", "is:new", "is:suspended", "prop:lapses>=2", "rated:1:1", "type:free"];
+  // Phones: plain words in one swipeable row; the query syntax still goes into the search box.
+  if (usePhone())
+    return (
+      <div className="-mx-5 flex gap-2 overflow-x-auto px-5 [scrollbar-width:none]">
+        {hints.map((h) => (
+          <button key={h} onClick={() => onPick(h)} className="h-9 shrink-0 rounded-full border bg-card px-3.5 text-[13px] text-muted-foreground active:bg-accent active:text-foreground">{HINT_LABEL[h]}</button>
+        ))}
+      </div>
+    );
   return (
     <div className="flex flex-wrap gap-1.5">
       {hints.map((h) => (

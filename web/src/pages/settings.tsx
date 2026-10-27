@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { UpdateSettingsRow } from "@/components/update-bar";
 import { Logo, Wordmark } from "@/components/logo";
 import { cn } from "@/lib/utils";
+import { PHONE_H1 } from "@/components/page";
 import { AiSection } from "@/components/settings-ai";
 import { AppearanceSection } from "@/components/settings-appearance";
 import { DataSection } from "@/components/settings-data";
@@ -128,9 +129,9 @@ export function SettingsPage() {
   const shown = dirty ? errors : {};
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-5 py-10 sm:px-8">
+    <div className="mx-auto w-full max-w-4xl px-5 py-10 max-md:pt-[calc(1.25rem+env(safe-area-inset-top))] sm:px-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        <h1 className={cn("text-2xl font-semibold tracking-tight", PHONE_H1)}>Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">For the whole collection. Scheduling options live on each deck.</p>
       </div>
 

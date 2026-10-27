@@ -4,8 +4,11 @@ import { cn } from "@/lib/utils";
 
 /** The page column: one width, one padding. `wide` is for dashboards (Stats). */
 export function Page({ wide, className, children }: { wide?: boolean; className?: string; children: React.ReactNode }) {
-  return <div className={cn("mx-auto w-full px-4 pt-6 pb-10 sm:px-8 sm:pt-10 sm:pb-12", wide ? "max-w-5xl" : "max-w-4xl", className)}>{children}</div>;
+  return <div className={cn("mx-auto w-full px-4 pt-6 pb-10 max-md:pt-[calc(1.25rem+env(safe-area-inset-top))] sm:px-8 sm:pt-10 sm:pb-12", wide ? "max-w-5xl" : "max-w-4xl", className)}>{children}</div>;
 }
+
+/** Page titles on a phone are set in Computer Modern, large ("Score", docs/mobile-design.md). */
+export const PHONE_H1 = "max-md:score-serif max-md:score-display max-md:text-[2.25rem] max-md:leading-[1.08] max-md:font-normal max-md:tracking-normal";
 
 /** Negative margins that let a bar inside <Page> run edge to edge. */
 export const PAGE_BLEED = "-mx-4 px-4 sm:-mx-8 sm:px-8";
@@ -40,7 +43,7 @@ export function PageHeader({ title, description, actions, crumbs, titleAside, cl
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="min-w-0 flex-1 basis-40">
           <div className="flex min-w-0 items-start gap-1">
-            <h1 className="min-w-0 text-2xl font-semibold tracking-tight break-words">{title}</h1>
+            <h1 className={cn("min-w-0 text-2xl font-semibold tracking-tight break-words", PHONE_H1)}>{title}</h1>
             {titleAside}
           </div>
           {description && <div className="mt-1 text-sm text-pretty text-muted-foreground">{description}</div>}

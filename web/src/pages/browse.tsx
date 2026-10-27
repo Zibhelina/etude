@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { BulkBar, CheckBox, groupItems, ItemEditor, ItemRow, NewItemDialog, OrderSelect, SearchHints } from "@/components/item-editor";
 import { api, type SearchRow, type TypeSummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { EmptyState } from "@/components/page";
+import { EmptyState, PHONE_H1 } from "@/components/page";
 import { X } from "lucide-react";
 
 const PAGE = 200;
@@ -74,9 +74,9 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
   return (
     <div className="flex h-[calc(100dvh-var(--tabbar-h))] min-w-0">
       <section className={cn("min-w-0 flex-col border-r md:flex md:w-[20rem] md:shrink-0 lg:w-[24rem] xl:w-[28rem]", selected ? "hidden" : "flex w-full")}>
-        <div className="flex flex-col gap-3 border-b px-4 pt-6 pb-3 sm:pt-8 md:px-4 md:pt-6">
+        <div className="flex flex-col gap-3 border-b px-4 pt-6 pb-3 max-md:px-5 max-md:pt-[calc(1.25rem+env(safe-area-inset-top))] sm:pt-8 md:px-4 md:pt-6">
           <div className="flex items-center justify-between gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">Browse</h1>
+            <h1 className={cn("text-2xl font-semibold tracking-tight", PHONE_H1)}>Browse</h1>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" />Add</Button>
           </div>
           <div className="relative">
@@ -90,7 +90,7 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
           </div>
           <SearchHints onPick={(s) => setQuery((q) => (q ? `${q} ${s}` : s))} />
           <div className="-mb-1 flex min-h-9 items-center gap-2.5 text-xs text-muted-foreground">
-            <CheckBox checked={allChecked} label="Select all" onClick={() => setChecked(allChecked ? new Set() : new Set(items.map((r) => r.itemId)))} />
+            <span className={cn(!checked.size && "max-md:hidden")}><CheckBox checked={allChecked} label="Select all" onClick={() => setChecked(allChecked ? new Set() : new Set(items.map((r) => r.itemId)))} /></span>
             <span className="tabular min-w-0 truncate">{error ? <span className="text-destructive">{error}</span> : `${total} card${total === 1 ? "" : "s"}${total > PAGE ? `, showing ${PAGE}` : ""}`}</span>
             <div className="flex-1" />
             <OrderSelect value={order} onChange={setOrder} />
@@ -114,7 +114,8 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
               row={r}
               active={selected === r.itemId}
               checked={checked.has(r.itemId)}
-              className="px-4"
+              className="px-4 max-md:px-5"
+              selecting={checked.size > 0}
               onOpen={() => setSelected(r.itemId)}
               onToggle={() => {
                 const n = new Set(checked);

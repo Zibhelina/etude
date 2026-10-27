@@ -71,6 +71,8 @@ export interface IndexEntry extends MarketMeta {
   bytes: number;
   /** Optional picture of the entry in use, `covers/<kind>s/<id>.<webp|png|jpg>`. */
   cover?: string;
+  /** Ordered screenshots and optional silent preview clips, discovered by market index. */
+  media?: string[];
   summary: MarketSummary;
 }
 
@@ -232,6 +234,27 @@ const indexCache = new Map<string, { at: number; index: MarketIndex }>();
 const COVER_EXT = ["webp", "png", "jpg"] as const;
 export const MAX_COVER_BYTES = 600 * 1024;
 const COVER_TYPE: Record<string, string> = { webp: "image/webp", png: "image/png", jpg: "image/jpeg" };
+
+/** Only catalog-owned image/video paths can be served. No external URLs or traversal. */
+export const MARKET_MEDIA_PATH = /^media\/(themes|decks|types)\/[a-z0-9-]+\/[a-z0-9-]+\.(webp|png|jpg|mp4|webm)$/;
+export const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
+export async function fetchMarketMedia(url: string, path: string): Promise<{ body: Buffer; type: string }> {
+  const m = MARKET_MEDIA_PATH.exec(path);
+  if (!m) throw new MarketError(`unexpected media path ${path}`);
+  let body: Buffer;
+  if (!isRemote(url)) {
+    const p = join(localDir(url), path);
+    if (!existsSync(p)) throw new MarketError(`the market has no ${path}`, 404);
+    body = readFileSync(p);
+  } else {
+    const res = await fetch(`${url.replace(/\/+$/, "")}/${path}`, { signal: AbortSignal.timeout(20_000) });
+    if (!res.ok) throw new MarketError(`the market answered ${res.status} for ${path}`, res.status === 404 ? 404 : 502);
+    if (Number(res.headers.get("content-length")) > MAX_MEDIA_BYTES) throw new MarketError("media is too large");
+    body = Buffer.from(await res.arrayBuffer());
+  }
+  if (body.length > MAX_MEDIA_BYTES) throw new MarketError("media is too large");
+  return { body, type: ({ ...COVER_TYPE, mp4: "video/mp4", webm: "video/webm" } as Record<string, string>)[m[2]] };
+}
 
 /** An entry's cover image, as bytes and a content type. */
 export async function fetchCover(url: string, cover: string): Promise<{ body: Buffer; type: string }> {
@@ -606,7 +629,14 @@ export async function buildIndex(dir: string, opts: { repo?: string; dryRunInto?
         problems.push({ path: cover, errors: [`cover is larger than ${MAX_COVER_BYTES / 1024} KB`] });
         continue;
       }
-      entries.push({ ...metaOf(file), path, bytes, ...(cover ? { cover } : {}), summary: summarize(file) });
+      const mediaDir = join(root, "media", `${kind}s`, file.id);
+      const media = existsSync(mediaDir) ? readdirSync(mediaDir).sort().map((f) => `media/${kind}s/${file.id}/${f}`) : [];
+      const invalidMedia = media.filter((p) => !MARKET_MEDIA_PATH.test(p) || statSync(join(root, p)).size > MAX_MEDIA_BYTES);
+      if (media.length > 12 || invalidMedia.length) {
+        problems.push({ path: `media/${kind}s/${file.id}`, errors: ["Use at most 12 images/videos, lowercase slug filenames, at most 12 MB each."] });
+        continue;
+      }
+      entries.push({ ...metaOf(file), path, bytes, ...(cover ? { cover } : {}), ...(media.length ? { media } : {}), summary: summarize(file) });
     }
   }
   entries.sort((a, b) => (b.updated || "").localeCompare(a.updated || "") || a.name.localeCompare(b.name));

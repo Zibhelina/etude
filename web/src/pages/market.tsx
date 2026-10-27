@@ -15,6 +15,7 @@ import { ThemeMiniature, ThemeSwatches } from "@/components/settings-theme-previ
 import { CardPreview } from "@/components/card-preview";
 import { download } from "@/components/type-editor/starter";
 import { api, ApiError, type CardType, type MarketEntry, type MarketFile, type MarketKind, type PublishResult } from "@/lib/api";
+import { MarketGallery } from "@/components/market-gallery";
 import { applyTheme } from "@/lib/theme";
 import { navigate, useLocation } from "@/lib/router";
 import { cn } from "@/lib/utils";
@@ -292,8 +293,14 @@ function EntryDialog({ entry, repo, inUse, onClose, onInstalled }: { entry: Mark
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
+      <DialogContent
+        className="market-detail"
+        aria-describedby="market-about"
+        // The screenshot lightbox is portaled to <body>; clicks in it aren't "outside" the dialog.
+        onInteractOutside={(e) => { if ((e.target as Element | null)?.closest?.(".market-lightbox")) e.preventDefault(); }}
+      >
+        <div className="market-detail-scroll">
+        <DialogHeader className="text-left">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pr-8 text-xs text-muted-foreground [&>span]:whitespace-nowrap">
             <span>{KIND_LABEL[entry.kind]}</span>
             <span aria-hidden="true">·</span>
@@ -302,19 +309,29 @@ function EntryDialog({ entry, repo, inUse, onClose, onInstalled }: { entry: Mark
             <span>v{entry.version}{entry.updated && `, ${entry.updated}`}</span>
             <InstalledMark state={entry.installed} />
           </div>
-          <DialogTitle className="text-xl">{entry.name}</DialogTitle>
-          {entry.description && <DialogDescription className="text-pretty">{entry.description}</DialogDescription>}
+          <DialogTitle className="pr-6 text-2xl leading-tight tracking-tight sm:text-3xl">{entry.name}</DialogTitle>
         </DialogHeader>
 
-        {entry.kind === "type" ? <TypePreview file={file} /> : <Cover entry={entry} large />}
+        <div className="market-facts">
+          <div className="market-fact"><span>{entry.kind === "theme" ? "Appearance" : "Includes"}</span><strong>{entry.kind === "deck" ? plural(s.items, "card") : entry.kind === "theme" ? (s.theme.scheme === "light" ? "Light theme" : "Dark theme") : plural(s.items, "example")}</strong></div>
+          <div className="market-fact"><span>{entry.kind === "deck" ? "Collection" : "Version"}</span><strong>{entry.kind === "deck" ? plural(s.decks.filter((d: string) => !s.decks.some((x: string) => x.startsWith(d + "::"))).length, "topic") : `v${entry.version}`}</strong></div>
+          <div className="market-fact"><span>Download</span><strong>{kb(entry.bytes)}</strong></div>
+          <div className="market-fact"><span>Creator</span><strong>{entry.author}</strong></div>
+        </div>
+        <MarketGallery key={`${entry.kind}/${entry.id}`} entry={entry} fallback={<Cover entry={entry} large />} />
+
+        <section id="market-about" className="market-description mb-6">
+          <h3 className="mb-3 text-base font-semibold">About this {entry.kind === "type" ? "card type" : entry.kind}</h3>
+          <div className="text-sm leading-relaxed text-muted-foreground whitespace-pre-line">{(entry.description || "No description yet.").split(/\n\s*\n/).map((p, i) => <p key={i}>{p}</p>)}</div>
+        </section>
+        {entry.kind === "theme" && <Button variant="link" className="mb-5 h-auto p-0 text-xs text-muted-foreground" disabled={!!busy} onClick={() => install(false)}>Install without changing my theme</Button>}
+        {entry.kind === "type" && <section className="mb-6"><h3 className="mb-3 text-base font-semibold">Try it</h3><TypePreview file={file} /></section>}
 
         <div className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-muted-foreground">
           {entry.kind === "deck" && (
             <>
-              <span>{plural(s.items, "card")}</span>
-              <span>{plural(s.decks.length, "deck")}</span>
-              {s.types.length > 0 && <span>brings {s.types.map((t: any) => t.name).join(", ")}</span>}
-              {s.watch && <span>a Watch tour, not scheduled</span>}
+              {s.types.length > 0 && <span>Includes {s.types.map((t: any) => t.name).join(", ")}</span>}
+              {s.watch && <span>Watch tour</span>}
             </>
           )}
           {entry.kind === "type" &&
@@ -328,23 +345,18 @@ function EntryDialog({ entry, repo, inUse, onClose, onInstalled }: { entry: Mark
           <span>{kb(entry.bytes)}</span>
           {entry.tags.length > 0 && <span>{entry.tags.map((t) => `#${t}`).join(" ")}</span>}
         </div>
+        </div>
 
-        <DialogFooter className="sticky -bottom-[calc(1.25rem+env(safe-area-inset-bottom))] -mx-5 -mb-[calc(1.25rem+env(safe-area-inset-bottom))] gap-2 border-t bg-background/95 px-5 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))] backdrop-blur sm:-bottom-6 sm:-mx-6 sm:-mb-6 sm:px-6 sm:pb-6 sm:justify-between">
-          <Button variant="ghost" size="sm" className="gap-1.5 self-start" asChild>
+        <DialogFooter className="flex-row items-center justify-between gap-3 border-t bg-background px-5 py-4 sm:justify-between">
+          <Button variant="ghost" size="sm" className="gap-1.5" asChild>
             <a href={`https://github.com/${repo}/blob/main/${entry.path}`} target="_blank" rel="noreferrer">
               <ExternalLink className="size-4" /> Source
             </a>
           </Button>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+          <div className="flex flex-wrap justify-end gap-2">
             {entry.installed && <Button variant="outline" onClick={goTo}>Open</Button>}
-            {entry.kind === "theme" && (
-              <Button variant="outline" className="gap-1.5" disabled={!!busy} onClick={() => install(false)}>
-                {busy === "install" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-                {entry.installed === "update" ? "Update" : entry.installed ? "Reinstall" : "Install"}
-              </Button>
-            )}
             <Button className="gap-1.5" disabled={!!busy || (entry.installed === "installed" && (entry.kind !== "theme" || inUse))} onClick={() => install(entry.kind === "theme")}>
-              {busy && busy !== "install" ? <Loader2 className="size-4 animate-spin" /> : entry.installed === "installed" && (entry.kind !== "theme" || inUse) ? <Check className="size-4" /> : <Download className="size-4" />}
+              {busy ? <Loader2 className="size-4 animate-spin" /> : entry.installed === "installed" && (entry.kind !== "theme" || inUse) ? <Check className="size-4" /> : <Download className="size-4" />}
               {entry.kind === "theme" ? (entry.installed === "installed" ? (inUse ? "In use" : "Use") : entry.installed === "update" ? "Update and use" : "Install and use") : entry.installed === "update" ? "Update" : entry.installed ? "Installed" : "Install"}
             </Button>
           </div>

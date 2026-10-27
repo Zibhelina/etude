@@ -1,0 +1,72 @@
+.market-detail { grid-template-rows: minmax(0, 1fr) auto; gap: 0; padding: 0; overflow: hidden; width: calc(100% - 2rem); max-height: 92dvh; }
+.market-detail-scroll { overflow-y: auto; min-width: 0; padding: 28px; overscroll-behavior: contain; }
+
+/* Gallery: one shared height, each shot keeps its own aspect ratio (App Store screenshot strip). */
+.market-gallery { --shot-h: 300px; --gutter: 28px; --fade: 96px; position: relative; min-width: 0; margin: 24px calc(var(--gutter) * -1); }
+.market-gallery-rail { display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding-inline: var(--gutter); padding: 2px var(--gutter); scrollbar-width: none; outline: none; }
+.market-gallery-rail::-webkit-scrollbar { display: none; }
+.market-gallery-rail:focus-visible .market-shot:first-child { box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent); }
+.market-shot { position: relative; flex: none; height: var(--shot-h); margin: 0; overflow: hidden; scroll-snap-align: start; border-radius: 14px; background: #000; }
+.market-shot > img, .market-shot > video { display: block; height: 100%; width: auto; max-width: none; }
+.market-shot > img { pointer-events: none; user-select: none; }
+button.market-shot { padding: 0; border: 0; cursor: zoom-in; transition: transform .2s, filter .2s; }
+button.market-shot:hover { filter: brightness(1.08); }
+button.market-shot:focus-visible { outline: 3px solid color-mix(in oklab, var(--ring) 60%, transparent); outline-offset: 2px; }
+.market-lightbox { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: rgb(0 0 0 / .95); backdrop-filter: blur(6px); cursor: zoom-out; animation: market-fade .15s ease-out; pointer-events: auto; }
+.market-lightbox > img { max-width: min(92vw, 1100px); max-height: 88dvh; border-radius: 14px; cursor: default; box-shadow: 0 0 0 1px rgb(255 255 255 / .14), 0 20px 60px rgb(0 0 0 / .5); }
+.market-lightbox-arrow { position: absolute; top: 50%; width: 44px; height: 44px; margin-top: -22px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: rgb(255 255 255 / .12); }
+.market-lightbox-arrow:hover:enabled { background: rgb(255 255 255 / .22); }
+.market-lightbox-arrow:disabled { opacity: .2; }
+.market-lightbox-arrow.left { left: 20px; }
+.market-lightbox-arrow.right { right: 20px; }
+.market-lightbox-close { position: absolute; top: calc(16px + env(safe-area-inset-top)); right: 16px; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: rgb(255 255 255 / .2); }
+.market-lightbox-close:hover { background: rgb(255 255 255 / .22); }
+.market-lightbox-count { position: absolute; bottom: calc(18px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); font-size: 13px; font-weight: 500; color: rgb(255 255 255 / .85); }
+@keyframes market-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .market-lightbox { animation: none; } }
+.market-shot::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent); pointer-events: none; }
+.market-clip > video { cursor: pointer; }
+.market-clip-toggle { position: absolute; right: 10px; bottom: 10px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: rgb(0 0 0 / .55); backdrop-filter: blur(6px); opacity: 0; transition: opacity .15s; }
+.market-clip:hover .market-clip-toggle, .market-clip-toggle:focus-visible, .market-clip-toggle[aria-label="Play preview"] { opacity: 1; }
+
+/* Edge fades only where there's more to scroll to. */
+.market-gallery::before, .market-gallery::after { content: ""; position: absolute; top: 0; bottom: 0; width: var(--fade); z-index: 1; pointer-events: none; opacity: 0; transition: opacity .2s; }
+.market-gallery::before { left: 0; background: linear-gradient(to right, var(--background) 15%, transparent); }
+.market-gallery::after { right: 0; background: linear-gradient(to left, var(--background) 15%, transparent); }
+.market-gallery.fade-start::before, .market-gallery.fade-end::after { opacity: 1; }
+
+/* Arrows float over the strip's edges on pointer devices; touch just swipes. */
+.market-gallery-arrow { position: absolute; top: calc(2px + var(--shot-h) / 2); z-index: 2; width: 36px; height: 36px; margin-top: -18px; display: grid; place-items: center; border-radius: 50%; color: var(--foreground); background: color-mix(in oklab, var(--popover) 88%, transparent); border: 1px solid var(--border); box-shadow: 0 4px 14px rgb(0 0 0 / .35); backdrop-filter: blur(8px); opacity: 0; transition: opacity .15s, background .15s; }
+.market-gallery-arrow.left { left: calc(var(--gutter) - 12px); }
+.market-gallery-arrow.right { right: calc(var(--gutter) - 12px); }
+.market-gallery:hover .market-gallery-arrow:not(.gone) { opacity: 1; }
+.market-gallery-arrow:hover { background: var(--popover); }
+.market-gallery-arrow.gone { pointer-events: none; }
+@media (hover: none) { .market-gallery-arrow { display: none; } }
+
+/* No media: the entry's cover or theme miniature, at a bounded size. */
+.market-gallery-single { margin-inline: 0; }
+.market-gallery-single::before, .market-gallery-single::after { display: none; }
+.market-gallery-single > div { max-height: 260px; }
+.market-gallery-single img { object-fit: contain; }
+
+.market-facts { display: flex; border-block: 1px solid var(--border); margin: 24px 0 0; padding: 16px 0; }
+.market-fact { flex: 1; min-width: 0; padding: 0 16px; border-left: 1px solid var(--border); }
+.market-fact:first-child { padding-left: 0; border: 0; }
+.market-fact span { display: block; font-size: 11px; color: var(--muted-foreground); margin-bottom: 5px; }
+.market-fact strong { display: block; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.market-description p + p { margin-top: 12px; }
+@media (min-width: 640px) { .market-detail { max-width: 860px; } }
+@media (max-width: 639px) {
+ .market-detail { width: 100%; max-height: 94dvh; }
+ .market-detail > [data-slot="dialog-footer"] { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+ .market-detail-scroll { padding: 22px 18px; }
+ .market-gallery { --shot-h: 250px; --gutter: 18px; --fade: 56px; }
+ .market-fact { padding: 0 10px; }
+ .market-fact strong { font-size: 12px; }
+}
+@media (max-width: 359px) {
+ .market-detail .market-facts { display: grid; grid-template-columns: 1fr 1fr; row-gap: 14px; }
+ .market-facts .market-fact:nth-child(odd) { border-left: 0; padding-left: 0; }
+ .market-facts .market-fact strong { overflow-wrap: normal; }
+}

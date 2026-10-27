@@ -14,7 +14,7 @@ import { ASSET_NAME, assetMime } from "../core/assets.ts";
 import { agentFor, AgentError, AGENT_MAX_ATTACHMENT_BYTES, type AgentEvent } from "../core/agent.ts";
 import { streamSSE } from "hono/streaming";
 import { applyUpdate, updateStatus, UpdateError } from "../core/update.ts";
-import { buildSubmission, fetchCover, fetchEntry, fetchIndex, ghStatus, installEntry, installState, installedEntries, manualPublishUrl, marketSettings, publishFile, summarize, entryPath, entryJson, forgetInstall, type MarketKind } from "../core/market.ts";
+import { buildSubmission, fetchMarketMedia, fetchCover, fetchEntry, fetchIndex, ghStatus, installEntry, installState, installedEntries, manualPublishUrl, marketSettings, publishFile, summarize, entryPath, entryJson, forgetInstall, type MarketKind } from "../core/market.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const require = createRequire(import.meta.url);
@@ -529,6 +529,15 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     if (!hit?.cover) return c.json({ error: "no cover" }, 404);
     const { body, type } = await fetchCover(url, hit.cover);
     return c.body(new Uint8Array(body), 200, { "Content-Type": type, "Cache-Control": "max-age=600" });
+  });
+  app.get("/api/market/media/:kind/:id/:index", async (c) => {
+    const url = marketSettings(etude).url;
+    const hit = (await fetchIndex(url)).entries.find((x) => x.kind === c.req.param("kind") && x.id === c.req.param("id"));
+    const slot = c.req.param("index");
+    const path = /^\d+$/.test(slot) ? hit?.media?.[Number(slot)] : undefined;
+    if (!path) return c.json({ error: "no media" }, 404);
+    const { body, type } = await fetchMarketMedia(url, path);
+    return c.body(new Uint8Array(body), 200, { "Content-Type": type, "Cache-Control": "max-age=600", "X-Content-Type-Options": "nosniff" });
   });
   app.post("/api/market/install", async (c) => {
     const b = await body(c);

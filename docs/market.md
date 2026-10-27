@@ -20,6 +20,16 @@ etude market install typing-test
 etude market installed
 ```
 
+## Entry previews
+
+Entry details open as a mini product page: a title and compact facts, a swipeable gallery, the description, and a persistent action bar. Descriptions support blank-line paragraph breaks. Card types retain their live, disposable preview beneath the description.
+
+Add optional media in the catalog repository at `media/<themes|decks|types>/<id>/`. Use lowercase slug filenames, prefixed with numbers to set the order (`01-preview.mp4`, `02-front.webp`). `etude market index` discovers up to 12 files per entry, each at most 12 MiB. Supported formats: WebP, PNG, JPG, MP4 and WebM. Place a screenshot immediately after a clip to provide its poster. Clips start paused, play inline, and pause when you swipe away or close the detail page. The first screenshot also supplies the poster, so it should show the same activity as the clip.
+
+The index exposes `media: string[]`, also returned by `etude market show`. The app serves indexed media through `/api/market/media/<kind>/<id>/<index>`; it accepts no arbitrary file path or external URL. Entries without media retain their cover or theme miniature.
+
+Deck details count leaf topics separately from parent folders. A collection with 20 topics and 6 grouping folders displays **20 topics**.
+
 ## Publishing
 
 **Market → Publish**, pick the deck, card type or theme, describe it and press **Open pull request**. Etude uses the GitHub CLI on the machine running the server (`gh auth login`): it forks the market repository when you can't push to it, adds the entry file on a new branch and opens the pull request. It goes live once a maintainer merges it.

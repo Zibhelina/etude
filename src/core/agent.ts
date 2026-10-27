@@ -24,7 +24,7 @@ const OPENROUTER_CHAT = "https://openrouter.ai/api/v1/chat/completions";
 
 /** Commands the agent may never run: they restart or replace things, or touch credentials. */
 // `media prune` deletes files, which an undo (a database snapshot) can't bring back.
-export const AGENT_DENY = ["serve", "update", "settings chatgpt login", "settings chatgpt logout", "settings chatgpt import", "db restore", "market publish", "media prune", "agent"];
+export const AGENT_DENY = ["serve", "update", "settings chatgpt login", "settings chatgpt logout", "settings chatgpt import", "db restore", "market publish", "sync unlock", "sync verify", "media prune", "agent"];
 
 export class AgentError extends Error {
   status: number;
@@ -586,6 +586,8 @@ export class Agent {
 
   /** Copies every table back from a snapshot, on the open connection. */
   private restore(file: string) {
+    const sync = this.etude.db.get("SELECT 1 FROM sqlite_master WHERE name='sync_meta'");
+    if (sync && this.etude.db.get("SELECT value FROM sync_meta WHERE key='config'")?.value) throw new AgentError("Snapshot undo is unavailable in a synced collection. Edit the affected items to reverse the change.",409);
     const db = this.etude.db.sql;
     if (db.attachImage) db.attachImage("snap", new Uint8Array(readFileSync(file)));
     else db.exec(`ATTACH DATABASE '${file.replace(/'/g, "''")}' AS snap`);
@@ -596,7 +598,7 @@ export class Agent {
       db.exec("BEGIN IMMEDIATE");
       try {
         for (const t of mainTables) {
-          if (t.startsWith("agent_")) continue;
+          if (t.startsWith("agent_") || t.startsWith("sync_")) continue;
           db.exec(`DELETE FROM main."${t}"`);
           if (!snapTables.has(t)) continue;
           const cols = (db.prepare(`PRAGMA snap.table_info("${t}")`).all() as { name: string }[]).map((c) => `"${c.name}"`);

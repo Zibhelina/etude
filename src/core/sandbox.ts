@@ -112,6 +112,7 @@ export interface RunOptions {
   params: string[];
   args: Record<string, unknown>;
   seed?: number;
+  clock?: string;
   timeoutMs?: number;
   where: string;
 }
@@ -130,6 +131,7 @@ export function runScript<T = unknown>(body: string, opts: RunOptions): T {
       .join(", ");
     const source = `${PRELUDE}${usesMath(body) ? `\n{\n${MATH_PRELUDE}\nstd.math = __math;\n}\n` : ""}
 const __args = ${JSON.stringify(opts.args ?? {})};
+${opts.clock ? `const __RealDate = Date; const __clock = ${JSON.stringify(opts.clock)}; globalThis.Date = class extends __RealDate { constructor(...a) { super(...(a.length ? a : [__clock])); } static now() { return new __RealDate(__clock).getTime(); } }; Math.random = __makeRng(${Number(opts.seed ?? 1) >>> 0}).next;` : ""}
 const __fn = function (${opts.params.join(", ")}) {
 ${body}
 };

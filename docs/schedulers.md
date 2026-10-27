@@ -80,7 +80,9 @@ What the script gets:
 
 `due` is an ISO date (or a timestamp). Returning `ctx.now` keeps the card available right away. A due date in the past works the same way.
 
-The script runs in the same sandbox as graders (no network, files or timers, 500 ms). If it throws, the answer isn't recorded and the card stays where it was, so a broken scheduler never loses a card.
+The script runs in the same sandbox as graders (no network, files or timers, 500 ms). If it throws, the answer isn't recorded and the card stays where it was, so a broken scheduler never loses a card. Its clock is fixed to `ctx.now`: `Date.now()` and argument-free `new Date()` use that time, and `Math.random()` uses a stream seeded by the review count.
+
+In a synced collection, merges replay the history with stable review-id ordering for tied timestamps and UTC study-day boundaries. FSRS replay disables fuzz. See [Sync](sync.md) for the conflict rules, reset/due controls and unsupported operations.
 
 Install it, then point a deck at it:
 

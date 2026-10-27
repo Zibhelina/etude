@@ -135,6 +135,8 @@ export function runSchedule(def: SchedulerDef, card: ScriptCard, attempt: Script
   const out = runScript<{ due?: unknown; state?: unknown }>(def.schedule, {
     params: SCHEDULE_PARAMS,
     args: { card, attempt, options, ctx },
+    clock: ctx.now,
+    seed: card.reps + 1,
     where: `${def.id}/schedule`,
     timeoutMs: 500,
   });

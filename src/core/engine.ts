@@ -294,6 +294,7 @@ export class Etude {
   invalidateCaches() {
     this.typeCache.clear();
     this.leftovers = null;
+    this.schedulerCache.clear();
     this.reindexItems();
   }
 
@@ -1623,6 +1624,7 @@ export class Etude {
           ts,
           id,
         );
+      if (this.db.get("SELECT 1 FROM sqlite_master WHERE name='sync_control'")) for (const id of cardIds) this.db.run("UPDATE cards SET sync_reset=?,sync_due=NULL,sync_due_at=NULL WHERE id=?",ts,id);
     });
   }
 
@@ -1637,6 +1639,7 @@ export class Etude {
         // Keep stability and difficulty; only the planned interval changes.
         const scheduled = c.last_review ? Math.max(0, Math.round((due.getTime() - new Date(c.last_review).getTime()) / 86400_000)) : c.scheduled_days;
         this.db.run("UPDATE cards SET due = ?, scheduled_days = ?, buried_until = NULL WHERE id = ?", ts, scheduled, id);
+        if (this.db.get("SELECT 1 FROM sqlite_master WHERE name='sync_control'")) this.db.run("UPDATE cards SET sync_due=?,sync_due_at=? WHERE id=?",ts,iso(),id);
       }
     });
   }
@@ -2459,6 +2462,36 @@ export class Etude {
       this.db.run("DELETE FROM reviews WHERE id = ?", r.id);
       return { cardId: r.card_id, itemId: this.db.get("SELECT item_id FROM cards WHERE id = ?", r.card_id)!.item_id };
     });
+  }
+
+  /** Canonical sync replay uses UTC study days, a stable review tie-break and no FSRS fuzz. */
+  replaySyncedCards() {
+    for (const c of this.db.all("SELECT c.*,i.created,d.name AS deck FROM cards c JOIN items i ON i.id=c.item_id JOIN decks d ON d.id=i.deck_id")) {
+      const cfg = { ...this.configFor(c.deck), enableFuzz: false };
+      const script = this.scriptFor(cfg);
+      let row: any = { ...c, ...sched.emptyCard(new Date(c.sync_reset ?? c.created)), sched_state: null };
+      const history: { at: string; rating: number | null; score: number | null }[] = [];
+      const reviews = this.db.all("SELECT r.*,a.grade FROM reviews r LEFT JOIN attempts a ON a.id=r.attempt_id WHERE r.card_id=? ORDER BY r.ts,r.sync_id",c.id);
+      for (const r of reviews) {
+        const before = json(row);
+        if (!r.practice && (!c.sync_reset || r.ts > c.sync_reset)) {
+          if (script) {
+            const g = parse<Grade | null>(r.grade,null);
+            const start = new Date(r.ts);
+            start.setUTCHours(this.settings().dayStartHour,0,0,0);
+            if (start > new Date(r.ts)) start.setUTCDate(start.getUTCDate()-1);
+            const day = Array.from({length:DAY_HORIZON+1},(_,i) => new Date(start.getTime()+i*86400_000).toISOString());
+            const past = history.slice(-50);
+            const out = runSchedule(script,{state:parse(row.sched_state,null),reps:row.reps,due:row.due,lastReview:row.last_review,created:c.created},{rating:script.ratings === false ? null : r.rating || null,score:r.score,verdict:g?.verdict ?? null,details:g?.details ?? null,ms:r.duration_ms,at:r.ts},resolveOptions(script,cfg.schedulerOptions),{now:r.ts,day,doneToday:past.filter(h=>h.at>=day[0]).length,history:past});
+            row = {...row,state:2,due:out.due,reps:row.reps+1,lapses:row.lapses+(r.rating===1?1:0),last_review:r.ts,sched_state:json(out.state)};
+          } else row = {...row,...sched.schedule(row,r.rating || sched.suggestRating(r.score,cfg) || 3,new Date(r.ts),cfg).next};
+          history.push({at:r.ts,rating:r.rating || null,score:r.score});
+        }
+        this.db.run("UPDATE reviews SET state=?,card_before=?,due_after=? WHERE id=?",JSON.parse(before).state,before,row.due,r.id);
+      }
+      if (c.sync_due && (!row.last_review || c.sync_due_at >= row.last_review)) { row.due=c.sync_due;row.scheduled_days=row.last_review?Math.max(0,Math.round((Date.parse(c.sync_due)-Date.parse(row.last_review))/86400_000)):0; }
+      this.db.run("UPDATE cards SET state=?,due=?,stability=?,difficulty=?,elapsed_days=?,scheduled_days=?,reps=?,lapses=?,learning_steps=?,last_review=?,sched_state=? WHERE id=?",row.state,row.due,row.stability,row.difficulty,row.elapsed_days,row.scheduled_days,row.reps,row.lapses,row.learning_steps,row.last_review,row.sched_state,c.id);
+    }
   }
 
   /** Recomputes cards from their review history with the current settings, e.g. after changing retention. */

@@ -1,5 +1,6 @@
 import { openSql, type SqlConnection, type SqlDriver, type SqlValue } from "./sql.ts";
 import { registerSearchFunctions } from "./query.ts";
+import { install as installSync } from "./sync/log.ts";
 
 const SCHEMA_VERSION = 1;
 
@@ -174,6 +175,7 @@ export class Db {
     registerSearchFunctions(this.sql);
     const v = this.get("SELECT value FROM meta WHERE key = 'schema_version'");
     if (!v) this.run("INSERT INTO meta (key, value) VALUES ('schema_version', ?)", String(SCHEMA_VERSION));
+    if (this.get("SELECT 1 FROM sqlite_master WHERE name='sync_control'")) installSync(this);
   }
 
   all<T = Row>(query: string, ...params: SqlValue[]): T[] {

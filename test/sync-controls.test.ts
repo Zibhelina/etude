@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, readFileSync, statSync } from "node:fs";
@@ -7,7 +8,7 @@ import { syncFor } from "../src/core/sync/client.ts";
 import { rows } from "../src/core/sync/log.ts";
 
 test("offline field edits, tied reviews, attempts, reset/due controls, password recovery and private settings",async()=>{
-  const dir=mkdtempSync(join(process.env.TMPDIR!,"sync-controls-"));
+  const dir=mkdtempSync(join((process.env.TMPDIR ?? tmpdir()),"sync-controls-"));
   const a=await Etude.open(join(dir,"a.db"),{home:join(dir,"ha")});const b=await Etude.open(join(dir,"b.db"),{home:join(dir,"hb")});
   const sa=syncFor(a),sb=syncFor(b);const password="local-password-test";
   try {

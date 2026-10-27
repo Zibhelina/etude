@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -58,7 +59,7 @@ function stub() {
 }
 
 test("account: sign in, token file 0600, purchased deck installs and updates through the pack importer, delete needs the typed email", async () => {
-  const dir = mkdtempSync(join(process.env.TMPDIR!, "account-"));
+  const dir = mkdtempSync(join((process.env.TMPDIR ?? tmpdir()), "account-"));
   const s = stub();
   const url = await s.start();
   const e = await Etude.open(join(dir, "etude.db"), { home: join(dir, "home") });
@@ -116,7 +117,7 @@ test("account: server URLs need https outside localhost", () => {
 
 test("account: Ask Etude may read the account but not buy, sell, sign in or delete", () => {
   const cmd = (name: string) => COMMANDS.find((c) => c.name === name)!;
-  const g = (name: string) => agentRefusal({ cmd: cmd(name), values: {}, named: {}, attachmentDir: process.env.TMPDIR! });
+  const g = (name: string) => agentRefusal({ cmd: cmd(name), values: {}, named: {}, attachmentDir: (process.env.TMPDIR ?? tmpdir()) });
   for (const ok of ["account status", "account library", "account sales"]) assert.equal(g(ok), null, ok);
   for (const no of ["account delete", "account buy", "account install", "account signin", "account list-deck", "account approve", "account revoke", "account server"]) assert.match(g(no) ?? "", /can't change the Etude account/, no);
 });

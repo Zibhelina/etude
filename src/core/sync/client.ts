@@ -6,6 +6,9 @@ import { createVault, decryptBlob, decryptEvent, encryptBlob, encryptEvent, from
 import { CloudTransport, FolderTransport, type Transport } from "./transport.ts";
 import { project } from "./project.ts";
 
+/** Most ciphertext characters sent in one push. */
+const PUSH_BATCH_BYTES=6*1024*1024;
+
 type Config = { kind:"cloud"|"folder";server?:string;folder?:string;email?:string;enabled:boolean;hasKeys?:boolean;lastSync?:string };
 type Secrets = { token?:string;vk?:string };
 const clients=new WeakMap<Etude,SyncClient>();
@@ -80,9 +83,10 @@ export class SyncClient {
     for(const [file,r] of rows(db,"media")) {if(!/^[\w./-]+$/.test(file)||file.split("/").some(p=>p===".."||p===""))throw new Error("invalid media path");const b=db.get("SELECT bytes FROM sync_blobs WHERE hash=?",r.hash);if(!b)throw new Error("missing media blob");const path=join(this.e.mediaDir,file);mkdirSync(dirname(path),{recursive:true});writeFileSync(path,b.bytes);}
     for(;;) {
       const batch=db.all("SELECT * FROM sync_events WHERE sent=0 ORDER BY id LIMIT 200");if(!batch.length)break;
-      const events=[];
-      for(const r of batch) {const ciphertext=r.ciphertext??await encryptEvent(key,r.id,JSON.parse(r.body));if(!r.ciphertext)db.run("UPDATE sync_events SET ciphertext=? WHERE id=?",ciphertext,r.id);events.push({id:r.id,ciphertext});}
-      await t.push(events);db.tx(()=>{for(const r of batch)db.run("UPDATE sync_events SET sent=1 WHERE id=?",r.id);});
+      // etude-cloud refuses push bodies over 8 MiB, so a batch also stops at ~6 MiB of ciphertext.
+      const events=[];const sent:any[]=[];let bytes=0;
+      for(const r of batch) {const ciphertext=r.ciphertext??await encryptEvent(key,r.id,JSON.parse(r.body));if(!r.ciphertext)db.run("UPDATE sync_events SET ciphertext=? WHERE id=?",ciphertext,r.id);if(events.length&&bytes+ciphertext.length>PUSH_BATCH_BYTES)break;events.push({id:r.id,ciphertext});sent.push(r);bytes+=ciphertext.length;}
+      await t.push(events);db.tx(()=>{for(const r of sent)db.run("UPDATE sync_events SET sent=1 WHERE id=?",r.id);});
     }
     // No await while rebuilding. SQL triggers are muted only for this transaction.
     drain(db);project(this.e);

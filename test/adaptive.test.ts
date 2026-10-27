@@ -149,6 +149,8 @@ test("learner math: Elo-style skills, pace, placement bisection and levels", () 
   const slow = pace(cfg, { activeDays: 7, scores: Array(100).fill(0.6), minutes: 210, newCards: 70 });
   assert.ok(fast.value > 10 && fast.value <= 25, JSON.stringify(fast));
   assert.ok(slow.value < 10 && slow.value >= 5, JSON.stringify(slow));
+  const busy = pace(cfg, { activeDays: 7, scores: Array(100).fill(0.97), minutes: 210, newCards: 70 });
+  assert.ok(busy.value < 10, `right answers don't outweigh being over the time budget: ${JSON.stringify(busy)}`);
 
   assert.deepEqual(placementState(6, []), { bands: 6, probes: 0, frontier: 0, next: 2 });
   const passLow = placementState(6, [{ band: 2, score: 1 }, { band: 2, score: 1 }]);

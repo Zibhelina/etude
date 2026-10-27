@@ -6,6 +6,8 @@
     <meta name="theme-color" content="#0f0f0f" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="color-scheme" content="dark" />
+    <!-- Card frames are srcdoc documents and inherit this policy, so scripts stay inline-capable; the sanitizer guards Markdown. -->
+    <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'; form-action 'self'" />
     <title>εtude</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <script>

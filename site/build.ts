@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cardFrame } from "../src/server/frame.ts";
 import { fieldDefaults, loadTypeDir } from "../src/core/types.ts";
+import { checkPublicContent } from "./public-content.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
@@ -19,6 +20,7 @@ const out = join(here, "dist");
 const require = createRequire(import.meta.url);
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 
+checkPublicContent(here);
 if (!existsSync(join(root, "web/dist/kit/kit.js"))) throw new Error("web/dist/kit is missing: run `npm run build` first");
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });

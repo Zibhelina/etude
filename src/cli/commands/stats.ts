@@ -1,7 +1,7 @@
 import { alias, command, group } from "../registry.ts";
 import { DECK_FLAG, QUERY_FLAG, scopeOf, stateName } from "../common.ts";
 
-group({ name: "stats", summary: "Statistics: overview, forecast, recall per tag", defaultVerb: "overview" });
+group({ name: "stats", summary: "Statistics: overview, forecast, recall per tag, adaptive skills", defaultVerb: "overview" });
 
 const SCOPE = [DECK_FLAG, QUERY_FLAG];
 const DAYS = { name: "days", type: "number" as const, description: "Activity window in days (heatmap, ratings, verdicts).", default: 30 };
@@ -24,6 +24,17 @@ command({
     const s = ctx.e.stats(scopeOf(ctx.flags));
     return { overdue: s.overdue, forecast: s.forecast, deadline: s.deadline };
   },
+});
+
+command({
+  name: "stats skills",
+  summary: "On an adaptive deck: estimated skills, levels, placement and today's adaptive pace.",
+  description:
+    "Skills come from the card types' faces (and `skill::` tags), measured across the highest deck with an adaptive setting on. `typical` is the predicted chance of getting a middling card right. Everything is computed from the graded history, so nothing here is stored. A deck that isn't adaptive reports `adaptive: false`.",
+  args: [{ name: "deck", description: "Deck name.", required: true }],
+  examples: ['etude stats skills "Course"'],
+  output: "{ deck, adaptive, root?, settings?, skills?: [{ skill, answers, success, ability, typical, level: { index, tag, progress, checkPassed, done, nextOpen } | null, placement: { probes, done, frontier } | null }], pace?: { value, base, success, minutesPerDay, reason } | null }",
+  run: (ctx) => ctx.e.learnerSummary(ctx.args.deck),
 });
 
 command({

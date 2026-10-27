@@ -160,5 +160,19 @@ export function validateConfig(c: Partial<PresetConfig>): string[] {
       Object.entries(c.newPerFace).some(([face, n]) => !/^[\w-]+$/.test(face) || (n !== null && !(typeof n === "number" && Number.isFinite(n) && n >= 0))))
   )
     e.push("newPerFace must map face names to non-negative numbers (null drops an inherited limit)");
+  for (const k of ["adaptiveChallenge", "adaptivePace"] as const) if (c[k] !== undefined && typeof c[k] !== "boolean") e.push(`${k} must be true or false`);
+  if (c.targetSuccess !== undefined && !(typeof c.targetSuccess === "number" && c.targetSuccess >= 0.5 && c.targetSuccess <= 0.99)) e.push("targetSuccess must be between 0.5 and 0.99");
+  for (const k of ["minutesPerDay", "newPerDayMin", "newPerDayMax", "quickChecksPerDay"] as const)
+    if (c[k] !== undefined && !(typeof c[k] === "number" && Number.isFinite(c[k]) && (c[k] as number) >= 0)) e.push(`${k} must be a non-negative number`);
+  if (typeof c.newPerDayMin === "number" && typeof c.newPerDayMax === "number" && c.newPerDayMin > c.newPerDayMax) e.push("newPerDayMin can't be above newPerDayMax");
+  for (const k of ["levelAdvanceAt", "levelMix"] as const)
+    if (c[k] !== undefined && !(typeof c[k] === "number" && (c[k] as number) >= 0 && (c[k] as number) <= 1)) e.push(`${k} must be between 0 and 1`);
+  if (
+    c.levels !== undefined &&
+    (!Array.isArray(c.levels) ||
+      !c.levels.every((l) => l && typeof l === "object" && typeof l.tag === "string" && l.tag.trim() && (l.check === undefined || (typeof l.check === "string" && l.check.trim()))) ||
+      new Set(c.levels.map((l) => l.tag)).size !== c.levels.length)
+  )
+    e.push('levels must be a list like [{"tag":"level::1","check":"check::1"}] with distinct tags');
   return e;
 }

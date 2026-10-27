@@ -7,6 +7,8 @@ import { DECK_FLAG, FACE_FLAG, QUERY_FLAG, oneCard, scopeOf, stateName } from ".
 group({ name: "study", summary: "Studying: the queue, presenting a card, submitting answers, ratings, undo" });
 
 const AHEAD_FLAG = { name: "ahead", type: "boolean" as const, description: "Study ahead: nothing has to be due. Every card in the scope, soonest due first, no daily limits; ratings are real reviews." };
+const PLACEMENT_FLAG = { name: "placement", type: "boolean" as const, description: "Placement on an adaptive deck: only probes that find the learner's level. Pass it again when submitting a probe." };
+const AS_OF_FLAG = { name: "as-of", type: "string" as const, description: "The card's `asOf` from `study next`/`study card` (adaptive decks), so the grade matches the variant shown.", placeholder: "ISO" };
 const PRACTICE_FLAG = { name: "practice", type: "boolean" as const, description: "Practice only: the review is logged but the card's schedule doesn't move (like “another variant” in the app)." };
 const ANSWER_FLAGS = [
   { name: "answer", type: "string" as const, short: "a", description: "The learner's answer, verbatim (`-` reads stdin). Parsed as JSON when it starts with `[`, `{` or `\"` (`[\"1.2\"]` for numeric parts, `[\"o0\"]` for mcq); anything else is kept as typed. --text forces text.", placeholder: "VALUE" },
@@ -32,6 +34,9 @@ function presented(c: EngineCard, ctx: Ctx) {
     view: c.view,
     answerFormat: answerFormat(c, ctx),
     scheduler: c.scheduler.id,
+    ...(c.asOf ? { asOf: c.asOf } : {}),
+    ...(c.placement ? { placement: true } : {}),
+    ...(c.quickCheck ? { quickCheck: true } : {}),
     ...(c.scheduler.ratings
       ? { intervals: Object.fromEntries(([1, 2, 3, 4] as Rating[]).map((r) => [RATING_NAMES[r], humanSpan(now, new Date(c.intervals[r]).getTime())])) }
       : { next: c.scheduler.next ? humanSpan(now, new Date(c.scheduler.next).getTime()) : null, rating: "none: submit, then `study rate <card> next` (or use `study answer`)" }),
@@ -99,12 +104,13 @@ command({
   name: "study next",
   summary: "The next card to study in a scope, with its view and how to answer it. Private fields are never included.",
   description:
-    "Use `view` to present the card (render its markdown for the learner). Keep `cardId` and `seed`: submit with them so the answer is graded against exactly this variant. Respects daily limits and the preset's ordering; `--exclude` skips the card just answered. With `--ahead`, nothing has to be due: every card in the scope comes up, soonest due first.",
-  flags: [DECK_FLAG, QUERY_FLAG, AHEAD_FLAG, { name: "exclude", type: "number", description: "Card id to avoid repeating right away." }],
-  examples: ['etude study next --deck "Networks"', 'etude study next --query "tag:delay is:due"', 'etude study next --deck "Networks" --ahead'],
-  output: "{ card: { cardId, itemId, face, seed, type, deck, tags, state, title, grader, view, answerFormat, intervals } | null, counts }",
+    "Use `view` to present the card (render its markdown for the learner). Keep `cardId` and `seed`: submit with them so the answer is graded against exactly this variant. On adaptive decks also keep `asOf` and pass it as `--as-of`. Respects daily limits and the preset's ordering; `--exclude` skips the card just answered. With `--ahead`, nothing has to be due: every card in the scope comes up, soonest due first. With `--placement` (adaptive decks), only placement probes come up, and `card` is null once the level is found.",
+  flags: [DECK_FLAG, QUERY_FLAG, AHEAD_FLAG, PLACEMENT_FLAG, { name: "exclude", type: "number", description: "Card id to avoid repeating right away." }],
+  examples: ['etude study next --deck "Networks"', 'etude study next --query "tag:delay is:due"', 'etude study next --deck "Networks" --ahead', 'etude study next --deck "Course" --placement'],
+  output: "{ card: { cardId, itemId, face, seed, type, deck, tags, state, title, grader, view, answerFormat, intervals, asOf?, placement?, quickCheck? } | null, counts }",
   run(ctx) {
-    const r = ctx.e.next(scopeOf(ctx.flags), { exclude: ctx.flags.exclude });
+    if (ctx.flags.placement && !ctx.flags.deck) throw new CliError("--placement needs --deck");
+    const r = ctx.e.next({ ...scopeOf(ctx.flags), placement: ctx.flags.placement || undefined }, { exclude: ctx.flags.exclude });
     return { card: r.card ? presented(r.card, ctx) : null, counts: r.counts };
   },
 });
@@ -131,6 +137,8 @@ command({
     PRACTICE_FLAG,
     { name: "feedback", type: "boolean", description: "Also write AI feedback now (when the grade has none)." },
     FACE_FLAG,
+    AS_OF_FLAG,
+    PLACEMENT_FLAG,
   ],
   writes: true,
   examples: ['etude study submit 42 --seed 7 --answer \'["1.2 ms"]\'', "etude study submit 43 --seed 3 --answer-file answer.md"],
@@ -139,7 +147,7 @@ command({
     if (ctx.flags.seed === undefined) throw new CliError("--seed is required (from `study next` or `study card`)");
     const cardId = oneCard(ctx, ctx.args.ref);
     const answer = shaped(ctx, cardId, ctx.flags.seed, answerOf(ctx));
-    const r = await ctx.e.submit(cardId, ctx.flags.seed, answer, { practice: ctx.flags.practice });
+    const r = await ctx.e.submit(cardId, ctx.flags.seed, answer, { practice: ctx.flags.practice, asOf: ctx.flags["as-of"], placement: ctx.flags.placement });
     const out: Record<string, unknown> = { attemptId: r.attemptId, cardId, answer, grade: r.grade, suggested: r.grade.suggested ? { rating: r.grade.suggested, name: RATING_NAMES[r.grade.suggested] } : null, key: r.key, wantsFeedback: r.wantsFeedback };
     if (ctx.flags.feedback && !r.grade.feedback) {
       try {
@@ -201,6 +209,8 @@ command({
     PRACTICE_FLAG,
     { name: "duration", type: "number", description: "Milliseconds spent." },
     FACE_FLAG,
+    AS_OF_FLAG,
+    PLACEMENT_FLAG,
   ],
   writes: true,
   examples: ['etude study answer 42 --seed 7 --answer \'["1.2"]\'', 'etude study answer 50 --seed 1 --answer "" --rate good'],
@@ -209,7 +219,7 @@ command({
     if (ctx.flags.seed === undefined) throw new CliError("--seed is required");
     const cardId = oneCard(ctx, ctx.args.ref);
     const answer = shaped(ctx, cardId, ctx.flags.seed, answerOf(ctx, false));
-    const r = await ctx.e.submit(cardId, ctx.flags.seed, answer, { practice: ctx.flags.practice });
+    const r = await ctx.e.submit(cardId, ctx.flags.seed, answer, { practice: ctx.flags.practice, asOf: ctx.flags["as-of"], placement: ctx.flags.placement });
     const base = { attemptId: r.attemptId, cardId, answer, grade: r.grade, key: r.key };
     if (!ctx.e.cardSchedule(cardId).scheduler.ratings) {
       // A drill records the result itself; there's nothing to choose.

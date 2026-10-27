@@ -19,6 +19,9 @@ import { MarketGallery } from "@/components/market-gallery";
 import { applyTheme } from "@/lib/theme";
 import { navigate, useLocation } from "@/lib/router";
 import { cn } from "@/lib/utils";
+import { LibraryView, PaidDialog, PaidTile, SellingView, usePaidIndex } from "@/components/market-paid";
+import type { PaidEntry } from "@/lib/account";
+import { canShowPurchases, isNativeApp } from "@/lib/platform";
 
 const KIND_LABEL: Record<MarketKind, string> = { theme: "Theme", deck: "Deck", type: "Card type" };
 const KIND_ICON: Record<MarketKind, React.ComponentType<{ className?: string }>> = { theme: Palette, deck: Layers, type: Blocks };
@@ -27,10 +30,16 @@ const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 const kb = (b: number) => (b < 1e6 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1e6).toFixed(1)} MB`);
 
 type Filter = "all" | MarketKind;
+type Tab = "browse" | "library" | "selling";
 
 export function MarketPage() {
   const { params } = useLocation();
   const filter = (params.get("kind") as Filter) || "all";
+  // Store apps never sell, so they don't get the Selling tab.
+  const tabs: Tab[] = isNativeApp() ? ["browse", "library"] : ["browse", "library", "selling"];
+  const tab: Tab = tabs.includes(params.get("tab") as Tab) ? (params.get("tab") as Tab) : "browse";
+  const paid = usePaidIndex();
+  const [openPaid, setOpenPaid] = useState<PaidEntry | null>(null);
   const [data, setData] = useState<{ repo: string; url: string; selectedTheme: string; entries: MarketEntry[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -72,13 +81,22 @@ export function MarketPage() {
       .filter((e) => words.every((w) => [e.name, e.description, e.author, ...e.tags].join(" ").toLowerCase().includes(w)));
   }, [data, filter, query]);
 
+  const paidShown = useMemo(() => {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    return filter === "all" || filter === "deck" ? paid.entries.filter((e) => words.every((w) => [e.name, e.description, e.author, ...e.tags].join(" ").toLowerCase().includes(w))) : [];
+  }, [paid.entries, filter, query]);
+
   const counts = useMemo(() => {
     const c = { all: 0, theme: 0, deck: 0, type: 0 } as Record<Filter, number>;
     for (const e of data?.entries ?? []) (c.all++, c[e.kind]++);
+    c.all += paid.entries.length;
+    c.deck += paid.entries.length;
     return c;
-  }, [data]);
+  }, [data, paid.entries]);
+  const setTab = (t: Tab) => navigate(t === "browse" ? "/market" : `/market?tab=${t}`, { replace: true });
 
   const setFilter = (f: Filter) => navigate(f === "all" ? "/market" : `/market?kind=${f}`, { replace: true });
+  const tabLabel: Record<Tab, string> = { browse: "Browse", library: "Library", selling: "Selling" };
   const closeEntry = () => {
     setOpen(null);
     if (params.get("entry")) navigate(filter === "all" ? "/market" : `/market?kind=${filter}`, { replace: true });
@@ -103,13 +121,32 @@ export function MarketPage() {
             <Button variant="ghost" size="icon" aria-label="Refresh" onClick={() => load(true)} disabled={refreshing}>
               <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
             </Button>
-            <Button className="gap-1.5" onClick={() => setPublishing(true)}>
-              <Upload className="size-4" /> Publish
-            </Button>
+            {tab === "browse" && (
+              <Button className="gap-1.5" onClick={() => setPublishing(true)}>
+                <Upload className="size-4" /> Publish
+              </Button>
+            )}
           </>
         }
       />
 
+      <nav className="mb-5 flex gap-1.5 border-b pb-3" aria-label="Market sections" data-market-tabs>
+        {tabs.map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            aria-current={tab === t ? "page" : undefined}
+            className={cn("flex h-10 items-center rounded-full border border-transparent px-4 text-sm text-muted-foreground transition-colors hover:text-foreground md:h-8 md:px-3.5", tab === t && "border-border bg-accent text-foreground")}
+          >
+            {tabLabel[t]}
+          </button>
+        ))}
+      </nav>
+
+      {tab === "library" && <LibraryView />}
+      {tab === "selling" && <SellingView />}
+
+      {tab === "browse" && (<>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
         <ToggleGroup type="single" variant="outline" value={filter} onValueChange={(v) => v && setFilter(v as Filter)} className="h-10 w-full sm:w-auto">
           {(["all", "theme", "deck", "type"] as Filter[]).map((f) => (
@@ -136,13 +173,29 @@ export function MarketPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-64 rounded-xl" />)}
         </div>
-      ) : shown.length === 0 ? (
+      ) : shown.length === 0 && paidShown.length === 0 ? (
         <div className="rounded-xl border px-5 py-10 text-center text-sm text-muted-foreground">{query ? `Nothing matches “${query}”.` : "Nothing here yet. Be the first to publish one."}</div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {shown.map((e) => <EntryTile key={`${e.kind}/${e.id}`} entry={e} onOpen={() => setOpen(e)} />)}
-        </div>
+        <>
+          {paidShown.length > 0 && (
+            <section className="mb-8" data-paid-section>
+              <div className="mb-3 flex items-baseline gap-2">
+                <h2 className="text-base font-semibold">{canShowPurchases() ? "Paid decks" : "Your decks"}</h2>
+                <span className="text-xs text-muted-foreground">{canShowPurchases() ? "From creators, sold on etude.study" : "Bought with your Etude account"}</span>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {paidShown.map((e) => <PaidTile key={e.listing} entry={e} onOpen={() => setOpenPaid(e)} />)}
+              </div>
+            </section>
+          )}
+          {shown.length > 0 && paidShown.length > 0 && <h2 className="mb-3 text-base font-semibold">Free</h2>}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {shown.map((e) => <EntryTile key={`${e.kind}/${e.id}`} entry={e} onOpen={() => setOpen(e)} />)}
+          </div>
+        </>
       )}
+      </>)}
+      {openPaid && <PaidDialog entry={openPaid} signedIn={paid.signedIn} onClose={() => setOpenPaid(null)} onChanged={() => void paid.reload().then(() => setOpenPaid(null))} />}
 
       {open && (
         <EntryDialog

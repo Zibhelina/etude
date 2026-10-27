@@ -1356,13 +1356,35 @@ export class Etude {
     });
   }
 
-  /** Deletes a deck only when it and its children hold no items. Archive decks that have content. */
-  deleteDeck(name: string) {
+  setDeckArchived(name: string, archived: boolean, opts: { subdecks?: boolean } = {}) {
+    const src = this.deckRow(name).name;
+    const names = this.db.all<{ name: string }>("SELECT name FROM decks WHERE name = ? OR (? AND name LIKE ? ESCAPE '\\') ORDER BY name", src, Number(!!opts.subdecks), src.replace(/[\\%_]/g, "\\$&") + "::%").map((r) => r.name);
+    this.db.tx(() => {
+      for (const n of names) this.db.run("UPDATE decks SET archived = ? WHERE name = ?", Number(archived), n);
+    });
+    return { decks: names, archived };
+  }
+
+  /** All content a deck deletion would remove, including archived items and subdecks. */
+  deckUsage(name: string): { items: number; cards: number } {
     const src = this.deckRow(name).name;
     const like = src.replace(/[\\%_]/g, "\\$&") + "::%";
-    const n = this.db.get("SELECT COUNT(*) AS n FROM items i JOIN decks d ON d.id = i.deck_id WHERE d.name = ? OR d.name LIKE ? ESCAPE '\\'", src, like)!.n;
-    if (n) throw new EtudeError(`deck "${src}" holds ${n} item(s); move or archive them first`);
-    this.db.run("DELETE FROM decks WHERE name = ? OR name LIKE ? ESCAPE '\\'", src, like);
+    const r = this.db.get<{ items: number; cards: number }>(
+      "SELECT COUNT(DISTINCT i.id) AS items, COUNT(c.id) AS cards FROM items i JOIN decks d ON d.id = i.deck_id LEFT JOIN cards c ON c.item_id = i.id WHERE d.name = ? OR d.name LIKE ? ESCAPE '\\'", src, like,
+    )!;
+    return { items: r.items, cards: r.cards };
+  }
+
+  /** Deleting content requires an explicit opt-in; cards and history go with their items. */
+  deleteDeck(name: string, opts: { items?: boolean } = {}) {
+    const src = this.deckRow(name).name;
+    const like = src.replace(/[\\%_]/g, "\\$&") + "::%";
+    this.db.tx(() => {
+      const n = this.deckUsage(src).items;
+      if (n && !opts.items) throw new EtudeError(`deck "${src}" holds ${n} item(s); use --items to delete them too`);
+      if (opts.items) this.db.run("DELETE FROM items WHERE deck_id IN (SELECT id FROM decks WHERE name = ? OR name LIKE ? ESCAPE '\\')", src, like);
+      this.db.run("DELETE FROM decks WHERE name = ? OR name LIKE ? ESCAPE '\\'", src, like);
+    });
   }
 
   listPresets(): Preset[] {
@@ -1904,7 +1926,7 @@ export class Etude {
   // ----------------------------------------------------------------- study
 
   private scopeWhere(scope: StudyScope): { where: string; params: any[]; cfg: PresetConfig } {
-    const parts: string[] = ["i.archived = 0", "c.suspended = 0"];
+    const parts: string[] = ["i.archived = 0", "d.archived = 0", "c.suspended = 0"];
     const params: any[] = [];
     let cfg: PresetConfig;
     if (scope.deck) {
@@ -2636,9 +2658,9 @@ export class Etude {
 
   // ------------------------------------------------------------- overview
 
-  /** Non-archived decks in tree order: parents before children, siblings by position, then name. */
-  private orderedDecks(): Row[] {
-    const rows = this.db.all("SELECT * FROM decks WHERE archived = 0");
+  /** Decks in tree order: parents before children, siblings by position, then name. */
+  private orderedDecks(includeArchived = false): Row[] {
+    const rows = this.db.all(includeArchived ? "SELECT * FROM decks" : "SELECT * FROM decks WHERE archived = 0");
     const byName = new Map(rows.map((r) => [r.name as string, r]));
     const key = (name: string) => {
       const parts = deckParts(name);
@@ -2683,8 +2705,8 @@ export class Etude {
     return final.map((r) => r.name);
   }
 
-  deckTree() {
-    const decks = this.orderedDecks();
+  deckTree(opts: { archived?: boolean } = {}) {
+    const decks = this.orderedDecks(!!opts.archived);
     const t = now();
     const totals = new Map(
       this.db
@@ -2694,7 +2716,7 @@ export class Etude {
     return decks.map((d) => {
       const prefix = d.name + "::";
       let cards = 0, unseen = 0;
-      for (const o of decks) if (o.name === d.name || o.name.startsWith(prefix)) {
+      for (const o of decks) if ((!o.archived || d.archived) && (o.name === d.name || o.name.startsWith(prefix))) {
         const tt = totals.get(o.id);
         cards += Number(tt?.cards ?? 0);
         unseen += Number(tt?.new ?? 0);

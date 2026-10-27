@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpLeft, ArrowUpToLine, CalendarClock, ChevronRight, Eye, FastForward, FolderInput, GripVertical, MoreHorizontal, Pencil, Play, Plus, Upload } from "lucide-react";
+import { ArrowUpLeft, ArrowUpToLine, CalendarClock, ChevronRight, Eye, FastForward, FolderInput, GripVertical, Pencil, Play, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -8,24 +8,35 @@ import { api, relative, type DeckNode } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { EmptyState, Page, PageHeader, Section } from "@/components/page";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { childrenOf, clashes, leafOf, moveDeck, MoveDeckDialog, parentOf } from "@/components/move-deck";
 import { usePhone } from "@/lib/phone";
 import { PhoneDecks } from "@/components/phone-decks";
+import { DeckMenu, useDeckActions } from "@/components/deck-actions";
 
 /** Where a dragged deck would land: between rows (`line`) or inside a deck (`into`). */
 type Drop = { kind: "line" | "into"; parent: string; index: number | undefined; y: number; depth: number };
 
-export function DecksPage() {
-  return usePhone() ? <PhoneDecks /> : <DesktopDecks />;
+function ancestorsOf(name: string) {
+  const parts = name.split("::");
+  return parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join("::"));
 }
 
-function DesktopDecks() {
-  const [decks, setDecks] = useState<DeckNode[] | null>(null);
+export function DecksPage({ archived = false }: { archived?: boolean }) {
+  return usePhone() && !archived ? <PhoneDecks /> : <DesktopDecks archived={archived} />;
+}
+
+function DesktopDecks({ archived }: { archived: boolean }) {
+  const [decks, setDecks] = useState<(DeckNode & { displayDepth: number })[] | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(JSON.parse(localStorage.getItem("etude.collapsed") ?? "[]")));
   const [creating, setCreating] = useState(false);
 
-  const reload = () => api.decks().then(setDecks).catch((e) => toast.error(e.message));
+  const reload = () => api.decks(archived).then((all) => {
+    const filtered = all.filter((d) => d.archived === archived);
+    const names = new Set(filtered.map((d) => d.name));
+    setDecks(filtered.map((d) => ({ ...d, displayDepth: ancestorsOf(d.name).filter((n) => names.has(n)).length })));
+  }).catch((e) => toast.error(e.message));
+  const deckActions = useDeckActions(reload);
   useEffect(() => {
     reload();
     const onFocus = () => reload();
@@ -42,17 +53,20 @@ function DesktopDecks() {
 
   const visible = useMemo(() => {
     if (!decks) return [];
-    const hasChildren = new Set(decks.filter((d) => d.depth > 0).map((d) => d.name.split("::").slice(0, -1).join("::")));
+    const names = new Set(decks.map((d) => d.name));
+    const hasChildren = new Set<string>();
+    for (const d of decks) {
+      const parent = ancestorsOf(d.name).findLast((n) => names.has(n));
+      if (parent) hasChildren.add(parent);
+    }
     return decks
       .filter((d) => {
-        const parts = d.name.split("::");
-        for (let i = 1; i < parts.length; i++) if (collapsed.has(parts.slice(0, i).join("::"))) return false;
-        return true;
+        return !ancestorsOf(d.name).some((n) => names.has(n) && collapsed.has(n));
       })
       .map((d) => ({ ...d, hasChildren: hasChildren.has(d.name) }));
   }, [decks, collapsed]);
 
-  const due = (decks ?? []).filter((d) => d.depth === 0).reduce((a, d) => a + d.new + d.learning + d.review, 0);
+  const due = (decks ?? []).filter((d) => d.displayDepth === 0).reduce((a, d) => a + d.new + d.learning + d.review, 0);
 
   // ------------------------------------------------------------ moving
   // Drag a deck by its grip anywhere in the tree: onto a deck to put it inside, or between rows to
@@ -176,9 +190,10 @@ function DesktopDecks() {
   return (
     <Page>
       <PageHeader
-        title="Decks"
-        description={decks ? (due ? `${due} cards to study today` : "Nothing due right now") : "\u00a0"}
-        actions={
+        title={archived ? "Archived Decks" : "Decks"}
+        crumbs={archived ? [{ label: "Decks", onClick: () => navigate("/") }] : undefined}
+        description={archived ? "Cards and review history are kept. Move a deck out of the archive to study it again." : decks ? (due ? `${due} cards to study today` : "Nothing due right now") : "\u00a0"}
+        actions={!archived &&
           <>
             <ImportButton onDone={reload} />
             <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" />New deck</Button>
@@ -187,30 +202,30 @@ function DesktopDecks() {
       />
 
       {decks && decks.length === 0 && (
-        <EmptyState title="No decks yet" action={<Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" />New deck</Button>}>
-          Import a pack or create a deck to start.
+        <EmptyState title={archived ? "No archived decks" : "No decks yet"} action={!archived && <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" />New deck</Button>}>
+          {archived ? "Decks you move to the archive will appear here." : "Import a pack or create a deck to start."}
         </EmptyState>
       )}
 
       {visible.length > 0 && (
         <Section>
           <div ref={listRef} className="relative">
-          <div className="hidden grid-cols-[1fr_4rem_repeat(3,3.5rem)_8.5rem] items-center gap-2 border-b px-5 py-2.5 text-xs font-medium text-muted-foreground sm:grid">
+          <div className={cn("hidden items-center gap-2 border-b px-5 py-2.5 text-xs font-medium text-muted-foreground sm:grid", archived ? "grid-cols-[1fr_4rem_2.5rem]" : "grid-cols-[1fr_4rem_repeat(3,3.5rem)_8.5rem]")}>
             <span>Deck</span>
             <span className="text-right">Cards</span>
-            <span className="text-right">New</span>
+            {!archived && <><span className="text-right">New</span>
             <span className="text-right">Learn</span>
-            <span className="text-right">Due</span>
+            <span className="text-right">Due</span></>}
             <span />
           </div>
           {visible.map((d, i) => {
             const name = d.name.split("::").pop()!;
             const work = d.new + d.learning + d.review;
-            const soon = d.depth === 0 && d.deadline && new Date(d.deadline) > new Date();
+            const soon = d.displayDepth === 0 && d.deadline && new Date(d.deadline) > new Date();
             const watch = d.mode === "watch";
             const study = () => navigate(`/${watch ? "watch" : "study"}?deck=${encodeURIComponent(d.name)}${!watch && !work ? "&ahead=1" : ""}`);
             // A new top-level deck after a subtree gets a stronger rule, so groups read as groups.
-            const groupStart = i > 0 && d.depth === 0;
+            const groupStart = i > 0 && d.displayDepth === 0;
             const lifted = dragged(d.name);
             const target = drag?.drop?.kind === "into" && drag.drop.parent === d.name && !isNoop(drag.name, drag.drop);
             const targetBlocked = target && blocked(drag!.name, drag!.drop!);
@@ -219,7 +234,8 @@ function DesktopDecks() {
                 key={d.id}
                 ref={(el) => { if (el) rows.current.set(d.name, el); else rows.current.delete(d.name); }}
                 className={cn(
-                  "group relative flex min-h-14 items-stretch gap-2 pr-3 pl-0.5 hover:bg-accent/40 sm:grid sm:min-h-12 sm:grid-cols-[1fr_4rem_repeat(3,3.5rem)_8.5rem] sm:pr-5 sm:pl-1",
+                  "group relative flex min-h-14 items-stretch gap-2 pr-3 pl-0.5 hover:bg-accent/40 sm:grid sm:min-h-12 sm:pr-5 sm:pl-1",
+                  archived ? "sm:grid-cols-[1fr_4rem_2.5rem]" : "sm:grid-cols-[1fr_4rem_repeat(3,3.5rem)_8.5rem]",
                   i > 0 && "border-t",
                   groupStart && "border-t-foreground/15",
                   !drag && "transition-colors",
@@ -229,14 +245,15 @@ function DesktopDecks() {
                 )}
               >
                 <div className="flex min-w-0 flex-1 items-stretch">
-                  <TreeGuides depth={d.depth} />
+                  <TreeGuides depth={d.displayDepth} />
                   <div className="flex shrink-0 items-center">
                     <button
                       data-grip
+                      disabled={archived}
                       className={cn(
                         "flex h-10 w-6 touch-none items-center justify-center rounded-md hover:!text-foreground sm:h-8 sm:w-5",
                         drag?.name === d.name ? "cursor-grabbing text-foreground" : "cursor-grab text-muted-foreground/50 group-hover:text-muted-foreground",
-                        (visible.length < 2 || (drag && drag.name !== d.name)) && "invisible",
+                        (archived || visible.length < 2 || (drag && drag.name !== d.name)) && "invisible",
                       )}
                       onPointerDown={(e) => startDrag(d.name, e)}
                       onKeyDown={(e) => keyMove(d.name, e)}
@@ -256,15 +273,15 @@ function DesktopDecks() {
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col justify-center py-2">
                     <button
-                      className={cn("text-left text-[0.95rem] leading-snug hover:underline sm:truncate", d.depth === 0 ? "font-medium" : "text-foreground/90")}
+                      className={cn("text-left text-[0.95rem] leading-snug hover:underline sm:truncate", d.displayDepth === 0 ? "font-medium" : "text-foreground/90")}
                       onClick={() => navigate(`/deck?name=${encodeURIComponent(d.name)}`)}
                     >
-                      {name}
+                      {d.displayDepth === 0 ? d.name : name}
                       {soon && <span className="ml-2 inline-flex items-center gap-1 align-middle text-xs font-normal text-highlight"><CalendarClock className="size-3.5" />{relative(d.deadline!)}</span>}
                     </button>
                     {/* Phone: counts on one line under the name instead of three narrow columns. */}
                     <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs tabular text-muted-foreground sm:hidden [&>span]:whitespace-nowrap">
-                      {watch ? (
+                      {archived ? <span>{d.cards} card{d.cards === 1 ? "" : "s"}</span> : watch ? (
                         <span>{d.cards} card{d.cards === 1 ? "" : "s"} to watch</span>
                       ) : work ? (
                         <>
@@ -280,7 +297,7 @@ function DesktopDecks() {
                   </div>
                 </div>
                 <span className="hidden items-center justify-end tabular text-sm text-muted-foreground sm:flex" title={`${d.cards} card${d.cards === 1 ? "" : "s"} in this deck`}>{d.cards}</span>
-                {watch ? (
+                {!archived && (watch ? (
                   <span className="hidden items-center justify-end text-xs text-muted-foreground sm:col-span-3 sm:flex">tour</span>
                 ) : (
                   <>
@@ -288,15 +305,19 @@ function DesktopDecks() {
                     <Count value={d.learning} cls="text-learn" />
                     <Count value={d.review} cls="text-review" />
                   </>
-                )}
+                ))}
                 <div className="flex shrink-0 items-center justify-end gap-0.5">
                   <RowMenu
                     name={d.name}
+                    archived={archived}
+                    disabled={deckActions.busy}
+                    onArchive={() => deckActions.archive(d.name, !archived)}
+                    onDelete={() => deckActions.requestDelete(d.name)}
                     onMove={() => setMoving(d.name)}
                     onTop={d.depth > 0 && !clashes(decks ?? [], d.name, "") ? () => place(d.name, "", childrenOf(decks ?? [], "").indexOf(d.name.split("::")[0]) + 1) : undefined}
                     onUp={d.depth > 1 && !clashes(decks ?? [], d.name, parentOf(parentOf(d.name))) ? () => { const gp = parentOf(parentOf(d.name)); place(d.name, gp, childrenOf(decks ?? [], gp).indexOf(parentOf(d.name)) + 1); } : undefined}
                   />
-                  <Button
+                  {!archived && <Button
                     size="sm"
                     variant={work || (watch && d.cards) ? "secondary" : "ghost"}
                     className="size-10 gap-1.5 self-center rounded-full px-0 sm:h-8 sm:w-auto sm:rounded-md sm:px-3"
@@ -314,7 +335,7 @@ function DesktopDecks() {
                       <><FastForward className="size-4 sm:size-3.5" /> <span className="hidden sm:inline">Ahead</span></>
                     )
                     )}
-                  </Button>
+                  </Button>}
                 </div>
               </div>
             );
@@ -333,6 +354,7 @@ function DesktopDecks() {
           </div>
         </Section>
       )}
+      {deckActions.deleteDialog}
       {drag && (
         <div
           aria-hidden
@@ -361,22 +383,17 @@ function DesktopDecks() {
 }
 
 /** The ⋯ on a deck row: move it somewhere, or take it out a level. */
-function RowMenu({ name, onMove, onTop, onUp }: { name: string; onMove(): void; onTop?: () => void; onUp?: () => void }) {
+function RowMenu({ name, archived, disabled, onArchive, onDelete, onMove, onTop, onUp }: { name: string; archived: boolean; disabled: boolean; onArchive(): void; onDelete(): void; onMove(): void; onTop?: () => void; onUp?: () => void }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="size-10 text-muted-foreground hover:text-foreground sm:size-8 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 sm:data-[state=open]:opacity-100" aria-label={`More for ${leafOf(name)}`}>
-          <MoreHorizontal className="size-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+    <DeckMenu name={name} archived={archived} disabled={disabled} onArchive={onArchive} onDelete={onDelete} className="sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 sm:data-[state=open]:opacity-100">
+      {!archived && <>
         <DropdownMenuItem className="h-10 sm:h-9" onClick={onMove}><FolderInput />Move to…</DropdownMenuItem>
         {onUp && <DropdownMenuItem className="h-10 sm:h-9" onClick={onUp}><ArrowUpLeft />Move up a level</DropdownMenuItem>}
         {onTop && <DropdownMenuItem className="h-10 sm:h-9" onClick={onTop}><ArrowUpToLine />Make it a deck of its own</DropdownMenuItem>}
         <DropdownMenuSeparator />
         <DropdownMenuItem className="h-10 sm:h-9" onClick={() => navigate(`/deck?name=${encodeURIComponent(name)}&rename=1`)}><Pencil />Rename</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </>}
+    </DeckMenu>
   );
 }
 

@@ -219,7 +219,7 @@ These work on every command, before or after the command words.
   - [`deck reorder`](#deck-reorder) Set the order of sibling decks in the deck list.
   - [`deck archive`](#deck-archive) Hide a deck from the deck list and study. Cards and history are kept.
   - [`deck unarchive`](#deck-unarchive) Bring an archived deck back.
-  - [`deck delete`](#deck-delete) Delete an empty deck and its empty subdecks. Decks holding items can't be deleted: move or archive them.
+  - [`deck delete`](#deck-delete) Delete a deck and its subdecks. Use --items to also delete their items, cards and review history.
   - [`deck description`](#deck-description) Get or set a deck's markdown description.
   - [`deck instructions`](#deck-instructions) Get or set a deck's AI grading instructions (they apply to its subdecks too).
   - [`deck set`](#deck-set) Override settings on this deck (they win over its preset and parents).
@@ -666,7 +666,7 @@ etude deck unarchive "Old course" --subdecks
 
 <a id="deck-delete"></a>
 
-Delete an empty deck and its empty subdecks. Decks holding items can't be deleted: move or archive them.
+Delete a deck and its subdecks. Use --items to also delete their items, cards and review history.
 
 ```
 etude deck delete <deck> [flags]
@@ -680,6 +680,7 @@ etude deck delete <deck> [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
+| `--items` | boolean | Permanently delete all items, cards and history in this deck and its subdecks, including archived content. |
 | `--dry-run` | boolean | Show what would change without writing anything. |
 | `-y, --yes` | boolean | Confirm a destructive operation. |
 
@@ -687,6 +688,7 @@ Output: { deleted: [names] }
 
 ```sh
 etude deck delete "Scratch" --yes
+etude deck delete "Old course" --items --yes
 ```
 
 ### etude deck description

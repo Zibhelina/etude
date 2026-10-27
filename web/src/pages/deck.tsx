@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, ArrowUpToLine, BarChart3, CalendarClock, Check, ChevronDown, ChevronRight, Download, Eye, FastForward, FolderInput, Library, Pencil, Play, Plus, Search, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowUpToLine, BarChart3, CalendarClock, Check, ChevronDown, ChevronRight, Download, Eye, FastForward, FolderInput, Library, Pencil, Play, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Markdown } from "@/components/markdown";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { BulkBar, CheckBox, groupItems, ItemEditor, ItemRow, NewItemDialog, OrderSelect, SearchHints } from "@/components/item-editor";
@@ -21,6 +20,7 @@ import { childrenOf, clashes, leafOf, moveDeck, MoveDeckDialog, parentOf } from 
 import { usePhone } from "@/lib/phone";
 import { DeckList } from "@/components/phone-decks";
 import { Mark, PhoneTitle } from "@/components/phone-shell";
+import { useDeckActions } from "@/components/deck-actions";
 
 const enc = encodeURIComponent;
 
@@ -51,9 +51,9 @@ export function DeckPage({ name }: { name: string }) {
 
   const reload = async () => {
     try {
-      const [d, all, p] = await Promise.all([api.deck(name), api.decks(), api.presets()]);
+      const [d, all, p] = await Promise.all([api.deck(name), api.decks(true), api.presets()]);
       setDeck(d);
-      setDecks(all);
+      setDecks(all.filter((node) => node.archived === d.archived));
       setPresets(p);
       setError(null);
     } catch (e) {
@@ -131,13 +131,13 @@ export function DeckPage({ name }: { name: string }) {
           />
   );
   const optionsTab = <DeckOptions deck={deck} decks={decks} presets={presets} onChanged={reload} />;
-  const manageTab = <DangerZone deck={deck} decks={decks} hasChildren={children.length > 0} cards={node?.cards ?? 0} onMoved={(to) => navigate(`/deck?name=${enc(to)}&tab=manage`, { replace: true })} />;
+  const manageTab = <DangerZone deck={deck} decks={decks} hasChildren={children.length > 0} onMoved={(to) => navigate(`/deck?name=${enc(to)}&tab=manage`, { replace: true })} />;
 
   if (phone)
     return (
       <div>
         <PhoneTitle
-          back={{ label: back ? leafOf(back) : "Decks", onClick: () => navigate(back ? `/deck?name=${enc(back)}` : "/") }}
+          back={{ label: deck.archived ? "Archive" : back ? leafOf(back) : "Decks", onClick: () => navigate(deck.archived ? "/archive" : back ? `/deck?name=${enc(back)}` : "/") }}
           kicker={parts.length > 2 ? parts.slice(0, -2).join(" › ") : undefined}
           title={leafOf(deck.name)}
           className="pb-3"
@@ -168,7 +168,7 @@ export function DeckPage({ name }: { name: string }) {
 
   return (
     <Page>
-      <Breadcrumb items={[{ label: "Decks", onClick: () => navigate("/") }, ...parts.slice(0, -1).map((p, i) => ({ label: p, onClick: () => navigate(`/deck?name=${enc(parts.slice(0, i + 1).join("::"))}`) }))]} />
+      <Breadcrumb items={[{ label: deck.archived ? "Archive" : "Decks", onClick: () => navigate(deck.archived ? "/archive" : "/") }, ...parts.slice(0, -1).map((p, i) => ({ label: p, onClick: () => navigate(`/deck?name=${enc(parts.slice(0, i + 1).join("::"))}`) }))]} />
       <Header deck={deck} node={node} work={work} tags={tags} onRenamed={(to) => navigate(`/deck?name=${enc(to)}`, { replace: true })} onAddCards={tab === "cards" ? undefined : () => switchTab("cards")} />
 
       <Tabs value={tab} onValueChange={switchTab} className="mt-8">
@@ -465,7 +465,7 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards, phone }: { deck
           </div>
         </div>
         <div className="flex gap-2">
-          {deck.resolved.mode === "watch" ? (
+          {deck.archived ? <span className="inline-flex items-center gap-2 py-2 text-sm text-muted-foreground"><Archive className="size-4" />Archived</span> : deck.resolved.mode === "watch" ? (
             <Button size="lg" className={cn("flex-1 gap-2 px-6 sm:flex-none", phone && "h-[3.25rem] rounded-full text-[16px] pointer-coarse:h-[3.25rem]")} disabled={!node?.cards} title="A tour: each card can show an example answer, and nothing is scheduled" onClick={() => navigate(`/watch?deck=${enc(deck.name)}`)}>
               <Eye className="size-4" />Watch
             </Button>
@@ -486,13 +486,13 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards, phone }: { deck
         </div>
       </div>
 
-      {deadline && <Countdown deadline={deadline} margin={deck.resolved.deadlineMargin} />}
+      {!deck.archived && deadline && <Countdown deadline={deadline} margin={deck.resolved.deadlineMargin} />}
       {node && node.cards === 0 && onAddCards && (
         <Section className="mt-6">
           <Block title="No cards yet" description="Add cards in the Cards tab, or import a pack from the Decks page." aside={<Button size="sm" onClick={onAddCards}>Add cards</Button>} stackAside />
         </Section>
       )}
-      {!work && node && node.cards > 0 && (
+      {!deck.archived && !work && node && node.cards > 0 && (
         <p className="mt-4 text-sm text-muted-foreground">{node.nextDue ? `Nothing due now. Next card ${relativeShort(node.nextDue)}.` : "Nothing due now."} Custom study works any time.</p>
       )}
     </header>
@@ -756,26 +756,11 @@ function TextSection({ title, help, empty, value, markdown, mono, onSave }: { ti
   );
 }
 
-function DangerZone({ deck, decks, hasChildren, cards, onMoved }: { deck: DeckFull; decks: DeckNode[]; hasChildren: boolean; cards: number; onMoved(to: string): void }) {
-  const [confirm, setConfirm] = useState<null | "archive" | "delete">(null);
+function DangerZone({ deck, decks, hasChildren, onMoved }: { deck: DeckFull; decks: DeckNode[]; hasChildren: boolean; onMoved(to: string): void }) {
   const [moving, setMoving] = useState(false);
   const parent = parentOf(deck.name);
   const topClash = !!parent && clashes(decks, deck.name, "");
-  const leaf = deck.name.split("::").at(-1);
-  const act = async () => {
-    try {
-      if (confirm === "archive") {
-        await api.updateDeck(deck.name, { archived: true });
-        toast.success(`Archived ${leaf}`);
-      } else {
-        await api.deleteDeck(deck.name);
-        toast.success(`Deleted ${leaf}`);
-      }
-      navigate("/");
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  };
+  const deckActions = useDeckActions(() => navigate(deck.archived ? "/archive" : "/"));
   return (
     <div className="flex flex-col gap-8">
       <Section title="Elsewhere">
@@ -820,37 +805,22 @@ function DangerZone({ deck, decks, hasChildren, cards, onMoved }: { deck: DeckFu
       <Section title="Danger zone" tone="danger">
         <Block
           stackAside
-          title="Archive deck"
-          description="Hides it from the deck list. Cards keep their history; nothing is deleted."
-          aside={<Button variant="outline" size="sm" className="gap-1.5" onClick={() => setConfirm("archive")}><Archive className="size-4" />Archive</Button>}
+          title={deck.archived ? "Move out of archive" : "Move to archive"}
+          description={deck.archived ? "Returns this deck and its subdecks to the deck list and study." : "Hides this deck and its subdecks from the deck list and study. Cards keep their history."}
+          aside={<Button variant="outline" size="sm" className="gap-1.5" disabled={deckActions.busy} onClick={() => deckActions.archive(deck.name, !deck.archived)}>{deck.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}{deck.archived ? "Restore" : "Archive"}</Button>}
         />
         <Block
           stackAside
           title="Delete deck"
-          description={cards ? `Only empty decks can be deleted. This one holds ${cards} card${cards === 1 ? "" : "s"}; move or archive them first.` : `Removes the deck${hasChildren ? " and its empty subdecks" : ""}.`}
+          description={`Permanently removes the deck${hasChildren ? " and its subdecks" : ""}, including all cards and review history.`}
           aside={
-            <Button variant="outline" size="sm" className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={cards > 0} onClick={() => setConfirm("delete")}>
+            <Button variant="outline" size="sm" className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={deckActions.busy} onClick={() => deckActions.requestDelete(deck.name)}>
               <Trash2 className="size-4" />Delete
             </Button>
           }
         />
       </Section>
-      <AlertDialog open={confirm !== null} onOpenChange={(o) => !o && setConfirm(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{confirm === "archive" ? `Archive ${leaf}?` : `Delete ${leaf}?`}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirm === "archive" ? "It disappears from the deck list and study. Its cards and history stay in the database." : "This can't be undone."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant={confirm === "delete" ? "destructive" : "default"} onClick={act}>
-              {confirm === "archive" ? "Archive" : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {deckActions.deleteDialog}
     </div>
   );
 }

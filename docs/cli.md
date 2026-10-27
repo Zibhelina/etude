@@ -323,6 +323,14 @@ These work on every command, before or after the command words.
   - [`settings chatgpt logout`](#settings-chatgpt-logout) End the ChatGPT session and delete the saved tokens. The app registration is kept for a later sign-in.
   - [`settings chatgpt models`](#settings-chatgpt-models) The models the signed-in ChatGPT account offers for plan usage (slug and display name).
   - [`settings chatgpt import`](#settings-chatgpt-import) Adopt a chatgpt.json signed in on another machine (the self-hosted-VM path). This host gets its own host id.
+- **sync**: Encrypted offline collection sync over a folder or etude-cloud (`etude sync` alone runs `status`)
+  - [`sync status`](#sync-status) Show connection, lock and pending change status.
+  - [`sync setup`](#sync-setup) Connect this collection to a shared folder or Sync server.
+  - [`sync signin`](#sync-signin) Send a one-time sign-in link to your email.
+  - [`sync verify`](#sync-verify) Redeem the code from the sign-in email.
+  - [`sync unlock`](#sync-unlock) Unlock the vault, or create one and return its recovery key once.
+  - [`sync now`](#sync-now) Push pending encrypted changes and merge remote changes.
+  - [`sync off`](#sync-off) Sign out and remove this device's saved Sync key; keep local content.
 - **theme**: Themes: pick the app's colors, or make your own with CSS variables and extra CSS (`etude theme` alone runs `list`)
   - [`theme list`](#theme-list) Every theme, built-in first, with which one is selected.
   - [`theme show`](#theme-show) A theme's variables and extra CSS. Without an id, the selected theme.
@@ -3218,6 +3226,137 @@ Output: { signedIn, email, hostId, credentialsPath, plan }
 ```sh
 scp laptop:~/.etude/chatgpt.json /tmp/ && etude settings chatgpt import /tmp/chatgpt.json
 ```
+
+## sync
+
+Encrypted offline collection sync over a folder or etude-cloud.
+
+### etude sync status
+
+<a id="sync-status"></a>
+
+Show connection, lock and pending change status.
+
+```
+etude sync status
+```
+
+*read-only*
+
+Output: { configured, kind, signedIn, unlocked, hasKeys, lastSync, pending, busy, error }
+
+### etude sync setup
+
+<a id="sync-setup"></a>
+
+Connect this collection to a shared folder or Sync server.
+
+```
+etude sync setup [flags]
+```
+
+*writes*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--folder <VALUE>` | string | Shared folder path. |
+| `--server <VALUE>` | string | HTTPS etude-cloud URL (HTTP on localhost). |
+
+Output: Sync status
+
+```sh
+etude sync setup --folder ~/Sync/Etude
+etude sync setup --server https://sync.etude.study
+```
+
+### etude sync signin
+
+<a id="sync-signin"></a>
+
+Send a one-time sign-in link to your email.
+
+```
+etude sync signin [flags]
+```
+
+*writes*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--email <VALUE>` | string | Account email. |
+
+Output: Sync status
+
+### etude sync verify
+
+<a id="sync-verify"></a>
+
+Redeem the code from the sign-in email.
+
+```
+etude sync verify <code>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `code` | Single-use email code. |
+
+Output: Sync status
+
+### etude sync unlock
+
+<a id="sync-unlock"></a>
+
+Unlock the vault, or create one and return its recovery key once.
+
+Read the Sync password from stdin to keep it out of shell history. With --recovery, stdin carries the recovery key. The password is never saved.
+
+```
+etude sync unlock [flags]
+```
+
+*writes*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--recovery` | boolean | Read a recovery key from stdin. |
+
+Output: { status, recoveryKey? }
+
+```sh
+etude sync unlock < password-file
+etude sync unlock --recovery < recovery-file
+```
+
+### etude sync now
+
+<a id="sync-now"></a>
+
+Push pending encrypted changes and merge remote changes.
+
+```
+etude sync now
+```
+
+*writes*
+
+Output: Sync status
+
+### etude sync off
+
+<a id="sync-off"></a>
+
+Sign out and remove this device's saved Sync key; keep local content.
+
+```
+etude sync off
+```
+
+*writes*
+
+Output: Sync status
 
 ## theme
 

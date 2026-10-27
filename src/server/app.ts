@@ -1,4 +1,6 @@
 // HTTP API, card frames, the card runtime and the web app.
+import { syncRoutes } from "./sync.ts";
+import { syncFor } from "../core/sync/client.ts";
 import { Hono, type Context } from "hono";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, join, normalize, resolve } from "node:path";
@@ -173,6 +175,8 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     }
   };
   const scopeOf = (c: Context): StudyScope => ({ deck: c.req.query("deck") || undefined, query: c.req.query("q") || undefined, ahead: c.req.query("ahead") === "1" || undefined });
+
+  syncRoutes(app, etude);
 
   app.post("/api/media", async (c) => {
     if (!c.req.header("content-type")?.includes("application/octet-stream")) return c.json({ error: "expected application/octet-stream" }, 415);

@@ -10,6 +10,7 @@ import "./scheduler.ts";
 import "./study.ts";
 import "./stats.ts";
 import "./settings.ts";
+import "./sync.ts";
 import "./theme.ts";
 import "./pack.ts";
 import "./anki.ts";

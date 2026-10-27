@@ -1719,7 +1719,10 @@ export class Etude {
     });
   }
 
-  /** Hides cards until the next study day, or `until`; `null` unburies. Returns changed ids. */
+  /**
+   * Hides cards until the next study day, or `until`; `null` unburies. Returns changed ids. Burying also
+   * discards an answer given but not yet rated (bury instead of rating: it doesn't count); rated answers stay.
+   */
   setBuried(cardIds: number[], until: Date | null = new Date(this.dayStart().getTime() + 86400_000), opts: { preserveExisting?: boolean } = {}) {
     const changed: number[] = [];
     const ts = iso();
@@ -1727,6 +1730,7 @@ export class Etude {
       for (const id of new Set(cardIds)) {
         const r = this.db.run("UPDATE cards SET buried_until = ? WHERE id = ? AND (? = 0 OR buried_until IS NULL OR buried_until <= ?)", until ? iso(until) : null, id, Number(!!opts.preserveExisting), ts);
         if (r.changes) changed.push(id);
+        if (until) this.db.run("DELETE FROM attempts WHERE card_id = ? AND review_id IS NULL", id);
       }
     });
     return changed;
@@ -2101,13 +2105,14 @@ export class Etude {
     const scores = new Map<number, { ts: string; score: number }[]>();
     const probes = new Map<string, { band: number; score: number }[]>();
     let maxTs = "";
-    for (const r of this.db.all(`SELECT a.ts, a.card_id, a.grade FROM attempts a JOIN cards c ON c.id = a.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${scope} ORDER BY a.ts, a.id`, ...sp)) {
+    for (const r of this.db.all(`SELECT a.ts, a.card_id, a.grade, a.review_id FROM attempts a JOIN cards c ON c.id = a.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${scope} ORDER BY a.ts, a.id`, ...sp)) {
       if (r.ts > maxTs) maxTs = r.ts;
       const g = parse<Partial<Grade>>(r.grade, {});
       const card = cards.get(r.card_id);
       const ad = g.adaptive;
       if (ad?.variant) seen.set(`${r.card_id}#${ad.variant}`, (seen.get(`${r.card_id}#${ad.variant}`) ?? 0) + 1);
-      if (typeof g.score !== "number" || !card) continue;
+      // Only rated answers count: burying or suspending a card instead of rating it, or undoing the rating, leaves the answer out.
+      if (typeof g.score !== "number" || !card || r.review_id == null) continue;
       attempts.push({ ts: r.ts, a: { cardId: r.card_id, key: ad?.variant ? `${card.itemId}#${ad.variant}` : `card:${r.card_id}`, skills: card.skills, score: g.score, prior: ad?.difficulty } });
       (scores.get(r.card_id) ?? scores.set(r.card_id, []).get(r.card_id)!).push({ ts: r.ts, score: g.score });
       if (ad?.placement) {
@@ -2235,7 +2240,7 @@ export class Etude {
     const sp = [root, root.replace(/[\\%_]/g, "\\$&") + "::%"];
     const join = "JOIN cards c ON c.id = x.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
     const scores = this.db
-      .all(`SELECT x.grade FROM attempts x ${join} WHERE x.practice = 0 AND x.ts >= ? AND x.ts < ? AND ${scope}`, from, to, ...sp)
+      .all(`SELECT x.grade FROM attempts x ${join} WHERE x.practice = 0 AND x.review_id IS NOT NULL AND x.ts >= ? AND x.ts < ? AND ${scope}`, from, to, ...sp)
       .map((r) => parse<Partial<Grade>>(r.grade, {}).score)
       .filter((s): s is number => typeof s === "number");
     // Reviews without a recorded duration count as 15 seconds.
@@ -2883,7 +2888,8 @@ export class Etude {
         const item = this.db.get("SELECT item_id FROM cards WHERE id = ?", r.card_id)!.item_id;
         this.db.run("UPDATE cards SET buried_until = NULL WHERE item_id = ? AND id != ?", item, r.card_id);
       }
-      this.db.run("UPDATE attempts SET review_id = NULL WHERE review_id = ?", r.id);
+      // The graded answer goes with its rating: an undone answer didn't happen.
+      this.db.run("DELETE FROM attempts WHERE review_id = ? OR id = ?", r.id, r.attempt_id ?? -1);
       this.db.run("DELETE FROM reviews WHERE id = ?", r.id);
       return { cardId: r.card_id, itemId: this.db.get("SELECT item_id FROM cards WHERE id = ?", r.card_id)!.item_id };
     });

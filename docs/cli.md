@@ -263,7 +263,7 @@ These work on every command, before or after the command words.
   - [`card unbury`](#card-unbury) Unbury cards so they can come up today.
   - [`card reset`](#card-reset) Forget cards: back to new, as if never studied. Review history is kept (and `card reschedule` would rebuild from it).
   - [`card prune`](#card-prune) Delete leftover cards: cards on faces their type no longer makes, after a face was removed or `facesWhen` changed.
-  - [`card bury`](#card-bury) Hide cards until the next study day, or until a date.
+  - [`card bury`](#card-bury) Hide cards until the next study day, or until a date. An answer given but not rated yet is discarded.
   - [`card due`](#card-due) Set when cards are next due, without recording a review.
   - [`card reschedule`](#card-reschedule) Rebuild cards' scheduling from their review history with the current settings (after changing retention, steps, weights or a deadline).
 - **tag**: Tags: hierarchical labels (a::b), with grading instructions and descriptions (`etude tag` alone runs `list`)
@@ -307,7 +307,7 @@ These work on every command, before or after the command words.
   - [`study feedback`](#study-feedback) AI feedback for an attempt (written once, then cached).
   - [`study rate`](#study-rate) Record a rating and reschedule the card. Pass --attempt to link the graded attempt.
   - [`study answer`](#study-answer) Submit and rate in one step: grades the answer, then applies the suggested rating (or the one you give).
-  - [`study undo`](#study-undo) Undo the most recent review (any card): the card returns exactly to its previous state.
+  - [`study undo`](#study-undo) Undo the most recent review (any card): the card returns exactly to its previous state, and the graded answer is discarded.
   - [`study watch`](#study-watch) Watch mode: the cards of a scope in order, one per item, each with an example answer and its grade. Records nothing.
 - **stats**: Statistics: overview, forecast, recall per tag, adaptive skills (`etude stats` alone runs `overview`)
   - [`stats overview`](#stats-overview) Everything the Stats page shows for a scope: card states, retention, recall, daily activity, forecast, ratings, verdicts, streak, deadline.
@@ -1850,7 +1850,7 @@ etude card prune --type de-vocab --yes
 
 <a id="card-bury"></a>
 
-Hide cards until the next study day, or until a date.
+Hide cards until the next study day, or until a date. An answer given but not rated yet is discarded.
 
 ```
 etude card bury [refs...] [flags]
@@ -2928,7 +2928,7 @@ etude study answer 50 --seed 1 --answer "" --rate good
 
 <a id="study-undo"></a>
 
-Undo the most recent review (any card): the card returns exactly to its previous state.
+Undo the most recent review (any card): the card returns exactly to its previous state, and the graded answer is discarded.
 
 ```
 etude study undo [flags]

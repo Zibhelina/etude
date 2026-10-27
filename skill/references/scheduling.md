@@ -41,6 +41,14 @@ etude deck show "Networks::Week 1"   # resolved, inherited, presetBase, own conf
 | `autoApply` | false | the app applies the suggested rating without asking |
 | `burySiblings` | true | other faces of the same item wait until tomorrow |
 | `enableFuzz`, `enableShortTerm`, `weights` | | FSRS-6 options |
+| `adaptiveChallenge` | false | card types get a `learner` argument and may pick easier or harder variants |
+| `adaptivePace` | false | each day's new-card limit follows the last week's success and study time |
+| `targetSuccess` | 0.85 | share of graded answers that should be right |
+| `minutesPerDay` | 20 | study time the adaptive pace aims for |
+| `newPerDayMin` / `newPerDayMax` | 5 / 25 | bounds for the adaptive pace |
+| `levels` | `[]` | ordered levels by tag, each with an optional check tag: `[{"tag":"level::1","check":"check::1"}]` |
+| `levelAdvanceAt` / `levelMix` | 0.8 / 0.2 | stable share of a level that opens the next one, and the next level's share of new cards |
+| `quickChecksPerDay` | 30 | after a placement, earlier cards it judged known, on top of `newPerDay` |
 
 Changing retention, steps, maximum interval, weights or the deadline only affects future reviews. Add `--reschedule` (or run `etude card reschedule --deck X`) to replay history with the new settings. Commands print a `hint` when that's needed.
 
@@ -94,3 +102,17 @@ Leeches: tag them first (`etude item tag --query 'deck:X prop:lapses>=4' -t leec
 ## Study scopes
 
 `study next`, `study counts` and `stats` take `--deck` and `--query`. A query narrows the deck's queue (custom study): `etude study next --deck X --query 'tag:http'`. Daily limits still apply. To go past them for extra practice, use `study card <id>` with `--practice` when submitting or rating.
+
+## Adaptive decks
+
+Both adaptive switches are off by default. With them off a deck behaves exactly as without them.
+
+```sh
+etude deck set "Course" adaptivePace=true minutesPerDay=20 targetSuccess=0.85
+etude deck set "Course" adaptiveChallenge=true levels='[{"tag":"level::1"},{"tag":"level::2"}]'
+etude stats skills "Course"                       # skills, levels, placement, today's pace
+etude study next --deck "Course" --placement      # placement probes; null when the level is found
+etude deck unset "Course" adaptivePace adaptiveChallenge levels
+```
+
+Skills are measured across the highest deck with an adaptive setting on, from the graded history: nothing is stored. Placement answers are real reviews. Don't fake them: a placement only places what the learner answered.

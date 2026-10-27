@@ -49,7 +49,7 @@ Any item may carry `fields.generator`: the body of a JavaScript function that re
 "generator": "const L = rng.pick([1000, 1500, 2000]); const R = rng.pick([10, 100]); const ms = L * 8 / (R * 1e6) * 1e3; return { prompt: `A ${L}-byte packet on a ${R} Mbps link. Transmission delay in ms?`, answer: ms, explanation: `$d_{trans} = L/R = ${L*8}\\text{ bits} / ${R}\\times10^6\\text{ bits/s} = ${ms}\\text{ ms}$` };"
 ```
 
-`rng` provides `rng.int(min, max)` (inclusive), `rng.float(min, max, decimals)`, `rng.pick(array)`, `rng.shuffle(array)` (returns a copy), `rng.bool(p)` and `rng.next()` (uniform in [0,1)). Generators run in a sandbox with no I/O, no network and a time limit. Keep the static `fields` filled with one valid example too, so previews and search show something sensible.
+On an [adaptive deck](types.md#adaptive-decks) the generator also gets `learner` as a second argument (`null` otherwise), so it can scale the exercise to the learner; it must work with `null`. `rng` provides `rng.int(min, max)` (inclusive), `rng.float(min, max, decimals)`, `rng.pick(array)`, `rng.shuffle(array)` (returns a copy), `rng.bool(p)` and `rng.next()` (uniform in [0,1)). Generators run in a sandbox with no I/O, no network and a time limit. Keep the static `fields` filled with one valid example too, so previews and search show something sensible.
 
 ## Built-in types
 

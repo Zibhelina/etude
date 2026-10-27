@@ -77,6 +77,7 @@ etude deck set "German" newPerFace.t1=5          # at most 5 new t1 cards a day 
 etude card due --query 'tag:http is:due' --in 1d # push to tomorrow without faking a review
 etude card suspend --query 'deck:"Networks" prop:lapses>=4'
 etude card prune --type vocab --dry-run          # cards on faces the type no longer makes (after removing a face)
+etude deck set "Course" adaptivePace=true adaptiveChallenge=true   # optional: pace and challenge follow the learner (`stats skills`)
 ```
 
 **Themes.** `etude theme list`, then `etude theme set paper`. Make one with `etude theme create sea --from midnight --var highlight="oklch(0.7 0.12 210)" --use`, and change it later with `theme edit` (variables, scheme, `--css-file`). `theme export`/`import` move themes between collections.
@@ -87,7 +88,7 @@ Use this when the user wants to practise with you instead of in the app. Every r
 
 1. `etude study next --deck "<deck>"` (or `--query`). Keep `card.cardId` and `card.seed`. If `card` is `null`, nothing is due: say so. For extra practice, pick cards with `etude card list '<search>'`, show one with `etude study card <cardId>`, and pass `--practice` when you submit and rate.
 2. Show the question from `card.view` only (render markdown and `$math$`). `card.answerFormat` says how to encode the answer. **Never reveal private fields or the key before the user answers.** Don't call `item show` or `item preview --with-key` on a card you're about to ask. For `basic` (self-graded), show the front and wait.
-3. Submit exactly what the user said, verbatim, even when it's wrong or partial: `etude study submit <cardId> --seed <seed> --answer "<their words>"` (or `--answer-file`, or `-` for stdin). For structured types, encode per `answerFormat` (e.g. mcq `["o1"]`, match `{"l0":"r2"}`). A plain string is fine for a one-blank cloze or a one-part numeric. Anything that doesn't start with `[`, `{` or `"` is submitted exactly as typed. Don't correct, complete or improve the answer before submitting.
+3. Submit exactly what the user said, verbatim, even when it's wrong or partial: `etude study submit <cardId> --seed <seed> --answer "<their words>"` (on adaptive decks the card also has `asOf`: add `--as-of <asOf>`, and `--placement` for a placement probe) (or `--answer-file`, or `-` for stdin). For structured types, encode per `answerFormat` (e.g. mcq `["o1"]`, match `{"l0":"r2"}`). A plain string is fine for a one-blank cloze or a one-part numeric. Anything that doesn't start with `[`, `{` or `"` is submitted exactly as typed. Don't correct, complete or improve the answer before submitting.
 4. Show the result: the `grade.verdict` and `score`, the `key` (the correct answer and explanation), and feedback if present. For AI-graded cards, `etude study feedback <attemptId>` writes feedback on request.
 5. Rate: `etude study rate <cardId> <again|hard|good|easy> --attempt <attemptId>`. Use `suggested.name` unless the user picks a rating. For self-graded cards, ask the user how well they recalled it; don't decide for them. `study answer` combines submit and rate (`--rate auto`).
 6. If something went wrong (a mis-typed answer, the wrong card), `etude study undo` reverts the last rating.

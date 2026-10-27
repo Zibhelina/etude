@@ -97,6 +97,7 @@ export interface DeckNode {
   description: string;
   instructions: string;
   position: number | null;
+  archived: boolean;
   depth: number;
   cards: number;
   unseen: number;
@@ -421,7 +422,9 @@ export interface OptimizeResult {
 export const api = {
   uploadMedia: (file: File) => call<StoredMedia>("POST", `/api/media${qs({ name: file.name })}`, undefined, file),
   importMedia: (path: string) => call<StoredMedia>("POST", "/api/media/import", { path }),
-  decks: () => call<DeckNode[]>("GET", "/api/decks"),
+  decks: (archived = false) => call<DeckNode[]>("GET", `/api/decks${qs({ archived: archived ? 1 : undefined })}`),
+  deckUsage: (name: string) => call<{ items: number; cards: number }>("GET", `/api/deck/usage${qs({ name })}`),
+  setDeckArchived: (name: string, archived: boolean) => call<{ decks: string[]; archived: boolean }>("POST", `/api/deck/archive${qs({ name })}`, { archived, subdecks: true }),
   deck: (name: string) => call<DeckNode & { resolved: PresetConfig; inherited: PresetConfig; presetBase: PresetConfig }>("GET", `/api/deck${qs({ name })}`),
   /** The faces of the cards in a deck and its subdecks, with the types that make each and how many are new. */
   deckFaces: (name: string) => call<DeckFace[]>("GET", `/api/deck/faces${qs({ name })}`),
@@ -431,7 +434,7 @@ export const api = {
   updateDeck: (name: string, patch: Partial<{ name: string; presetId: string | null; config: Partial<PresetConfig>; description: string; instructions: string; archived: boolean }>) =>
     call<DeckNode & { resolved: PresetConfig }>("PATCH", `/api/deck${qs({ name })}`, patch),
   // Mutations must be JSON (the server refuses anything else), so body-less deletes send {}.
-  deleteDeck: (name: string) => call("DELETE", `/api/deck${qs({ name })}`, {}),
+  deleteDeck: (name: string, items = false) => call("DELETE", `/api/deck${qs({ name })}`, { items }),
   presets: () => call<{ id: string; name: string; config: Partial<PresetConfig> }[]>("GET", "/api/presets"),
   savePreset: (id: string, name: string, config: Partial<PresetConfig>) => call<Preset>("PUT", `/api/presets/${encodeURIComponent(id)}`, { name, config }),
   deletePreset: (id: string) => call<{ ok: true }>("DELETE", `/api/presets/${encodeURIComponent(id)}`, {}),

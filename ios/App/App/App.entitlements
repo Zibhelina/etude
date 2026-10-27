@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Universal links: https://etude.study/app/… opens the app once the site serves
+	     /.well-known/apple-app-site-association with this app's Team ID. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:etude.study</string>
+	</array>
+</dict>
+</plist>

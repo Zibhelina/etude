@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Behind the system bars when the WebView is older than 140 and Capacitor pads the window
+         instead of passing the safe areas to the page. Matches the app's dark background. -->
+    <color name="etude_background">#070707</color>
+</resources>

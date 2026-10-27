@@ -179,8 +179,8 @@ export interface PresetConfig {
   adaptiveChallenge: boolean;
   /** The day's new-card limit follows recent success and study time, between `newPerDayMin` and `newPerDayMax`. */
   adaptivePace: boolean;
-  /** Share of graded answers that should be right: the challenge adaptation aims for it. */
-  targetSuccess: number;
+  /** Share of answers practice aims for (decks without a memory model). Null: the desired retention. */
+  targetSuccess: number | null;
   /** Study time the adaptive pace aims for. */
   minutesPerDay: number;
   newPerDayMin: number;
@@ -223,7 +223,7 @@ export const DEFAULT_PRESET: PresetConfig = {
   schedulerOptions: {},
   adaptiveChallenge: false,
   adaptivePace: false,
-  targetSuccess: 0.85,
+  targetSuccess: null,
   minutesPerDay: 20,
   newPerDayMin: 5,
   newPerDayMax: 25,
@@ -314,6 +314,8 @@ export interface AdaptiveChoice {
   variant?: string;
   /** The variant's prior difficulty, 0 to 1, so later estimates can start from it. */
   difficulty?: number;
+  /** What the answer was for (teach, measure, practice). Teaching answers don't feed the skill estimates. */
+  goal?: "teach" | "measure" | "practice";
   reason?: string;
   /** A placement probe: the session it belongs to (`true` from before sessions had names). */
   placement?: string | boolean;

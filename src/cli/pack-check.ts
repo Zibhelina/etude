@@ -170,17 +170,19 @@ function checkFields(err: (m: string) => void, warn: (m: string) => void, type: 
   }
 }
 
-// Learners a type has to cope with: none (adaptation off), a new card, a struggling and a strong learner.
+// Learners a type has to cope with: none (adaptation off), a new card, a struggling and a strong learner, a practice session.
 const SAMPLE_LEARNERS = [
-  { label: "a new card", ability: 0, known: 0.5, seen: 0, card: { state: "new", reps: 0, lapses: 0, stability: 0, retrievability: null, scores: [] } },
-  { label: "a struggling learner", ability: -2, known: 0.3, seen: 3, card: { state: "relearning", reps: 6, lapses: 4, stability: 1.5, retrievability: 0.6, scores: [0, 0.5, 0] } },
-  { label: "a strong learner", ability: 2, known: 1, seen: 1, card: { state: "review", reps: 9, lapses: 0, stability: 60, retrievability: 0.95, scores: [1, 1, 1] } },
+  { label: "a new card", goal: "teach", ability: 0, known: 0.5, seen: 0, card: { state: "new", reps: 0, lapses: 0, stability: 0, retrievability: null, scores: [] } },
+  { label: "a struggling learner", goal: "measure", ability: -2, known: 0.3, seen: 3, card: { state: "relearning", reps: 6, lapses: 4, stability: 1.5, retrievability: 0.6, scores: [0, 0.5, 0] } },
+  { label: "a strong learner", goal: "measure", ability: 2, known: 1, seen: 1, card: { state: "review", reps: 9, lapses: 0, stability: 60, retrievability: 0.95, scores: [1, 1, 1] } },
+  { label: "a practice session", goal: "practice", ability: 1, known: 1, seen: 2, card: { state: "review", reps: 4, lapses: 1, stability: 12, retrievability: 0.9, scores: [1, 0.5, 1] } },
 ] as const;
 
 function sampleLearner(s: (typeof SAMPLE_LEARNERS)[number], skill: string): Learner {
   return {
     asOf: "2026-01-01T00:00:00.000Z",
-    target: 0.85,
+    goal: s.goal,
+    target: 0.9,
     skill,
     ability: { [skill]: s.ability },
     success: { [skill]: sigmoid(s.ability) },
@@ -213,7 +215,7 @@ function checkPrepare(err: (m: string) => void, def: Json, f: Json) {
             [v.field]: fields[v.field].map((e: Json) => {
               if (!e || typeof e !== "object") return e;
               const d = typeof e[v.difficulty ?? "difficulty"] === "number" ? e[v.difficulty ?? "difficulty"] : 0.5;
-              return { ...e, _p: sigmoid(sample.ability - toLogit(d)), _known: sample.known, _seen: sample.seen, _difficulty: d };
+              return { ...e, _p: sigmoid(sample.ability - toLogit(d)), _known: sample.known, _seen: sample.seen, _difficulty: d, _offset: d - 0.5 };
             }),
           };
         try {

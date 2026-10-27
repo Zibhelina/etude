@@ -44,7 +44,8 @@ export interface PresetConfig {
   schedulerOptions: Record<string, unknown>;
   adaptiveChallenge: boolean;
   adaptivePace: boolean;
-  targetSuccess: number;
+  /** Practice aims for this share of right answers; null follows desiredRetention. */
+  targetSuccess: number | null;
   minutesPerDay: number;
   newPerDayMin: number;
   newPerDayMax: number;
@@ -79,7 +80,7 @@ export type LearnerSummary =
         level: LevelState | null;
         placement: { probes: number; done: boolean; frontier: string } | null;
       }[];
-      pace: { value: number; base: number; success: number | null; minutesPerDay: number | null; reason: string } | null;
+      pace: { value: number; base: number; youngRetention: number | null; minutesPerDay: number | null; reason: string } | null;
     };
 
 export interface SchedulerOption {

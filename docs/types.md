@@ -258,17 +258,18 @@ When a type has no prepare script, private fields go into `key` and are not sent
 
 ## Adaptive decks
 
-A deck with **Adaptive challenge** on (`adaptiveChallenge: true`) hands card types a `learner` argument, so a type can choose an easier or harder variant for this learner. It's optional twice over: decks have it off by default, and types that ignore `learner` behave exactly as before. With it off, `learner` is `null`, and `etude pack check` runs every type's prepare both ways (and with a new card, a struggling learner and a strong learner), so a type that only works with a learner can't be imported.
+A deck with **Adaptive challenge** on (`adaptiveChallenge: true`) hands card types a `learner` argument, so a type can choose which variant of an exercise to show. It's optional twice over: decks have it off by default, and types that ignore `learner` behave exactly as before. With it off, `learner` is `null`, and `etude pack check` runs every type's prepare both ways (and with each goal below), so a type that only works with a learner can't be imported.
 
-Estimates are computed from the graded history of the highest deck at or above the card's deck with an adaptive setting on, as of the moment the card was shown. Nothing new is stored, so devices that sync the same history agree, and turning adaptation on later uses the history you already have.
+Estimates are computed from the rated answers of the highest deck at or above the card's deck with an adaptive setting on, as of the moment the card was shown. Nothing new is stored, so devices that sync the same history agree, and turning adaptation on later uses the history you already have.
 
 ```js
 {
   asOf: "2026-10-27T16:40:00.000Z",
-  target: 0.85,                       // the deck's targetSuccess
+  goal: "measure",                    // what this answer is for: "teach", "measure" or "practice"
+  target: 0.9,                        // for practice: targetSuccess, else the deck's desired retention
   skill: "reading",                   // this face's skill (the type's `skills`, else "general")
   ability: { reading: 0.62, listening: -0.3 },  // logit scale: 0 is an even chance on a middling card
-  success: { reading: 0.88 },         // share of the last 50 graded answers that were right
+  success: { reading: 0.88 },         // share of the last 50 rated answers that were right
   answers: { reading: 140 },
   level: { reading: { index: 1, tag: "level::2", progress: 0.43, checkPassed: false, done: false, nextOpen: false } } | null,
   card: { state: "review", reps: 6, lapses: 1, stability: 18.2, retrievability: 0.91, scores: [1, 0.5, 1] },
@@ -277,24 +278,48 @@ Estimates are computed from the graded history of the highest deck at or above t
 }
 ```
 
-Two optional parts of the type definition feed it:
+### Goals: what the answer will be used for
 
-- `skills` maps faces to skills: `{ "read": "reading", "listen": "listening", "produce": "writing" }`. Items can add skills with `skill::` tags (`skill::grammar::dative`). Every graded answer moves the learner's ability on its skills and the difficulty of what was shown, Elo-style.
-- `variants: { "field": "sentences" }` names a json or list field whose entries are interchangeable versions of the exercise. Each entry may have an `id` (stable, to track its difficulty), `requires` (item ids it relies on, such as the other words in a sentence) and a prior `difficulty` from 0 (easy) to 1 (hard); `variants.id`, `variants.requires` and `variants.difficulty` rename those keys. On an adaptive deck, before prepare runs, each entry gets `_p` (predicted success for this learner), `_known` (share of its `requires` items the learner knows: one of their cards has graduated to review), `_seen` (times this card showed it) and `_difficulty` (its current estimate, 0 to 1).
+FSRS already sets how hard a review is, through timing: it brings a card back when recall has fallen to the desired retention. A second controller that also moved difficulty at review time (an easier sentence when the learner struggles, a harder one when they don't) would change the question while FSRS reads the outcome as memory, inflating or deflating stability. So the variant should depend on what the answer is for, given in `learner.goal`:
 
-A prepare that picks a variant returns its id as `variant` and may say why in `reason` (a few words, "a shorter sentence"). Both are recorded in the attempt's grade as `adaptive`, the variant's difficulty is calibrated from the answers, and the app shows the reason after answering.
+| goal | when | pick |
+|---|---|---|
+| `teach` | a new card's first showing in normal study | the clearest version: the most `_known`, then the lowest `_difficulty`. A first showing is encoding, not recall, and its answer doesn't feed the skill estimates. |
+| `measure` | learning steps, reviews and relapses on a scheduler with a memory model; placement probes; quick checks | a version of the item's usual difficulty, whatever the learner's state: the most `_known`, then the smallest `_offset`, rotating through unseen ones (`_seen`). Vary the context, not the difficulty, so FSRS sees comparable evidence. |
+| `practice` | decks whose scheduler has no memory model (drill) | the version closest to `learner.target` (`_p`): adapt the challenge freely, nothing is being measured |
+
+Grade what the card schedules. If a card is about one word, score that word (in its sentence), not every other word around it, or the rating ends up measuring something FSRS doesn't schedule.
+
+### Skills and variants
+
+Two optional parts of the type definition feed `learner`:
+
+- `skills` maps faces to skills: `{ "read": "reading", "listen": "listening", "produce": "writing" }`. Items can add skills with `skill::` tags (`skill::grammar::dative`). Every rated answer moves the learner's ability on its skills and the difficulty of what was shown, Elo-style.
+- `variants: { "field": "sentences" }` names a json or list field whose entries are interchangeable versions of the exercise. Each entry may have an `id` (stable, to track its difficulty), `requires` (item ids it relies on, such as the other words in a sentence) and a prior `difficulty` from 0 (easy) to 1 (hard); `variants.id`, `variants.requires` and `variants.difficulty` rename those keys. On an adaptive deck, before prepare runs, each entry gets `_known` (share of its `requires` items the learner knows: one of their cards has graduated to review), `_seen` (times this card showed it), `_difficulty` (its current estimate, 0 to 1, calibrated from answers), `_offset` (`_difficulty` minus the median of the item's variants) and `_p` (predicted success for this learner).
+
+A prepare that picks a variant returns its id as `variant` and may say why in `reason` (a few words, "a sentence you haven't seen"). Both are recorded in the attempt's grade as `adaptive`, with the goal, and the app shows the reason after answering.
 
 ```js
 const list = fields.sentences;
 if (!learner) return show(rng.pick(list));
-const pool = list.filter((s) => s._known >= 1);
-const pick = (pool.length ? pool : list).sort((a, b) => Math.abs(a._p - learner.target) - Math.abs(b._p - learner.target) || a._seen - b._seen)[0];
-return { ...show(pick), variant: pick.id, reason: pick._p < learner.target ? "a harder sentence" : "an easier sentence" };
+const best = Math.max(...list.map((s) => s._known));
+const pool = list.filter((s) => s._known >= best);
+const cost = {
+  teach: (s) => s._difficulty,
+  measure: (s) => Math.abs(s._offset) + 0.05 * s._seen,
+  practice: (s) => Math.abs(s._p - learner.target) + 0.05 * s._seen,
+}[learner.goal];
+const pick = pool.sort((a, b) => cost(a) - cost(b))[0];
+return { ...show(pick), variant: pick.id, reason: learner.goal === "teach" ? "a clear sentence with words you know" : undefined };
 ```
 
 The app passes the card's `asOf` back when it submits, so grading sees the same estimates and the same variant. Agents using the CLI pass it as `study submit --as-of`. Generators get the same `learner` as their second argument.
 
-The deck settings (see the scheduling reference) add three things around this. **Adaptive pace** sets each day's new-card limit from the last week's success and study time. **Levels** (`levels: [{ tag, check? }]`) bring new cards from the learner's level and open the next one gradually. **Placement** (`study next --placement <session>`) finds the learner's level with real reviews, after which earlier cards come up as quick checks. Each session is named; a new name starts a fresh placement, and the latest one is the one that counts. `etude stats skills <deck>` reports all of it.
+### Around it
+
+The deck settings (see the scheduling reference) add three things that only decide which new cards come in, so they don't touch FSRS's evidence. **Adaptive pace** sets each day's new-card limit from how well the last week's young cards held (reviews of cards under 21 days' stability not rated Again, against the desired retention) and the study time. **Levels** (`levels: [{ tag, check? }]`) bring new cards from the learner's level and open the next one gradually. **Placement** (`study next --placement <session>`) finds the learner's level with real reviews, after which earlier cards come up as quick checks. Each session is named; a new name starts a fresh placement, and the latest one is the one that counts. `etude stats skills <deck>` reports all of it.
+
+The two signals keep separate jobs: your **rating** is the memory signal (FSRS, and the pace's young-card retention); the graded **score** is the skill signal (the estimates, placement and variant difficulty).
 
 ## Item generators
 

@@ -495,7 +495,8 @@ h1, h2, h3 { margin: 0; font-family: var(--font-serif); font-weight: 400; letter
 .footer { padding: 0 0 2.5rem; font-size: 0.85rem; color: var(--muted-foreground); }
 .footer .wrap { display: grid; gap: 2rem; }
 .footer .wrap::before { content: ""; grid-column: 1 / -1; height: 1px; background: var(--rule); margin-bottom: 1rem; }
-@media (min-width: 760px) { .footer .wrap { grid-template-columns: 2fr repeat(3, auto); justify-content: space-between; column-gap: 4rem; } }
+@media (min-width: 760px) { .footer .wrap { grid-template-columns: 2fr repeat(4, auto); justify-content: space-between; column-gap: 3rem; } }
+@media (min-width: 1100px) { .footer .wrap { column-gap: 4rem; } }
 .footer .wordmark { font-size: 1.6rem; color: var(--foreground); }
 .footer p { margin: 0.8rem 0 0; max-width: 18rem; }
 .footer h4 { margin: 0 0 0.8rem; font-size: 0.95rem; font-weight: 400; font-family: var(--font-serif); font-style: italic; color: var(--foreground); }

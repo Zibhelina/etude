@@ -48,6 +48,37 @@ function vendorPath(name: string): string | null {
   return null;
 }
 
+/**
+ * Card documents run a type's own code. `sandbox allow-scripts` gives them an opaque origin even
+ * when opened as a top-level page (a link to /frame/<type>), so that code can never act as the app.
+ */
+const FRAME_HEADERS = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*", "Content-Security-Policy": "sandbox allow-scripts" };
+
+/**
+ * The app page's own policy. Only the app's bundled scripts run here; card code runs in sandboxed
+ * frames loaded by URL (/frame/<type>, /frame-doc/<id>), which carry their own policy. Embeds stay
+ * framable by other apps, so there is no frame-ancestors.
+ */
+export const APP_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "media-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "frame-src 'self'",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
+
+function withAppCsp(res: Response, path: string): Response {
+  if (path.endsWith(".html")) res.headers.set("Content-Security-Policy", APP_CSP);
+  return res;
+}
+
 function sendFile(c: Context, path: string, opts: { cors?: boolean; cache?: string; mime?: string } = {}) {
   if (!existsSync(path) || !statSync(path).isFile()) return c.text("not found", 404);
   const headers: Record<string, string> = { "Content-Type": opts.mime ?? MIME[extname(path)] ?? "application/octet-stream", "Cache-Control": opts.cache ?? "no-cache" };
@@ -619,7 +650,22 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.get("/frame/:type", (c) => {
     const def = etude.type(c.req.param("type"));
     const base = publicBase(c);
-    return c.body(cardFrame(def, base, frameAssets(def.id)), 200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*" });
+    return c.body(cardFrame(def, base, frameAssets(def.id)), 200, FRAME_HEADERS);
+  });
+  // Unsaved previews (type editor, Market) as a served document: a srcdoc frame would inherit the
+  // app page's Content-Security-Policy, which doesn't allow a card's inline scripts.
+  const docs = new Map<string, string>();
+  app.post("/api/frame-doc", async (c) => {
+    const b = await body(c);
+    if (typeof b.html !== "string" || b.html.length > 8 * 1024 * 1024) throw new EtudeError("html must be text under 8 MiB");
+    const id = globalThis.crypto.randomUUID();
+    docs.set(id, b.html);
+    while (docs.size > 64) docs.delete(docs.keys().next().value!);
+    return c.json({ url: `/frame-doc/${id}` });
+  });
+  app.get("/frame-doc/:id", (c) => {
+    const html = docs.get(c.req.param("id"));
+    return html === undefined ? c.text("not found", 404) : c.body(html, 200, FRAME_HEADERS);
   });
   // The type editor previews unsaved code: it posts the definition and gets a frame back.
   app.post("/api/frame", async (c) => {
@@ -679,8 +725,8 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
       const rel = normalize(c.req.path).replace(/^\/+/, "");
       const full = resolve(dist, rel);
       if (rel && full.startsWith(resolve(dist)) && existsSync(full) && statSync(full).isFile())
-        return sendFile(c, full, { cache: rel.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-cache" });
-      return sendFile(c, join(dist, "index.html"));
+        return withAppCsp(sendFile(c, full, { cache: rel.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-cache" }), full);
+      return withAppCsp(sendFile(c, join(dist, "index.html")), "index.html");
     });
   }
   return app;

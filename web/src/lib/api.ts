@@ -456,6 +456,7 @@ export const api = {
   previewType: (def: CardType, fields: Record<string, unknown>, opts: { seed?: number; face?: string; answer?: unknown } = {}) =>
     call<{ errors: string[]; view?: Record<string, unknown>; key?: Record<string, unknown>; grade?: Grade | null; seed?: number }>("POST", "/api/types-preview", { def, fields, ...opts }),
   frameHtml: (def: CardType) => call<{ html: string }>("POST", "/api/frame", { def }),
+  frameDoc: (html: string) => call<{ url: string }>("POST", "/api/frame-doc", { html }),
 
   search: (q: string, opts: { limit?: number; offset?: number; order?: string } = {}) => call<{ total: number; rows: SearchRow[] }>("GET", `/api/items${qs({ q, ...opts })}`),
   item: (id: string) => call<ItemDetail>("GET", `/api/items/${encodeURIComponent(id)}`),

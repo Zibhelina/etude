@@ -11,6 +11,8 @@ import { Block, Field, Section } from "@/components/settings-ui";
 import { relative } from "@/lib/api";
 import { etudeFetch } from "@/lib/transport";
 import { cn } from "@/lib/utils";
+import { ACCOUNT_EVENT } from "@/components/settings-account";
+import { account } from "@/lib/account";
 
 const DEFAULT_SERVER = "https://sync.etude.study";
 
@@ -20,6 +22,8 @@ export interface SyncStatus {
   server?: string;
   folder?: string;
   signedIn: boolean;
+  /** Signed in through the Etude account rather than Sync's own code. */
+  account?: boolean;
   email?: string;
   unlocked: boolean;
   hasKeys: boolean;
@@ -79,6 +83,7 @@ export function SyncSection() {
   const [copied, setCopied] = useState(false);
   const [confirmOff, setConfirmOff] = useState(false);
   const seeded = useRef(false);
+  const suggested = useRef<string | null>(null);
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -95,6 +100,14 @@ export function SyncSection() {
 
   useEffect(() => {
     void load();
+    // Signing in to the Etude account also signs Sync in when both use the same server.
+    const h = () => {
+      void load(true);
+      // Not set up yet and not edited by hand: follow the account's server.
+      account.status().then((a) => setServer((cur) => (cur === DEFAULT_SERVER || cur === suggested.current ? (suggested.current = a.server) : cur))).catch(() => {});
+    };
+    window.addEventListener(ACCOUNT_EVENT, h);
+    return () => window.removeEventListener(ACCOUNT_EVENT, h);
   }, [load]);
 
   // Fill the forms once from the server, without overwriting anything being typed.
@@ -102,6 +115,8 @@ export function SyncSection() {
     if (!status || seeded.current) return;
     seeded.current = true;
     setServer(status.server ?? DEFAULT_SERVER);
+    // Not set up yet: offer the server the Etude account uses.
+    if (!status.server) account.status().then((a) => setServer((cur) => (cur === DEFAULT_SERVER ? (suggested.current = a.server) : cur))).catch(() => {});
     setFolder(status.folder ?? "");
     setEmail(status.email ?? "");
   }, [status]);

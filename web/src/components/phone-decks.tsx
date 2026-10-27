@@ -1,8 +1,8 @@
 // Decks on a phone. One level at a time instead of an indented tree: the top level here, a deck's
 // subdecks on its own page. Today's work leads; every row is one tap to open and a press-and-hold
-// for everything else (practice, move, rename), so there are no grips or ⋯ buttons on the row.
+// for everything else (practice, move, rename). The ⋯ also opens the deck's menu.
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpLeft, ArrowUpToLine, CalendarClock, ChevronRight, Eye, FastForward, FolderInput, FolderPlus, Pencil, Play, Plus, Upload } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowDown, ArrowUp, ArrowUpLeft, ArrowUpToLine, CalendarClock, ChevronRight, Eye, FastForward, FolderInput, FolderPlus, Pencil, Play, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { api, relative, type DeckNode } from "@/lib/api";
 import { navigate } from "@/lib/router";
@@ -11,6 +11,7 @@ import { useLongPress } from "@/lib/phone";
 import { childrenOf, clashes, leafOf, moveDeck, MoveDeckDialog, parentOf } from "@/components/move-deck";
 import { ActionSheet, Mark, PhoneIconButton, PhoneTitle, Tally, type SheetAction } from "@/components/phone-shell";
 import { NewDeckDialog, useImportPicker } from "@/pages/decks";
+import { DeckMenu, useDeckActions } from "@/components/deck-actions";
 
 const enc = encodeURIComponent;
 const work = (d: DeckNode) => d.new + d.learning + d.review;
@@ -34,7 +35,8 @@ export function PhoneDecks() {
   }, []);
   const pickFile = useImportPicker(reload);
 
-  const top = (decks ?? []).filter((d) => d.depth === 0);
+  const names = new Set((decks ?? []).map((d) => d.name));
+  const top = (decks ?? []).filter((d) => !names.has(parentOf(d.name)));
   const studyTop = top.filter((d) => d.mode !== "watch");
   const totals = studyTop.reduce((a, d) => ({ n: a.n + d.new, l: a.l + d.learning, r: a.r + d.review, done: a.done + d.doneToday }), { n: 0, l: 0, r: 0, done: 0 });
   const due = totals.n + totals.l + totals.r;
@@ -66,6 +68,7 @@ export function PhoneDecks() {
       {!decks && <div className="mx-5 mt-2 h-36 animate-pulse rounded-3xl bg-muted/50" />}
 
       {top.length > 0 && <DeckList decks={decks ?? []} parent="" label="Your decks" onChanged={reload} />}
+      <button onClick={() => navigate("/archive")} className="mx-5 mt-5 flex min-h-11 items-center gap-2 text-[14px] text-muted-foreground"><Archive className="size-4" />Archive</button>
 
       <ActionSheet
         open={adding}
@@ -139,11 +142,17 @@ function TodayCard({ due, n, l, r, done }: { due: number; n: number; l: number; 
 export function DeckList({ decks, parent, label, onChanged }: { decks: DeckNode[]; parent: string; label?: string; onChanged(): void }) {
   const [sheet, setSheet] = useState<DeckNode | null>(null);
   const [moving, setMoving] = useState<string | null>(null);
-  const kids = childrenOf(decks, parent).map((n) => decks.find((d) => d.name === n)!).filter(Boolean);
+  const deckActions = useDeckActions(onChanged);
+  const names = new Set(decks.map((d) => d.name));
+  const kids = parent ? decks.filter((d) => parentOf(d.name) === parent) : decks.filter((d) => !names.has(parentOf(d.name)));
   if (!kids.length) return null;
   const place = (name: string, to: string, index: number | undefined) => moveDeck(decks, name, to, index, () => onChanged());
 
   const actions = (d: DeckNode): SheetAction[][] => {
+    if (d.archived) return [[
+      { label: "Move out of archive", icon: ArchiveRestore, onClick: () => { void deckActions.archive(d.name, false); }, disabled: deckActions.busy },
+      { label: "Delete", icon: Trash2, tone: "danger", onClick: () => { void deckActions.requestDelete(d.name); }, disabled: deckActions.busy },
+    ]];
     const sibs = childrenOf(decks, parentOf(d.name));
     const i = sibs.indexOf(d.name);
     const w = work(d);
@@ -165,6 +174,10 @@ export function DeckList({ decks, parent, label, onChanged }: { decks: DeckNode[
         ...(d.depth > 1 && !clashes(decks, d.name, gp) ? [{ label: "Out one level", icon: ArrowUpLeft, onClick: () => place(d.name, gp, childrenOf(decks, gp).indexOf(parentOf(d.name)) + 1) }] : []),
         ...(d.depth > 0 && !clashes(decks, d.name, "") ? [{ label: "Make it a deck of its own", icon: ArrowUpToLine, onClick: () => place(d.name, "", childrenOf(decks, "").indexOf(d.name.split("::")[0]) + 1) }] : []),
       ],
+      [
+        { label: "Move to archive", icon: Archive, onClick: () => { void deckActions.archive(d.name, true); }, disabled: deckActions.busy },
+        { label: "Delete", icon: Trash2, tone: "danger", onClick: () => { void deckActions.requestDelete(d.name); }, disabled: deckActions.busy },
+      ],
     ];
   };
 
@@ -177,7 +190,7 @@ export function DeckList({ decks, parent, label, onChanged }: { decks: DeckNode[
         </div>
       )}
       <div className="score-list">
-        {kids.map((d) => <DeckRow key={d.id} d={d} decks={decks} onHold={() => setSheet(d)} />)}
+        {kids.map((d) => <DeckRow key={d.id} d={d} decks={decks} onHold={() => setSheet(d)} menu={<DeckMenu name={d.name} archived={d.archived} disabled={deckActions.busy} onArchive={() => deckActions.archive(d.name, !d.archived)} onDelete={() => deckActions.requestDelete(d.name)} />} />)}
       </div>
       <ActionSheet
         open={!!sheet}
@@ -187,6 +200,7 @@ export function DeckList({ decks, parent, label, onChanged }: { decks: DeckNode[
         groups={sheet ? actions(sheet) : []}
       />
       <MoveDeckDialog deck={moving} decks={decks} onOpenChange={(o) => !o && setMoving(null)} onMoved={() => onChanged()} />
+      {deckActions.deleteDialog}
     </section>
   );
 }
@@ -197,7 +211,7 @@ function summary(d: DeckNode) {
   return `${plural(d.cards, "card")}${w ? ` · ${w} to practice` : d.nextDue ? ` · next ${relative(d.nextDue)}` : ""}`;
 }
 
-function DeckRow({ d, decks, onHold }: { d: DeckNode; decks: DeckNode[]; onHold(): void }) {
+function DeckRow({ d, decks, onHold, menu }: { d: DeckNode; decks: DeckNode[]; onHold(): void; menu: React.ReactNode }) {
   const { handlers, held } = useLongPress(onHold);
   const subs = childrenOf(decks, d.name).length;
   const w = work(d);
@@ -213,7 +227,7 @@ function DeckRow({ d, decks, onHold }: { d: DeckNode; decks: DeckNode[]; onHold(
         <span className="min-w-0 flex-1">
           <span className="block text-[16.5px] leading-snug break-words">{leafOf(d.name)}</span>
           <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted-foreground">
-            {watch ? (
+            {d.archived ? <span>{plural(d.cards, "card")} · archived</span> : watch ? (
               <span className="inline-flex items-center gap-1"><Eye className="size-3.5" />tour · {d.cards}</span>
             ) : w ? (
               <Tally n={d.new} l={d.learning} r={d.review} />
@@ -225,7 +239,8 @@ function DeckRow({ d, decks, onHold }: { d: DeckNode; decks: DeckNode[]; onHold(
           </span>
         </span>
       </button>
-      {(w > 0 || (watch && d.cards > 0)) ? (
+      <div className="shrink-0" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>{menu}</div>
+      {!d.archived && (w > 0 || (watch && d.cards > 0)) ? (
         <button
           onClick={() => { if (!held()) navigate(practiceUrl(d)); }}
           aria-label={`${watch ? "Watch" : "Practice"} ${leafOf(d.name)}`}

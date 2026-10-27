@@ -14,14 +14,7 @@ command({
   examples: ["etude deck list", "etude deck list --format table"],
   output: "array of decks: { name, depth, presetId, cards, unseen, new, learning, review, doneToday, nextDue, deadline, archived }",
   run(ctx) {
-    const e = ctx.e;
-    const rows = e.deckTree().map(({ at, config, description, instructions, ...d }) => ({ ...d, overrides: Object.keys(config) }));
-    if (!ctx.flags.archived) return rows;
-    const archived = e.db.all("SELECT name FROM decks WHERE archived = 1 ORDER BY name").map((r) => {
-      const d = e.deck(r.name);
-      return { id: d.id, name: d.name, presetId: d.presetId, archived: true, depth: d.name.split("::").length - 1, overrides: Object.keys(d.config) };
-    });
-    return [...rows, ...archived].sort((a, b) => a.name.localeCompare(b.name));
+    return ctx.e.deckTree({ archived: !!ctx.flags.archived }).map(({ at, config, description, instructions, ...d }) => ({ ...d, overrides: Object.keys(config) }));
   },
 });
 
@@ -44,12 +37,13 @@ command({
   run(ctx) {
     const e = ctx.e;
     const d = e.deck(ctx.args.deck);
-    const node = e.deckTree().find((x) => x.id === d.id);
+    const node = e.deckTree({ archived: true }).find((x) => x.id === d.id);
     const children = e.db.all("SELECT name FROM decks WHERE name LIKE ? ESCAPE '\\' ORDER BY name", d.name.replace(/[\\%_]/g, "\\$&") + "::%").map((r) => r.name);
     return {
       ...d,
       sources: configSources(e, d.name),
       counts: node ? { cards: node.cards, unseen: node.unseen, new: node.new, learning: node.learning, review: node.review, doneToday: node.doneToday, nextDue: node.nextDue } : null,
+      usage: e.deckUsage(d.name),
       subdecks: children,
     };
   },
@@ -166,30 +160,26 @@ for (const archived of [true, false]) {
     examples: [`etude deck ${archived ? "archive" : "unarchive"} "Old course" --subdecks`],
     output: "{ decks: [names changed], archived }",
     run(ctx) {
-      const e = ctx.e;
-      const d = e.deck(ctx.args.deck);
-      const names = [d.name];
-      if (ctx.flags.subdecks) names.push(...e.db.all("SELECT name FROM decks WHERE name LIKE ? ESCAPE '\\' ORDER BY name", d.name.replace(/[\\%_]/g, "\\$&") + "::%").map((r) => r.name));
-      for (const n of names) e.updateDeck(n, { archived });
-      return { decks: names, archived };
+      return ctx.e.setDeckArchived(ctx.args.deck, archived, { subdecks: !!ctx.flags.subdecks });
     },
   });
 }
 
 command({
   name: "deck delete",
-  summary: "Delete an empty deck and its empty subdecks. Decks holding items can't be deleted: move or archive them.",
+  summary: "Delete a deck and its subdecks. Use --items to also delete their items, cards and review history.",
   args: [{ name: "deck", description: "Deck name.", required: true }],
+  flags: [{ name: "items", type: "boolean", description: "Permanently delete all items, cards and history in this deck and its subdecks, including archived content." }],
   writes: true,
   dryRun: true,
   confirm: true,
-  examples: ['etude deck delete "Scratch" --yes'],
+  examples: ['etude deck delete "Scratch" --yes', 'etude deck delete "Old course" --items --yes'],
   output: "{ deleted: [names] }",
   run(ctx) {
     const e = ctx.e;
     const d = e.deck(ctx.args.deck);
     const names = e.db.all("SELECT name FROM decks WHERE name = ? OR name LIKE ? ESCAPE '\\' ORDER BY name", d.name, d.name.replace(/[\\%_]/g, "\\$&") + "::%").map((r) => r.name);
-    e.deleteDeck(d.name);
+    e.deleteDeck(d.name, { items: !!ctx.flags.items });
     return { deleted: names };
   },
 });

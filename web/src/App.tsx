@@ -1,5 +1,5 @@
 import { autoSync } from "@/lib/sync";
-import { BarChart3, Blocks, Layers, Library, Settings, Store } from "lucide-react";
+import { Archive, BarChart3, Blocks, Layers, Library, Settings, Store } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -25,6 +25,7 @@ import { usePhone } from "@/lib/phone";
 
 const NAV = [
   { to: "/", label: "Decks", icon: Layers, match: (p: string) => p === "/" || p === "/deck" },
+  { to: "/archive", label: "Archive", icon: Archive, match: (p: string) => p === "/archive" },
   { to: "/browse", label: "Browse", icon: Library, match: (p: string) => p === "/browse" },
   { to: "/types", label: "Card types", icon: Blocks, match: (p: string) => p.startsWith("/types") },
   { to: "/market", label: "Market", icon: Store, match: (p: string) => p === "/market" },
@@ -95,7 +96,7 @@ export function App() {
   else if (path === "/settings") page = <SettingsPage />;
   else if (path === "/market") page = <MarketPage />;
   else if (path === "/more") page = <MorePage />;
-  else page = <DecksPage />;
+  else page = <DecksPage key={path} archived={path === "/archive"} />;
 
   return (
     <TooltipProvider delayDuration={300}>

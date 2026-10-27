@@ -309,9 +309,10 @@ These work on every command, before or after the command words.
   - [`study answer`](#study-answer) Submit and rate in one step: grades the answer, then applies the suggested rating (or the one you give).
   - [`study undo`](#study-undo) Undo the most recent review (any card): the card returns exactly to its previous state.
   - [`study watch`](#study-watch) Watch mode: the cards of a scope in order, one per item, each with an example answer and its grade. Records nothing.
-- **stats**: Statistics: overview, forecast, recall per tag (`etude stats` alone runs `overview`)
+- **stats**: Statistics: overview, forecast, recall per tag, adaptive skills (`etude stats` alone runs `overview`)
   - [`stats overview`](#stats-overview) Everything the Stats page shows for a scope: card states, retention, recall, daily activity, forecast, ratings, verdicts, streak, deadline.
   - [`stats forecast`](#stats-forecast) Cards due per day for the next 30 days (overdue counts on today).
+  - [`stats skills`](#stats-skills) On an adaptive deck: estimated skills, levels, placement and today's adaptive pace.
   - [`stats tags`](#stats-tags) Predicted recall per tag (with parent tags), weakest first.
   - [`stats weak`](#stats-weak) Cards most likely forgotten or most often lapsed: candidates for rewording, splitting or suspending.
 - **settings**: App settings: AI providers and models, day start, learn-ahead, ChatGPT sign-in (`etude settings` alone runs `get`)
@@ -759,7 +760,7 @@ etude deck instructions "Networks" --file notes.md
 
 Override settings on this deck (they win over its preset and parents).
 
-Values are JSON when they parse, text otherwise. Steps accept "1m 10m" or '["1m","10m"]'. Dates accept anything Date can read. Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, newPerFace, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, scheduler, schedulerOptions, weights; also autoRate.good and autoRate.hard, and newPerFace.<face>=N for a face's own new-card limit (null drops an inherited one; see `etude deck faces`).
+Values are JSON when they parse, text otherwise. Steps accept "1m 10m" or '["1m","10m"]'. Dates accept anything Date can read. Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, newPerFace, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, scheduler, schedulerOptions, adaptiveChallenge, adaptivePace, targetSuccess, minutesPerDay, newPerDayMin, newPerDayMax, levels, levelAdvanceAt, levelMix, quickChecksPerDay, weights; also autoRate.good and autoRate.hard, and newPerFace.<face>=N for a face's own new-card limit (null drops an inherited one; see `etude deck faces`).
 
 ```
 etude deck set <deck> <pairs...> [flags]
@@ -954,7 +955,7 @@ etude preset create net --from-deck "Networks" --apply
 
 Change settings in a preset. Every deck using it is affected.
 
-Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, newPerFace, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, scheduler, schedulerOptions, weights; also autoRate.good / autoRate.hard. Use `--name` to rename.
+Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, newPerFace, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, scheduler, schedulerOptions, adaptiveChallenge, adaptivePace, targetSuccess, minutesPerDay, newPerDayMin, newPerDayMax, levels, levelAdvanceAt, levelMix, quickChecksPerDay, weights; also autoRate.good / autoRate.hard. Use `--name` to rename.
 
 ```
 etude preset set <id> [pairs...] [flags]
@@ -2748,7 +2749,7 @@ etude study counts --deck "Networks" --ahead
 
 The next card to study in a scope, with its view and how to answer it. Private fields are never included.
 
-Use `view` to present the card (render its markdown for the learner). Keep `cardId` and `seed`: submit with them so the answer is graded against exactly this variant. Respects daily limits and the preset's ordering; `--exclude` skips the card just answered. With `--ahead`, nothing has to be due: every card in the scope comes up, soonest due first.
+Use `view` to present the card (render its markdown for the learner). Keep `cardId` and `seed`: submit with them so the answer is graded against exactly this variant. On adaptive decks also keep `asOf` and pass it as `--as-of`. Respects daily limits and the preset's ordering; `--exclude` skips the card just answered. With `--ahead`, nothing has to be due: every card in the scope comes up, soonest due first. With `--placement` (adaptive decks), only placement probes come up, and `card` is null once the level is found.
 
 ```
 etude study next [flags]
@@ -2761,14 +2762,16 @@ etude study next [flags]
 | `--deck <NAME>` | string | Limit to this deck and its subdecks. |
 | `--query <SEARCH>` | string | Limit to cards matching a search (see `Search language`). Also `--q`. |
 | `--ahead` | boolean | Study ahead: nothing has to be due. Every card in the scope, soonest due first, no daily limits; ratings are real reviews. |
+| `--placement` | boolean | Placement on an adaptive deck: only probes that find the learner's level. Pass it again when submitting a probe. |
 | `--exclude <N>` | number | Card id to avoid repeating right away. |
 
-Output: { card: { cardId, itemId, face, seed, type, deck, tags, state, title, grader, view, answerFormat, intervals } | null, counts }
+Output: { card: { cardId, itemId, face, seed, type, deck, tags, state, title, grader, view, answerFormat, intervals, asOf?, placement?, quickCheck? } | null, counts }
 
 ```sh
 etude study next --deck "Networks"
 etude study next --query "tag:delay is:due"
 etude study next --deck "Networks" --ahead
+etude study next --deck "Course" --placement
 ```
 
 ### etude study card
@@ -2823,6 +2826,8 @@ etude study submit <ref> [flags]
 | `--practice` | boolean | Practice only: the review is logged but the card's schedule doesn't move (like “another variant” in the app). |
 | `--feedback` | boolean | Also write AI feedback now (when the grade has none). |
 | `--face <VALUE>` | string | With item ids: only the card for this face. |
+| `--as-of <ISO>` | string | The card's `asOf` from `study next`/`study card` (adaptive decks), so the grade matches the variant shown. |
+| `--placement` | boolean | Placement on an adaptive deck: only probes that find the learner's level. Pass it again when submitting a probe. |
 
 Output: { attemptId, cardId, grade: { score, verdict, feedback, details, suggested, grader }, suggested: { rating, name }, key, wantsFeedback, feedback? }
 
@@ -2909,6 +2914,8 @@ etude study answer <ref> [flags]
 | `--practice` | boolean | Practice only: the review is logged but the card's schedule doesn't move (like “another variant” in the app). |
 | `--duration <N>` | number | Milliseconds spent. |
 | `--face <VALUE>` | string | With item ids: only the card for this face. |
+| `--as-of <ISO>` | string | The card's `asOf` from `study next`/`study card` (adaptive decks), so the grade matches the variant shown. |
+| `--placement` | boolean | Placement on an adaptive deck: only probes that find the learner's level. Pass it again when submitting a probe. |
 
 Output: { attemptId, grade, key, rated: { reviewId, rating, due, in } | null, needsRating? }
 
@@ -2964,7 +2971,7 @@ etude study watch --query "type:chess"
 
 ## stats
 
-Statistics: overview, forecast, recall per tag.
+Statistics: overview, forecast, recall per tag, adaptive skills.
 
 ### etude stats overview
 
@@ -3009,6 +3016,30 @@ etude stats forecast [flags]
 | `--query <SEARCH>` | string | Limit to cards matching a search (see `Search language`). Also `--q`. |
 
 Output: { overdue, forecast: [{ day, due }], deadline }
+
+### etude stats skills
+
+<a id="stats-skills"></a>
+
+On an adaptive deck: estimated skills, levels, placement and today's adaptive pace.
+
+Skills come from the card types' faces (and `skill::` tags), measured across the highest deck with an adaptive setting on. `typical` is the predicted chance of getting a middling card right. Everything is computed from the graded history, so nothing here is stored. A deck that isn't adaptive reports `adaptive: false`.
+
+```
+etude stats skills <deck>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `deck` | Deck name. |
+
+Output: { deck, adaptive, root?, settings?, skills?: [{ skill, answers, success, ability, typical, level: { index, tag, progress, checkPassed, done, nextOpen } | null, placement: { probes, done, frontier } | null }], pace?: { value, base, success, minutesPerDay, reason } | null }
+
+```sh
+etude stats skills "Course"
+```
 
 ### etude stats tags
 

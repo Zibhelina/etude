@@ -74,6 +74,24 @@ export interface CardTypeDef {
    * Stored apart from the definition; omitted on save means "keep the stored ones".
    */
   assets?: Record<string, string>;
+  /** The skill each face trains (`{ read: "reading", listen: "listening" }`), for adaptive decks. Faces left out train "general". */
+  skills?: Record<string, string>;
+  /**
+   * A list field whose entries are interchangeable variants (sentences, contexts). On adaptive decks
+   * each entry gets `_p` (predicted success), `_known` (share of its `requires` items the learner
+   * knows), `_seen` and `_difficulty` before prepare runs.
+   */
+  variants?: VariantSpec;
+}
+
+export interface VariantSpec {
+  field: string;
+  /** Key of each entry's stable id. Default "id". */
+  id?: string;
+  /** Key of each entry's list of item ids it relies on. Default "requires". */
+  requires?: string;
+  /** Key of each entry's prior difficulty, 0 (easy) to 1 (hard). Default "difficulty". */
+  difficulty?: string;
 }
 
 export interface MetricSpec {
@@ -157,6 +175,29 @@ export interface PresetConfig {
   scheduler: string;
   /** Settings for a non-FSRS scheduler, by option name. */
   schedulerOptions: Record<string, unknown>;
+  /** Card types get a `learner` argument and can choose easier or harder variants. Off: `learner` is null. */
+  adaptiveChallenge: boolean;
+  /** The day's new-card limit follows recent success and study time, between `newPerDayMin` and `newPerDayMax`. */
+  adaptivePace: boolean;
+  /** Share of graded answers that should be right: the challenge adaptation aims for it. */
+  targetSuccess: number;
+  /** Study time the adaptive pace aims for. */
+  minutesPerDay: number;
+  newPerDayMin: number;
+  newPerDayMax: number;
+  /** Ordered levels by tag (`level::1`, `level::2`...), each with an optional tag for its level check. */
+  levels: LevelSpec[];
+  /** Share of a level's cards that must be stable before the next level's new cards start to appear. */
+  levelAdvanceAt: number;
+  /** Share of new cards taken from the next level once it opens. */
+  levelMix: number;
+  /** Quick checks after a placement: earlier cards it judged known, offered on top of `newPerDay`. */
+  quickChecksPerDay: number;
+}
+
+export interface LevelSpec {
+  tag: string;
+  check?: string;
 }
 
 export const DEFAULT_PRESET: PresetConfig = {
@@ -180,6 +221,16 @@ export const DEFAULT_PRESET: PresetConfig = {
   mode: "study",
   scheduler: "fsrs",
   schedulerOptions: {},
+  adaptiveChallenge: false,
+  adaptivePace: false,
+  targetSuccess: 0.85,
+  minutesPerDay: 20,
+  newPerDayMin: 5,
+  newPerDayMax: 25,
+  levels: [],
+  levelAdvanceAt: 0.8,
+  levelMix: 0.2,
+  quickChecksPerDay: 30,
 };
 
 export interface Preset {
@@ -253,6 +304,21 @@ export interface Grade {
   confidence?: number;
   /** `example`: a recorded grade shown in watch mode, not one made for this answer. */
   grader: { kind: string; model?: string; ms?: number; cost?: number; error?: string; example?: boolean };
+  /** On adaptive decks: what was chosen for this showing and why, as of when it was shown. */
+  adaptive?: AdaptiveChoice;
+}
+
+export interface AdaptiveChoice {
+  asOf: string;
+  skill: string;
+  variant?: string;
+  /** The variant's prior difficulty, 0 to 1, so later estimates can start from it. */
+  difficulty?: number;
+  reason?: string;
+  /** A placement probe. */
+  placement?: boolean;
+  /** A quick check after a placement. */
+  quickCheck?: boolean;
 }
 
 export interface Prepared {
@@ -261,4 +327,6 @@ export interface Prepared {
   seed: number;
   /** Set when prepare returned `grader: "self"`: this variant is revealed and self-rated, whatever the type's grader. */
   selfGraded?: boolean;
+  /** Set on adaptive decks: what prepare chose, from the learner it was given. */
+  adaptive?: AdaptiveChoice;
 }

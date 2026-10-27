@@ -104,7 +104,7 @@ export interface Pace {
   reason: string;
 }
 
-/** Today's new-card limit from the last week: more when answers are mostly right and time is left, fewer otherwise. */
+/** Today's new-card limit from the last week: more when answers are mostly right and time is left, fewer when either falls short. */
 export function pace(cfg: PresetConfig, h: PaceHistory): Pace {
   const lo = cfg.newPerDayMin, hi = Math.max(cfg.newPerDayMin, cfg.newPerDayMax);
   if (h.scores.length < 20 || h.activeDays === 0)
@@ -114,7 +114,8 @@ export function pace(cfg: PresetConfig, h: PaceHistory): Pace {
   const base = Math.max(h.newCards / h.activeDays, lo);
   const bySuccess = clamp(1 + 2.5 * (success - cfg.targetSuccess), 0.5, 1.5);
   const byTime = minutes > 0 ? clamp(cfg.minutesPerDay / minutes, 0.5, 1.5) : 1.5;
-  const value = clamp(Math.round(base * bySuccess * byTime), lo, hi);
+  // The stricter of the two decides: more new cards only when answers are good and time is left.
+  const value = clamp(Math.round(base * Math.min(bySuccess, byTime)), lo, hi);
   const why = [
     success >= cfg.targetSuccess + 0.03 ? "answers above target" : success <= cfg.targetSuccess - 0.03 ? "answers below target" : "answers on target",
     minutes > cfg.minutesPerDay * 1.1 ? "over the time budget" : minutes < cfg.minutesPerDay * 0.9 ? "time to spare" : "on the time budget",

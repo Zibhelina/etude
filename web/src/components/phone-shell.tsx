@@ -1,4 +1,4 @@
-// The phone shell ("Score", see docs/mobile-design.md): a four-tab bar with the ε in the middle,
+// The phone shell ("Score", see docs/mobile-design.md): a floating tab capsule with the ε beside it,
 // the big serif page title that folds into a slim bar on scroll, and the bottom action sheet.
 // Nothing here renders at md (768 px) and up.
 import { useEffect, useRef, useState } from "react";
@@ -10,44 +10,49 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { to: "/", label: "Decks", icon: Layers, match: (p: string) => p === "/" || p === "/deck" },
   { to: "/browse", label: "Browse", icon: Library, match: (p: string) => p === "/browse" },
-  null, // the ε
   { to: "/stats", label: "Stats", icon: BarChart3, match: (p: string) => p === "/stats" },
   { to: "/more", label: "More", icon: MoreHorizontal, match: (p: string) => p === "/more" || p.startsWith("/types") || p === "/market" || p === "/settings" },
 ];
 
+/**
+ * "Ilha": a floating capsule with the four tabs as icons, where only the active one opens up and shows
+ * its name, and the ε in its own disc beside it. The list scrolls under both, behind a short fade.
+ */
 export function PhoneTabBar({ path, updateDot, onAsk }: { path: string; updateDot: boolean; onAsk(): void }) {
   return (
-    <nav aria-label="Main" className="score-tabbar fixed inset-x-0 bottom-0 z-20 md:hidden">
-      <div className="mx-auto grid h-16 max-w-md grid-cols-5 items-stretch px-2">
-        {TABS.map((t, i) =>
-          t ? (
-            <button
-              key={t.to}
-              onClick={() => navigate(t.to)}
-              aria-current={t.match(path) ? "page" : undefined}
-              className={cn(
-                "relative flex flex-col items-center justify-center gap-[3px] text-[11px] tracking-wide text-muted-foreground transition-colors active:scale-95",
-                t.match(path) && "text-foreground",
-              )}
-            >
-              <span className="relative">
-                <t.icon className={cn("size-[21px]", t.match(path) && "text-highlight")} strokeWidth={t.match(path) ? 2.1 : 1.7} />
-                {t.to === "/more" && updateDot && <span data-update-dot aria-label="Update available" className="absolute -top-0.5 -right-1 size-2 rounded-full bg-highlight ring-2 ring-background" />}
-              </span>
-              <span className={cn(t.match(path) && "font-medium")}>{t.label}</span>
-            </button>
-          ) : (
-            <button key={i} onClick={onAsk} aria-label="Ask Etude" data-agent-launcher className="group relative flex flex-col items-center justify-center gap-[3px] text-[11px] tracking-wide text-muted-foreground">
-              {/* Same slot as the other icons, so the labels share a baseline; the disc rises out of the bar. */}
-              <span className="relative size-[21px]">
-                <span className="score-ask absolute top-1/2 left-1/2 flex size-[3.25rem] -translate-x-1/2 -translate-y-[84%] items-center justify-center rounded-full border bg-card transition-transform group-active:scale-95">
-                  <Logo className="size-7" />
+    <nav aria-label="Main" className="score-island pointer-events-none fixed inset-x-0 bottom-0 z-20 md:hidden">
+      <div className="pointer-events-auto mx-auto flex max-w-md items-center gap-2 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] min-[360px]:gap-2.5 min-[360px]:px-3.5">
+        <div className="score-capsule flex h-[3.375rem] min-w-0 flex-1 items-center justify-between rounded-full border px-[5px]">
+          {TABS.map((t) => {
+            const on = t.match(path);
+            return (
+              <button
+                key={t.to}
+                onClick={() => navigate(t.to)}
+                aria-current={on ? "page" : undefined}
+                aria-label={t.label}
+                className={cn(
+                  // The pill grows out of the icon: padding, the label's width and the fill all ease together,
+                  // so the old tab folds while the new one opens. An inactive tab's box is exactly its icon, so
+                  // space-between keeps the visible gaps equal; the ::before keeps a 45 px touch target.
+                  "relative flex h-11 shrink-0 items-center justify-center rounded-full text-[13px] text-muted-foreground transition-[background-color,color,padding,margin] duration-300 ease-[cubic-bezier(0.22,0.9,0.3,1)] before:absolute before:-inset-x-3 before:inset-y-0 before:content-[''] active:scale-95 motion-reduce:transition-none",
+                  on ? "bg-accent px-3.5 font-medium text-foreground" : "bg-transparent px-0 first:ml-3.5 last:mr-3.5",
+                )}
+              >
+                <span className="relative">
+                  <t.icon className={cn("size-[21px] transition-colors duration-300", on && "text-highlight")} strokeWidth={on ? 2.1 : 1.7} />
+                  {t.to === "/more" && updateDot && <span data-update-dot aria-label="Update available" className="absolute -top-0.5 -right-1 size-2 rounded-full bg-highlight ring-2 ring-card" />}
                 </span>
-              </span>
-              <span>Ask</span>
-            </button>
-          ),
-        )}
+                <span aria-hidden={!on} className={cn("grid transition-[grid-template-columns,opacity,margin] duration-300 ease-[cubic-bezier(0.22,0.9,0.3,1)] motion-reduce:transition-none", on ? "ml-1.5 grid-cols-[1fr] opacity-100" : "ml-0 grid-cols-[0fr] opacity-0")}>
+                  <span className="overflow-hidden whitespace-nowrap">{t.label}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <button onClick={onAsk} aria-label="Ask Etude" data-agent-launcher className="score-capsule flex size-[3.375rem] shrink-0 items-center justify-center rounded-full border transition-transform active:scale-95">
+          <Logo className="size-[26px]" />
+        </button>
       </div>
     </nav>
   );

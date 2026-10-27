@@ -30,6 +30,75 @@ for (const page of ["index.html", "download.html", "404.html"]) {
   if (existsSync(p)) writeFileSync(p, readFileSync(p, "utf8").replaceAll("{{VERSION}}", pkg.version));
 }
 
+// The text pages: /sync and /support from site/pages/*.html, /terms, /privacy, /refunds and
+// /creators from the Markdown in site/legal/, all in one layout with the shared footer. GitHub
+// Pages serves sync.html at /sync. The footer replaces the one in index.html and download.html,
+// so every page links to Support and the legal pages.
+{
+  const { Marked } = await import("marked");
+  const layout = readFileSync(join(here, "pages/layout.html"), "utf8");
+  const footer = readFileSync(join(here, "pages/footer.html"), "utf8").trim();
+  const attr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  const page = (slug: string, title: string, description: string, body: string) =>
+    layout
+      .replaceAll("{{TITLE}}", attr(title))
+      .replaceAll("{{DESCRIPTION}}", attr(description))
+      .replaceAll("{{SLUG}}", slug)
+      .replace("{{NAV_SYNC}}", slug === "sync" ? ' aria-current="page"' : "")
+      .replace("{{NAV_SUPPORT}}", slug === "support" ? ' aria-current="page"' : "")
+      .replace("{{BODY}}", body.trim())
+      .replace("{{FOOTER}}", footer);
+  const frontMatter = (src: string) => {
+    const m = /^(?:---\n([\s\S]*?)\n---|<!--\n([\s\S]*?)\n-->)\n/.exec(src);
+    if (!m) throw new Error("page is missing its front matter");
+    const meta = Object.fromEntries((m[1] ?? m[2]).split("\n").map((l) => [l.slice(0, l.indexOf(":")).trim(), l.slice(l.indexOf(":") + 1).trim()]));
+    if (!meta.title || !meta.description) throw new Error("front matter needs title and description");
+    return { meta, rest: src.slice(m[0].length) };
+  };
+  for (const slug of ["sync", "support"]) {
+    const { meta, rest } = frontMatter(readFileSync(join(here, "pages", `${slug}.html`), "utf8"));
+    writeFileSync(join(out, `${slug}.html`), page(slug, meta.title, meta.description, rest));
+  }
+  const LEGAL = [["terms", "Terms"], ["privacy", "Privacy"], ["refunds", "Refunds"], ["creators", "Creator terms"]] as const;
+  const slugify = (s: string) => s.toLowerCase().replace(/<[^>]+>/g, "").replace(/&[a-z]+;/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const md = new Marked({
+    gfm: true,
+    renderer: {
+      heading({ tokens, depth }) {
+        const text = this.parser.parseInline(tokens);
+        return depth === 2 ? `<h2 id="${slugify(text)}">${text}</h2>\n` : `<h${depth}>${text}</h${depth}>\n`;
+      },
+      table(t) {
+        const head = t.header.map((c) => `<th>${this.parser.parseInline(c.tokens)}</th>`).join("");
+        const labels = t.header.map((c) => attr(c.text.replace(/[*_`]/g, "")));
+        const rows = t.rows.map((r) => `<tr>${r.map((c, i) => `<td data-label="${labels[i]}">${this.parser.parseInline(c.tokens)}</td>`).join("")}</tr>`).join("\n");
+        return `<div class="table-scroll"><table class="booktabs"><thead><tr>${head}</tr></thead><tbody>\n${rows}\n</tbody></table></div>\n`;
+      },
+    },
+  });
+  const date = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  for (const [slug] of LEGAL) {
+    const { meta, rest } = frontMatter(readFileSync(join(here, "legal", `${slug}.md`), "utf8"));
+    const html = (md.parse(rest) as string).replaceAll('<a href="http', '<a rel="noopener" href="http');
+    const nav = LEGAL.map(([s, label]) => `<a href="${s}"${s === slug ? ' aria-current="page"' : ""}>${label}</a>`).join("");
+    const body = `<article class="legal"><div class="wrap">
+<p class="opus">Legal <span>${attr(meta.title.toLowerCase())}</span></p>
+<nav class="legal-nav" aria-label="Legal pages">${nav}</nav>
+<div class="doc">
+${html}</div>
+<p class="legal-meta">Last updated ${date(meta["last-updated"])}. Questions: <a href="mailto:hello@etude.study">hello@etude.study</a>.</p>
+</div></article>`;
+    writeFileSync(join(out, `${slug}.html`), page(slug, meta.title, meta.description, body));
+  }
+  for (const f of ["index.html", "download.html"]) {
+    const p = join(out, f);
+    const s = readFileSync(p, "utf8");
+    const swapped = s.replace(/<footer class="footer">[\s\S]*?<\/footer>/, () => footer);
+    if (swapped === s) throw new Error(`${f}: no footer to replace`);
+    writeFileSync(p, swapped);
+  }
+}
+
 // The card runtime, exactly as the app serves it.
 const rt = join(out, "runtime");
 mkdirSync(join(rt, "vendor"), { recursive: true });

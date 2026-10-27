@@ -1,0 +1,131 @@
+<!--
+title: Etude Sync
+description: Etude Sync keeps your collection the same on your phone and your computers. End-to-end encrypted, US$5 a month or US$40 a year, 1 GB. Self-hosting is free.
+-->
+<section class="pg-hero">
+  <div class="wrap">
+    <p class="opus fade-up">Sync <span>one collection, every device</span></p>
+    <h1 class="fade-up" style="animation-delay:.1s">Practice on your phone. Pick up on your&nbsp;desk.</h1>
+    <p class="lede fade-up" style="animation-delay:.2s">Etude Sync keeps your decks, cards, reviews and media the same on every device you use. It's end-to-end encrypted: your collection is locked on your device before it leaves, and only your devices hold the key.</p>
+    <div class="hero-cta fade-up" style="animation-delay:.3s">
+      <a class="btn btn-primary btn-lg" href="#plans">See the plans</a>
+      <a class="textlink" href="#self-host">Or run your own server for free <span aria-hidden="true">→</span></a>
+    </div>
+  </div>
+</section>
+
+<section class="pg-section">
+  <div class="wrap pg-grid">
+    <div class="pg-col">
+      <p class="opus">I. <span>what it does</span></p>
+      <h2>Your collection, on all your devices.</h2>
+    </div>
+    <ul class="pg-points">
+      <li><b>Everything you make.</b> Decks, cards, edits, tags, media, your own card types and schedulers, themes, and every review with its answer.</li>
+      <li><b>Offline first.</b> Each device keeps its own full copy and works without a connection. Changes travel when you're back online.</li>
+      <li><b>Nothing lost when two devices disagree.</b> Review on the bus and at your desk, both offline: both reviews are kept and the schedule is worked out again from the full history.</li>
+      <li><b>Stays out of the way.</b> Once it's set up, Etude syncs on its own in the background.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="pg-section">
+  <div class="wrap pg-grid">
+    <div class="pg-col">
+      <p class="opus">II. <span>end-to-end encryption, in plain words</span></p>
+      <h2>We store your collection. We can't read&nbsp;it.</h2>
+    </div>
+    <div class="pg-prose">
+      <p>When you set up Sync, your device makes a random key. Everything that leaves the device is locked with it first: card text, answers, reviews, images, even deck names. Our server only ever receives the locked copy.</p>
+      <p>The key itself never reaches us. To let your other devices open it, Etude locks the key again with your <b>Sync password</b>, and once more with a <b>recovery key</b> that you write down. A new phone downloads the locked key and opens it with your password. We don't have the password, so we can't open it, and neither can anyone who breaks into the server or asks us for your data.</p>
+      <p>Signing in to your account (with a link sent to your email, or a passkey) only proves who you are. Unlocking your collection is a separate step that happens on your device.</p>
+      <p class="fineprint">What the server does see: your email address, how much you store, and when your devices upload. The details are in the <a href="privacy">Privacy Policy</a>. The scheme is AES-256-GCM, with the password stretched by Argon2id.</p>
+    </div>
+  </div>
+</section>
+
+<section class="pg-section" id="plans">
+  <div class="wrap">
+    <p class="opus">III. <span>plans</span></p>
+    <h2 class="pg-h2">One plan, two ways to pay.</h2>
+    <div class="plans">
+      <div class="plan">
+        <h3>Monthly</h3>
+        <p class="price"><b>US$5</b> <span>a month</span></p>
+        <ul class="reqs"><li><span><b>1 GB</b> of encrypted storage</span></li><li><span>All your devices</span></li><li><span>Cancel any time</span></li></ul>
+        <a class="btn btn-lg" href="https://sync.etude.study/account/subscribe?plan=monthly">Subscribe monthly</a>
+      </div>
+      <div class="plan plan-best">
+        <h3>Yearly <span class="save">save US$20</span></h3>
+        <p class="price"><b>US$40</b> <span>a year</span></p>
+        <ul class="reqs"><li><span><b>1 GB</b> of encrypted storage</span></li><li><span>All your devices</span></li><li><span>About US$3.33 a month</span></li></ul>
+        <a class="btn btn-primary btn-lg" href="https://sync.etude.study/account/subscribe?plan=yearly">Subscribe yearly</a>
+      </div>
+    </div>
+    <p class="fineprint plans-note">Prices are in US dollars, plus tax where it applies. You subscribe here on the website, then sign in to Sync from the app. Payments are handled by Polar, our merchant of record. See the <a href="terms">Terms</a> and the <a href="refunds">Refund Policy</a>.</p>
+  </div>
+</section>
+
+<section class="pg-section" id="self-host">
+  <div class="wrap pg-grid">
+    <div class="pg-col">
+      <p class="opus">IV. <span>self-host</span></p>
+      <h2>Or run the server yourself, for&nbsp;free.</h2>
+    </div>
+    <div class="pg-prose">
+      <p>Etude and its sync server are open source. If you'd rather keep everything on your own machines, run the server on a computer or a small VPS you control and point Etude at it. There's no limit on storage beyond your own disk, and no charge.</p>
+      <p>On a computer you can also sync through a folder you already share (Syncthing, Dropbox, a network drive): the same encrypted files, with no account and no server at all.</p>
+      <p>The paid plan is for people who want it to just work. It pays for the server, the backups and the time it takes to keep them running.</p>
+      <p><a class="textlink" href="https://github.com/Zibhelina/etude">Etude on GitHub <span aria-hidden="true">→</span></a></p>
+    </div>
+  </div>
+</section>
+
+<section class="pg-section">
+  <div class="wrap pg-grid">
+    <div class="pg-col">
+      <p class="opus">V. <span>questions</span></p>
+      <h2>Before you subscribe.</h2>
+    </div>
+    <div class="faq">
+      <details>
+        <summary>What if I forget my Sync password?</summary>
+        <p>Use your recovery key. Etude shows it once, when you set up Sync, and asks you to save it: on paper, in a password manager, anywhere safe. With the recovery key you can open your collection on a new device and choose a new password. We can't reset either for you, because we never have them. If you lose both, the copy on our server can't be opened by anyone, but the collections on your devices are untouched and you can set Sync up again from one of them.</p>
+      </details>
+      <details>
+        <summary>What happens if I cancel?</summary>
+        <p>Nothing on your devices changes. Every device keeps its full collection and Etude keeps working offline, as it always does without Sync. Sync runs until the end of the period you paid for. After that we keep the encrypted copy on the server for 90 days, in case you come back, and then delete it.</p>
+      </details>
+      <details>
+        <summary>Is 1 GB enough?</summary>
+        <p>For most people, yes. Text cards and reviews take very little space; images, audio and 3D models use most of it. If you reach the limit, new uploads pause until you free space, and nothing already stored is deleted.</p>
+      </details>
+      <details>
+        <summary>Do I need Sync to use Etude?</summary>
+        <p>No. Etude is free and complete without it. Sync is only for keeping more than one device in step.</p>
+      </details>
+      <details>
+        <summary>Why can't I subscribe inside the app?</summary>
+        <p>The apps don't sell anything. You subscribe here on the website, then sign in to Sync from the app with the same email.</p>
+      </details>
+      <details>
+        <summary>Does AI grading go through Sync?</summary>
+        <p>No. AI grading talks straight from your device to the AI provider you chose, with your own key. Your API keys and AI settings stay on each device and are never synced.</p>
+      </details>
+      <details>
+        <summary>Can I get a refund?</summary>
+        <p>Etude is free to try in full before you pay, so payments are final. We refund our own mistakes (a double charge, a charge after you cancelled) and any billing period in which Sync was down for more than 7 days in a row. The <a href="refunds">Refund Policy</a> has the details.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="wrap">
+    <h2>Questions we didn't answer?</h2>
+    <p class="cta-sub">Write to <a href="mailto:hello@etude.study">hello@etude.study</a>. A person reads every message.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary btn-lg" href="support">Support</a>
+    </div>
+  </div>
+</section>

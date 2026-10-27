@@ -382,6 +382,10 @@ Card code runs in sandboxed iframes with an opaque origin, user scripts run in Q
 
 Etude is free and made by one person in his free time. If it helps you study, you can [buy me a coffee on Ko-fi](https://ko-fi.com/jhca) or on [Buy Me a Coffee](https://buymeacoffee.com/jhca).
 
+## Legal
+
+The [Terms](https://etude.study/terms), [Privacy Policy](https://etude.study/privacy), [Refund Policy](https://etude.study/refunds) and [Creator Terms](https://etude.study/creators) cover the optional account, Sync and the paid Market. Their source is in [`site/legal/`](site/legal/). They are drafts that haven't been reviewed by a lawyer yet.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and new card types are very welcome.

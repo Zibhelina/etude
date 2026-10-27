@@ -1222,3 +1222,157 @@ if (rep && GALLERY?.length) {
     }, "0px 0px 30% 0px");
   }
 }
+
+// ------------------------------------------------------------- the phone edition
+// Below 640px (site.css "Score"): a dock that names the movement you're in and opens the programme,
+// rails with a position meter, and the long material folded behind a tap. Nothing here runs wider.
+{
+  const phone = matchMedia("(max-width: 640px)");
+  // the programme: every movement with an .opus label, in page order
+  const movements = $$("main .opus").map((o) => {
+    const sec = o.closest("section");
+    const n = [...o.childNodes].filter((c) => c.nodeType === 3).map((c) => c.textContent).join("").replace(/\s+/g, " ").trim();
+    return { sec, n, t: $("span", o)?.textContent.trim() ?? "" };
+  }).filter((m) => m.sec?.id);
+  const dock = $("[data-dock]"), dn = $("[data-dock-n]"), dt = $("[data-dock-t]");
+  const back = $("[data-programme]"), list = $("[data-programme-list]");
+  if (dock && movements.length) {
+    $("#programme-h em").textContent = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen"][movements.length] ?? String(movements.length);
+    list.innerHTML = movements.map((m, i) => `<li><a href="#${m.sec.id}" data-i="${i}"><span class="pn">${esc(m.n)}</span><span class="pt">${esc(m.t)}</span></a></li>`).join("");
+    let cur = -1;
+    const set = (i) => {
+      if (i === cur) return;
+      cur = i;
+      const m = movements[i];
+      for (const el of [dn, dt]) { el.classList.remove("swap"); void el.offsetWidth; el.classList.add("swap"); }
+      dn.textContent = m.n; dt.textContent = m.t;
+      $$("a", list).forEach((a) => a.toggleAttribute("aria-current", Number(a.dataset.i) === i));
+    };
+    // the dock comes up once the hero's buttons have scrolled away, and steps aside for the closing CTA
+    const hero = $(".hero .hero-cta"), cta = $(".cta");
+    let pastHero = false, atEnd = false;
+    const show = () => dock.classList.toggle("show", phone.matches && pastHero && !atEnd);
+    new IntersectionObserver(([e]) => { pastHero = !e.isIntersecting && e.boundingClientRect.top < 0; show(); }).observe(hero);
+    new IntersectionObserver(([e]) => { atEnd = e.isIntersecting; show(); }, { rootMargin: "0px 0px -20% 0px" }).observe(cta);
+    const track = () => {
+      if (!phone.matches) return;
+      const y = innerHeight * 0.5;
+      let i = 0;
+      movements.forEach((m, k) => { if (m.sec.getBoundingClientRect().top < y) i = k; });
+      set(i);
+    };
+    let ticking = false;
+    addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(() => { ticking = false; track(); }); } }, { passive: true });
+    phone.addEventListener("change", () => { show(); track(); });
+    track();
+
+    const open = () => {
+      back.hidden = false;
+      $("[data-programme-open]").setAttribute("aria-expanded", "true");
+      document.documentElement.classList.add("sheet-open");
+      requestAnimationFrame(() => requestAnimationFrame(() => back.classList.add("open")));
+      $("a[aria-current]", list)?.scrollIntoView({ block: "center" });
+      $("[data-programme-close]", back).focus({ preventScroll: true });
+    };
+    const close = (then) => {
+      back.classList.remove("open");
+      $("[data-programme-open]").setAttribute("aria-expanded", "false");
+      $("[data-programme-open]").focus({ preventScroll: true });
+      document.documentElement.classList.remove("sheet-open");
+      setTimeout(() => { back.hidden = true; then?.(); }, reduced ? 0 : 380);
+    };
+    $("[data-programme-open]").addEventListener("click", open);
+    back.addEventListener("click", (e) => {
+      const a = e.target.closest("a[href^='#']");
+      if (a) { e.preventDefault(); const t = $(a.getAttribute("href")); close(() => t?.scrollIntoView({ behavior: reduced ? "auto" : "smooth" })); return; }
+      if (e.target === back || e.target.closest("[data-programme-close]")) close();
+    });
+    addEventListener("keydown", (e) => {
+      if (back.hidden) return;
+      if (e.key === "Escape") close();
+      if (e.key === "Tab") {
+        const links = $$("button, a[href]", back), first = links[0], last = links.at(-1);
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    });
+    // swipe the sheet down to close it
+    const sheet = $(".programme", back);
+    let y0 = null;
+    sheet.addEventListener("touchstart", (e) => { y0 = sheet.scrollTop <= 0 ? e.touches[0].clientY : null; }, { passive: true });
+    sheet.addEventListener("touchmove", (e) => { if (y0 == null) return; const d = Math.max(0, e.touches[0].clientY - y0); sheet.style.transition = "none"; sheet.style.translate = `0 ${d}px`; }, { passive: true });
+    sheet.addEventListener("touchend", (e) => {
+      if (y0 == null) return;
+      const d = e.changedTouches[0].clientY - y0; y0 = null;
+      sheet.style.transition = sheet.style.translate = "";
+      if (d > 90) close();
+    });
+  }
+
+  // folded material: the button folds whatever its data-expand selector names (within its section)
+  for (const b of $$("[data-expand]")) {
+    const sec = b.closest("section") ?? document;
+    const target = $(b.dataset.expand, sec);
+    if (!target) continue;
+    const more = b.textContent, less = b.dataset.less ?? more;
+    const isLetter = target.classList.contains("letter");
+    const fold = (open) => {
+      b.setAttribute("aria-expanded", String(open));
+      b.textContent = open ? less : more;
+      if (isLetter) target.classList.toggle("folded", !open && phone.matches);
+      else { target.classList.add("folds"); target.classList.toggle("open", open); }
+    };
+    // the letter lives inside .letter, so put its button after it, where the fade ends
+    if (isLetter) target.after(b);
+    b.addEventListener("click", () => {
+      const open = b.getAttribute("aria-expanded") !== "true";
+      fold(open);
+      if (!open) b.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
+    });
+    fold(false);
+    phone.addEventListener("change", () => fold(b.getAttribute("aria-expanded") === "true"));
+  }
+
+  // rails: a meter under each says how far along you are, and how many there are
+  for (const rail of $$("[data-rail]")) {
+    const meter = document.createElement("div");
+    meter.className = "rail-meter ph-only";
+    meter.setAttribute("aria-hidden", "true");
+    meter.innerHTML = `<span class="tabular" data-pos></span><span class="bar"><i></i></span><span class="hint">swipe</span>`;
+    rail.after(meter);
+    const pos = $("[data-pos]", meter), bar = $(".bar i", meter);
+    const update = () => {
+      const items = [...rail.children].filter((c) => c.offsetWidth);
+      const n = items.length;
+      if (!n || rail.scrollWidth <= rail.clientWidth + 4) { meter.style.visibility = "hidden"; return; }
+      meter.style.visibility = "";
+      const max = rail.scrollWidth - rail.clientWidth, f = max > 0 ? rail.scrollLeft / max : 0;
+      const shown = Math.max(1, Math.round(rail.clientWidth / (items[0].offsetWidth + 14)));
+      const first = Math.min(n - shown, Math.round(f * (n - shown))) + 1;
+      pos.textContent = `${first}${shown > 1 ? `–${Math.min(n, first + shown - 1)}` : ""} of ${n}`;
+      const w = Math.max(0.08, rail.clientWidth / rail.scrollWidth);
+      bar.style.width = `${w * 100}%`; bar.style.left = `${f * (1 - w) * 100}%`;
+      if (rail.scrollLeft > 8) meter.querySelector(".hint").hidden = true;
+    };
+    rail.addEventListener("scroll", update, { passive: true });
+    new ResizeObserver(update).observe(rail);
+    new MutationObserver(update).observe(rail, { childList: true });
+    update();
+  }
+
+  // no. 9: on a phone each part opens on tap
+  for (const dt of $$(".feats dt")) {
+    dt.setAttribute("role", "button");
+    dt.tabIndex = 0;
+    const toggle = () => phone.matches && dt.parentElement.classList.toggle("open");
+    dt.addEventListener("click", toggle);
+    dt.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), toggle()));
+  }
+
+  // the hero's film button: go to the film and play it
+  $("[data-play-film]")?.addEventListener("click", () => {
+    const film = $("#film");
+    film.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
+    $(".film-play")?.click();
+  });
+}

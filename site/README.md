@@ -21,3 +21,13 @@ The hero runs real card types from `examples/showcase/`: `build.ts` turns each t
 | `tools/interact.mjs` | plays the hero's chess and math cards with real clicks and reports the grades |
 
 The tools need Chromium (`CHROME` overrides the binary) and ImageMagick.
+
+## Phone edition
+
+At widths up to 640 px the landing page uses the app's Score vocabulary: a bottom dock names the current movement and opens a programme sheet; theme cards, drill panels and phone screenshots are swipe rails with a position meter. The founder letter, generator source and exam-method note fold behind explicit controls, and the final feature list is an accordion. All original copy stays available. Desktop keeps its full layouts and expanded content. The same `site.js` powers the real card examples and charts in both compositions.
+
+The programme supports backdrop/close/Escape dismissal, a focus loop, and a downward swipe from the top. Its links navigate to the original section anchors. The dock appears after the hero actions leave the screen and hides for the closing CTA. The film shortcut plays the existing film; Get Etude goes to the existing download page. This does not advertise an unreleased mobile install.
+
+For browser captures, disable smooth scrolling while positioning a section and check the evaluated scroll position before each shot. A reused top-level `const` in the CDP context throws on later evaluations; wrap capture expressions in an IIFE and fail on `exceptionDetails`. Full-page captures of scroll-revealed content can look empty after late layout shifts: inspect individual sections before diagnosing missing content.
+
+Acceptance: build the site, run `tools/check.mjs` on landing and download at 320/390 and desktop widths, then exercise folding, market tabs/rail scrolling, feature accordion, programme open/close/navigation, and viewport overflow. Check real screenshots separately from DOM assertions. Intentional swipe rails are excluded from the checker's offscreen-descendant warning, while the document overflow check remains active.

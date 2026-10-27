@@ -54,7 +54,7 @@ await evaluate("scrollTo(0, 0)");
 await sleep(600);
 const ow = await evaluate("document.documentElement.scrollWidth - innerWidth");
 if (ow > 0) problems.push(`horizontal overflow ${ow}px`);
-const wide = await evaluate(`[...document.querySelectorAll('body *')].filter(e => { const r = e.getBoundingClientRect(); return r.right > innerWidth + 1 && getComputedStyle(e).position !== 'fixed' && !e.closest('.marquee, .stage-tabs, .shots-tabs, .code-tabs, .plate-list, .hero-bg, .cta .big-eps') && !e.closest('pre'); }).slice(0, 8).map(e => e.tagName + '.' + e.className + ' ' + Math.round(e.getBoundingClientRect().right))`);
+const wide = await evaluate(`[...document.querySelectorAll('body *')].filter(e => { const r = e.getBoundingClientRect(); return r.right > innerWidth + 1 && getComputedStyle(e).position !== 'fixed' && !e.closest('.marquee, .stage-tabs, .shots-tabs, .code-tabs, .plate-list, .hero-bg, .cta .big-eps, [data-rail]') && !e.closest('pre'); }).slice(0, 8).map(e => e.tagName + '.' + e.className + ' ' + Math.round(e.getBoundingClientRect().right))`);
 if (wide?.length) problems.push("wider than viewport: " + wide.join(" | "));
 const h = await evaluate("document.documentElement.scrollHeight");
 const shot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { x: 0, y: 0, width, height: h, scale: 1 } });

@@ -1015,3 +1015,163 @@ h1, h2, h3 { margin: 0; font-family: var(--font-serif); font-weight: 400; letter
 @keyframes suite-head { from { opacity: 0; translate: 0 0.35rem; } to { opacity: 1; translate: 0 0; } }
 #decks .head h2.swap { animation: suite-head 0.45s var(--ease, ease-out) both; }
 @media (prefers-reduced-motion: reduce) { #decks .head h2.swap { animation: none; } }
+
+/* ============================================================ phone edition: "Score"
+   The same language as the app's phone layout (docs/mobile-design.md). On a phone the page is read
+   as a score, one movement at a time: a dock at the bottom always says where you are and opens the
+   programme as a sheet; long sets (themes, stats panels, the app's screens) are rails you swipe
+   instead of lists you scroll past; the long material (the letter, the generator's code, the
+   method notes) folds behind a tap. Desktop never sees any of it. */
+.ph-only { display: none !important; }
+.dock, .programme-back { display: none; }
+@media (max-width: 640px) {
+  .ph-only { display: revert !important; }
+  .ph-hide { display: none !important; }
+  .btn.ph-only { display: inline-flex !important; }
+
+  /* nav: the dock carries the action, the nav keeps the name */
+  .nav .btn-primary { display: none; }
+  .nav .wrap { height: 3.5rem; }
+
+  /* hero: one promise, two thumbs' worth of buttons */
+  .hero-cta { gap: 0.6rem; }
+  .hero-cta .btn { height: 3.25rem; border-radius: 99px; font-size: 1rem; }
+  .ph-film { gap: 0.55rem; border-color: var(--input); }
+  .ph-film svg { width: 0.95rem; height: 0.95rem; }
+  .ph-film small { font-size: 0.78rem; color: var(--muted-foreground); font-weight: 400; }
+  .colophon { margin-top: 1.2rem; font-size: 0.78rem; line-height: 1.7; }
+
+  /* movement heads: the label as a tracked kicker, the title big, a hairline above */
+  .head { border-top: 0; padding-top: 0; position: relative; }
+  .head::before { content: ""; display: block; width: 2.25rem; height: 1.5px; background: var(--highlight); margin-bottom: 0.4rem; }
+  .head .opus { font-family: var(--font-sans); font-style: normal; font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--foreground); gap: 0 0.55rem; }
+  .head .opus span { letter-spacing: 0.06em; text-transform: none; font-family: var(--font-serif); font-style: italic; font-size: 0.95rem; }
+  .head h2 { font-size: 2.15rem; line-height: 1.08; letter-spacing: -0.01em; }
+  .sub { font-size: 0.98rem; line-height: 1.6; }
+  .section { padding: 2.25rem 0 2.75rem; }
+
+  /* folded material */
+  .ph-expand {
+    align-items: center; gap: 0.5rem; margin-top: 0.4rem; padding: 0.55rem 0; border: 0; background: none; cursor: pointer;
+    font: 500 0.88rem var(--font-sans); color: var(--foreground);
+  }
+  .ph-expand::after { content: ""; width: 0.45rem; height: 0.45rem; border-right: 1.5px solid var(--highlight); border-bottom: 1.5px solid var(--highlight); rotate: 45deg; translate: 0 -0.15rem; transition: rotate 0.3s var(--ease), translate 0.3s var(--ease); }
+  .ph-expand[aria-expanded="true"]::after { rotate: 225deg; translate: 0 0.12rem; }
+  .ph-expand { display: inline-flex !important; }
+  .folds:not(.open) { display: none; }
+  /* the letter folds after its first paragraph, fading into the button */
+  .letter.folded p:not(:first-child) { display: none; }
+  .letter.folded p:first-child { margin-bottom: 0.2rem; }
+  .prelude .ph-expand { margin-top: 0; }
+  .letter { font-size: 1.12rem; }
+  .gen { gap: 1rem; }
+  .gen .ph-gen { order: 2; justify-self: start; }
+  .gen .variants { order: 1; }
+  .gen .gen-code { order: 3; }
+  .variant-list li:nth-child(n + 3) { display: none; }
+  .exam-note.folds.open { margin-top: 0.6rem; }
+
+  /* rails: a set you swipe, with a meter under it */
+  [data-rail] {
+    display: flex !important; gap: 0.85rem; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain;
+    margin-inline: -1.25rem; padding: 0.25rem 1.25rem 0.5rem; scroll-padding-inline: 1.25rem;
+  }
+  [data-rail]::-webkit-scrollbar { display: none; }
+  [data-rail] > * { flex: none; scroll-snap-align: start; }
+  [data-rail]::after { content: ""; flex: none; width: 0.4rem; }
+  .rail-meter { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.6rem; font: 0.75rem var(--font-sans); color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+  .rail-meter .bar { flex: 1; height: 1.5px; background: var(--border); border-radius: 2px; position: relative; overflow: hidden; }
+  .rail-meter .bar i { position: absolute; inset: 0 auto 0 0; background: var(--foreground); border-radius: 2px; transition: left 0.2s, width 0.2s; }
+  .rail-meter .hint { font-style: italic; font-family: var(--font-serif); font-size: 0.85rem; }
+
+  /* market: themes are small swatch cards, three-and-a-bit to a screen */
+  .market-grid[data-rail] > .mk { width: 72%; animation: none; }
+  .mk-theme { padding: 0.7rem; grid-template-columns: 1.6rem 1fr; gap: 0.45rem; }
+  .mk-body { padding: 0.7rem 0.85rem 0.85rem; }
+  .mk-desc { -webkit-line-clamp: 2; font-size: 0.8rem; }
+  .mk-tags { display: none; }
+  .market-tabs { margin-bottom: 1.1rem; }
+  .market-foot { margin-top: 1.25rem; flex-direction: column; align-items: flex-start; gap: 0.6rem; }
+
+  /* tempo: the two live stats panels side by side as a rail */
+  .tempo-stats[data-rail] > .tempo-shot { width: 88%; }
+  .tempo-stats[data-rail] { margin-top: 2rem; }
+  .tempo-src { display: none; }
+
+  /* the app: real phone screenshots, one and a peek per screen */
+  .phone-strip[data-rail] { margin-inline: -1.25rem; gap: 1.1rem; }
+  .phone-strip .phone-slide { width: 58%; }
+
+  /* no. 9: the parts list is two columns of names; tap one to read it */
+  .feats { grid-template-columns: 1fr; }
+  .feats > div { padding: 0; }
+  .feats dt { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 0; font-size: 1.08rem; cursor: pointer; }
+  .feats dt::after { content: ""; flex: none; width: 0.45rem; height: 0.45rem; border-right: 1.5px solid var(--muted-foreground); border-bottom: 1.5px solid var(--muted-foreground); rotate: 45deg; translate: 0 -0.15rem; transition: rotate 0.3s var(--ease), translate 0.3s var(--ease); }
+  .feats > div.open dt::after { rotate: 225deg; translate: 0 0.12rem; border-color: var(--highlight); }
+  .feats dd { display: none; margin: -0.3rem 0 0; padding-bottom: 1rem; }
+  .feats > div.open dd { display: block; }
+
+  /* types: the code is a window, not a wall */
+  .code-tabs + .code { height: 17rem; }
+  .tree + .fineprint { max-width: none; }
+
+  /* agents: the terminal is as tall as what it has said */
+  .term-body { height: auto; min-height: 9rem; max-height: 19rem; }
+
+  /* the closing: no dock over it */
+  .cta { padding: 3rem 0 3.5rem; }
+  .footer { padding-bottom: calc(2rem + env(safe-area-inset-bottom)); }
+  body { padding-bottom: 0; }
+
+  /* --------------------------------------------------- the dock */
+  .dock {
+    position: fixed; z-index: 60; left: 0.75rem; right: 0.75rem; bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    display: flex; align-items: center; gap: 0.4rem; padding: 0.35rem; border-radius: 99px;
+    background: oklch(0.215 0.005 85 / 96%); border: 1px solid color-mix(in oklab, var(--foreground) 16%, transparent);
+    box-shadow: 0 18px 40px -12px oklch(0 0 0 / 80%), 0 1px 0 oklch(1 0 0 / 5%) inset;
+    -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2);
+    translate: 0 calc(100% + 1.5rem); transition: translate 0.45s var(--ease);
+  }
+  .dock.show { translate: 0 0; }
+  .dock-now {
+    flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.5rem; height: 2.9rem; padding: 0 0.6rem 0 1rem; border: 0; background: none; cursor: pointer; text-align: left;
+  }
+  .dock-n { flex: none; font: 600 0.66rem var(--font-sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--highlight); }
+  .dock-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: italic 1rem var(--font-serif); color: var(--foreground); }
+  .dock-now svg { flex: none; width: 1rem; height: 1rem; margin-left: auto; align-self: center; color: var(--muted-foreground); }
+  .dock-n.swap, .dock-t.swap { animation: dock-swap 0.35s var(--ease); }
+  @keyframes dock-swap { from { opacity: 0; translate: 0 0.4rem; } }
+  .dock-get { flex: none; display: inline-flex; align-items: center; height: 2.9rem; padding: 0 1.15rem; border-radius: 99px; background: var(--primary); color: var(--primary-foreground); font-weight: 600; font-size: 0.9rem; }
+
+  /* --------------------------------------------------- the programme sheet */
+  .programme-back { position: fixed; inset: 0; z-index: 70; display: block; background: oklch(0 0 0 / 0%); transition: background 0.35s var(--ease); }
+  .programme-back[hidden] { display: none !important; }
+  .programme-back.open { background: oklch(0 0 0 / 62%); }
+  .programme {
+    position: absolute; left: 0; right: 0; bottom: 0; max-height: 86svh; isolation: isolate; overflow-y: auto; overscroll-behavior: contain;
+    background: var(--card); border-radius: 1.5rem 1.5rem 0 0; border-top: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent);
+    padding: 0.6rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
+    translate: 0 100%; transition: translate 0.45s var(--ease);
+  }
+  .programme-back.open .programme { translate: 0 0; }
+  .programme .grab { display: block; width: 2.4rem; height: 0.28rem; border-radius: 99px; background: var(--rule); margin: 0 auto 1.1rem; }
+  .programme-k { margin: 0; font: 600 0.66rem var(--font-sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted-foreground); }
+  .programme h3 { font-size: 1.65rem; line-height: 1.15; margin: 0.25rem 0 1.25rem; }
+  .programme-x { position: absolute; top: 0.9rem; right: 0.9rem; width: 2.4rem; height: 2.4rem; display: grid; place-items: center; border-radius: 99px; border: 0; background: var(--secondary); color: var(--muted-foreground); cursor: pointer; }
+  .programme-x svg { width: 1rem; height: 1rem; }
+  .gh-stars { display: none !important; }
+  .programme h3 em { color: var(--highlight); }
+  .programme ol { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+  .programme li a { display: grid; grid-template-columns: 7.6rem 1fr; align-items: baseline; gap: 0.5rem; padding: 0.72rem 0; border-bottom: 1px solid var(--border); }
+  .programme li .pn { font: 600 0.7rem var(--font-sans); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted-foreground); }
+  .programme li .pt { font: italic 1.08rem var(--font-serif); color: var(--muted-foreground); }
+  .programme li a[aria-current] .pn { color: var(--highlight); }
+  .programme li a[aria-current] .pt { color: var(--foreground); }
+  .prelude-grid { gap: 0.4rem; }
+  .dock-n { max-width: 5.2rem; overflow: hidden; text-overflow: ellipsis; }
+  .dock::before { content: ""; position: absolute; z-index: -1; pointer-events: none; left: -1rem; right: -1rem; bottom: calc(-1rem - env(safe-area-inset-bottom)); height: 6rem; background: linear-gradient(transparent, var(--background) 72%); border-radius: 0; }
+  html.sheet-open { overflow: hidden; }
+}
+@media (max-width: 640px) and (prefers-reduced-motion: reduce) {
+  .dock, .programme, .programme-back { transition: none; }
+}

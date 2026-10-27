@@ -62,8 +62,9 @@
       <h1 class="fade-up" style="animation-delay:.08s"><span class="l">Practice</span> <span class="l"><em>anything.</em></span></h1>
       <p class="lede fade-up" style="animation-delay:.18s">Every card type is a small program. Compute, drag, play, draw or prove, and let a script or AI check your answer.</p>
       <div class="hero-cta fade-up" style="animation-delay:.26s">
-        <a class="btn btn-primary btn-lg" href="download.html">Download Etude</a>
-        <a class="textlink" href="#cards">See how it works <span aria-hidden="true">→</span></a>
+        <a class="btn btn-primary btn-lg" href="download.html"><span class="ph-hide">Download Etude</span><span class="ph-only">Get Etude</span></a>
+        <a class="textlink ph-hide" href="#cards">See how it works <span aria-hidden="true">→</span></a>
+        <button class="btn btn-lg ph-only ph-film" type="button" data-play-film><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>Watch the film <small class="tabular">2:26</small></button>
       </div>
       <p class="colophon fade-up" style="animation-delay:.34s">Endless card types, write your own · FSRS-6 · MIT · runs on your own computer</p>
     </div>
@@ -115,6 +116,7 @@
         <p>Etude is my attempt to take that idea further. It isn't really a flashcard app. It's a practice app. The scheduling stays, but a card can be a chess position, a chord, a proof or a piece of code, checked the way it should be. And every part of it can be extended, swapped or rewritten, so the app bends around what you're learning instead of the other way around.</p>
         <p>It's also my take on what learning should put first: systematic practice. A lot of people treat learning as something a bit mystical, as if some people just get it and you have to be smart to memorize things. I don't think that's true. Most of it is memory and repetition: practice.</p>
         <p>That's why I'd like Etude to be used by students, by schools, and by anyone who wants learning to be easier. Its whole point is to show that your mind can do a lot more than you think, once you give it the right system.</p>
+        <button class="ph-only ph-expand" type="button" data-expand=".letter" data-less="Fold the letter">Read the whole letter</button>
       </div>
       <blockquote class="pull" data-reveal style="--d:.15s" aria-hidden="true">Your mind can do more than you think, with the right <em>system.</em></blockquote>
     </div>
@@ -216,6 +218,7 @@
       </div>
     </header>
     <div class="gen">
+      <button class="ph-only ph-expand ph-gen" type="button" data-expand=".gen-code" data-less="Hide the generator">Show the generator</button>
       <div class="gen-code" data-reveal>
         <p class="code-head"><span>generator</span><span>showcase.math.derivative</span></p>
         <pre class="code"><code data-gen-code></code></pre>
@@ -250,6 +253,7 @@
         <div class="lg on"><i></i><div><b>With a deadline</b><span data-last-on></span></div></div>
         <div class="lg deck"><div><b class="tabular"><span data-recall-off>–</span> <span class="to">→</span> <em data-recall-on>–</em></b><span>predicted recall on exam day, across a deck of 40 cards</span></div></div>
       </div>
+      <button class="ph-only ph-expand" type="button" data-expand=".exam-note" data-less="Hide how it's computed">How it's computed</button>
       <p class="exam-note">One card learned on day 0 and answered Good at every review, studying at 5 pm, exam at 9 am. The curve is the predicted chance you'd recall it. The deck figure is 40 cards learned over the first 60% of the time. Computed live in your browser with the real FSRS-6 scheduler (ts-fsrs) and Etude's deadline rule.</p>
     </div>
   </div>
@@ -273,7 +277,7 @@
       <div class="tempo-chart" data-tempo-chart></div>
       <p class="fineprint">Each row runs the real scheduler in your browser: FSRS-6 through ts-fsrs, and the <code>drill</code> and <code>leitner</code> scripts that ship with Etude. The last row is the example from <a href="https://github.com/Zibhelina/etude/blob/main/docs/schedulers.md">docs/schedulers.md</a>.</p>
     </div>
-    <div class="tempo-stats">
+    <div class="tempo-stats" data-rail>
       <figure class="tempo-shot" data-reveal>
         <div class="tempo-live" data-live="drill"></div>
         <figcaption><b>A drill keeps every result.</b> No ratings, no forgetting curve. Stats charts what the grader measured, run by run: WPM, accuracy, consistency.</figcaption>
@@ -426,7 +430,7 @@
         <button role="tab" aria-selected="false" data-kind="deck">Decks</button>
         <button role="tab" aria-selected="false" data-kind="type">Card types</button>
       </div>
-      <div class="market-grid" data-market-grid></div>
+      <div class="market-grid" data-market-grid data-rail></div>
       <div class="market-foot">
         <p class="fineprint" data-market-count></p>
         <a class="textlink" href="https://github.com/Zibhelina/etude-market">Browse the catalogue on GitHub <span aria-hidden="true">→</span></a>
@@ -468,7 +472,7 @@
       <p class="shot-caption" data-shot-caption></p>
     </div>
     <!-- phones get the phone app: real screenshots, swiped sideways -->
-    <div class="phone-strip" aria-label="Etude on a phone">
+    <div class="phone-strip" aria-label="Etude on a phone" data-rail>
       <figure class="phone-slide"><div class="phone"><img class="screen" src="assets/shots/phone-decks.webp" alt="The Decks page on a phone" loading="lazy" width="804" height="1748"><img class="frame" src="assets/device/iphone-16-pro-black-titanium.webp" alt="" aria-hidden="true" loading="lazy"></div><figcaption><b>Decks</b> in a tree, with what's new and due today.</figcaption></figure>
       <figure class="phone-slide"><div class="phone"><img class="screen" src="assets/shots/phone-chess.webp" alt="A chess card on a phone" loading="lazy" width="804" height="1748"><img class="frame" src="assets/device/iphone-16-pro-black-titanium.webp" alt="" aria-hidden="true" loading="lazy"></div><figcaption><b>Study</b> one card at a time. Moves are checked against the engine.</figcaption></figure>
       <figure class="phone-slide"><div class="phone"><img class="screen" src="assets/shots/phone-circle.webp" alt="A unit circle card on a phone" loading="lazy" width="804" height="1748"><img class="frame" src="assets/device/iphone-16-pro-black-titanium.webp" alt="" aria-hidden="true" loading="lazy"></div><figcaption><b>Drag or tap.</b> Every card type is made for thumbs.</figcaption></figure>
@@ -582,5 +586,20 @@
     <div class="fine"><span>MIT License · © 2026 Etude contributors</span><span>Made with <span class="wordmark" style="font-size:1em"><span class="eps">ε</span>tude</span> cards, of course.</span></div>
   </div>
 </footer>
+
+<!-- phones: where you are in the piece, and the way to anywhere else -->
+<nav class="dock" aria-label="Where you are" data-dock>
+  <button class="dock-now" type="button" data-programme-open aria-haspopup="dialog"><span class="dock-n" data-dock-n>Overture</span><span class="dock-t" data-dock-t>the film</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  <a class="dock-get" href="download.html">Get Etude</a>
+</nav>
+<div class="programme-back" data-programme hidden>
+  <div class="programme" role="dialog" aria-modal="true" aria-labelledby="programme-h">
+    <i class="grab" aria-hidden="true"></i>
+    <button class="programme-x" type="button" aria-label="Close" data-programme-close><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+    <p class="programme-k">Programme</p>
+    <h3 id="programme-h">Etude, in <em>sixteen</em> movements</h3>
+    <ol data-programme-list></ol>
+  </div>
+</div>
 </body>
 </html>

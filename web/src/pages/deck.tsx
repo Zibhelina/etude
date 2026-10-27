@@ -471,7 +471,7 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards, phone }: { deck
             </Button>
           ) : (
             <>
-              <CustomStudy deck={deck.name} tags={tags} disabled={!node?.cards} phone={phone} />
+              <CustomStudy deck={deck.name} tags={tags} disabled={!node?.cards} phone={phone} adaptive={deck.resolved.adaptiveChallenge || deck.resolved.adaptivePace} />
               {work || !node?.cards ? (
                 <Button size="lg" className={cn("flex-1 gap-2 px-6 sm:flex-none", phone && "h-[3.25rem] rounded-full text-[16px] pointer-coarse:h-[3.25rem]")} disabled={!work} onClick={() => navigate(`/study?deck=${enc(deck.name)}`)}>
                   <Play className="size-4" />Practice
@@ -572,7 +572,7 @@ function Countdown({ deadline, margin }: { deadline: string; margin: number }) {
   );
 }
 
-function CustomStudy({ deck, tags, disabled, phone }: { deck: string; tags: string[]; disabled?: boolean; phone?: boolean }) {
+function CustomStudy({ deck, tags, disabled, phone, adaptive }: { deck: string; tags: string[]; disabled?: boolean; phone?: boolean; adaptive?: boolean }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [count, setCount] = useState<number | null>(null);
@@ -622,6 +622,15 @@ function CustomStudy({ deck, tags, disabled, phone }: { deck: string; tags: stri
           <DropdownMenuItem className="h-10" onClick={() => go("is:new")}>New cards only</DropdownMenuItem>
           <DropdownMenuItem className="h-10" onClick={() => go("rated:1:1")}>Failed today</DropdownMenuItem>
           <DropdownMenuItem className="h-10" onClick={() => go("prop:lapses>=2")}>Frequently forgotten</DropdownMenuItem>
+          {adaptive && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="h-10" onClick={() => navigate(`/study?${new URLSearchParams({ deck, placement: "1" })}`)}>
+                Find my level
+                <span className="ml-auto text-xs text-muted-foreground">placement</span>
+              </DropdownMenuItem>
+            </>
+          )}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className="h-10" disabled={!tags.length}>By tag</DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="max-h-80 w-64 overflow-y-auto">

@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
@@ -7,7 +8,7 @@ import { syncFor } from "../src/core/sync/client.ts";
 import { compare, tick, rows, drain, receive, type Change } from "../src/core/sync/log.ts";
 import { generateVaultKey, encryptBlob, decryptBlob, encryptEvent, decryptEvent } from "../src/core/sync/crypto.ts";
 
-const temp=()=>mkdtempSync(join(process.env.TMPDIR!,"sync-test-"));
+const temp=()=>mkdtempSync(join((process.env.TMPDIR ?? tmpdir()),"sync-test-"));
 const password="a test Sync password";
 const put=(e:Etude,id:string,front="question",back="answer")=>e.upsertItem({id,deck:"Test",type:"basic",fields:{front,back},tags:["test"]});
 function canonical(e:Etude) {

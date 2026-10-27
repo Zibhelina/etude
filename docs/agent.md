@@ -17,6 +17,7 @@ A chat inside Etude that can do anything the CLI can: make decks from your notes
 - **Undo.** Before the first change in each reply, Etude snapshots the collection (`VACUUM INTO` into `$ETUDE_HOME/agent-snapshots/`, the last 10 are kept). A reply that changed something has an **Undo these changes** button that puts the collection back as it was before that reply. Changes made after it are undone too. Conversations themselves aren't rewound. Media files copied in by the reply stay on disk.
 - **Limits.** At most 25 tool calls per message. **Stop** ends a running reply at the next step.
 - **Blocked commands.** The assistant can't run `serve`, `update`, `settings chatgpt login/logout/import`, `db restore`, `market publish` or the `agent` commands, and can't point a command at another database with `--db`. Settings output never contains API keys.
+- **Outside the collection.** Attached files, deck text and Market entries can carry instructions, so the assistant treats them as material and is limited before a command runs: `settings set/unset` only for day start, learn-ahead, theme, auto feedback, language and model names (never provider URLs, API key names or `market.*`); no `--out`, backup destinations or exports that write files; file paths only from the chat's own attachments; no `--url` on Market commands. The user's own CLI and Settings page aren't limited.
 
 ## Models
 

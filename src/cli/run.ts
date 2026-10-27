@@ -242,6 +242,16 @@ export function resolveCommand(argv: string[]): CommandSpec | undefined {
 export interface RunOptions {
   /** Run against this open collection instead of opening one; it is left open. */
   etude?: Etude;
+  /** Ask Etude is running the command, not the user: commands that weigh trust (settings set) see `ctx.agent`. */
+  agent?: boolean;
+}
+
+/** The command an argv names with its parsed flags and arguments, exactly as `run` would parse them. Throws CliError on bad arguments. */
+export function parseInvocation(argv: string[]): { cmd: CommandSpec; values: Record<string, any>; named: Record<string, any> } | null {
+  const loc = locate(argv);
+  if (!loc.cmd) return null;
+  const { values, named } = parse(loc.cmd, loc.rest, loc.pre);
+  return { cmd: loc.cmd, values, named };
 }
 
 /** Runs one invocation. Returns the exit code; the collection stays open only for `serve`. */
@@ -284,6 +294,7 @@ export async function run(argv: string[], io: Io = defaultIo(), opts: RunOptions
       home,
       env: io.env,
       dry: !!values["dry-run"],
+      agent: !!opts.agent,
       get e() {
         if (!etude) throw new Error(`${cmd.name} has no database open`);
         return etude;

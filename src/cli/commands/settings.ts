@@ -1,6 +1,7 @@
 import { DEFAULT_SETTINGS, type Settings } from "../../core/engine.ts";
 import { chatGptStatus, chatGptLogout, listChatGptModels, openInBrowser, beginChatGptLogin, readChatGptHostId, importChatGptCredentials, ChatGptError } from "../../core/chatgpt.ts";
 import { chatProviderKeyEnv } from "../../core/ai.ts";
+import { agentSettingRefusal } from "../../core/agent-guard.ts";
 import { command, group, CliError } from "../registry.ts";
 import { deepDelete, deepGet, deepSet, looseValue, splitPair } from "../input.ts";
 
@@ -45,6 +46,8 @@ command({
     const changed: Record<string, { from: unknown; to: unknown }> = {};
     for (const p of ctx.args.pairs) {
       const [k, raw] = splitPair(p, "key=value");
+      const refused = ctx.agent ? agentSettingRefusal(k) : null;
+      if (refused) throw new CliError(refused, "validation");
       if (/apiKey$|secret|token/i.test(k) && !/Env$/.test(k)) throw new CliError(`refusing to store a secret in settings; put it in the environment or ${ctx.home}/.env and set ${k}Env instead`, "validation");
       const top = k.split(".")[0];
       if (!(top in cur)) throw new CliError(`unknown setting "${top}" (settings: ${Object.keys(cur).join(", ")})`, "validation");
@@ -74,6 +77,8 @@ command({
     const e = ctx.e;
     const next = structuredClone(e.settings()) as any;
     for (const k of ctx.args.keys) {
+      const refused = ctx.agent ? agentSettingRefusal(k) : null;
+      if (refused) throw new CliError(refused, "validation");
       const def = deepGet(DEFAULT_SETTINGS, k);
       if (def === undefined) {
         if (!deepDelete(next, k)) throw new CliError(`no setting "${k}"`, "not_found");

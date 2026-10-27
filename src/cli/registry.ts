@@ -33,6 +33,8 @@ export interface Ctx {
   /** The environment the runner was given (process.env, or a test's). */
   env: Record<string, string | undefined>;
   dry: boolean;
+  /** True when Ask Etude runs the command in-process rather than the user. */
+  agent?: boolean;
   /** Undeclared `--name value` pairs, for commands with `dynamicFlags`. */
   extra: [string, string][];
   /** The open collection. Throws for commands marked `noDb`. */

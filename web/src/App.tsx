@@ -88,7 +88,8 @@ export function App() {
     const q = params.get("q") ?? undefined;
     const card = params.get("card") ? Number(params.get("card")) : undefined;
     const ahead = params.get("ahead") === "1";
-    page = <StudyPage key={`${deck}|${q}|${card}|${ahead}`} scope={{ deck, q, ahead }} startCard={card} title={deck ? deck.split("::").pop()! : q ? `Search: ${q}` : "All cards"} />;
+    const placement = params.get("placement") === "1" && !!deck;
+    page = <StudyPage key={`${deck}|${q}|${card}|${ahead}|${placement}`} scope={{ deck, q, ahead, placement }} startCard={card} title={deck ? deck.split("::").pop()! : q ? `Search: ${q}` : "All cards"} />;
   } else if (path === "/deck") page = <DeckPage key={params.get("name")} name={params.get("name") ?? ""} />;
   else if (path === "/browse") page = <BrowsePage initialQuery={params.get("q") ?? ""} openItem={params.get("item")} />;
   else if (path.startsWith("/types")) page = <TypesPage id={path.split("/")[2] ? decodeURIComponent(path.split("/")[2]) : null} />;

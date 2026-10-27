@@ -11,7 +11,7 @@ import { Markdown } from "@/components/markdown";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { BulkBar, CheckBox, groupItems, ItemEditor, ItemRow, NewItemDialog, OrderSelect, SearchHints } from "@/components/item-editor";
 import { DeckOptions, formatDeadline, type DeckFull } from "@/components/deck-options";
-import { api, type DeckNode, type Preset, type SearchRow, type TypeSummary } from "@/lib/api";
+import { api, type DeckNode, type LearnerSummary, type Preset, type SearchRow, type TypeSummary } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { Block, Breadcrumb, EmptyState, LinkRow, Page, Section } from "@/components/page";
@@ -487,6 +487,7 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards, phone }: { deck
       </div>
 
       {!deck.archived && deadline && <Countdown deadline={deadline} margin={deck.resolved.deadlineMargin} />}
+      {!deck.archived && deck.resolved.mode !== "watch" && (deck.resolved.adaptiveChallenge || deck.resolved.adaptivePace) && <AdaptiveSummary deck={deck.name} hasNew={(node?.new ?? 0) > 0} />}
       {node && node.cards === 0 && onAddCards && (
         <Section className="mt-6">
           <Block title="No cards yet" description="Add cards in the Cards tab, or import a pack from the Decks page." aside={<Button size="sm" onClick={onAddCards}>Add cards</Button>} stackAside />
@@ -821,6 +822,46 @@ function DangerZone({ deck, decks, hasChildren, onMoved }: { deck: DeckFull; dec
         />
       </Section>
       {deckActions.deleteDialog}
+    </div>
+  );
+}
+
+/** Adaptive decks: per-skill levels, today's pace, and a placement offer before anything is learned. */
+function AdaptiveSummary({ deck, hasNew }: { deck: string; hasNew: boolean }) {
+  const [summary, setSummary] = useState<LearnerSummary | null>(null);
+  useEffect(() => {
+    api.skills(deck).then(setSummary, () => setSummary(null));
+  }, [deck]);
+  if (!summary?.adaptive) return null;
+  const answered = summary.skills.some((s) => s.answers > 0);
+  const placed = summary.skills.some((s) => s.placement);
+  const pct = (x: number | null) => (x == null ? "–" : `${Math.round(x * 100)}%`);
+  return (
+    <div className="mt-5 flex flex-col gap-3">
+      {!answered && !placed && hasNew && (
+        <Section>
+          <Block
+            title="Already know some of this?"
+            description="Find your level in about ten minutes. Your answers count as real reviews, and earlier cards come up as quick checks. Or just start from the beginning."
+            aside={<Button size="sm" onClick={() => navigate(`/study?${new URLSearchParams({ deck, placement: "1" })}`)}>Find my level</Button>}
+            stackAside
+          />
+        </Section>
+      )}
+      {(answered || placed) && (
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
+          {summary.skills.map((s) => (
+            <span key={s.skill} title={s.answers ? `${s.answers} answers, ${pct(s.success)} right recently` : undefined}>
+              <span className="text-foreground">{s.skill}</span> {s.level ? `${s.level.tag.split("::").pop()} · ${pct(s.level.progress)} stable` : pct(s.success)}
+            </span>
+          ))}
+          {summary.pace && (
+            <span title={summary.pace.reason}>
+              <span className="text-foreground">{summary.pace.value}</span> new today
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

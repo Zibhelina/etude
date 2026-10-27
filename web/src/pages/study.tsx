@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { CardFrame, type CardFrameHandle, type CardResult } from "@/components/card-frame";
 import { Markdown } from "@/components/markdown";
-import { api, humanInterval, relative, RATING_LABEL, type Counts, type Rating, type Scope, type StudyCard } from "@/lib/api";
+import { api, humanInterval, relative, RATING_LABEL, type Counts, type LearnerSummary, type Rating, type Scope, type StudyCard } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { navigate } from "@/lib/router";
 import { usePhone } from "@/lib/phone";
@@ -99,7 +99,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     busy.current = true;
     setPhase("grading");
     try {
-      const r = await api.submit(card.cardId, card.seed, answer, practice);
+      const r = await api.submit(card, answer, practice);
       const res: CardResult = { grade: r.grade, key: r.key, answer };
       setResult(res);
       setAttemptId(r.attemptId);
@@ -349,7 +349,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       </header>
       )}
 
-      {phase === "done" && <Done counts={counts} scope={scope} />}
+      {phase === "done" && (scope.placement ? <PlacementDone deck={scope.deck ?? ""} /> : <Done counts={counts} scope={scope} />)}
 
       {card && phase !== "done" && (
         <main className="flex flex-1 flex-col gap-5 pt-3 sm:gap-6 sm:pt-6">
@@ -364,6 +364,13 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
               </Tooltip>
             )}
             {scope.ahead && <Badge variant="outline" className="gap-1 font-normal"><FastForward className="size-3" />practicing ahead</Badge>}
+            {card.placement && <Badge variant="outline" className="border-highlight/40 font-normal text-highlight">finding your level</Badge>}
+            {card.quickCheck && (
+              <Tooltip>
+                <TooltipTrigger asChild><Badge variant="outline" className="font-normal">quick check</Badge></TooltipTrigger>
+                <TooltipContent>Your placement suggests you know this. Right on first sight sends it weeks away.</TooltipContent>
+              </Tooltip>
+            )}
             {practice && <Badge variant="outline" className="border-highlight/40 font-normal text-highlight">practice, not scheduled</Badge>}
             <div className="flex-1" />
             <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs text-muted-foreground max-md:hidden" onClick={() => navigate(`/browse?item=${encodeURIComponent(card.itemId)}`)}>
@@ -393,6 +400,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
                   )}
                 </div>
               )}
+              {result.grade.adaptive?.reason && <div className="text-xs text-muted-foreground">Picked for you: {result.grade.adaptive.reason}.</div>}
               {feedback?.loading && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Writing feedback…</div>
               )}
@@ -491,6 +499,35 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
         <div className="flex flex-1 items-center justify-center text-muted-foreground"><Loader2 className="animate-spin" /></div>
       )}
       {total === 0 && phase === "loading" && null}
+    </div>
+  );
+}
+
+function PlacementDone({ deck }: { deck: string }) {
+  const [summary, setSummary] = useState<LearnerSummary | null>(null);
+  useEffect(() => {
+    api.skills(deck).then(setSummary, () => setSummary(null));
+  }, [deck]);
+  const skills = summary?.adaptive ? summary.skills.filter((s) => s.placement) : [];
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 py-24 text-center">
+      <div className="text-2xl font-semibold tracking-tight">Placement done</div>
+      {skills.length > 0 ? (
+        <ul className="flex flex-col gap-1 text-muted-foreground">
+          {skills.map((s) => (
+            <li key={s.skill}>
+              <span className="font-medium text-foreground">{s.skill}</span>: you start at {s.placement!.frontier}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="max-w-sm text-muted-foreground">There was nothing to place: the deck has no new cards for it.</p>
+      )}
+      <p className="max-w-sm text-sm text-muted-foreground">Earlier cards come up as quick checks. Right on first sight sends them weeks away.</p>
+      <div className="mt-4 flex gap-2">
+        <Button variant="outline" onClick={() => navigate(`/deck?${new URLSearchParams({ name: deck })}`)}>Back to the deck</Button>
+        <Button onClick={() => navigate(`/study?${new URLSearchParams({ deck })}`)}>Start studying</Button>
+      </div>
     </div>
   );
 }

@@ -21,7 +21,8 @@ export function frameCsp(base: string): string {
   try {
     origin = new URL(base).origin;
   } catch {
-    origin = "'none'";
+    // A relative base (the static website's prebuilt frames) is served from the page's own origin.
+    origin = "'self'";
   }
   const self = origin === "null" ? "'none'" : origin;
   return [

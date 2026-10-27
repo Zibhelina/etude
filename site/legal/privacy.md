@@ -72,7 +72,7 @@ We don't sell or rent personal information, and we don't share it for advertisin
 
 - **Delete your account** in the app (Settings → Account → Delete account), on your account page at sync.etude.study/account, or by writing to hello@etude.study from the address on the account. In the app and on the web you need to have signed in within the last 10 minutes. Deleting immediately removes your email address, display name, devices, passkeys, pending sign-in and email-change links, your subscription link and your entire encrypted collection from the server. Paid Market orders are kept for tax purposes, detached from you, with only a hash of your email address so a tax or refund question can be matched to the order. A creator's listings are hidden. The security log keeps its rows until their 12 months are up.
 - **When Sync ends** (you cancel or a payment lapses), we keep your encrypted data for 90 days so you can come back, then delete it.
-- **Backups** of the server are kept for at most 30 days, so deleted data is gone from them within 30 days.
+- **Backups** of the server are encrypted and kept for at most 35 days, so deleted data is gone from them within 35 days.
 - Deleting your account doesn't touch the collection on your devices. To remove that, uninstall the app, or on a computer delete the `.etude` folder in your home folder.
 
 ## 6. Your rights

@@ -4,12 +4,10 @@
       {
         "appIDs": ["TEAMID.study.etude.app"],
         "components": [
-          { "/": "/app/*", "comment": "Links into the Etude app" }
+          { "/": "/app", "comment": "Opens Etude" },
+          { "/": "/app/*", "comment": "Opens a screen in Etude: /app/study?deck=…, /app/market, …" }
         ]
       }
     ]
-  },
-  "webcredentials": {
-    "apps": ["TEAMID.study.etude.app"]
   }
 }

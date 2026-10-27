@@ -2,7 +2,7 @@
 // the app only through postMessage, so a shared deck can't touch your data.
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import type { Grade } from "@/lib/api";
+import { api, type Grade } from "@/lib/api";
 import { pageScheme, THEME_EVENT, useScheme } from "@/lib/theme";
 import { etudeFetch, isLocal } from "@/lib/transport";
 
@@ -87,6 +87,23 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
     };
   }, [local, props.src, props.frameKey]);
 
+  // With a server, unsaved HTML (type editor, Market previews) is posted once and loaded by URL:
+  // a srcdoc frame inherits the app page's Content-Security-Policy, which blocks a card's inline code.
+  const served = !isLocal() && props.html !== undefined;
+  const [docUrl, setDocUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!served) return;
+    let live = true;
+    setDocUrl(null);
+    api
+      .frameDoc(props.html!)
+      .then((j) => live && setDocUrl(j.url))
+      .catch((e) => latest.current.onError?.(String(e?.message ?? e)));
+    return () => {
+      live = false;
+    };
+  }, [served, props.html, props.frameKey]);
+
   useImperativeHandle(ref, () => ({
     collect: () => post({ type: "collect" }),
     showResult: (result) => post({ type: "result", result }),
@@ -169,8 +186,8 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
       ref={iframe}
       title="card"
       sandbox="allow-scripts"
-      src={props.html || local ? undefined : props.src}
-      srcDoc={props.html ?? (local ? (localHtml ?? "") : undefined)}
+      src={served ? (docUrl ?? undefined) : props.html !== undefined || local ? undefined : props.src}
+      srcDoc={served ? undefined : (props.html ?? (local ? (localHtml ?? "") : undefined))}
       // No opacity fade: on macOS WebKit the faded-in card frame could stop painting.
       className={cn("block w-full border-0 bg-transparent", props.className)}
       style={{ height, colorScheme: scheme }}

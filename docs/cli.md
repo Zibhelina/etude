@@ -189,6 +189,7 @@ These work on every command, before or after the command words.
 | Flag | Type | Description |
 | --- | --- | --- |
 | `--db <PATH>` | string | Database file. Defaults to $ETUDE_DB, then $ETUDE_HOME/etude.db, then ~/.etude/etude.db. |
+| `--json` | boolean | Use JSON output (also the default). |
 | `--pretty` | boolean | Indent JSON output (the default when stdout is a terminal). |
 | `--compact` | boolean | One-line JSON output (the default when stdout is not a terminal). |
 | `--format <json\|table>` | string | Output format. `table` renders lists for humans. Default `"json"`. |

@@ -126,7 +126,7 @@ export function SettingsPage() {
   }, [saved]);
 
   useEffect(() => {
-    navRef.current?.querySelector(`[data-id="${active}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    navRef.current?.querySelector(`[data-id="${active}"]`)?.scrollIntoView({ block: "nearest", inline: "center" });
   }, [active]);
 
   // Saved settings can't be invalid, so errors only show once something was edited.

@@ -274,6 +274,7 @@ export async function run(argv: string[], io: Io = defaultIo(), opts: RunOptions
       return 0;
     }
     const { values, named, extra } = parse(cmd, loc.rest, loc.pre);
+    if (values.json) values.format = "json";
     if (values.pretty) pretty = true;
     if (values.compact) pretty = false;
     if (cmd.confirm && !values.yes && !values["dry-run"]) throw new CliError(`\`etude ${cmd.name}\` is destructive; add --yes to confirm (or --dry-run to preview)`);

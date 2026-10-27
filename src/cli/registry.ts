@@ -80,6 +80,7 @@ export interface GroupSpec {
 
 export const GLOBAL_FLAGS: FlagSpec[] = [
   { name: "db", type: "string", description: "Database file. Defaults to $ETUDE_DB, then $ETUDE_HOME/etude.db, then ~/.etude/etude.db.", placeholder: "PATH" },
+  { name: "json", type: "boolean", description: "Use JSON output (also the default)." },
   { name: "pretty", type: "boolean", description: "Indent JSON output (the default when stdout is a terminal)." },
   { name: "compact", type: "boolean", description: "One-line JSON output (the default when stdout is not a terminal)." },
   { name: "format", type: "string", description: "Output format. `table` renders lists for humans.", values: ["json", "table"], default: "json" },

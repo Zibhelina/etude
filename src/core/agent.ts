@@ -22,7 +22,8 @@ const INLINE_BUDGET = 24000;
 const OPENROUTER_CHAT = "https://openrouter.ai/api/v1/chat/completions";
 
 /** Commands the agent may never run: they restart or replace things, or touch credentials. */
-export const AGENT_DENY = ["serve", "update", "settings chatgpt login", "settings chatgpt logout", "settings chatgpt import", "db restore", "market publish", "agent"];
+// `media prune` deletes files, which an undo (a database snapshot) can't bring back.
+export const AGENT_DENY = ["serve", "update", "settings chatgpt login", "settings chatgpt logout", "settings chatgpt import", "db restore", "market publish", "media prune", "agent"];
 
 export class AgentError extends Error {
   status: number;
@@ -1236,6 +1237,11 @@ export function consequence(e: Etude, name: string, argv: string[], dry: any, fa
         return { summary: `Deletes the scheduler ${arg}. No deck or preset uses it.`, action: "Delete scheduler" };
       case "scheduler reset":
         return { summary: `Puts the built-in scheduler ${arg} back to the shipped version; your edits to it are lost.`, action: "Reset scheduler" };
+      case "card prune": {
+        const n = Number(dry?.cards ?? 0);
+        if (!n) return { summary: "Deletes nothing: no card is on a face its type no longer makes.", action: "Delete cards" };
+        return { summary: `Deletes ${plural(n, "card")} on faces their types no longer make, with ${plural(Number(dry?.reviews ?? 0), "review")} of history.`, action: n === 1 ? "Delete card" : `Delete ${n} cards` };
+      }
     }
   } catch {}
   const verb = name.split(" ").pop() ?? "run";

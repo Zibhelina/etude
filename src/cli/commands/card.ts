@@ -95,6 +95,29 @@ const MOMENT_FLAGS = [
 ];
 
 command({
+  name: "card prune",
+  summary: "Delete leftover cards: cards on faces their type no longer makes, after a face was removed or `facesWhen` changed.",
+  description:
+    "Saving a type never deletes cards, so their history isn't lost by accident; this does, with their review history. An item keeps every card when its type's `facesWhen` fails for it or when it would be left without one; archived items are left alone. See the cards first with `etude card list is:leftover` (add type: and face: to narrow it), or preview with --dry-run.",
+  flags: [
+    { name: "type", type: "string", description: "Only this type's leftover cards.", placeholder: "ID" },
+    { name: "face", type: "string", description: "Only leftover cards on this face.", placeholder: "FACE" },
+  ],
+  writes: true,
+  dryRun: true,
+  confirm: true,
+  examples: ["etude card list is:leftover type:de-vocab", "etude card prune --type de-vocab --face t2 --dry-run", "etude card prune --type de-vocab --yes"],
+  output: "{ cards, reviewed, reviews, faces: [{ type, typeName, face, cards, reviews }] }",
+  run(ctx) {
+    if (ctx.flags.type) ctx.e.type(ctx.flags.type);
+    const only = { type: ctx.flags.type, face: ctx.flags.face };
+    const report = ctx.e.leftoverReport(only);
+    ctx.e.deleteLeftoverCards(only);
+    return report;
+  },
+});
+
+command({
   name: "card bury",
   summary: "Hide cards until the next study day, or until a date.",
   args: [refsArg],

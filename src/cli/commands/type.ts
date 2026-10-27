@@ -129,14 +129,15 @@ command({
   writes: true,
   dryRun: true,
   examples: ["etude type import ./vocab", "etude type import vocab.json --dry-run", "etude type export basic --json | jq '.id=\"basic2\"' | etude type import -"],
-  output: "{ result: created|updated|unchanged, type: { id, name, fields, grader }, assets: { files, bytes, created, updated, unchanged, removed } | null }",
+  output: "{ result: created|updated|unchanged, type: { id, name, fields, grader }, assets: { files, bytes, created, updated, unchanged, removed } | null, leftover: { cards, reviews } | null }",
   run(ctx) {
     const def = loadTypeSource(ctx, ctx.args.source);
     if (ctx.flags.id) def.id = ctx.flags.id;
     const errors = validateType(def);
     if (errors.length) throw new CliError(`invalid type: ${errors.join("; ")}`, "validation", { errors });
-    const { type: saved, result, assets } = ctx.e.saveTypeReport(def);
-    return { result, type: { id: saved.id, name: saved.name, faces: saved.faces ?? ["main"], fields: saved.fields.map((f) => f.name), grader: saved.grader.kind }, assets };
+    const { type: saved, result, assets, leftover } = ctx.e.saveTypeReport(def);
+    // Cards on faces the type no longer makes stay until `card prune` deletes them.
+    return { result, type: { id: saved.id, name: saved.name, faces: saved.faces ?? ["main"], fields: saved.fields.map((f) => f.name), grader: saved.grader.kind }, assets, leftover };
   },
 });
 

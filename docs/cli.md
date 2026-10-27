@@ -261,6 +261,7 @@ These work on every command, before or after the command words.
   - [`card unsuspend`](#card-unsuspend) Unsuspend cards.
   - [`card unbury`](#card-unbury) Unbury cards so they can come up today.
   - [`card reset`](#card-reset) Forget cards: back to new, as if never studied. Review history is kept (and `card reschedule` would rebuild from it).
+  - [`card prune`](#card-prune) Delete leftover cards: cards on faces their type no longer makes, after a face was removed or `facesWhen` changed.
   - [`card bury`](#card-bury) Hide cards until the next study day, or until a date.
   - [`card due`](#card-due) Set when cards are next due, without recording a review.
   - [`card reschedule`](#card-reschedule) Rebuild cards' scheduling from their review history with the current settings (after changing retention, steps, weights or a deadline).
@@ -340,6 +341,7 @@ These work on every command, before or after the command words.
   - [`anki import`](#anki-import) Import an Anki package: card types, presets, decks, items, cards, media and review history.
 - **media**: Media copied into the collection's own folder
   - [`media path`](#media-path) Show the collection's media folder.
+  - [`media prune`](#media-prune) Delete media files nothing in the collection names any more.
   - [`media add`](#media-add) Copy an image, audio or video file into the collection's media folder.
 - **market**: Market: browse, install and publish shared themes, decks and card types (`etude market` alone runs `list`)
   - [`market list`](#market-list) Entries in the market, newest first, with whether each is installed here.
@@ -1773,6 +1775,35 @@ etude card reset 42 43
 etude card reset --query "deck:Physics prop:lapses>=4"
 ```
 
+### etude card prune
+
+<a id="card-prune"></a>
+
+Delete leftover cards: cards on faces their type no longer makes, after a face was removed or `facesWhen` changed.
+
+Saving a type never deletes cards, so their history isn't lost by accident; this does, with their review history. An item keeps every card when its type's `facesWhen` fails for it or when it would be left without one; archived items are left alone. See the cards first with `etude card list is:leftover` (add type: and face: to narrow it), or preview with --dry-run.
+
+```
+etude card prune [flags]
+```
+
+*writes · `--dry-run` · needs `--yes`*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--type <ID>` | string | Only this type's leftover cards. |
+| `--face <FACE>` | string | Only leftover cards on this face. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { cards, reviewed, reviews, faces: [{ type, typeName, face, cards, reviews }] }
+
+```sh
+etude card list is:leftover type:de-vocab
+etude card prune --type de-vocab --face t2 --dry-run
+etude card prune --type de-vocab --yes
+```
+
 ### etude card bury
 
 <a id="card-bury"></a>
@@ -2111,7 +2142,7 @@ etude type import <source> [flags]
 | `--id <VALUE>` | string | Save under this id instead of the one in the source. |
 | `--dry-run` | boolean | Show what would change without writing anything. |
 
-Output: { result: created|updated|unchanged, type: { id, name, fields, grader }, assets: { files, bytes, created, updated, unchanged, removed } | null }
+Output: { result: created|updated|unchanged, type: { id, name, fields, grader }, assets: { files, bytes, created, updated, unchanged, removed } | null, leftover: { cards, reviews } | null }
 
 ```sh
 etude type import ./vocab
@@ -3593,6 +3624,32 @@ Output: { path }
 
 ```sh
 etude media path
+```
+
+### etude media prune
+
+<a id="media-prune"></a>
+
+Delete media files nothing in the collection names any more.
+
+A file counts as used when any field, template, deck or tag text, setting, past attempt or conversation mentions its name. Hidden files, files without an extension, names starting with `_` (Anki's mark for files a template loads itself) and files changed in the last hour are kept. Deleted files can't be restored from database backups; preview with --dry-run.
+
+```
+etude media prune [flags]
+```
+
+*writes · `--dry-run` · needs `--yes`*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { count, bytes, files: [{ path, bytes }], dryRun }
+
+```sh
+etude media prune --dry-run
+etude media prune --yes
 ```
 
 ### etude media add

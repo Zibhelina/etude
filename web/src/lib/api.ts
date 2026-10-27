@@ -159,6 +159,20 @@ export interface FieldSpec {
   language?: string;
 }
 
+/** Cards on faces their type no longer makes, per type and face. */
+export interface LeftoverReport {
+  cards: number;
+  reviewed: number;
+  reviews: number;
+  faces: { type: string; typeName: string; face: string; cards: number; reviews: number }[];
+}
+
+export interface CleanupReport {
+  leftover: LeftoverReport;
+  /** `files` lists the first 200. */
+  media: { count: number; bytes: number; files: { path: string; bytes: number }[] };
+}
+
 export interface DeckFace {
   face: string;
   types: { id: string; name: string }[];
@@ -423,7 +437,12 @@ export const api = {
 
   types: () => call<TypeSummary[]>("GET", "/api/types"),
   type: (id: string) => call<CardType>("GET", `/api/types/${encodeURIComponent(id)}`),
-  saveType: (def: CardType) => call<CardType>("PUT", `/api/types/${encodeURIComponent(def.id)}`, def),
+  /** `leftover`: cards on faces the saved type no longer makes (null when the definition didn't change). */
+  saveType: (def: CardType) => call<CardType & { leftover: { cards: number; reviews: number } | null }>("PUT", `/api/types/${encodeURIComponent(def.id)}`, def),
+  typeLeftover: (id: string) => call<LeftoverReport>("GET", `/api/types/${encodeURIComponent(id)}/leftover`),
+  cleanup: () => call<CleanupReport>("GET", "/api/cleanup"),
+  deleteLeftoverCards: (only: { type?: string; face?: string } = {}) => call<{ cards: number; reviews: number }>("POST", "/api/cleanup/cards", only),
+  deleteUnusedMedia: () => call<{ files: number; bytes: number }>("POST", "/api/cleanup/media", {}),
   /** `items`: also delete the items using the type (archived ones too), with their cards and history. */
   deleteType: (id: string, opts: { items?: boolean } = {}) => call<{ ok: true; items: number; cards: number; reviews: number }>("DELETE", `/api/types/${encodeURIComponent(id)}`, opts),
   typeUsage: (id: string) => call<{ items: number; archived: number; cards: number; reviews: number }>("GET", `/api/types/${encodeURIComponent(id)}/usage`),

@@ -30,7 +30,7 @@ Read `docs/cli.md` in the repo for the full reference and recipes. Don't guess f
 - **Type**: fields schema, template, an optional `prepare` script, and a grader (`self`, `script`, `ai`, `hybrid`). **Private fields** (answers, references) stay hidden from the learner until they submit. Built-ins: `basic`, `typed`, `numeric`, `mcq`, `order`, `match`, `cloze`, `free`, `draw`. Run `etude type show <id> --fields-only` for field names.
 - **Generated items**: a `generator` field (sandboxed JS with a seeded `rng`) makes new numbers on every review. The `seed` picks the variant.
 - **Grading**: script graders return a score, and the preset's `autoRate` thresholds turn it into a suggested rating. AI graders use a decision model for the verdict and a language model for feedback. Instructions are read most specific first: the item's rubric, its tags (deepest first), the deck and its parents, then the type.
-- **Search** (used by `--query`, `item list`, `card list`): `deck:"X"`, `tag:a::b`, `type:numeric`, `id:pre.*`, `is:new|due|review|suspended|buried|archived`, `prop:lapses>=3`, `rated:7:1`, free words (any field, ignoring case), `field:word` (one field by name, e.g. `front:router`; `field:` alone finds it empty), `-neg`, `OR`, parentheses. With free words, results come best match first (title equal to or starting with the word).
+- **Search** (used by `--query`, `item list`, `card list`): `deck:"X"`, `tag:a::b`, `type:numeric`, `id:pre.*`, `is:new|due|review|suspended|buried|archived|leftover` (leftover: cards on faces their type no longer makes), `prop:lapses>=3`, `rated:7:1`, free words (any field, ignoring case), `field:word` (one field by name, e.g. `front:router`; `field:` alone finds it empty), `-neg`, `OR`, parentheses. With free words, results come best match first (title equal to or starting with the word).
 
 ## Core workflows
 
@@ -76,6 +76,7 @@ etude deck unset "Networks" newPerDay            # back to inherited
 etude deck set "German" newPerFace.t1=5          # at most 5 new t1 cards a day (see `etude deck faces "German"`)
 etude card due --query 'tag:http is:due' --in 1d # push to tomorrow without faking a review
 etude card suspend --query 'deck:"Networks" prop:lapses>=4'
+etude card prune --type vocab --dry-run          # cards on faces the type no longer makes (after removing a face)
 ```
 
 **Themes.** `etude theme list`, then `etude theme set paper`. Make one with `etude theme create sea --from midnight --var highlight="oklch(0.7 0.12 210)" --use`, and change it later with `theme edit` (variables, scheme, `--css-file`). `theme export`/`import` move themes between collections.

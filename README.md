@@ -162,7 +162,7 @@ npm start            # same as: node src/cli/main.ts serve
 
 Open http://127.0.0.1:4610. Your collection lives in `~/.etude/etude.db`.
 
-Paste an image, audio or video file into a card field and Etude copies it into its own media folder, normally `~/.etude/media`. Pasted local file paths and `file://` URLs are copied too; the card uses the copy even after the original is moved or deleted. Settings → Data shows the folder, and `etude media add ./picture.png` imports a file from the terminal. When Etude runs on another computer, paste the file itself; local paths refer to the computer running Etude. Back up the media folder along with the database.
+Paste an image, audio or video file into a card field and Etude copies it into its own media folder, normally `~/.etude/media`. Pasted local file paths and `file://` URLs are copied too; the card uses the copy even after the original is moved or deleted. Settings → Data shows the folder, and `etude media add ./picture.png` imports a file from the terminal. When Etude runs on another computer, paste the file itself; local paths refer to the computer running Etude. Back up the media folder along with the database. Settings → Clean up (or `etude media prune`) deletes media files nothing names any more, and cards on faces their type no longer makes.
 
 To see what cards can be, import the showcase: one card for each of the 28 card types. It opens in Watch mode, a tour where each card can show an example answer, graded, so you see how it works without answering anything:
 
@@ -277,6 +277,7 @@ deck:"Networks"       the deck and everything below it      (deck:net* wildcards
 tag:net::w1           the tag and every tag below it        (tag:exam::* wildcards)
 type:numeric  id:net.w1.*  source:ch1
 is:new is:learning is:review is:relearning is:due is:suspended is:buried is:archived
+is:leftover           cards on faces their type no longer makes (see Settings → Clean up)
 prop:lapses>=2  prop:reps=0  prop:stability<3  prop:difficulty>7  prop:due<=1 (days from now)
 rated:1  rated:7:1    reviewed in the last N days (optionally with that rating)
 word  "a phrase"      text in any field, ignoring case (not markup or media file names)

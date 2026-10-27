@@ -235,7 +235,7 @@ command({
 
 command({
   name: "study undo",
-  summary: "Undo the most recent review (any card): the card returns exactly to its previous state.",
+  summary: "Undo the most recent review (any card): the card returns exactly to its previous state, and the graded answer is discarded.",
   writes: true,
   dryRun: true,
   output: "{ undone: { cardId, itemId } | null }",

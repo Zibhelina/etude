@@ -128,10 +128,11 @@ test("grading with asOf reproduces the variant shown, even after other answers m
   const target = cardOf(e, "w5");
   const shown = e.present(target, 11);
   const key = e.prepare("w5", "read", 11, e.adaptContext(target, shown.asOf!)).key;
-  // Several other answers in between, all wrong: the learner's estimates drop.
+  // Several other answers in between, all wrong and rated: the learner's estimates drop.
   for (const item of ["w2", "w3", "w4"]) {
     const c = e.present(cardOf(e, item), 3);
-    await e.submit(c.cardId, c.seed, "nope", { asOf: c.asOf });
+    const r = await e.submit(c.cardId, c.seed, "nope", { asOf: c.asOf });
+    e.rate(c.cardId, 1, { attemptId: r.attemptId! });
   }
   const r = await e.submit(target, 11, "w5", { asOf: shown.asOf });
   assert.deepEqual(r.key, key);
@@ -257,7 +258,7 @@ test("estimates over 50,000 attempts stay fast and are cached until something ch
   e.db.run("BEGIN");
   for (let i = 0; i < 50_000; i++) {
     const grade = JSON.stringify({ score: i % 7 ? 1 : 0, verdict: "correct", suggested: 3, grader: { kind: "script" }, adaptive: { asOf: "x", skill: "reading", variant: i % 2 ? "easy" : "hard" } });
-    e.db.run("INSERT INTO attempts (card_id, ts, seed, view, answer, grade) VALUES (?, ?, 1, '{}', '\"a\"', ?)", cards[i % cards.length], new Date(t0 + i * 60_000).toISOString(), grade);
+    e.db.run("INSERT INTO attempts (card_id, ts, seed, view, answer, grade, review_id) VALUES (?, ?, 1, '{}', '\"a\"', ?, ?)", cards[i % cards.length], new Date(t0 + i * 60_000).toISOString(), grade, i + 1);
   }
   e.db.run("COMMIT");
   let t = performance.now();
@@ -269,5 +270,30 @@ test("estimates over 50,000 attempts stay fast and are cached until something ch
   assert.ok(c.view.hasLearner);
   assert.ok(first < 3000, `first estimate took ${Math.round(first)} ms`);
   assert.ok(cached < 100, `a cached one took ${Math.round(cached)} ms`);
+  done();
+});
+
+test("undo and bury discard the graded answer, and only rated answers count", async () => {
+  const { e, done } = await setup({ levels: false });
+  e.updateDeck("Course", { config: { adaptiveChallenge: true } });
+  const answers = () => (e.learnerSummary("Course") as any).skills.find((k: any) => k.skill === "reading").answers;
+  const attempts = (item: string) => e.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM attempts WHERE card_id = ?", cardOf(e, item))!.n;
+  const answer = async (item: string) => {
+    const c = e.present(cardOf(e, item), 1);
+    return (await e.submit(c.cardId, c.seed, "wrong", { asOf: c.asOf })).attemptId!;
+  };
+  await answer("w1");
+  assert.equal(answers(), 0, "answered but not rated yet");
+  e.setBuried([cardOf(e, "w1")]);
+  assert.equal(attempts("w1"), 0, "burying instead of rating discards the answer");
+  const id = await answer("w2");
+  e.rate(cardOf(e, "w2"), 1, { attemptId: id });
+  assert.equal(answers(), 1);
+  e.setBuried([cardOf(e, "w2")]);
+  assert.equal(attempts("w2"), 1, "a rated answer survives a later bury");
+  e.undo();
+  assert.equal(attempts("w2"), 0, "undo discards the review and its answer");
+  assert.equal(answers(), 0);
+  assert.equal(e.db.get<{ state: number }>("SELECT state FROM cards WHERE id = ?", cardOf(e, "w2"))!.state, 0);
   done();
 });

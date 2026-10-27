@@ -2,10 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { Etude } from "../src/core/engine.ts";
 
 test("media cleanup keeps referenced parentheses and URL-encoded Unicode filenames", async (t) => {
-  const dir = mkdtempSync(join(process.env.TMPDIR!, "cleanup-names-"));
+  const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "cleanup-names-"));
   const e = await Etude.open(join(dir, "etude.db"));
   t.after(() => { e.close(); rmSync(dir, { recursive: true, force: true }); });
   mkdirSync(join(e.mediaDir, "anki"), { recursive: true });
@@ -23,7 +24,7 @@ test("media cleanup keeps referenced parentheses and URL-encoded Unicode filenam
 });
 
 test("leftover cache follows edits even when updated timestamps do not advance", async (t) => {
-  const dir = mkdtempSync(join(process.env.TMPDIR!, "cleanup-cache-"));
+  const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "cleanup-cache-"));
   const e = await Etude.open(join(dir, "etude.db"));
   t.after(() => { e.close(); rmSync(dir, { recursive: true, force: true }); });
   e.saveType({ id: "conditional", name: "Conditional", faces: ["a", "b"], facesWhen: 'return fields.front === "both" ? ["a", "b"] : ["a"];', fields: [{ name: "front", kind: "text" }], template: { html: "{{front}}" }, grader: { kind: "self" } });

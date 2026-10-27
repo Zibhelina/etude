@@ -625,7 +625,7 @@ function CustomStudy({ deck, tags, disabled, phone, adaptive }: { deck: string; 
           {adaptive && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="h-10" onClick={() => navigate(`/study?${new URLSearchParams({ deck, placement: "1" })}`)}>
+              <DropdownMenuItem className="h-10" onClick={() => navigate(`/study?${new URLSearchParams({ deck, placement: String(Date.now()) })}`)}>
                 Find my level
                 <span className="ml-auto text-xs text-muted-foreground">placement</span>
               </DropdownMenuItem>
@@ -852,7 +852,7 @@ function AdaptiveSummary({ deck, hasNew }: { deck: string; hasNew: boolean }) {
           <Block
             title="Already know some of this?"
             description="Find your level in about ten minutes. Your answers count as real reviews, and earlier cards come up as quick checks. Or just start from the beginning."
-            aside={<Button size="sm" onClick={() => navigate(`/study?${new URLSearchParams({ deck, placement: "1" })}`)}>Find my level</Button>}
+            aside={<Button size="sm" onClick={() => navigate(`/study?${new URLSearchParams({ deck, placement: String(Date.now()) })}`)}>Find my level</Button>}
             stackAside
           />
         </Section>

@@ -315,8 +315,8 @@ export interface AdaptiveChoice {
   /** The variant's prior difficulty, 0 to 1, so later estimates can start from it. */
   difficulty?: number;
   reason?: string;
-  /** A placement probe. */
-  placement?: boolean;
+  /** A placement probe: the session it belongs to (`true` from before sessions had names). */
+  placement?: string | boolean;
   /** A quick check after a placement. */
   quickCheck?: boolean;
 }

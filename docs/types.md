@@ -294,7 +294,7 @@ return { ...show(pick), variant: pick.id, reason: pick._p < learner.target ? "a 
 
 The app passes the card's `asOf` back when it submits, so grading sees the same estimates and the same variant. Agents using the CLI pass it as `study submit --as-of`. Generators get the same `learner` as their second argument.
 
-The deck settings (see the scheduling reference) add three things around this. **Adaptive pace** sets each day's new-card limit from the last week's success and study time. **Levels** (`levels: [{ tag, check? }]`) bring new cards from the learner's level and open the next one gradually. **Placement** (`study next --placement`) finds the learner's level with real reviews, after which earlier cards come up as quick checks. `etude stats skills <deck>` reports all of it.
+The deck settings (see the scheduling reference) add three things around this. **Adaptive pace** sets each day's new-card limit from the last week's success and study time. **Levels** (`levels: [{ tag, check? }]`) bring new cards from the learner's level and open the next one gradually. **Placement** (`study next --placement <session>`) finds the learner's level with real reviews, after which earlier cards come up as quick checks. Each session is named; a new name starts a fresh placement, and the latest one is the one that counts. `etude stats skills <deck>` reports all of it.
 
 ## Item generators
 

@@ -191,18 +191,18 @@ test("levels: new cards come from the learner's level, and the next opens once i
 });
 
 test("placement finds the level with real reviews; earlier cards become quick checks that suggest Easy", async () => {
-  const { e, done } = await setup({ perLevel: 4 });
+  const { e, done } = await setup({ perLevel: 10 });
   e.updateDeck("Course", { config: { adaptiveChallenge: true, levels: LEVELS.map((tag) => ({ tag })), burySiblings: false } });
-  const level = (item: string) => Math.floor((Number(item.slice(1)) - 1) / 4);
+  const level = (item: string) => Math.floor((Number(item.slice(1)) - 1) / 10);
   let probes = 0;
   for (let i = 0; i < 40; i++) {
     const { card } = e.next({ deck: "Course", placement: true });
     if (!card) break;
-    assert.equal(card.placement, true);
+    assert.equal(card.placement, "1", "an unnamed session");
     probes++;
     // Knows levels 1 and 2, not 3.
     const r = await e.submit(card.cardId, card.seed, level(card.itemId) < 2 ? card.itemId : "?", { asOf: card.asOf, placement: true });
-    assert.equal(r.grade.adaptive?.placement, true);
+    assert.equal(r.grade.adaptive?.placement, "1");
     e.rate(card.cardId, r.grade.suggested!, { attemptId: r.attemptId! });
   }
   assert.ok(probes >= 4 && probes < 40, `${probes} probes`);
@@ -220,6 +220,21 @@ test("placement finds the level with real reviews; earlier cards become quick ch
   assert.equal(c.view.quick, true);
   const r = await e.submit(c.cardId, c.seed, c.itemId, { asOf: c.asOf });
   assert.equal(r.grade.suggested, 4, "known on first sight: Easy");
+
+  // A new session redoes the placement from scratch, and the latest session is the one that counts.
+  assert.equal(e.next({ deck: "Course", placement: true }).card, null, "the first session is done");
+  let redo = 0;
+  for (let i = 0; i < 40; i++) {
+    const { card } = e.next({ deck: "Course", placement: "again" });
+    if (!card) break;
+    assert.equal(card.placement, "again");
+    redo++;
+    const rr = await e.submit(card.cardId, card.seed, "?", { asOf: card.asOf, placement: card.placement });
+    e.rate(card.cardId, 1, { attemptId: rr.attemptId! });
+  }
+  assert.ok(redo >= 3, `${redo} probes in the second session`);
+  const s2 = e.learnerSummary("Course");
+  if (s2.adaptive) for (const k of s2.skills) assert.equal(k.placement?.frontier, "level::1", JSON.stringify(k));
   done();
 });
 

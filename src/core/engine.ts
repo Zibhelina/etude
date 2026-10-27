@@ -77,6 +77,8 @@ export const BUILTIN_TYPES_DIR = join(ROOT, "types");
 export const BUILTIN_SCHEDULERS_DIR = join(ROOT, "schedulers");
 
 const now = () => new Date();
+/** A placement session's name; `true` (no name) is the session answers had before sessions were named. */
+const placementSession = (p: string | boolean | undefined) => (typeof p === "string" && p.trim() ? p.trim().slice(0, 64) : "1");
 const iso = (d = now()) => d.toISOString();
 const json = (v: unknown) => JSON.stringify(v ?? null);
 const parse = <T>(s: string | null | undefined, fallback: T): T => {
@@ -130,13 +132,18 @@ export interface StudyScope {
   query?: string;
   /** Study ahead: nothing has to be due. Every card in the scope is in the queue, soonest due first, with no daily limits. Ratings are real reviews. */
   ahead?: boolean;
-  /** A placement session: only probes that find the learner's level on an adaptive deck. */
-  placement?: boolean;
+  /**
+   * A placement on an adaptive deck: only probes that find the learner's level. The value names the
+   * session (any text); a new session starts afresh and the latest one is the one that counts.
+   */
+  placement?: string | boolean;
 }
 
 /** Learner estimates and lookups for one showing of a card on an adaptive deck. */
 export interface AdaptContext {
   learner: learn.Learner;
+  /** Placement session of this showing. */
+  session?: string;
   /** Card types see `learner` (adaptiveChallenge on); otherwise only the showing's skill and flags are recorded. */
   challenge: boolean;
   itemId: string;
@@ -171,7 +178,10 @@ interface RootData {
   known: Set<string>;
   seen: Map<string, number>;
   scores: Map<number, { ts: string; score: number }[]>;
+  /** The latest placement session, per skill. */
   placement: Map<string, { bands: number[]; state: learn.PlacementState }>;
+  /** Any session's state, for picking its next probe. */
+  placementOf: (session: string) => Map<string, { bands: number[]; state: learn.PlacementState }>;
   levels: Map<string, learn.LevelState> | null;
   /** In a band a placement showed to be known. */
   passed: (c: RootCard) => boolean;
@@ -221,7 +231,8 @@ export interface StudyCard {
   title: string;
   /** On adaptive decks: the moment the learner estimates were taken. Pass it back when submitting. */
   asOf?: string;
-  placement?: boolean;
+  /** The placement session this card was shown for. */
+  placement?: string;
   quickCheck?: boolean;
 }
 
@@ -1927,7 +1938,7 @@ export class Etude {
     let fields = this.generate({ ...fieldDefaults(def), ...parse(r.fields, {}) }, seed, itemId, learner);
     if (learner && def.variants) fields = this.annotateVariants(def, fields, adapt!);
     const adaptive: AdaptiveChoice | undefined = adapt
-      ? { asOf: adapt.learner.asOf, skill: adapt.learner.skill, ...(adapt.learner.placement ? { placement: true } : {}), ...(adapt.learner.quickCheck ? { quickCheck: true } : {}) }
+      ? { asOf: adapt.learner.asOf, skill: adapt.learner.skill, ...(adapt.session ? { placement: adapt.session } : {}), ...(adapt.learner.quickCheck ? { quickCheck: true } : {}) }
       : undefined;
     if (def.prepare) {
       const out = runScript<{ view?: Record<string, unknown>; key?: Record<string, unknown>; grader?: string; variant?: unknown; reason?: unknown }>(def.prepare, {
@@ -2103,7 +2114,8 @@ export class Etude {
     const attempts: RootData["attempts"] = [];
     const seen = new Map<string, number>();
     const scores = new Map<number, { ts: string; score: number }[]>();
-    const probes = new Map<string, { band: number; score: number }[]>();
+    // Probes per placement session (answers from before sessions had names count as one session).
+    const sessions = new Map<string, { first: string; probes: Map<string, { band: number; score: number }[]> }>();
     let maxTs = "";
     for (const r of this.db.all(`SELECT a.ts, a.card_id, a.grade, a.review_id FROM attempts a JOIN cards c ON c.id = a.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${scope} ORDER BY a.ts, a.id`, ...sp)) {
       if (r.ts > maxTs) maxTs = r.ts;
@@ -2116,12 +2128,20 @@ export class Etude {
       attempts.push({ ts: r.ts, a: { cardId: r.card_id, key: ad?.variant ? `${card.itemId}#${ad.variant}` : `card:${r.card_id}`, skills: card.skills, score: g.score, prior: ad?.difficulty } });
       (scores.get(r.card_id) ?? scores.set(r.card_id, []).get(r.card_id)!).push({ ts: r.ts, score: g.score });
       if (ad?.placement) {
+        const key = String(ad.placement);
+        const sess = sessions.get(key) ?? sessions.set(key, { first: r.ts, probes: new Map() }).get(key)!;
         const skill = card.skills[0];
-        (probes.get(skill) ?? probes.set(skill, []).get(skill)!).push({ band: bands.get(skill)?.indexOf(card.band) ?? -1, score: g.score });
+        (sess.probes.get(skill) ?? sess.probes.set(skill, []).get(skill)!).push({ band: bands.get(skill)?.indexOf(card.band) ?? -1, score: g.score });
       }
     }
-    const placement = new Map<string, { bands: number[]; state: learn.PlacementState }>();
-    for (const [skill, list] of bands) placement.set(skill, { bands: list, state: learn.placementState(list.length, probes.get(skill) ?? []) });
+    const placementOf = (session: string) => {
+      const probes = sessions.get(session)?.probes;
+      const out = new Map<string, { bands: number[]; state: learn.PlacementState }>();
+      for (const [skill, list] of bands) out.set(skill, { bands: list, state: learn.placementState(list.length, probes?.get(skill) ?? []) });
+      return out;
+    };
+    const latest = [...sessions.entries()].sort((a, b) => b[1].first.localeCompare(a[1].first))[0]?.[0];
+    const placement = placementOf(latest ?? "");
     // Bands below a placement's frontier were passed; frontier 0 (or no placement) passes nothing.
     const passed = (c: RootCard) => {
       const p = placement.get(c.skills[0]);
@@ -2155,13 +2175,13 @@ export class Etude {
         levels.set(skill, learn.levelState(cfg.levels, counts, cfg, floor));
       }
     }
-    const data: RootData = { root, cfg, cards, attempts, model: learn.fitSkills(attempts.map((x) => x.a)), maxTs, known, seen, scores, placement, levels, passed };
+    const data: RootData = { root, cfg, cards, attempts, model: learn.fitSkills(attempts.map((x) => x.a)), maxTs, known, seen, scores, placement, placementOf, levels, passed };
     this.rootCache.set(root, { version, data });
     return data;
   }
 
   /** Learner estimates for one showing of a card, as of `asOf`. Null unless the card's deck is adaptive. */
-  adaptContext(cardId: number, asOf: string, opts: { placement?: boolean } = {}): AdaptContext | null {
+  adaptContext(cardId: number, asOf: string, opts: { placement?: string | boolean } = {}): AdaptContext | null {
     const c = this.cardWithDeck(cardId);
     const cfg = this.configFor(c.deck);
     if (!cfg.adaptiveChallenge && !cfg.adaptivePace) return null;
@@ -2194,7 +2214,8 @@ export class Etude {
       placement: !!opts.placement,
       quickCheck: !opts.placement && !!rc && rc.state === 0 && A.passed(rc),
     };
-    return { learner, challenge: cfg.adaptiveChallenge, itemId: c.item_id, cardId, model, known: A.known, seen: A.seen };
+    const session = opts.placement ? placementSession(opts.placement) : undefined;
+    return { learner, ...(session ? { session } : {}), challenge: cfg.adaptiveChallenge, itemId: c.item_id, cardId, model, known: A.known, seen: A.seen };
   }
 
   /** Marks each variant with the learner's predicted success, how much of it they know, and how often they saw it. */
@@ -2275,12 +2296,12 @@ export class Etude {
   }
 
   /** The next placement probe: a new card in the band that halves what's left to find, for the skill with the fewest answers. */
-  private placementPick<T extends CardRow>(root: string | null, rows: T[], dayStart: string): T | null {
+  private placementPick<T extends CardRow>(root: string | null, rows: T[], dayStart: string, session: string): T | null {
     if (!root) return null;
     const A = this.rootData(root);
     const fresh = rows.filter((c) => c.state === 0 && A.cards.get(c.id)?.active);
     let best: { skill: string; probes: number; band: number } | null = null;
-    for (const [skill, p] of A.placement) {
+    for (const [skill, p] of A.placementOf(session)) {
       if (p.state.next === null) continue;
       const band = p.bands[p.state.next];
       if (!fresh.some((c) => A.cards.get(c.id)!.skills[0] === skill && A.cards.get(c.id)!.band === band)) continue;
@@ -2358,7 +2379,7 @@ export class Etude {
 
     const root = scope.deck ? this.adaptiveRoot(scope.deck) : null;
     if (scope.placement) {
-      const pick = this.placementPick(root, rows, dayStart);
+      const pick = this.placementPick(root, rows, dayStart, placementSession(scope.placement));
       return { learning: [] as typeof rows, reviews: [] as typeof rows, news: pick ? [pick] : [], doneNew, doneRev, cfg, nowIso, nextLater: null as string | null, ahead: false };
     }
 
@@ -2488,7 +2509,7 @@ export class Etude {
   }
 
   /** Prepares a specific card for display. A new seed gives a new variant of generated items. */
-  present(cardId: number, seed?: number, opts: { placement?: boolean } = {}): StudyCard {
+  present(cardId: number, seed?: number, opts: { placement?: string | boolean } = {}): StudyCard {
     const c = this.db.get<CardRow & { type: string; deck: string; tags: string; source: string }>(
       "SELECT c.*, i.type, i.tags, i.source, d.name AS deck FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE c.id = ?",
       cardId,
@@ -2516,7 +2537,7 @@ export class Etude {
       showVerdict: def.showVerdict !== false,
       generated: typeof p.fields.generator === "string" || typeof parse<Record<string, unknown>>(this.db.get("SELECT fields FROM items WHERE id = ?", c.item_id)!.fields, {}).generator === "string",
       title: this.titleOf(c.type, p.fields),
-      ...(adapt ? { asOf, ...(adapt.learner.placement ? { placement: true } : {}), ...(adapt.learner.quickCheck ? { quickCheck: true } : {}) } : {}),
+      ...(adapt ? { asOf, ...(adapt.session ? { placement: adapt.session } : {}), ...(adapt.learner.quickCheck ? { quickCheck: true } : {}) } : {}),
     };
   }
 
@@ -2629,7 +2650,7 @@ export class Etude {
   }
 
   /** Grades an answer and stores the attempt. Scheduling waits for `rate`. */
-  async submit(cardId: number, seed: number, answer: unknown, opts: { practice?: boolean; asOf?: string; placement?: boolean } = {}) {
+  async submit(cardId: number, seed: number, answer: unknown, opts: { practice?: boolean; asOf?: string; placement?: string | boolean } = {}) {
     const { grade, prep } = await this.grade(cardId, seed, answer, { asOf: opts.asOf, placement: opts.placement });
     const stored = this.storeAnswer(answer, cardId);
     const id = Number(
@@ -2646,7 +2667,7 @@ export class Etude {
     cardId: number,
     seed: number,
     answer: unknown,
-    opts: { noAi?: boolean; asOf?: string; placement?: boolean } = {},
+    opts: { noAi?: boolean; asOf?: string; placement?: string | boolean } = {},
   ): Promise<{ grade: Grade; prep: Prepared & { fields: Record<string, unknown> }; adapt: AdaptContext | null }> {
     const c = this.cardWithDeck(cardId);
     const def = this.type(c.type);

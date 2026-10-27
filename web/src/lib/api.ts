@@ -14,7 +14,7 @@ export interface Grade {
   /** `example`: a recorded grade shown in watch mode, not one made for this answer. */
   grader: { kind: string; model?: string; ms?: number; cost?: number; error?: string; example?: boolean };
   /** On adaptive decks: what was picked for this showing and why. */
-  adaptive?: { asOf: string; skill: string; variant?: string; reason?: string; placement?: boolean; quickCheck?: boolean };
+  adaptive?: { asOf: string; skill: string; variant?: string; reason?: string; placement?: string | boolean; quickCheck?: boolean };
 }
 
 export interface PresetConfig {
@@ -188,7 +188,8 @@ export interface StudyCard {
   title: string;
   /** Adaptive decks: when the learner estimates were taken; sent back on submit. */
   asOf?: string;
-  placement?: boolean;
+  /** The placement session this card was shown for. */
+  placement?: string;
   quickCheck?: boolean;
 }
 
@@ -447,8 +448,8 @@ export interface Scope {
   q?: string;
   /** Study ahead: nothing has to be due. */
   ahead?: boolean;
-  /** Placement on an adaptive deck: only probes that find the learner's level. */
-  placement?: boolean;
+  /** Placement on an adaptive deck, by session: only probes that find the learner's level. */
+  placement?: string;
 }
 
 export interface OptimizeResult {
@@ -521,7 +522,7 @@ export const api = {
 
   counts: (s: Scope) => call<Counts>("GET", `/api/study/counts${qs({ deck: s.deck, q: s.q, ahead: s.ahead ? 1 : undefined })}`),
   next: (s: Scope, exclude?: number) =>
-    call<{ card: StudyCard | null; counts: Counts }>("GET", `/api/study/next${qs({ deck: s.deck, q: s.q, ahead: s.ahead ? 1 : undefined, placement: s.placement ? 1 : undefined, exclude })}`),
+    call<{ card: StudyCard | null; counts: Counts }>("GET", `/api/study/next${qs({ deck: s.deck, q: s.q, ahead: s.ahead ? 1 : undefined, placement: s.placement || undefined, exclude })}`),
   card: (cardId: number, seed?: number) => call<StudyCard>("GET", `/api/study/card/${cardId}${qs({ seed })}`),
   submit: (card: Pick<StudyCard, "cardId" | "seed" | "asOf" | "placement">, answer: unknown, practice = false) =>
     call<{ attemptId: number; grade: Grade; key: Record<string, unknown>; wantsFeedback: boolean }>("POST", "/api/study/submit", {

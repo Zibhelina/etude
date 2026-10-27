@@ -88,7 +88,7 @@ AI grading is off by default. A person can turn it on with their own OpenAI or O
 Support: https://etude.study/support · hello@etude.study
 ```
 
-**Demo account plan.** Review doesn't need one, because nothing is behind a sign-in. If you want reviewers to try the account anyway: create review@etude.study as a free Porkbun forward to your Gmail. Sign-in is a one-time link (valid 15 minutes) whose code can also be pasted into the app, so in the notes write "Optional account: enter review@etude.study in Settings → Account and ask us through App Review messages; we'll reply with the sign-in code within the hour." Watch the inbox while the app is in review. etude-cloud has no admin command to grant Sync without a payment yet, so Sync itself can't be shown on that account unless you add one or pay for one month with your own card. Delete the account after approval.
+**Demo account plan.** Review doesn't need one, because nothing is behind a sign-in. If you want reviewers to try the account anyway: create review@etude.study as a free Porkbun forward to your Gmail. Sign-in is a one-time link (valid 15 minutes) whose code can also be pasted into the app, so in the notes write "Optional account: enter review@etude.study in Settings → Account and ask us through App Review messages; we'll reply with the sign-in code within the hour." Watch the inbox while the app is in review. To let them try Sync too, sign the account in once, then on the server run `docker compose exec app node src/tools/grant.ts /data sync review@etude.study --days 30` (it turns Sync on without a payment). Revoke it with `--revoke` and delete the account after approval.
 
 ## Export compliance
 

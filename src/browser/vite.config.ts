@@ -37,6 +37,9 @@ export default defineConfig({
       { find: /^node:(child_process|http|net|sqlite)$/, replacement: unavailable },
     ],
   },
+  // Vite swaps a bare `process.env` for `{}`, so the core's `process.env[name]` (API keys, see
+  // worker.ts) would always be empty. Point it at the object shims/globals.ts creates instead.
+  define: { "process.env": "globalThis.process.env", "process.env.NODE_ENV": JSON.stringify("production") },
   worker: { format: "es" },
   optimizeDeps: { exclude: ["@sqlite.org/sqlite-wasm"] },
   server: { fs: { allow: [here("../..")] }, headers: { "Cross-Origin-Opener-Policy": "same-origin", "Cross-Origin-Embedder-Policy": "require-corp" } },

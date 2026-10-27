@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api, relative, type UpdateStatus } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { serverless } from "@/lib/native";
 
 type Phase = "idle" | "checking" | "updating" | "restarting";
 
@@ -85,8 +86,9 @@ export function useUpdater() {
     () => state,
   );
   useEffect(() => {
-    // The server throttles automatic checks, so this doesn't hammer GitHub.
-    if (!started) {
+    // The server throttles automatic checks, so this doesn't hammer GitHub. With no server (browser
+    // build, phone apps) the host updates the app: the web page on deploy, the stores on release.
+    if (!started && !serverless()) {
       started = true;
       check();
     }
@@ -213,6 +215,7 @@ export function useUpdateDot() {
 export function UpdateSettingsRow() {
   const { st, phase, busy, behind } = useUpdater();
   const [open, setOpen] = useState(false);
+  if (serverless()) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm" data-update-settings>
       <span className="flex min-w-0 items-center gap-1.5">

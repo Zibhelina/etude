@@ -5,7 +5,10 @@ import { CircleAlert, CircleCheck, FlaskConical, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Markdown } from "@/components/markdown";
+import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
+import { saveLocalKey, serverless } from "@/lib/native";
 import { cn } from "@/lib/utils";
 import { BigSwitch, Block, Field, NumberField, Section, TextField } from "@/components/settings-ui";
 import { ChatGptBlock } from "@/components/settings-chatgpt";
@@ -61,8 +64,8 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
       }
     >
       <Block title="Quick setup" description="Fills the provider fields below. Feedback timing and language stay as they are.">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {PRESETS.map((p) => (
+        <div className={cn("grid gap-2 sm:grid-cols-2", serverless() ? "lg:grid-cols-3" : "lg:grid-cols-4")}>
+          {PRESETS.filter((p) => !(serverless() && p.id === "chatgpt")).map((p) => (
             <button
               key={p.id}
               onClick={() => defaults && onChange(presetAi(p.id, defaults, ai))}
@@ -82,7 +85,10 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
         </div>
       </Block>
 
-      {fbGpt && (
+      {fbGpt && serverless() && (
+        <p className="text-sm text-warning">Signing in with ChatGPT needs the desktop app. Pick OpenRouter or OpenAI above and paste a key below.</p>
+      )}
+      {fbGpt && !serverless() && (
         <ChatGptBlock
           provider={fbGpt}
           error={errors["feedback.model"]}
@@ -281,6 +287,7 @@ function AgentBlock({ ai, onChange }: { ai: AiSettings; onChange(patch: { model?
 
 function KeysBlock({ ai, saved }: { ai: AiSettings; saved: SettingsResponse }) {
   const vars = keyVars(ai);
+  if (serverless()) return <LocalKeysBlock vars={vars.length ? vars : [{ name: "OPENROUTER_API_KEY", usedBy: ["feedback"] }]} saved={saved} />;
   return (
     <Block
       title="API keys"
@@ -317,6 +324,62 @@ function KeysBlock({ ai, saved }: { ai: AiSettings; saved: SettingsResponse }) {
       ) : (
         <p className="text-sm text-muted-foreground">The current setup doesn't need any key.</p>
       )}
+    </Block>
+  );
+}
+
+/** No server here (browser build, phone apps): keys are pasted in and kept in the app's private storage. */
+function LocalKeysBlock({ vars, saved }: { vars: { name: string; usedBy: string[] }[]; saved: SettingsResponse }) {
+  const [status, setStatus] = useState<Record<string, boolean>>(saved.keyStatus);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const save = async (name: string, value: string) => {
+    setBusy(name);
+    try {
+      await saveLocalKey(name, value);
+      setStatus((s) => ({ ...s, [name]: !!value.trim() }));
+      setValues((v) => ({ ...v, [name]: "" }));
+      toast.success(value.trim() ? `${name} saved on this device` : `${name} removed`);
+    } catch (e) {
+      toast.error("Couldn't save the key", { description: (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <Block title="API keys" description="Stored only on this device, in the app's private storage. Etude never shows a key again after you save it.">
+      <ul className="flex flex-col gap-4">
+        {vars.map((v) => (
+          <li key={v.name} className="flex flex-col gap-2" data-local-key={v.name}>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              {status[v.name] ? <CircleCheck className="size-4 shrink-0 text-success" /> : <CircleAlert className="size-4 shrink-0 text-warning" />}
+              <span className="font-mono text-[13px]">{v.name}</span>
+              <span className={cn("text-xs", status[v.name] ? "text-success" : "text-warning")}>{status[v.name] ? "set" : "missing"}</span>
+              <span className="text-xs text-muted-foreground">· {v.usedBy.join(", ")}</span>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                type="password"
+                aria-label={`Value for ${v.name}`}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={status[v.name] ? "Paste a new key to replace it" : "Paste the key"}
+                className="h-10 font-mono text-[13px] md:h-9"
+                value={values[v.name] ?? ""}
+                onChange={(e) => setValues((x) => ({ ...x, [v.name]: e.target.value }))}
+              />
+              <Button size="sm" className="h-10 md:h-9" disabled={busy === v.name || !(values[v.name] ?? "").trim()} onClick={() => save(v.name, values[v.name] ?? "")}>
+                Save
+              </Button>
+              {status[v.name] && (
+                <Button size="sm" variant="outline" className="h-10 md:h-9" disabled={busy === v.name} onClick={() => save(v.name, "")}>
+                  Remove
+                </Button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
     </Block>
   );
 }
@@ -361,7 +424,7 @@ function TestBlock({ ai, saved }: { ai: AiSettings; saved: SettingsResponse }) {
           <CircleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
           <div className="min-w-0">
             <p className="break-words text-destructive">{result.verdictError}</p>
-            {/ is not set$/.test(result.verdictError ?? "") && <p className="mt-1 text-xs text-muted-foreground">Add it to ~/.etude/.env and restart the server, then run the test again.</p>}
+            {/ is not set$/.test(result.verdictError ?? "") && !serverless() && <p className="mt-1 text-xs text-muted-foreground">Add it to ~/.etude/.env and restart the server, then run the test again.</p>}
           </div>
         </div>
       )}

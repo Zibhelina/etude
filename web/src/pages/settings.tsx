@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { UpdateSettingsRow } from "@/components/update-bar";
 import { Logo, Wordmark } from "@/components/logo";
 import { cn } from "@/lib/utils";
+import { serverless } from "@/lib/native";
 import { PHONE_H1 } from "@/components/page";
 import { AiSection } from "@/components/settings-ai";
 import { AppearanceSection } from "@/components/settings-appearance";
@@ -202,9 +203,9 @@ export function SettingsPage() {
                     </a>
                   ))}
                 </div>
-                <p className="text-xs text-muted-foreground">
+                {!serverless() && <p className="text-xs text-muted-foreground">
                   From a terminal: <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11.5px] text-foreground/85">etude update --check</code>
-                </p>
+                </p>}
               </Block>
             </Section>
 

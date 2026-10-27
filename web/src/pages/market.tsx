@@ -19,6 +19,7 @@ import { MarketGallery } from "@/components/market-gallery";
 import { applyTheme } from "@/lib/theme";
 import { navigate, useLocation } from "@/lib/router";
 import { cn } from "@/lib/utils";
+import { serverless } from "@/lib/native";
 
 const KIND_LABEL: Record<MarketKind, string> = { theme: "Theme", deck: "Deck", type: "Card type" };
 const KIND_ICON: Record<MarketKind, React.ComponentType<{ className?: string }>> = { theme: Palette, deck: Layers, type: Blocks };
@@ -103,9 +104,12 @@ export function MarketPage() {
             <Button variant="ghost" size="icon" aria-label="Refresh" onClick={() => load(true)} disabled={refreshing}>
               <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
             </Button>
-            <Button className="gap-1.5" onClick={() => setPublishing(true)}>
-              <Upload className="size-4" /> Publish
-            </Button>
+            {/* Publishing opens a pull request with the GitHub CLI on the desktop. */}
+            {!serverless() && (
+              <Button className="gap-1.5" onClick={() => setPublishing(true)}>
+                <Upload className="size-4" /> Publish
+              </Button>
+            )}
           </>
         }
       />

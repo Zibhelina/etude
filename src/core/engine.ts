@@ -1160,7 +1160,7 @@ export class Etude {
   leftoverCards(opts: { type?: string; face?: string } = {}): LeftoverCard[] {
     // Finding them runs facesWhen for every item, so the answer is kept until items, cards, reviews or types change.
     const key = this.db.get<{ k: string }>(
-      "SELECT (SELECT COUNT(*) || ':' || COALESCE(MAX(updated), '') FROM items) || '|' || (SELECT COUNT(*) || ':' || COALESCE(MAX(id), 0) FROM cards) || '|' || (SELECT COUNT(*) FROM reviews) || '|' || (SELECT COUNT(*) || ':' || COALESCE(MAX(updated), '') FROM types) AS k",
+      "SELECT total_changes() || ':' || (SELECT data_version FROM pragma_data_version) AS k",
     )!.k;
     if (this.leftovers?.key !== key) this.leftovers = { key, cards: this.findLeftoverCards() };
     return this.leftovers.cards.filter((c) => (!opts.type || c.type === opts.type) && (!opts.face || c.face === opts.face));

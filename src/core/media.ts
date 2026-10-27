@@ -15,9 +15,9 @@ const TYPES: Record<string, [string, MediaKind, string?]> = {
 };
 
 // Where a file name mentioned in text can start: after a quote, bracket, slash, colon or equals sign.
-const NAME_START = new Set(['"', "'", "<", ">", "(", ")", "[", "]", "{", "}", "/", "\\", ":", "=", "\n", "\r", "\t"]);
+const NAME_START = new Set(['"', "'", "<", ">", "/", "\\", ":", "=", "\n", "\r", "\t"]);
 // A name may also start after one of these inside such a run ("see my file.mp3" names "file.mp3" too).
-const NAME_SPLIT = /[ ,;|*`]/g;
+const NAME_SPLIT = /[ ,;|*`()\[\]{}]/g;
 
 /**
  * Adds every file name `text` mentions that ends in one of `exts` (lowercase, no dot), lowercased and
@@ -25,6 +25,10 @@ const NAME_SPLIT = /[ ,;|*`]/g;
  * towards finding too many names, so a file it misses is one nothing names.
  */
 export function collectFileNames(text: string, exts: Set<string>, into: Set<string>) {
+  // Decode before locating extensions, including an encoded dot or uppercase Unicode letters.
+  text = text.replace(/(?:%[0-9a-f]{2})+/gi, (s) => {
+    try { return decodeURIComponent(s); } catch { return s; }
+  });
   const ext = /\.([A-Za-z0-9]{1,8})(?![A-Za-z0-9])/g;
   for (let m: RegExpExecArray | null; (m = ext.exec(text)); ) {
     if (!exts.has(m[1].toLowerCase())) continue;

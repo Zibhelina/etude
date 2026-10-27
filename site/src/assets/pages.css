@@ -85,5 +85,14 @@
   .pg-section { padding: 2.5rem 0; }
   .pg-hero .hero-cta .btn { flex: 1 1 100%; }
   .plan .btn { align-self: stretch; }
-  .doc table.booktabs { min-width: 30rem; }
+  /* Phones: each row becomes a short block, its cells labelled with the column heading. */
+  .doc table.booktabs { min-width: 0; width: 100%; }
+  .doc table.booktabs thead { display: none; }
+  .doc table.booktabs, .doc table.booktabs tbody, .doc table.booktabs tr, .doc table.booktabs td { display: block; }
+  .doc table.booktabs tr { padding: 0.8rem 0; }
+  .doc table.booktabs tbody tr + tr > * { border-top: 0; }
+  .doc table.booktabs tbody tr + tr { border-top: 1px solid var(--border); }
+  .doc table.booktabs td { padding: 0.1rem 0; }
+  .doc table.booktabs td + td::before { content: attr(data-label) " · "; font-family: var(--font-serif); font-style: italic; color: var(--muted-foreground); }
+  .doc table.booktabs td:first-child { font-weight: 500; }
 }

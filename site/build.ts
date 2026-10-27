@@ -70,7 +70,8 @@ for (const page of ["index.html", "download.html", "404.html"]) {
       },
       table(t) {
         const head = t.header.map((c) => `<th>${this.parser.parseInline(c.tokens)}</th>`).join("");
-        const rows = t.rows.map((r) => `<tr>${r.map((c) => `<td>${this.parser.parseInline(c.tokens)}</td>`).join("")}</tr>`).join("\n");
+        const labels = t.header.map((c) => attr(c.text.replace(/[*_`]/g, "")));
+        const rows = t.rows.map((r) => `<tr>${r.map((c, i) => `<td data-label="${labels[i]}">${this.parser.parseInline(c.tokens)}</td>`).join("")}</tr>`).join("\n");
         return `<div class="table-scroll"><table class="booktabs"><thead><tr>${head}</tr></thead><tbody>\n${rows}\n</tbody></table></div>\n`;
       },
     },

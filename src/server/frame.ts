@@ -11,6 +11,34 @@ export interface FrameAssets {
 
 const esc = (s: string) => s.replace(/<\/(script|style)/gi, "<\\/$1");
 
+/**
+ * The frame's Content-Security-Policy: a card's code may load the runtime, KaTeX, its type's assets
+ * and collection media from the Etude server, and data:/blob: URLs it makes itself, and nothing
+ * else. That keeps a Market card type from sending what the user studies or types to another host.
+ */
+export function frameCsp(base: string): string {
+  let origin: string;
+  try {
+    origin = new URL(base).origin;
+  } catch {
+    origin = "'none'";
+  }
+  const self = origin === "null" ? "'none'" : origin;
+  return [
+    "default-src 'none'",
+    `script-src ${self} 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:`,
+    `style-src ${self} 'unsafe-inline'`,
+    `img-src ${self} data: blob:`,
+    `media-src ${self} data: blob:`,
+    `font-src ${self} data:`,
+    `connect-src ${self} data: blob:`,
+    `worker-src ${self} blob:`,
+    "frame-src 'none'",
+    "form-action 'none'",
+    `base-uri ${self}`,
+  ].join("; ");
+}
+
 export function cardFrame(def: CardTypeDef, base: string, assets?: FrameAssets): string {
   const js = def.template.js ?? "";
   const assetMap = { type: assets?.type ?? def.id, files: Object.fromEntries((assets?.files ?? []).map((f) => [f.name, f.hash])) };
@@ -18,6 +46,7 @@ export function cardFrame(def: CardTypeDef, base: string, assets?: FrameAssets):
 <html>
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="${frameCsp(base)}">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <base href="${base}">
 <link rel="stylesheet" href="${base}runtime/vendor/katex.css">

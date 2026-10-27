@@ -1,5 +1,5 @@
 import type { Etude } from "../engine.ts";
-import { muted, rows, TABLES } from "./log.ts";
+import { muted, rows, safeSettings, TABLES } from "./log.ts";
 import { emptyCard } from "../scheduler.ts";
 
 /** Rebuild the relational view of the registers. Local integer handles survive each rebuild. */
@@ -62,8 +62,17 @@ export function project(e: Etude) {
         insert("reviews",{...r,id:ids.get("reviews")!.get(k),sync_id:k,card_id:ids.get("cards")!.get(r.card_id),attempt_id:liveAttempts.has(r.attempt_id) ? ids.get("attempts")!.get(r.attempt_id) : null,state:0,card_before:"{}",due_after:r.ts});
       }
       for (const [key,r] of data.get("settings")!) if (key === "settings") {
-        const local = db.setting<any>("settings",{});
-        db.setSetting("settings",{...local,...clean(r.value)});
+        // Another device (or anyone holding the vault key) wrote these. Only the synced keys are
+        // taken, and each goes through the same checks as a local change: provider URLs, key
+        // names and the Market catalog stay this device's own, and theme CSS is sanitized again.
+        const incoming = safeSettings(clean(r.value));
+        for (const k of ["themes","theme","dayStartHour","learnAheadMinutes"]) {
+          if (!(k in incoming)) continue;
+          const v = incoming[k];
+          if (k === "learnAheadMinutes" && !(typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 24 * 60)) continue;
+          if (k === "dayStartHour" && !(typeof v === "number" && Number.isInteger(v))) continue;
+          try { e.updateSettings({[k]:v}); } catch { /* an invalid value from another device is ignored */ }
+        }
       }
       for (const r of data.get("type_assets")!.values()) {
         const bytes = db.get("SELECT bytes FROM sync_blobs WHERE hash=?",r.hash)?.bytes;

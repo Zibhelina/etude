@@ -43,6 +43,12 @@ export interface WasmOptions {
   bytes?: Uint8Array | null;
   /** Called with the whole database after each write that leaves no transaction open. */
   persist?: (bytes: Uint8Array) => void;
+  /**
+   * Called before each statement while no transaction is open. Returns the file's bytes when
+   * someone else (another connection or process) rewrote it since this connection last read or
+   * wrote it, so this copy picks up their changes instead of overwriting them on its next write.
+   */
+  changed?: () => Uint8Array | null;
 }
 
 /** Same message node:sqlite gives ("UNIQUE constraint failed: t.a"), so callers and tests see one error text. */
@@ -118,12 +124,14 @@ class WasmConnection implements SqlConnection {
   private readonly s: Sqlite3;
   private readonly db: any;
   private readonly persist?: (bytes: Uint8Array) => void;
+  private readonly changed?: () => Uint8Array | null;
   private dirty = false;
 
   constructor(s: Sqlite3, opts: WasmOptions & { db?: any }) {
     this.s = s;
     this.db = opts.db ?? new s.oo1.DB(":memory:", "c");
     this.persist = opts.persist;
+    this.changed = opts.changed;
     if (opts.bytes && opts.bytes.length) this.load(opts.bytes);
   }
 
@@ -144,7 +152,15 @@ class WasmConnection implements SqlConnection {
     this.db.exec("PRAGMA journal_mode = MEMORY;");
   }
 
+  /** Reloads the file if another writer changed it (only between transactions). */
+  private refresh() {
+    if (!this.changed || !this.db.pointer || !this.s.capi.sqlite3_get_autocommit(this.db.pointer)) return;
+    const bytes = this.changed();
+    if (bytes) this.load(bytes);
+  }
+
   withStatement<T>(sql: string, fn: (stmt: any) => T): T {
+    this.refresh();
     let stmt: any;
     try {
       stmt = this.db.prepare(sql);
@@ -167,6 +183,7 @@ class WasmConnection implements SqlConnection {
   }
 
   exec(sql: string): void {
+    this.refresh();
     try {
       this.db.exec(sql);
     } catch (e) {
@@ -280,7 +297,7 @@ async function openOpfs(path: string): Promise<SqlConnection> {
 export async function openWasm(path: string): Promise<SqlConnection> {
   if (path === ":memory:") return createWasmConnection();
   if (inBrowser()) return openOpfs(path);
-  const { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } = await import("node:fs");
+  const { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } = await import("node:fs");
   const { dirname } = await import("node:path");
   mkdirSync(dirname(path), { recursive: true });
   // node:sqlite may have left WAL sidecar files; fold them in before reading the main file.
@@ -290,15 +307,38 @@ export async function openWasm(path: string): Promise<SqlConnection> {
     d.exec("PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode = DELETE;");
     d.close();
   }
-  const bytes = existsSync(path) ? readFileSync(path) : null;
+  // Every write replaces the file by rename, so inode + size + mtime change whenever anyone writes.
+  const signature = () => {
+    try {
+      const st = statSync(path);
+      return `${st.ino}:${st.size}:${st.mtimeMs}`;
+    } catch {
+      return "";
+    }
+  };
+  const read = () => {
+    const b = readFileSync(path);
+    return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+  };
+  let seen = signature();
+  const bytes = existsSync(path) ? read() : null;
   return createWasmConnection({
-    bytes: bytes ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength) : null,
+    bytes,
     persist: (b) => {
-      const tmp = `${path}.tmp-${process.pid}`;
+      const tmp = `${path}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
       writeFileSync(tmp, b);
       renameSync(tmp, path);
       rmSync(path + "-wal", { force: true });
       rmSync(path + "-shm", { force: true });
+      seen = signature();
+    },
+    // Two connections to one file under Node (the CLI next to an open collection, tests) each hold
+    // a copy in memory; without this, one would never see the other's writes and would overwrite them.
+    changed: () => {
+      const now = signature();
+      if (!now || now === seen) return null;
+      seen = now;
+      return read();
     },
   });
 }

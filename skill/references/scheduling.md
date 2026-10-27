@@ -111,8 +111,8 @@ Both adaptive switches are off by default. With them off a deck behaves exactly 
 etude deck set "Course" adaptivePace=true minutesPerDay=20 targetSuccess=0.85
 etude deck set "Course" adaptiveChallenge=true levels='[{"tag":"level::1"},{"tag":"level::2"}]'
 etude stats skills "Course"                       # skills, levels, placement, today's pace
-etude study next --deck "Course" --placement      # placement probes; null when the level is found
+etude study next --deck "Course" --placement s1   # placement probes for session s1; null when the level is found
 etude deck unset "Course" adaptivePace adaptiveChallenge levels
 ```
 
-Skills are measured across the highest deck with an adaptive setting on, from the graded history: nothing is stored. Placement answers are real reviews. Don't fake them: a placement only places what the learner answered.
+Skills are measured across the highest deck with an adaptive setting on, from the graded history: nothing is stored. Placement answers are real reviews; submit them with the same `--placement` session. A new session name redoes the placement, and only the latest counts. Don't fake them: a placement only places what the learner answered.

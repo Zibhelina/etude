@@ -7,7 +7,7 @@ import { DECK_FLAG, FACE_FLAG, QUERY_FLAG, oneCard, scopeOf, stateName } from ".
 group({ name: "study", summary: "Studying: the queue, presenting a card, submitting answers, ratings, undo" });
 
 const AHEAD_FLAG = { name: "ahead", type: "boolean" as const, description: "Study ahead: nothing has to be due. Every card in the scope, soonest due first, no daily limits; ratings are real reviews." };
-const PLACEMENT_FLAG = { name: "placement", type: "boolean" as const, description: "Placement on an adaptive deck: only probes that find the learner's level. Pass it again when submitting a probe." };
+const PLACEMENT_FLAG = { name: "placement", type: "string" as const, description: "Placement on an adaptive deck: only probes that find the learner's level. The value names the session (any text, e.g. today's date): use the same one for every probe and when submitting; a new name starts a fresh placement, and the latest placement is the one that counts.", placeholder: "SESSION" };
 const AS_OF_FLAG = { name: "as-of", type: "string" as const, description: "The card's `asOf` from `study next`/`study card` (adaptive decks), so the grade matches the variant shown.", placeholder: "ISO" };
 const PRACTICE_FLAG = { name: "practice", type: "boolean" as const, description: "Practice only: the review is logged but the card's schedule doesn't move (like “another variant” in the app)." };
 const ANSWER_FLAGS = [
@@ -35,7 +35,7 @@ function presented(c: EngineCard, ctx: Ctx) {
     answerFormat: answerFormat(c, ctx),
     scheduler: c.scheduler.id,
     ...(c.asOf ? { asOf: c.asOf } : {}),
-    ...(c.placement ? { placement: true } : {}),
+    ...(c.placement ? { placement: c.placement } : {}),
     ...(c.quickCheck ? { quickCheck: true } : {}),
     ...(c.scheduler.ratings
       ? { intervals: Object.fromEntries(([1, 2, 3, 4] as Rating[]).map((r) => [RATING_NAMES[r], humanSpan(now, new Date(c.intervals[r]).getTime())])) }
@@ -106,8 +106,8 @@ command({
   description:
     "Use `view` to present the card (render its markdown for the learner). Keep `cardId` and `seed`: submit with them so the answer is graded against exactly this variant. On adaptive decks also keep `asOf` and pass it as `--as-of`. Respects daily limits and the preset's ordering; `--exclude` skips the card just answered. With `--ahead`, nothing has to be due: every card in the scope comes up, soonest due first. With `--placement` (adaptive decks), only placement probes come up, and `card` is null once the level is found.",
   flags: [DECK_FLAG, QUERY_FLAG, AHEAD_FLAG, PLACEMENT_FLAG, { name: "exclude", type: "number", description: "Card id to avoid repeating right away." }],
-  examples: ['etude study next --deck "Networks"', 'etude study next --query "tag:delay is:due"', 'etude study next --deck "Networks" --ahead', 'etude study next --deck "Course" --placement'],
-  output: "{ card: { cardId, itemId, face, seed, type, deck, tags, state, title, grader, view, answerFormat, intervals, asOf?, placement?, quickCheck? } | null, counts }",
+  examples: ['etude study next --deck "Networks"', 'etude study next --query "tag:delay is:due"', 'etude study next --deck "Networks" --ahead', 'etude study next --deck "Course" --placement 2026-10-27'],
+  output: "{ card: { cardId, itemId, face, seed, type, deck, tags, state, title, grader, view, answerFormat, intervals, asOf?, placement?: session, quickCheck? } | null, counts }",
   run(ctx) {
     if (ctx.flags.placement && !ctx.flags.deck) throw new CliError("--placement needs --deck");
     const r = ctx.e.next({ ...scopeOf(ctx.flags), placement: ctx.flags.placement || undefined }, { exclude: ctx.flags.exclude });

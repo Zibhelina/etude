@@ -2762,16 +2762,16 @@ etude study next [flags]
 | `--deck <NAME>` | string | Limit to this deck and its subdecks. |
 | `--query <SEARCH>` | string | Limit to cards matching a search (see `Search language`). Also `--q`. |
 | `--ahead` | boolean | Study ahead: nothing has to be due. Every card in the scope, soonest due first, no daily limits; ratings are real reviews. |
-| `--placement` | boolean | Placement on an adaptive deck: only probes that find the learner's level. Pass it again when submitting a probe. |
+| `--placement <SESSION>` | string | Placement on an adaptive deck: only probes that find the learner's level. The value names the session (any text, e.g. today's date): use the same one for every probe and when submitting; a new name starts a fresh placement, and the latest placement is the one that counts. |
 | `--exclude <N>` | number | Card id to avoid repeating right away. |
 
-Output: { card: { cardId, itemId, face, seed, type, deck, tags, state, title, grader, view, answerFormat, intervals, asOf?, placement?, quickCheck? } | null, counts }
+Output: { card: { cardId, itemId, face, seed, type, deck, tags, state, title, grader, view, answerFormat, intervals, asOf?, placement?: session, quickCheck? } | null, counts }
 
 ```sh
 etude study next --deck "Networks"
 etude study next --query "tag:delay is:due"
 etude study next --deck "Networks" --ahead
-etude study next --deck "Course" --placement
+etude study next --deck "Course" --placement 2026-10-27
 ```
 
 ### etude study card
@@ -2827,7 +2827,7 @@ etude study submit <ref> [flags]
 | `--feedback` | boolean | Also write AI feedback now (when the grade has none). |
 | `--face <VALUE>` | string | With item ids: only the card for this face. |
 | `--as-of <ISO>` | string | The card's `asOf` from `study next`/`study card` (adaptive decks), so the grade matches the variant shown. |
-| `--placement` | boolean | Placement on an adaptive deck: only probes that find the learner's level. Pass it again when submitting a probe. |
+| `--placement <SESSION>` | string | Placement on an adaptive deck: only probes that find the learner's level. The value names the session (any text, e.g. today's date): use the same one for every probe and when submitting; a new name starts a fresh placement, and the latest placement is the one that counts. |
 
 Output: { attemptId, cardId, grade: { score, verdict, feedback, details, suggested, grader }, suggested: { rating, name }, key, wantsFeedback, feedback? }
 
@@ -2915,7 +2915,7 @@ etude study answer <ref> [flags]
 | `--duration <N>` | number | Milliseconds spent. |
 | `--face <VALUE>` | string | With item ids: only the card for this face. |
 | `--as-of <ISO>` | string | The card's `asOf` from `study next`/`study card` (adaptive decks), so the grade matches the variant shown. |
-| `--placement` | boolean | Placement on an adaptive deck: only probes that find the learner's level. Pass it again when submitting a probe. |
+| `--placement <SESSION>` | string | Placement on an adaptive deck: only probes that find the learner's level. The value names the session (any text, e.g. today's date): use the same one for every probe and when submitting; a new name starts a fresh placement, and the latest placement is the one that counts. |
 
 Output: { attemptId, grade, key, rated: { reviewId, rating, due, in } | null, needsRating? }
 

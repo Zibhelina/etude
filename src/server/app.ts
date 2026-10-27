@@ -206,7 +206,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
       throw new EtudeError("request body must be JSON");
     }
   };
-  const scopeOf = (c: Context): StudyScope => ({ deck: c.req.query("deck") || undefined, query: c.req.query("q") || undefined, ahead: c.req.query("ahead") === "1" || undefined, placement: c.req.query("placement") === "1" || undefined });
+  const scopeOf = (c: Context): StudyScope => ({ deck: c.req.query("deck") || undefined, query: c.req.query("q") || undefined, ahead: c.req.query("ahead") === "1" || undefined, placement: c.req.query("placement") || undefined });
 
   syncRoutes(app, etude);
   accountRoutes(app as any, etude);
@@ -374,7 +374,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.get("/api/study/card/:cardId", (c) => c.json(etude.present(Number(c.req.param("cardId")), c.req.query("seed") ? Number(c.req.query("seed")) : undefined)));
   app.post("/api/study/submit", async (c) => {
     const b = await body(c);
-    return c.json(await etude.submit(Number(b.cardId), Number(b.seed), b.answer ?? null, { practice: !!b.practice, asOf: typeof b.asOf === "string" ? b.asOf : undefined, placement: !!b.placement }));
+    return c.json(await etude.submit(Number(b.cardId), Number(b.seed), b.answer ?? null, { practice: !!b.practice, asOf: typeof b.asOf === "string" ? b.asOf : undefined, placement: typeof b.placement === "string" ? b.placement : !!b.placement }));
   });
   app.post("/api/study/feedback", async (c) => c.json(await etude.feedback(Number((await body(c)).attemptId))));
   app.post("/api/study/rate", async (c) => {

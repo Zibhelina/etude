@@ -250,6 +250,9 @@ async function installPool(s: Sqlite3): Promise<any> {
         initialCapacity: 8,
         preserveOnInitFailure: true,
         forceReinitIfPreviouslyFailed: i > 0,
+        // Quiet: while the old worker still holds the files, each try logs NoModificationAllowedError.
+        // A real failure is thrown below after the last try.
+        verbosity: 0,
       });
     } catch (e) {
       last = e;

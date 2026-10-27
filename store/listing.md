@@ -82,7 +82,7 @@ The first version of Etude for Android.
 The captions are part of the images in `store/screenshots/`. In order:
 
 1. Practice *anything.* Your decks, on your device.
-2. Cards that are *small apps.* Tap the country on a real map.
+2. Cards that are *small apps.* Name the country on a real map.
 3. Find it on a *blank table.* The periodic table, one cell at a time.
 4. Tap it out. *Get graded.* Morse, music, code, maths and more.
 5. See what you *remember.* FSRS schedules every review.

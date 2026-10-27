@@ -28,7 +28,7 @@ const deck = (n) => encodeURIComponent(n);
 const SCENES = [
   { id: "01-decks", caption: "Practice <em>anything.</em>", sub: "Your decks, on your device.", url: "/" },
   {
-    id: "02-map", caption: "Cards that are <em>small apps.</em>", sub: "Tap the country on a real map.",
+    id: "02-map", caption: "Cards that are <em>small apps.</em>", sub: "Name the country on a real map.",
     url: `/study?deck=${deck("Geography::Countries of the World::South America")}`, frame: true,
   },
   {

@@ -1964,7 +1964,8 @@ export class Etude {
     try {
       merged = this.generate({ ...fieldDefaults(def), ...fields }, seed, "preview");
       if (def.prepare) {
-        const out = runScript<any>(def.prepare, { params: ["fields", "face", "rng"], args: { fields: merged, face }, seed: hashString(`${seed}:preview:${face}`), where: `${def.id}/prepare` });
+        // Previews have no learner: they show what a deck without adaptation shows.
+        const out = runScript<any>(def.prepare, { params: ["fields", "face", "rng", "learner"], args: { fields: merged, face, learner: null }, seed: hashString(`${seed}:preview:${face}`), where: `${def.id}/prepare` });
         view = out?.view ?? {};
         key = out?.key ?? {};
         if (out?.grader === "self") selfGraded = true;

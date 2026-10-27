@@ -84,6 +84,9 @@ test("adaptive settings are off by default, validated, and a plain deck behaves 
   assert.equal(r.grade.adaptive, undefined);
   assert.equal(r.grade.score, 1);
   assert.deepEqual(e.learnerSummary("Course"), { deck: "Course", adaptive: false });
+  // Previews (type editor, `type preview`) run prepare without a learner.
+  const pv = await e.previewType(e.type("ctx"), { word: "x", sentences: [{ id: "a", de: "a" }] }, { face: "read" });
+  assert.equal((pv as any).view?.hasLearner, false, JSON.stringify(pv));
   done();
 });
 

@@ -41,9 +41,9 @@ etude deck show "Networks::Week 1"   # resolved, inherited, presetBase, own conf
 | `autoApply` | false | the app applies the suggested rating without asking |
 | `burySiblings` | true | other faces of the same item wait until tomorrow |
 | `enableFuzz`, `enableShortTerm`, `weights` | | FSRS-6 options |
-| `adaptiveChallenge` | false | card types get a `learner` argument and may pick easier or harder variants |
-| `adaptivePace` | false | each day's new-card limit follows the last week's success and study time |
-| `targetSuccess` | 0.85 | share of graded answers that should be right |
+| `adaptiveChallenge` | false | card types get a `learner` argument and pick variants by goal: clearest when new, usual difficulty when FSRS measures memory |
+| `adaptivePace` | false | each day's new-card limit follows how well last week's young cards held (against `desiredRetention`) and the study time |
+| `targetSuccess` | null | share of right answers practice aims for (decks without a memory model); null follows `desiredRetention` |
 | `minutesPerDay` | 20 | study time the adaptive pace aims for |
 | `newPerDayMin` / `newPerDayMax` | 5 / 25 | bounds for the adaptive pace |
 | `levels` | `[]` | ordered levels by tag, each with an optional check tag: `[{"tag":"level::1","check":"check::1"}]` |
@@ -108,7 +108,7 @@ Leeches: tag them first (`etude item tag --query 'deck:X prop:lapses>=4' -t leec
 Both adaptive switches are off by default. With them off a deck behaves exactly as without them.
 
 ```sh
-etude deck set "Course" adaptivePace=true minutesPerDay=20 targetSuccess=0.85
+etude deck set "Course" adaptivePace=true minutesPerDay=20
 etude deck set "Course" adaptiveChallenge=true levels='[{"tag":"level::1"},{"tag":"level::2"}]'
 etude stats skills "Course"                       # skills, levels, placement, today's pace
 etude study next --deck "Course" --placement s1   # placement probes for session s1; null when the level is found

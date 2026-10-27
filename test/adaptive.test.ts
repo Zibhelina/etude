@@ -69,7 +69,7 @@ const cardOf = (e: Etude, item: string, face = "read") => e.db.get<{ id: number 
 test("adaptive settings are off by default, validated, and a plain deck behaves as before", async () => {
   await initSandbox();
   for (const k of ["adaptiveChallenge", "adaptivePace"] as const) assert.equal(DEFAULT_PRESET[k], false);
-  assert.deepEqual(validateConfig({ adaptivePace: true, targetSuccess: 0.85, newPerDayMin: 3, newPerDayMax: 9, levels: [{ tag: "level::1", check: "check::1" }], levelMix: 0.2 }), []);
+  assert.deepEqual(validateConfig({ adaptivePace: true, targetSuccess: null, newPerDayMin: 3, newPerDayMax: 9, levels: [{ tag: "level::1", check: "check::1" }], levelMix: 0.2 }), []);
   for (const bad of [{ adaptivePace: "yes" }, { targetSuccess: 0.3 }, { newPerDayMin: 9, newPerDayMax: 3 }, { levels: [{ tag: "a" }, { tag: "a" }] }, { levels: "a" }, { levelMix: 2 }])
     assert.equal(validateConfig(bad as never).length, 1, JSON.stringify(bad));
   assert.deepEqual(validateType(CONTEXT_TYPE), []);
@@ -147,14 +147,16 @@ test("learner math: Elo-style skills, pace, placement bisection and levels", () 
   assert.equal(right.answers.reading, 20);
   assert.equal(right.success.reading, 1);
 
-  const cfg = { ...DEFAULT_PRESET, newPerDay: 10, newPerDayMin: 5, newPerDayMax: 25, targetSuccess: 0.85, minutesPerDay: 20 };
-  assert.equal(pace(cfg, { activeDays: 1, scores: [1, 1], minutes: 5, newCards: 10 }).value, 10, "too little data: the configured limit");
-  const fast = pace(cfg, { activeDays: 7, scores: Array(100).fill(0.97), minutes: 70, newCards: 70 });
-  const slow = pace(cfg, { activeDays: 7, scores: Array(100).fill(0.6), minutes: 210, newCards: 70 });
+  const cfg = { ...DEFAULT_PRESET, newPerDay: 10, newPerDayMin: 5, newPerDayMax: 25, desiredRetention: 0.9, minutesPerDay: 20 };
+  assert.equal(pace(cfg, { activeDays: 1, young: { reviews: 5, passed: 5 }, minutes: 5, newCards: 10 }).value, 10, "too little data: the configured limit");
+  const fast = pace(cfg, { activeDays: 7, young: { reviews: 100, passed: 97 }, minutes: 70, newCards: 70 });
+  const slow = pace(cfg, { activeDays: 7, young: { reviews: 100, passed: 70 }, minutes: 210, newCards: 70 });
   assert.ok(fast.value > 10 && fast.value <= 25, JSON.stringify(fast));
   assert.ok(slow.value < 10 && slow.value >= 5, JSON.stringify(slow));
-  const busy = pace(cfg, { activeDays: 7, scores: Array(100).fill(0.97), minutes: 210, newCards: 70 });
-  assert.ok(busy.value < 10, `right answers don't outweigh being over the time budget: ${JSON.stringify(busy)}`);
+  const busy = pace(cfg, { activeDays: 7, young: { reviews: 100, passed: 97 }, minutes: 210, newCards: 70 });
+  assert.ok(busy.value < 10, `cards holding well doesn't outweigh being over the time budget: ${JSON.stringify(busy)}`);
+  const steady = pace(cfg, { activeDays: 7, young: { reviews: 100, passed: 90 }, minutes: 20, newCards: 70 });
+  assert.equal(steady.value, 10, "holding at the desired retention on budget: keep the pace");
 
   assert.deepEqual(placementState(6, []), { bands: 6, probes: 0, frontier: 0, next: 2 });
   assert.equal(placementState(6, [{ band: 2, score: 1 }, { band: 2, score: 1 }]).frontier, 0, "two answers aren't enough to pass a band");
@@ -301,6 +303,8 @@ test("undo and bury discard the graded answer, and only rated answers count", as
   assert.equal(answers(), 0, "answered but not rated yet");
   e.setBuried([cardOf(e, "w1")]);
   assert.equal(attempts("w1"), 0, "burying instead of rating discards the answer");
+  // A card in review, so its answer measures memory (a new card's first showing teaches and isn't counted).
+  e.db.run("UPDATE cards SET state = 2, stability = 10, difficulty = 5, last_review = ?, reps = 1 WHERE id = ?", new Date(Date.now() - 5 * 86400_000).toISOString(), cardOf(e, "w2"));
   const id = await answer("w2");
   e.rate(cardOf(e, "w2"), 1, { attemptId: id });
   assert.equal(answers(), 1);
@@ -309,6 +313,28 @@ test("undo and bury discard the graded answer, and only rated answers count", as
   e.undo();
   assert.equal(attempts("w2"), 0, "undo discards the review and its answer");
   assert.equal(answers(), 0);
-  assert.equal(e.db.get<{ state: number }>("SELECT state FROM cards WHERE id = ?", cardOf(e, "w2"))!.state, 0);
+  assert.equal(e.db.get<{ state: number }>("SELECT state FROM cards WHERE id = ?", cardOf(e, "w2"))!.state, 2, "back in review, as before");
   done();
 });
+
+test("goals: a first showing teaches, reviews and placement measure, drill decks practise", async () => {
+  const { e, done } = await setup({ levels: false });
+  e.updateDeck("Course", { config: { adaptiveChallenge: true } });
+  const ctx = (item: string, opts = {}) => e.adaptContext(cardOf(e, item), new Date().toISOString(), opts)!;
+  assert.equal(ctx("w1").learner.goal, "teach", "new card");
+  assert.equal(ctx("w1", { placement: "p" }).learner.goal, "measure", "placement probe");
+  const c = e.present(cardOf(e, "w1"), 1);
+  const r = await e.submit(c.cardId, c.seed, "nope", { asOf: c.asOf });
+  e.rate(c.cardId, 1, { attemptId: r.attemptId! });
+  assert.equal(r.grade.adaptive?.goal, "teach");
+  assert.equal((e.learnerSummary("Course") as any).skills.find((k: any) => k.skill === "reading").answers, 0, "teaching answers don't feed the skill estimates");
+  assert.equal(ctx("w1").learner.goal, "measure", "learning");
+  // Variants carry their offset from the item's usual difficulty.
+  const f = e.prepare("w2", "read", 1, ctx("w2")).fields.sentences as any[];
+  assert.ok(f[0]._offset < 0 && f[1]._offset > 0, JSON.stringify(f.map((x) => x._offset)));
+  e.updateDeck("Course", { config: { adaptiveChallenge: true, scheduler: "drill" } });
+  assert.equal(ctx("w3").learner.goal, "practice", "no memory model");
+  assert.equal(ctx("w3").learner.target, 0.9, "the target follows the desired retention");
+  done();
+});
+

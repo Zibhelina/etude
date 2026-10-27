@@ -3035,7 +3035,7 @@ etude stats skills <deck>
 | --- | --- |
 | `deck` | Deck name. |
 
-Output: { deck, adaptive, root?, settings?, skills?: [{ skill, answers, success, ability, typical, level: { index, tag, progress, checkPassed, done, nextOpen } | null, placement: { probes, done, frontier } | null }], pace?: { value, base, success, minutesPerDay, reason } | null }
+Output: { deck, adaptive, root?, settings?, skills?: [{ skill, answers, success, ability, typical, level: { index, tag, progress, checkPassed, done, nextOpen } | null, placement: { probes, done, frontier } | null }], pace?: { value, base, youngRetention, minutesPerDay, reason } | null }
 
 ```sh
 etude stats skills "Course"

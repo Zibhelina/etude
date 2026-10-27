@@ -485,16 +485,8 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
       </Group>
 
       <Group title="Adaptive" description="Fit the work to how you're doing. Off: the deck works as built.">
-        {row("adaptivePace", <Switch checked={value("adaptivePace")} onCheckedChange={(v) => set("adaptivePace", v)} aria-label="Adaptive pace" />, "Raise or lower the new cards per day from your last week's results and study time.", { inline: true })}
+        {row("adaptivePace", <Switch checked={value("adaptivePace")} onCheckedChange={(v) => set("adaptivePace", v)} aria-label="Adaptive pace" />, "Raise or lower the new cards per day from how well last week's new cards held (against the desired retention) and your study time.", { inline: true })}
         {value("adaptivePace") && <>
-          {row(
-            "targetSuccess",
-            <div className="flex items-center gap-4">
-              <Slider min={0.7} max={0.95} step={0.01} value={[value("targetSuccess")]} onValueChange={([v]) => set("targetSuccess", Math.round(v * 100) / 100)} aria-label="Target success" className="flex-1 py-3" />
-              <span className="tabular w-11 text-right text-sm font-medium">{Math.round(value("targetSuccess") * 100)}%</span>
-            </div>,
-            "Share of answers that should be right. Above it the deck speeds up; below it, it slows down.",
-          )}
           {row("minutesPerDay", <NumberField value={value("minutesPerDay")} min={1} onChange={(v) => set("minutesPerDay", v)} suffix="min/day" ariaLabel="Time budget in minutes per day" />, "Study time per day the pace aims for.")}
           {row("newPerDayMin", <NumberField value={value("newPerDayMin")} min={0} onChange={(v) => set("newPerDayMin", v)} suffix="cards" ariaLabel="Fewest new cards per day" />, "The pace never goes below this.")}
           {row("newPerDayMax", <NumberField value={value("newPerDayMax")} min={0} onChange={(v) => set("newPerDayMax", v)} suffix="cards" ariaLabel="Most new cards per day" />, "Or above this.")}
@@ -502,7 +494,7 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
         {row(
           "adaptiveChallenge",
           <Switch checked={value("adaptiveChallenge")} onCheckedChange={(v) => set("adaptiveChallenge", v)} aria-label="Adaptive challenge" />,
-          "Let card types choose easier or harder versions for you. Only types that support it change; the others ignore this.",
+          "Let card types choose versions for you: the clearest one when a card is new, one of its usual difficulty when FSRS measures your memory. Only types that support it change.",
           { inline: true },
         )}
         {(value("adaptivePace") || value("adaptiveChallenge")) && <>

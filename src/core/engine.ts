@@ -1938,7 +1938,7 @@ export class Etude {
     let fields = this.generate({ ...fieldDefaults(def), ...parse(r.fields, {}) }, seed, itemId, learner);
     if (learner && def.variants) fields = this.annotateVariants(def, fields, adapt!);
     const adaptive: AdaptiveChoice | undefined = adapt
-      ? { asOf: adapt.learner.asOf, skill: adapt.learner.skill, ...(adapt.session ? { placement: adapt.session } : {}), ...(adapt.learner.quickCheck ? { quickCheck: true } : {}) }
+      ? { asOf: adapt.learner.asOf, skill: adapt.learner.skill, goal: adapt.learner.goal, ...(adapt.session ? { placement: adapt.session } : {}), ...(adapt.learner.quickCheck ? { quickCheck: true } : {}) }
       : undefined;
     if (def.prepare) {
       const out = runScript<{ view?: Record<string, unknown>; key?: Record<string, unknown>; grader?: string; variant?: unknown; reason?: unknown }>(def.prepare, {
@@ -2125,8 +2125,10 @@ export class Etude {
       if (ad?.variant) seen.set(`${r.card_id}#${ad.variant}`, (seen.get(`${r.card_id}#${ad.variant}`) ?? 0) + 1);
       // Only rated answers count: burying or suspending a card instead of rating it, or undoing the rating, leaves the answer out.
       if (typeof g.score !== "number" || !card || r.review_id == null) continue;
-      attempts.push({ ts: r.ts, a: { cardId: r.card_id, key: ad?.variant ? `${card.itemId}#${ad.variant}` : `card:${r.card_id}`, skills: card.skills, score: g.score, prior: ad?.difficulty } });
       (scores.get(r.card_id) ?? scores.set(r.card_id, []).get(r.card_id)!).push({ ts: r.ts, score: g.score });
+      // A first showing is encoding, not recall: it would only pull the skill estimates down.
+      if (ad?.goal === "teach") continue;
+      attempts.push({ ts: r.ts, a: { cardId: r.card_id, key: ad?.variant ? `${card.itemId}#${ad.variant}` : `card:${r.card_id}`, skills: card.skills, score: g.score, prior: ad?.difficulty } });
       if (ad?.placement) {
         const key = String(ad.placement);
         const sess = sessions.get(key) ?? sessions.set(key, { first: r.ts, probes: new Map() }).get(key)!;
@@ -2163,7 +2165,7 @@ export class Etude {
             if (!isCheck(c, i)) return;
             counts[i].checks++;
             const last = scores.get(c.id)?.at(-1)?.score;
-            if (last !== undefined && last >= cfg.targetSuccess) counts[i].checksPassed++;
+            if (last !== undefined && last >= learn.targetOf(cfg)) counts[i].checksPassed++;
           });
           if (c.level < 0 || isCheck(c, c.level)) continue;
           counts[c.level].total++;
@@ -2195,9 +2197,13 @@ export class Etude {
     const r3 = (x: number) => Math.round(x * 1000) / 1000;
     const round = (o: Record<string, number>) => Object.fromEntries(Object.entries(o).map(([k, x]) => [k, r3(x)]));
     const R = sched.retrievability(c, new Date(asOf), cfg);
+    const quickCheck = !opts.placement && !!rc && rc.state === 0 && A.passed(rc);
+    const script = this.scriptFor(cfg);
+    const goal: learn.LearnerGoal = script && script.ratings === false ? "practice" : c.state === 0 && !opts.placement && !quickCheck ? "teach" : "measure";
     const learner: learn.Learner = {
       asOf,
-      target: A.cfg.targetSuccess,
+      goal,
+      target: learn.targetOf(A.cfg),
       skill: skills[0],
       ability: round(model.ability),
       success: round(model.success),
@@ -2212,7 +2218,7 @@ export class Etude {
         scores: (A.scores.get(cardId) ?? []).filter((x) => x.ts < asOf).slice(-5).map((x) => r3(x.score)),
       },
       placement: !!opts.placement,
-      quickCheck: !opts.placement && !!rc && rc.state === 0 && A.passed(rc),
+      quickCheck,
     };
     const session = opts.placement ? placementSession(opts.placement) : undefined;
     return { learner, ...(session ? { session } : {}), challenge: cfg.adaptiveChallenge, itemId: c.item_id, cardId, model, known: A.known, seen: A.seen };
@@ -2226,19 +2232,24 @@ export class Etude {
     const idKey = v.id ?? "id", reqKey = v.requires ?? "requires", diffKey = v.difficulty ?? "difficulty";
     const theta = adapt.model.ability[adapt.learner.skill] ?? 0;
     const r3 = (x: number) => Math.round(x * 1000) / 1000;
+    const difficultyOf = (e: any) => adapt.model.difficulty.get(`${adapt.itemId}#${String(e[idKey] ?? "")}`) ?? learn.toLogit(typeof e[diffKey] === "number" ? e[diffKey] : 0.5);
+    // The item's usual difficulty: the median of its variants, for showings that measure memory.
+    const sorted = list.filter((e) => e && typeof e === "object" && !Array.isArray(e)).map((e) => learn.fromLogit(difficultyOf(e))).sort((a, b) => a - b);
+    const median = sorted.length ? (sorted[(sorted.length - 1) >> 1] + sorted[sorted.length >> 1]) / 2 : 0.5;
     return {
       ...fields,
       [v.field]: list.map((e) => {
         if (!e || typeof e !== "object" || Array.isArray(e)) return e;
         const id = String(e[idKey] ?? "");
         const req: string[] = Array.isArray(e[reqKey]) ? e[reqKey].map(String) : [];
-        const b = adapt.model.difficulty.get(`${adapt.itemId}#${id}`) ?? learn.toLogit(typeof e[diffKey] === "number" ? e[diffKey] : 0.5);
+        const b = difficultyOf(e);
         return {
           ...e,
           _p: r3(learn.sigmoid(theta - b)),
           _known: req.length ? r3(req.filter((x) => adapt.known.has(x)).length / req.length) : 1,
           _seen: adapt.seen.get(`${adapt.cardId}#${id}`) ?? 0,
           _difficulty: r3(learn.fromLogit(b)),
+          _offset: r3(learn.fromLogit(b) - median),
         };
       }),
     };
@@ -2260,10 +2271,13 @@ export class Etude {
     const scope = "(d.name = ? OR d.name LIKE ? ESCAPE '\\')";
     const sp = [root, root.replace(/[\\%_]/g, "\\$&") + "::%"];
     const join = "JOIN cards c ON c.id = x.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
-    const scores = this.db
-      .all(`SELECT x.grade FROM attempts x ${join} WHERE x.practice = 0 AND x.review_id IS NOT NULL AND x.ts >= ? AND x.ts < ? AND ${scope}`, from, to, ...sp)
-      .map((r) => parse<Partial<Grade>>(r.grade, {}).score)
-      .filter((s): s is number => typeof s === "number");
+    // Reviews of young cards (in review, stability under three weeks): did recently learned cards hold?
+    const young = { reviews: 0, passed: 0 };
+    for (const r of this.db.all(`SELECT x.rating, x.card_before FROM reviews x ${join} WHERE x.practice = 0 AND x.state = 2 AND x.ts >= ? AND x.ts < ? AND ${scope}`, from, to, ...sp)) {
+      if (!(parse<{ stability?: number }>(r.card_before, {}).stability! < learn.YOUNG_STABILITY)) continue;
+      young.reviews++;
+      if (r.rating > 1) young.passed++;
+    }
     // Reviews without a recorded duration count as 15 seconds.
     const rv = this.db.get(
       `SELECT SUM(COALESCE(x.duration_ms, 15000)) AS ms, SUM(x.state = 0) AS news, COUNT(DISTINCT substr(x.ts, 1, 10)) AS days FROM reviews x ${join} WHERE x.practice = 0 AND x.ts >= ? AND x.ts < ? AND ${scope}`,
@@ -2271,7 +2285,7 @@ export class Etude {
       to,
       ...sp,
     )!;
-    return learn.pace(cfg, { activeDays: Number(rv.days ?? 0), scores, minutes: Number(rv.ms ?? 0) / 60000, newCards: Number(rv.news ?? 0) });
+    return learn.pace(cfg, { activeDays: Number(rv.days ?? 0), young, minutes: Number(rv.ms ?? 0) / 60000, newCards: Number(rv.news ?? 0) });
   }
 
   /** New cards up to the learner's level for each skill, with the next level's mixed in once it opens. Higher ones wait. */
@@ -2325,7 +2339,7 @@ export class Etude {
       deck: d.name,
       adaptive: true as const,
       root,
-      settings: { adaptiveChallenge: c.adaptiveChallenge, adaptivePace: c.adaptivePace, targetSuccess: c.targetSuccess, minutesPerDay: c.minutesPerDay, levels: c.levels },
+      settings: { adaptiveChallenge: c.adaptiveChallenge, adaptivePace: c.adaptivePace, targetSuccess: learn.targetOf(c), minutesPerDay: c.minutesPerDay, levels: c.levels },
       skills: skills.map((skill) => {
         const p = A.placement.get(skill);
         const theta = A.model.ability[skill];

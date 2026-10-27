@@ -2,9 +2,21 @@
 // state, so two devices with the same history agree and nothing new has to be synced.
 import type { LevelSpec, PresetConfig } from "./model.ts";
 
+/**
+ * What this showing's answer will be used for, which decides how a type should pick its variant.
+ * - `teach`: a new card's first showing. It's encoding, not recall: show the clearest version.
+ * - `measure`: the answer is evidence about memory (FSRS reviews and learning steps, placement probes,
+ *   quick checks). Show a version of the item's usual difficulty, whatever the learner's state, so the
+ *   evidence stays comparable; vary the context, not the difficulty.
+ * - `practice`: nothing measures memory (a scheduler without one, like drill). Aim at `target`.
+ */
+export type LearnerGoal = "teach" | "measure" | "practice";
+
 /** What a card type's `prepare` and an item's generator receive as `learner` on an adaptive deck. */
 export interface Learner {
   asOf: string;
+  goal: LearnerGoal;
+  /** Share of answers to aim for when practising: the deck's targetSuccess, else its desired retention. */
   target: number;
   /** The skill this card's face trains. */
   skill: string;
@@ -88,10 +100,16 @@ export function fitSkills(attempts: GradedAttempt[]): SkillModel {
   return { ability, answers, success, difficulty };
 }
 
+export const targetOf = (cfg: PresetConfig) => cfg.targetSuccess ?? cfg.desiredRetention;
+
+/** Young cards: in review with stability under this many days. Overload shows in them first. */
+export const YOUNG_STABILITY = 21;
+
 export interface PaceHistory {
   /** Days with at least one review in the window. */
   activeDays: number;
-  scores: number[];
+  /** Reviews of young cards, and how many weren't rated Again. */
+  young: { reviews: number; passed: number };
   minutes: number;
   newCards: number;
 }
@@ -99,28 +117,35 @@ export interface PaceHistory {
 export interface Pace {
   value: number;
   base: number;
-  success: number | null;
+  /** Share of young-card reviews not rated Again. */
+  youngRetention: number | null;
   minutesPerDay: number | null;
   reason: string;
 }
 
-/** Today's new-card limit from the last week: more when answers are mostly right and time is left, fewer when either falls short. */
+/**
+ * Today's new-card limit from the last week. Its signal is what new cards cost: how well recently
+ * learned cards hold (your ratings, against the deck's desired retention) and the time spent. All
+ * reviews together say little, since FSRS keeps them near the desired retention by design. More new
+ * cards only when young cards hold and time is left; fewer when either falls short.
+ */
 export function pace(cfg: PresetConfig, h: PaceHistory): Pace {
   const lo = cfg.newPerDayMin, hi = Math.max(cfg.newPerDayMin, cfg.newPerDayMax);
-  if (h.scores.length < 20 || h.activeDays === 0)
-    return { value: clamp(Math.round(cfg.newPerDay), lo, hi), base: cfg.newPerDay, success: null, minutesPerDay: null, reason: "not enough answers in the last week yet" };
-  const success = h.scores.reduce((x, y) => x + y, 0) / h.scores.length;
+  if (h.young.reviews < 20 || h.activeDays === 0)
+    return { value: clamp(Math.round(cfg.newPerDay), lo, hi), base: cfg.newPerDay, youngRetention: null, minutesPerDay: null, reason: "not enough reviews of recently learned cards yet" };
+  const retention = h.young.passed / h.young.reviews;
+  const goal = cfg.desiredRetention;
   const minutes = h.minutes / h.activeDays;
   const base = Math.max(h.newCards / h.activeDays, lo);
-  const bySuccess = clamp(1 + 2.5 * (success - cfg.targetSuccess), 0.5, 1.5);
+  const byMemory = clamp(1 + 3 * (retention - goal), 0.5, 1.5);
   const byTime = minutes > 0 ? clamp(cfg.minutesPerDay / minutes, 0.5, 1.5) : 1.5;
-  // The stricter of the two decides: more new cards only when answers are good and time is left.
-  const value = clamp(Math.round(base * Math.min(bySuccess, byTime)), lo, hi);
+  // The stricter of the two decides.
+  const value = clamp(Math.round(base * Math.min(byMemory, byTime)), lo, hi);
   const why = [
-    success >= cfg.targetSuccess + 0.03 ? "answers above target" : success <= cfg.targetSuccess - 0.03 ? "answers below target" : "answers on target",
+    retention >= goal + 0.03 ? "recent cards holding well" : retention <= goal - 0.03 ? "recent cards slipping" : "recent cards holding as planned",
     minutes > cfg.minutesPerDay * 1.1 ? "over the time budget" : minutes < cfg.minutesPerDay * 0.9 ? "time to spare" : "on the time budget",
   ];
-  return { value, base: Math.round(base * 10) / 10, success, minutesPerDay: Math.round(minutes * 10) / 10, reason: why.join(", ") };
+  return { value, base: Math.round(base * 10) / 10, youngRetention: Math.round(retention * 1000) / 1000, minutesPerDay: Math.round(minutes * 10) / 10, reason: why.join(", ") };
 }
 
 export interface LevelCounts {

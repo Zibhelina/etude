@@ -252,7 +252,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   });
 
   // ------------------------------------------------------------- decks
-  app.get("/api/decks", (c) => c.json(etude.deckTree()));
+  app.get("/api/decks", (c) => c.json(etude.deckTree({ archived: c.req.query("archived") === "1" })));
   app.post("/api/decks", async (c) => {
     const b = await body(c);
     etude.ensureDeck(String(b.name ?? ""));
@@ -268,10 +268,17 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     return c.json(etude.moveDeck(String(b.name ?? ""), String(b.parent ?? ""), index));
   });
   app.get("/api/deck", (c) => c.json(etude.deck(c.req.query("name") ?? "")));
+  app.get("/api/deck/usage", (c) => c.json(etude.deckUsage(c.req.query("name") ?? "")));
+  app.post("/api/deck/archive", async (c) => {
+    const b = await body(c);
+    if (typeof b.archived !== "boolean") throw new EtudeError("archived must be a boolean");
+    return c.json(etude.setDeckArchived(c.req.query("name") ?? "", b.archived, { subdecks: b.subdecks === true }));
+  });
   app.get("/api/deck/faces", (c) => c.json(etude.deckFaces(c.req.query("name") ?? "")));
   app.patch("/api/deck", async (c) => c.json(etude.updateDeck(c.req.query("name") ?? "", await body(c))));
-  app.delete("/api/deck", (c) => {
-    etude.deleteDeck(c.req.query("name") ?? "");
+  app.delete("/api/deck", async (c) => {
+    const b = await body(c);
+    etude.deleteDeck(c.req.query("name") ?? "", { items: b.items === true });
     return c.json({ ok: true });
   });
 

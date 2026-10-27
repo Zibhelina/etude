@@ -8,7 +8,7 @@ import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { to: "/", label: "Decks", icon: Layers, match: (p: string) => p === "/" || p === "/deck" },
+  { to: "/", label: "Decks", icon: Layers, match: (p: string) => p === "/" || p === "/deck" || p === "/archive" },
   { to: "/browse", label: "Browse", icon: Library, match: (p: string) => p === "/browse" },
   { to: "/stats", label: "Stats", icon: BarChart3, match: (p: string) => p === "/stats" },
   { to: "/more", label: "More", icon: MoreHorizontal, match: (p: string) => p === "/more" || p.startsWith("/types") || p === "/market" || p === "/settings" },

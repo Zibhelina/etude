@@ -160,6 +160,20 @@ test("decks, presets, settings inheritance and reset to inherited", async () => 
   assert.equal((await e(["deck", "show", "School"])).code, 3);
 });
 
+test("deck delete: content needs --items and --yes; dry run keeps the subtree", async () => {
+  const e = cli(home());
+  ok(await e(["item", "add", "--deck", "Course::Unit", "--front", "question", "--back", "answer"]));
+  ok(await e(["deck", "archive", "Course", "--subdecks"]));
+  assert.deepEqual((await e(["deck", "show", "Course"])).json.usage, { items: 1, cards: 1 });
+  assert.equal((await e(["deck", "list", "--archived"])).json.find((d: any) => d.name === "Course").cards, 1);
+  assert.notEqual((await e(["deck", "delete", "Course", "--yes"])).code, 0);
+  assert.notEqual((await e(["deck", "delete", "Course", "--items"])).code, 0);
+  ok(await e(["deck", "delete", "Course", "--items", "--dry-run"]));
+  ok(await e(["deck", "show", "Course::Unit"]));
+  ok(await e(["deck", "delete", "Course", "--items", "--yes"]));
+  assert.equal((await e(["deck", "show", "Course::Unit"])).code, 3);
+});
+
 test("items: add from flags, files and stdin; edit; bulk ops; delete needs --yes", async () => {
   const dir = home();
   const e = cli(dir);

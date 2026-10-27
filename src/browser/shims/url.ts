@@ -6,7 +6,8 @@ export const APP_ROOT = "/etude/app";
 export function fileURLToPath(u: string | URL): string {
   const s = String(u);
   if (s.startsWith("file://")) return decodeURIComponent(new URL(s).pathname);
-  if (/^(https?|blob):/.test(s)) return `${APP_ROOT}/src/core/bundle.js`;
+  // https://localhost on Android, capacitor://localhost on iOS.
+  if (/^(https?|blob|capacitor):/.test(s)) return `${APP_ROOT}/src/core/bundle.js`;
   throw new TypeError(`The URL must be of scheme file: ${s}`);
 }
 export const pathToFileURL = (p: string) => new URL("file://" + p);

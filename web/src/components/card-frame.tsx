@@ -4,6 +4,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { cn } from "@/lib/utils";
 import type { Grade } from "@/lib/api";
 import { pageScheme, THEME_EVENT, useScheme } from "@/lib/theme";
+import { etudeFetch, isLocal } from "@/lib/transport";
 
 export interface CardResult {
   grade: Grade;
@@ -65,9 +66,26 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
   const latest = useRef(props);
   latest.current = props;
 
-  const post = useCallback((msg: Record<string, unknown>) => {
-    iframe.current?.contentWindow?.postMessage({ etude: 1, ...msg }, "*");
+  const post = useCallback((msg: Record<string, unknown>, transfer: Transferable[] = []) => {
+    iframe.current?.contentWindow?.postMessage({ etude: 1, ...msg }, "*", transfer);
   }, []);
+
+  // With no server (the core runs in this tab), a served frame can't be loaded by URL: fetch its
+  // HTML from the core and show it as srcdoc. The frame then asks for media over postMessage.
+  const local = isLocal() && !props.html && !!props.src;
+  const [localHtml, setLocalHtml] = useState<string | null>(null);
+  useEffect(() => {
+    if (!local) return;
+    let live = true;
+    setLocalHtml(null);
+    etudeFetch(props.src!)
+      .then((r) => r.text())
+      .then((html) => live && setLocalHtml(html))
+      .catch((e) => latest.current.onError?.(String(e?.message ?? e)));
+    return () => {
+      live = false;
+    };
+  }, [local, props.src, props.frameKey]);
 
   useImperativeHandle(ref, () => ({
     collect: () => post({ type: "collect" }),
@@ -111,6 +129,26 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
         case "error":
           p.onError?.(String(msg.message));
           break;
+        case "get": {
+          // Local mode only: the frame wants the bytes of a media file or a type asset.
+          const req = msg.req;
+          let path = "";
+          try {
+            const u = new URL(String(msg.url), location.href);
+            path = u.pathname + u.search;
+          } catch {}
+          if (!isLocal() || !/^\/(media|type-assets)\//.test(path)) {
+            post({ type: "bytes", req, error: "not allowed" });
+            break;
+          }
+          etudeFetch(path)
+            .then(async (r) => {
+              const body = await r.arrayBuffer();
+              post({ type: "bytes", req, status: r.status, contentType: r.headers.get("content-type") ?? "", body }, [body]);
+            })
+            .catch((e) => post({ type: "bytes", req, error: String(e?.message ?? e) }));
+          break;
+        }
       }
     };
     window.addEventListener("message", onMessage);
@@ -131,8 +169,8 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
       ref={iframe}
       title="card"
       sandbox="allow-scripts"
-      src={props.html ? undefined : props.src}
-      srcDoc={props.html}
+      src={props.html || local ? undefined : props.src}
+      srcDoc={props.html ?? (local ? (localHtml ?? "") : undefined)}
       // No opacity fade: on macOS WebKit the faded-in card frame could stop painting.
       className={cn("block w-full border-0 bg-transparent", props.className)}
       style={{ height, colorScheme: scheme }}

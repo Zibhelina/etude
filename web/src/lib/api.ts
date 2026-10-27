@@ -1,4 +1,5 @@
 // Typed client for the Etude API.
+import { etudeFetch } from "./transport";
 
 export type Rating = 1 | 2 | 3 | 4;
 export type Verdict = "correct" | "partial" | "incorrect" | "ungraded";
@@ -363,7 +364,7 @@ async function call<T>(method: string, path: string, body?: unknown, raw?: Blob)
   if (raw) headers["Content-Type"] = "application/octet-stream";
   else if (json !== undefined) headers["Content-Type"] = "application/json";
   if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
-  const res = await fetch(path, {
+  const res = await etudeFetch(path, {
     method,
     headers,
     body: raw ?? (json !== undefined ? JSON.stringify(json) : undefined),

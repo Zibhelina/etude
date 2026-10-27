@@ -13,3 +13,5 @@ packaging/macos/.cache/
 /dist/
 web/.dist-next/
 web/.dist-prev/
+dist-browser/
+src/browser/gen/

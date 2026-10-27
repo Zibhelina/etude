@@ -1,4 +1,5 @@
 // Client for the in-app assistant: conversations, attachments, and the streamed turn.
+import { etudeFetch } from "./transport";
 
 export interface Attachment {
   id: string;
@@ -96,7 +97,7 @@ function headers(json = true): Record<string, string> {
 }
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, { method, headers: headers(body !== undefined || method !== "GET"), body: body !== undefined ? JSON.stringify(body) : method !== "GET" ? "{}" : undefined });
+  const res = await etudeFetch(path, { method, headers: headers(body !== undefined || method !== "GET"), body: body !== undefined ? JSON.stringify(body) : method !== "GET" ? "{}" : undefined });
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) throw new Error(data?.error ?? res.statusText);
@@ -116,7 +117,7 @@ export const agentApi = {
   undo: (id: string, messageId: number) => call<{ restored: string; undone: number[] }>("POST", `/api/agent/conversations/${id}/undo`, { messageId }),
   attachmentUrl: (conv: string, id: string) => `/api/agent/conversations/${conv}/attachments/${id}${TOKEN() ? `?token=${encodeURIComponent(TOKEN()!)}` : ""}`,
   async upload(conv: string, file: File): Promise<Attachment> {
-    const res = await fetch(`/api/agent/conversations/${conv}/attachments?name=${encodeURIComponent(file.name || "pasted.png")}`, {
+    const res = await etudeFetch(`/api/agent/conversations/${conv}/attachments?name=${encodeURIComponent(file.name || "pasted.png")}`, {
       method: "POST",
       headers: { ...headers(false), "Content-Type": "application/octet-stream" },
       body: file,
@@ -127,7 +128,7 @@ export const agentApi = {
   },
   /** Posts a message and calls `on` for every streamed event. Resolves when the stream ends. */
   async send(conv: string, body: { text: string; attachments: string[]; model?: string | null; page?: string }, on: (e: AgentEvent) => void): Promise<void> {
-    const res = await fetch(`/api/agent/conversations/${conv}/messages`, { method: "POST", headers: headers(), body: JSON.stringify(body) });
+    const res = await etudeFetch(`/api/agent/conversations/${conv}/messages`, { method: "POST", headers: headers(), body: JSON.stringify(body) });
     if (!res.ok || !res.body) {
       const data = await res.json().catch(() => null);
       throw new Error(data?.error ?? res.statusText);

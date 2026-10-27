@@ -1,6 +1,4 @@
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { openSql, type SqlConnection, type SqlDriver, type SqlValue } from "./sql.ts";
 import { registerSearchFunctions } from "./query.ts";
 
 const SCHEMA_VERSION = 1;
@@ -156,13 +154,16 @@ CREATE TABLE IF NOT EXISTS settings (
 export type Row = Record<string, any>;
 
 export class Db {
-  readonly sql: DatabaseSync;
+  readonly sql: SqlConnection;
 
-  constructor(path: string) {
-    if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-    // The timeout lets the CLI and the server write at the same time: one waits instead of failing.
-    this.sql = new DatabaseSync(path, { timeout: 5000 });
-    this.sql.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+  /** Opens a collection file (or ":memory:") on node:sqlite or the WebAssembly build. */
+  static async open(path: string, driver?: SqlDriver): Promise<Db> {
+    return new Db(await openSql(path, driver));
+  }
+
+  constructor(sql: SqlConnection) {
+    this.sql = sql;
+    this.sql.exec("PRAGMA foreign_keys = ON;");
     this.sql.exec(SCHEMA);
     // Columns added after a table first shipped.
     if (!this.all("PRAGMA table_info(decks)").some((c) => c.name === "position")) this.sql.exec("ALTER TABLE decks ADD COLUMN position INTEGER");
@@ -175,15 +176,15 @@ export class Db {
     if (!v) this.run("INSERT INTO meta (key, value) VALUES ('schema_version', ?)", String(SCHEMA_VERSION));
   }
 
-  all<T = Row>(query: string, ...params: SQLInputValue[]): T[] {
+  all<T = Row>(query: string, ...params: SqlValue[]): T[] {
     return this.sql.prepare(query).all(...params) as T[];
   }
 
-  get<T = Row>(query: string, ...params: SQLInputValue[]): T | undefined {
+  get<T = Row>(query: string, ...params: SqlValue[]): T | undefined {
     return this.sql.prepare(query).get(...params) as T | undefined;
   }
 
-  run(query: string, ...params: SQLInputValue[]) {
+  run(query: string, ...params: SqlValue[]) {
     return this.sql.prepare(query).run(...params);
   }
 

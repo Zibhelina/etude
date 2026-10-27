@@ -272,7 +272,7 @@ export class Etude {
 
   static async open(path: string, opts: { builtinTypesDir?: string; builtinSchedulersDir?: string; home?: string } = {}): Promise<Etude> {
     await initSandbox();
-    const db = new Db(path);
+    const db = await Db.open(path);
     const media = path === ":memory:" ? join(process.env.TMPDIR ?? "/tmp", `etude-media-${process.pid}`) : join(dirname(path), "media");
     const home = resolve(opts.home ?? process.env.ETUDE_HOME ?? join(homedir(), ".etude"));
     const e = new Etude(db, media, path, home);

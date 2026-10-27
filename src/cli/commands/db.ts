@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { backup } from "node:sqlite";
 import { command, group, CliError, Failed } from "../registry.ts";
@@ -33,7 +33,14 @@ command({
     if (existsSync(dest) && statSync(dest).isDirectory()) dest = join(dest, `etude-${stamp()}.db`);
     if (existsSync(dest) && !ctx.flags.force) throw new CliError(`${dest} exists (use --force)`, "conflict");
     mkdirSync(dirname(dest), { recursive: true });
-    const pages = await backup(ctx.e.db.sql, dest);
+    const sql = ctx.e.db.sql;
+    let pages: number;
+    if (sql.serialize) {
+      // WebAssembly driver: the database lives in memory, so write its image out.
+      const bytes: Uint8Array = sql.serialize();
+      writeFileSync(dest, bytes);
+      pages = Math.round(bytes.length / Number(ctx.e.db.get("PRAGMA page_size")?.page_size ?? 4096));
+    } else pages = await backup(sql as any, dest);
     return { backup: dest, bytes: statSync(dest).size, pages };
   },
 });

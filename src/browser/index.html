@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f0f0f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="color-scheme" content="dark" />
+    <title>εtude</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <script>
+      // The last theme, before the first paint, so a light theme doesn't flash dark. Embeds follow their host instead.
+      (function () {
+        try {
+          if (location.pathname === "/embed") return;
+          var t = JSON.parse(localStorage.getItem("etude.theme") || "null");
+          if (!t || typeof t.css !== "string") return;
+          var s = document.createElement("style");
+          s.id = "etude-theme";
+          s.textContent = t.css;
+          document.head.appendChild(s);
+          var root = document.documentElement;
+          root.classList.toggle("dark", t.scheme !== "light");
+          root.dataset.theme = t.id;
+          document.querySelector('meta[name="color-scheme"]').content = t.scheme === "light" ? "light" : "dark";
+          if (t.bg) document.querySelector('meta[name="theme-color"]').content = t.bg;
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./app-main.ts"></script>
+  </body>
+</html>

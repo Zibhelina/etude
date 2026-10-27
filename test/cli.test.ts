@@ -522,7 +522,8 @@ test("packs: new, check, import (dry run, idempotent), export, round trip; db ba
   const info = await e(["db", "info"]);
   ok(info);
   assert.equal(info.json.schemaVersion, 1);
-  assert.equal(info.json.journalMode, "wal");
+  // The WebAssembly driver keeps the database in memory and writes the whole file after each commit.
+  assert.equal(info.json.journalMode, process.env.ETUDE_SQL === "wasm" ? "memory" : "wal");
   const p = await e(["db", "path"]);
   assert.equal(p.json.source, "ETUDE_HOME");
 

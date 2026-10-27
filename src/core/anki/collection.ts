@@ -5,6 +5,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { defaultDriver, type SqlConnection } from "../sql.ts";
+import { openImageSync } from "../sql-wasm.ts";
 import { protoFloats, protoMsg, protoNum, protoStr, readProto } from "./package.ts";
 
 export interface AnkiField {
@@ -108,14 +110,24 @@ export interface AnkiCollection {
 }
 
 /** Anki's schema declares columns `COLLATE unicase`, which the bundled SQLite doesn't know. */
-function openCopy(buf: Buffer): { db: DatabaseSync; close: () => void } {
+/** What reading a collection needs: node:sqlite's DatabaseSync and our WebAssembly connection both fit. */
+type Reader = Pick<SqlConnection, "prepare">;
+
+const UNICASE_PATCH = "UPDATE sqlite_master SET sql = replace(sql, 'COLLATE unicase', '') WHERE sql LIKE '%unicase%';";
+
+function openCopy(buf: Buffer): { db: DatabaseSync | SqlConnection; close: () => void } {
+  if (defaultDriver() === "wasm") {
+    // No temp files (there are none in a browser): open the image in memory and patch it there.
+    const db = openImageSync(new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength), UNICASE_PATCH);
+    return { db, close: () => db.close() };
+  }
   const dir = mkdtempSync(join(tmpdir(), "etude-anki-"));
   const file = join(dir, "collection.db");
   writeFileSync(file, buf);
   const patch = new DatabaseSync(file);
   patch.enableDefensive(false);
   patch.exec("PRAGMA writable_schema = ON");
-  patch.prepare("UPDATE sqlite_master SET sql = replace(sql, 'COLLATE unicase', '') WHERE sql LIKE '%unicase%'").run();
+  patch.prepare(UNICASE_PATCH).run();
   patch.exec("PRAGMA writable_schema = OFF");
   patch.close();
   const db = new DatabaseSync(file, { readOnly: true });
@@ -131,7 +143,7 @@ function openCopy(buf: Buffer): { db: DatabaseSync; close: () => void } {
 const bytes = (v: unknown): Buffer => (v == null ? Buffer.alloc(0) : Buffer.isBuffer(v) ? v : Buffer.from(v as Uint8Array));
 const num = (v: unknown, fallback = 0): number => (typeof v === "number" ? v : typeof v === "bigint" ? Number(v) : v == null ? fallback : Number(v));
 
-function hasTable(db: DatabaseSync, name: string): boolean {
+function hasTable(db: Reader, name: string): boolean {
   return !!db.prepare("SELECT 1 AS x FROM sqlite_master WHERE type = 'table' AND name = ?").get(name);
 }
 
@@ -146,7 +158,7 @@ export function readCollection(collection: Buffer): AnkiCollection {
 
 // ------------------------------------------------------------------ current schema
 
-function readCurrent(db: DatabaseSync): AnkiCollection {
+function readCurrent(db: Reader): AnkiCollection {
   const notetypes: AnkiNotetype[] = [];
   for (const row of db.prepare("SELECT id, name, config FROM notetypes ORDER BY id").all() as any[]) {
     const cfg = readProto(bytes(row.config));
@@ -206,7 +218,7 @@ function readCurrent(db: DatabaseSync): AnkiCollection {
 
 // ------------------------------------------------------------------- legacy schema
 
-function readLegacy(db: DatabaseSync): AnkiCollection {
+function readLegacy(db: Reader): AnkiCollection {
   const col = db.prepare("SELECT crt, models, decks, dconf FROM col LIMIT 1").get() as any;
   if (!col) throw new Error("the collection has no col row");
   const models = JSON.parse(col.models || "{}") as Record<string, any>;
@@ -249,7 +261,7 @@ function readLegacy(db: DatabaseSync): AnkiCollection {
   return { created: num(col.crt, Math.floor(Date.now() / 1000)), notetypes, decks, configs, ...readNotesCardsReviews(db) };
 }
 
-function readNotesCardsReviews(db: DatabaseSync) {
+function readNotesCardsReviews(db: Reader) {
   const notes: AnkiNote[] = (db.prepare("SELECT id, guid, mid, tags, flds FROM notes ORDER BY id").all() as any[]).map((n) => ({
     id: num(n.id),
     guid: String(n.guid ?? ""),

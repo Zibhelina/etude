@@ -13,7 +13,7 @@
 //
 // Free text runs against `items.search`, which `itemSearchText` derives from the fields when an item is saved.
 // With free text, the "relevance" order puts items whose title is the word, then starts with it, first.
-import type { DatabaseSync, SQLInputValue } from "node:sqlite";
+import type { SqlConnection, SqlValue as SQLInputValue } from "./sql.ts";
 
 export class QueryError extends Error {}
 
@@ -86,7 +86,7 @@ export function searchText(value: unknown): string {
 export const itemSearchText = (fields: Record<string, unknown>) => searchText(Object.values(fields));
 
 /** The SQL functions compiled searches call. Every connection to a collection registers them. */
-export function registerSearchFunctions(db: DatabaseSync) {
+export function registerSearchFunctions(db: SqlConnection) {
   db.function("etude_fold", { deterministic: true }, (s) => (s == null ? null : fold(String(s))));
   // A field's value as JSON (`fields -> '$."name"'`), turned into the same text free-text search sees.
   db.function("etude_search_text", { deterministic: true }, (j) => (j == null ? null : searchText(JSON.parse(String(j)))));

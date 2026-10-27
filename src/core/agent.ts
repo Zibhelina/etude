@@ -2,7 +2,7 @@
 // destructive commands, a snapshot before the first write of each turn, and undo.
 // Conversations are stored in the collection (agent_* tables); undo leaves those tables alone,
 // so restoring a snapshot never rewinds the chat itself.
-import type { DatabaseSync } from "node:sqlite";
+import type { SqlConnection } from "./sql.ts";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -146,8 +146,8 @@ export interface ModelGroup {
 const now = () => new Date().toISOString();
 
 class Store {
-  readonly sql: DatabaseSync;
-  constructor(sql: DatabaseSync) {
+  readonly sql: SqlConnection;
+  constructor(sql: SqlConnection) {
     this.sql = sql;
     this.sql.exec(`CREATE TABLE IF NOT EXISTS agent_conversations (
   id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', model TEXT, created TEXT NOT NULL, updated TEXT NOT NULL
@@ -574,7 +574,9 @@ export class Agent {
   private snapshot(convId: string): string {
     mkdirSync(this.snapshotDir, { recursive: true });
     const file = join(this.snapshotDir, `${new Date().toISOString().replace(/[:.]/g, "-")}-${convId}-${randomUUID().slice(0, 4)}.db`);
-    this.etude.db.sql.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
+    const sql = this.etude.db.sql;
+    if (sql.serialize) writeFileSync(file, sql.serialize());
+    else sql.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
     const all = readdirSync(this.snapshotDir)
       .filter((f) => f.endsWith(".db"))
       .sort();
@@ -585,7 +587,8 @@ export class Agent {
   /** Copies every table back from a snapshot, on the open connection. */
   private restore(file: string) {
     const db = this.etude.db.sql;
-    db.exec(`ATTACH DATABASE '${file.replace(/'/g, "''")}' AS snap`);
+    if (db.attachImage) db.attachImage("snap", new Uint8Array(readFileSync(file)));
+    else db.exec(`ATTACH DATABASE '${file.replace(/'/g, "''")}' AS snap`);
     try {
       const mainTables = (db.prepare("SELECT name FROM main.sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as { name: string }[]).map((r) => r.name);
       const snapTables = new Set((db.prepare("SELECT name FROM snap.sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as { name: string }[]).map((r) => r.name));

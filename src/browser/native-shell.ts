@@ -74,7 +74,8 @@ export async function startNativeShell() {
     const el = document.activeElement as HTMLElement | null;
     if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) el.scrollIntoView({ block: "center", behavior: "smooth" });
   }).catch(() => {});
-  Keyboard.setAccessoryBarVisible?.({ isVisible: true }).catch(() => {});
+  // iOS only: the bar with Done above the keyboard. Android has no such call (it logs an error).
+  if (cap?.getPlatform?.() === "ios") Keyboard.setAccessoryBarVisible({ isVisible: true }).catch(() => {});
 
   SplashScreen.hide().catch(() => {});
 }

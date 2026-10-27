@@ -11,6 +11,7 @@ import "./study.ts";
 import "./stats.ts";
 import "./settings.ts";
 import "./sync.ts";
+import "./account.ts";
 import "./theme.ts";
 import "./pack.ts";
 import "./anki.ts";

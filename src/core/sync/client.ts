@@ -5,6 +5,7 @@ import { bootstrap, drain, install, localEvent, receive, rows, type Change } fro
 import { createVault, decryptBlob, decryptEvent, encryptBlob, encryptEvent, fromB64, sha256Hex, toB64, unwrapWithPassword, unwrapWithRecovery } from "./crypto.ts";
 import { CloudTransport, FolderTransport, type Transport } from "./transport.ts";
 import { project } from "./project.ts";
+import { accountFor } from "../account.ts";
 
 /** Most ciphertext characters sent in one push. */
 const PUSH_BATCH_BYTES=6*1024*1024;
@@ -26,7 +27,10 @@ export class SyncClient {
   private secretFile() { const dev=this.e.db.get("SELECT device FROM sync_control WHERE id=1")!.device;return join(this.e.home,"sync",dev+".json"); }
   private secrets():Secrets {if(!this.initialized())return {};const f=this.secretFile();return existsSync(f)?JSON.parse(readFileSync(f,"utf8")):{};}
   private saveSecrets(s:Secrets) {const f=this.secretFile();mkdirSync(dirname(f),{recursive:true,mode:0o700});writeFileSync(f+".tmp",JSON.stringify(s),{mode:0o600});chmodSync(f+".tmp",0o600);renameSync(f+".tmp",f);}
-  status() {const cfg=this.config();const sec=this.secrets();return {configured:!!cfg?.enabled,kind:cfg?.kind??null,server:cfg?.server,folder:cfg?.folder,email:cfg?.email,signedIn:!!sec.token,unlocked:!!sec.vk,hasKeys:cfg?.kind==="folder" ? existsSync(join(cfg.folder!,"keys.json")) : !!cfg?.hasKeys,lastSync:cfg?.lastSync??null,busy:this.busy,error:this.error,pending:this.initialized()?this.e.db.get("SELECT (SELECT count(*) FROM sync_outbox)+(SELECT count(*) FROM sync_events WHERE sent=0) AS n")!.n:0};}
+  /** This device's token: Sync's own sign-in, or the Etude account's when it is signed in to the same server. */
+  private token() {const c=this.config();return this.secrets().token ?? (c?.kind==="cloud" ? accountFor(this.e).tokenFor(c.server) : undefined);}
+  private shared() {return !this.secrets().token && !!this.token();}
+  status() {const cfg=this.config();const sec=this.secrets();return {configured:!!cfg?.enabled,kind:cfg?.kind??null,server:cfg?.server,folder:cfg?.folder,email:cfg?.email ?? (this.shared()?accountFor(this.e).email():undefined),signedIn:!!this.token(),account:this.shared(),unlocked:!!sec.vk,hasKeys:cfg?.kind==="folder" ? existsSync(join(cfg.folder!,"keys.json")) : !!cfg?.hasKeys,lastSync:cfg?.lastSync??null,busy:this.busy,error:this.error,pending:this.initialized()?this.e.db.get("SELECT (SELECT count(*) FROM sync_outbox)+(SELECT count(*) FROM sync_events WHERE sent=0) AS n")!.n:0};}
   setup(input:{server?:string;folder?:string}) {
     if(this.busy)throw new Error("wait for sync to finish");
     if (!!input.server === !!input.folder) throw new Error("choose a server or a folder");
@@ -39,9 +43,11 @@ export class SyncClient {
     this.set("config",{...old,...cfg});bootstrap(this.e.db);drain(this.e.db);
     return this.status();
   }
-  private transport():Transport {const c=this.config();if(!c?.enabled)throw new Error("set up Sync first");if(c.kind==="folder")return new FolderTransport(c.folder!,this.e.db.get("SELECT device FROM sync_control WHERE id=1")!.device);const s=this.secrets();if(!s.token)throw new Error("sign in first");return new CloudTransport(c.server!,s.token);}
+  private transport():Transport {const c=this.config();if(!c?.enabled)throw new Error("set up Sync first");if(c.kind==="folder")return new FolderTransport(c.folder!,this.e.db.get("SELECT device FROM sync_control WHERE id=1")!.device);const token=this.token();if(!token)throw new Error("sign in first");return new CloudTransport(c.server!,token);}
+  /** After setup with the account's token: learn whether the vault already has keys. */
+  async probe() {const c=this.config();if(c?.kind!=="cloud"||!this.token())return this.status();try{const k=await this.transport().keys();this.set("config",{...this.config(),hasKeys:!!k});this.error=null;}catch(e){this.error=(e as Error).message;}return this.status();}
   async signin(email:string) {const c=this.config();if(c?.kind!=="cloud")throw new Error("choose a Sync server first");await new CloudTransport(c.server!,"").json("/v1/auth/email/start",{email});this.set("config",{...c,email});return this.status();}
-  async verify(code:string) {const c=this.config();if(c?.kind!=="cloud")throw new Error("choose a Sync server first");const r:any=await new CloudTransport(c.server!,"").json("/v1/auth/email/verify",{token:code.trim(),deviceName:process.versions?.node?"Etude desktop":"Etude browser"});this.saveSecrets({token:r.token});const k=await this.transport().keys();this.set("config",{...c,email:r.account.email,hasKeys:!!k});return this.status();}
+  async verify(code:string) {const c=this.config();if(c?.kind!=="cloud")throw new Error("choose a Sync server first");const r:any=await new CloudTransport(c.server!,"").json("/v1/auth/email/verify",{token:code.trim(),deviceName:process.versions?.node?"Etude desktop":"Etude browser"});this.saveSecrets({token:r.token});accountFor(this.e).adopt(c.server!,r.token,r.account);const k=await this.transport().keys();this.set("config",{...c,email:r.account.email,hasKeys:!!k});return this.status();}
   async unlock(input:{password?:string;recovery?:string}) {
     const transport=this.transport();const found=await transport.keys();
     let vk:Uint8Array;let recoveryKey:string|undefined;
@@ -58,7 +64,7 @@ export class SyncClient {
     this.set("vault",fingerprint);this.saveSecrets({...this.secrets(),vk:toB64(vk)});this.set("config",{...this.config(),hasKeys:true});
     return {status:this.status(),...(recoveryKey?{recoveryKey}:{})};
   }
-  async off() {if(this.active)await this.active.catch(()=>{});const c=this.config();if(c?.kind==="cloud" && this.secrets().token) { try { await (this.transport() as CloudTransport).json("/v1/auth/logout",{}); } catch { this.error="Signed out locally. This device could not be revoked on the server while offline."; } } if(c)this.set("config",{...c,enabled:false});if(this.initialized())rmSync(this.secretFile(),{force:true});return this.status();}
+  async off() {if(this.active)await this.active.catch(()=>{});const c=this.config();if(c?.kind==="cloud" && this.secrets().token && accountFor(this.e).token()!==this.secrets().token) { try { await (this.transport() as CloudTransport).json("/v1/auth/logout",{}); } catch { this.error="Signed out locally. This device could not be revoked on the server while offline."; } } if(c)this.set("config",{...c,enabled:false});if(this.initialized())rmSync(this.secretFile(),{force:true});return this.status();}
   now() {if(this.active)return this.active;this.busy=true;this.error=null;this.active=this.run().then(()=>({...this.status(),busy:false})).catch(e=>{this.error=e.message;throw e;}).finally(()=>{this.busy=false;this.active=null;});return this.active;}
   async auto() {if(!this.status().configured||!this.status().unlocked)return;try{await this.now();}catch(e){if(e instanceof TypeError || /fetch failed|network|offline|timeout/i.test((e as Error).message))this.error=null;}}
   private async run() {

@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["TEAMID.study.etude.app"],
+        "components": [
+          { "/": "/app/*", "comment": "Links into the Etude app" }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["TEAMID.study.etude.app"]
+  }
+}

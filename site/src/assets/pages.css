@@ -1,0 +1,89 @@
+/* The text pages: Sync, Support and the legal pages. Built on site.css (tokens, nav, footer,
+   buttons, .opus, .steps, .reqs, .cta) and set like the rest of the site: serif headings,
+   booktabs rules, pink only for the place you are. */
+
+.nav-end .btn[aria-current] { color: var(--foreground); }
+@media (max-width: 520px) { .nav-gh-label { display: none; } }
+
+.pg-hero { padding: 4.5rem 0 3rem; }
+.pg-hero h1 { margin-top: 1.2rem; font-size: clamp(2.5rem, 6vw, 4.4rem); line-height: 1.05; letter-spacing: -0.01em; text-wrap: balance; max-width: 18ch; }
+.pg-hero .lede { max-width: 38rem; }
+.pg-hero .lede a, .pg-prose a:not(.btn):not(.textlink), .faq a, .cta-sub a { color: var(--foreground); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; transition: text-decoration-color 0.2s; }
+.pg-hero .lede a:hover, .pg-prose a:not(.btn):not(.textlink):hover, .faq a:hover, .cta-sub a:hover { text-decoration-color: var(--highlight); }
+.pg-mail { white-space: nowrap; }
+
+.pg-section { padding: 3.5rem 0; }
+.pg-grid { display: grid; gap: 1.75rem; border-top: 1px solid var(--rule); padding-top: 1.4rem; }
+.pg-grid > * { min-width: 0; }
+@media (min-width: 900px) { .pg-grid { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.25fr); gap: 4rem; } .pg-col { position: sticky; top: 5.5rem; align-self: start; } }
+.pg-col h2, .pg-h2 { margin-top: 0.8rem; font-size: clamp(1.8rem, 3.4vw, 2.6rem); line-height: 1.12; text-wrap: balance; max-width: 18ch; }
+.pg-section > .wrap > .opus { border-top: 1px solid var(--rule); padding-top: 1.4rem; }
+
+.pg-prose { font-size: 1rem; line-height: 1.7; color: var(--muted-foreground); max-width: 40rem; }
+.pg-prose p { margin: 0 0 1rem; text-wrap: pretty; }
+.pg-prose b { color: var(--foreground); font-weight: 500; }
+.pg-prose .steps { margin: 1.4rem 0 1.6rem; }
+.pg-prose .steps p { font-size: 0.92rem; }
+.pg-prose code, .faq code { font-size: 0.85em; color: var(--foreground); }
+
+.pg-points { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.1rem; max-width: 40rem; }
+.pg-points li { color: var(--muted-foreground); line-height: 1.65; padding-left: 1.4rem; position: relative; }
+.pg-points li::before { content: "–"; position: absolute; left: 0; color: var(--highlight); }
+.pg-points b { color: var(--foreground); font-weight: 500; }
+
+/* plans */
+.plans { display: grid; gap: 1.5rem; margin-top: 2.2rem; }
+@media (min-width: 760px) { .plans { grid-template-columns: 1fr 1fr; gap: 2.5rem; } }
+.plan { border-top: 1.5px solid var(--foreground); padding-top: 1.25rem; display: flex; flex-direction: column; }
+.plan h3 { font-size: 1.5rem; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.8rem; }
+.plan .save { font: italic 400 1rem var(--font-serif); color: var(--highlight); }
+.price { margin: 0.9rem 0 0; display: flex; align-items: baseline; gap: 0.5rem; color: var(--muted-foreground); }
+.price b { font-family: var(--font-serif); font-weight: 400; font-size: 3rem; line-height: 1; color: var(--foreground); letter-spacing: -0.01em; }
+.plan .reqs { margin: 1.2rem 0 1.6rem; }
+.plan .btn { margin-top: auto; align-self: flex-start; }
+.plans-note { margin-top: 1.6rem; max-width: 44rem; }
+
+/* questions */
+.faq { border-top: 1.5px solid var(--foreground); max-width: 44rem; }
+.faq details { border-bottom: 1px solid var(--border); }
+.faq summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: 1rem 0; font-family: var(--font-serif); font-size: 1.15rem; line-height: 1.35; color: var(--foreground); }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; font-family: var(--font-sans); color: var(--muted-foreground); flex: none; transition: rotate 0.25s var(--ease), color 0.2s; }
+.faq details[open] summary::after { rotate: 45deg; color: var(--highlight); }
+.faq summary:hover::after { color: var(--foreground); }
+.faq summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 0.25rem; }
+.faq details p { margin: 0 0 1.1rem; color: var(--muted-foreground); line-height: 1.7; max-width: 40rem; }
+
+/* legal documents */
+.legal { padding: 4rem 0 4.5rem; }
+.legal .wrap { max-width: 50rem; }
+.legal-meta { margin: 1rem 0 0; font-size: 0.85rem; color: var(--muted-foreground); }
+.legal-nav { display: flex; flex-wrap: wrap; gap: 0.4rem 1.4rem; margin: 1.6rem 0 0; padding: 0.9rem 0; border-block: 1px solid var(--rule); font-size: 0.88rem; color: var(--muted-foreground); }
+.legal-nav a:hover, .legal-nav a[aria-current] { color: var(--foreground); }
+.legal-nav a[aria-current] { text-decoration: underline; text-decoration-color: var(--highlight); text-underline-offset: 0.4rem; text-decoration-thickness: 1.5px; }
+.doc { margin-top: 2.6rem; color: var(--muted-foreground); line-height: 1.75; font-size: 1rem; }
+.doc h1 { font-size: clamp(2.4rem, 5.5vw, 3.6rem); line-height: 1.06; color: var(--foreground); margin: 0; }
+.doc h2 { font-size: 1.6rem; line-height: 1.2; color: var(--foreground); margin: 2.8rem 0 0.9rem; padding-top: 1.2rem; border-top: 1px solid var(--rule); scroll-margin-top: 5rem; }
+.doc h3 { font-size: 1.2rem; color: var(--foreground); margin: 1.8rem 0 0.6rem; }
+.doc p { margin: 0 0 1rem; text-wrap: pretty; }
+.doc strong { color: var(--foreground); font-weight: 500; }
+.doc ul, .doc ol { margin: 0 0 1.1rem; padding-left: 1.3rem; display: grid; gap: 0.5rem; }
+.doc li::marker { color: var(--highlight); }
+.doc a { color: var(--foreground); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; overflow-wrap: anywhere; }
+.doc a:hover { text-decoration-color: var(--highlight); }
+.doc code { font-size: 0.85em; color: var(--foreground); overflow-wrap: anywhere; }
+.doc .table-scroll { overflow-x: auto; margin: 1.4rem 0 1.6rem; }
+.doc table.booktabs { font-size: 0.88rem; line-height: 1.55; min-width: 34rem; }
+.doc table.booktabs th, .doc table.booktabs td { padding: 0.65rem 1.1rem 0.65rem 0; vertical-align: top; }
+.doc table.booktabs thead th { font-size: 1rem; }
+.doc table.booktabs tbody td:first-child { color: var(--foreground); }
+.doc table.booktabs tbody td:nth-child(2) { color: var(--muted-foreground); }
+.doc table.booktabs tbody tr + tr > * { border-top: 1px solid var(--border); }
+
+@media (max-width: 640px) {
+  .pg-hero, .legal { padding-top: 2.5rem; }
+  .pg-section { padding: 2.5rem 0; }
+  .pg-hero .hero-cta .btn { flex: 1 1 100%; }
+  .plan .btn { align-self: stretch; }
+  .doc table.booktabs { min-width: 30rem; }
+}

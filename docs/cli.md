@@ -332,6 +332,36 @@ These work on every command, before or after the command words.
   - [`sync unlock`](#sync-unlock) Unlock the vault, or create one and return its recovery key once.
   - [`sync now`](#sync-now) Push pending encrypted changes and merge remote changes.
   - [`sync off`](#sync-off) Sign out and remove this device's saved Sync key; keep local content.
+- **account**: Etude account: sign-in, devices, Sync subscription, purchased decks and selling on the paid Market (`etude account` alone runs `status`)
+  - [`account status`](#account-status) Server, sign-in state, account, Sync plan and storage.
+  - [`account server`](#account-server) Show or change the Etude server this install uses (default https://sync.etude.study, or $ETUDE_CLOUD_URL).
+  - [`account signin`](#account-signin) Email a one-time sign-in code.
+  - [`account verify`](#account-verify) Redeem the code from the sign-in email. When already signed in, it re-confirms this device.
+  - [`account signout`](#account-signout) Sign this device out of the account. Local data stays.
+  - [`account devices`](#account-devices) Devices signed in to the account.
+  - [`account revoke`](#account-revoke) Sign a device out. Another device needs a sign-in on this one within 10 minutes.
+  - [`account passkeys`](#account-passkeys) Passkeys on the account (add them in Settings → Account; the browser holds them).
+  - [`account email`](#account-email) Start an email change: a link goes to the new address. Needs a recent sign-in.
+  - [`account email-confirm`](#account-email-confirm) Confirm an email change with the code from the link.
+  - [`account export`](#account-export) Download everything the server holds about the account (JSON).
+  - [`account delete`](#account-delete) Delete the account on the server: devices, passkeys, the Sync vault, purchases. Orders stay anonymized for tax. Local data stays.
+  - [`account subscribe`](#account-subscribe) A checkout link for Etude Sync (US$5/month or US$40/year). Open it in a browser.
+  - [`account billing`](#account-billing) A link to manage the Sync subscription (cancel, card, invoices).
+  - [`account market`](#account-market) Paid decks on the server's Market, with price and whether you own them.
+  - [`account buy`](#account-buy) A checkout link for a paid deck. Open it in a browser.
+  - [`account library`](#account-library) Decks you bought, with the latest approved version and whether it's installed here.
+  - [`account install`](#account-install) Install or update a purchased deck in this collection.
+  - [`account creator`](#account-creator) Your seller profile on the paid Market, or null.
+  - [`account sell`](#account-sell) Start selling: creates the payout account and returns the Stripe onboarding link.
+  - [`account listings`](#account-listings) Your listings with status, versions and review notes.
+  - [`account list-deck`](#account-list-deck) Put a deck from this collection up for sale: draft listing, cover, version 1.0.0. Submit it for review afterwards.
+  - [`account update-listing`](#account-update-listing) Upload the deck again as the next version. Buyers get it after review.
+  - [`account submit`](#account-submit) Send a listing for review.
+  - [`account hide`](#account-hide) Take a listing off sale. Buyers keep it.
+  - [`account sales`](#account-sales) Your sales and earnings (after Etude's 20% fee).
+  - [`account review`](#account-review) Admins: listings waiting for review.
+  - [`account approve`](#account-approve) Admins: approve a listing's pending versions; it goes live.
+  - [`account reject`](#account-reject) Admins: turn down a listing's pending versions with a reason.
 - **theme**: Themes: pick the app's colors, or make your own with CSS variables and extra CSS (`etude theme` alone runs `list`)
   - [`theme list`](#theme-list) Every theme, built-in first, with which one is selected.
   - [`theme show`](#theme-show) A theme's variables and extra CSS. Without an id, the selected theme.
@@ -3358,6 +3388,526 @@ etude sync off
 *writes*
 
 Output: Sync status
+
+## account
+
+Etude account: sign-in, devices, Sync subscription, purchased decks and selling on the paid Market.
+
+### etude account status
+
+<a id="account-status"></a>
+
+Server, sign-in state, account, Sync plan and storage.
+
+```
+etude account status
+```
+
+*read-only*
+
+Output: { server, offering, signedIn, email, me, billing, vault }
+
+### etude account server
+
+<a id="account-server"></a>
+
+Show or change the Etude server this install uses (default https://sync.etude.study, or $ETUDE_CLOUD_URL).
+
+```
+etude account server [url]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `url` (optional) | Server address. Empty string goes back to the default. |
+
+Output: { server }
+
+```sh
+etude account server
+etude account server http://localhost:4870
+```
+
+### etude account signin
+
+<a id="account-signin"></a>
+
+Email a one-time sign-in code.
+
+```
+etude account signin <email>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `email` | Account email. |
+
+Output: { ok, server, email }
+
+### etude account verify
+
+<a id="account-verify"></a>
+
+Redeem the code from the sign-in email. When already signed in, it re-confirms this device.
+
+```
+etude account verify <code> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `code` | The code from the email. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--name <VALUE>` | string | Name for this device. |
+
+Output: { reauth, email }
+
+### etude account signout
+
+<a id="account-signout"></a>
+
+Sign this device out of the account. Local data stays.
+
+```
+etude account signout
+```
+
+*writes*
+
+Output: { signedIn }
+
+### etude account devices
+
+<a id="account-devices"></a>
+
+Devices signed in to the account.
+
+```
+etude account devices
+```
+
+*read-only*
+
+Output: { devices: [{ id, name, via, created, lastSeen, current }] }
+
+### etude account revoke
+
+<a id="account-revoke"></a>
+
+Sign a device out. Another device needs a sign-in on this one within 10 minutes.
+
+```
+etude account revoke <device>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `device` | Device id. |
+
+Output: { ok }
+
+### etude account passkeys
+
+<a id="account-passkeys"></a>
+
+Passkeys on the account (add them in Settings → Account; the browser holds them).
+
+```
+etude account passkeys
+```
+
+*read-only*
+
+Output: { passkeys }
+
+### etude account email
+
+<a id="account-email"></a>
+
+Start an email change: a link goes to the new address. Needs a recent sign-in.
+
+```
+etude account email <email>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `email` | New address. |
+
+Output: { ok, expiresIn }
+
+### etude account email-confirm
+
+<a id="account-email-confirm"></a>
+
+Confirm an email change with the code from the link.
+
+```
+etude account email-confirm <code>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `code` | Code from the link. |
+
+Output: { ok, email }
+
+### etude account export
+
+<a id="account-export"></a>
+
+Download everything the server holds about the account (JSON).
+
+```
+etude account export [flags]
+```
+
+*read-only*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-o, --out <FILE>` | string | Write it to this file instead of stdout. |
+
+Output: the export, or { written }
+
+### etude account delete
+
+<a id="account-delete"></a>
+
+Delete the account on the server: devices, passkeys, the Sync vault, purchases. Orders stay anonymized for tax. Local data stays.
+
+Needs a sign-in on this device within the last 10 minutes (`account signin` + `account verify`), the account's email as --confirm, and --yes.
+
+```
+etude account delete [flags]
+```
+
+*writes · needs `--yes`*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--confirm <VALUE>` | string | The account's email address. |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { ok, deleted }
+
+### etude account subscribe
+
+<a id="account-subscribe"></a>
+
+A checkout link for Etude Sync (US$5/month or US$40/year). Open it in a browser.
+
+```
+etude account subscribe
+```
+
+*writes*
+
+Output: { url, id }
+
+### etude account billing
+
+<a id="account-billing"></a>
+
+A link to manage the Sync subscription (cancel, card, invoices).
+
+```
+etude account billing
+```
+
+*read-only*
+
+Output: { url }
+
+### etude account market
+
+<a id="account-market"></a>
+
+Paid decks on the server's Market, with price and whether you own them.
+
+```
+etude account market
+```
+
+*read-only*
+
+Output: { entries: [{ id, name, price, currency, listing, owned, installed }] }
+
+### etude account buy
+
+<a id="account-buy"></a>
+
+A checkout link for a paid deck. Open it in a browser.
+
+```
+etude account buy <listing>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `listing` | Listing id (lst_…) or slug. |
+
+Output: { url, id, price, fee, currency }
+
+### etude account library
+
+<a id="account-library"></a>
+
+Decks you bought, with the latest approved version and whether it's installed here.
+
+```
+etude account library
+```
+
+*read-only*
+
+Output: { library: [{ listing, slug, name, version, installed }] }
+
+### etude account install
+
+<a id="account-install"></a>
+
+Install or update a purchased deck in this collection.
+
+```
+etude account install <listing> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `listing` | Listing id (lst_…) or slug. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { entry, result, ids, report }
+
+### etude account creator
+
+<a id="account-creator"></a>
+
+Your seller profile on the paid Market, or null.
+
+```
+etude account creator
+```
+
+*read-only*
+
+Output: { country, stripeAccount, chargesEnabled, payoutsEnabled, detailsSubmitted } | null
+
+### etude account sell
+
+<a id="account-sell"></a>
+
+Start selling: creates the payout account and returns the Stripe onboarding link.
+
+```
+etude account sell [flags]
+```
+
+*writes*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--country <VALUE>` | string | Two-letter country of the payout account (US, CA, GB, EEA, CH). |
+| `--name <VALUE>` | string | Name shown as the author. |
+
+Output: { creator, url }
+
+### etude account listings
+
+<a id="account-listings"></a>
+
+Your listings with status, versions and review notes.
+
+```
+etude account listings
+```
+
+*read-only*
+
+Output: { listings }
+
+### etude account list-deck
+
+<a id="account-list-deck"></a>
+
+Put a deck from this collection up for sale: draft listing, cover, version 1.0.0. Submit it for review afterwards.
+
+```
+etude account list-deck <deck> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `deck` | Deck name. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--price <VALUE>` | string | Price in US dollars (at least 5). |
+| `--name <VALUE>` | string | Listing name (default: the deck's). |
+| `--description <VALUE>` | string | What buyers get. |
+| `--tag <VALUE> (repeatable)` | string | Tag (repeatable). |
+| `--cover <FILE>` | string | Cover image (.webp, .png or .jpg, ≤ 600 KB). |
+
+Output: the listing
+
+```sh
+etude account list-deck "Pharmacology" --price 12 --cover cover.webp --description "…"
+```
+
+### etude account update-listing
+
+<a id="account-update-listing"></a>
+
+Upload the deck again as the next version. Buyers get it after review.
+
+```
+etude account update-listing <listing> <deck> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `listing` | Listing id (lst_…) or slug. |
+| `deck` | Deck name. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--changelog <VALUE>` | string | What changed. |
+
+Output: the listing
+
+### etude account submit
+
+<a id="account-submit"></a>
+
+Send a listing for review.
+
+```
+etude account submit <listing>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `listing` | Listing id (lst_…) or slug. |
+
+Output: the listing
+
+### etude account hide
+
+<a id="account-hide"></a>
+
+Take a listing off sale. Buyers keep it.
+
+```
+etude account hide <listing>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `listing` | Listing id (lst_…) or slug. |
+
+Output: the listing
+
+### etude account sales
+
+<a id="account-sales"></a>
+
+Your sales and earnings (after Etude's 20% fee).
+
+```
+etude account sales
+```
+
+*read-only*
+
+Output: { sales, totals: { count, gross, earnings } }
+
+### etude account review
+
+<a id="account-review"></a>
+
+Admins: listings waiting for review.
+
+```
+etude account review
+```
+
+*read-only*
+
+Output: { queue }
+
+### etude account approve
+
+<a id="account-approve"></a>
+
+Admins: approve a listing's pending versions; it goes live.
+
+```
+etude account approve <listing> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `listing` | Listing id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--notes <VALUE>` | string | Note to the creator. |
+
+Output: the listing
+
+### etude account reject
+
+<a id="account-reject"></a>
+
+Admins: turn down a listing's pending versions with a reason.
+
+```
+etude account reject <listing> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `listing` | Listing id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--notes <VALUE>` | string | Why (sent to the creator). |
+
+Output: the listing
 
 ## theme
 

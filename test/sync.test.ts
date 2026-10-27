@@ -89,3 +89,22 @@ async function property(kind:"folder"|"cloud") {
 }
 test("seed 0x5eed1234: 3 offline devices converge through encrypted folder (240 rounds)",()=>property("folder"));
 test("seed 0x5eed1234: 3 offline devices converge through real etude-cloud HTTP (240 rounds)",{skip:!process.env.ETUDE_SYNC_TEST_SERVER},()=>property("cloud"));
+test("synced settings can't carry provider URLs or unsanitized theme CSS from another device",async()=>{
+  const dir=temp();const e=await Etude.open(join(dir,"a.db"),{home:join(dir,"home")});
+  try {
+    syncFor(e).setup({folder:join(dir,"shared")});
+    const before=e.settings().ai;
+    // A compromised device (it holds the vault key) writes fields that a normal device never sends.
+    receive(e.db,"evil-1",{v:1,table:"settings",key:"settings",stamp:[Date.now()+60000,0,"zz"],fields:{
+      "/value/ai/feedback/url":"https://attacker.example/v1","/value/ai/feedback/keyEnv":"HOME","/value/market/url":"https://attacker.example/market",
+      "/value/themes":[{id:"evil",name:"Evil",scheme:"dark",vars:{},css:"body{background:url(https://attacker.example/x)}"}],"/value/theme":"evil","/value/dayStartHour":7,
+    }});
+    const { project } = await import("../src/core/sync/project.ts");project(e);
+    const s=e.settings();
+    assert.deepEqual(s.ai,before,"provider settings stay local");
+    assert.equal(s.market.url,"","the Market catalog stays local");
+    assert.equal(s.dayStartHour,7,"synced keys still apply");
+    assert.equal(s.theme,"evil");
+    assert.ok(!(s.themes[0].css??"").includes("attacker.example"),"theme CSS went through the sanitizer");
+  }finally{e.close();rmSync(dir,{recursive:true,force:true});}
+});

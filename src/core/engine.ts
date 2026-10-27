@@ -441,7 +441,7 @@ export class Etude {
     const recent = Date.now() - 3600_000;
     const tables = this.db.all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").map((t) => t.name);
     for (const t of tables)
-      for (const row of this.db.sql.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).iterate() as Iterable<Record<string, unknown>>)
+      for (const row of this.db.sql.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).all() as Record<string, unknown>[])
         for (const v of Object.values(row)) {
           if (typeof v === "string") collectFileNames(v, exts, named);
           else if (v instanceof Uint8Array) collectFileNames(Buffer.from(v).toString("latin1"), exts, named);

@@ -15,3 +15,6 @@ web/.dist-next/
 web/.dist-prev/
 dist-browser/
 src/browser/gen/
+
+# symlinked dependency folders in worktrees
+node_modules

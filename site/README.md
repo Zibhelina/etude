@@ -2,6 +2,8 @@
 
 The Etude website: a landing page and a download page, built into `site/dist` as plain static files for GitHub Pages.
 
+Only the free demo types listed in `public-content.ts` may ship in `decks/` and `src/type-assets/`. The build rejects other demos and assets before copying files. Keep paid content and local backups outside the public repository.
+
 ```sh
 npm run build        # the web app; the site copies its card runtime and editor kit
 npm run site         # builds site/dist

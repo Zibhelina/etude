@@ -6,6 +6,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PUBLIC_DEMO_TYPES, checkPublicContent } from "../public-content.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const src = process.argv[2] ?? join(homedir(), "main/projects/etude");
@@ -18,7 +19,8 @@ const PACKS = {
   flippy: ["market/flippy-bit/dist/pack.json", ["flippy.hex"]],
 };
 const summary = {};
-for (const [type, [file, ids]] of Object.entries(PACKS)) {
+for (const type of PUBLIC_DEMO_TYPES) {
+  const [file, ids] = PACKS[type];
   const pack = JSON.parse(readFileSync(join(src, file), "utf8"));
   const def = pack.types.find((t) => t.id === type);
   const { assets, ...rest } = def;
@@ -38,4 +40,5 @@ for (const [type, [file, ids]] of Object.entries(PACKS)) {
   writeFileSync(join(out, `${type}.json`), JSON.stringify({ type: rest, items, assets: scenes.map((s) => `scene-${s}.bin`), deck: { name: pack.name, cards: pack.items.length, decks: decks.length, config: pack.decks[0]?.config ?? null } }));
   summary[type] = { items: items.length, scenes, cards: pack.items.length };
 }
+checkPublicContent(join(here, ".."));
 console.log(JSON.stringify(summary));

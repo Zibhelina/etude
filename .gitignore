@@ -18,3 +18,4 @@ src/browser/gen/
 
 # symlinked dependency folders in worktrees
 node_modules
+.private-backups/

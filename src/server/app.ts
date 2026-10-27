@@ -73,6 +73,47 @@ export interface AppOptions {
   kitDir?: string | null;
   /** Restarts the server on the new code after a successful update. Without it, the update tells the user to restart. */
   onRestart?: () => void;
+  /** Extra Host names (no port) to answer for without a token, besides localhost and Tailscale's *.ts.net. */
+  allowHosts?: string[];
+}
+
+/** Hostnames always served: loopback, and Tailscale MagicDNS names, which only Tailscale can point anywhere. */
+export function hostAllowed(hostHeader: string, extra: Set<string> = new Set()): boolean {
+  let name = hostHeader.toLowerCase().trim();
+  if (name.startsWith("[")) name = name.slice(0, name.indexOf("]") + 1);
+  else name = name.replace(/:\d+$/, "");
+  name = name.replace(/\.$/, "");
+  if (name === "localhost" || name.endsWith(".localhost") || name === "[::1]" || /^127(\.\d{1,3}){3}$/.test(name)) return true;
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)*\.ts\.net$/.test(name)) return true;
+  return extra.has(name);
+}
+
+/** Largest .apkg upload accepted. */
+const MAX_ANKI_UPLOAD = 2 * 1024 ** 3;
+
+/** The request body as bytes, refusing it as soon as it passes `max` (Content-Length is checked first). */
+async function readBody(c: Context, max: number, message: string): Promise<Buffer> {
+  const declared = Number(c.req.header("content-length") ?? NaN);
+  if (declared > max) throw new EtudeError(message, 413);
+  const reader = c.req.raw.body?.getReader();
+  if (!reader) return Buffer.alloc(0);
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > max) {
+        await reader.cancel();
+        throw new EtudeError(message, 413);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks);
 }
 
 export function createApp(etude: Etude, opts: AppOptions = {}) {
@@ -85,6 +126,17 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     if (err instanceof UpdateError) return c.json({ error: err.message, details: err.details }, err.status as 400);
     console.error(err);
     return c.json({ error: String(err?.message ?? err) }, 500);
+  });
+
+  // DNS rebinding: a page on evil.example that re-resolves to 127.0.0.1 still sends Host: evil.example.
+  // Only names that can't be rebound by a stranger are served without a token.
+  const allowHosts = new Set((opts.allowHosts ?? []).map((h) => h.toLowerCase()));
+  app.use("*", async (c, next) => {
+    if (opts.token) return next();
+    const raw = (c.req.header("host") ?? "").toLowerCase();
+    if (!raw) return next(); // HTTP/1.0 clients and in-process requests (tests, app.request) send none
+    if (hostAllowed(raw, allowHosts)) return next();
+    return c.json({ error: `host "${raw}" refused: Etude only answers on localhost. Run it with --allow-host ${raw.replace(/:\d+$/, "")} (or --token) to serve this name.` }, 421);
   });
 
   // Mutating requests must be JSON from this app: blocks other websites from driving a local server.
@@ -326,7 +378,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.post("/api/import", async (c) => c.json(etude.importPack(await body(c), { dryRun: c.req.query("dryRun") === "1" })));
   // The package arrives as the raw body; flags are query parameters.
   app.post("/api/anki/import", async (c) => {
-    const data = Buffer.from(await c.req.arrayBuffer());
+    const data = await readBody(c, MAX_ANKI_UPLOAD, "Anki packages must be 2 GiB or smaller");
     if (!data.length) throw new EtudeError("the Anki package is empty");
     return c.json(
       etude.importAnki(data, {

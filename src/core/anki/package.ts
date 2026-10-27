@@ -42,12 +42,38 @@ export function readZip(buf: Buffer): Map<string, ZipEntry> {
   return out;
 }
 
-export function zipData(buf: Buffer, e: ZipEntry): Buffer {
+/** Largest decompressed sizes accepted from a package. A tiny .apkg can claim gigabytes (a zip bomb). */
+export const ANKI_LIMITS = {
+  /** The SQLite collection. Real collections with years of history stay well under this. */
+  collection: 2 * 1024 ** 3,
+  /** One media file, same as any media in Etude. */
+  media: 100 * 1024 ** 2,
+  /** The media index (names and hashes). */
+  index: 64 * 1024 ** 2,
+  /** Every media file together. */
+  total: 16 * 1024 ** 3,
+};
+
+function decompress(name: string, max: number, f: () => Buffer): Buffer {
+  try {
+    return f();
+  } catch (err: any) {
+    if (err?.code === "ERR_BUFFER_TOO_LARGE" || err?.code === "ERR_OUT_OF_RANGE" || /larger than|too large/i.test(String(err?.message))) {
+      throw new AnkiFormatError(`${name} unpacks to more than ${Math.round(max / 1024 ** 2)} MiB, which is more than an Anki package holds; refusing it`);
+    }
+    throw new AnkiFormatError(`corrupt zip entry ${name}: ${err?.message ?? err}`);
+  }
+}
+
+export function zipData(buf: Buffer, e: ZipEntry, max = ANKI_LIMITS.collection): Buffer {
   if (buf.readUInt32LE(e.offset) !== 0x04034b50) throw new AnkiFormatError(`corrupt zip entry ${e.name}`);
   const start = e.offset + 30 + buf.readUInt16LE(e.offset + 26) + buf.readUInt16LE(e.offset + 28);
   const raw = buf.subarray(start, start + e.compressedSize);
-  if (e.method === 0) return Buffer.from(raw);
-  if (e.method === 8) return inflateRawSync(raw);
+  if (e.method === 0) {
+    if (raw.length > max) throw new AnkiFormatError(`${e.name} is larger than ${Math.round(max / 1024 ** 2)} MiB; refusing it`);
+    return Buffer.from(raw);
+  }
+  if (e.method === 8) return decompress(e.name, max, () => inflateRawSync(raw, { maxOutputLength: max }));
   throw new AnkiFormatError(`zip entry ${e.name} uses unsupported compression ${e.method}`);
 }
 
@@ -124,7 +150,7 @@ export interface AnkiPackage {
 }
 
 const ZSTD_MAGIC = 0xfd2fb528;
-const unzstd = (b: Buffer) => (b.length >= 4 && b.readUInt32LE(0) === ZSTD_MAGIC ? zstdDecompressSync(b) : b);
+const unzstd = (b: Buffer, name: string, max: number) => (b.length >= 4 && b.readUInt32LE(0) === ZSTD_MAGIC ? decompress(name, max, () => zstdDecompressSync(b, { maxOutputLength: max })) : b);
 
 export function openPackage(buf: Buffer): AnkiPackage {
   const zip = readZip(buf);
@@ -133,7 +159,7 @@ export function openPackage(buf: Buffer): AnkiPackage {
   let collection: Buffer;
   if (entry("collection.anki21b")) {
     format = "new";
-    collection = unzstd(zipData(buf, entry("collection.anki21b")!));
+    collection = unzstd(zipData(buf, entry("collection.anki21b")!), "collection.anki21b", ANKI_LIMITS.collection);
   } else if (entry("collection.anki21") || entry("collection.anki2")) {
     format = "legacy";
     collection = zipData(buf, (entry("collection.anki21") ?? entry("collection.anki2"))!);
@@ -143,11 +169,15 @@ export function openPackage(buf: Buffer): AnkiPackage {
   const media = new Map<string, () => Buffer>();
   const mediaEntry = entry("media");
   if (mediaEntry) {
-    const raw = unzstd(zipData(buf, mediaEntry));
+    const raw = unzstd(zipData(buf, mediaEntry, ANKI_LIMITS.index), "media", ANKI_LIMITS.index);
+    let total = 0;
     const load = (zipName: string) => () => {
       const e = entry(zipName);
       if (!e) throw new AnkiFormatError(`media file ${zipName} is missing from the package`);
-      return unzstd(zipData(buf, e));
+      const data = unzstd(zipData(buf, e, ANKI_LIMITS.media), zipName, ANKI_LIMITS.media);
+      total += data.length;
+      if (total > ANKI_LIMITS.total) throw new AnkiFormatError(`the package's media unpacks to more than ${ANKI_LIMITS.total / 1024 ** 3} GiB; refusing it`);
+      return data;
     };
     if (raw.length && raw.toString("utf8").trimStart().startsWith("{")) {
       const map = JSON.parse(raw.toString("utf8")) as Record<string, string>;

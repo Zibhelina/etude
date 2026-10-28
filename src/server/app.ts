@@ -267,7 +267,10 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const index = b.index === undefined || b.index === null ? undefined : Number(b.index);
     return c.json(etude.moveDeck(String(b.name ?? ""), String(b.parent ?? ""), index));
   });
-  app.get("/api/deck", (c) => c.json(etude.deck(c.req.query("name") ?? "")));
+  app.get("/api/deck", (c) => {
+    const name = c.req.query("name") ?? "";
+    return c.json({ ...etude.deck(name), typeSchedulers: etude.typeSchedulers(name) });
+  });
   app.get("/api/deck/usage", (c) => c.json(etude.deckUsage(c.req.query("name") ?? "")));
   app.post("/api/deck/archive", async (c) => {
     const b = await body(c);

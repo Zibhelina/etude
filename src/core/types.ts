@@ -111,6 +111,8 @@ export function validateType(def: unknown): string[] {
         if (m?.better !== undefined && m.better !== "higher" && m.better !== "lower") errors.push(`metrics[${i}].better must be "higher" or "lower"`);
       });
   }
+  if (t.scheduler !== undefined && (typeof t.scheduler !== "string" || !TYPE_ID.test(t.scheduler))) errors.push('scheduler must be a scheduler id ("fsrs", "drill", ...)');
+  if (t.schedulerOptions !== undefined && (!t.schedulerOptions || typeof t.schedulerOptions !== "object" || Array.isArray(t.schedulerOptions))) errors.push("schedulerOptions must be an object");
   if (g && "code" in g && g.code) {
     const e = checkSyntax(g.code, ["answer", "view", "key", "fields"], `${t.id}/grade`);
     if (e) errors.push(e);

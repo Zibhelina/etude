@@ -287,3 +287,110 @@ test("a user scheduler can declare what Stats groups its cards by", async (t) =>
   assert.deepEqual(s.groups, { label: "Level", bins: [{ key: "2", cards: 1 }, { key: "3", cards: 0 }, { key: "4", cards: 1 }], other: 0 });
   assert.equal(e.listSchedulers().find((x) => x.id === "lv")!.stats!.label, "Level");
 });
+
+test("a type's scheduler applies where no deck picks one, and any deck layer that picks one wins", async (t) => {
+  const e = await open(t);
+  e.saveType(loadTypeDir(TYPING));
+  assert.equal(e.type("typing").scheduler, "drill");
+  e.upsertItem({ id: "type", type: "typing", deck: "Mix", fields: { count: 10, target: 60 } });
+  e.upsertItem({ id: "fact", type: "basic", deck: "Mix", fields: { front: "f", back: "F" } });
+  const cardOf = (item: string) => e.db.get<{ id: number }>("SELECT id FROM cards WHERE item_id = ?", item)!.id;
+  const typing = cardOf("type"), fact = cardOf("fact");
+
+  assert.equal(e.configFor("Mix").scheduler, "fsrs", "the deck itself is still on FSRS");
+  assert.equal(e.present(typing, 1).scheduler.id, "drill");
+  assert.equal(e.present(typing, 1).scheduler.ratings, false);
+  assert.equal(e.present(fact, 1).scheduler.id, "fsrs");
+  assert.deepEqual(e.typeSchedulers("Mix"), [{ type: "typing", name: "Type fast", scheduler: "drill", cards: 1 }]);
+  const s = await e.submit(typing, 1, typeIt(e, typing, 1, 60));
+  e.rate(typing, 0, { attemptId: s.attemptId });
+  assert.ok(e.db.get("SELECT sched_state FROM cards WHERE id = ?", typing)!.sched_state, "the drill keeps its state");
+  assert.throws(() => e.rate(fact, 0), /rating must be/, "the FSRS card still asks for a rating");
+
+  // The deck's own choice, a preset's or a parent's all win, FSRS included.
+  e.updateDeck("Mix", { config: { scheduler: "fsrs" } });
+  assert.equal(e.present(typing, 1).scheduler.id, "fsrs");
+  e.updateDeck("Mix", { config: {} });
+  e.savePreset({ id: "boxes", name: "Boxes", config: { scheduler: "leitner" } });
+  e.updateDeck("Mix", { presetId: "boxes" });
+  assert.equal(e.present(typing, 1).scheduler.id, "leitner");
+  e.updateDeck("Mix", { presetId: null });
+  e.upsertItem({ id: "sub", type: "typing", deck: "Course::Unit", fields: { count: 10 } });
+  assert.equal(e.present(cardOf("sub"), 1).scheduler.id, "drill");
+  e.updateDeck("Course", { config: { scheduler: "fsrs" } });
+  assert.equal(e.present(cardOf("sub"), 1).scheduler.id, "fsrs");
+
+  // The type's options sit under the deck's, key by key.
+  e.saveType({ ...e.type("typing"), schedulerOptions: { perDay: 0, everyDays: 2 } });
+  e.updateDeck("Mix", { config: { schedulerOptions: { perDay: 3 } } });
+  assert.deepEqual(e.cardConfig("Mix", "typing").schedulerOptions, { perDay: 3, everyDays: 2 });
+});
+
+test("a type's scheduler is validated, protects a custom scheduler and travels in packs", async (t) => {
+  const e = await open(t);
+  const base = { id: "t", name: "T", fields: [{ name: "front", kind: "markdown" as const }], template: { html: "{{front}}" }, grader: { kind: "self" as const } };
+  assert.throws(() => e.saveType({ ...base, scheduler: "Not An Id" }), /scheduler must be a scheduler id/);
+  assert.throws(() => e.saveType({ ...base, scheduler: "nope" }), /unknown scheduler "nope"/);
+  assert.throws(() => e.saveType({ ...base, scheduler: "drill", schedulerOptions: [] as any }), /schedulerOptions must be an object/);
+  e.saveScheduler({ id: "weekly", name: "Weekly", ratings: false, schedule: "return { due: ctx.day[7] }" });
+  e.saveType({ ...base, scheduler: "weekly" });
+  assert.throws(() => e.deleteScheduler("weekly"), /used by type t/);
+  e.upsertItem({ id: "w", type: "t", deck: "W", fields: { front: "w" } });
+  const pack = e.exportPack({ deck: "W" }) as any;
+  assert.equal(pack.types[0].scheduler, "weekly");
+  assert.deepEqual(pack.schedulers.map((x: any) => x.id), ["weekly"]);
+  // Without a scheduler the options are dropped: they'd have nothing to configure.
+  assert.equal(e.saveType({ ...base, schedulerOptions: { perDay: 1 } }).schedulerOptions, undefined);
+});
+
+test("changing a type's scheduler replays its cards, except where a deck picks the scheduler", async (t) => {
+  const e = await open(t);
+  const { scheduler: _, ...plain } = loadTypeDir(TYPING);
+  e.saveType(plain);
+  e.upsertItem({ id: "free", type: "typing", deck: "Free", fields: { count: 10, target: 60 } });
+  e.upsertItem({ id: "pinned", type: "typing", deck: "Pinned", fields: { count: 10, target: 60 } });
+  e.updateDeck("Pinned", { config: { scheduler: "fsrs" } });
+  const ids = e.db.all("SELECT c.id FROM cards c ORDER BY c.item_id").map((r) => r.id as number); // free, pinned
+  const day = 864e5;
+  for (const id of ids)
+    for (let i = 0; i < 3; i++) {
+      const s = await e.submit(id, i, typeIt(e, id, i, 60));
+      e.rate(id, 3, { attemptId: s.attemptId, at: new Date(Date.now() - (3 - i) * 3 * day) });
+    }
+  const row = (id: number) => e.db.get("SELECT stability, sched_state FROM cards WHERE id = ?", id)!;
+  assert.ok(row(ids[0]).stability > 0 && row(ids[1]).stability > 0, "both on FSRS");
+
+  e.saveType({ ...plain, scheduler: "drill" });
+  assert.equal(row(ids[0]).stability, 0, "replayed as a drill");
+  assert.ok(row(ids[0]).sched_state);
+  assert.ok(row(ids[1]).stability > 0, "the deck that picks FSRS keeps it");
+
+  e.saveType(plain);
+  assert.ok(row(ids[0]).stability > 0, "back on FSRS, from the same history");
+  assert.equal(row(ids[0]).sched_state, null);
+});
+
+test("stats and the optimizer treat a type's drill cards as drills, inside an FSRS deck", async (t) => {
+  const e = await open(t);
+  e.saveType(loadTypeDir(TYPING));
+  e.upsertItem({ id: "fact", type: "basic", deck: "Mix", fields: { front: "f", back: "F" } });
+  e.upsertItem({ id: "type", type: "typing", deck: "Mix", fields: { count: 10, target: 60 } });
+  e.upsertItem({ id: "solo", type: "typing", deck: "Solo", fields: { count: 10, target: 60 } });
+  const cardOf = (item: string) => e.db.get<{ id: number }>("SELECT id FROM cards WHERE item_id = ?", item)!.id;
+  e.rate(cardOf("fact"), 3);
+  for (const item of ["type", "solo"]) {
+    const s = await e.submit(cardOf(item), 1, typeIt(e, cardOf(item), 1, 60));
+    e.rate(cardOf(item), 0, { attemptId: s.attemptId });
+  }
+  const mix = e.stats({ deck: "Mix" });
+  assert.equal(mix.scheduler, "fsrs");
+  assert.equal(mix.cards.total, 1, "FSRS's card states count the FSRS card only");
+  assert.deepEqual(mix.schedulers.map((x) => [x.id, x.cards]), [["fsrs", 1], ["drill", 1]]);
+  assert.deepEqual(mix.practice.map((p) => [p.cardId, p.scheduler]), [[cardOf("type"), "drill"]]);
+  // A deck whose cards all follow their type shows that scheduler's page.
+  assert.equal(e.stats({ deck: "Solo" }).scheduler, "drill");
+
+  e.savePreset({ id: "p", name: "P", config: {} });
+  e.updateDeck("Solo", { presetId: "p" });
+  await assert.rejects(() => e.optimizeWeights({ preset: "p" }), /needs at least \d+ reviews; this deck has 0/, "the drill runs don't feed FSRS");
+});

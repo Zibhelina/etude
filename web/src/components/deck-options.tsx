@@ -12,10 +12,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { StepsInput } from "@/components/deck-steps-input";
-import { api, type DeckFace, type DeckNode, type OptimizeResult, type PresetConfig, type Preset, type SchedulerSummary } from "@/lib/api";
+import { api, type DeckDetail, type DeckFace, type DeckNode, type OptimizeResult, type PresetConfig, type Preset, type SchedulerSummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-export type DeckFull = DeckNode & { resolved: PresetConfig; inherited: PresetConfig; presetBase: PresetConfig };
+export type DeckFull = DeckDetail;
 type Key = keyof PresetConfig;
 
 /** FSRS-6 published defaults, shown when a deck doesn't set its own weights. */
@@ -378,7 +378,10 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
             options={(schedulers.length ? schedulers : [{ id: "fsrs", name: "FSRS" } as SchedulerSummary]).map((x) => [x.id, x.name])}
             ariaLabel="Scheduler"
           />,
-          current?.description || (fsrs ? "Spaced repetition." : schedulerId),
+          <>
+            {current?.description || (fsrs ? "Spaced repetition." : schedulerId)}
+            {deck.typeSchedulers.length > 0 && <TypeSchedulers deck={deck} schedulers={schedulers} unset={source("scheduler").kind === "default"} onPin={() => afterSave(["scheduler"], [deck.name])} />}
+          </>,
           { wide: true },
         )}
         {!fsrs &&
@@ -667,6 +670,37 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/** Card types here that pick their own scheduler: whether they follow it, and a way to put every card on this deck's. */
+function TypeSchedulers({ deck, schedulers, unset, onPin }: { deck: DeckFull; schedulers: SchedulerSummary[]; unset: boolean; onPin(): void }) {
+  const [busy, setBusy] = useState(false);
+  const nameOf = (id: string) => schedulers.find((x) => x.id === id)?.name ?? id;
+  const list = deck.typeSchedulers.map((t, i) => (
+    <span key={t.type}>
+      {i > 0 && (i === deck.typeSchedulers.length - 1 ? " and " : ", ")}
+      {t.name}, {t.cards.toLocaleString()} card{t.cards === 1 ? "" : "s"} on {nameOf(t.scheduler)}
+    </span>
+  ));
+  const pin = async () => {
+    setBusy(true);
+    try {
+      await api.updateDeck(deck.name, { config: { ...deck.config, scheduler: deck.resolved.scheduler } });
+      onPin();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return unset ? (
+    <span className="mt-1.5 block">
+      Except where a card type picks its own scheduler: {list}.{" "}
+      <button className="underline underline-offset-2 hover:text-foreground disabled:opacity-50" disabled={busy} onClick={pin}>Use {nameOf(deck.resolved.scheduler)} for them too</button>
+    </span>
+  ) : (
+    <span className="mt-1.5 block">It also applies to cards whose type picks its own scheduler, instead of that one: {deck.typeSchedulers.map((t) => `${t.name} (${nameOf(t.scheduler)})`).join(", ")}.</span>
   );
 }
 

@@ -15,7 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { CodeEditor } from "@/components/code-editor";
 import { CardPreview } from "@/components/card-preview";
 import { AutoTextarea, FieldEditor } from "@/components/field-editor";
-import { api, ApiError, type CardType, type FieldSpec, type LeftoverReport, type TypeSummary } from "@/lib/api";
+import { api, ApiError, type CardType, type FieldSpec, type LeftoverReport, type SchedulerSummary, type TypeSummary } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { FieldsSchema } from "./fields-schema";
@@ -39,6 +39,10 @@ export function TypeEditor({ id }: { id: string }) {
   // Cards on faces this type no longer makes; checked in the background (it runs facesWhen per item).
   const [leftover, setLeftover] = useState<LeftoverReport | null>(null);
   const [askPrune, setAskPrune] = useState<{ cards: number; reviews: number } | null>(null);
+  const [schedulers, setSchedulers] = useState<SchedulerSummary[]>([]);
+  useEffect(() => {
+    api.schedulers().then(setSchedulers).catch(() => {});
+  }, []);
 
   const isNew = !saved;
 
@@ -476,6 +480,18 @@ export function TypeEditor({ id }: { id: string }) {
                   </SelectContent>
                 </Select>
               </Field>
+              <Field label="Scheduler" hint="Who decides when this type's cards come back, when their deck doesn't pick a scheduler: a drill for a typing test or a game. A deck that picks one, FSRS included, wins.">
+                <Select value={draft.scheduler ?? DECK_SCHEDULER} onValueChange={(v) => set({ scheduler: v === DECK_SCHEDULER ? undefined : v, schedulerOptions: undefined })}>
+                  <SelectTrigger className="h-10 w-full sm:w-72"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={DECK_SCHEDULER}>The deck's</SelectItem>
+                    {schedulers.filter((x) => x.id !== "fsrs").map((x) => (
+                      <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>
+                    ))}
+                    {draft.scheduler && !schedulers.some((x) => x.id === draft.scheduler) && <SelectItem value={draft.scheduler}>{draft.scheduler}</SelectItem>}
+                  </SelectContent>
+                </Select>
+              </Field>
               {!!saved?.assetFiles?.length && <AssetList files={saved.assetFiles} />}
             </TabsContent>
 
@@ -778,6 +794,7 @@ function formatBytes(n: number) {
 }
 
 const AUTO_TITLE = "__auto__";
+const DECK_SCHEDULER = "__deck__";
 const TITLE_KINDS = new Set<FieldSpec["kind"]>(["markdown", "text", "html", "code"]);
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {

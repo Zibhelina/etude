@@ -19,3 +19,14 @@ export function hashString(s: string): number {
   }
   return h >>> 0;
 }
+
+/** Two piles in one order that finishes both together, given how many of each were done already. Ties go to `a`. */
+export function interleave<T>(a: T[], b: T[], doneA = 0, doneB = 0): T[] {
+  const out: T[] = [];
+  let i = 0, j = 0;
+  while (i < a.length || j < b.length) {
+    const takeA = j >= b.length || (i < a.length && (doneA + i) / (doneA + a.length) <= (doneB + j) / (doneB + b.length));
+    out.push(takeA ? a[i++] : b[j++]);
+  }
+  return out;
+}

@@ -10,6 +10,7 @@ import { validateType } from "../src/core/types.ts";
 import { initSandbox } from "../src/core/sandbox.ts";
 import { checkPack } from "../src/cli/pack-check.ts";
 import { fitSkills, levelState, pace, placementState, revisedFrontier } from "../src/core/learner.ts";
+import { interleave } from "../src/core/util.ts";
 
 // A sentence type that picks the variant closest to the target when it gets a learner, and a random one otherwise.
 const CONTEXT_TYPE = {
@@ -288,6 +289,35 @@ test("a placement vouches for the cards it passed until one is missed; missing m
     assert.equal(s2.skills.find((x) => x.skill === "listening")!.placement!.frontier, "level::3", "listening has its own placement");
   }
   assert.ok(!e.present(cardOf(e, level1[10]), 1).quickCheck, "no longer a quick check");
+  done();
+});
+
+test("quick checks mix in with the new cards, so both run out together", async () => {
+  assert.equal(interleave(["q1", "q2", "q3", "q4"], ["n1", "n2"]).join(" "), "q1 n1 q2 q3 n2 q4");
+  assert.equal(interleave(["q1", "q2"], ["n1", "n2"], 2, 0).join(" "), "n1 q1 n2 q2", "counts what each pile did already");
+  // The queue is rebuilt after every answer: answering the first card each time keeps the same order.
+  const qs = ["q1", "q2", "q3", "q4", "q5", "q6", "q7"], ns = ["n1", "n2", "n3"];
+  let a = qs, b = ns, doneA = 0, doneB = 0;
+  const shown: string[] = [];
+  while (a.length || b.length) {
+    const next = interleave(a, b, doneA, doneB)[0];
+    shown.push(next);
+    if (next === a[0]) (a = a.slice(1)), doneA++;
+    else (b = b.slice(1)), doneB++;
+  }
+  assert.deepEqual(shown, interleave(qs, ns));
+
+  const { e, done } = await setup({ perLevel: 20 });
+  e.updateDeck("Course", { config: { adaptiveChallenge: true, levels: LEVELS.map((tag) => ({ tag })), burySiblings: false, newPerDay: 200 } });
+  const level = (item: string) => Math.floor((Number(item.slice(1)) - 1) / 20);
+  for (let i = 0; i < 60; i++) {
+    const { card } = e.next({ deck: "Course", placement: "p" });
+    if (!card) break;
+    const r = await e.submit(card.cardId, card.seed, level(card.itemId) < 2 ? card.itemId : "?", { asOf: card.asOf, placement: card.placement });
+    e.rate(card.cardId, r.grade.suggested!, { attemptId: r.attemptId! });
+  }
+  const first = e.queue({ deck: "Course" }).news.slice(0, 6).map((c) => !!e.present(c.id, 1).quickCheck);
+  assert.ok(first.includes(true) && first.includes(false), JSON.stringify(first));
   done();
 });
 

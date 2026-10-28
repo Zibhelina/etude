@@ -1,6 +1,6 @@
 import { autoSync } from "@/lib/sync";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronLeft, FastForward, CornerDownLeft, Dices, EyeOff, Loader2, MessageSquareText, MoreHorizontal, Pause, Pencil, RotateCcw, Undo2 } from "lucide-react";
+import { ArrowLeft, ArrowLeftToLine, ChevronLeft, Plus, X as XIcon, FastForward, CornerDownLeft, Dices, EyeOff, Loader2, MessageSquareText, MoreHorizontal, Pause, Pencil, RotateCcw, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { navigate } from "@/lib/router";
 import { usePhone } from "@/lib/phone";
 import { ActionSheet, Tally } from "@/components/phone-shell";
+import { SketchBar, SketchLayer, sketchTransform, useSketch } from "@/components/sketch-pad";
 
 type Phase = "loading" | "answer" | "grading" | "result" | "done";
 
@@ -42,11 +43,14 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const [practice, setPractice] = useState(false);
   const phone = usePhone();
   const [tools, setTools] = useState(false);
+  const [plus, setPlus] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
   const frame = useRef<CardFrameHandle>(null);
   const shownAt = useRef(Date.now());
   const lastCard = useRef<number | undefined>(undefined);
   const busy = useRef(false);
   const resultRef = useRef<HTMLElement>(null);
+  const sk = useSketch(card ? `${card.cardId}:${card.seed}` : null);
 
   useEffect(() => {
     if (phase === "result") setTimeout(() => resultRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }), 60);
@@ -299,7 +303,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const total = counts ? counts.new + counts.learning + counts.review : 0;
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 pb-44 sm:px-8">
+    <div className={cn("mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 pb-44 sm:px-8", sk.on && "overflow-x-clip")}>
       {phone ? (
         <header className="sticky top-0 z-10 -mx-4 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-end bg-background/92 px-1 pt-[env(safe-area-inset-top)] backdrop-blur">
           <div className="flex h-14 w-full items-center gap-1">
@@ -365,7 +369,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       {phase === "done" && (scope.placement ? <PlacementDone deck={scope.deck ?? ""} /> : <Done counts={counts} scope={scope} />)}
 
       {card && phase !== "done" && (
-        <main className="flex flex-1 flex-col gap-5 pt-3 sm:gap-6 sm:pt-6">
+        <main ref={mainRef} style={phone ? sketchTransform(sk.view, mainRef.current) : undefined} className="flex flex-1 flex-col gap-5 pt-3 sm:gap-6 sm:pt-6">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <Badge variant="outline" className="font-normal">{card.type}</Badge>
             {card.scheduler.id !== "fsrs" && <Badge variant="outline" className="font-normal">{card.scheduler.name.toLowerCase()}</Badge>}
@@ -444,10 +448,31 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       )}
 
       {card && (phase === "answer" || phase === "grading" || phase === "result") && (
-        <footer className="fixed inset-x-0 bottom-0 z-10 border-t bg-background pb-[env(safe-area-inset-bottom)] max-md:border-t-0 max-md:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+        <footer className="fixed inset-x-0 bottom-0 z-20 border-t bg-background pb-[env(safe-area-inset-bottom)] max-md:border-t-0 max-md:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           <div className="mx-auto flex max-w-3xl items-center justify-center gap-2 px-3 py-3 max-md:px-4 sm:px-8 sm:py-4">
+            {phone && sk.on ? (
+              <SketchBar sk={sk} />
+            ) : <>
             {phone && phase !== "result" && (
-              <button onClick={undo} disabled={phase === "grading"} aria-label="Undo last rating" className="flex size-[3.25rem] shrink-0 items-center justify-center rounded-full border bg-card text-muted-foreground active:bg-accent disabled:opacity-40"><Undo2 className="size-5" /></button>
+              <div className="relative shrink-0">
+                {plus && (
+                  <div className="absolute bottom-[calc(100%+0.6rem)] left-0 z-20 w-60 rounded-[1.6rem] border bg-card p-1.5 shadow-2xl">
+                    {[
+                      { label: "Rascunho", icon: Pencil, hl: true, onClick: () => { setPlus(false); sk.setOn(true); } },
+                      { label: "Card anterior", icon: ArrowLeftToLine, onClick: () => { setPlus(false); undo(); } },
+                      { label: "Suspender", icon: Pause, onClick: () => { setPlus(false); setAside("suspend", false); } },
+                      { label: "Mais ações", icon: MoreHorizontal, onClick: () => { setPlus(false); setTools(true); } },
+                    ].map((a) => (
+                      <button key={a.label} onClick={a.onClick} className={cn("flex h-[2.9rem] w-full items-center gap-3 rounded-full px-4 text-[15px] active:bg-accent", a.hl ? "bg-highlight/10 text-highlight" : "text-foreground/85")}>
+                        <a.icon className="size-5" />{a.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button onClick={() => setPlus((v) => !v)} disabled={phase === "grading"} aria-label={plus ? "Fechar" : "Mais"} aria-expanded={plus} className="flex size-[3.25rem] items-center justify-center rounded-full border bg-card text-foreground active:bg-accent disabled:opacity-40">
+                  {plus ? <XIcon className="size-5" /> : <Plus className="size-5" />}
+                </button>
+              </div>
             )}
             {phase !== "result" ? (
               <Button size="lg" className="h-[3.25rem] flex-1 gap-2 rounded-full text-[16px] pointer-coarse:h-[3.25rem] sm:h-10 sm:w-auto sm:min-w-48 sm:flex-none sm:rounded-md sm:text-sm" disabled={phase === "grading" || (!ready && card.grader !== "self")} onClick={reveal}>
@@ -479,6 +504,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
                 </button>
               ))
             )}
+            </>}
           </div>
           {phase === "result" && (
             <div className="hidden pb-3 text-center text-xs text-muted-foreground sm:block">
@@ -491,6 +517,8 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
           )}
         </footer>
       )}
+      {phone && card && <SketchLayer sk={sk} />}
+      {phone && plus && <div className="fixed inset-0 z-[9] bg-background/60" onClick={() => setPlus(false)} />}
       {phone && card && (
         <ActionSheet
           open={tools}

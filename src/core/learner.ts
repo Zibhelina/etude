@@ -214,6 +214,27 @@ export function placementState(bands: number, probes: { band: number; score: num
   return { bands, probes: probes.length, frontier, next };
 }
 
+// Quick checks test a placement card by card. Well under PASS on enough of them means the placement
+// was wrong for that band; lenient, because a wrong revision sends known cards back to be taught.
+const CHECKS_MIN = 10;
+const CHECKS_PASS = 0.6;
+
+/**
+ * The frontier after the quick checks, in the order answered: the first passed band whose share
+ * right fell below CHECKS_PASS once it had CHECKS_MIN of them. A revision stands for the session.
+ */
+export function revisedFrontier(frontier: number, checks: Map<number, boolean[]>): number {
+  for (let b = 0; b < frontier; b++) {
+    let n = 0, ok = 0;
+    for (const right of checks.get(b) ?? []) {
+      n++;
+      if (right) ok++;
+      if (n >= CHECKS_MIN && ok / n < CHECKS_PASS) return b;
+    }
+  }
+  return frontier;
+}
+
 /** Band of a card for placement: its level, or a tenth of the deck by position when the deck has no levels. */
 export function bandOf(levels: LevelSpec[], tags: string[], rank: number, total: number): number {
   if (levels.length) return levelIndex(levels, tags);

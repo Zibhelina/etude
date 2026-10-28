@@ -176,10 +176,12 @@ interface RootData {
   model: learn.SkillModel;
   maxTs: string;
   known: Set<string>;
+  /** Of `known`, items known only because a placement passed their band. */
+  assumed: number;
   seen: Map<string, number>;
   scores: Map<number, { ts: string; score: number }[]>;
-  /** The latest placement session, per skill. */
-  placement: Map<string, { bands: number[]; state: learn.PlacementState }>;
+  /** The latest placement session, per skill; `frontier` is the bisection's, revised by the quick checks. */
+  placement: Map<string, { bands: number[]; state: learn.PlacementState; frontier: number; checks: { done: number; passed: number } }>;
   /** Any session's state, for picking its next probe. */
   placementOf: (session: string) => Map<string, { bands: number[]; state: learn.PlacementState }>;
   levels: Map<string, learn.LevelState> | null;
@@ -2115,7 +2117,7 @@ export class Etude {
     const seen = new Map<string, number>();
     const scores = new Map<number, { ts: string; score: number }[]>();
     // Probes per placement session (answers from before sessions had names count as one session).
-    const sessions = new Map<string, { first: string; probes: Map<string, { band: number; score: number }[]> }>();
+    const sessions = new Map<string, { first: string; probes: Map<string, { band: number; score: number }[]>; reviews: Set<number> }>();
     let maxTs = "";
     for (const r of this.db.all(
       `SELECT a.ts, a.card_id, a.grade, a.review_id, rv.rating FROM attempts a JOIN cards c ON c.id = a.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id LEFT JOIN reviews rv ON rv.id = a.review_id WHERE ${scope} ORDER BY a.ts, a.id`,
@@ -2135,7 +2137,8 @@ export class Etude {
       attempts.push({ ts: r.ts, a: { cardId: r.card_id, key: ad?.variant ? `${card.itemId}#${ad.variant}` : `card:${r.card_id}`, skills: card.skills, score: g.score, prior: ad?.difficulty } });
       if (ad?.placement) {
         const key = String(ad.placement);
-        const sess = sessions.get(key) ?? sessions.set(key, { first: r.ts, probes: new Map() }).get(key)!;
+        const sess = sessions.get(key) ?? sessions.set(key, { first: r.ts, probes: new Map(), reviews: new Set() }).get(key)!;
+        sess.reviews.add(r.review_id);
         const skill = card.skills[0];
         (sess.probes.get(skill) ?? sess.probes.set(skill, []).get(skill)!).push({ band: bands.get(skill)?.indexOf(card.band) ?? -1, score: g.score });
       }
@@ -2147,14 +2150,46 @@ export class Etude {
       return out;
     };
     const latest = [...sessions.entries()].sort((a, b) => b[1].first.localeCompare(a[1].first))[0]?.[0];
-    const placement = placementOf(latest ?? "");
+    const placement: RootData["placement"] = new Map([...placementOf(latest ?? "")].map(([skill, p]) => [skill, { ...p, frontier: p.state.frontier, checks: { done: 0, passed: 0 } }]));
+    // Quick checks: first answers since the session began to cards in the bands it passed. Too many
+    // wrong in a band revises the frontier down to it.
+    const sess = latest ? sessions.get(latest) : undefined;
+    if (sess) {
+      const checks = new Map<string, Map<number, boolean[]>>();
+      for (const r of this.db.all<{ id: number; card_id: number; rating: number }>(
+        `SELECT r.id, r.card_id, r.rating FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${scope} AND r.state = 0 AND r.practice = 0 AND r.ts >= ? ORDER BY r.ts, r.id`,
+        ...sp,
+        sess.first,
+      )) {
+        const c = cards.get(r.card_id);
+        const p = c && placement.get(c.skills[0]);
+        if (!c || !p || sess.reviews.has(r.id)) continue;
+        const band = p.bands.indexOf(c.band);
+        if (band < 0 || band >= p.state.frontier) continue;
+        const byBand = checks.get(c.skills[0]) ?? checks.set(c.skills[0], new Map()).get(c.skills[0])!;
+        (byBand.get(band) ?? byBand.set(band, []).get(band)!).push(r.rating > 1);
+        p.checks.done++;
+        if (r.rating > 1) p.checks.passed++;
+      }
+      for (const [skill, p] of placement) p.frontier = learn.revisedFrontier(p.state.frontier, checks.get(skill) ?? new Map());
+    }
     // Bands below a placement's frontier were passed; frontier 0 (or no placement) passes nothing.
     const passed = (c: RootCard) => {
       const p = placement.get(c.skills[0]);
-      return !!p && p.state.probes > 0 && c.band >= 0 && p.bands.indexOf(c.band) < p.state.frontier;
+      return !!p && p.state.probes > 0 && c.band >= 0 && p.bands.indexOf(c.band) < p.frontier;
     };
+    // Known: one of the item's cards graduated to review, or, until one of its cards is rated Again,
+    // the latest placement passed its band.
+    const failed = new Set(
+      this.db
+        .all<{ item_id: string }>(`SELECT DISTINCT c.item_id FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${scope} AND r.rating = 1`, ...sp)
+        .map((r) => r.item_id),
+    );
     const known = new Set<string>();
     for (const c of cards.values()) if (c.state === 2) known.add(c.itemId);
+    const assumed = new Set<string>();
+    for (const c of cards.values()) if (!known.has(c.itemId) && !failed.has(c.itemId) && passed(c)) assumed.add(c.itemId);
+    for (const id of assumed) known.add(id);
     let levels: Map<string, learn.LevelState> | null = null;
     if (cfg.levels.length) {
       levels = new Map();
@@ -2177,11 +2212,11 @@ export class Etude {
         }
         const p = placement.get(skill);
         // Past every band: the highest level that has cards, not the last level of the list.
-        const floor = p && p.state.probes > 0 ? (p.bands[p.state.frontier] ?? p.bands.at(-1) ?? 0) : 0;
+        const floor = p && p.state.probes > 0 ? (p.bands[p.frontier] ?? p.bands.at(-1) ?? 0) : 0;
         levels.set(skill, learn.levelState(cfg.levels, counts, cfg, floor));
       }
     }
-    const data: RootData = { root, cfg, cards, attempts, model: learn.fitSkills(attempts.map((x) => x.a)), maxTs, known, seen, scores, placement, placementOf, levels, passed };
+    const data: RootData = { root, cfg, cards, attempts, model: learn.fitSkills(attempts.map((x) => x.a)), maxTs, known, assumed: assumed.size, seen, scores, placement, placementOf, levels, passed };
     this.rootCache.set(root, { version, data });
     return data;
   }
@@ -2355,9 +2390,14 @@ export class Etude {
           /** Predicted success on a card of middling difficulty. */
           typical: theta == null ? null : r3(learn.sigmoid(theta)),
           level: A.levels?.get(skill) ?? null,
-          placement: p && p.state.probes > 0 ? { probes: p.state.probes, done: p.state.next === null, frontier: this.bandLabel(c, p.bands[p.state.frontier]) } : null,
+          placement:
+            p && p.state.probes > 0
+              ? { probes: p.state.probes, done: p.state.next === null, frontier: this.bandLabel(c, p.bands[p.frontier]), revised: p.frontier < p.state.frontier, checks: p.checks }
+              : null,
         };
       }),
+      /** Items the learner knows, and how many of those only a placement vouches for. */
+      known: { items: A.known.size, assumed: A.assumed },
       pace: c.adaptivePace ? this.paceFor(root, c) : null,
     };
   }

@@ -48,7 +48,7 @@ etude deck show "Networks::Week 1"   # resolved, inherited, presetBase, own conf
 | `newPerDayMin` / `newPerDayMax` | 5 / 25 | bounds for the adaptive pace |
 | `levels` | `[]` | ordered levels by tag, each with an optional check tag: `[{"tag":"level::1","check":"check::1"}]` |
 | `levelAdvanceAt` / `levelMix` | 0.8 / 0.2 | stable share of a level that opens the next one, and the next level's share of new cards |
-| `quickChecksPerDay` | 30 | after a placement, earlier cards it judged known, on top of `newPerDay` |
+| `quickChecksPerDay` | 30 | after a placement, earlier cards it judged known, on top of `newPerDay`; too many wrong in a level lowers the placement |
 
 Changing retention, steps, maximum interval, weights or the deadline only affects future reviews. Add `--reschedule` (or run `etude card reschedule --deck X`) to replay history with the new settings. Commands print a `hint` when that's needed.
 

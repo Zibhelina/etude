@@ -102,7 +102,9 @@ function Skills({ deck }: { deck: string }) {
                   {summary.settings.levels.length > 0 && (
                     <td className="py-2">{s.level ? `${s.level.tag.split("::").pop()} · ${pct(s.level.progress)} stable${s.level.nextOpen ? " · next level open" : ""}${s.level.done ? " · all done" : ""}` : "–"}</td>
                   )}
-                  <td className="py-2 text-muted-foreground">{s.placement ? `${s.placement.frontier}${s.placement.done ? "" : " (in progress)"}` : "–"}</td>
+                  <td className="py-2 text-muted-foreground" title={s.placement?.checks.done ? `${s.placement.checks.passed} of ${s.placement.checks.done} quick checks right` : undefined}>
+                    {s.placement ? `${s.placement.frontier}${s.placement.revised ? " (lowered by quick checks)" : ""}${s.placement.done ? "" : " (in progress)"}` : "–"}
+                  </td>
                 </tr>
               ))}
             </tbody>

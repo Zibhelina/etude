@@ -46,7 +46,26 @@ const LABELS: Record<Key, string> = {
   mode: "Mode",
   scheduler: "Schedule with",
   schedulerOptions: "Scheduler settings",
+  adaptiveChallenge: "Adaptive challenge",
+  adaptivePace: "Adaptive pace",
+  targetSuccess: "Target success",
+  minutesPerDay: "Time budget",
+  newPerDayMin: "Fewest new cards",
+  newPerDayMax: "Most new cards",
+  levels: "Levels",
+  levelAdvanceAt: "Open the next level at",
+  levelMix: "Next-level share",
+  quickChecksPerDay: "Quick checks per day",
 };
+
+/** Levels as text: one per line, the level's tag, then optionally the tag of its level check. */
+const levelsText = (levels: PresetConfig["levels"]) => levels.map((l) => (l.check ? `${l.tag} ${l.check}` : l.tag)).join("\n");
+const parseLevels = (text: string): PresetConfig["levels"] =>
+  text
+    .split("\n")
+    .map((line) => line.trim().split(/\s+/).filter(Boolean))
+    .filter((p) => p.length)
+    .map(([tag, check]) => (check ? { tag, check } : { tag }));
 
 const norm = (v: unknown) => JSON.stringify(v ?? null);
 const same = (a: unknown, b: unknown) => norm(a) === norm(b);
@@ -432,7 +451,11 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
       </>}
 
       <Group title="Daily limits" description="Counted across this deck and its subdecks, custom study included.">
-        {row("newPerDay", <NumberField value={value("newPerDay")} min={0} onChange={(v) => set("newPerDay", v)} suffix="cards" ariaLabel="New cards per day" />, "New cards introduced per study day, across this deck and its subdecks.")}
+        {row(
+          "newPerDay",
+          <NumberField value={value("newPerDay")} min={0} onChange={(v) => set("newPerDay", v)} suffix="cards" ariaLabel="New cards per day" />,
+          value("adaptivePace") ? "Adaptive pace sets this each day; until there's a week of answers it starts here." : "New cards introduced per study day, across this deck and its subdecks.",
+        )}
         {faces.length > 1 && faces.map(faceRow)}
         {row("reviewsPerDay", <NumberField value={value("reviewsPerDay")} min={0} onChange={(v) => set("reviewsPerDay", v)} suffix="cards" ariaLabel="Reviews per day" />, "Due reviews shown per day. The rest wait until tomorrow.")}
       </Group>
@@ -459,6 +482,34 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
           "Watch makes the deck a tour: every card can show an example answer, nothing is scheduled, and its cards stay out of study sessions.",
         )}
         {row("burySiblings", <Switch checked={value("burySiblings")} onCheckedChange={(v) => set("burySiblings", v)} aria-label="Bury siblings" />, "After you study one face of an item, hide its other new faces until tomorrow.", { inline: true })}
+      </Group>
+
+      <Group title="Adaptive" description="Fit the work to how you're doing. Off: the deck works as built.">
+        {row("adaptivePace", <Switch checked={value("adaptivePace")} onCheckedChange={(v) => set("adaptivePace", v)} aria-label="Adaptive pace" />, "Raise or lower the new cards per day from how well last week's new cards held (against the desired retention) and your study time.", { inline: true })}
+        {value("adaptivePace") && <>
+          {row("minutesPerDay", <NumberField value={value("minutesPerDay")} min={1} onChange={(v) => set("minutesPerDay", v)} suffix="min/day" ariaLabel="Time budget in minutes per day" />, "Study time per day the pace aims for.")}
+          {row("newPerDayMin", <NumberField value={value("newPerDayMin")} min={0} onChange={(v) => set("newPerDayMin", v)} suffix="cards" ariaLabel="Fewest new cards per day" />, "The pace never goes below this.")}
+          {row("newPerDayMax", <NumberField value={value("newPerDayMax")} min={0} onChange={(v) => set("newPerDayMax", v)} suffix="cards" ariaLabel="Most new cards per day" />, "Or above this.")}
+        </>}
+        {row(
+          "adaptiveChallenge",
+          <Switch checked={value("adaptiveChallenge")} onCheckedChange={(v) => set("adaptiveChallenge", v)} aria-label="Adaptive challenge" />,
+          "Let card types choose versions for you: the clearest one when a card is new, one of its usual difficulty when FSRS measures your memory. Only types that support it change.",
+          { inline: true },
+        )}
+        {(value("adaptivePace") || value("adaptiveChallenge")) && <>
+          {row(
+            "levels",
+            <Textarea value={levelsText(value("levels"))} onChange={(e) => set("levels", parseLevels(e.target.value))} placeholder={"level::1 check::1\nlevel::2 check::2"} rows={3} className="font-mono text-sm" aria-label="Levels" />,
+            "One per line, easiest first: the tag of the level's items, then optionally the tag of its level check. New cards come from your level; the next one opens gradually.",
+            { wide: true },
+          )}
+          {value("levels").length > 0 && <>
+            {row("levelAdvanceAt", <NumberField value={Math.round(value("levelAdvanceAt") * 100)} min={0} max={100} onChange={(v) => set("levelAdvanceAt", v / 100)} suffix="% stable" ariaLabel="Open the next level at" />, "How much of a level has to be stable before the next level's new cards start to appear.")}
+            {row("levelMix", <NumberField value={Math.round(value("levelMix") * 100)} min={0} max={100} onChange={(v) => set("levelMix", v / 100)} suffix="%" ariaLabel="Next-level share" />, "Share of new cards taken from the next level once it opens.")}
+          </>}
+          {row("quickChecksPerDay", <NumberField value={value("quickChecksPerDay")} min={0} onChange={(v) => set("quickChecksPerDay", v)} suffix="cards" ariaLabel="Quick checks per day" />, "After a placement, earlier cards it judged known come up as quick checks, on top of the new cards.")}
+        </>}
       </Group>
 
       {fsrs && <>

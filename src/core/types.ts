@@ -79,8 +79,16 @@ export function validateType(def: unknown): string[] {
   else if ((g.kind === "script" || g.kind === "hybrid") && typeof g.code !== "string") errors.push("script graders need grader.code");
   if (errors.length) return errors;
   if (t.prepare) {
-    const e = checkSyntax(t.prepare, ["fields", "face", "rng"], `${t.id}/prepare`);
+    const e = checkSyntax(t.prepare, ["fields", "face", "rng", "learner"], `${t.id}/prepare`);
     if (e) errors.push(e);
+  }
+  if (t.skills !== undefined && (!t.skills || typeof t.skills !== "object" || Array.isArray(t.skills) || !Object.entries(t.skills).every(([face, s]) => /^[\w-]+$/.test(face) && typeof s === "string" && /^[\w-]+$/.test(s))))
+    errors.push('skills must map face names to skill names, like {"read": "reading"}');
+  if (t.variants !== undefined) {
+    const v = t.variants;
+    const keyOk = (k: unknown) => k === undefined || (typeof k === "string" && /^[A-Za-z_]\w*$/.test(k));
+    if (!v || typeof v !== "object" || typeof v.field !== "string" || !keyOk(v.id) || !keyOk(v.requires) || !keyOk(v.difficulty)) errors.push('variants must look like {"field": "sentences"}, with optional id, requires and difficulty keys');
+    else if (!t.fields?.some((f) => f.name === v.field && (f.kind === "json" || f.kind === "list"))) errors.push("variants.field must name a json or list field of the type");
   }
   if (t.facesWhen) {
     const e = checkSyntax(t.facesWhen, ["fields"], `${t.id}/facesWhen`);

@@ -14,6 +14,7 @@ import {
   type MetricSpec,
   type SchedulerDef,
   type Grade,
+  type AdaptiveChoice,
   type Item,
   type Prepared,
   type Preset,
@@ -38,6 +39,9 @@ import {
   type ScriptCtx,
 } from "./schedulers.ts";
 import { fitWeights, MIN_REVIEWS, OptimizerMissing, type Fit } from "./optimize.ts";
+import type { Learner } from "./learner.ts";
+import { Adaptive, annotateVariants, placementSession, variantPrior, type AdaptContext } from "./adaptive.ts";
+import { deckParts, hashString, interleave, parse } from "./util.ts";
 import { compile, isMediaRef, itemSearchText, QueryError, stripHtml, type Compiled } from "./query.ts";
 import { AGENT_EFFORTS, aiEditFields, aiFeedback, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type GradingContext } from "./ai.ts";
 import {
@@ -77,16 +81,7 @@ export const BUILTIN_SCHEDULERS_DIR = join(ROOT, "schedulers");
 const now = () => new Date();
 const iso = (d = now()) => d.toISOString();
 const json = (v: unknown) => JSON.stringify(v ?? null);
-const parse = <T>(s: string | null | undefined, fallback: T): T => {
-  if (s == null) return fallback;
-  try {
-    return JSON.parse(s) as T;
-  } catch {
-    return fallback;
-  }
-};
 
-export const deckParts = (name: string) => name.split("::").map((s) => s.trim()).filter(Boolean);
 export const normDeck = (name: string) => deckParts(name).join("::");
 export const normTag = (t: string) => t.trim().replace(/\s+/g, "-").split("::").filter(Boolean).join("::");
 
@@ -128,6 +123,11 @@ export interface StudyScope {
   query?: string;
   /** Study ahead: nothing has to be due. Every card in the scope is in the queue, soonest due first, with no daily limits. Ratings are real reviews. */
   ahead?: boolean;
+  /**
+   * A placement on an adaptive deck: only probes that find the learner's level. The value names the
+   * session (any text); a new session starts afresh and the latest one is the one that counts.
+   */
+  placement?: string | boolean;
 }
 
 export type WeightsSource = { kind: "preset"; id: string } | { kind: "deck"; name: string } | { kind: "defaults" };
@@ -172,6 +172,11 @@ export interface StudyCard {
   generated: boolean;
   /** One-line plain-text label (for lists and summaries). */
   title: string;
+  /** On adaptive decks: the moment the learner estimates were taken. Pass it back when submitting. */
+  asOf?: string;
+  /** The placement session this card was shown for. */
+  placement?: string;
+  quickCheck?: boolean;
 }
 
 const TEX_SYMBOLS: Record<string, string> = { times: "×", cdot: "·", div: "÷", pm: "±", le: "≤", leq: "≤", ge: "≥", geq: "≥", ne: "≠", neq: "≠", approx: "≈", equiv: "≡", to: "→", rightarrow: "→", Rightarrow: "⇒", iff: "⇔", infty: "∞", partial: "∂", nabla: "∇", in: "∈", forall: "∀", exists: "∃", cup: "∪", cap: "∩", sum: "Σ", prod: "Π", int: "∫", sqrt: "√", ldots: "…", dots: "…", cdots: "⋯", circ: "°", deg: "°", flat: "♭", sharp: "♯", natural: "♮" };
@@ -243,16 +248,10 @@ function leftoversOf<T extends { face: string }>(cards: T[], faces: string[] | n
 }
 
 /** Bump when `itemTitle` or `itemSearchText` change, so collections rebuild the stored columns on open. */
+export { deckParts };
+
 const ITEM_INDEX_VERSION = "1";
 
-function hashString(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
 
 export class Etude {
   readonly db: Db;
@@ -262,12 +261,22 @@ export class Etude {
   readonly home: string;
   private typeCache = new Map<string, CardTypeDef>();
   private leftovers: { key: string; cards: LeftoverCard[] } | null = null;
+  private readonly adaptive: Adaptive;
 
   private constructor(db: Db, mediaDir: string, path: string, home: string) {
     this.db = db;
     this.mediaDir = mediaDir;
     this.path = path;
     this.home = home;
+    this.adaptive = new Adaptive({
+      db,
+      configFor: (deck) => this.configFor(deck),
+      type: (id) => this.type(id),
+      scriptFor: (cfg) => this.scriptFor(cfg),
+      cardWithDeck: (cardId) => this.cardWithDeck(cardId),
+      deckName: (deck) => this.deckRow(deck).name,
+      dayStart: (at) => this.dayStart(at),
+    });
   }
 
   static async open(path: string, opts: { builtinTypesDir?: string; builtinSchedulersDir?: string; home?: string } = {}): Promise<Etude> {
@@ -973,6 +982,8 @@ export class Etude {
       ...(def.demo ? { demo: def.demo } : {}),
       ...(def.metrics?.length ? { metrics: def.metrics } : {}),
       ...(def.showVerdict === false ? { showVerdict: false } : {}),
+      ...(def.skills && Object.keys(def.skills).length ? { skills: def.skills } : {}),
+      ...(def.variants ? { variants: def.variants } : {}),
     };
     const old = this.db.get("SELECT def FROM types WHERE id = ?", def.id);
     const sameDef = !!old && old.def === json(clean);
@@ -1666,7 +1677,10 @@ export class Etude {
     });
   }
 
-  /** Hides cards until the next study day, or `until`; `null` unburies. Returns changed ids. */
+  /**
+   * Hides cards until the next study day, or `until`; `null` unburies. Returns changed ids. Burying also
+   * discards an answer given but not yet rated (bury instead of rating: it doesn't count); rated answers stay.
+   */
   setBuried(cardIds: number[], until: Date | null = new Date(this.dayStart().getTime() + 86400_000), opts: { preserveExisting?: boolean } = {}) {
     const changed: number[] = [];
     const ts = iso();
@@ -1674,6 +1688,7 @@ export class Etude {
       for (const id of new Set(cardIds)) {
         const r = this.db.run("UPDATE cards SET buried_until = ? WHERE id = ? AND (? = 0 OR buried_until IS NULL OR buried_until <= ?)", until ? iso(until) : null, id, Number(!!opts.preserveExisting), ts);
         if (r.changes) changed.push(id);
+        if (until) this.db.run("DELETE FROM attempts WHERE card_id = ? AND review_id IS NULL", id);
       }
     });
     return changed;
@@ -1843,7 +1858,7 @@ export class Etude {
 
   // ------------------------------------------------------------ preparation
 
-  private generate(fields: Record<string, unknown>, seed: number, where: string): Record<string, unknown> {
+  private generate(fields: Record<string, unknown>, seed: number, where: string, learner: Learner | null = null): Record<string, unknown> {
     // An item's example answer for watch mode (`demo`, `demoGrade`) never reaches the card.
     if ("demo" in fields || "demoGrade" in fields) {
       fields = { ...fields };
@@ -1851,33 +1866,49 @@ export class Etude {
       delete fields.demoGrade;
     }
     if (typeof fields.generator !== "string") return fields;
-    const out = runScript<Record<string, unknown>>(fields.generator, { params: ["rng"], args: {}, seed, where: `${where}/generator` });
+    const out = runScript<Record<string, unknown>>(fields.generator, { params: ["rng", "learner"], args: { learner }, seed, where: `${where}/generator` });
     if (!out || typeof out !== "object" || Array.isArray(out)) throw new EtudeError(`${where}: generator must return an object of fields`);
     const merged = { ...fields, ...out };
     delete merged.generator;
     return merged;
   }
 
-  /** Turns an item into what one face of its card shows (`view`) and what grading needs (`key`). */
-  prepare(itemId: string, face: string, seed: number): Prepared & { fields: Record<string, unknown> } {
+  /**
+   * Turns an item into what one face of its card shows (`view`) and what grading needs (`key`).
+   * On adaptive decks `adapt` carries the learner estimates the scripts see; without it they get null.
+   */
+  prepare(itemId: string, face: string, seed: number, adapt: AdaptContext | null = null): Prepared & { fields: Record<string, unknown> } {
     const r = this.db.get("SELECT type, fields FROM items WHERE id = ?", itemId);
     if (!r) throw new EtudeError(`unknown item "${itemId}"`, 404);
     const def = this.type(r.type);
-    const fields = this.generate({ ...fieldDefaults(def), ...parse(r.fields, {}) }, seed, itemId);
+    const learner = adapt?.challenge ? adapt.learner : null;
+    let fields = this.generate({ ...fieldDefaults(def), ...parse(r.fields, {}) }, seed, itemId, learner);
+    if (learner && def.variants) fields = annotateVariants(def, fields, adapt!);
+    const adaptive: AdaptiveChoice | undefined = adapt
+      ? { asOf: adapt.learner.asOf, skill: adapt.learner.skill, goal: adapt.learner.goal, ...(adapt.session ? { placement: adapt.session } : {}), ...(adapt.learner.quickCheck ? { quickCheck: true } : {}) }
+      : undefined;
     if (def.prepare) {
-      const out = runScript<{ view?: Record<string, unknown>; key?: Record<string, unknown>; grader?: string }>(def.prepare, {
-        params: ["fields", "face", "rng"],
-        args: { fields, face },
+      const out = runScript<{ view?: Record<string, unknown>; key?: Record<string, unknown>; grader?: string; variant?: unknown; reason?: unknown }>(def.prepare, {
+        params: ["fields", "face", "rng", "learner"],
+        args: { fields, face, learner },
         seed: hashString(`${seed}:${itemId}:${face}`),
         where: `${def.id}/prepare`,
       });
-      return { view: out?.view ?? {}, key: out?.key ?? {}, seed, fields, ...(out?.grader === "self" ? { selfGraded: true } : {}) };
+      if (adaptive && learner) {
+        if (typeof out?.variant === "string" && out.variant) {
+          adaptive.variant = out.variant.slice(0, 200);
+          const prior = variantPrior(def, fields, adaptive.variant);
+          if (prior !== undefined) adaptive.difficulty = prior;
+        }
+        if (typeof out?.reason === "string" && out.reason.trim()) adaptive.reason = out.reason.trim().slice(0, 200);
+      }
+      return { view: out?.view ?? {}, key: out?.key ?? {}, seed, fields, ...(out?.grader === "self" ? { selfGraded: true } : {}), ...(adaptive ? { adaptive } : {}) };
     }
     const priv = new Set(def.fields.filter((f) => f.private).map((f) => f.name));
     const view: Record<string, unknown> = {};
     const key: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(fields)) (priv.has(k) ? key : view)[k] = v;
-    return { view, key, seed, fields };
+    return { view, key, seed, fields, ...(adaptive ? { adaptive } : {}) };
   }
 
   /**
@@ -1895,7 +1926,8 @@ export class Etude {
     try {
       merged = this.generate({ ...fieldDefaults(def), ...fields }, seed, "preview");
       if (def.prepare) {
-        const out = runScript<any>(def.prepare, { params: ["fields", "face", "rng"], args: { fields: merged, face }, seed: hashString(`${seed}:preview:${face}`), where: `${def.id}/prepare` });
+        // Previews have no learner: they show what a deck without adaptation shows.
+        const out = runScript<any>(def.prepare, { params: ["fields", "face", "rng", "learner"], args: { fields: merged, face, learner: null }, seed: hashString(`${seed}:preview:${face}`), where: `${def.id}/prepare` });
         view = out?.view ?? {};
         key = out?.key ?? {};
         if (out?.grader === "self") selfGraded = true;
@@ -1970,10 +2002,24 @@ export class Etude {
     return [...out.values()];
   }
 
+  // ------------------------------------------------------------- adaptive
+
+  /** Learner estimates for one showing of a card, as of `asOf`. Null unless the card's deck is adaptive. */
+  adaptContext(cardId: number, asOf: string, opts: { placement?: string | boolean } = {}): AdaptContext | null {
+    if (Number.isNaN(new Date(asOf).getTime())) throw new EtudeError("asOf must be an ISO date");
+    return this.adaptive.adaptContext(cardId, asOf, opts);
+  }
+
+  /** Skills, levels, placement and today's pace for an adaptive deck. */
+  learnerSummary(deck: string) {
+    return this.adaptive.learnerSummary(deck);
+  }
+
   /** The queue for a deck or search right now: learning, due reviews and today's new cards, in order. */
   queue(scope: StudyScope) {
     const t = now();
-    const { where, params, cfg } = this.scopeWhere(scope);
+    const { where, params, cfg: scopeCfg } = this.scopeWhere(scope);
+    let cfg = scopeCfg;
     const from = "FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
     const rows = this.db.all(
       `SELECT c.*, i.ord, d.name AS deck ${from} WHERE ${where} AND (c.buried_until IS NULL OR c.buried_until <= ?)`,
@@ -1997,6 +2043,12 @@ export class Etude {
     const nowIso = iso(t);
     const aheadIso = iso(new Date(t.getTime() + this.settings().learnAheadMinutes * 60_000));
 
+    const root = scope.deck ? this.adaptive.adaptiveRoot(scope.deck) : null;
+    if (scope.placement) {
+      const pick = this.adaptive.placementPick(root, rows, dayStart, placementSession(scope.placement));
+      return { learning: [] as typeof rows, reviews: [] as typeof rows, news: pick ? [pick] : [], doneNew, doneRev, cfg, nowIso, nextLater: null as string | null, ahead: false };
+    }
+
     if (scope.ahead) {
       // Study ahead: everything in scope, soonest due first, no daily limits. FSRS scales the gain for an early review.
       const byDue = (a: CardRow, b: CardRow) => a.due.localeCompare(b.due);
@@ -2015,7 +2067,14 @@ export class Etude {
       const day = dayStart.slice(0, 10);
       reviews.sort((a, b) => hashString(day + a.id) - hashString(day + b.id));
     } else reviews.sort((a, b) => a.due.localeCompare(b.due));
-    reviews = reviews.slice(0, Math.max(0, cfg.reviewsPerDay - doneRev));
+    // Today's answers against the limits. An adaptive deck's limits are for all of it, whichever subdeck is open.
+    const limits = root ? this.scopeWhere({ deck: root }) : { where, params };
+    const answered = this.db.all<{ id: number; face: string; state: number }>(
+      `SELECT c.id, c.face, r.state FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.state IN (0, 2) AND r.ts >= ? AND ${limits.where}`,
+      dayStart,
+      ...limits.params,
+    );
+    reviews = reviews.slice(0, Math.max(0, cfg.reviewsPerDay - answered.filter((r) => r.state === 2).length));
 
     // A new card given a later due date (setDue) waits until then.
     let news = rows.filter((c) => c.state === 0 && c.due <= nowIso);
@@ -2024,16 +2083,15 @@ export class Etude {
       news.sort((a, b) => hashString(day + a.id) - hashString(day + b.id));
     } else if (cfg.newOrder === "deck") news.sort((a, b) => a.deck.localeCompare(b.deck) || a.ord - b.ord || a.id - b.id);
     else news.sort((a, b) => a.ord - b.ord || a.id - b.id);
-    let room = Math.max(0, cfg.newPerDay - doneNew);
+    // Adaptive decks: the day's pace, quick checks after a placement (on top of the limits), and the level frontier.
+    let firsts = answered.filter((r) => r.state === 0);
+    let quick: typeof news = [];
+    if (root) ({ cfg, news, quick, firsts } = this.adaptive.newCards(root, cfg, news, firsts));
+    let room = Math.max(0, cfg.newPerDay - firsts.length);
     if (Object.keys(cfg.newPerFace).length) {
       // Faces with their own limit take what's left of it today, in the same order; the rest share newPerDay.
       const left = new Map(Object.entries(cfg.newPerFace).map(([face, n]) => [face, n ?? Infinity]));
-      for (const r of this.db.all<{ face: string; n: number }>(
-        `SELECT c.face, COUNT(*) AS n FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.state = 0 AND r.ts >= ? AND ${where} GROUP BY c.face`,
-        dayStart,
-        ...params,
-      ))
-        if (left.has(r.face)) left.set(r.face, left.get(r.face)! - r.n);
+      for (const r of firsts) if (left.has(r.face)) left.set(r.face, left.get(r.face)! - 1);
       news = news.filter((c) => {
         if (room <= 0) return false;
         const n = left.get(c.face);
@@ -2045,6 +2103,8 @@ export class Etude {
         return true;
       });
     } else news = news.slice(0, room);
+    // Quick checks mix in so both piles run out together: a short session still gets new cards.
+    if (quick.length) news = interleave(quick, news, answered.filter((r) => r.state === 0).length - firsts.length, firsts.length);
 
     const nextLater = rows
       .filter((c) => (c.state !== 0 && c.due > aheadIso) || (c.state === 0 && c.due > nowIso))
@@ -2096,18 +2156,20 @@ export class Etude {
     // Only the excluded card is left: show it rather than nothing.
     pick ??= q.learning[0] ?? q.reviews[0] ?? q.news[0];
     if (!pick) return { card: null, counts };
-    return { card: this.present(pick.id), counts };
+    return { card: this.present(pick.id, undefined, { placement: scope.placement }), counts };
   }
 
   /** Prepares a specific card for display. A new seed gives a new variant of generated items. */
-  present(cardId: number, seed?: number): StudyCard {
+  present(cardId: number, seed?: number, opts: { placement?: string | boolean } = {}): StudyCard {
     const c = this.db.get<CardRow & { type: string; deck: string; tags: string; source: string }>(
       "SELECT c.*, i.type, i.tags, i.source, d.name AS deck FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE c.id = ?",
       cardId,
     );
     if (!c) throw new EtudeError(`unknown card ${cardId}`, 404);
     const s = seed ?? Math.floor(Math.random() * 2 ** 31);
-    const p = this.prepare(c.item_id, c.face, s);
+    const asOf = iso(now());
+    const adapt = this.adaptContext(cardId, asOf, opts);
+    const p = this.prepare(c.item_id, c.face, s, adapt);
     const def = this.type(c.type);
     return {
       cardId: c.id,
@@ -2126,6 +2188,7 @@ export class Etude {
       showVerdict: def.showVerdict !== false,
       generated: typeof p.fields.generator === "string" || typeof parse<Record<string, unknown>>(this.db.get("SELECT fields FROM items WHERE id = ?", c.item_id)!.fields, {}).generator === "string",
       title: this.titleOf(c.type, p.fields),
+      ...(adapt ? { asOf, ...(adapt.session ? { placement: adapt.session } : {}), ...(adapt.learner.quickCheck ? { quickCheck: true } : {}) } : {}),
     };
   }
 
@@ -2196,7 +2259,8 @@ export class Etude {
 
   private gradingContext(c: { item_id: string; deck: string; type: string; tags: string }, prep: Prepared & { fields: Record<string, unknown> }, answer: unknown): GradingContext {
     const def = this.type(c.type);
-    const card: GradingContext["card"] = [];
+    // What the learner saw: which variant prepare picked, not only the item's fields.
+    const card: GradingContext["card"] = [{ label: "Prompt shown to the student", text: JSON.stringify(prep.view) }];
     const shown = new Set<string>();
     for (const f of def.fields) {
       const v = prep.fields[f.name];
@@ -2237,8 +2301,8 @@ export class Etude {
   }
 
   /** Grades an answer and stores the attempt. Scheduling waits for `rate`. */
-  async submit(cardId: number, seed: number, answer: unknown, opts: { practice?: boolean } = {}) {
-    const { grade, prep } = await this.grade(cardId, seed, answer);
+  async submit(cardId: number, seed: number, answer: unknown, opts: { practice?: boolean; asOf?: string; placement?: string | boolean } = {}) {
+    const { grade, prep } = await this.grade(cardId, seed, answer, { asOf: opts.asOf, placement: opts.placement });
     const stored = this.storeAnswer(answer, cardId);
     const id = Number(
       this.db.run("INSERT INTO attempts (card_id, ts, seed, view, answer, grade, practice) VALUES (?, ?, ?, ?, ?, ?, ?)", cardId, iso(), seed, json(prep.view), json(stored), json(grade), Number(!!opts.practice))
@@ -2250,11 +2314,19 @@ export class Etude {
   }
 
   /** Grades an answer against a card variant without storing anything. */
-  async grade(cardId: number, seed: number, answer: unknown, opts: { noAi?: boolean } = {}): Promise<{ grade: Grade; prep: Prepared & { fields: Record<string, unknown> } }> {
+  async grade(
+    cardId: number,
+    seed: number,
+    answer: unknown,
+    opts: { noAi?: boolean; asOf?: string; placement?: string | boolean } = {},
+  ): Promise<{ grade: Grade; prep: Prepared & { fields: Record<string, unknown> }; adapt: AdaptContext | null }> {
     const c = this.cardWithDeck(cardId);
     const def = this.type(c.type);
     const cfg = this.configFor(c.deck);
-    const prep = this.prepare(c.item_id, c.face, seed);
+    // The estimates as of when the card was shown, so prepare picks the same variant again.
+    const asOf = opts.asOf && opts.asOf < iso(now()) ? opts.asOf : iso(now());
+    const adapt = this.adaptContext(cardId, asOf, { placement: opts.placement });
+    const prep = this.prepare(c.item_id, c.face, seed, adapt);
     const g = def.grader;
     let grade: Grade;
     const t0 = Date.now();
@@ -2297,7 +2369,12 @@ export class Etude {
       const out = scripted();
       return out.defer === true || out.score == null;
     }
-    return { grade, prep };
+    if (prep.adaptive) {
+      grade.adaptive = prep.adaptive;
+      // A quick check answered right on first sight was already known: suggest Easy.
+      if (prep.adaptive.quickCheck && c.state === 0 && grade.score != null && grade.score >= cfg.autoRate.good && grade.suggested) grade.suggested = 4;
+    }
+    return { grade, prep, adapt };
   }
 
   /** Drawings go to disk next to the database, not into it. */
@@ -2330,7 +2407,10 @@ export class Etude {
     const grade = parse<Grade>(a.grade, {} as Grade);
     if (grade.feedback) return { feedback: grade.feedback, cached: true };
     const c = this.cardWithDeck(a.card_id);
-    const prep = this.prepare(c.item_id, c.face, a.seed);
+    const adapt = grade.adaptive ? this.adaptContext(a.card_id, grade.adaptive.asOf, { placement: grade.adaptive.placement }) : null;
+    const prep = this.prepare(c.item_id, c.face, a.seed, adapt);
+    // An adaptive card's state has moved on since: describe the view that was actually shown.
+    if (grade.adaptive) prep.view = parse(a.view, prep.view);
     const answer = this.loadAnswer(parse(a.answer, null));
     const ctx = this.gradingContext(c, prep, answer);
     ctx.verdict = grade.verdict;
@@ -2480,7 +2560,8 @@ export class Etude {
         const item = this.db.get("SELECT item_id FROM cards WHERE id = ?", r.card_id)!.item_id;
         this.db.run("UPDATE cards SET buried_until = NULL WHERE item_id = ? AND id != ?", item, r.card_id);
       }
-      this.db.run("UPDATE attempts SET review_id = NULL WHERE review_id = ?", r.id);
+      // The graded answer goes with its rating: an undone answer didn't happen.
+      this.db.run("DELETE FROM attempts WHERE review_id = ? OR id = ?", r.id, r.attempt_id ?? -1);
       this.db.run("DELETE FROM reviews WHERE id = ?", r.id);
       return { cardId: r.card_id, itemId: this.db.get("SELECT item_id FROM cards WHERE id = ?", r.card_id)!.item_id };
     });

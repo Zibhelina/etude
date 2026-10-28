@@ -145,7 +145,7 @@ export function EmbedStudy({ scope, limit, cardId, title }: { scope: Scope; limi
     busy.current = true;
     setPhase("grading");
     try {
-      const r = await api.submit(card.cardId, card.seed, answer);
+      const r = await api.submit(card, answer);
       const res: CardResult = { grade: r.grade, key: r.key, answer };
       setResult(res);
       setAttemptId(r.attemptId);
@@ -280,6 +280,7 @@ export function EmbedStudy({ scope, limit, cardId, title }: { scope: Scope; limi
                   {result.grade.verdict === "partial" && result.grade.score != null && <span className="tabular text-muted-foreground">{Math.round(result.grade.score * 100)}%</span>}
                 </div>
               )}
+              {result.grade.adaptive?.reason && <div className="text-xs text-muted-foreground">Picked for you: {result.grade.adaptive.reason}.</div>}
               {feedback?.loading && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Writing feedback…</div>}
               {feedback?.text && (
                 <div className="rounded-lg border px-3.5 py-2.5">

@@ -10,7 +10,8 @@ Notes for coding agents. Two different jobs:
 ```
 src/core/      engine.ts (every operation), model.ts, scheduler.ts (FSRS-6, deadlines), schedulers.ts (script schedulers; built-ins in schedulers/), optimize.ts (FSRS weights
                from review history), query.ts (search language), sandbox.ts (QuickJS), ai.ts (grading providers),
-               types.ts (type loading/validation)
+               types.ts (type loading/validation), adaptive.ts (adaptive decks: estimates, pace, levels, placement;
+               the math in learner.ts), util.ts (small shared helpers)
 src/server/    app.ts: the HTTP API the web app uses. Each route maps to an engine call.
 src/cli/       main.ts → run.ts (parsing, errors, dry run); registry.ts (command table);
                commands/<group>.ts (one file per noun); help.ts; pack-check.ts

@@ -31,7 +31,7 @@ command({
   name: "deck show",
   summary: "A deck with its effective settings and where each one comes from.",
   description:
-    "`resolved` is what applies to the deck's cards. `config` is the deck's own overrides, `inherited` what applies without them (parents and preset), `presetBase` what applies without the preset. `sources` names, per setting, the layer it comes from: default, parent-preset, parent, preset or deck.",
+    "`resolved` is what applies to the deck's cards. `config` is the deck's own overrides, `inherited` what applies without them (parents and preset), `presetBase` what applies without the preset. `sources` names, per setting, the layer it comes from: default, parent-preset, parent, preset or deck. `typeSchedulers` lists the card types here that pick their own scheduler: their cards use it while `sources.scheduler` is default.",
   args: [{ name: "deck", description: "Deck name; `::` separates levels.", required: true }],
   examples: ['etude deck show "Networks::Week 1"'],
   run(ctx) {
@@ -42,6 +42,7 @@ command({
     return {
       ...d,
       sources: configSources(e, d.name),
+      typeSchedulers: e.typeSchedulers(d.name),
       counts: node ? { cards: node.cards, unseen: node.unseen, new: node.new, learning: node.learning, review: node.review, doneToday: node.doneToday, nextDue: node.nextDue } : null,
       usage: e.deckUsage(d.name),
       subdecks: children,

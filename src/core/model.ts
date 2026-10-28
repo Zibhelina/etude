@@ -70,6 +70,13 @@ export interface CardTypeDef {
    */
   metrics?: MetricSpec[];
   /**
+   * The scheduler this type's cards use when their deck doesn't pick one (a typing test: "drill").
+   * A deck, its preset or a parent deck that sets `scheduler` wins, FSRS included.
+   */
+  scheduler?: string;
+  /** Default settings for `scheduler`; a deck's `schedulerOptions` override them key by key. */
+  schedulerOptions?: Record<string, unknown>;
+  /**
    * Files shipped once with the type, `{ name: base64 }`. Cards load them with `etude.asset(name)`.
    * Stored apart from the definition; omitted on save means "keep the stored ones".
    */

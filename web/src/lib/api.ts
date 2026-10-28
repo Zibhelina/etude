@@ -96,6 +96,14 @@ export interface SchedulerOption {
   suffix?: string;
 }
 
+/** A deck with its settings resolved, and the card types in it that pick their own scheduler. */
+export type DeckDetail = DeckNode & {
+  resolved: PresetConfig;
+  inherited: PresetConfig;
+  presetBase: PresetConfig;
+  typeSchedulers: { type: string; name: string; scheduler: string; cards: number }[];
+};
+
 export interface SchedulerSummary {
   id: string;
   name: string;
@@ -248,6 +256,9 @@ export interface CardType {
   demo?: string;
   /** Grader numbers worth tracking over time. */
   metrics?: { key: string; label?: string; unit?: string; better?: "higher" | "lower"; digits?: number }[];
+  /** The scheduler this type's cards use when their deck doesn't pick one. */
+  scheduler?: string;
+  schedulerOptions?: Record<string, unknown>;
   updated?: string;
   builtin?: boolean;
   /** Files the type ships with (read-only here; packs and `etude type import` set them). */
@@ -475,7 +486,7 @@ export const api = {
   decks: (archived = false) => call<DeckNode[]>("GET", `/api/decks${qs({ archived: archived ? 1 : undefined })}`),
   deckUsage: (name: string) => call<{ items: number; cards: number }>("GET", `/api/deck/usage${qs({ name })}`),
   setDeckArchived: (name: string, archived: boolean) => call<{ decks: string[]; archived: boolean }>("POST", `/api/deck/archive${qs({ name })}`, { archived, subdecks: true }),
-  deck: (name: string) => call<DeckNode & { resolved: PresetConfig; inherited: PresetConfig; presetBase: PresetConfig }>("GET", `/api/deck${qs({ name })}`),
+  deck: (name: string) => call<DeckDetail>("GET", `/api/deck${qs({ name })}`),
   /** The faces of the cards in a deck and its subdecks, with the types that make each and how many are new. */
   deckFaces: (name: string) => call<DeckFace[]>("GET", `/api/deck/faces${qs({ name })}`),
   createDeck: (name: string) => call("POST", "/api/decks", { name }),

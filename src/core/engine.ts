@@ -41,7 +41,7 @@ import {
 import { fitWeights, MIN_REVIEWS, OptimizerMissing, type Fit } from "./optimize.ts";
 import type { Learner } from "./learner.ts";
 import { Adaptive, annotateVariants, placementSession, variantPrior, type AdaptContext } from "./adaptive.ts";
-import { deckParts, hashString, parse } from "./util.ts";
+import { deckParts, hashString, interleave, parse } from "./util.ts";
 import { compile, isMediaRef, itemSearchText, QueryError, stripHtml, type Compiled } from "./query.ts";
 import { AGENT_EFFORTS, aiEditFields, aiFeedback, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type GradingContext } from "./ai.ts";
 import {
@@ -2103,7 +2103,8 @@ export class Etude {
         return true;
       });
     } else news = news.slice(0, room);
-    if (quick.length) news = [...quick, ...news];
+    // Quick checks mix in so both piles run out together: a short session still gets new cards.
+    if (quick.length) news = interleave(quick, news, answered.filter((r) => r.state === 0).length - firsts.length, firsts.length);
 
     const nextLater = rows
       .filter((c) => (c.state !== 0 && c.due > aheadIso) || (c.state === 0 && c.due > nowIso))

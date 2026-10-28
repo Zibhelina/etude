@@ -102,6 +102,24 @@ export function fitSkills(attempts: GradedAttempt[]): SkillModel {
 
 export const targetOf = (cfg: PresetConfig) => cfg.targetSuccess ?? cfg.desiredRetention;
 
+/**
+ * Whether an answer passed: rated above Again, or, unrated (a drill's run), scored at the target.
+ * Null for an unrated answer without a score, which says nothing.
+ */
+export function passes(rating: number, score: number | null, target: number): boolean | null {
+  if (rating >= 1) return rating > 1;
+  return score == null ? null : score >= target;
+}
+
+/** On a scheduler without a memory model (a drill, Leitner), a card is held once this many answers in a row passed. */
+export const HELD_ANSWERS = 3;
+
+/** Whether a card's answers before `before` (all of them by default) end in HELD_ANSWERS passes. */
+export function held(answers: { ts: string; pass: boolean }[], before?: string): boolean {
+  const prior = before === undefined ? answers : answers.filter((a) => a.ts < before);
+  return prior.length >= HELD_ANSWERS && prior.slice(-HELD_ANSWERS).every((a) => a.pass);
+}
+
 /** Young cards: in review with stability under this many days. Overload shows in them first. */
 export const YOUNG_STABILITY = 21;
 

@@ -190,6 +190,8 @@ Assets are stored apart from the definition:
 
 Only `view` reaches the card before grading. `key` goes to the grader, to `onResult` and to result templates. Without a prepare script, private fields go to `key` and every other field goes to `view`.
 
+Prepare can also return `retry`, to let a grader ask for another try instead of grading (see [Another try](#another-try)).
+
 ## Example answers (watch mode)
 
 A deck in watch mode (`mode: "watch"` in its preset or deck options) is a tour: the app shows its cards one by one, each with a **Show an answer** button that fills in an example answer and grades it like a real one, and nothing is scheduled. The example comes from:
@@ -212,6 +214,24 @@ A script-graded example is graded on the spot. AI-graded items can ship a record
 - `hybrid`: the script runs first. If it returns `defer: true` or `score: null`, the answer goes to the AI grader. Otherwise the script's score stands.
 
 If a script or AI grader fails, the attempt is kept as ungraded and the learner rates it themselves.
+
+### Another try
+
+Some answers deserve another try rather than a grade: right but not in the form the card asks for, or a different valid answer when the card practises a particular one. A grader can then return a hint instead of a grade. Nothing is recorded (no attempt, rating or review), the key stays hidden, and the student answers the same card again.
+
+- A `script` or `hybrid` grader returns `{ retry: "hint" }` (up to 600 characters).
+- An `ai` grader, or a hybrid's AI fallback, asks for another try only when prepare says when, with `retry.when`. These decisions use the configured language model.
+
+What prepare returns as `retry` (every key optional):
+
+| Key | |
+|---|---|
+| `when` | For AI graders: the case in which to ask for another try, in plain words ("the answer is a different word with the same meaning"). |
+| `conceal` | Text the hint must never show, such as the expected answer: each one becomes "…", in any case and with or without accents. |
+| `format` | The hint as shown, with `{hint}` for the grader's text: `"{hint} It starts with ch…"`. |
+| `hintField` | An optional text field the hint is saved to, so the next showings can include it. It is saved only if the card didn't change while the grader ran. |
+
+`study submit` and `study answer` return `retry: { hint, view }` (`view` is the card prepared again, with any saved hint) and `attemptId: null`.
 
 `showVerdict: false` hides "Correct / Not quite" and the grader's feedback after an answer (and skips automatic AI feedback). Use it when the card's own result screen is the answer, like a typing test. The score and details are still recorded. In the type editor it's the **Show the verdict and feedback** switch on the Grader tab.
 

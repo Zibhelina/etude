@@ -129,7 +129,7 @@ command({
 
 command({
   name: "study submit",
-  summary: "Grade an answer and store the attempt. Returns the grade, the suggested rating and the answer key. Doesn't schedule: follow with `study rate`.",
+  summary: "Grade an answer and store the attempt, or return the hint when the grader asks for another try. Doesn't schedule: follow a grade with `study rate`.",
   args: [{ name: "ref", description: "Card id (or item id with one card).", required: true }],
   flags: [
     { name: "seed", type: "number", description: "The seed from `study next`/`study card`. Required, so the grade matches what was shown." },
@@ -142,14 +142,14 @@ command({
   ],
   writes: true,
   examples: ['etude study submit 42 --seed 7 --answer \'["1.2 ms"]\'', "etude study submit 43 --seed 3 --answer-file answer.md"],
-  output: "{ attemptId, cardId, grade: { score, verdict, feedback, details, suggested, grader }, suggested: { rating, name }, key, wantsFeedback, feedback? }",
+  output: "{ attemptId: number | null, cardId, grade, suggested, key, wantsFeedback, retry: { hint, view } | null, feedback? }; retry means the grader asked for another try: nothing was stored and there is no key; show retry.hint and ask again with the same card and seed",
   async run(ctx) {
     if (ctx.flags.seed === undefined) throw new CliError("--seed is required (from `study next` or `study card`)");
     const cardId = oneCard(ctx, ctx.args.ref);
     const answer = shaped(ctx, cardId, ctx.flags.seed, answerOf(ctx));
     const r = await ctx.e.submit(cardId, ctx.flags.seed, answer, { practice: ctx.flags.practice, asOf: ctx.flags["as-of"], placement: ctx.flags.placement });
-    const out: Record<string, unknown> = { attemptId: r.attemptId, cardId, answer, grade: r.grade, suggested: r.grade.suggested ? { rating: r.grade.suggested, name: RATING_NAMES[r.grade.suggested] } : null, key: r.key, wantsFeedback: r.wantsFeedback };
-    if (ctx.flags.feedback && !r.grade.feedback) {
+    const out: Record<string, unknown> = { attemptId: r.attemptId, cardId, answer, grade: r.grade, suggested: r.grade.suggested ? { rating: r.grade.suggested, name: RATING_NAMES[r.grade.suggested] } : null, key: r.key, wantsFeedback: r.wantsFeedback, retry: r.retry };
+    if (ctx.flags.feedback && r.attemptId !== null && !r.grade.feedback) {
       try {
         out.feedback = (await ctx.e.feedback(r.attemptId)).feedback;
       } catch (e) {
@@ -200,7 +200,7 @@ command({
   name: "study answer",
   summary: "Submit and rate in one step: grades the answer, then applies the suggested rating (or the one you give).",
   description:
-    "`--rate auto` (default) uses the grader's suggestion and fails, without rating, when there is none (self-graded cards, or a grading error): then ask the learner and run `study rate`. The attempt is still stored.",
+    "`--rate auto` (default) uses the grader's suggestion. When there is none (self-graded cards or a grading error), ask the learner and run `study rate`; the attempt is still stored. When the grader asks for another try, nothing is stored or rated, even with an explicit --rate: show retry.hint and ask again with the same card and seed.",
   args: [{ name: "ref", description: "Card id (or item id with one card).", required: true }],
   flags: [
     { name: "seed", type: "number", description: "The seed the card was shown with." },
@@ -214,13 +214,14 @@ command({
   ],
   writes: true,
   examples: ['etude study answer 42 --seed 7 --answer \'["1.2"]\'', 'etude study answer 50 --seed 1 --answer "" --rate good'],
-  output: "{ attemptId, grade, key, rated: { reviewId, rating, due, in } | null, needsRating? }",
+  output: "{ attemptId: number | null, grade, key, retry: { hint, view } | null, rated: { reviewId, rating, due, in } | null, needsRating? }",
   async run(ctx) {
     if (ctx.flags.seed === undefined) throw new CliError("--seed is required");
     const cardId = oneCard(ctx, ctx.args.ref);
     const answer = shaped(ctx, cardId, ctx.flags.seed, answerOf(ctx, false));
     const r = await ctx.e.submit(cardId, ctx.flags.seed, answer, { practice: ctx.flags.practice, asOf: ctx.flags["as-of"], placement: ctx.flags.placement });
-    const base = { attemptId: r.attemptId, cardId, answer, grade: r.grade, key: r.key };
+    const base = { attemptId: r.attemptId, cardId, answer, grade: r.grade, key: r.key, retry: r.retry };
+    if (r.retry) return { ...base, rated: null, needsRating: false };
     if (!ctx.e.cardSchedule(cardId).scheduler.ratings) {
       // A drill records the result itself; there's nothing to choose.
       const rv = ctx.e.rate(cardId, 0, { attemptId: r.attemptId, durationMs: ctx.flags.duration, practice: ctx.flags.practice });

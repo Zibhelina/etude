@@ -68,5 +68,6 @@
       "digits": 0
     }
   ],
-  "showVerdict": false
+  "showVerdict": false,
+  "scheduler": "drill"
 }

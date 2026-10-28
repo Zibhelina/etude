@@ -4,6 +4,8 @@ A card type decides what a card *is*: how it looks, how you answer and how the a
 
 Every deck has one scheduler (set in the deck's Options, in a preset, or with `etude deck set "Deck" scheduler=<id>`). Subdecks inherit it like any other setting.
 
+A card type can name the scheduler its cards need (`"scheduler": "drill"` in its definition; see [Card types](types.md#shape)). Those cards use it whenever no deck layer sets `scheduler`, so a typing test added to any deck is a drill without changing the deck. Once the deck, its preset or a parent sets one, FSRS included, that applies to every card in it. The deck's Options list the types that pick their own scheduler, and `etude deck show` returns them as `typeSchedulers`.
+
 | Scheduler | Asks for a rating | Good for |
 | --- | --- | --- |
 | `fsrs` (default) | Again / Hard / Good / Easy | Things you want to remember. Each card comes back right before you'd forget it. |
@@ -16,6 +18,8 @@ Every deck has one scheduler (set in the deck's Options, in a preset, or with `e
 ```sh
 etude deck set "Typing" scheduler=drill schedulerOptions.perDay=3
 ```
+
+A typing type that names `drill` as its scheduler doesn't need this: its cards are drills in any deck that doesn't pick a scheduler.
 
 A typing card has nothing to remember, so FSRS makes no sense for it: there is no "forgetting" to predict, and the real result is your WPM. On a drill deck:
 
@@ -92,7 +96,7 @@ etude scheduler import ./every-monday
 etude deck set "Weekly review" scheduler=every-monday schedulerOptions.weeks=2
 ```
 
-`etude scheduler export drill -o my-drill` gives you a built-in one to start from. A pack can carry its schedulers in a top-level `"schedulers": [...]` array, and `etude pack export` includes the custom ones its decks use.
+`etude scheduler export drill -o my-drill` gives you a built-in one to start from. A pack can carry its schedulers in a top-level `"schedulers": [...]` array, and `etude pack export` includes the custom ones its decks, presets and types use.
 
 ## Charting what a type measures
 

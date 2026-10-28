@@ -471,7 +471,7 @@ etude deck set "German" newPerFace.t1=5
 
 A deck with its effective settings and where each one comes from.
 
-`resolved` is what applies to the deck's cards. `config` is the deck's own overrides, `inherited` what applies without them (parents and preset), `presetBase` what applies without the preset. `sources` names, per setting, the layer it comes from: default, parent-preset, parent, preset or deck.
+`resolved` is what applies to the deck's cards. `config` is the deck's own overrides, `inherited` what applies without them (parents and preset), `presetBase` what applies without the preset. `sources` names, per setting, the layer it comes from: default, parent-preset, parent, preset or deck. `typeSchedulers` lists the card types here that pick their own scheduler: their cards use it while `sources.scheduler` is default.
 
 ```
 etude deck show <deck>

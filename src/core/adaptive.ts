@@ -11,9 +11,10 @@ import { deckParts, hashString, parse } from "./util.ts";
 export interface AdaptiveHost {
   db: Db;
   configFor(deck: string): PresetConfig;
+  cardConfig(deck: string, type: string): PresetConfig;
   type(id: string): CardTypeDef;
   scriptFor(cfg: PresetConfig): SchedulerDef | null;
-  cardWithDeck(cardId: number): CardRow & { deck: string };
+  cardWithDeck(cardId: number): CardRow & { deck: string; type: string };
   /** The deck's stored name; throws for an unknown deck. */
   deckName(deck: string): string;
   dayStart(at: Date): Date;
@@ -244,7 +245,7 @@ export class Adaptive {
   /** Learner estimates for one showing of a card, as of `asOf`. Null unless the card's deck is adaptive. */
   adaptContext(cardId: number, asOf: string, opts: { placement?: string | boolean } = {}): AdaptContext | null {
     const c = this.host.cardWithDeck(cardId);
-    const cfg = this.host.configFor(c.deck);
+    const cfg = this.host.cardConfig(c.deck, c.type);
     if (!cfg.adaptiveChallenge && !cfg.adaptivePace) return null;
     const root = this.adaptiveRoot(c.deck);
     if (!root) return null;

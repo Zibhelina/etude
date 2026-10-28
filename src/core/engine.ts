@@ -312,6 +312,7 @@ export class Etude {
     this.adaptive = new Adaptive({
       db,
       configFor: (deck) => this.configFor(deck),
+      cardConfig: (deck, type) => this.cardConfig(deck, type),
       type: (id) => this.type(id),
       scriptFor: (cfg) => this.scriptFor(cfg),
       cardWithDeck: (cardId) => this.cardWithDeck(cardId),
@@ -752,6 +753,7 @@ export class Etude {
     const users = [
       ...this.db.all("SELECT name, config FROM decks").filter((d) => parse<Partial<PresetConfig>>(d.config, {}).scheduler === id).map((d) => `deck ${d.name}`),
       ...this.db.all("SELECT id, config FROM presets").filter((p) => parse<Partial<PresetConfig>>(p.config, {}).scheduler === id).map((p) => `preset ${p.id}`),
+      ...this.db.all("SELECT id, def FROM types").filter((t) => parse<Partial<CardTypeDef>>(t.def, {}).scheduler === id).map((t) => `type ${t.id}`),
     ];
     if (users.length) throw new EtudeError(`scheduler "${id}" is used by ${users.slice(0, 5).join(", ")}${users.length > 5 ? ", …" : ""}`, 409);
     this.db.run("DELETE FROM schedulers WHERE id = ?", id);
@@ -1023,9 +1025,12 @@ export class Etude {
       ...(def.demo ? { demo: def.demo } : {}),
       ...(def.metrics?.length ? { metrics: def.metrics } : {}),
       ...(def.showVerdict === false ? { showVerdict: false } : {}),
+      ...(def.scheduler ? { scheduler: def.scheduler } : {}),
+      ...(def.scheduler && def.schedulerOptions && Object.keys(def.schedulerOptions).length ? { schedulerOptions: def.schedulerOptions } : {}),
       ...(def.skills && Object.keys(def.skills).length ? { skills: def.skills } : {}),
       ...(def.variants ? { variants: def.variants } : {}),
     };
+    this.checkSchedulerRef({ scheduler: clean.scheduler });
     const old = this.db.get("SELECT def FROM types WHERE id = ?", def.id);
     const sameDef = !!old && old.def === json(clean);
     if (sameDef && (def.assets === undefined || !this.assetsDiffer(def.id, def.assets))) {
@@ -1044,6 +1049,21 @@ export class Etude {
       if (!sameDef) {
         leftover = this.ensureCardsForType(clean.id);
         this.reindexItems({ type: clean });
+      }
+      // A new preferred scheduler: replay the history of the cards it now schedules (or stopped scheduling).
+      const was = parse<Partial<CardTypeDef>>(old?.def, {});
+      if (old && json([was.scheduler ?? null, was.schedulerOptions ?? null]) !== json([clean.scheduler ?? null, clean.schedulerOptions ?? null])) {
+        this.typeCache.delete(clean.id);
+        const decks = new Map<string, boolean>();
+        const follows = (deck: string) => {
+          if (!decks.has(deck)) decks.set(deck, !this.configLayers(deck).some((l) => l.scheduler !== undefined));
+          return decks.get(deck)!;
+        };
+        this.replayCards(
+          this.db
+            .all(`SELECT c.id, c.item_id, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE i.type = ?`, clean.id)
+            .filter((c) => follows(c.deck)),
+        );
       }
     });
     this.typeCache.delete(def.id);
@@ -1332,6 +1352,22 @@ export class Etude {
     };
   }
 
+  /** Card types in a deck (subdecks too) that pick their own scheduler, used while no deck layer sets one. */
+  typeSchedulers(nameOrId: string | number): { type: string; name: string; scheduler: string; cards: number }[] {
+    const deckName = this.deckRow(nameOrId).name;
+    const like = deckName.replace(/[\\%_]/g, "\\$&") + "::%";
+    return this.db
+      .all<{ type: string; cards: number }>(
+        "SELECT i.type, COUNT(c.id) AS cards FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE i.archived = 0 AND (d.name = ? OR d.name LIKE ? ESCAPE '\\') GROUP BY i.type ORDER BY i.type",
+        deckName,
+        like,
+      )
+      .flatMap((r) => {
+        const scheduler = this.typeSchedulerLayer(r.type)?.scheduler;
+        return scheduler ? [{ type: r.type, name: this.type(r.type).name, scheduler, cards: r.cards }] : [];
+      });
+  }
+
   private deckFromRow(r: Row): Deck {
     return { id: r.id, name: r.name, presetId: r.preset_id, config: parse(r.config, {}), description: r.description, instructions: r.instructions, archived: !!r.archived, position: r.position ?? null };
   }
@@ -1473,6 +1509,30 @@ export class Etude {
 
   /** Settings for a deck: defaults, then each ancestor's preset and own overrides, root first. */
   configFor(deckName: string, opts: { excludeOwn?: boolean; excludePreset?: boolean } = {}): PresetConfig {
+    return sched.resolveConfig(...this.configLayers(deckName, opts));
+  }
+
+  /**
+   * A card's settings: its deck's, with its type's preferred scheduler underneath, so the type's
+   * choice applies only when no deck layer (its own, its preset's or a parent's) sets `scheduler`.
+   */
+  cardConfig(deckName: string, typeId: string): PresetConfig {
+    const layers = this.configLayers(deckName);
+    if (layers.some((l) => l.scheduler !== undefined)) return sched.resolveConfig(...layers);
+    return sched.resolveConfig(this.typeSchedulerLayer(typeId), ...layers);
+  }
+
+  private typeSchedulerLayer(typeId: string): Partial<PresetConfig> | null {
+    let def: CardTypeDef;
+    try {
+      def = this.type(typeId);
+    } catch {
+      return null;
+    }
+    return def.scheduler ? { scheduler: def.scheduler, ...(def.schedulerOptions ? { schedulerOptions: def.schedulerOptions } : {}) } : null;
+  }
+
+  private configLayers(deckName: string, opts: { excludeOwn?: boolean; excludePreset?: boolean } = {}): Partial<PresetConfig>[] {
     const parts = deckParts(deckName);
     const layers: Partial<PresetConfig>[] = [];
     for (let i = 1; i <= parts.length; i++) {
@@ -1485,7 +1545,7 @@ export class Etude {
       }
       if (!(own && opts.excludeOwn)) layers.push(parse(r.config, {}));
     }
-    return sched.resolveConfig(...layers);
+    return layers;
   }
 
   // ---------------------------------------------------------------- tags
@@ -1543,7 +1603,7 @@ export class Etude {
     const r = this.db.get("SELECT i.*, d.name AS deck FROM items i JOIN decks d ON d.id = i.deck_id WHERE i.id = ?", id);
     if (!r) throw new EtudeError(`unknown item "${id}"`, 404);
     const cards = this.db.all<CardRow>("SELECT * FROM cards WHERE item_id = ? ORDER BY id", id);
-    const cfg = this.configFor(r.deck);
+    const cfg = this.cardConfig(r.deck, r.type);
     const t = now();
     return {
       ...this.itemFromRow(r),
@@ -1744,7 +1804,7 @@ export class Etude {
   /** A card's scheduling right now, with what each rating would do. */
   cardSchedule(cardId: number) {
     const c = this.cardWithDeck(cardId);
-    const cfg = this.configFor(c.deck);
+    const cfg = this.cardConfig(c.deck, c.type);
     const t = now();
     const row: CardRow = { ...c };
     return {
@@ -1863,7 +1923,8 @@ export class Etude {
     return {
       total,
       rows: rows.map((r) => {
-        if (!cfgs.has(r.deck)) cfgs.set(r.deck, this.configFor(r.deck));
+        const key = `${r.deck}\0${r.type}`;
+        if (!cfgs.has(key)) cfgs.set(key, this.cardConfig(r.deck, r.type));
         const fields = parse<Record<string, unknown>>(r.fields, {});
         return {
           cardId: r.id,
@@ -1882,7 +1943,7 @@ export class Etude {
           suspended: !!r.suspended,
           archived: !!r.archived,
           generated: typeof fields.generator === "string",
-          retrievability: sched.retrievability(r as CardRow, t, cfgs.get(r.deck)!),
+          retrievability: this.scriptFor(cfgs.get(key)!) ? null : sched.retrievability(r as CardRow, t, cfgs.get(key)!),
         };
       }),
     };
@@ -2075,10 +2136,10 @@ export class Etude {
     let cfg = scopeCfg;
     const from = "FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
     const rows = this.db.all(
-      `SELECT c.*, i.ord, d.name AS deck ${from} WHERE ${where} AND (c.buried_until IS NULL OR c.buried_until <= ?)`,
+      `SELECT c.*, i.ord, i.type, d.name AS deck ${from} WHERE ${where} AND (c.buried_until IS NULL OR c.buried_until <= ?)`,
       ...params,
       iso(t),
-    ) as (CardRow & { ord: number; deck: string })[];
+    ) as (CardRow & { ord: number; deck: string; type: string })[];
     // Watch decks are tours, not study: their cards never enter the queue.
     const watching = new Map<string, boolean>();
     const watch = (deck: string) => {
@@ -2114,7 +2175,13 @@ export class Etude {
     let reviews = rows.filter((c) => c.state === 2 && c.due <= nowIso);
     if (cfg.reviewOrder === "retrievability") {
       // Cards on a script scheduler have no predicted recall; they sort after the weakest FSRS cards, by due.
-      const R = new Map(reviews.map((c) => [c.id, this.scriptFor(this.configFor(c.deck)) ? 2 : (sched.retrievability(c, t, this.configFor(c.deck)) ?? 1)]));
+      const cfgs = new Map<string, PresetConfig>();
+      const cfgOf = (c: (typeof reviews)[number]) => {
+        const key = `${c.deck}\0${c.type}`;
+        if (!cfgs.has(key)) cfgs.set(key, this.cardConfig(c.deck, c.type));
+        return cfgs.get(key)!;
+      };
+      const R = new Map(reviews.map((c) => [c.id, this.scriptFor(cfgOf(c)) ? 2 : (sched.retrievability(c, t, cfgOf(c)) ?? 1)]));
       reviews.sort((a, b) => R.get(a.id)! - R.get(b.id)!);
     } else if (cfg.reviewOrder === "random") {
       const day = dayStart.slice(0, 10);
@@ -2236,7 +2303,7 @@ export class Etude {
       state: c.state,
       seed: s,
       view: p.view,
-      ...this.previewFor(c, this.configFor(c.deck), now()),
+      ...this.previewFor(c, this.cardConfig(c.deck, c.type), now()),
       grader: p.selfGraded ? "self" : def.grader.kind,
       showVerdict: def.showVerdict !== false,
       generated: typeof p.fields.generator === "string" || typeof parse<Record<string, unknown>>(this.db.get("SELECT fields FROM items WHERE id = ?", c.item_id)!.fields, {}).generator === "string",
@@ -2567,7 +2634,7 @@ export class Etude {
   rate(cardId: number, rating: Rating | 0, opts: { attemptId?: number | null; durationMs?: number; practice?: boolean; at?: Date } = {}) {
     const c = this.cardWithDeck(cardId);
     const t = opts.at ?? now();
-    const cfg = this.configFor(c.deck);
+    const cfg = this.cardConfig(c.deck, c.type);
     const script = this.scriptFor(cfg);
     const rated = !script || script.ratings !== false;
     if (rated && ![1, 2, 3, 4].includes(rating)) throw new EtudeError("rating must be 1 (again), 2 (hard), 3 (good) or 4 (easy)");
@@ -2641,8 +2708,8 @@ export class Etude {
 
   /** Canonical sync replay uses UTC study days, a stable review tie-break and no FSRS fuzz. */
   replaySyncedCards() {
-    for (const c of this.db.all("SELECT c.*,i.created,d.name AS deck FROM cards c JOIN items i ON i.id=c.item_id JOIN decks d ON d.id=i.deck_id")) {
-      const cfg = { ...this.configFor(c.deck), enableFuzz: false };
+    for (const c of this.db.all("SELECT c.*,i.created,i.type,d.name AS deck FROM cards c JOIN items i ON i.id=c.item_id JOIN decks d ON d.id=i.deck_id")) {
+      const cfg = { ...this.cardConfig(c.deck, c.type), enableFuzz: false };
       const script = this.scriptFor(cfg);
       let row: any = { ...c, ...sched.emptyCard(new Date(c.sync_reset ?? c.created)), sched_state: null };
       const history: { at: string; rating: number | null; score: number | null }[] = [];
@@ -2672,7 +2739,7 @@ export class Etude {
   /** Recomputes cards from their review history with the current settings, e.g. after changing retention. */
   reschedule(scope: StudyScope = {}) {
     const { where, params } = this.scopeWhere({ ...scope });
-    return this.replayCards(this.db.all(`SELECT c.id, c.item_id, d.name AS deck, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${where.replace("c.suspended = 0", "1")}`, ...params));
+    return this.replayCards(this.db.all(`SELECT c.id, c.item_id, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${where.replace("c.suspended = 0", "1")}`, ...params));
   }
 
   private replayCards(cards: Row[]) {
@@ -2684,7 +2751,7 @@ export class Etude {
           c.id,
         );
         if (!reviews.length) continue;
-        const cfg = this.configFor(c.deck);
+        const cfg = this.cardConfig(c.deck, c.type);
         const script = this.scriptFor(cfg);
         if (script) {
           // Same script, same history: run it again answer by answer.
@@ -2753,14 +2820,21 @@ export class Etude {
     const decks = this.db
       .all<{ id: number; name: string }>("SELECT id, name FROM decks ORDER BY name")
       .filter((d) => JSON.stringify(this.weightsSource(d.name)) === key && !this.scriptFor(this.configFor(d.name)));
+    const fsrsOf = new Map<string, boolean>();
+    const onFsrs = (deck: string, type: string) => {
+      const key = `${deck}\0${type}`;
+      if (!fsrsOf.has(key)) fsrsOf.set(key, !this.scriptFor(this.cardConfig(deck, type)));
+      return fsrsOf.get(key)!;
+    };
     if (!decks.length) throw new EtudeError(`no FSRS deck takes its weights from ${source.kind === "preset" ? `preset "${source.id}"` : `deck "${source.name}"`}`);
     const ids = decks.map((d) => d.id);
     const marks = ids.map(() => "?").join(", ");
     const reviews = this.db
-      .all<{ card_id: number; ts: string; rating: number; state: number; duration_ms: number | null }>(
-        `SELECT r.card_id, r.ts, r.rating, r.state, r.duration_ms FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id WHERE r.practice = 0 AND i.deck_id IN (${marks}) ORDER BY r.card_id, r.ts`,
+      .all<{ card_id: number; ts: string; rating: number; state: number; duration_ms: number | null; deck: string; type: string }>(
+        `SELECT r.card_id, r.ts, r.rating, r.state, r.duration_ms, d.name AS deck, i.type FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND i.deck_id IN (${marks}) ORDER BY r.card_id, r.ts`,
         ...ids,
       )
+      .filter((r) => onFsrs(r.deck, r.type))
       .map((r) => ({ cardId: r.card_id, ts: r.ts, rating: r.rating, state: r.state, durationMs: r.duration_ms }));
     if (reviews.length < MIN_REVIEWS) throw new EtudeError(`optimizing needs at least ${MIN_REVIEWS} reviews; ${decks.length === 1 ? "this deck has" : `these ${decks.length} decks have`} ${reviews.length}`);
     const cfg = this.configFor(decks[0].name);
@@ -2802,7 +2876,7 @@ export class Etude {
       out.applied = true;
       if (opts.reschedule) {
         out.rescheduled = this.replayCards(
-          this.db.all(`SELECT c.id, c.item_id, d.name AS deck, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE d.id IN (${marks})`, ...ids),
+          this.db.all(`SELECT c.id, c.item_id, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE d.id IN (${marks})`, ...ids),
         ).rescheduled;
       }
     }
@@ -2897,17 +2971,19 @@ export class Etude {
       if (!cfgs.has(deck)) cfgs.set(deck, this.configFor(deck));
       return cfgs.get(deck)!;
     };
+    // A card's type can pick the scheduler when its deck doesn't, so the kind goes by deck and type.
     const kinds = new Map<string, { kind: "fsrs" | "rated" | "drill"; def: SchedulerDef | null }>();
-    const kindOf = (deck: string) => {
-      if (!kinds.has(deck)) {
-        const def = this.scriptFor(cfgOf(deck));
-        kinds.set(deck, { kind: !def ? "fsrs" : def.ratings === false ? "drill" : "rated", def });
+    const kindOf = (deck: string, type: string) => {
+      const key = `${deck}\0${type}`;
+      if (!kinds.has(key)) {
+        const def = this.scriptFor(this.cardConfig(deck, type));
+        kinds.set(key, { kind: !def ? "fsrs" : def.ratings === false ? "drill" : "rated", def });
       }
-      return kinds.get(deck)!;
+      return kinds.get(key)!;
     };
-    const onScript = (deck: string) => kindOf(deck).kind !== "fsrs";
+    const onScript = (deck: string, type: string) => kindOf(deck, type).kind !== "fsrs";
     const everything = this.db.all<CardRow & { deck: string; tags: string; item_id: string; type: string; fields: string }>(`SELECT c.*, d.name AS deck, i.tags, i.type, i.fields ${from} WHERE ${where}`, ...params);
-    const all = everything.filter((c) => !onScript(c.deck));
+    const all = everything.filter((c) => !onScript(c.deck, c.type));
     // Card states and maturity are FSRS's; a script scheduler's cards are counted in `schedulers`.
     const states = { total: all.length, new: 0, learning: 0, review: 0, mature: 0 };
     for (const c of all) {
@@ -2932,7 +3008,7 @@ export class Etude {
     const since30 = dayAt(-29);
     const rvFrom = `FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id`;
     const windowStart = since < since30 ? since : since30;
-    const rv = this.db.all(`SELECT r.ts, r.rating, r.state, r.duration_ms, d.name AS deck ${rvFrom} WHERE r.ts >= ? AND r.practice = 0 AND ${where}`, iso(windowStart), ...params);
+    const rv = this.db.all(`SELECT r.ts, r.rating, r.state, r.duration_ms, d.name AS deck, i.type ${rvFrom} WHERE r.ts >= ? AND r.practice = 0 AND ${where}`, iso(windowStart), ...params);
     // Pass rates only count rated reviews; a drill's answers (rating 0) are runs, measured in its own metrics.
     // Retention is FSRS's: a script scheduler's pass rate is reported per scheduler.
     const byDay = new Map<string, { reviews: number; again: number; runs: number; ms: number }>();
@@ -2943,7 +3019,7 @@ export class Etude {
     const sinceIso = iso(since), since30Iso = iso(since30), todayIso = iso(today);
     const todayRuns = { runs: 0 };
     for (const r of rv) {
-      const fsrs = kindOf(r.deck).kind === "fsrs";
+      const fsrs = kindOf(r.deck, r.type).kind === "fsrs";
       const run = r.rating === 0;
       if (fsrs && r.ts >= since30Iso && r.state === 2 && r.rating >= 1) {
         reviewed30++;
@@ -2985,7 +3061,7 @@ export class Etude {
     // Forecast: overdue cards land on today. A drill is always ready by design, so it stays out:
     // it's counted as `ready` in its scheduler's summary instead.
     const forecast: { day: string; due: number }[] = [];
-    const dueRows = everything.filter((c) => c.state !== 0 && kindOf(c.deck).kind !== "drill");
+    const dueRows = everything.filter((c) => c.state !== 0 && kindOf(c.deck, c.type).kind !== "drill");
     const bounds = Array.from({ length: 31 }, (_, i) => dayAt(i).getTime());
     const buckets = new Array(30).fill(0);
     let overdue = 0;
@@ -3090,7 +3166,7 @@ export class Etude {
       if (w < 0 || w >= weekCount) continue;
       weeks[w].reviews++;
       weeks[w].ms += r.duration_ms ?? 0;
-      if (kindOf(r.deck).kind === "fsrs" && r.state === 2 && r.rating >= 1) {
+      if (kindOf(r.deck, r.type).kind === "fsrs" && r.state === 2 && r.rating >= 1) {
         weeks[w].reviewed++;
         if (r.rating > 1) weeks[w].passed++;
       }
@@ -3138,14 +3214,14 @@ export class Etude {
       window: { days, from: dayKey(since), to: dayKey(today) },
       deadline: scope.deck ? (cfg.deadline ?? null) : null,
       deadlineMargin: cfg.deadlineMargin,
-      /** The scope's own scheduler (a deck's), or null for "all decks". */
-      scheduler: scope.deck ? cfg.scheduler : null,
+      /** The scope's own scheduler (a deck's, or the one all its cards follow), or null for "all decks". */
+      scheduler: scope.deck ? (schedulers.length === 1 ? schedulers[0].id : cfg.scheduler) : null,
       /** Every scheduler with cards in scope, FSRS first: how many cards, what's due, and what its state says. */
       schedulers,
       /** Cards whose results are measurements: every graded attempt's numbers over time. */
       // Measured cards: drills, and any card whose type declares metrics. A rated script's cards (Leitner)
       // are reviews like FSRS's, not measurements, so they don't get a chart each.
-      practice: this.practiceStats(everything.filter((c) => kindOf(c.deck).kind === "drill" || !!this.typeMetrics(c.type)), sinceIso),
+      practice: this.practiceStats(everything.filter((c) => kindOf(c.deck, c.type).kind === "drill" || !!this.typeMetrics(c.type)), sinceIso),
     };
   }
 
@@ -3155,9 +3231,9 @@ export class Etude {
    * value of their state (Leitner: cards per box).
    */
   private schedulerSummary(
-    cards: (CardRow & { deck: string })[],
+    cards: (CardRow & { deck: string; type: string })[],
     rv: Row[],
-    kindOf: (deck: string) => { kind: "fsrs" | "rated" | "drill"; def: SchedulerDef | null },
+    kindOf: (deck: string, type: string) => { kind: "fsrs" | "rated" | "drill"; def: SchedulerDef | null },
     t: Date,
     sinceIso: string,
     tomorrow: Date,
@@ -3177,8 +3253,8 @@ export class Etude {
       passRate: number | null;
       groups: { label: string; bins: { key: string; cards: number }[]; other: number } | null;
     };
-    const out = new Map<string, Summary & { values: Map<string, number>; deckSet: Set<string> }>();
-    const idOf = (deck: string) => kindOf(deck).def?.id ?? FSRS;
+    const out = new Map<string, Summary & { values: Map<string, number>; deckSet: Set<string>; def: SchedulerDef | null }>();
+    const idOf = (deck: string, type: string) => kindOf(deck, type).def?.id ?? FSRS;
     const pick = (obj: unknown, path: string): unknown => {
       let v: any = obj;
       for (const k of path.split(".")) v = v == null ? undefined : v[k];
@@ -3186,11 +3262,11 @@ export class Etude {
     };
     const nowMs = t.getTime(), tomorrowMs = tomorrow.getTime();
     for (const c of cards) {
-      const { kind, def } = kindOf(c.deck);
-      const id = idOf(c.deck);
+      const { kind, def } = kindOf(c.deck, c.type);
+      const id = idOf(c.deck, c.type);
       let e = out.get(id);
       if (!e) {
-        e = { id, name: def?.name ?? "FSRS", kind, decks: [], cards: 0, new: 0, due: 0, answers: 0, rated: 0, passed: 0, passRate: null, groups: null, values: new Map(), deckSet: new Set() };
+        e = { id, name: def?.name ?? "FSRS", kind, decks: [], cards: 0, new: 0, due: 0, answers: 0, rated: 0, passed: 0, passRate: null, groups: null, values: new Map(), deckSet: new Set(), def };
         out.set(id, e);
       }
       e.cards++;
@@ -3206,7 +3282,7 @@ export class Etude {
     }
     for (const r of rv) {
       if (r.ts < sinceIso) continue;
-      const e = out.get(idOf(r.deck));
+      const e = out.get(idOf(r.deck, r.type));
       if (!e) continue;
       e.answers++;
       if (r.rating >= 1) {
@@ -3216,8 +3292,7 @@ export class Etude {
     }
     return [...out.values()]
       .sort((a, b) => (a.id === FSRS ? -1 : b.id === FSRS ? 1 : b.cards - a.cards))
-      .map(({ values, deckSet, ...e }) => {
-        const def = kindOf([...deckSet][0]).def;
+      .map(({ values, deckSet, def, ...e }) => {
         let groups: Summary["groups"] = null;
         if (def?.stats) {
           const other = values.get("") ?? 0;
@@ -3313,7 +3388,7 @@ export class Etude {
         deck: c.deck,
         type: c.type,
         title: this.titleOf(c.type, parse<Record<string, unknown>>(c.fields, {}), { private: true }),
-        scheduler: this.configFor(c.deck).scheduler,
+        scheduler: this.cardConfig(c.deck, c.type).scheduler,
         sessions: grades.length,
         metrics,
         days: [...byDay.entries()].sort().map(([day, sessions]) => ({ day, sessions })),
@@ -3556,9 +3631,11 @@ export class Etude {
     const presetIds = new Set(decks.map((d) => d.presetId).filter(Boolean) as string[]);
     const typeIds = new Set(items.map((i) => i.type));
     const custom = this.db.all("SELECT id FROM types WHERE builtin = 0").filter((t) => typeIds.has(t.id)).map((t) => this.typeWithAssets(t.id));
-    // Script schedulers the exported decks or presets use, unless they ship with Etude unchanged.
+    // Script schedulers the exported decks, presets or types use, unless they ship with Etude unchanged.
     const schedulerIds = new Set(
-      [...decks.map((d) => d.config.scheduler), ...[...presetIds].map((id) => this.preset(id).config.scheduler)].filter((x): x is string => !!x && x !== FSRS),
+      [...decks.map((d) => d.config.scheduler), ...[...presetIds].map((id) => this.preset(id).config.scheduler), ...[...typeIds].map((id) => this.typeSchedulerLayer(id)?.scheduler)].filter(
+        (x): x is string => !!x && x !== FSRS,
+      ),
     );
     const schedulers = this.db.all("SELECT id, def FROM schedulers WHERE builtin = 0").filter((r) => schedulerIds.has(r.id)).map((r) => parse(r.def, {}));
     const tagSet = new Set(items.flatMap((i) => parse<string[]>(i.tags, [])));

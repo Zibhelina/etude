@@ -13,6 +13,7 @@ export interface Grade {
   confidence?: number;
   /** `example`: a recorded grade shown in watch mode, not one made for this answer. */
   grader: { kind: string; model?: string; ms?: number; cost?: number; error?: string; example?: boolean };
+  retry?: { hint: string };
   /** On adaptive decks: what was picked for this showing and why. */
   adaptive?: { asOf: string; skill: string; variant?: string; reason?: string; placement?: string | boolean; quickCheck?: boolean };
 }
@@ -527,7 +528,7 @@ export const api = {
     call<{ card: StudyCard | null; counts: Counts }>("GET", `/api/study/next${qs({ deck: s.deck, q: s.q, ahead: s.ahead ? 1 : undefined, placement: s.placement || undefined, exclude })}`),
   card: (cardId: number, seed?: number) => call<StudyCard>("GET", `/api/study/card/${cardId}${qs({ seed })}`),
   submit: (card: Pick<StudyCard, "cardId" | "seed" | "asOf" | "placement">, answer: unknown, practice = false) =>
-    call<{ attemptId: number; grade: Grade; key: Record<string, unknown>; wantsFeedback: boolean }>("POST", "/api/study/submit", {
+    call<{ attemptId: number | null; grade: Grade; key: Record<string, unknown>; wantsFeedback: boolean; retry: { hint: string; view: Record<string, unknown> } | null }>("POST", "/api/study/submit", {
       cardId: card.cardId,
       seed: card.seed,
       answer,

@@ -2067,7 +2067,14 @@ export class Etude {
       const day = dayStart.slice(0, 10);
       reviews.sort((a, b) => hashString(day + a.id) - hashString(day + b.id));
     } else reviews.sort((a, b) => a.due.localeCompare(b.due));
-    reviews = reviews.slice(0, Math.max(0, cfg.reviewsPerDay - doneRev));
+    // Today's answers against the limits. An adaptive deck's limits are for all of it, whichever subdeck is open.
+    const limits = root ? this.scopeWhere({ deck: root }) : { where, params };
+    const answered = this.db.all<{ id: number; face: string; state: number }>(
+      `SELECT c.id, c.face, r.state FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.state IN (0, 2) AND r.ts >= ? AND ${limits.where}`,
+      dayStart,
+      ...limits.params,
+    );
+    reviews = reviews.slice(0, Math.max(0, cfg.reviewsPerDay - answered.filter((r) => r.state === 2).length));
 
     // A new card given a later due date (setDue) waits until then.
     let news = rows.filter((c) => c.state === 0 && c.due <= nowIso);
@@ -2076,20 +2083,15 @@ export class Etude {
       news.sort((a, b) => hashString(day + a.id) - hashString(day + b.id));
     } else if (cfg.newOrder === "deck") news.sort((a, b) => a.deck.localeCompare(b.deck) || a.ord - b.ord || a.id - b.id);
     else news.sort((a, b) => a.ord - b.ord || a.id - b.id);
-    // Adaptive decks: the day's pace, quick checks after a placement (on top of newPerDay), and the level frontier.
+    // Adaptive decks: the day's pace, quick checks after a placement (on top of the limits), and the level frontier.
+    let firsts = answered.filter((r) => r.state === 0);
     let quick: typeof news = [];
-    let doneQuick = 0;
-    if (root) ({ cfg, news, quick, doneQuick } = this.adaptive.newCards(root, cfg, news, dayStart, where, params));
-    let room = Math.max(0, cfg.newPerDay - (doneNew - doneQuick));
+    if (root) ({ cfg, news, quick, firsts } = this.adaptive.newCards(root, cfg, news, firsts));
+    let room = Math.max(0, cfg.newPerDay - firsts.length);
     if (Object.keys(cfg.newPerFace).length) {
       // Faces with their own limit take what's left of it today, in the same order; the rest share newPerDay.
       const left = new Map(Object.entries(cfg.newPerFace).map(([face, n]) => [face, n ?? Infinity]));
-      for (const r of this.db.all<{ face: string; n: number }>(
-        `SELECT c.face, COUNT(*) AS n FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.state = 0 AND r.ts >= ? AND ${where} GROUP BY c.face`,
-        dayStart,
-        ...params,
-      ))
-        if (left.has(r.face)) left.set(r.face, left.get(r.face)! - r.n);
+      for (const r of firsts) if (left.has(r.face)) left.set(r.face, left.get(r.face)! - 1);
       news = news.filter((c) => {
         if (room <= 0) return false;
         const n = left.get(c.face);

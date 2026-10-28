@@ -3,7 +3,6 @@
 // in preparing a card. The math is in learner.ts; decks without these settings never get here.
 import type { Db } from "./db.ts";
 import type { CardRow, CardTypeDef, Grade, PresetConfig, SchedulerDef } from "./model.ts";
-import type { SqlValue } from "./sql.ts";
 import * as sched from "./scheduler.ts";
 import * as learn from "./learner.ts";
 import { deckParts, hashString, parse } from "./util.ts";
@@ -283,35 +282,47 @@ export class Adaptive {
     return { learner, ...(session ? { session } : {}), challenge: cfg.adaptiveChallenge, itemId: c.item_id, cardId, model, known: A.known, seen: A.seen };
   }
 
-  /** Today's new-card limit for an adaptive root, from the last seven days before today. */
+  /**
+   * Today's new-card limit for an adaptive root, from the last seven days before today. Only new cards
+   * taught count: a card first shown as a placement probe or a quick check was tested, not learned, so
+   * neither that showing nor its later reviews say what new cards cost.
+   */
   private paceFor(root: string, cfg: PresetConfig): learn.Pace {
     const day = this.host.dayStart(new Date());
     const from = new Date(day.getTime() - 7 * 86400_000).toISOString(), to = day.toISOString();
     const scope = "(d.name = ? OR d.name LIKE ? ESCAPE '\\')";
     const sp = [root, root.replace(/[\\%_]/g, "\\$&") + "::%"];
     const join = "JOIN cards c ON c.id = x.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
+    const tested = new Set<number>();
+    let news = 0;
+    for (const r of this.host.db.all(`SELECT x.card_id, x.ts, a.grade FROM reviews x ${join} LEFT JOIN attempts a ON a.id = x.attempt_id WHERE x.practice = 0 AND x.state = 0 AND ${scope}`, ...sp)) {
+      const ad = parse<Partial<Grade>>(r.grade, {}).adaptive;
+      if (ad?.placement || ad?.quickCheck) tested.add(r.card_id);
+      else if (r.ts >= from && r.ts < to) news++;
+    }
     // Reviews of young cards (in review, stability under three weeks): did recently learned cards hold?
     const young = { reviews: 0, passed: 0 };
-    for (const r of this.host.db.all(`SELECT x.rating, x.card_before FROM reviews x ${join} WHERE x.practice = 0 AND x.state = 2 AND x.ts >= ? AND x.ts < ? AND ${scope}`, from, to, ...sp)) {
-      if (!(parse<{ stability?: number }>(r.card_before, {}).stability! < learn.YOUNG_STABILITY)) continue;
+    for (const r of this.host.db.all(`SELECT x.card_id, x.rating, x.card_before FROM reviews x ${join} WHERE x.practice = 0 AND x.state = 2 AND x.ts >= ? AND x.ts < ? AND ${scope}`, from, to, ...sp)) {
+      if (tested.has(r.card_id) || !(parse<{ stability?: number }>(r.card_before, {}).stability! < learn.YOUNG_STABILITY)) continue;
       young.reviews++;
       if (r.rating > 1) young.passed++;
     }
     // Reviews without a recorded duration count as 15 seconds.
     const rv = this.host.db.get(
-      `SELECT SUM(COALESCE(x.duration_ms, 15000)) AS ms, SUM(x.state = 0) AS news, COUNT(DISTINCT substr(x.ts, 1, 10)) AS days FROM reviews x ${join} WHERE x.practice = 0 AND x.ts >= ? AND x.ts < ? AND ${scope}`,
+      `SELECT SUM(COALESCE(x.duration_ms, 15000)) AS ms, COUNT(DISTINCT substr(x.ts, 1, 10)) AS days FROM reviews x ${join} WHERE x.practice = 0 AND x.ts >= ? AND x.ts < ? AND ${scope}`,
       from,
       to,
       ...sp,
     )!;
-    return learn.pace(cfg, { activeDays: Number(rv.days ?? 0), young, minutes: Number(rv.ms ?? 0) / 60000, newCards: Number(rv.news ?? 0) });
+    return learn.pace(cfg, { activeDays: Number(rv.days ?? 0), young, minutes: Number(rv.ms ?? 0) / 60000, newCards: news });
   }
 
   /**
    * Today's new cards on an adaptive root: the pace sets newPerDay, cards in bands a placement passed
    * come as quick checks (on top of it, up to quickChecksPerDay), and the level frontier orders the rest.
+   * `firsts` are today's first showings across the root; the ones that count toward the new-card limits come back.
    */
-  newCards<T extends CardRow>(root: string, cfg: PresetConfig, news: T[], dayStart: string, where: string, params: SqlValue[]) {
+  newCards<T extends CardRow, F extends { id: number }>(root: string, cfg: PresetConfig, news: T[], firsts: F[]) {
     const A = this.rootData(root);
     if (cfg.adaptivePace) cfg = { ...cfg, newPerDay: this.paceFor(root, A.cfg).value };
     const passed = (id: number) => {
@@ -320,16 +331,10 @@ export class Adaptive {
     };
     let quick = news.filter((c) => passed(c.id));
     if (quick.length) news = news.filter((c) => !passed(c.id));
-    const doneQuick = this.host.db
-      .all<{ card_id: number }>(
-        `SELECT r.card_id FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.state = 0 AND r.ts >= ? AND ${where}`,
-        dayStart,
-        ...params,
-      )
-      .filter((r) => passed(r.card_id)).length;
+    const doneQuick = firsts.filter((r) => passed(r.id)).length;
     quick = quick.slice(0, Math.max(0, cfg.quickChecksPerDay - doneQuick));
     if (A.levels) news = this.levelFrontier(A, news);
-    return { cfg, news, quick, doneQuick };
+    return { cfg, news, quick, firsts: firsts.filter((r) => !passed(r.id)) };
   }
 
   /** New cards up to the learner's level for each skill, with the next level's mixed in once it opens. Higher ones wait. */

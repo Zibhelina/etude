@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, MessageSquareText, RotateCcw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CardFrame, type CardFrameHandle, type CardResult } from "@/components/card-frame";
+import { AnswerRetry } from "@/components/answer-retry";
 import { Markdown } from "@/components/markdown";
 import { api, humanInterval, RATING_LABEL, type Counts, type Rating, type Scope, type StudyCard } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -79,6 +80,7 @@ export function EmbedStudy({ scope, limit, cardId, title }: { scope: Scope; limi
   const [counts, setCounts] = useState<Counts | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const [result, setResult] = useState<CardResult | null>(null);
+  const [retry, setRetry] = useState<{ hint: string; count: number } | null>(null);
   const [attemptId, setAttemptId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<{ text?: string; loading?: boolean; error?: string } | null>(null);
   const [ready, setReady] = useState(true);
@@ -94,6 +96,7 @@ export function EmbedStudy({ scope, limit, cardId, title }: { scope: Scope; limi
 
   const reset = () => {
     setResult(null);
+    setRetry(null);
     setAttemptId(null);
     setFeedback(null);
     setReady(true);
@@ -146,13 +149,19 @@ export function EmbedStudy({ scope, limit, cardId, title }: { scope: Scope; limi
     setPhase("grading");
     try {
       const r = await api.submit(card, answer);
+      if (r.retry) {
+        setRetry((previous) => ({ hint: r.retry!.hint, count: (previous?.count ?? 0) + 1 }));
+        setReady(true);
+        setPhase("answer");
+        return;
+      }
       const res: CardResult = { grade: r.grade, key: r.key, answer };
       setResult(res);
       setAttemptId(r.attemptId);
       frame.current?.showResult(res);
       setPhase("result");
       if (r.grade.feedback && card.showVerdict !== false) setFeedback({ text: r.grade.feedback });
-      else if (r.wantsFeedback) askFeedback(r.attemptId);
+      else if (r.wantsFeedback && r.attemptId !== null) askFeedback(r.attemptId);
     } catch {
       setPhase("answer");
     } finally {
@@ -262,10 +271,11 @@ export function EmbedStudy({ scope, limit, cardId, title }: { scope: Scope; limi
         </div>
       ) : card ? (
         <>
+          {retry && phase === "answer" && <AnswerRetry hint={retry.hint} />}
           <CardFrame
             ref={frame}
             src={`/frame/${encodeURIComponent(card.type)}?v=${encodeURIComponent(card.typeVersion)}`}
-            frameKey={`${card.cardId}:${card.seed}:${card.typeVersion}`}
+            frameKey={`${card.cardId}:${card.seed}:${card.typeVersion}:${retry?.count ?? 0}`}
             view={card.view}
             autoFocus={done.length > 0}
             onSubmit={onSubmit}

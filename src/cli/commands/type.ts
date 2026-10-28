@@ -178,10 +178,11 @@ command({
   name: "type test-grade",
   summary: "Run a type's grader on an answer without saving anything.",
   description:
-    "Script and hybrid graders run locally on sample fields (or --item's fields). AI graders need a real card: pass --item and the configured AI providers are called (no attempt is stored). Answers are JSON when they parse (`[\"1.2\"]`, `{\"l0\":\"r0\"}`), text otherwise.",
+    "Script and hybrid graders run locally on sample fields (or --item's fields). Use --ai with --item to test a hybrid grader's AI fallback, including asking for another try. AI graders always need --item. Provider calls store no attempt and save no hint. Answers are JSON when they parse (`[\"1.2\"]`, `{\"l0\":\"r0\"}`), text otherwise.",
   args: [{ name: "id", description: "Type id (ignored with --from).", required: false }],
   flags: [
     ...PREVIEW_FLAGS,
+    { name: "ai", type: "boolean", description: "Allow a hybrid grader's AI fallback. Requires --item and a stored type (no --from)." },
     { name: "answer", type: "string", description: "The answer (`-` reads stdin).", placeholder: "VALUE" },
     { name: "answer-file", type: "string", description: "Read the answer from a file.", placeholder: "PATH" },
   ],
@@ -196,7 +197,8 @@ command({
     else if (ctx.flags.item) def = strip(ctx.e.type(ctx.e.item(ctx.flags.item).type));
     else throw new CliError("give a type id, --from <dir> or --item <id>");
     const kind = def.grader.kind;
-    if (kind === "ai" && !ctx.flags.from) {
+    if (ctx.flags.ai && (!ctx.flags.item || ctx.flags.from)) throw new CliError("--ai requires --item and a stored type (no --from)");
+    if ((kind === "ai" || (kind === "hybrid" && ctx.flags.ai)) && !ctx.flags.from) {
       if (!ctx.flags.item) throw new CliError(`type ${def.id} is graded by AI; pass --item <id> to grade against a real card`);
       const it = ctx.e.item(ctx.flags.item);
       const card = it.cards.find((c) => !ctx.flags.face || c.face === ctx.flags.face) ?? it.cards[0];

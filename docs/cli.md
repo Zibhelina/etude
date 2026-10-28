@@ -303,7 +303,7 @@ These work on every command, before or after the command words.
   - [`study counts`](#study-counts) Today's queue for a scope: new, learning, review, done today, next due.
   - [`study next`](#study-next) The next card to study in a scope, with its view and how to answer it. Private fields are never included.
   - [`study card`](#study-card) Present a specific card (any time, due or not). A seed reproduces a variant; a new seed gives a new one.
-  - [`study submit`](#study-submit) Grade an answer and store the attempt. Returns the grade, the suggested rating and the answer key. Doesn't schedule: follow with `study rate`.
+  - [`study submit`](#study-submit) Grade an answer and store the attempt, or return the hint when the grader asks for another try. Doesn't schedule: follow a grade with `study rate`.
   - [`study feedback`](#study-feedback) AI feedback for an attempt (written once, then cached).
   - [`study rate`](#study-rate) Record a rating and reschedule the card. Pass --attempt to link the graded attempt.
   - [`study answer`](#study-answer) Submit and rate in one step: grades the answer, then applies the suggested rating (or the one you give).
@@ -2250,7 +2250,7 @@ etude type preview --from ./unit-circle --item showcase.unit-circle.mixed
 
 Run a type's grader on an answer without saving anything.
 
-Script and hybrid graders run locally on sample fields (or --item's fields). AI graders need a real card: pass --item and the configured AI providers are called (no attempt is stored). Answers are JSON when they parse (`["1.2"]`, `{"l0":"r0"}`), text otherwise.
+Script and hybrid graders run locally on sample fields (or --item's fields). Use --ai with --item to test a hybrid grader's AI fallback, including asking for another try. AI graders always need --item. Provider calls store no attempt and save no hint. Answers are JSON when they parse (`["1.2"]`, `{"l0":"r0"}`), text otherwise.
 
 ```
 etude type test-grade [id] [flags]
@@ -2270,6 +2270,7 @@ etude type test-grade [id] [flags]
 | `--seed <N>` | number | Seed for prepare scripts and generators. Default `1`. |
 | `--face <VALUE>` | string | Face to render (types with several faces). |
 | `--from <DIR\|FILE>` | string | Use an unsaved type from a directory or JSON file instead of the stored one. |
+| `--ai` | boolean | Allow a hybrid grader's AI fallback. Requires --item and a stored type (no --from). |
 | `--answer <VALUE>` | string | The answer (`-` reads stdin). |
 | `--answer-file <PATH>` | string | Read the answer from a file. |
 
@@ -2805,7 +2806,7 @@ etude study card 42 --seed 7
 
 <a id="study-submit"></a>
 
-Grade an answer and store the attempt. Returns the grade, the suggested rating and the answer key. Doesn't schedule: follow with `study rate`.
+Grade an answer and store the attempt, or return the hint when the grader asks for another try. Doesn't schedule: follow a grade with `study rate`.
 
 ```
 etude study submit <ref> [flags]
@@ -2829,7 +2830,7 @@ etude study submit <ref> [flags]
 | `--as-of <ISO>` | string | The card's `asOf` from `study next`/`study card` (adaptive decks), so the grade matches the variant shown. |
 | `--placement <SESSION>` | string | Placement on an adaptive deck: only probes that find the learner's level. The value names the session (any text, e.g. today's date): use the same one for every probe and when submitting; a new name starts a fresh placement, and the latest placement is the one that counts. |
 
-Output: { attemptId, cardId, grade: { score, verdict, feedback, details, suggested, grader }, suggested: { rating, name }, key, wantsFeedback, feedback? }
+Output: { attemptId: number | null, cardId, grade, suggested, key, wantsFeedback, retry: { hint, view } | null, feedback? }; retry means the grader asked for another try: nothing was stored and there is no key; show retry.hint and ask again with the same card and seed
 
 ```sh
 etude study submit 42 --seed 7 --answer '["1.2 ms"]'
@@ -2892,7 +2893,7 @@ etude study rate 42 1
 
 Submit and rate in one step: grades the answer, then applies the suggested rating (or the one you give).
 
-`--rate auto` (default) uses the grader's suggestion and fails, without rating, when there is none (self-graded cards, or a grading error): then ask the learner and run `study rate`. The attempt is still stored.
+`--rate auto` (default) uses the grader's suggestion. When there is none (self-graded cards or a grading error), ask the learner and run `study rate`; the attempt is still stored. When the grader asks for another try, nothing is stored or rated, even with an explicit --rate: show retry.hint and ask again with the same card and seed.
 
 ```
 etude study answer <ref> [flags]
@@ -2917,7 +2918,7 @@ etude study answer <ref> [flags]
 | `--as-of <ISO>` | string | The card's `asOf` from `study next`/`study card` (adaptive decks), so the grade matches the variant shown. |
 | `--placement <SESSION>` | string | Placement on an adaptive deck: only probes that find the learner's level. The value names the session (any text, e.g. today's date): use the same one for every probe and when submitting; a new name starts a fresh placement, and the latest placement is the one that counts. |
 
-Output: { attemptId, grade, key, rated: { reviewId, rating, due, in } | null, needsRating? }
+Output: { attemptId: number | null, grade, key, retry: { hint, view } | null, rated: { reviewId, rating, due, in } | null, needsRating? }
 
 ```sh
 etude study answer 42 --seed 7 --answer '["1.2"]'

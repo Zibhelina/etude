@@ -304,8 +304,22 @@ export interface Grade {
   confidence?: number;
   /** `example`: a recorded grade shown in watch mode, not one made for this answer. */
   grader: { kind: string; model?: string; ms?: number; cost?: number; error?: string; example?: boolean };
+  /** The grader asked for another try instead of grading: the hint is shown and nothing is recorded. */
+  retry?: { hint: string };
   /** On adaptive decks: what was chosen for this showing and why, as of when it was shown. */
   adaptive?: AdaptiveChoice;
+}
+
+/** What prepare returns as `retry`: when a grader may ask for another try, and how the hint is shown. */
+export interface RetrySpec {
+  /** For AI graders: when to ask for another try instead of grading. Without it, only a script grader can. */
+  when?: string;
+  /** Text the hint must never show, such as the expected answer: each one is replaced by "…". */
+  conceal?: string[];
+  /** The hint as shown, with `{hint}` for the grader's text. Default `{hint}`. */
+  format?: string;
+  /** An optional text field the hint is saved to, so later showings can include it. */
+  hintField?: string;
 }
 
 export interface AdaptiveChoice {
@@ -329,6 +343,8 @@ export interface Prepared {
   seed: number;
   /** Set when prepare returned `grader: "self"`: this variant is revealed and self-rated, whatever the type's grader. */
   selfGraded?: boolean;
+  /** From prepare: how this showing may ask for another try. Stays on the server. */
+  retry?: RetrySpec;
   /** Set on adaptive decks: what prepare chose, from the learner it was given. */
   adaptive?: AdaptiveChoice;
 }

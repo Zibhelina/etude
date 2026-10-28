@@ -33,7 +33,7 @@ command({
     "Skills come from the card types' faces (and `skill::` tags), measured across the highest deck with an adaptive setting on. `typical` is the predicted chance of getting a middling card right. Everything is computed from the graded history, so nothing here is stored. A deck that isn't adaptive reports `adaptive: false`.",
   args: [{ name: "deck", description: "Deck name.", required: true }],
   examples: ['etude stats skills "Course"'],
-  output: "{ deck, adaptive, root?, settings?, skills?: [{ skill, answers, success, ability, typical, level: { index, tag, progress, checkPassed, done, nextOpen } | null, placement: { probes, done, frontier } | null }], pace?: { value, base, youngRetention, minutesPerDay, reason } | null }",
+  output: "{ deck, adaptive, root?, settings?, skills?: [{ skill, answers, success, ability, typical, level: { index, tag, progress, checkPassed, done, nextOpen } | null, placement: { probes, done, frontier, revised, checks: { done, passed } } | null }], known?: { items, assumed }, pace?: { value, base, youngRetention, minutesPerDay, reason } | null }",
   run: (ctx) => ctx.e.learnerSummary(ctx.args.deck),
 });
 

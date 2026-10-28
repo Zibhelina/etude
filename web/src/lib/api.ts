@@ -78,8 +78,9 @@ export type LearnerSummary =
         ability: number | null;
         typical: number | null;
         level: LevelState | null;
-        placement: { probes: number; done: boolean; frontier: string } | null;
+        placement: { probes: number; done: boolean; frontier: string; revised: boolean; checks: { done: number; passed: number } } | null;
       }[];
+      known: { items: number; assumed: number };
       pace: { value: number; base: number; youngRetention: number | null; minutesPerDay: number | null; reason: string } | null;
     };
 

@@ -9,7 +9,7 @@ import { validateConfig } from "../src/core/scheduler.ts";
 import { validateType } from "../src/core/types.ts";
 import { initSandbox } from "../src/core/sandbox.ts";
 import { checkPack } from "../src/cli/pack-check.ts";
-import { fitSkills, levelState, pace, placementState } from "../src/core/learner.ts";
+import { fitSkills, levelState, pace, placementState, revisedFrontier } from "../src/core/learner.ts";
 
 // A sentence type that picks the variant closest to the target when it gets a learner, and a random one otherwise.
 const CONTEXT_TYPE = {
@@ -168,6 +168,14 @@ test("learner math: Elo-style skills, pace, placement bisection and levels", () 
   assert.equal(settled.next, null);
   void settled;
 
+  const checks = (...bands: boolean[][]) => new Map(bands.map((xs, i) => [i, xs]));
+  const n = (k: number, right: boolean) => Array<boolean>(k).fill(right);
+  assert.equal(revisedFrontier(3, checks(n(9, false))), 3, "nine quick checks aren't enough to revise");
+  assert.equal(revisedFrontier(3, checks([...n(5, true), ...n(5, false)])), 0);
+  assert.equal(revisedFrontier(3, checks([...n(6, true), ...n(4, false)])), 3, "60% right holds");
+  assert.equal(revisedFrontier(3, checks([...n(10, false), ...n(30, true)])), 0, "a revision stands");
+  assert.equal(revisedFrontier(3, checks(n(20, true), n(10, false))), 1, "a later band can fail on its own");
+
   const levels = [{ tag: "l1" }, { tag: "l2", check: "check::2" }, { tag: "l3" }];
   const counts = [{ total: 10, stable: 9, checks: 0, checksPassed: 0 }, { total: 10, stable: 9, checks: 2, checksPassed: 1 }, { total: 10, stable: 0, checks: 0, checksPassed: 0 }];
   const st = levelState(levels, counts, cfg);
@@ -237,6 +245,49 @@ test("placement finds the level with real reviews; earlier cards become quick ch
   assert.ok(redo >= 3, `${redo} probes in the second session`);
   const s2 = e.learnerSummary("Course");
   if (s2.adaptive) for (const k of s2.skills) assert.equal(k.placement?.frontier, "level::1", JSON.stringify(k));
+  done();
+});
+
+test("a placement vouches for the cards it passed until one is missed; missing many lowers it", async () => {
+  const { e, done } = await setup({ perLevel: 20 });
+  e.updateDeck("Course", { config: { adaptiveChallenge: true, levels: LEVELS.map((tag) => ({ tag })), burySiblings: false, quickChecksPerDay: 100 } });
+  const level = (item: string) => Math.floor((Number(item.slice(1)) - 1) / 20);
+  for (let i = 0; i < 60; i++) {
+    const { card } = e.next({ deck: "Course", placement: "p" });
+    if (!card) break;
+    const r = await e.submit(card.cardId, card.seed, level(card.itemId) < 2 ? card.itemId : "?", { asOf: card.asOf, placement: card.placement });
+    e.rate(card.cardId, r.grade.suggested!, { attemptId: r.attemptId! });
+  }
+  const fresh = e.db.all<{ id: string }>("SELECT id FROM items i WHERE NOT EXISTS (SELECT 1 FROM reviews r JOIN cards c ON c.id = r.card_id WHERE c.item_id = i.id) ORDER BY ord").map((r) => r.id);
+  const known = () => e.adaptContext(cardOf(e, "w1"), new Date().toISOString())!.known;
+  const k = known();
+  assert.ok(fresh.some((id) => level(id) < 2) && fresh.filter((id) => level(id) < 2).every((id) => k.has(id)), "untested items in passed levels count as known");
+  assert.ok(fresh.filter((id) => level(id) === 2).every((id) => !k.has(id)));
+  const s = e.learnerSummary("Course");
+  assert.ok(s.adaptive && s.known.assumed > 0, JSON.stringify(s));
+
+  const miss = async (item: string) => {
+    const c = e.present(cardOf(e, item), 1);
+    assert.equal(c.quickCheck, true, item);
+    const r = await e.submit(c.cardId, c.seed, "?", { asOf: c.asOf });
+    e.rate(c.cardId, 1, { attemptId: r.attemptId! });
+  };
+  const level1 = fresh.filter((id) => level(id) === 0);
+  assert.ok(level1.length >= 11, `${level1.length} untested level 1 items`);
+  await miss(level1[0]);
+  assert.ok(!known().has(level1[0]), "missed: no longer assumed known");
+  assert.ok(known().has(level1[1]));
+
+  // Nine more misses in level 1: the reading placement drops to level 1, and its cards are taught, not checked.
+  for (const id of level1.slice(1, 10)) await miss(id);
+  const s2 = e.learnerSummary("Course");
+  assert.ok(s2.adaptive);
+  if (s2.adaptive) {
+    const reading = s2.skills.find((x) => x.skill === "reading")!.placement!;
+    assert.deepEqual([reading.frontier, reading.revised, reading.checks], ["level::1", true, { done: 10, passed: 0 }]);
+    assert.equal(s2.skills.find((x) => x.skill === "listening")!.placement!.frontier, "level::3", "listening has its own placement");
+  }
+  assert.ok(!e.present(cardOf(e, level1[10]), 1).quickCheck, "no longer a quick check");
   done();
 });
 

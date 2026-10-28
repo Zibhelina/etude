@@ -864,6 +864,11 @@ function AdaptiveSummary({ deck, hasNew }: { deck: string; hasNew: boolean }) {
               <span className="text-foreground">{s.skill}</span> {s.level ? `${s.level.tag.split("::").pop()} · ${pct(s.level.progress)} stable` : pct(s.success)}
             </span>
           ))}
+          {summary.known.items > 0 && (
+            <span title={summary.known.assumed ? `${summary.known.assumed} of them from your placement, until you miss one` : undefined}>
+              <span className="text-foreground">{summary.known.items}</span> known
+            </span>
+          )}
           {summary.pace && (
             <span title={summary.pace.reason}>
               <span className="text-foreground">{summary.pace.value}</span> new today

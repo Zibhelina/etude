@@ -186,7 +186,7 @@ export interface PresetConfig {
   adaptiveChallenge: boolean;
   /** The day's new-card limit follows recent success and study time, between `newPerDayMin` and `newPerDayMax`. */
   adaptivePace: boolean;
-  /** Share of answers practice aims for (decks without a memory model). Null: the desired retention. */
+  /** Share of answers practice aims for, and the score a drill's run needs to pass on an adaptive deck. Null: the desired retention. */
   targetSuccess: number | null;
   /** Study time the adaptive pace aims for. */
   minutesPerDay: number;

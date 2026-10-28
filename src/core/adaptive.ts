@@ -50,6 +50,10 @@ interface RootCard {
   level: number;
   /** Placement band, or -1. */
   band: number;
+  /** On FSRS, which measures memory. Other schedulers are judged by `answers` instead of stability. */
+  fsrs: boolean;
+  /** Whether each answer passed, oldest first; kept for cards not on FSRS. */
+  answers: { ts: string; pass: boolean }[];
 }
 
 interface RootData {
@@ -98,10 +102,11 @@ export class Adaptive {
   private rootData(root: string): RootData {
     const cfg = this.host.configFor(root);
     // Card states can change without a review (reschedule, reset), so their totals are part of the version.
+    // So are deck, preset and type settings: they decide each card's scheduler.
     const v = this.host.db.get(
-      "SELECT (SELECT MAX(id) FROM attempts) AS a, (SELECT MAX(id) FROM reviews) AS r, (SELECT COUNT(*) || ':' || TOTAL(state) || ':' || TOTAL(stability) || ':' || TOTAL(suspended) FROM cards) AS c, (SELECT MAX(updated) FROM items) AS i",
+      "SELECT (SELECT MAX(id) FROM attempts) AS a, (SELECT MAX(id) FROM reviews) AS r, (SELECT COUNT(*) || ':' || TOTAL(state) || ':' || TOTAL(stability) || ':' || TOTAL(suspended) FROM cards) AS c, (SELECT MAX(updated) FROM items) AS i, (SELECT group_concat(COALESCE(preset_id, '') || config, ';') FROM decks) || (SELECT COALESCE(group_concat(config, ';'), '') FROM presets) || (SELECT MAX(updated) FROM types) AS s",
     )!;
-    const version = JSON.stringify([v.a, v.r, v.c, v.i, cfg]);
+    const version = JSON.stringify([v.a, v.r, v.c, v.i, v.s, cfg]);
     const hit = this.rootCache.get(root);
     if (hit?.version === version) return hit.data;
     const scope = "(d.name = ? OR d.name LIKE ? ESCAPE '\\')";
@@ -117,15 +122,33 @@ export class Adaptive {
       }
       return defs.get(id)!;
     };
+    // A card's scheduler can come from its deck or its type.
+    const memory = new Map<string, boolean>();
+    const onFsrs = (deck: string, type: string) => {
+      const key = `${deck}\0${type}`;
+      if (!memory.has(key)) memory.set(key, !this.host.scriptFor(this.host.cardConfig(deck, type)));
+      return memory.get(key)!;
+    };
     const cards = new Map<number, RootCard>();
     for (const r of this.host.db.all(
-      `SELECT c.id, c.item_id, c.face, c.state, c.stability, c.suspended, i.type, i.tags, i.ord, i.archived FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${scope} ORDER BY i.ord, c.id`,
+      `SELECT c.id, c.item_id, c.face, c.state, c.stability, c.suspended, i.type, i.tags, i.ord, i.archived, d.name AS deck FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${scope} ORDER BY i.ord, c.id`,
       ...sp,
     )) {
       const tags = parse<string[]>(r.tags, []);
       const skills = [def(r.type)?.skills?.[r.face] ?? "general", ...tags.filter((t) => t.startsWith("skill::")).map((t) => t.slice(7))];
-      cards.set(r.id, { id: r.id, itemId: r.item_id, state: r.state, stability: r.stability, active: !r.suspended && !r.archived, tags, skills, level: learn.levelIndex(cfg.levels, tags), band: -1 });
+      const fsrs = onFsrs(r.deck, r.type);
+      cards.set(r.id, { id: r.id, itemId: r.item_id, state: r.state, stability: r.stability, active: !r.suspended && !r.archived, tags, skills, level: learn.levelIndex(cfg.levels, tags), band: -1, fsrs, answers: [] });
     }
+    const target = learn.targetOf(cfg);
+    if ([...cards.values()].some((c) => !c.fsrs))
+      for (const r of this.host.db.all<{ card_id: number; ts: string; rating: number; score: number | null }>(
+        `SELECT r.card_id, r.ts, r.rating, r.score FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${scope} AND r.practice = 0 ORDER BY r.ts, r.id`,
+        ...sp,
+      )) {
+        const c = cards.get(r.card_id);
+        const pass = c && !c.fsrs ? learn.passes(r.rating, r.score, target) : null;
+        if (pass !== null) c!.answers.push({ ts: r.ts, pass });
+      }
     // Placement bands per skill: levels, or tenths of the deck by position. Only bands with cards count.
     const bands = new Map<string, number[]>();
     const bySkill = new Map<string, RootCard[]>();
@@ -177,20 +200,21 @@ export class Adaptive {
     const sess = latest ? sessions.get(latest) : undefined;
     if (sess) {
       const checks = new Map<string, Map<number, boolean[]>>();
-      for (const r of this.host.db.all<{ id: number; card_id: number; rating: number }>(
-        `SELECT r.id, r.card_id, r.rating FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${scope} AND r.state = 0 AND r.practice = 0 AND r.ts >= ? ORDER BY r.ts, r.id`,
+      for (const r of this.host.db.all<{ id: number; card_id: number; rating: number; score: number | null }>(
+        `SELECT r.id, r.card_id, r.rating, r.score FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${scope} AND r.state = 0 AND r.practice = 0 AND r.ts >= ? ORDER BY r.ts, r.id`,
         ...sp,
         sess.first,
       )) {
         const c = cards.get(r.card_id);
         const p = c && placement.get(c.skills[0]);
-        if (!c || !p || sess.reviews.has(r.id)) continue;
+        const pass = learn.passes(r.rating, r.score, target);
+        if (!c || !p || pass === null || sess.reviews.has(r.id)) continue;
         const band = p.bands.indexOf(c.band);
         if (band < 0 || band >= p.state.frontier) continue;
         const byBand = checks.get(c.skills[0]) ?? checks.set(c.skills[0], new Map()).get(c.skills[0])!;
-        (byBand.get(band) ?? byBand.set(band, []).get(band)!).push(r.rating > 1);
+        (byBand.get(band) ?? byBand.set(band, []).get(band)!).push(pass);
         p.checks.done++;
-        if (r.rating > 1) p.checks.passed++;
+        if (pass) p.checks.passed++;
       }
       for (const [skill, p] of placement) p.frontier = learn.revisedFrontier(p.state.frontier, checks.get(skill) ?? new Map());
     }
@@ -199,15 +223,16 @@ export class Adaptive {
       const p = placement.get(c.skills[0]);
       return !!p && p.state.probes > 0 && c.band >= 0 && p.bands.indexOf(c.band) < p.frontier;
     };
-    // Known: one of the item's cards graduated to review, or, until one of its cards is rated Again,
-    // the latest placement passed its band.
+    // Known: one of the item's cards graduated to review (on another scheduler: its last answer passed),
+    // or, until one of its cards is rated Again or misses the target, the latest placement passed its band.
     const failed = new Set(
       this.host.db
         .all<{ item_id: string }>(`SELECT DISTINCT c.item_id FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${scope} AND r.rating = 1`, ...sp)
         .map((r) => r.item_id),
     );
+    for (const c of cards.values()) if (c.answers.some((a) => !a.pass)) failed.add(c.itemId);
     const known = new Set<string>();
-    for (const c of cards.values()) if (c.state === 2) known.add(c.itemId);
+    for (const c of cards.values()) if (c.fsrs ? c.state === 2 : c.answers.at(-1)?.pass) known.add(c.itemId);
     const assumed = new Set<string>();
     for (const c of cards.values()) if (!known.has(c.itemId) && !failed.has(c.itemId) && passed(c)) assumed.add(c.itemId);
     for (const id of assumed) known.add(id);
@@ -225,11 +250,12 @@ export class Adaptive {
             if (!isCheck(c, i)) return;
             counts[i].checks++;
             const last = scores.get(c.id)?.at(-1)?.score;
-            if (last !== undefined && last >= learn.targetOf(cfg)) counts[i].checksPassed++;
+            if (last !== undefined && last >= target) counts[i].checksPassed++;
           });
           if (c.level < 0 || isCheck(c, c.level)) continue;
           counts[c.level].total++;
-          if (c.state === 2 && c.stability >= learn.KNOWN_STABILITY) counts[c.level].stable++;
+          // Stable: three weeks of FSRS stability, or, on a scheduler without a memory model, held.
+          if (c.fsrs ? c.state === 2 && c.stability >= learn.KNOWN_STABILITY : learn.held(c.answers)) counts[c.level].stable++;
         }
         const p = placement.get(skill);
         // Past every band: the highest level that has cards, not the last level of the list.
@@ -255,9 +281,9 @@ export class Adaptive {
     const model = asOf > A.maxTs ? A.model : learn.fitSkills(A.attempts.filter((x) => x.ts < asOf).map((x) => x.a));
     const r3 = (x: number) => Math.round(x * 1000) / 1000;
     const round = (o: Record<string, number>) => Object.fromEntries(Object.entries(o).map(([k, x]) => [k, r3(x)]));
-    const R = sched.retrievability(c, new Date(asOf), cfg);
-    const quickCheck = !opts.placement && !!rc && rc.state === 0 && A.passed(rc);
     const script = this.host.scriptFor(cfg);
+    const R = script ? null : sched.retrievability(c, new Date(asOf), cfg);
+    const quickCheck = !opts.placement && !!rc && rc.state === 0 && A.passed(rc);
     const goal: learn.LearnerGoal = script && script.ratings === false ? "practice" : c.state === 0 && !opts.placement && !quickCheck ? "teach" : "measure";
     const learner: learn.Learner = {
       asOf,
@@ -301,12 +327,19 @@ export class Adaptive {
       if (ad?.placement || ad?.quickCheck) tested.add(r.card_id);
       else if (r.ts >= from && r.ts < to) news++;
     }
-    // Reviews of young cards (in review, stability under three weeks): did recently learned cards hold?
+    // Reviews of young cards (in review, stability under three weeks; on a scheduler without a memory
+    // model, not held yet): did recently learned cards hold? An unrated run passes at the target score.
+    const A = this.rootData(root);
+    const target = learn.targetOf(cfg);
     const young = { reviews: 0, passed: 0 };
-    for (const r of this.host.db.all(`SELECT x.card_id, x.rating, x.card_before FROM reviews x ${join} WHERE x.practice = 0 AND x.state = 2 AND x.ts >= ? AND x.ts < ? AND ${scope}`, from, to, ...sp)) {
-      if (tested.has(r.card_id) || !(parse<{ stability?: number }>(r.card_before, {}).stability! < learn.YOUNG_STABILITY)) continue;
+    for (const r of this.host.db.all(`SELECT x.card_id, x.ts, x.rating, x.score, x.card_before FROM reviews x ${join} WHERE x.practice = 0 AND x.state = 2 AND x.ts >= ? AND x.ts < ? AND ${scope}`, from, to, ...sp)) {
+      const c = A.cards.get(r.card_id);
+      if (!c || tested.has(r.card_id)) continue;
+      if (c.fsrs ? !(parse<{ stability?: number }>(r.card_before, {}).stability! < learn.YOUNG_STABILITY) : learn.held(c.answers, r.ts)) continue;
+      const pass = learn.passes(r.rating, r.score, target);
+      if (pass === null) continue;
       young.reviews++;
-      if (r.rating > 1) young.passed++;
+      if (pass) young.passed++;
     }
     // Reviews without a recorded duration count as 15 seconds.
     const rv = this.host.db.get(

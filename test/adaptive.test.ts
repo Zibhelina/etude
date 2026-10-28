@@ -470,3 +470,72 @@ test("goals: a first showing teaches, reviews and placement measure, drill decks
   done();
 });
 
+
+// A skill drill: the answer is the score, so a test sets each run's result directly.
+const SKILL_TYPE = {
+  id: "skill",
+  name: "Skill",
+  fields: [{ name: "task", kind: "text" as const }],
+  template: { html: "{{task}}" },
+  grader: { kind: "script" as const, code: "return { score: Number(answer) };" },
+};
+
+/** `runs` answers per card with these scores, one day apart, ending yesterday. */
+async function practise(e: Etude, cards: number[], scores: number[]) {
+  const day = e.dayStart().getTime();
+  for (const [k, score] of scores.entries())
+    for (const [i, id] of cards.entries()) {
+      const s = await e.submit(id, k, score);
+      e.rate(id, 0, { attemptId: s.attemptId, at: new Date(day - (scores.length - k) * 86400_000 + 3600_000 + i * 1000) });
+    }
+}
+
+async function drillSetup(t: { after(fn: () => void): void }, config: Record<string, unknown>, typeScheduler = false) {
+  const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-adaptive-drill-"));
+  const e = await Etude.open(join(dir, "etude.db"));
+  t.after(() => (e.close(), rmSync(dir, { recursive: true, force: true })));
+  e.saveType(typeScheduler ? { ...SKILL_TYPE, scheduler: "drill" } : SKILL_TYPE);
+  for (let n = 1; n <= 30; n++) e.upsertItem({ id: `s${n}`, type: "skill", deck: "Drills::Set", tags: [n <= 20 ? "level::1" : "level::2"], fields: { task: `t${n}` } });
+  e.updateDeck("Drills", { config: { adaptivePace: true, newPerDay: 10, newPerDayMin: 1, newPerDayMax: 40, minutesPerDay: 60, levels: [{ tag: "level::1" }, { tag: "level::2" }], ...config } });
+  const level1 = e.db.all("SELECT c.id FROM cards c JOIN items i ON i.id = c.item_id WHERE i.tags LIKE '%level::1%' ORDER BY c.id").map((r) => r.id as number);
+  return { e, level1 };
+}
+
+test("on a drill, runs at the target count as held: the pace keeps up and the next level opens", async (t) => {
+  const { e, level1 } = await drillSetup(t, { scheduler: "drill", schedulerOptions: { perDay: 0 } });
+  await practise(e, level1, [1, 1, 1, 1, 1]);
+  const s = e.learnerSummary("Drills");
+  assert.ok(s.adaptive && s.pace && s.skills[0].level);
+  // Runs 2 and 3 of each card are young (not held yet); from the fourth on the card is held.
+  assert.equal(s.pace.youngRetention, 1, JSON.stringify(s.pace));
+  assert.match(s.pace.reason, /holding well/);
+  assert.equal(s.skills[0].level.tag, "level::2", "level 1 is held");
+  assert.equal(s.known.items, 20);
+});
+
+test("on a drill, runs below the target are misses: the pace slows and the level waits", async (t) => {
+  const { e, level1 } = await drillSetup(t, { scheduler: "drill", schedulerOptions: { perDay: 0 } });
+  await practise(e, level1, [0.5, 0.5, 0.5, 0.5, 0.5]);
+  const s = e.learnerSummary("Drills");
+  assert.ok(s.adaptive && s.pace && s.skills[0].level);
+  assert.equal(s.pace.youngRetention, 0);
+  assert.equal(s.skills[0].level.tag, "level::1");
+  assert.equal(s.skills[0].level.progress, 0);
+  assert.equal(s.known.items, 0);
+});
+
+test("in an FSRS deck, a type's drill cards count by their scores, not as unrated misses", async (t) => {
+  const { e, level1 } = await drillSetup(t, {}, true);
+  assert.equal(e.configFor("Drills").scheduler, "fsrs");
+  await practise(e, level1, [1, 1, 0.95, 1, 1]);
+  const s = e.learnerSummary("Drills");
+  assert.ok(s.adaptive && s.pace && s.skills[0].level);
+  assert.equal(s.pace.youngRetention, 1);
+  assert.equal(s.skills[0].level.tag, "level::2");
+  // A miss takes the card off known and held again; 19 of 20 held still clears level 1.
+  await practise(e, [level1[0]], [0.2]);
+  const after = e.learnerSummary("Drills");
+  assert.ok(after.adaptive);
+  assert.equal(after.known.items, 19);
+  assert.equal(after.skills[0].level!.tag, "level::2");
+});

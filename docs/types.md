@@ -117,6 +117,8 @@ The body gets `data-mode="answer"` or `data-mode="result"`, so `.only-answer` an
 | `etude.submit(value?)` | submit now, with `value` or `getAnswer()`'s result; ignored outside answer mode or after the first submit |
 | `etude.setReady(bool)` | enable or disable the app's Submit button (enabled by default) |
 | `etude.onResult(fn)` | called with `{ grade, key, answer }` after grading; called at once if the card is already graded |
+| `etude.screen` | `{ height }`: how much of the screen the card can fill, in CSS pixels, while the learner studies in focus mode; `{ height: null }` otherwise (the page scrolls). Also set as the CSS variable `--etude-screen-height` |
+| `etude.onScreen(fn)` | called with `etude.screen` whenever it changes: focus mode turned on or off, the window resized |
 
 `grade.details` is whatever the grade script returned as `details`. Use it to mark parts, options or blanks.
 
@@ -129,6 +131,7 @@ A small `std.normalize(s)` is also in scope in card scripts. The full `std` (bel
 - In answer mode, Space, Enter, `u`, `=`, `-`, `!` and `@` go to the app only when the card's own handler didn't call `preventDefault()` and focus isn't in an input. In result mode, 1–4 and the same keys are forwarded the same way, for rating, undo, burying (`=` the note, `-` the card) and suspending (`!` the note, `@` the card), as in Anki.
 - On mount, focus goes to the first usable `[autofocus]` target, otherwise the first visible, enabled typing field (input, textarea or contenteditable editor). Buttons are a fallback for cards without a typing field.
 - The frame resizes to the card's height automatically. Don't use fixed heights or internal scrolling for the whole card.
+- In focus mode (the ⤢ button on the study page, Esc to leave) the app hides its header and an idle bottom bar and tells the card how tall the screen is (`etude.screen`). A card that should fit on one screen, such as a game, can scale itself to that height.
 
 ### Editors and code
 

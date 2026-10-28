@@ -318,6 +318,51 @@ test("adaptive pace sets the day's new-card limit within its bounds", async () =
   done();
 });
 
+test("an adaptive deck's limits count the whole deck's answers, whichever subdeck is open", async () => {
+  const { e, done } = await setup({ levels: false, perLevel: 10 });
+  for (let n = 31; n <= 40; n++) e.upsertItem({ id: `w${n}`, type: "ctx", deck: "Course::Other", tags: [], fields: { word: `w${n}`, sentences: [{ id: "easy", de: `easy ${n}`, difficulty: 0.1, requires: [] }] } });
+  const limits = { newPerDay: 4, newPerFace: { listen: 1 }, burySiblings: false };
+  e.updateDeck("Course", { config: limits });
+  for (let i = 0; i < 4; i++) {
+    const { card } = e.next({ deck: "Course::Unit" });
+    const r = await e.submit(card!.cardId, card!.seed, card!.itemId, { asOf: card!.asOf });
+    e.rate(card!.cardId, 3, { attemptId: r.attemptId! });
+  }
+  assert.equal(e.queue({ deck: "Course::Other" }).news.length, 4, "not adaptive: each deck counts its own");
+  e.updateDeck("Course", { config: { ...limits, adaptiveChallenge: true } });
+  assert.equal(e.queue({ deck: "Course" }).news.length, 0);
+  assert.equal(e.queue({ deck: "Course::Other" }).news.length, 0, "used up in another subdeck");
+  e.updateDeck("Course", { config: { ...limits, adaptiveChallenge: true, newPerDay: 6 } });
+  const other = e.queue({ deck: "Course::Other" }).news;
+  assert.deepEqual(other.map((c) => c.face), ["read", "read"], "the one listen card for today came up elsewhere");
+  done();
+});
+
+test("the pace counts the new cards taught, not placement probes or quick checks", async () => {
+  const { e, done } = await setup({ levels: false, perLevel: 10 });
+  e.updateDeck("Course", { config: { adaptivePace: true, newPerDay: 10, newPerDayMin: 1, newPerDayMax: 40, minutesPerDay: 60 } });
+  const cards = e.db.all<{ id: number }>("SELECT id FROM cards ORDER BY id").map((r) => r.id);
+  const day = e.dayStart().getTime();
+  const at = (days: number, i: number) => new Date(day - days * 86400_000 + 3600_000 + i * 1000).toISOString();
+  let n = 0;
+  const answer = (card: number, ts: string, state: number, rating: number, adaptive: object) => {
+    n++;
+    e.db.run("INSERT INTO attempts (id, card_id, ts, seed, view, answer, grade, review_id) VALUES (?, ?, ?, 1, '{}', '\"a\"', ?, ?)", n, card, ts, JSON.stringify({ score: rating > 1 ? 1 : 0, adaptive: { asOf: ts, skill: "reading", ...adaptive } }), n);
+    e.db.run("INSERT INTO reviews (id, card_id, attempt_id, ts, rating, state, card_before, due_after, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 10000)", n, card, n, ts, rating, state, JSON.stringify({ stability: state ? 3 : 0 }), ts);
+  };
+  // Two days ago: 6 cards taught, 4 placement probes and 20 quick checks.
+  cards.slice(0, 6).forEach((c, i) => answer(c, at(2, i), 0, 3, { goal: "teach" }));
+  cards.slice(6, 10).forEach((c, i) => answer(c, at(2, 10 + i), 0, 3, { goal: "measure", placement: "p" }));
+  cards.slice(10, 30).forEach((c, i) => answer(c, at(2, 20 + i), 0, 3, { goal: "measure", quickCheck: true }));
+  // Yesterday: 20 reviews of the taught cards, 18 of them passed, and 20 of the checked ones, all passed.
+  for (let i = 0; i < 20; i++) answer(cards[i % 6], at(1, i), 2, i < 18 ? 3 : 1, { goal: "measure" });
+  for (let i = 0; i < 20; i++) answer(cards[10 + i], at(1, 30 + i), 2, 3, { goal: "measure" });
+  const s = e.learnerSummary("Course");
+  assert.ok(s.adaptive && s.pace);
+  assert.deepEqual([s.pace.youngRetention, s.pace.base, s.pace.value], [0.9, 3, 3], JSON.stringify(s.pace));
+  done();
+});
+
 test("estimates over 50,000 attempts stay fast and are cached until something changes", async () => {
   const { e, done } = await setup({ levels: false, perLevel: 10 });
   e.updateDeck("Course", { config: { adaptiveChallenge: true } });

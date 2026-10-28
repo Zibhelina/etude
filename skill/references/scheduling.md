@@ -30,7 +30,7 @@ etude deck show "Networks::Week 1"   # resolved, inherited, presetBase, own conf
 | `learningSteps` | `["1m","10m"]` | steps for new cards (`"1m 10m 1h"` or a JSON list) |
 | `relearningSteps` | `["10m"]` | steps after a lapse |
 | `maximumInterval` | 36500 | days |
-| `newPerDay` / `reviewsPerDay` | 20 / 200 | daily limits, counted across the deck and its subdecks |
+| `newPerDay` / `reviewsPerDay` | 20 / 200 | daily limits, counted across the deck and its subdecks; on an adaptive deck, across all of it, whichever subdeck is studied |
 | `newPerFace` | `{}` | a face's own new-card limit within `newPerDay`, by face name: `newPerFace.t1=5`; `0` holds a face back, `null` drops an inherited limit. `etude deck faces <deck>` lists the faces |
 | `newOrder` | added | added \| random \| deck |
 | `reviewOrder` | due | due \| retrievability \| random |
@@ -42,7 +42,7 @@ etude deck show "Networks::Week 1"   # resolved, inherited, presetBase, own conf
 | `burySiblings` | true | other faces of the same item wait until tomorrow |
 | `enableFuzz`, `enableShortTerm`, `weights` | | FSRS-6 options |
 | `adaptiveChallenge` | false | card types get a `learner` argument and pick variants by goal: clearest when new, usual difficulty when FSRS measures memory |
-| `adaptivePace` | false | each day's new-card limit follows how well last week's young cards held (against `desiredRetention`) and the study time |
+| `adaptivePace` | false | each day's new-card limit follows how well last week's young cards held (against `desiredRetention`) and the study time; placement probes and quick checks aren't new cards and don't count |
 | `targetSuccess` | null | share of right answers practice aims for (decks without a memory model); null follows `desiredRetention` |
 | `minutesPerDay` | 20 | study time the adaptive pace aims for |
 | `newPerDayMin` / `newPerDayMax` | 5 / 25 | bounds for the adaptive pace |

@@ -35,6 +35,8 @@ interface Props {
   minHeight?: number;
   /** Focus the card when it mounts. Off for embeds that shouldn't steal focus from their host. */
   autoFocus?: boolean;
+  /** Tell the card how much screen height it can fill below its top (`etude.screen`), e.g. in focus mode. */
+  fitScreen?: boolean;
   onSubmit?(answer: unknown): void;
   onReady?(ready: boolean): void;
   onKey?(key: string): void;
@@ -69,6 +71,21 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
   const post = useCallback((msg: Record<string, unknown>, transfer: Transferable[] = []) => {
     iframe.current?.contentWindow?.postMessage({ etude: 1, ...msg }, "*", transfer);
   }, []);
+
+  // The height left on screen from the frame's top to the bottom of the window (less a margin), or null.
+  const screenHeight = useCallback(() => {
+    const el = iframe.current;
+    if (!latest.current.fitScreen || !el) return null;
+    return Math.max(200, Math.floor(window.innerHeight - (el.getBoundingClientRect().top + window.scrollY) - 16));
+  }, []);
+  useEffect(() => {
+    if (!loaded) return;
+    const send = () => post({ type: "screen", height: screenHeight() });
+    send();
+    if (!props.fitScreen) return;
+    window.addEventListener("resize", send);
+    return () => window.removeEventListener("resize", send);
+  }, [loaded, props.fitScreen, post, screenHeight]);
 
   // With no server (the core runs in this tab), a served frame can't be loaded by URL: fetch its
   // HTML from the core and show it as srcdoc. The frame then asks for media over postMessage.
@@ -122,7 +139,7 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
       const p = latest.current;
       switch (msg.type) {
         case "loaded":
-          post({ type: "init", view: p.view, mode: p.mode ?? "answer", answer: p.answer ?? null, result: p.result ?? null, theme: theme() });
+          post({ type: "init", view: p.view, mode: p.mode ?? "answer", answer: p.answer ?? null, result: p.result ?? null, theme: theme(), screen: { height: screenHeight() } });
           break;
         case "mounted":
           setLoaded(true);

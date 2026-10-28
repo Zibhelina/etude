@@ -13,6 +13,8 @@ export interface Grade {
   confidence?: number;
   /** `example`: a recorded grade shown in watch mode, not one made for this answer. */
   grader: { kind: string; model?: string; ms?: number; cost?: number; error?: string; example?: boolean };
+  /** On adaptive decks: what was picked for this showing and why. */
+  adaptive?: { asOf: string; skill: string; variant?: string; reason?: string; placement?: string | boolean; quickCheck?: boolean };
 }
 
 export interface PresetConfig {
@@ -40,7 +42,47 @@ export interface PresetConfig {
   /** Who decides when cards come back: "fsrs" or a scheduler id. */
   scheduler: string;
   schedulerOptions: Record<string, unknown>;
+  adaptiveChallenge: boolean;
+  adaptivePace: boolean;
+  /** Practice aims for this share of right answers; null follows desiredRetention. */
+  targetSuccess: number | null;
+  minutesPerDay: number;
+  newPerDayMin: number;
+  newPerDayMax: number;
+  levels: { tag: string; check?: string }[];
+  levelAdvanceAt: number;
+  levelMix: number;
+  quickChecksPerDay: number;
 }
+
+export interface LevelState {
+  index: number;
+  tag: string;
+  progress: number;
+  checkPassed: boolean;
+  done: boolean;
+  nextOpen: boolean;
+}
+
+export type LearnerSummary =
+  | { deck: string; adaptive: false }
+  | {
+      deck: string;
+      adaptive: true;
+      root: string;
+      settings: { adaptiveChallenge: boolean; adaptivePace: boolean; targetSuccess: number; minutesPerDay: number; levels: { tag: string; check?: string }[] };
+      skills: {
+        skill: string;
+        answers: number;
+        success: number | null;
+        ability: number | null;
+        typical: number | null;
+        level: LevelState | null;
+        placement: { probes: number; done: boolean; frontier: string; revised: boolean; checks: { done: number; passed: number } } | null;
+      }[];
+      known: { items: number; assumed: number };
+      pace: { value: number; base: number; youngRetention: number | null; minutesPerDay: number | null; reason: string } | null;
+    };
 
 export interface SchedulerOption {
   name: string;
@@ -146,6 +188,11 @@ export interface StudyCard {
   showVerdict: boolean;
   generated: boolean;
   title: string;
+  /** Adaptive decks: when the learner estimates were taken; sent back on submit. */
+  asOf?: string;
+  /** The placement session this card was shown for. */
+  placement?: string;
+  quickCheck?: boolean;
 }
 
 export interface FieldSpec {
@@ -403,6 +450,8 @@ export interface Scope {
   q?: string;
   /** Study ahead: nothing has to be due. */
   ahead?: boolean;
+  /** Placement on an adaptive deck, by session: only probes that find the learner's level. */
+  placement?: string;
 }
 
 export interface OptimizeResult {
@@ -474,10 +523,18 @@ export const api = {
   suspendCards: (cardIds: number[], note: boolean) => call<{ count: number; cardIds: number[] }>("POST", "/api/cards-bulk", { action: note ? "suspend-note" : "suspend", cardIds }),
 
   counts: (s: Scope) => call<Counts>("GET", `/api/study/counts${qs({ deck: s.deck, q: s.q, ahead: s.ahead ? 1 : undefined })}`),
-  next: (s: Scope, exclude?: number) => call<{ card: StudyCard | null; counts: Counts }>("GET", `/api/study/next${qs({ deck: s.deck, q: s.q, ahead: s.ahead ? 1 : undefined, exclude })}`),
+  next: (s: Scope, exclude?: number) =>
+    call<{ card: StudyCard | null; counts: Counts }>("GET", `/api/study/next${qs({ deck: s.deck, q: s.q, ahead: s.ahead ? 1 : undefined, placement: s.placement || undefined, exclude })}`),
   card: (cardId: number, seed?: number) => call<StudyCard>("GET", `/api/study/card/${cardId}${qs({ seed })}`),
-  submit: (cardId: number, seed: number, answer: unknown, practice = false) =>
-    call<{ attemptId: number; grade: Grade; key: Record<string, unknown>; wantsFeedback: boolean }>("POST", "/api/study/submit", { cardId, seed, answer, practice }),
+  submit: (card: Pick<StudyCard, "cardId" | "seed" | "asOf" | "placement">, answer: unknown, practice = false) =>
+    call<{ attemptId: number; grade: Grade; key: Record<string, unknown>; wantsFeedback: boolean }>("POST", "/api/study/submit", {
+      cardId: card.cardId,
+      seed: card.seed,
+      answer,
+      practice,
+      asOf: card.asOf,
+      placement: card.placement,
+    }),
   feedback: (attemptId: number) => call<{ feedback: string; model?: string; ms?: number }>("POST", "/api/study/feedback", { attemptId }),
   rate: (cardId: number, rating: Rating | 0, opts: { attemptId?: number; durationMs?: number; practice?: boolean } = {}) =>
     call<{ reviewId: number; due: string; state: number }>("POST", "/api/study/rate", { cardId, rating, ...opts }),
@@ -489,6 +546,7 @@ export const api = {
   optimizeWeights: (deck: string) => call<OptimizeResult>("POST", "/api/optimize", { deck }),
 
   stats: (s: Scope, days = 30) => call<Stats>("GET", `/api/stats${qs({ deck: s.deck, q: s.q, days })}`),
+  skills: (deck: string) => call<LearnerSummary>("GET", `/api/stats/skills${qs({ deck })}`),
   tags: () => call<{ tag: string; items: number; instructions: string | null; description: string | null }[]>("GET", "/api/tags"),
   saveTag: (tag: string, instructions: string, description = "") => call("PUT", "/api/tags", { tag, instructions, description }),
   renameTag: (from: string, to: string) => call("POST", "/api/tags/rename", { from, to }),

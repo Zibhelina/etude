@@ -119,7 +119,7 @@ command({
 
 command({
   name: "card bury",
-  summary: "Hide cards until the next study day, or until a date.",
+  summary: "Hide cards until the next study day, or until a date. An answer given but not rated yet is discarded.",
   args: [refsArg],
   flags: [...BULK, ...MOMENT_FLAGS.slice(0, 2), { name: "note", type: "boolean", description: "Bury every card of the selected cards' items." }],
   writes: true,

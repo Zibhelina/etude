@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BarChart, Heatmap, ShareBar, fmtDay, fmtDuration, parseDay } from "@/components/stats-charts";
 import { Donut, ForgettingCurve, Histogram, ProgressChart, RecallRing, SERIF, Sparkline, StudyClock, recallColor } from "@/components/stats-viz";
-import { api, type DeckNode, type PracticeCard, type StatsScheduler, type Stats } from "@/lib/api";
+import { api, type DeckNode, type LearnerSummary, type PracticeCard, type StatsScheduler, type Stats } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { PHONE_H1 } from "@/components/page";
@@ -62,7 +62,55 @@ export function StatsPage({ deck }: { deck?: string }) {
 
       {error && !stats && <div className="rounded-xl border border-dashed p-10 text-center text-muted-foreground">{error}</div>}
       {!stats && !error && <Loading />}
+      {stats && deck && <Skills deck={deck} />}
       {stats && <Body stats={stats} deck={deck} />}
+    </div>
+  );
+}
+
+/** Adaptive decks: what the deck estimates about each skill. Computed from the graded history. */
+function Skills({ deck }: { deck: string }) {
+  const [summary, setSummary] = useState<LearnerSummary | null>(null);
+  useEffect(() => {
+    setSummary(null);
+    api.skills(deck).then(setSummary, () => setSummary(null));
+  }, [deck]);
+  if (!summary?.adaptive) return null;
+  const pct = (x: number | null) => (x == null ? "–" : `${Math.round(x * 100)}%`);
+  return (
+    <div className="mb-6">
+      <Panel title="Skills" aside={summary.pace ? `${summary.pace.value} new cards today · ${summary.pace.reason}` : `Target ${pct(summary.settings.targetSuccess)} right`}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="pb-2 font-normal">Skill</th>
+                <th className="pb-2 font-normal">Answers</th>
+                <th className="pb-2 font-normal" title="Share of the last 50 graded answers that were right">Recently right</th>
+                <th className="pb-2 font-normal" title="Predicted chance of getting a card of middling difficulty right">Typical card</th>
+                {summary.settings.levels.length > 0 && <th className="pb-2 font-normal">Level</th>}
+                <th className="pb-2 font-normal">Placement</th>
+              </tr>
+            </thead>
+            <tbody className="tabular">
+              {summary.skills.map((s) => (
+                <tr key={s.skill} className="border-t">
+                  <td className="py-2 font-medium">{s.skill}</td>
+                  <td className="py-2">{s.answers}</td>
+                  <td className="py-2">{pct(s.success)}</td>
+                  <td className="py-2">{pct(s.typical)}</td>
+                  {summary.settings.levels.length > 0 && (
+                    <td className="py-2">{s.level ? `${s.level.tag.split("::").pop()} · ${pct(s.level.progress)} stable${s.level.nextOpen ? " · next level open" : ""}${s.level.done ? " · all done" : ""}` : "–"}</td>
+                  )}
+                  <td className="py-2 text-muted-foreground" title={s.placement?.checks.done ? `${s.placement.checks.passed} of ${s.placement.checks.done} quick checks right` : undefined}>
+                    {s.placement ? `${s.placement.frontier}${s.placement.revised ? " (lowered by quick checks)" : ""}${s.placement.done ? "" : " (in progress)"}` : "–"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
     </div>
   );
 }

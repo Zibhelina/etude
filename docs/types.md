@@ -48,6 +48,7 @@ This is the JSON that `PUT /api/types/:id` accepts and the editor exports:
   - `editor` asks for a structured form: `choices` (`[{ text, correct, why }]`), `pairs` (`[[left, right]]`), `parts` (`[{ label, answer, unit, tolerance }]`) or `occlusion` (`[{ id, x, y, w, h, label, group }]`, drawn on the image in the sibling `image` field; see [Image occlusion](#image-occlusion)).
   - `language` (for `code` fields) is the language the editor highlights: a name (`"python"`) or `"field:<name>"` to follow another field, like the `code` type's `language`.
   - In the item editor, `markdown` fields are live markdown editors and `code` fields are code editors.
+- `skills` and `variants` (optional): see [Adaptive decks](#adaptive-decks).
 - `titleField` (optional) names the `markdown`, `text`, `html` or `code` field that labels an item in Browse, search results and Stats, and what search ranks first. Without it, the label is the first non-private markdown field, then the first other non-private text field, in the order the type lists them. Fields with a `default` are settings (a mode, a language) and are never picked automatically. A private title field is used in those lists only: anything sent with a card being studied falls back to the automatic label. In the type editor it's **List title** on the Info tab.
 - `template.html` is required; `css` and `js` may be empty.
 
@@ -180,11 +181,12 @@ Assets are stored apart from the definition:
 
 ## Prepare
 
-`prepare` is the body of `function (fields, face, rng)` and returns `{ view, key }`. It runs on the server, in the sandbox, before every showing. It may also return `grader: "self"`: that one card is then revealed and rated by the learner even though the type has a script grader (the image occlusion type does this for a box with no label).
+`prepare` is the body of `function (fields, face, rng, learner)` and returns `{ view, key }`. It runs on the server, in the sandbox, before every showing. It may also return `grader: "self"`: that one card is then revealed and rated by the learner even though the type has a script grader (the image occlusion type does this for a box with no label).
 
 - `fields`: the item's fields with defaults merged in and the generator already applied.
 - `face`: the name of the face being shown.
 - `rng`: seeded from the review seed, the item and the face, so a variant can be replayed exactly.
+- `learner`: the learner's estimates on an [adaptive deck](#adaptive-decks), or `null`. It is `null` whenever the deck's Adaptive challenge is off, so every type must work without it.
 
 Only `view` reaches the card before grading. `key` goes to the grader, to `onResult` and to result templates. Without a prepare script, private fields go to `key` and every other field goes to `view`.
 
@@ -215,6 +217,7 @@ If a script or AI grader fails, the attempt is kept as ungraded and the learner 
 
 ### What the AI grader reads
 
+- **The prepared view**: what the student was shown, including the variant prepare picked.
 - **The card's fields**, each labelled with its `label` or name. Private fields are marked "hidden from the student". Empty fields and `generator` are left out.
 - **The answer:** a string as-is, an object with `image` as a picture, anything else as JSON.
 - **Instructions, most specific first** (earlier ones win on conflict):
@@ -253,9 +256,74 @@ When a script takes `rng`, it provides:
 
 When a type has no prepare script, private fields go into `key` and are not sent to the card until the answer is graded. With a prepare script, you decide what goes in `view`; the `private` flag then only labels the field for editors and the AI grader. Everything in `view` should be treated as visible to the learner.
 
+## Adaptive decks
+
+A deck with **Adaptive challenge** on (`adaptiveChallenge: true`) hands card types a `learner` argument, so a type can choose which variant of an exercise to show. It's optional twice over: decks have it off by default, and types that ignore `learner` behave exactly as before. With it off, `learner` is `null`, and `etude pack check` runs every type's prepare both ways (and with each goal below), so a type that only works with a learner can't be imported.
+
+Estimates are computed from the rated answers of the highest deck at or above the card's deck with an adaptive setting on, as of the moment the card was shown. Nothing new is stored, so devices that sync the same history agree, and turning adaptation on later uses the history you already have.
+
+```js
+{
+  asOf: "2026-10-27T16:40:00.000Z",
+  goal: "measure",                    // what this answer is for: "teach", "measure" or "practice"
+  target: 0.9,                        // for practice: targetSuccess, else the deck's desired retention
+  skill: "reading",                   // this face's skill (the type's `skills`, else "general")
+  ability: { reading: 0.62, listening: -0.3 },  // logit scale: 0 is an even chance on a middling card
+  success: { reading: 0.88 },         // share of the last 50 rated answers that were right
+  answers: { reading: 140 },
+  level: { reading: { index: 1, tag: "level::2", progress: 0.43, checkPassed: false, done: false, nextOpen: false } } | null,
+  card: { state: "review", reps: 6, lapses: 1, stability: 18.2, retrievability: 0.91, scores: [1, 0.5, 1] },
+  placement: false,                   // a placement probe
+  quickCheck: false,                  // a quick check after a placement
+}
+```
+
+### Goals: what the answer will be used for
+
+FSRS already sets how hard a review is, through timing: it brings a card back when recall has fallen to the desired retention. A second controller that also moved difficulty at review time (an easier sentence when the learner struggles, a harder one when they don't) would change the question while FSRS reads the outcome as memory, inflating or deflating stability. So the variant should depend on what the answer is for, given in `learner.goal`:
+
+| goal | when | pick |
+|---|---|---|
+| `teach` | a new card's first showing in normal study | the clearest version: the most `_known`, then the lowest `_difficulty`. A first showing is encoding, not recall, so its answer doesn't feed the skill estimates, unless the learner rates it Easy (they already knew it). |
+| `measure` | learning steps, reviews and relapses on a scheduler with a memory model; placement probes; quick checks | a version of the item's usual difficulty, whatever the learner's state: the most `_known`, then the smallest `_offset`, rotating through unseen ones (`_seen`). Vary the context, not the difficulty, so FSRS sees comparable evidence. |
+| `practice` | decks whose scheduler has no memory model (drill) | the version closest to `learner.target` (`_p`): adapt the challenge freely, nothing is being measured |
+
+Grade what the card schedules. If a card is about one word, score that word (in its sentence), not every other word around it, or the rating ends up measuring something FSRS doesn't schedule.
+
+### Skills and variants
+
+Two optional parts of the type definition feed `learner`:
+
+- `skills` maps faces to skills: `{ "read": "reading", "listen": "listening", "produce": "writing" }`. Items can add skills with `skill::` tags (`skill::grammar::dative`). Every rated answer moves the learner's ability on its skills and the difficulty of what was shown, Elo-style.
+- `variants: { "field": "sentences" }` names a json or list field whose entries are interchangeable versions of the exercise. Each entry may have an `id` (stable, to track its difficulty), `requires` (item ids it relies on, such as the other words in a sentence) and a prior `difficulty` from 0 (easy) to 1 (hard); `variants.id`, `variants.requires` and `variants.difficulty` rename those keys. On an adaptive deck, before prepare runs, each entry gets `_known` (share of its `requires` items the learner knows: one of their cards has graduated to review, or the latest placement passed their band and none of their cards has been rated Again), `_seen` (times this card showed it), `_difficulty` (its current estimate, 0 to 1, calibrated from answers), `_offset` (`_difficulty` minus the median of the item's variants) and `_p` (predicted success for this learner).
+
+A prepare that picks a variant returns its id as `variant` and may say why in `reason` (a few words, "a sentence you haven't seen"). Both are recorded in the attempt's grade as `adaptive`, with the goal, and the app shows the reason after answering.
+
+```js
+const list = fields.sentences;
+if (!learner) return show(rng.pick(list));
+const best = Math.max(...list.map((s) => s._known));
+const pool = list.filter((s) => s._known >= best);
+const cost = {
+  teach: (s) => s._difficulty,
+  measure: (s) => Math.abs(s._offset) + 0.05 * s._seen,
+  practice: (s) => Math.abs(s._p - learner.target) + 0.05 * s._seen,
+}[learner.goal];
+const pick = pool.sort((a, b) => cost(a) - cost(b))[0];
+return { ...show(pick), variant: pick.id, reason: learner.goal === "teach" ? "a clear sentence with words you know" : undefined };
+```
+
+The app passes the card's `asOf` back when it submits, so grading sees the same estimates and the same variant. Agents using the CLI pass it as `study submit --as-of`. Generators get the same `learner` as their second argument.
+
+### Around it
+
+The deck settings (see the scheduling reference) add three things that only decide which new cards come in, so they don't touch FSRS's evidence. **Adaptive pace** sets each day's new-card limit from how well the last week's young cards held (reviews of cards under 21 days' stability not rated Again, against the desired retention) and the study time. It counts the new cards taught: a card first shown as a placement probe or a quick check was tested rather than learned, so neither counts. The day's limits cover the whole adaptive deck, whichever subdeck is studied. **Levels** (`levels: [{ tag, check? }]`) bring new cards from the learner's level and open the next one gradually. **Placement** (`study next --placement <session>`) finds the learner's level with real reviews. Afterwards the items in the bands it passed count as known until one of their cards is rated Again, and their cards come up as quick checks, mixed in with the new cards; when under 60% of at least 10 quick checks in a band are right, the placement is lowered to that band. Each session is named; a new name starts a fresh placement, and the latest one is the one that counts. `etude stats skills <deck>` reports all of it.
+
+The two signals keep separate jobs: your **rating** is the memory signal (FSRS, and the pace's young-card retention); the graded **score** is the skill signal (the estimates, placement and variant difficulty).
+
 ## Item generators
 
-Any item can set `fields.generator`, the body of `function (rng)` that returns an object of field overrides. It runs before prepare with the review's seed, so each review shows a new variant, and the stored seed replays it. Keep valid static fields next to it so lists and previews have something to show. See [packs.md](packs.md#generated-items).
+Any item can set `fields.generator`, the body of `function (rng, learner)` that returns an object of field overrides. It runs before prepare with the review's seed, so each review shows a new variant, and the stored seed replays it. Keep valid static fields next to it so lists and previews have something to show. See [packs.md](packs.md#generated-items).
 
 ## Image occlusion
 

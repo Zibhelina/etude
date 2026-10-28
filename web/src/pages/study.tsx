@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { CardFrame, type CardFrameHandle, type CardResult } from "@/components/card-frame";
+import { AnswerRetry } from "@/components/answer-retry";
 import { Markdown } from "@/components/markdown";
 import { api, humanInterval, relative, RATING_LABEL, type Counts, type LearnerSummary, type Rating, type Scope, type StudyCard } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const [counts, setCounts] = useState<Counts | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const [result, setResult] = useState<CardResult | null>(null);
+  const [retry, setRetry] = useState<{ hint: string; count: number } | null>(null);
   const [attemptId, setAttemptId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<{ text?: string; loading?: boolean; error?: string } | null>(null);
   const [ready, setReady] = useState(true);
@@ -53,6 +55,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const load = useCallback(async (exclude?: number) => {
     setPhase("loading");
     setResult(null);
+    setRetry(null);
     setAttemptId(null);
     setFeedback(null);
     setReady(true);
@@ -100,13 +103,19 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     setPhase("grading");
     try {
       const r = await api.submit(card, answer, practice);
+      if (r.retry) {
+        setRetry((previous) => ({ hint: r.retry!.hint, count: (previous?.count ?? 0) + 1 }));
+        setReady(true);
+        setPhase("answer");
+        return;
+      }
       const res: CardResult = { grade: r.grade, key: r.key, answer };
       setResult(res);
       setAttemptId(r.attemptId);
       frame.current?.showResult(res);
       setPhase("result");
       if (r.grade.feedback && card.showVerdict !== false) setFeedback({ text: r.grade.feedback });
-      else if (r.wantsFeedback) askFeedback(r.attemptId);
+      else if (r.wantsFeedback && r.attemptId !== null) askFeedback(r.attemptId);
       if (r.grade.grader.error) toast.warning("Couldn't grade automatically", { description: r.grade.grader.error.slice(0, 200) });
     } catch (e) {
       toast.error((e as Error).message);
@@ -148,6 +157,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       setCounts(cnt);
       setCard(c);
       setResult(null);
+      setRetry(null);
       setAttemptId(null);
       setFeedback(null);
       setReady(true);
@@ -172,6 +182,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       setCounts(cnt);
       setCard(c);
       setResult(null);
+      setRetry(null);
       setAttemptId(null);
       setFeedback(null);
       setReady(false);
@@ -191,6 +202,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     const c = await api.card(card.cardId);
     setCard(c);
     setResult(null);
+    setRetry(null);
     setAttemptId(null);
     setFeedback(null);
     setPractice(true);
@@ -218,6 +230,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
               setCard(c);
               setCounts(cnt);
               setResult(null);
+              setRetry(null);
               setAttemptId(null);
               setFeedback(null);
               setReady(true);
@@ -378,10 +391,11 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
             </Button>
           </div>
 
+          {retry && phase === "answer" && <AnswerRetry hint={retry.hint} />}
           <CardFrame
             ref={frame}
             src={`/frame/${encodeURIComponent(card.type)}?v=${encodeURIComponent(card.typeVersion)}`}
-            frameKey={`${card.cardId}:${card.seed}:${card.typeVersion}`}
+            frameKey={`${card.cardId}:${card.seed}:${card.typeVersion}:${retry?.count ?? 0}`}
             view={card.view}
             onSubmit={onSubmit}
             onReady={setReady}

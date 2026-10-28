@@ -20,6 +20,7 @@ import {
   type Preset,
   type PresetConfig,
   type Rating,
+  type RetrySpec,
   type Verdict,
 } from "./model.ts";
 import { initSandbox, runScript, ScriptError } from "./sandbox.ts";
@@ -252,6 +253,46 @@ export { deckParts };
 
 const ITEM_INDEX_VERSION = "1";
 
+
+/** Checks what prepare returned as `retry`. */
+function retrySpec(def: CardTypeDef, raw: unknown): RetrySpec {
+  const bad = (why: string) => new EtudeError(`${def.id}/prepare: retry ${why}`);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw bad("must be an object");
+  const r = raw as Record<string, unknown>;
+  const out: RetrySpec = {};
+  if (r.when != null) {
+    if (typeof r.when !== "string" || !r.when.trim() || r.when.length > 4000) throw bad("when must be text of up to 4000 characters");
+    out.when = r.when.trim();
+  }
+  if (r.conceal != null) {
+    const list = Array.isArray(r.conceal) ? r.conceal : [r.conceal];
+    if (!list.every((x) => typeof x === "string")) throw bad("conceal must be text or a list of text");
+    out.conceal = [...new Set((list as string[]).map((x) => x.trim()).filter(Boolean))];
+  }
+  if (r.format != null) {
+    if (typeof r.format !== "string" || !r.format.includes("{hint}")) throw bad("format must be text containing {hint}");
+    out.format = r.format;
+  }
+  if (r.hintField != null) {
+    const f = def.fields.find((f) => f.name === r.hintField);
+    if (!f || !["text", "markdown"].includes(f.kind) || f.required) throw bad("hintField must name an optional text field");
+    out.hintField = f.name;
+  }
+  return out;
+}
+
+/** A grader's hint as shown: concealed text (with or without accents, any case) becomes "…", then the type's format applies. */
+function retryHint(hint: string, spec: RetrySpec | undefined): string {
+  let safe = hint.trim().normalize("NFC");
+  for (const text of spec?.conceal ?? []) {
+    const t = text.normalize("NFC");
+    for (const variant of new Set([t, t.normalize("NFD").replace(/\p{M}/gu, "")])) {
+      const escaped = variant.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      safe = safe.replace(new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "giu"), "…");
+    }
+  }
+  return (spec?.format ?? "{hint}").replace("{hint}", () => safe);
+}
 
 export class Etude {
   readonly db: Db;
@@ -1888,12 +1929,13 @@ export class Etude {
       ? { asOf: adapt.learner.asOf, skill: adapt.learner.skill, goal: adapt.learner.goal, ...(adapt.session ? { placement: adapt.session } : {}), ...(adapt.learner.quickCheck ? { quickCheck: true } : {}) }
       : undefined;
     if (def.prepare) {
-      const out = runScript<{ view?: Record<string, unknown>; key?: Record<string, unknown>; grader?: string; variant?: unknown; reason?: unknown }>(def.prepare, {
+      const out = runScript<{ view?: Record<string, unknown>; key?: Record<string, unknown>; grader?: string; retry?: unknown; variant?: unknown; reason?: unknown }>(def.prepare, {
         params: ["fields", "face", "rng", "learner"],
         args: { fields, face, learner },
         seed: hashString(`${seed}:${itemId}:${face}`),
         where: `${def.id}/prepare`,
       });
+      const retry = out?.retry == null ? undefined : retrySpec(def, out.retry);
       if (adaptive && learner) {
         if (typeof out?.variant === "string" && out.variant) {
           adaptive.variant = out.variant.slice(0, 200);
@@ -1902,7 +1944,15 @@ export class Etude {
         }
         if (typeof out?.reason === "string" && out.reason.trim()) adaptive.reason = out.reason.trim().slice(0, 200);
       }
-      return { view: out?.view ?? {}, key: out?.key ?? {}, seed, fields, ...(out?.grader === "self" ? { selfGraded: true } : {}), ...(adaptive ? { adaptive } : {}) };
+      return {
+        view: out?.view ?? {},
+        key: out?.key ?? {},
+        seed,
+        fields,
+        ...(out?.grader === "self" ? { selfGraded: true } : {}),
+        ...(retry ? { retry } : {}),
+        ...(adaptive ? { adaptive } : {}),
+      };
     }
     const priv = new Set(def.fields.filter((f) => f.private).map((f) => f.name));
     const view: Record<string, unknown> = {};
@@ -1923,6 +1973,7 @@ export class Etude {
     let merged: Record<string, unknown>;
     let view: Record<string, unknown> = {}, key: Record<string, unknown> = {};
     let selfGraded = false;
+    let retry: RetrySpec | undefined;
     try {
       merged = this.generate({ ...fieldDefaults(def), ...fields }, seed, "preview");
       if (def.prepare) {
@@ -1931,6 +1982,7 @@ export class Etude {
         view = out?.view ?? {};
         key = out?.key ?? {};
         if (out?.grader === "self") selfGraded = true;
+        if (out?.retry != null) retry = retrySpec(def, out.retry);
       } else {
         const priv = new Set(def.fields.filter((f) => f.private).map((f) => f.name));
         for (const [k, v] of Object.entries(merged)) (priv.has(k) ? key : view)[k] = v;
@@ -1947,6 +1999,7 @@ export class Etude {
           const out = runScript<any>((g as { code: string }).code, { params: ["answer", "view", "key", "fields"], args: { answer: opts.answer, view, key, fields: merged }, where: `${def.id}/grade`, timeoutMs: 1000 });
           const score = out?.score == null ? null : Math.max(0, Math.min(1, Number(out.score)));
           grade = { score, verdict: this.verdictOf(score), details: out?.details, feedback: out?.feedback, suggested: null, grader: { kind: "script" } };
+          if (typeof out?.retry === "string" && out.retry.trim()) grade = { score: null, verdict: "ungraded", suggested: null, grader: { kind: "script" }, retry: { hint: retryHint(out.retry, retry) } };
         } catch (e) {
           return { errors: [(e as Error).message], view, key };
         }
@@ -2290,7 +2343,7 @@ export class Etude {
     if (typeof answer === "string") answerText = answer;
     else if (answer && typeof answer === "object" && typeof (answer as any).image === "string") answerImage = (answer as any).image;
     else if (answer != null) answerText = JSON.stringify(answer);
-    return { card, instructions, answerText, answerImage };
+    return { card, instructions, answerText, answerImage, ...(prep.retry?.when ? { retryWhen: prep.retry.when } : {}) };
   }
 
   private verdictOf(score: number | null): Verdict {
@@ -2300,9 +2353,22 @@ export class Etude {
     return "partial";
   }
 
-  /** Grades an answer and stores the attempt. Scheduling waits for `rate`. */
+  /** Grades an answer and stores the attempt, or, when the grader asks for another try, stores nothing and returns its hint. Scheduling waits for `rate`. */
   async submit(cardId: number, seed: number, answer: unknown, opts: { practice?: boolean; asOf?: string; placement?: string | boolean } = {}) {
-    const { grade, prep } = await this.grade(cardId, seed, answer, { asOf: opts.asOf, placement: opts.placement });
+    const { grade, prep, adapt } = await this.grade(cardId, seed, answer, { asOf: opts.asOf, placement: opts.placement });
+    if (grade.retry) {
+      const c = this.cardWithDeck(cardId);
+      const field = prep.retry?.hintField;
+      if (field) {
+        // Saved only if the card is still the one graded: an edit made while the grader ran wins.
+        const current = this.prepare(c.item_id, c.face, seed, adapt);
+        if (JSON.stringify(current.key) !== JSON.stringify(prep.key) || JSON.stringify(current.retry) !== JSON.stringify(prep.retry))
+          throw new EtudeError("this card changed while grading; show it again before answering", 409);
+        const item = this.item(c.item_id);
+        this.upsertItem({ ...item, fields: { ...item.fields, [field]: grade.retry.hint } });
+      }
+      return { attemptId: null, grade, key: {}, wantsFeedback: false, retry: { hint: grade.retry.hint, view: this.prepare(c.item_id, c.face, seed, adapt).view } };
+    }
     const stored = this.storeAnswer(answer, cardId);
     const id = Number(
       this.db.run("INSERT INTO attempts (card_id, ts, seed, view, answer, grade, practice) VALUES (?, ?, ?, ?, ?, ?, ?)", cardId, iso(), seed, json(prep.view), json(stored), json(grade), Number(!!opts.practice))
@@ -2310,7 +2376,7 @@ export class Etude {
     );
     const quiet = this.type(this.cardWithDeck(cardId).type).showVerdict === false;
     const wantsFeedback = !quiet && !grade.feedback && grade.grader.kind === "ai" && !grade.grader.error && this.settings().ai.autoFeedback !== "never";
-    return { attemptId: id, grade, key: prep.key, wantsFeedback: wantsFeedback || (!quiet && this.settings().ai.autoFeedback === "always" && !grade.feedback) };
+    return { attemptId: id, grade, key: prep.key, wantsFeedback: wantsFeedback || (!quiet && this.settings().ai.autoFeedback === "always" && !grade.feedback), retry: null };
   }
 
   /** Grades an answer against a card variant without storing anything. */
@@ -2331,7 +2397,7 @@ export class Etude {
     let grade: Grade;
     const t0 = Date.now();
     const scripted = () => {
-      const out = runScript<{ score?: number | null; details?: unknown; feedback?: string; defer?: boolean }>((g as { code: string }).code, {
+      const out = runScript<{ score?: number | null; details?: unknown; feedback?: string; defer?: boolean; retry?: unknown }>((g as { code: string }).code, {
         params: ["answer", "view", "key", "fields"],
         args: { answer, view: prep.view, key: prep.key, fields: prep.fields },
         where: `${def.id}/grade`,
@@ -2343,20 +2409,26 @@ export class Etude {
       if (g.kind === "self" || prep.selfGraded) grade = { score: null, verdict: "ungraded", suggested: null, grader: { kind: "self" } };
       else if (g.kind === "script" || (g.kind === "hybrid" && !scriptedDeferred())) {
         const out = scripted();
-        const score = out.score == null ? null : Math.max(0, Math.min(1, Number(out.score)));
-        grade = { score, verdict: this.verdictOf(score), feedback: out.feedback, details: out.details, suggested: sched.suggestRating(score, cfg), grader: { kind: "script", ms: Date.now() - t0 } };
+        if (out.retry != null) {
+          if (typeof out.retry !== "string" || !out.retry.trim() || out.retry.length > 600) throw new EtudeError(`${def.id}/grade: retry must be a hint of up to 600 characters`);
+          grade = { score: null, verdict: "ungraded", suggested: null, grader: { kind: "script", ms: Date.now() - t0 }, retry: { hint: retryHint(out.retry, prep.retry) } };
+        } else {
+          const score = out.score == null ? null : Math.max(0, Math.min(1, Number(out.score)));
+          grade = { score, verdict: this.verdictOf(score), feedback: out.feedback, details: out.details, suggested: sched.suggestRating(score, cfg), grader: { kind: "script", ms: Date.now() - t0 } };
+        }
       } else if (opts.noAi) {
         grade = { score: null, verdict: "ungraded", suggested: null, grader: { kind: "ai" } };
       } else {
         const ctx = this.gradingContext(c, prep, answer);
         const v = await aiVerdict(this.settings().ai, ctx, { vision: !!(g as { vision?: boolean }).vision, home: this.home });
         grade = {
-          score: v.score,
+          score: v.retry ? null : v.score,
           verdict: v.verdict,
           feedback: v.feedback,
           confidence: v.confidence,
-          suggested: v.verdict === "correct" ? 3 : v.verdict === "partial" ? 2 : 1,
+          suggested: v.retry ? null : v.verdict === "correct" ? 3 : v.verdict === "partial" ? 2 : 1,
           grader: { kind: "ai", model: v.model, ms: v.ms, cost: v.cost },
+          ...(v.retry ? { retry: { hint: retryHint(v.retry.hint, prep.retry) } } : {}),
         };
       }
     } catch (e) {
@@ -2367,7 +2439,7 @@ export class Etude {
     function scriptedDeferred() {
       if (g.kind !== "hybrid") return false;
       const out = scripted();
-      return out.defer === true || out.score == null;
+      return out.defer === true || (out.score == null && out.retry == null);
     }
     if (prep.adaptive) {
       grade.adaptive = prep.adaptive;
@@ -2492,7 +2564,7 @@ export class Etude {
    * Records a rating and reschedules the card. Practice ratings are logged but don't move the schedule.
    * A scheduler without ratings (a drill) takes `0`: the graded result is what's recorded.
    */
-  rate(cardId: number, rating: Rating | 0, opts: { attemptId?: number; durationMs?: number; practice?: boolean; at?: Date } = {}) {
+  rate(cardId: number, rating: Rating | 0, opts: { attemptId?: number | null; durationMs?: number; practice?: boolean; at?: Date } = {}) {
     const c = this.cardWithDeck(cardId);
     const t = opts.at ?? now();
     const cfg = this.configFor(c.deck);

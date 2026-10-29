@@ -130,6 +130,16 @@ function createApi(init, assets = { type: "", files: {} }) {
       resultHandlers.push(fn);
       if (api.result) fn(api.result);
     },
+    /** What this card type saved for itself with `setPref` (a chosen character, a sound switch), shared by all its cards. */
+    prefs: { ...(init.prefs ?? {}) },
+    /** Saves a preference for this card type: a short key (letters, digits, `_ . -`) and a JSON value; `null` removes it. */
+    setPref(key, value) {
+      if (typeof key !== "string" || !/^[A-Za-z0-9_.-]{1,64}$/.test(key)) throw new Error("a preference key is 1 to 64 letters, digits, '_', '.' or '-'");
+      const v = value === undefined ? null : JSON.parse(JSON.stringify(value));
+      if (v === null) delete api.prefs[key];
+      else api.prefs[key] = v;
+      send("set-pref", { key, value: v });
+    },
     /** How much of the screen the card can fill: `{ height }` in CSS pixels, or `{ height: null }` when the page scrolls. */
     screen: { height: init.screen?.height ?? null },
     /** Called with `etude.screen` whenever it changes (focus mode on or off, the window resized). */

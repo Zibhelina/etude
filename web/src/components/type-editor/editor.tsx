@@ -1,6 +1,6 @@
 // The card type editor: schema, template, scripts and grader on the left, a live preview of the
 // unsaved draft on the right. Nothing is stored until Save.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ArrowLeft, Copy, Download, Loader2, MoreHorizontal, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { CodeEditor } from "@/components/code-editor";
 import { CardPreview } from "@/components/card-preview";
+import { forgetTypePrefs } from "@/components/card-frame";
 import { AutoTextarea, FieldEditor } from "@/components/field-editor";
 import { api, ApiError, type CardType, type FieldSpec, type LeftoverReport, type SchedulerSummary, type TypeSummary } from "@/lib/api";
 import { navigate } from "@/lib/router";
@@ -493,6 +494,7 @@ export function TypeEditor({ id }: { id: string }) {
                 </Select>
               </Field>
               {!!saved?.assetFiles?.length && <AssetList files={saved.assetFiles} />}
+              {saved && <SavedPrefs typeId={saved.id} />}
             </TabsContent>
 
             <TabsContent value="fields" className="mt-5">
@@ -786,6 +788,34 @@ function AssetList({ files }: { files: { name: string; size: number }[] }) {
 }
 
 const cardCount = (n: number) => `${n.toLocaleString()} card${n === 1 ? "" : "s"}`;
+
+// What the type's cards saved for themselves with etude.setPref (a game's chosen character, a sound switch).
+function SavedPrefs({ typeId }: { typeId: string }) {
+  const [prefs, setPrefs] = useState<Record<string, unknown> | null>(null);
+  useEffect(() => {
+    api.typePrefs(typeId).then(setPrefs).catch(() => setPrefs(null));
+  }, [typeId]);
+  if (!prefs || !Object.keys(prefs).length) return null;
+  const reset = async () => {
+    setPrefs(await api.resetTypePrefs(typeId));
+    forgetTypePrefs(typeId);
+  };
+  return (
+    <Field label="Saved by its cards" hint="Settings the cards keep for themselves, shared by every card of this type and synced with your collection.">
+      <div className="flex flex-wrap items-start gap-3">
+        <dl className="grid min-w-0 grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+          {Object.entries(prefs).map(([k, v]) => (
+            <Fragment key={k}>
+              <dt className="font-mono text-xs text-muted-foreground">{k}</dt>
+              <dd className="min-w-0 break-all font-mono text-xs">{JSON.stringify(v)}</dd>
+            </Fragment>
+          ))}
+        </dl>
+        <Button variant="outline" size="sm" onClick={reset}>Reset</Button>
+      </div>
+    </Field>
+  );
+}
 
 function formatBytes(n: number) {
   if (n < 1024) return `${n} B`;

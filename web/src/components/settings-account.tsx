@@ -1,8 +1,8 @@
-// Settings → Account: the optional Etude account. Sign in by email code or passkey; then the Sync plan
-// and storage, passkeys, devices, email, data export and deletion. Selling lives in the Market.
+// Settings → Account: the optional Etude account. Sign in by email code or passkey; then passkeys,
+// devices, email, data export and deletion. Selling lives in the Market.
 import { useCallback, useEffect, useId, useState } from "react";
 import type { ReactNode } from "react";
-import { CircleAlert, ExternalLink, Fingerprint, KeyRound, Laptop, Loader2, LogOut, Mail, Smartphone, Trash2 } from "lucide-react";
+import { CircleAlert, Fingerprint, KeyRound, Laptop, Loader2, LogOut, Mail, Smartphone, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,9 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Block, Field, Section } from "@/components/settings-ui";
 import { download } from "@/components/type-editor/starter";
-import { account, AccountApiError, bytes, createPasskey, getPasskey, openOutside, passkeysHere, type AccountStatus, type Device, type Passkey } from "@/lib/account";
+import { account, AccountApiError, createPasskey, getPasskey, passkeysHere, type AccountStatus, type Device, type Passkey } from "@/lib/account";
 import { relative } from "@/lib/api";
-import { canShowPurchases, isNativeApp } from "@/lib/platform";
+import { isNativeApp } from "@/lib/platform";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 
@@ -83,7 +83,6 @@ export function AccountSection() {
       {st && signedIn && (
         <>
           <Profile st={st} onChanged={changed} guarded={guarded} />
-          <Plan st={st} onChanged={load} />
           <Passkeys rpId={st.offering?.passkeys.rpId} guarded={guarded} />
           <Devices guarded={guarded} onSelfRevoked={changed} />
           {st.offering?.market && <SellingLink />}
@@ -266,77 +265,6 @@ function Profile({ st, onChanged, guarded }: { st: AccountStatus; onChanged(): P
           )}
         </div>
       )}
-    </Block>
-  );
-}
-
-const REASON: Record<string, string> = {
-  billing_off: "Included on this server",
-  active: "Active",
-  canceled_until_end: "Canceled, active until the period ends",
-  grace: "Payment failed, still syncing for a few days",
-  past_due: "Paused: the payment failed",
-  expired: "Ended",
-  revoked: "Ended",
-  none: "Not subscribed",
-};
-
-function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void> }) {
-  const [busy, setBusy] = useState(false);
-  const b = st.billing;
-  const active = !!st.me?.sync.active;
-  const reason = st.me?.sync.reason ?? "none";
-  const quota = st.vault?.quotaBytes ?? st.offering?.quotaBytes ?? 1024 ** 3;
-  const used = st.vault?.usedBytes ?? 0;
-  const pct = Math.min(100, (used / quota) * 100);
-  const purchases = canShowPurchases();
-  const billingOn = !!st.offering?.billing;
-  const open = async (fn: () => Promise<{ url: string }>) => {
-    setBusy(true);
-    try {
-      openOutside((await fn()).url);
-    } catch (e) {
-      toast.error("Couldn't open the page", { description: msg(e) });
-    } finally {
-      setBusy(false);
-    }
-  };
-  const when = b?.expires ? (reason === "active" ? `Renews ${date(b.expires)}` : reason === "canceled_until_end" ? `Ends ${date(b.expires)}` : reason === "grace" ? `Syncing until ${date(b.graceUntil)}` : reason === "expired" || reason === "revoked" ? `Ended ${date(b.expires)}` : "") : "";
-  return (
-    <Block title="Etude Sync" description={!billingOn ? "This server doesn't charge for Sync." : canShowPurchases() ? "US$5 a month or US$40 a year. 1 GB of end-to-end encrypted storage." : "1 GB of end-to-end encrypted storage."}>
-      <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm" data-plan>
-        <dt className="text-muted-foreground">Plan</dt>
-        <dd className={cn(active ? "text-foreground" : "text-muted-foreground")} data-plan-state={reason}>
-          {REASON[reason] ?? reason}
-          {when && <span className="text-muted-foreground"> · {when}</span>}
-        </dd>
-        <dt className="text-muted-foreground">Storage</dt>
-        <dd>
-          <div className="flex items-center gap-3">
-            <div className="h-1.5 w-full max-w-56 overflow-hidden rounded-full bg-muted" role="meter" aria-valuemin={0} aria-valuemax={quota} aria-valuenow={used} aria-label="Storage used">
-              <div className="h-full rounded-full bg-highlight" style={{ width: `${Math.max(pct, used ? 1.5 : 0)}%` }} />
-            </div>
-            <span className="shrink-0 tabular-nums text-muted-foreground">{bytes(used)} of {bytes(quota)}</span>
-          </div>
-        </dd>
-      </dl>
-      <div className="flex flex-wrap items-center gap-2">
-        {billingOn && purchases && !active && (
-          <Button size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => void open(account.checkout)}>
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />} Subscribe on etude.study
-          </Button>
-        )}
-        {billingOn && purchases && b?.status && (
-          <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => void open(account.portal)}>
-            <ExternalLink className="size-4" /> Manage subscription
-          </Button>
-        )}
-        <Button variant="ghost" size="sm" className="h-10 md:h-8" onClick={() => void onChanged()}>Refresh</Button>
-        {active && (
-          <Button variant="ghost" size="sm" className="h-10 md:h-8" onClick={() => document.getElementById("sync")?.scrollIntoView({ behavior: "smooth" })}>Sync settings</Button>
-        )}
-      </div>
-      {billingOn && !purchases && !active && <p className="text-xs text-muted-foreground">Sync isn't active on this account.</p>}
     </Block>
   );
 }

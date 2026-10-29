@@ -14,6 +14,8 @@ export interface Transport {
   usage?(): Promise<number|null>;
 }
 const VALID = /^[\w:.-]{1,128}$/;
+/** Tries per request while the server answers 429 Too Many Requests. */
+const RATE_LIMIT_ATTEMPTS = 30;
 export class FolderTransport implements Transport {
   readonly folder:string;
   readonly device:string;
@@ -61,7 +63,15 @@ export class CloudTransport implements Transport {
   async request(path:string,opts:RequestInit={}) {
     const headers=new Headers(opts.headers);
     if (this.token) headers.set("Authorization",`Bearer ${this.token}`);
-    const res=await fetch(this.server+path,{...opts,headers,signal:AbortSignal.timeout(60_000)});
+    let res:Response;
+    for (let attempt=1;;attempt++) {
+      res=await fetch(this.server+path,{...opts,headers,signal:AbortSignal.timeout(60_000)});
+      if (res.status!==429 || attempt>=RATE_LIMIT_ATTEMPTS) break;
+      // The server limits requests per client address; wait as long as it says, with jitter so parallel transfers spread out.
+      await res.body?.cancel();
+      const wait=Math.min(60,Number(res.headers.get("retry-after"))||1);
+      await new Promise(r=>setTimeout(r,wait*1000+Math.random()*1000));
+    }
     if (!res.ok) {
       const body:any=await res.json().catch(()=>null);
       const error=new Error(body?.error?.message ?? `Sync server returned ${res.status}`);

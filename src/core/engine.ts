@@ -98,9 +98,30 @@ export interface Settings {
   themes: Theme[];
   /** Where the market is read from and published to; empty values mean the public market (src/core/market.ts). */
   market: { url: string; repo: string };
+  /** What card types saved for themselves (`etude.setPref` in a card): type id → key → JSON value. */
+  typePrefs: Record<string, Record<string, unknown>>;
 }
 
-export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" } };
+export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {} };
+
+/** Card preferences: short keys, and a few KB per type, since they ride along in the synced settings. */
+export const TYPE_PREF_KEY = /^[A-Za-z0-9_.-]{1,64}$/;
+export const TYPE_PREFS_MAX_BYTES = 4096;
+
+/** Checks card preferences: plain JSON objects per type id, short keys, at most TYPE_PREFS_MAX_BYTES per type. */
+export function checkTypePrefs(v: unknown): Record<string, Record<string, unknown>> {
+  if (!v || typeof v !== "object" || Array.isArray(v)) throw new EtudeError("typePrefs must be an object of type id → preferences");
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const [type, prefs] of Object.entries(v as Record<string, unknown>)) {
+    if (!prefs || typeof prefs !== "object" || Array.isArray(prefs)) throw new EtudeError(`typePrefs.${type} must be an object`);
+    for (const key of Object.keys(prefs)) if (!TYPE_PREF_KEY.test(key)) throw new EtudeError(`typePrefs.${type}: a preference key is 1 to 64 letters, digits, '_', '.' or '-'`);
+    let json: string;
+    try { json = JSON.stringify(prefs); } catch { throw new EtudeError(`typePrefs.${type} must be plain JSON`); }
+    if (new TextEncoder().encode(json).length > TYPE_PREFS_MAX_BYTES) throw new EtudeError(`typePrefs.${type} is over ${TYPE_PREFS_MAX_BYTES} bytes`);
+    if (Object.keys(prefs).length) out[type] = JSON.parse(json);
+  }
+  return out;
+}
 
 /** A card on a face its item's type no longer makes. */
 export interface LeftoverCard {
@@ -539,7 +560,7 @@ export class Etude {
 
   settings(): Settings {
     const s = this.db.setting<Partial<Settings>>("settings", {});
-    return { ...DEFAULT_SETTINGS, ...s, ai: { ...DEFAULT_AI, ...(s.ai ?? {}) }, market: { ...DEFAULT_SETTINGS.market, ...(s.market ?? {}) } };
+    return { ...DEFAULT_SETTINGS, ...s, ai: { ...DEFAULT_AI, ...(s.ai ?? {}) }, market: { ...DEFAULT_SETTINGS.market, ...(s.market ?? {}) }, typePrefs: { ...(s.typePrefs ?? {}) } };
   }
 
   updateSettings(patch: Partial<Settings>): Settings {
@@ -554,8 +575,38 @@ export class Etude {
     if (patch.theme !== undefined || patch.themes !== undefined) {
       if (typeof next.theme !== "string" || !this.findTheme(next.theme, next.themes)) throw new EtudeError(`unknown theme "${next.theme}"`, 404);
     }
+    if (patch.typePrefs !== undefined) next.typePrefs = checkTypePrefs(patch.typePrefs);
     this.db.setSetting("settings", next);
     return next;
+  }
+
+  // ---------------------------------------------------------------- card preferences
+
+  /** What a card type saved for itself (a game's chosen character, a sound switch): read by its cards as `etude.prefs`. */
+  typePrefs(typeId: string): Record<string, unknown> {
+    this.type(typeId);
+    return { ...(this.settings().typePrefs[typeId] ?? {}) };
+  }
+
+  /** Saves one of a card type's preferences; `null` removes it. */
+  setTypePref(typeId: string, key: string, value: unknown): Record<string, unknown> {
+    this.type(typeId);
+    if (typeof key !== "string" || !TYPE_PREF_KEY.test(key)) throw new EtudeError("a preference key is 1 to 64 letters, digits, '_', '.' or '-'");
+    const all = this.settings().typePrefs;
+    const prefs = { ...(all[typeId] ?? {}) };
+    if (value === null || value === undefined) delete prefs[key];
+    else prefs[key] = value;
+    this.updateSettings({ typePrefs: { ...all, [typeId]: prefs } });
+    return prefs;
+  }
+
+  /** Forgets everything a card type saved. */
+  resetTypePrefs(typeId: string): Record<string, unknown> {
+    const all = { ...this.settings().typePrefs };
+    if (!(typeId in all)) return {};
+    delete all[typeId];
+    this.updateSettings({ typePrefs: all });
+    return {};
   }
 
   // ------------------------------------------------------------------ themes
@@ -1183,6 +1234,7 @@ export class Etude {
       this.db.run("DELETE FROM type_assets WHERE type_id = ?", id);
     });
     this.typeCache.delete(id);
+    this.resetTypePrefs(id);
     return opts.items ? { items: used.items, cards: used.cards, reviews: used.reviews } : { items: 0, cards: 0, reviews: 0 };
   }
 

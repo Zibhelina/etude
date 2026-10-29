@@ -43,6 +43,22 @@ interface Props {
   onError?(message: string): void;
 }
 
+// A type's saved preferences (etude.prefs), fetched once per type and kept current as cards save them.
+const prefCache = new Map<string, Promise<Record<string, unknown>>>();
+const typeOfSrc = (src?: string) => {
+  const m = src?.match(/^\/frame\/([^/?#]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+};
+/** Drops a type's cached preferences, e.g. after they were reset in Settings. */
+export function forgetTypePrefs(type: string) {
+  prefCache.delete(type);
+}
+function prefsFor(type: string | null): Promise<Record<string, unknown>> {
+  if (!type) return Promise.resolve({});
+  if (!prefCache.has(type)) prefCache.set(type, api.typePrefs(type).catch(() => ({})));
+  return prefCache.get(type)!;
+}
+
 const THEME_VARS = [
   "--background", "--foreground", "--card", "--card-foreground", "--popover", "--popover-foreground", "--muted",
   "--muted-foreground", "--secondary", "--secondary-foreground", "--border", "--input", "--primary", "--primary-foreground",
@@ -139,8 +155,17 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
       const p = latest.current;
       switch (msg.type) {
         case "loaded":
-          post({ type: "init", view: p.view, mode: p.mode ?? "answer", answer: p.answer ?? null, result: p.result ?? null, theme: theme(), screen: { height: screenHeight() } });
+          prefsFor(typeOfSrc(p.src)).then((prefs) => post({ type: "init", view: p.view, mode: p.mode ?? "answer", answer: p.answer ?? null, result: p.result ?? null, theme: theme(), screen: { height: screenHeight() }, prefs }));
           break;
+        case "set-pref": {
+          // Previews of unsaved types (raw HTML) have nowhere to keep preferences.
+          const type = typeOfSrc(p.src);
+          if (!type || typeof msg.key !== "string") break;
+          const saved = api.setTypePref(type, msg.key, msg.value ?? null);
+          prefCache.set(type, saved.catch(() => prefsFor(type)));
+          saved.catch((e) => p.onError?.(`couldn't save the card's preference: ${e?.message ?? e}`));
+          break;
+        }
         case "mounted":
           setLoaded(true);
           if ((p.mode ?? "answer") === "answer" && p.autoFocus !== false) {

@@ -247,6 +247,35 @@ command({
 });
 
 command({
+  name: "type prefs",
+  summary: "Show, set or reset what a type's cards saved for themselves (`etude.setPref`).",
+  description: "Card preferences are a few small settings a card type keeps for all its cards, such as a game's chosen character or a sound switch. They live in the collection's settings and sync with it. A value is read as JSON when it parses (`sound=false`, `level=3`) and as text otherwise (`hero=elder`); `key=` with nothing after it removes the key.",
+  args: [
+    { name: "id", description: "Type id.", required: true },
+    { name: "pairs", description: "key=value preferences to set.", variadic: true },
+  ],
+  flags: [{ name: "reset", type: "boolean", description: "Forget every preference of the type." }],
+  writes: true,
+  dryRun: true,
+  examples: ["etude type prefs hanzi-pixel", "etude type prefs hanzi-pixel hero=4-stern-elder sound=false", "etude type prefs hanzi-pixel --reset"],
+  output: "{ type, prefs }",
+  run(ctx) {
+    const id = ctx.args.id;
+    ctx.e.type(id);
+    if (ctx.flags.reset) ctx.e.resetTypePrefs(id);
+    for (const pair of ctx.args.pairs ?? []) {
+      const at = pair.indexOf("=");
+      if (at < 1) throw new CliError(`expected key=value, got "${pair}"`, "usage");
+      const key = pair.slice(0, at), raw = pair.slice(at + 1);
+      let value: unknown = raw === "" ? null : raw;
+      if (raw !== "") try { value = JSON.parse(raw); } catch { /* plain text */ }
+      ctx.e.setTypePref(id, key, value);
+    }
+    return { type: id, prefs: ctx.e.typePrefs(id) };
+  },
+});
+
+command({
   name: "type move",
   summary: "Put a type in a folder of the Types page (created if needed); `--root` takes it out of every folder.",
   description: "Folders only organize the Types page. Moving never changes the type's definition, so a built-in stays unedited.",

@@ -27,6 +27,10 @@ const RATING_STYLE: Record<Rating, string> = {
 
 const FOCUS_KEY = "etude.study.focus";
 
+// On a phone, focus mode runs the card edge to edge; this strip under it holds the leave-focus button,
+// so the button never covers the card.
+const PHONE_FOCUS_STRIP = 56;
+
 const VERDICT_TEXT: Record<string, { label: string; cls: string }> = {
   correct: { label: "Correct", cls: "text-good" },
   partial: { label: "Partly right", cls: "text-hard" },
@@ -314,7 +318,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const showBar = !bare || !idleBar;
 
   return (
-    <div className={cn("mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 sm:px-8", showBar ? "pb-44" : "pb-6", bare && "pt-[env(safe-area-inset-top)]", sk.on && "overflow-x-clip")}>
+    <div className={cn("mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 sm:px-8", showBar ? "pb-44" : "pb-6", bare && "pt-[env(safe-area-inset-top)]", bare && phone && "px-0", bare && phone && !showBar && "pb-0", sk.on && "overflow-x-clip")}>
       {bare ? null : phone ? (
         <header className="sticky top-0 z-10 -mx-4 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-end bg-background/92 px-1 pt-[env(safe-area-inset-top)] backdrop-blur">
           <div className="flex h-14 w-full items-center gap-1">
@@ -391,7 +395,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       {phase === "done" && (scope.placement ? <PlacementDone deck={scope.deck ?? ""} /> : <Done counts={counts} scope={scope} />)}
 
       {card && phase !== "done" && (
-        <main ref={mainRef} style={phone ? sketchTransform(sk.view, mainRef.current) : undefined} className="flex flex-1 flex-col gap-5 pt-3 sm:gap-6 sm:pt-6">
+        <main ref={mainRef} style={phone ? sketchTransform(sk.view, mainRef.current) : undefined} className={cn("flex flex-1 flex-col gap-5 pt-3 sm:gap-6 sm:pt-6", bare && phone && "pt-0")}>
           <div className={cn("flex flex-wrap items-center gap-2 text-xs text-muted-foreground", bare && "hidden")}>
             <Badge variant="outline" className="font-normal">{card.type}</Badge>
             {card.scheduler.id !== "fsrs" && <Badge variant="outline" className="font-normal">{card.scheduler.name.toLowerCase()}</Badge>}
@@ -428,6 +432,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
             onKey={onKey}
             onError={(m) => toast.error("Card error", { description: m })}
             fitScreen={bare}
+            fitMargin={bare && phone && !showBar ? PHONE_FOCUS_STRIP : undefined}
           />
 
           {phase === "result" && result && (
@@ -477,7 +482,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
           title="Leave focus mode (Esc)"
           className={cn(
             "fixed right-[max(1rem,env(safe-area-inset-right))] z-30 flex size-10 items-center justify-center rounded-full border bg-background/80 text-muted-foreground shadow-sm backdrop-blur hover:text-foreground",
-            showBar ? "bottom-[calc(6.5rem+env(safe-area-inset-bottom))] sm:bottom-[calc(7.5rem+env(safe-area-inset-bottom))]" : "bottom-[max(1rem,env(safe-area-inset-bottom))]",
+            showBar ? "bottom-[calc(6.5rem+env(safe-area-inset-bottom))] sm:bottom-[calc(7.5rem+env(safe-area-inset-bottom))]" : phone ? "bottom-[max(0.5rem,env(safe-area-inset-bottom))]" : "bottom-[max(1rem,env(safe-area-inset-bottom))]",
           )}
         >
           <Minimize2 className="size-4" />

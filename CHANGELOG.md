@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.4.0
+
+- Etude Sync: end-to-end encrypted sync across your devices, as a subscription (US$5 a month or US$40 a year, 1 GB) bought on etude.study and handled by Polar. Settings → Account signs you in by email link; Settings → Sync sets up the vault (password and recovery key), pushes and pulls in the background, and merges changes from several devices without losing reviews. A shared folder works as a free transport, and the server is open source for self-hosting.
+- Etude runs entirely in the browser (SQLite in WebAssembly, saved on the device) and as phone apps for iOS and Android.
+- Score, a phone layout of its own: a floating tab bar with Ask Etude beside it, thumb-reach study controls, focus mode that gives the card the whole screen, and a + menu beside Check with a scratchpad you can draw on over the card, with pinch zoom.
+- Adaptive decks (optional): card types can adapt each showing to the learner, with adaptive pace, levels, placement ("Find my level") and per-skill estimates, without confusing FSRS. Thanks to Victor Bonato.
+- A grader can ask for another try with a hint instead of marking the answer wrong. Thanks to Victor Bonato.
+- A card type can pick its own scheduler for decks that don't set one (a typing test runs as a drill anywhere). Thanks to Victor Bonato.
+- Card preferences: card types can remember small settings per type (etude.prefs, etude.setPref). Thanks to Victor Bonato.
+- Market product pages with a screenshot and video gallery; account, Library and Selling screens for the paid Market (opening later).
+- Deck archive, confirmed deck deletion, daily new-card limits per face, deleting a type together with its items, and cleaning up leftover cards and unused media.
+- Security: Markdown sanitized with DOMPurify, Content-Security-Policy on the app and card frames, foreign Host headers refused, Anki decompression capped, and Ask Etude can't redirect AI providers or write files.
+- Faster saves (SQLite synchronous NORMAL with WAL).
+
 ## 2.3.0
 
 - Image occlusion, a built-in card type. Drop, paste or pick an image (a diagram, a slide, an atlas page), drag boxes over the parts to hide and name them; every box, or group of boxes, becomes its own card. On the card you type the name under the image and the box opens with its name; small typos pass, another box's name never does (the feedback tells you which part you named), and an empty answer shows it. Pinch, Ctrl + scroll or double-click zooms big images. The editor has move, resize, duplicate, nudge, group, undo and redo, and works with touch. Boxes without a label are revealed and self-graded. Anki imports convert the built-in Image Occlusion notetype and the Image Occlusion Enhanced add-on (as self-graded boxes: Anki doesn't store names). CLI: `etude occlusion add <image> --box "x,y,w,h=Label" [--px]`; API: `POST /api/occlusion`. The Showcase gains a Gray's Anatomy heart.

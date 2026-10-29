@@ -44,7 +44,9 @@ test("LWW fields, permanent entity tombstones, idempotence and no echo",async()=
   }finally{e.close();rmSync(dir,{recursive:true,force:true});}
 });
 test("media names with spaces and accents sync; unsafe paths from another device are skipped",async()=>{
-  const dir=temp();const a=await Etude.open(join(dir,"a.db"),{home:join(dir,"ha")}),b=await Etude.open(join(dir,"b.db"),{home:join(dir,"hb")});
+  const dir=temp();// Separate folders, so each device has its own media folder.
+  for(const d of ["a","b"])mkdirSync(join(dir,d));
+  const a=await Etude.open(join(dir,"a","a.db"),{home:join(dir,"ha")}),b=await Etude.open(join(dir,"b","b.db"),{home:join(dir,"hb")});
   try {
     const folder=join(dir,"shared");for(const e of [a,b]){syncFor(e).setup({folder});await syncFor(e).unlock({password});}
     mkdirSync(join(a.mediaDir,"anki"),{recursive:true});writeFileSync(join(a.mediaDir,"anki","Thüringen Wappen.png"),"flag");
@@ -55,6 +57,30 @@ test("media names with spaces and accents sync; unsafe paths from another device
     assert.equal(readFileSync(join(b.mediaDir,"anki","Thüringen Wappen.png"),"utf8"),"flag");
     assert.equal(existsSync(join(b.mediaDir,"..","escaped.png")),false);
     assert.equal(syncFor(b).status().error,null);
+    // A file changed on this device is uploaded, not overwritten by the copy it had before.
+    writeFileSync(join(b.mediaDir,"anki","Thüringen Wappen.png"),"new flag");
+    await syncFor(b).now();await syncFor(a).now();
+    assert.equal(readFileSync(join(b.mediaDir,"anki","Thüringen Wappen.png"),"utf8"),"new flag");
+    assert.equal(readFileSync(join(a.mediaDir,"anki","Thüringen Wappen.png"),"utf8"),"new flag");
+  }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
+});
+test("sync reports its steps, and the upload total matches the bytes sent",async()=>{
+  const dir=temp();// Separate folders, so each device has its own media folder.
+  for(const d of ["a","b"])mkdirSync(join(dir,d));
+  const a=await Etude.open(join(dir,"a","a.db"),{home:join(dir,"ha")}),b=await Etude.open(join(dir,"b","b.db"),{home:join(dir,"hb")});
+  try {
+    const folder=join(dir,"shared");for(const e of [a,b]){syncFor(e).setup({folder});await syncFor(e).unlock({password});}
+    put(a,"one");mkdirSync(join(a.mediaDir,"anki"),{recursive:true});
+    for(let i=0;i<3;i++)writeFileSync(join(a.mediaDir,"anki",`clip ${i}.mp3`),"sound ".repeat(1000+i));
+    const record=(e:Etude)=>{const s=syncFor(e) as any,seen:any[]=[],step=s.step.bind(s);s.step=(...args:any[])=>{const p=step(...args);if(!seen.includes(p))seen.push(p);return p;};return seen;};
+    const sa=record(a);await syncFor(a).now();
+    assert.deepEqual(sa.map(p=>p.step),["download","check","upload","apply"]);
+    const up=sa.find(p=>p.step==="upload");assert.ok(up.done>3000);assert.equal(up.done,up.total);
+    assert.deepEqual(sa.find(p=>p.step==="check"),{step:"check",done:3,total:3,rate:0});
+    assert.equal(syncFor(a).status().progress,null);
+    const sb=record(b);await syncFor(b).now();
+    assert.ok(sb.find(p=>p.step==="download").done>up.done*0.9,"b downloads what a sent");
+    assert.equal(sb.find(p=>p.step==="upload").total,0);
   }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
 });
 async function login(s:ReturnType<typeof syncFor>,server:string,outbox:string,email:string){

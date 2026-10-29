@@ -33,6 +33,17 @@ export interface SyncStatus {
   error: string | null;
   pending: number;
   busy: boolean;
+  /** While a sync runs. */
+  progress: SyncProgress | null;
+}
+
+/** download and upload count bytes; check counts media files. The total is null when it isn't known ahead. */
+export interface SyncProgress {
+  step: "download" | "check" | "upload" | "apply";
+  done: number;
+  total: number | null;
+  /** Bytes per second. */
+  rate: number;
 }
 
 type UnlockResponse = { recoveryKey?: string; status: SyncStatus };
@@ -136,7 +147,7 @@ export function SyncSection() {
   // A running sync is reported by status; look again until it settles.
   useEffect(() => {
     if (!status?.busy) return;
-    const t = window.setInterval(() => void load(true), 2500);
+    const t = window.setInterval(() => void load(true), 1000);
     return () => window.clearInterval(t);
   }, [status?.busy, load]);
 
@@ -576,6 +587,12 @@ export function SyncSection() {
             <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm">
               <dt className="text-muted-foreground">Status</dt>
               <dd className={cn(status.error && "text-destructive")}>{stateLabel}</dd>
+              {syncing && status.progress && (
+                <>
+                  <dt className="text-muted-foreground">Progress</dt>
+                  <dd><ProgressRow p={status.progress} /></dd>
+                </>
+              )}
               <dt className="text-muted-foreground">Last sync</dt>
               <dd>
                 {status.lastSync ? (
@@ -695,6 +712,28 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
       </div>
       {billingOn && !purchases && !active && <p className="text-xs text-muted-foreground">Sync isn't active on this account.</p>}
     </Block>
+  );
+}
+
+const STEP: Record<SyncProgress["step"], string> = { download: "Downloading", check: "Checking media", upload: "Uploading", apply: "Applying changes" };
+
+function ProgressRow({ p }: { p: SyncProgress }) {
+  const transfer = p.step === "download" || p.step === "upload";
+  // The download total is the server's estimate, so it never claims 100% before the step ends.
+  const pct = p.total ? Math.min(p.step === "download" ? 99 : 100, Math.floor((p.done / p.total) * 100)) : null;
+  const detail = p.step === "check"
+    ? `${p.done.toLocaleString()} of ${(p.total ?? 0).toLocaleString()} files`
+    : transfer
+      ? p.total ? `${bytes(p.done)} of ${p.step === "download" ? "about " : ""}${bytes(p.total)}` : bytes(p.done)
+      : "";
+  const rate = transfer && p.rate > 0 ? `${p.step === "download" ? "↓" : "↑"} ${bytes(p.rate)}/s` : "";
+  return (
+    <div className="flex flex-col gap-1.5" data-sync-progress={p.step}>
+      <div className="h-1.5 w-full max-w-72 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Sync progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined}>
+        <div className={cn("h-full rounded-full bg-highlight transition-[width] duration-700", pct === null && "w-1/3 animate-pulse")} style={pct === null ? undefined : { width: `${Math.max(pct, 1.5)}%` }} />
+      </div>
+      <span className="tabular-nums text-muted-foreground">{[STEP[p.step] + (pct === null ? "" : ` ${pct}%`), detail, rate].filter(Boolean).join(" · ")}</span>
+    </div>
   );
 }
 

@@ -10,6 +10,8 @@ export interface Transport {
   pull(cursor:string): Promise<{events:WireEvent[];cursor:string;more:boolean}>;
   putBlob(name:string,bytes:Uint8Array): Promise<void>;
   getBlob(name:string): Promise<Uint8Array>;
+  /** Bytes stored on the server, when it says. */
+  usage?(): Promise<number|null>;
 }
 const VALID = /^[\w:.-]{1,128}$/;
 export class FolderTransport implements Transport {
@@ -78,4 +80,5 @@ export class CloudTransport implements Transport {
   async pull(cursor:string) { const r:any=await (await this.request(`/v1/sync/events?after=${Number(cursor)||0}&limit=500`)).json();return {...r,cursor:String(r.cursor)}; }
   async putBlob(name:string,bytes:Uint8Array) { await this.request("/v1/blobs/"+name,{method:"PUT",body:new Uint8Array(bytes)}); }
   async getBlob(name:string) { return new Uint8Array(await (await this.request("/v1/blobs/"+name)).arrayBuffer()); }
+  async usage() { try { const r:any=await (await this.request("/v1/vault")).json();return r.usedBytes||null; } catch { return null; } }
 }

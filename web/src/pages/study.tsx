@@ -1,6 +1,6 @@
 import { autoSync } from "@/lib/sync";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowLeftToLine, ChevronLeft, Plus, X as XIcon, FastForward, CornerDownLeft, Dices, EyeOff, Loader2, MessageSquareText, MoreHorizontal, Pause, Pencil, RotateCcw, Undo2 } from "lucide-react";
+import { ArrowLeft, ArrowLeftToLine, ChevronLeft, Plus, X as XIcon, FastForward, CornerDownLeft, Dices, EyeOff, Loader2, Maximize2, MessageSquareText, Minimize2, MoreHorizontal, Pause, Pencil, RotateCcw, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,8 @@ const RATING_STYLE: Record<Rating, string> = {
   4: "text-easy border-easy/30 hover:bg-easy/10",
 };
 
+const FOCUS_KEY = "etude.study.focus";
+
 const VERDICT_TEXT: Record<string, { label: string; cls: string }> = {
   correct: { label: "Correct", cls: "text-good" },
   partial: { label: "Partly right", cls: "text-hard" },
@@ -44,6 +46,9 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const phone = usePhone();
   const [tools, setTools] = useState(false);
   const [plus, setPlus] = useState(false);
+  // Focus mode: only the card, for cards that fill the screen (games). Remembered per browser.
+  const [focus, setFocus] = useState(() => { try { return localStorage.getItem(FOCUS_KEY) === "1"; } catch { return false; } });
+  useEffect(() => { try { localStorage.setItem(FOCUS_KEY, focus ? "1" : "0"); } catch { /* storage blocked */ } }, [focus]);
   const mainRef = useRef<HTMLElement>(null);
   const frame = useRef<CardFrameHandle>(null);
   const shownAt = useRef(Date.now());
@@ -257,6 +262,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   }, [card, phase, load, scope.deck, scope.q, scope.ahead]);
 
   const onKey = useCallback((key: string) => {
+    if (key === "Escape") return void setFocus(false);
     if (phase === "answer" || phase === "result") {
       // As in Anki: - and = bury the card or the note, @ and ! suspend them.
       if (key === "-" || key === "=") return void setAside("bury", key === "=");
@@ -286,7 +292,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       if (e.repeat && (["u", "U", "=", "-", "@", "!"].includes(e.key) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z"))) return;
       const t = e.target as HTMLElement;
       if (t?.closest("input, textarea, [contenteditable]")) return;
-      if (e.key === "Escape") return navigate("/");
+      if (e.key === "Escape") return focus ? setFocus(false) : navigate("/");
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") return onKey("Mod+Enter");
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "z") {
         e.preventDefault();
@@ -296,15 +302,20 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [onKey]);
+  }, [onKey, focus]);
 
   const suggested = result?.grade.suggested ?? null;
   const verdict = card?.showVerdict !== false && result?.grade.verdict && VERDICT_TEXT[result.grade.verdict];
   const total = counts ? counts.new + counts.learning + counts.review : 0;
+  // In focus mode the header and the card's badges go, and the bottom bar only shows when it has
+  // something to press: not while grading, nor while a card that submits by itself keeps Check disabled.
+  const bare = focus && !!card && phase !== "done" && phase !== "loading";
+  const idleBar = phase === "grading" || (phase === "answer" && !ready && card?.grader !== "self");
+  const showBar = !bare || !idleBar;
 
   return (
-    <div className={cn("mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 pb-44 sm:px-8", sk.on && "overflow-x-clip")}>
-      {phone ? (
+    <div className={cn("mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 sm:px-8", showBar ? "pb-44" : "pb-6", bare && "pt-[env(safe-area-inset-top)]", sk.on && "overflow-x-clip")}>
+      {bare ? null : phone ? (
         <header className="sticky top-0 z-10 -mx-4 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-end bg-background/92 px-1 pt-[env(safe-area-inset-top)] backdrop-blur">
           <div className="flex h-14 w-full items-center gap-1">
             <button onClick={() => navigate("/")} className="flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent" aria-label="Back to decks"><ChevronLeft className="size-6" /></button>
@@ -312,6 +323,9 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
               <div className="score-serif truncate text-[1.15rem] leading-tight">{title}</div>
               {counts && <Tally n={counts.new} l={counts.learning} r={counts.review} className="mt-0.5 text-[12px]" />}
             </div>
+            {card && (phase === "answer" || phase === "result") && (
+              <button onClick={() => setFocus(true)} className="flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent" aria-label="Focus on the card"><Maximize2 className="size-5" /></button>
+            )}
             {card && (phase === "answer" || phase === "result") && (
               <button onClick={() => setTools(true)} className="flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent" aria-label="Card actions"><MoreHorizontal className="size-5" /></button>
             )}
@@ -357,6 +371,14 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+        {card && (phase === "answer" || phase === "result") && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => setFocus(true)} aria-label="Focus on the card"><Maximize2 /></Button>
+            </TooltipTrigger>
+            <TooltipContent>Focus: hide everything but the card. <kbd className="opacity-70">Esc</kbd> leaves</TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost" size="icon" disabled={phase === "loading" || phase === "grading"} onClick={undo} aria-label="Undo"><Undo2 /></Button>
@@ -370,7 +392,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
 
       {card && phase !== "done" && (
         <main ref={mainRef} style={phone ? sketchTransform(sk.view, mainRef.current) : undefined} className="flex flex-1 flex-col gap-5 pt-3 sm:gap-6 sm:pt-6">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <div className={cn("flex flex-wrap items-center gap-2 text-xs text-muted-foreground", bare && "hidden")}>
             <Badge variant="outline" className="font-normal">{card.type}</Badge>
             {card.scheduler.id !== "fsrs" && <Badge variant="outline" className="font-normal">{card.scheduler.name.toLowerCase()}</Badge>}
             {card.state === 0 && <Badge variant="outline" className="border-new/30 font-normal text-new">new</Badge>}
@@ -405,6 +427,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
             onReady={setReady}
             onKey={onKey}
             onError={(m) => toast.error("Card error", { description: m })}
+            fitScreen={bare}
           />
 
           {phase === "result" && result && (
@@ -447,7 +470,20 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
         </main>
       )}
 
-      {card && (phase === "answer" || phase === "grading" || phase === "result") && (
+      {bare && (
+        <button
+          onClick={() => setFocus(false)}
+          aria-label="Leave focus mode"
+          title="Leave focus mode (Esc)"
+          className={cn(
+            "fixed right-[max(1rem,env(safe-area-inset-right))] z-30 flex size-10 items-center justify-center rounded-full border bg-background/80 text-muted-foreground shadow-sm backdrop-blur hover:text-foreground",
+            showBar ? "bottom-[calc(6.5rem+env(safe-area-inset-bottom))] sm:bottom-[calc(7.5rem+env(safe-area-inset-bottom))]" : "bottom-[max(1rem,env(safe-area-inset-bottom))]",
+          )}
+        >
+          <Minimize2 className="size-4" />
+        </button>
+      )}
+      {card && showBar && (phase === "answer" || phase === "grading" || phase === "result") && (
         <footer className="fixed inset-x-0 bottom-0 z-20 border-t bg-background pb-[env(safe-area-inset-bottom)] max-md:border-t-0 max-md:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           <div className="mx-auto flex max-w-3xl items-center justify-center gap-2 px-3 py-3 max-md:px-4 sm:px-8 sm:py-4">
             {phone && sk.on ? (
@@ -533,7 +569,10 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
               { label: "Suspend this card", icon: Pause, onClick: () => setAside("suspend", false) },
               { label: "Suspend the whole note", icon: Pause, onClick: () => setAside("suspend", true) },
             ],
-            [{ label: "Edit card", icon: Pencil, onClick: () => navigate(`/browse?item=${encodeURIComponent(card.itemId)}`) }],
+            [
+              { label: "Focus on the card", icon: Maximize2, hint: "hide everything else", onClick: () => setFocus(true) },
+              { label: "Edit card", icon: Pencil, onClick: () => navigate(`/browse?item=${encodeURIComponent(card.itemId)}`) },
+            ],
           ]}
         />
       )}

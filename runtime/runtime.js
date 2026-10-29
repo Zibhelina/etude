@@ -69,6 +69,7 @@ function createApi(init, assets = { type: "", files: {} }) {
   let getter = null;
   const assetNames = Object.keys(assets.files ?? {}).sort();
   let resultHandlers = [];
+  let screenHandlers = [];
   let submitted = false;
   let ready = true;
   const api = {
@@ -129,6 +130,17 @@ function createApi(init, assets = { type: "", files: {} }) {
       resultHandlers.push(fn);
       if (api.result) fn(api.result);
     },
+    /** How much of the screen the card can fill: `{ height }` in CSS pixels, or `{ height: null }` when the page scrolls. */
+    screen: { height: init.screen?.height ?? null },
+    /** Called with `etude.screen` whenever it changes (focus mode on or off, the window resized). */
+    onScreen(fn) {
+      screenHandlers.push(fn);
+    },
+    _screen(height) {
+      api.screen = { height: typeof height === "number" && height > 0 ? Math.round(height) : null };
+      setScreenVar(api.screen.height);
+      for (const fn of screenHandlers) fn(api.screen);
+    },
     /** Shortcut helpers. */
     $(sel) {
       return api.root.querySelector(sel);
@@ -177,6 +189,12 @@ function applyTheme(theme) {
     .map(([k, v]) => `${k}: ${v};`)
     .join(" ");
   document.getElementById("etude-theme").textContent = `:root { ${css} color-scheme: ${theme.scheme ?? "dark"}; }`;
+}
+
+// --etude-screen-height: the screen height the card can fill, or unset when the page scrolls.
+function setScreenVar(height) {
+  if (height) document.documentElement.style.setProperty("--etude-screen-height", `${height}px`);
+  else document.documentElement.style.removeProperty("--etude-screen-height");
 }
 
 function observeSize() {
@@ -285,6 +303,7 @@ export function boot(main, templateHtml, assets) {
       const split = splitResultBlocks(templateHtml);
       blocks = split.blocks;
       api = createApi(msg, assets);
+      setScreenVar(api.screen.height);
       // Parse inertly: an `autofocus` attribute inserted into this cross-origin frame makes Chrome log
       // an error and does nothing. focusCard() honours it as data-autofocus instead.
       const tpl = document.createElement("template");
@@ -315,6 +334,7 @@ export function boot(main, templateHtml, assets) {
     } else if (msg.type === "collect") api?._collect();
     else if (msg.type === "result") api?._result(msg.result);
     else if (msg.type === "theme") applyTheme(msg.theme);
+    else if (msg.type === "screen") api?._screen(msg.height);
     else if (msg.type === "focus") focusCard(api?.root);
   });
   forwardKeys();

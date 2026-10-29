@@ -12,7 +12,8 @@ The app talks to an etude-cloud server. The default is `https://sync.etude.study
 - Devices: list, rename, revoke. Revoking another device needs a fresh sign-in.
 - Export my data: the server's JSON export.
 - Delete account: type the email to confirm, then confirm a fresh sign-in if the last one is older than 10 minutes. The server deletes devices, passkeys, the Sync vault and entitlements; orders stay anonymized for tax. The local collection stays.
-- Etude Sync: plan, renewal or end date, storage used of 1 GB. "Subscribe on etude.study" and "Manage subscription" open the website (Polar checkout and portal).
+
+The Sync plan is in Settings → Sync, at the top while signed in to the account (not for folder sync): plan, renewal or end date, storage used of 1 GB. "Subscribe on etude.study" and "Manage subscription" open the website (Polar checkout and portal).
 
 Signing in to the account also signs Sync in when Sync uses the same server, so Sync only needs the vault password afterwards.
 
@@ -21,7 +22,7 @@ Signing in to the account also signs Sync in when Sync uses the same server, so 
 `web/src/lib/platform.ts` reads `window.Capacitor` (no import): `isNativeApp()`, `nativePlatform()`, `isIOSApp()`, `canShowPurchases()`.
 
 - Desktop app and browsers: prices, "Buy on etude.study", "Subscribe on etude.study", "Manage subscription", and the Selling tab.
-- iOS and Android apps: the apps sell nothing. Paid decks appear only when owned, under "Your decks", with no price, no buy button and no link to buy. The Sync block shows plan and storage with no price and no subscribe or manage buttons. The Selling tab is hidden.
+- iOS and Android apps: the apps sell nothing. Paid decks appear only when owned, under "Your decks", with no price, no buy button and no link to buy. The Sync plan shows plan and storage with no price and no subscribe or manage buttons. The Selling tab is hidden.
 
 ## Market
 

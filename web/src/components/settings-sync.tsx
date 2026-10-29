@@ -1,7 +1,8 @@
-// Settings → Sync: connect a server or folder, sign in, unlock the vault and sync on demand.
+// Settings → Sync: the Sync plan and storage, then connect a server or folder, sign in, unlock the vault
+// and sync on demand.
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Check, CircleAlert, Copy, Loader2, LogOut, RefreshCw } from "lucide-react";
+import { Check, CircleAlert, Copy, ExternalLink, Loader2, LogOut, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,8 @@ import { relative } from "@/lib/api";
 import { etudeFetch } from "@/lib/transport";
 import { cn } from "@/lib/utils";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
-import { account } from "@/lib/account";
+import { account, bytes, openOutside, type AccountStatus } from "@/lib/account";
+import { canShowPurchases } from "@/lib/platform";
 
 const DEFAULT_SERVER = "https://sync.etude.study";
 
@@ -37,6 +39,7 @@ type UnlockResponse = { recoveryKey?: string; status: SyncStatus };
 type Stage = "setup" | "signin" | "code" | "unlock" | "recovery" | "ready";
 
 const errorMessage = (e: unknown) => (e instanceof Error ? e.message : "The request failed.");
+const date = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "");
 
 async function callSync<T>(method: "GET" | "POST", path: string, body?: Record<string, unknown>): Promise<T> {
   const res = await etudeFetch(path, {
@@ -64,6 +67,7 @@ async function callSync<T>(method: "GET" | "POST", path: string, body?: Record<s
 
 export function SyncSection() {
   const [status, setStatus] = useState<SyncStatus | null>(null);
+  const [acct, setAcct] = useState<AccountStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,17 +102,25 @@ export function SyncSection() {
     }
   }, []);
 
+  const loadAccount = useCallback(async () => {
+    setAcct(await account.status().catch(() => null));
+  }, []);
+
   useEffect(() => {
     void load();
+    void loadAccount();
     // Signing in to the Etude account also signs Sync in when both use the same server.
     const h = () => {
       void load(true);
-      // Not set up yet and not edited by hand: follow the account's server.
-      account.status().then((a) => setServer((cur) => (cur === DEFAULT_SERVER || cur === suggested.current ? (suggested.current = a.server) : cur))).catch(() => {});
+      account.status().then((a) => {
+        setAcct(a);
+        // Not set up yet and not edited by hand: follow the account's server.
+        setServer((cur) => (cur === DEFAULT_SERVER || cur === suggested.current ? (suggested.current = a.server) : cur));
+      }).catch(() => setAcct(null));
     };
     window.addEventListener(ACCOUNT_EVENT, h);
     return () => window.removeEventListener(ACCOUNT_EVENT, h);
-  }, [load]);
+  }, [load, loadAccount]);
 
   // Fill the forms once from the server, without overwriting anything being typed.
   useEffect(() => {
@@ -127,6 +139,11 @@ export function SyncSection() {
     const t = window.setInterval(() => void load(true), 2500);
     return () => window.clearInterval(t);
   }, [status?.busy, load]);
+
+  // Storage used changes with each sync.
+  useEffect(() => {
+    if (status?.lastSync) void loadAccount();
+  }, [status?.lastSync, loadAccount]);
 
   // Keep "3m ago" current while the page is open.
   const [, setTick] = useState(0);
@@ -316,6 +333,7 @@ export function SyncSection() {
 
   return (
     <Section id="sync" title="Sync" description="Keep the same collection on more than one device. Sign in, unlock it with your sync password, and changes sync in the background.">
+      {acct?.signedIn && acct.me && status?.kind !== "folder" && <Plan st={acct} onChanged={loadAccount} />}
       {loading && !status && !loadError && (
         <Block>
           <div className="flex flex-col gap-3">
@@ -609,6 +627,74 @@ export function SyncSection() {
         </>
       )}
     </Section>
+  );
+}
+
+const REASON: Record<string, string> = {
+  billing_off: "Included on this server",
+  active: "Active",
+  canceled_until_end: "Canceled, active until the period ends",
+  grace: "Payment failed, still syncing for a few days",
+  past_due: "Paused: the payment failed",
+  expired: "Ended",
+  revoked: "Ended",
+  none: "Not subscribed",
+};
+
+function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const b = st.billing;
+  const active = !!st.me?.sync.active;
+  const reason = st.me?.sync.reason ?? "none";
+  const quota = st.vault?.quotaBytes ?? st.offering?.quotaBytes ?? 1024 ** 3;
+  const used = st.vault?.usedBytes ?? 0;
+  const pct = Math.min(100, (used / quota) * 100);
+  const purchases = canShowPurchases();
+  const billingOn = !!st.offering?.billing;
+  const open = async (fn: () => Promise<{ url: string }>) => {
+    setBusy(true);
+    try {
+      openOutside((await fn()).url);
+    } catch (e) {
+      toast.error("Couldn't open the page", { description: errorMessage(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const when = b?.expires ? (reason === "active" ? `Renews ${date(b.expires)}` : reason === "canceled_until_end" ? `Ends ${date(b.expires)}` : reason === "grace" ? `Syncing until ${date(b.graceUntil)}` : reason === "expired" || reason === "revoked" ? `Ended ${date(b.expires)}` : "") : "";
+  return (
+    <Block title="Etude Sync" description={!billingOn ? "This server doesn't charge for Sync." : canShowPurchases() ? "US$5 a month or US$40 a year. 1 GB of end-to-end encrypted storage." : "1 GB of end-to-end encrypted storage."}>
+      <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm" data-plan>
+        <dt className="text-muted-foreground">Plan</dt>
+        <dd className={cn(active ? "text-foreground" : "text-muted-foreground")} data-plan-state={reason}>
+          {REASON[reason] ?? reason}
+          {when && <span className="text-muted-foreground"> · {when}</span>}
+        </dd>
+        <dt className="text-muted-foreground">Storage</dt>
+        <dd>
+          <div className="flex items-center gap-3">
+            <div className="h-1.5 w-full max-w-56 overflow-hidden rounded-full bg-muted" role="meter" aria-valuemin={0} aria-valuemax={quota} aria-valuenow={used} aria-label="Storage used">
+              <div className="h-full rounded-full bg-highlight" style={{ width: `${Math.max(pct, used ? 1.5 : 0)}%` }} />
+            </div>
+            <span className="shrink-0 tabular-nums text-muted-foreground">{bytes(used)} of {bytes(quota)}</span>
+          </div>
+        </dd>
+      </dl>
+      <div className="flex flex-wrap items-center gap-2">
+        {billingOn && purchases && !active && (
+          <Button size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => void open(account.checkout)}>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />} Subscribe on etude.study
+          </Button>
+        )}
+        {billingOn && purchases && b?.status && (
+          <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => void open(account.portal)}>
+            <ExternalLink className="size-4" /> Manage subscription
+          </Button>
+        )}
+        <Button variant="ghost" size="sm" className="h-10 md:h-8" onClick={() => void onChanged()}>Refresh</Button>
+      </div>
+      {billingOn && !purchases && !active && <p className="text-xs text-muted-foreground">Sync isn't active on this account.</p>}
+    </Block>
   );
 }
 

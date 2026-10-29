@@ -37,6 +37,8 @@ interface Props {
   autoFocus?: boolean;
   /** Tell the card how much screen height it can fill below its top (`etude.screen`), e.g. in focus mode. */
   fitScreen?: boolean;
+  /** Pixels kept free under the card when fitting the screen (default 16), e.g. for a button. */
+  fitMargin?: number;
   onSubmit?(answer: unknown): void;
   onReady?(ready: boolean): void;
   onKey?(key: string): void;
@@ -92,7 +94,7 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
   const screenHeight = useCallback(() => {
     const el = iframe.current;
     if (!latest.current.fitScreen || !el) return null;
-    return Math.max(200, Math.floor(window.innerHeight - (el.getBoundingClientRect().top + window.scrollY) - 16));
+    return Math.max(200, Math.floor(window.innerHeight - (el.getBoundingClientRect().top + window.scrollY) - (latest.current.fitMargin ?? 16)));
   }, []);
   useEffect(() => {
     if (!loaded) return;

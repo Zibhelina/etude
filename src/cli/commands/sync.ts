@@ -1,7 +1,7 @@
 import { syncFor } from "../../core/sync/client.ts";
 import { command, group, CliError } from "../registry.ts";
 group({name:"sync",summary:"Encrypted offline collection sync over a folder or etude-cloud",defaultVerb:"status"});
-command({name:"sync status",summary:"Show connection, lock and pending change status.",output:"{ configured, kind, signedIn, unlocked, hasKeys, lastSync, pending, busy, error }",run:c=>syncFor(c.e).status()});
+command({name:"sync status",summary:"Show connection, lock and pending change status.",output:"{ configured, kind, signedIn, unlocked, hasKeys, lastSync, pending, busy, error, progress }",run:c=>syncFor(c.e).status()});
 command({name:"sync setup",summary:"Connect this collection to a shared folder or Sync server.",writes:true,flags:[{name:"folder",type:"string",description:"Shared folder path."},{name:"server",type:"string",description:"HTTPS etude-cloud URL (HTTP on localhost)."}],examples:["etude sync setup --folder ~/Sync/Etude","etude sync setup --server https://sync.etude.study"],output:"Sync status",run:c=>syncFor(c.e).setup(c.flags)});
 command({name:"sync signin",summary:"Send a one-time sign-in link to your email.",writes:true,flags:[{name:"email",type:"string",description:"Account email."}],output:"Sync status",run:c=>{if(!c.flags.email)throw new CliError("--email is required");return syncFor(c.e).signin(c.flags.email);}});
 command({name:"sync verify",summary:"Redeem the code from the sign-in email.",writes:true,args:[{name:"code",required:true,description:"Single-use email code."}],output:"Sync status",run:c=>syncFor(c.e).verify(c.args.code)});

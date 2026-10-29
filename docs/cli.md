@@ -3341,7 +3341,7 @@ etude sync status
 
 *read-only*
 
-Output: { configured, kind, signedIn, unlocked, hasKeys, lastSync, pending, busy, error }
+Output: { configured, kind, signedIn, unlocked, hasKeys, lastSync, pending, busy, error, progress }
 
 ### etude sync setup
 

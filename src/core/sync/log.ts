@@ -12,7 +12,7 @@ export const TABLES = ["presets", "decks", "types", "schedulers", "type_folders"
 const UUID_TABLES = ["decks", "cards", "attempts", "reviews"];
 const q = (s: string) => `'${s.replaceAll("'", "''")}'`;
 const id = (s: string) => `"${s}"`;
-const SETTINGS = new Set(["dayStartHour", "learnAheadMinutes", "theme", "themes"]);
+const SETTINGS = new Set(["dayStartHour", "learnAheadMinutes", "theme", "themes", "typePrefs"]);
 export const safeSettings = (s: any) => Object.fromEntries(Object.entries(s ?? {}).filter(([k]) => SETTINGS.has(k)));
 
 function keyExpr(table: string, prefix: string) {

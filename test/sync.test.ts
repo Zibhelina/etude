@@ -1,7 +1,7 @@
 import { tmpdir } from "node:os";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Etude } from "../src/core/engine.ts";
 import { syncFor } from "../src/core/sync/client.ts";
@@ -42,6 +42,20 @@ test("LWW fields, permanent entity tombstones, idempotence and no echo",async()=
     assert.equal(rows(e.db,"items").has("missing"),false);drain(e.db);
     assert.equal(e.db.get("SELECT count(*) n FROM sync_events WHERE sent=0")!.n,0);
   }finally{e.close();rmSync(dir,{recursive:true,force:true});}
+});
+test("media names with spaces and accents sync; unsafe paths from another device are skipped",async()=>{
+  const dir=temp();const a=await Etude.open(join(dir,"a.db"),{home:join(dir,"ha")}),b=await Etude.open(join(dir,"b.db"),{home:join(dir,"hb")});
+  try {
+    const folder=join(dir,"shared");for(const e of [a,b]){syncFor(e).setup({folder});await syncFor(e).unlock({password});}
+    mkdirSync(join(a.mediaDir,"anki"),{recursive:true});writeFileSync(join(a.mediaDir,"anki","Thüringen Wappen.png"),"flag");
+    await syncFor(a).now();
+    // A compromised device (it holds the vault key) names a file outside the media folder.
+    receive(b.db,"evil-1",{v:1,table:"media",key:"../escaped.png",stamp:[Date.now(),0,"zz"],fields:{"/hash":"0".repeat(64)}});
+    await syncFor(b).now();
+    assert.equal(readFileSync(join(b.mediaDir,"anki","Thüringen Wappen.png"),"utf8"),"flag");
+    assert.equal(existsSync(join(b.mediaDir,"..","escaped.png")),false);
+    assert.equal(syncFor(b).status().error,null);
+  }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
 });
 async function login(s:ReturnType<typeof syncFor>,server:string,outbox:string,email:string){
   s.setup({server});await s.signin(email);

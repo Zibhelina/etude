@@ -1,5 +1,5 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import type { Etude } from "../engine.ts";
 import { bootstrap, drain, install, localEvent, receive, rows, type Change } from "./log.ts";
 import { createVault, decryptBlob, decryptEvent, encryptBlob, encryptEvent, fromB64, sha256Hex, toB64, unwrapWithPassword, unwrapWithRecovery } from "./crypto.ts";
@@ -9,6 +9,9 @@ import { accountFor } from "../account.ts";
 
 /** Most ciphertext characters sent in one push. */
 const PUSH_BATCH_BYTES=6*1024*1024;
+
+/** A media path is relative, stays inside the media folder and has no control characters or backslashes. Spaces and accents are fine. */
+const safeMediaPath=(file:string)=>!/[\x00-\x1f\x7f\\]/.test(file)&&!file.split("/").some(p=>p===""||p==="."||p==="..");
 
 type Config = { kind:"cloud"|"folder";server?:string;folder?:string;email?:string;enabled:boolean;hasKeys?:boolean;lastSync?:string };
 type Secrets = { token?:string;vk?:string };
@@ -65,7 +68,7 @@ export class SyncClient {
     return {status:this.status(),...(recoveryKey?{recoveryKey}:{})};
   }
   async off() {if(this.active)await this.active.catch(()=>{});const c=this.config();if(c?.kind==="cloud" && this.secrets().token && accountFor(this.e).token()!==this.secrets().token) { try { await (this.transport() as CloudTransport).json("/v1/auth/logout",{}); } catch { this.error="Signed out locally. This device could not be revoked on the server while offline."; } } if(c)this.set("config",{...c,enabled:false});if(this.initialized())rmSync(this.secretFile(),{force:true});return this.status();}
-  now() {if(this.active)return this.active;this.busy=true;this.error=null;this.active=this.run().then(()=>({...this.status(),busy:false})).catch(e=>{this.error=e.message;throw e;}).finally(()=>{this.busy=false;this.active=null;});return this.active;}
+  now() {if(this.active)return this.active;this.busy=true;this.active=this.run().then(()=>(this.error=null,{...this.status(),busy:false})).catch(e=>{this.error=e.message;throw e;}).finally(()=>{this.busy=false;this.active=null;});return this.active;}
   async auto() {if(!this.status().configured||!this.status().unlocked)return;try{await this.now();}catch(e){if(e instanceof TypeError || /fetch failed|network|offline|timeout/i.test((e as Error).message))this.error=null;}}
   private async run() {
     const vk=this.secrets().vk;if(!vk)throw new Error("unlock Sync first");const key=fromB64(vk);const t=this.transport();const db=this.e.db;
@@ -74,19 +77,24 @@ export class SyncClient {
     let cursor=this.meta("cursor","");let more=true;
     while(more) {const page=await t.pull(cursor);for(const event of page.events)receive(db,event.id,await decryptEvent<Change>(key,event.id,event.ciphertext));cursor=page.cursor;more=page.more;this.set("cursor",cursor);}
     // Pull mappings first so another device's encrypted copy can be reused.
+    // Read the registers once: a collection can hold tens of thousands of media files.
+    const blobs=rows(db,"blob"),media=rows(db,"media");
     const addBlob=async(bytes:Uint8Array) => {
-      const hash=await sha256Hex(bytes);let name=rows(db,"blob").get(hash)?.name;
-      if(!name) {const b=await encryptBlob(key,bytes);await t.putBlob(b.hash,b.ciphertext);name=b.hash;localEvent(db,"blob",hash,{"/name":name});}
+      const hash=await sha256Hex(bytes);let name=blobs.get(hash)?.name;
+      if(!name) {const b=await encryptBlob(key,bytes);await t.putBlob(b.hash,b.ciphertext);name=b.hash;localEvent(db,"blob",hash,{"/name":name});blobs.set(hash,{name});}
       db.run("INSERT INTO sync_blobs VALUES(?,?,?) ON CONFLICT(hash) DO UPDATE SET name=excluded.name,bytes=excluded.bytes",hash,name,bytes);
       return hash;
     };
     for(const asset of db.all("SELECT hash,bytes FROM type_assets")) if(!db.get("SELECT 1 FROM sync_blobs WHERE hash=?",asset.hash))await addBlob(new Uint8Array(asset.bytes));
-    const walk=async(dir:string,prefix="") => {if(!existsSync(dir))return;for(const name of readdirSync(dir)){const p=join(dir,name),relative=prefix+name;if(statSync(p).isDirectory())await walk(p,relative+"/");else{const bytes=new Uint8Array(readFileSync(p));const hash=await sha256Hex(bytes);if(rows(db,"media").get(relative)?.hash!==hash){await addBlob(bytes);localEvent(db,"media",relative,{"/hash":hash});}}}};
+    // Files already on disk, by path, so unchanged ones aren't written again below.
+    const onDisk=new Map<string,string>();
+    const walk=async(dir:string,prefix="") => {if(!existsSync(dir))return;for(const name of readdirSync(dir)){const p=join(dir,name),relative=prefix+name;if(statSync(p).isDirectory())await walk(p,relative+"/");else if(safeMediaPath(relative)){const bytes=new Uint8Array(readFileSync(p));const hash=await sha256Hex(bytes);onDisk.set(relative,hash);if(media.get(relative)?.hash!==hash){await addBlob(bytes);localEvent(db,"media",relative,{"/hash":hash});}}}};
     await walk(this.e.mediaDir);
     drain(db);
     const mappings=rows(db,"blob");
     for(const [hash,r] of mappings) if(!db.get("SELECT 1 FROM sync_blobs WHERE hash=?",hash)) {const bytes=await decryptBlob(key,await t.getBlob(r.name),r.name);if(await sha256Hex(bytes)!==hash)throw new Error("plaintext blob hash mismatch");db.run("INSERT INTO sync_blobs VALUES(?,?,?)",hash,r.name,bytes);}
-    for(const [file,r] of rows(db,"media")) {if(!/^[\w./-]+$/.test(file)||file.split("/").some(p=>p===".."||p===""))throw new Error("invalid media path");const b=db.get("SELECT bytes FROM sync_blobs WHERE hash=?",r.hash);if(!b)throw new Error("missing media blob");const path=join(this.e.mediaDir,file);mkdirSync(dirname(path),{recursive:true});writeFileSync(path,b.bytes);}
+    const root=resolve(this.e.mediaDir);
+    for(const [file,r] of rows(db,"media")) {if(!safeMediaPath(file)||!resolve(root,file).startsWith(root+sep))continue;if(onDisk.get(file)===r.hash)continue;const b=db.get("SELECT bytes FROM sync_blobs WHERE hash=?",r.hash);if(!b)throw new Error("missing media blob");const path=join(this.e.mediaDir,file);mkdirSync(dirname(path),{recursive:true});writeFileSync(path,b.bytes);}
     for(;;) {
       const batch=db.all("SELECT * FROM sync_events WHERE sent=0 ORDER BY id LIMIT 200");if(!batch.length)break;
       // etude-cloud refuses push bodies over 8 MiB, so a batch also stops at ~6 MiB of ciphertext.

@@ -504,6 +504,9 @@ export const api = {
   type: (id: string) => call<CardType>("GET", `/api/types/${encodeURIComponent(id)}`),
   /** `leftover`: cards on faces the saved type no longer makes (null when the definition didn't change). */
   saveType: (def: CardType) => call<CardType & { leftover: { cards: number; reviews: number } | null }>("PUT", `/api/types/${encodeURIComponent(def.id)}`, def),
+  typePrefs: (id: string) => call<Record<string, unknown>>("GET", `/api/types/${encodeURIComponent(id)}/prefs`),
+  setTypePref: (id: string, key: string, value: unknown) => call<Record<string, unknown>>("PUT", `/api/types/${encodeURIComponent(id)}/prefs`, { key, value }),
+  resetTypePrefs: (id: string) => call<Record<string, unknown>>("DELETE", `/api/types/${encodeURIComponent(id)}/prefs`),
   typeLeftover: (id: string) => call<LeftoverReport>("GET", `/api/types/${encodeURIComponent(id)}/leftover`),
   cleanup: () => call<CleanupReport>("GET", "/api/cleanup"),
   deleteLeftoverCards: (only: { type?: string; face?: string } = {}) => call<{ cards: number; reviews: number }>("POST", "/api/cleanup/cards", only),

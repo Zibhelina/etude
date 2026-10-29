@@ -283,6 +283,7 @@ These work on every command, before or after the command words.
   - [`type test-grade`](#type-test-grade) Run a type's grader on an answer without saving anything.
   - [`type reset`](#type-reset) Restore an edited built-in type to the shipped version.
   - [`type delete`](#type-delete) Delete a custom type. Items using it (archived ones count) stop it, unless --items deletes them too.
+  - [`type prefs`](#type-prefs) Show, set or reset what a type's cards saved for themselves (`etude.setPref`).
   - [`type move`](#type-move) Put a type in a folder of the Types page (created if needed); `--root` takes it out of every folder.
   - [`type folder list`](#type-folder-list) Folders of the Types page with the types directly inside each one.
   - [`type folder create`](#type-folder-create) Create a folder (and its parents) in the Types page.
@@ -2335,6 +2336,38 @@ Output: { deleted, items, cards, reviews }
 ```sh
 etude type delete my-old-type --yes
 etude type delete anki-basic-2 --items --dry-run
+```
+
+### etude type prefs
+
+<a id="type-prefs"></a>
+
+Show, set or reset what a type's cards saved for themselves (`etude.setPref`).
+
+Card preferences are a few small settings a card type keeps for all its cards, such as a game's chosen character or a sound switch. They live in the collection's settings and sync with it. A value is read as JSON when it parses (`sound=false`, `level=3`) and as text otherwise (`hero=elder`); `key=` with nothing after it removes the key.
+
+```
+etude type prefs <id> [pairs...] [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Type id. |
+| `pairs...` (optional) | key=value preferences to set. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--reset` | boolean | Forget every preference of the type. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { type, prefs }
+
+```sh
+etude type prefs hanzi-pixel
+etude type prefs hanzi-pixel hero=4-stern-elder sound=false
+etude type prefs hanzi-pixel --reset
 ```
 
 ### etude type move

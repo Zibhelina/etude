@@ -301,6 +301,13 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const r = etude.saveTypeReport({ ...(await body(c)), id: c.req.param("id") });
     return c.json({ ...r.type, leftover: r.leftover });
   });
+  // What a type's cards saved for themselves (etude.setPref): read when a card opens, written by the card frame.
+  app.get("/api/types/:id/prefs", (c) => c.json(etude.typePrefs(c.req.param("id"))));
+  app.put("/api/types/:id/prefs", async (c) => {
+    const b = await body(c);
+    return c.json(etude.setTypePref(c.req.param("id"), b.key, b.value ?? null));
+  });
+  app.delete("/api/types/:id/prefs", (c) => c.json(etude.resetTypePrefs(c.req.param("id"))));
   app.get("/api/types/:id/leftover", (c) => c.json(etude.leftoverReport({ type: c.req.param("id") })));
   app.get("/api/types/:id/usage", (c) => c.json(etude.typeUsage(c.req.param("id"))));
   app.delete("/api/types/:id", async (c) => {

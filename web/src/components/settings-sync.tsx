@@ -274,8 +274,20 @@ export function SyncSection() {
 
   const syncNow = async () => {
     if (busy) return;
-    const s = await withBusy("now", () => callSync<SyncStatus>("POST", "/api/sync/now", {}));
-    if (s) setStatus(s);
+    setBusy("now");
+    setError(null);
+    try {
+      setStatus(await callSync<SyncStatus>("POST", "/api/sync/now", {}));
+    } catch (e) {
+      // A failed run leaves its error in the status; keep the request's own message only when the status can't be read.
+      try {
+        setStatus(await callSync<SyncStatus>("GET", "/api/sync/status"));
+      } catch {
+        setError(errorMessage(e));
+      }
+    } finally {
+      setBusy(null);
+    }
   };
 
   const signOut = async () => {
@@ -332,9 +344,11 @@ export function SyncSection() {
 
   const newVault = !!status && !status.hasKeys;
   const syncing = !!status && (status.busy || busy === "now");
+  // One notice: this form's own error first, then the last sync run's. None while a new run is going.
+  const problem = syncing ? null : (error ?? status?.error ?? null);
   const stateLabel = syncing
     ? "Syncing…"
-    : status?.error || error
+    : problem
       ? "Needs attention"
       : status && status.pending > 0
         ? `${status.pending} ${status.pending === 1 ? "change" : "changes"} waiting`
@@ -376,8 +390,7 @@ export function SyncSection() {
           >
             <TextInput label="Server" value={server} onChange={setServer} placeholder={DEFAULT_SERVER} mono autoComplete="url" hint="The sync server address. Change it to use one of your own." />
             {!(globalThis as any).__etudeLocal && <TextInput label="Folder (optional)" value={folder} onChange={setFolder} placeholder="/home/you/Etude" mono autoComplete="off" hint="Desktop app only. Leave empty to sync through the server." />}
-            {error && <Notice>{error}</Notice>}
-            {status.error && <Notice>{status.error}</Notice>}
+            {problem && <Notice>{problem}</Notice>}
             <div>
               <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
                 {busy === "setup" && <Loader2 className="size-4 animate-spin" />}
@@ -405,8 +418,7 @@ export function SyncSection() {
             }}
           >
             <TextInput label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" inputMode="email" placeholder="you@example.com" />
-            {error && <Notice>{error}</Notice>}
-            {status.error && <Notice>{status.error}</Notice>}
+            {problem && <Notice>{problem}</Notice>}
             <div>
               <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
                 {busy === "signin" && <Loader2 className="size-4 animate-spin" />}
@@ -427,8 +439,7 @@ export function SyncSection() {
             }}
           >
             <TextInput label="Sign-in code" value={code} onChange={setCode} autoComplete="one-time-code" inputMode="text" placeholder="Code from the email" mono />
-            {error && <Notice>{error}</Notice>}
-            {status.error && <Notice>{status.error}</Notice>}
+            {problem && <Notice>{problem}</Notice>}
             <div className="flex flex-wrap items-center gap-2">
               <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
                 {busy === "verify" && <Loader2 className="size-4 animate-spin" />}
@@ -475,8 +486,7 @@ export function SyncSection() {
             {status.hasKeys && useRecovery ? (
               <>
                 <TextInput label="Recovery key" value={recoveryInput} onChange={setRecoveryInput} autoComplete="off" mono placeholder="Your recovery key" />
-                {error && <Notice>{error}</Notice>}
-                {status.error && <Notice>{status.error}</Notice>}
+                {problem && <Notice>{problem}</Notice>}
                 <div className="flex flex-wrap items-center gap-2">
                   <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
                     {busy === "unlock" && <Loader2 className="size-4 animate-spin" />}
@@ -512,8 +522,7 @@ export function SyncSection() {
                   hint={newVault ? "You'll need it on every device that syncs this collection." : undefined}
                 />
                 {newVault && <TextInput label="Confirm password" type="password" value={confirm} onChange={setConfirm} autoComplete="new-password" />}
-                {error && <Notice>{error}</Notice>}
-                {status.error && <Notice>{status.error}</Notice>}
+                {problem && <Notice>{problem}</Notice>}
                 <div className="flex flex-wrap items-center gap-2">
                   <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
                     {busy === "unlock" && <Loader2 className="size-4 animate-spin" />}
@@ -582,11 +591,10 @@ export function SyncSection() {
             title="Connection"
             description={status.kind === "folder" ? "Syncing through a folder on this computer." : "Syncing through your server."}
           >
-            {error && <Notice>{error}</Notice>}
-            {status.error && <Notice>{status.error}</Notice>}
+            {problem && <Notice>{problem}</Notice>}
             <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm">
               <dt className="text-muted-foreground">Status</dt>
-              <dd className={cn(status.error && "text-destructive")}>{stateLabel}</dd>
+              <dd className={cn(problem && "text-destructive")}>{stateLabel}</dd>
               {syncing && status.progress && (
                 <>
                   <dt className="text-muted-foreground">Progress</dt>

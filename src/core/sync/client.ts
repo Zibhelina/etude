@@ -97,7 +97,7 @@ export class SyncClient {
     return {status:this.status(),...(recoveryKey?{recoveryKey}:{})};
   }
   async off() {if(this.active)await this.active.catch(()=>{});const c=this.config();if(c?.kind==="cloud" && this.secrets().token && accountFor(this.e).token()!==this.secrets().token) { try { await (this.transport() as CloudTransport).json("/v1/auth/logout",{}); } catch { this.error="Signed out locally. This device could not be revoked on the server while offline."; } } if(c)this.set("config",{...c,enabled:false});if(this.initialized())rmSync(this.secretFile(),{force:true});return this.status();}
-  now() {if(this.active)return this.active;this.busy=true;this.active=this.run().then(()=>(this.error=null,{...this.status(),busy:false})).catch(e=>{this.error=e.message;throw e;}).finally(()=>{this.busy=false;this.active=null;this.progress=null;});return this.active;}
+  now() {if(this.active)return this.active;this.busy=true;this.active=this.run().then(()=>(this.error=null,this.progress=null,{...this.status(),busy:false})).catch(e=>{this.error=e.message;throw e;}).finally(()=>{this.busy=false;this.active=null;this.progress=null;});return this.active;}
   async auto() {if(!this.status().configured||!this.status().unlocked)return;try{await this.now();}catch(e){if(e instanceof TypeError || /fetch failed|network|offline|timeout/i.test((e as Error).message))this.error=null;}}
   private async run() {
     const vk=this.secrets().vk;if(!vk)throw new Error("unlock Sync first");const key=fromB64(vk);const t=this.transport();const db=this.e.db;

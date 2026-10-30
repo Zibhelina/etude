@@ -56,17 +56,19 @@ function show(os) {
   $("[data-home]").textContent = o.home;
   $("[data-env]").textContent = o.env;
   const panel = $("[data-panel]");
-  panel.classList.toggle("mac", os === "mac");
+  panel.dataset.show = os;
   panel.classList.remove("os-panel"); void panel.offsetWidth; panel.classList.add("os-panel");
   history.replaceState(null, "", `#${os}`);
 }
 $$("[data-os]").forEach((b) => b.addEventListener("click", () => show(b.dataset.os)));
 
-// Mac: the terminal steps open on request.
-$("[data-mac-term]").addEventListener("click", (ev) => {
-  const open = $("[data-panel]").classList.toggle("show-term");
-  ev.currentTarget.setAttribute("aria-expanded", String(open));
-});
+// The terminal steps open on request.
+$$("[data-term-toggle]").forEach((b) =>
+  b.addEventListener("click", () => {
+    const open = $("[data-panel]").classList.toggle("show-term");
+    $$("[data-term-toggle]").forEach((t) => t.setAttribute("aria-expanded", String(open)));
+  }),
+);
 
 // Mac: Intel Macs get the Intel build as the main button when the browser can tell.
 async function macChip() {

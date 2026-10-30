@@ -148,9 +148,9 @@ The Market also has a Morse code deck, the Showcase, single card types and 22 th
 
 ## Quick start
 
-**On a Mac**, download the app from the [latest release](https://github.com/Zibhelina/etude/releases/latest) ([Apple Silicon](https://github.com/Zibhelina/etude/releases/latest/download/Etude-mac-apple-silicon.dmg), [Intel](https://github.com/Zibhelina/etude/releases/latest/download/Etude-mac-intel.dmg)) and drag it to Applications. It has Node inside and opens on the showcase.
+**The app**, with everything inside, from [etude.study/download](https://etude.study/download.html) or the [latest release](https://github.com/Zibhelina/etude/releases/latest): Mac ([Apple Silicon](https://github.com/Zibhelina/etude/releases/latest/download/Etude-mac-apple-silicon.dmg), [Intel](https://github.com/Zibhelina/etude/releases/latest/download/Etude-mac-intel.dmg)), [Windows](https://github.com/Zibhelina/etude/releases/latest/download/Etude-windows-setup.exe), Linux ([.deb](https://github.com/Zibhelina/etude/releases/latest/download/Etude-linux-amd64.deb), [.rpm](https://github.com/Zibhelina/etude/releases/latest/download/Etude-linux-x86_64.rpm), [AppImage](https://github.com/Zibhelina/etude/releases/latest/download/Etude-linux-x86_64.AppImage)). Windows and the AppImage update themselves.
 
-**Anywhere else**, Etude needs Node 24 or newer. Node runs the TypeScript sources directly, so the server has no compile step.
+**From source**, Etude needs Node 24 or newer. Node runs the TypeScript sources directly, so the server has no compile step.
 
 ```sh
 git clone https://github.com/Zibhelina/etude.git

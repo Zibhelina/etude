@@ -92,7 +92,8 @@ export const account = {
   status: () => call<AccountStatus>("GET", "/api/account"),
   setServer: (server: string) => call<{ server: string }>("PUT", "/api/account/server", { server }),
   signin: (email: string) => call<{ ok: boolean; email: string }>("POST", "/api/account/signin", { email }),
-  verify: (code: string) => call<{ reauth: boolean; email: string }>("POST", "/api/account/verify", { code }),
+  /** `email` is the address the code was sent to (the server falls back to the last sign-in it started). */
+  verify: (code: string, email?: string) => call<{ reauth: boolean; email: string }>("POST", "/api/account/verify", { code, email }),
   signout: () => call<{ signedIn: false }>("POST", "/api/account/signout"),
   devices: () => call<{ devices: Device[] }>("GET", "/api/account/devices"),
   renameDevice: (id: string, name: string) => call<Device>("PATCH", `/api/account/devices/${encodeURIComponent(id)}`, { name }),

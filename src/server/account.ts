@@ -22,7 +22,7 @@ export function accountRoutes(app: Hono, e: Etude) {
   app.post("/api/account/signin", async (c) => c.json(await a.signin(need((await body(c)).email, "email"))));
   app.post("/api/account/verify", async (c) => {
     const b = await body(c);
-    return c.json(await a.verify(need(b.code, "code"), b.deviceName));
+    return c.json(await a.verify(need(b.code, "code"), b.deviceName, typeof b.email === "string" ? b.email : undefined));
   });
   app.post("/api/account/signout", async (c) => c.json(await a.signout()));
 

@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { Etude } from "../src/core/engine.ts";
-import { accountFor, AccountError, checkServerUrl, paidId } from "../src/core/account.ts";
+import { accountFor, AccountError, checkServerUrl, paidId, signInCode } from "../src/core/account.ts";
 import { syncFor } from "../src/core/sync/client.ts";
 import { agentRefusal } from "../src/core/agent-guard.ts";
 import { COMMANDS } from "../src/cli/registry.ts";
@@ -18,6 +18,7 @@ function stub() {
   let pack: any = { etude: "pack/1", name: "Pharm", decks: [{ name: "Pharm" }], items: [{ id: "p1", type: "basic", deck: "Pharm", fields: { front: "ACE inhibitor ending", back: "-pril" } }] };
   let version = "1.0.0";
   const calls: string[] = [];
+  const verifyBodies: any[] = [];
   const srv = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     let raw = "";
     for await (const c of req) raw += c;
@@ -29,7 +30,9 @@ function stub() {
     if (path === "/v1/server") return send(200, { billing: true, market: true, quotaBytes: 1024 ** 3, passkeys: { rpId: "localhost" } });
     if (path === "/v1/auth/email/start") return send(200, { ok: true });
     if (path === "/v1/auth/email/verify") {
-      if (body.token !== "good-code") return send(401, { error: { code: "invalid_token", message: "bad code" } });
+      verifyBodies.push(body);
+      const good = body.token === "good-code" || (body.email === "a@example.test" && body.code === "482913" && body.token === undefined);
+      if (!good) return send(401, { error: body.code ? { code: "invalid_code", message: "That code isn't right. 4 tries left.", attemptsLeft: 4 } : { code: "invalid_token", message: "bad code" } });
       if (tokens.has(auth)) return send(200, { reauth: true, account: { id: "acc_1", email: "a@example.test" } });
       tokens.add("ecd_tok");
       return send(200, { token: "ecd_tok", account: { id: "acc_1", email: "a@example.test" } });
@@ -46,6 +49,7 @@ function stub() {
   });
   return {
     calls,
+    verifyBodies,
     bump(next: string) {
       version = next;
       pack = { ...pack, items: [...pack.items, { id: "p2", type: "basic", deck: "Pharm", fields: { front: "Beta blocker ending", back: "-olol" } }] };
@@ -103,6 +107,50 @@ test("account: sign in, token file 0600, purchased deck installs and updates thr
     assert.equal(e.db.get("SELECT count(*) AS n FROM items WHERE id = 'p1'")!.n, 1);
   } finally {
     e.close();
+    await s.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("account and sync: a 6-digit code (spaces allowed) goes as {email, code}, anything else as {token}", async () => {
+  assert.equal(signInCode("482913"), "482913");
+  assert.equal(signInCode(" 482 913 "), "482913");
+  assert.equal(signInCode("48291"), null);
+  assert.equal(signInCode("ml_abcdefghijklmnop"), null);
+  assert.equal(signInCode("4829134"), null);
+  const dir = mkdtempSync(join((process.env.TMPDIR ?? tmpdir()), "account-code-"));
+  const s = stub();
+  const url = await s.start();
+  const e = await Etude.open(join(dir, "etude.db"), { home: join(dir, "home") });
+  const e2 = await Etude.open(join(dir, "etude2.db"), { home: join(dir, "home2") });
+  try {
+    const a = accountFor(e);
+    a.setServer(url);
+    await assert.rejects(a.verify("482913"), (err: AccountError) => err.code === "invalid_email", "no pending sign-in: no address to send");
+    await a.signin("a@example.test");
+    await assert.rejects(a.verify("111 111"), (err: AccountError) => err.code === "invalid_code" && /4 tries left/.test(err.message));
+    assert.deepEqual(s.verifyBodies.at(-1), { email: "a@example.test", code: "111111", deviceName: s.verifyBodies.at(-1).deviceName });
+    assert.deepEqual(await a.verify("482 913"), { reauth: false, email: "a@example.test" });
+    assert.equal(s.verifyBodies.at(-1).code, "482913");
+    assert.equal(s.verifyBodies.at(-1).token, undefined);
+    // The long token from the link still goes as {token}.
+    assert.equal((await a.verify("good-code")).reauth, true);
+    assert.deepEqual(Object.keys(s.verifyBodies.at(-1)).sort(), ["deviceName", "token"]);
+
+    // Sync's own sign-in uses the address it was given in `signin`.
+    const sy = syncFor(e2);
+    sy.setup({ server: url });
+    await sy.signin("a@example.test");
+    // A wrong code is the server's 401 with its message (not a 500 from the app server).
+    await assert.rejects(sy.verify("111111"), (err: AccountError) => err instanceof AccountError && err.status === 401 && err.code === "invalid_code" && /4 tries left/.test(err.message));
+    const st = await sy.verify("482913");
+    assert.equal(st.signedIn, true);
+    assert.equal(s.verifyBodies.at(-1).email, "a@example.test");
+    assert.equal(s.verifyBodies.at(-1).code, "482913");
+    assert.equal(s.verifyBodies.at(-1).token, undefined);
+  } finally {
+    e.close();
+    e2.close();
     await s.stop();
     rmSync(dir, { recursive: true, force: true });
   }

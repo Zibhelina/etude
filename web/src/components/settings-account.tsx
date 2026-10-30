@@ -130,7 +130,7 @@ function SignIn({ st, onDone }: { st: AccountStatus; onDone(): Promise<void> }) 
   return (
     <Block
       title={sent ? "Enter the code" : "Sign in or create an account"}
-      description={sent ? <>We sent a code to <span className="text-foreground/90">{email.trim()}</span>. It works once, for 15 minutes.</> : "No password. We email you a one-time code; a new address gets a new account."}
+      description={sent ? <>Sent to <span className="text-foreground/90">{email.trim()}</span>. It works for 15 minutes.</> : "No password. We email you a one-time code; a new address gets a new account."}
     >
       {st.offline && <Notice>Can't reach {st.server}: {st.offline}</Notice>}
       {!sent ? (
@@ -155,12 +155,12 @@ function SignIn({ st, onDone }: { st: AccountStatus; onDone(): Promise<void> }) 
         </form>
       ) : (
         <form className="flex flex-col gap-4" onSubmit={(e) => (e.preventDefault(), void run("verify", async () => {
-          const r = await account.verify(code);
+          const r = await account.verify(code, email.trim());
           setCode("");
           toast.success("Signed in", { description: r.email });
           await onDone();
         }))}>
-          <TextInput label="Code" value={code} onChange={setCode} autoComplete="one-time-code" mono placeholder="Code from the email" />
+          <TextInput label="Code" value={code} onChange={setCode} autoComplete="one-time-code" inputMode="numeric" mono placeholder="6-digit code" />
           {error && <Notice>{error}</Notice>}
           <div className="flex flex-wrap items-center gap-2">
             <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy || !code.trim()}>
@@ -440,7 +440,7 @@ function ReauthDialog({ email, rpId, why, onClose, onConfirmed }: { email: strin
           <DialogTitle>Confirm it's you</DialogTitle>
           <DialogDescription>To {why}, sign in again on this device. It counts for 10 minutes.</DialogDescription>
         </DialogHeader>
-        {sent && <TextInput label={`Code sent to ${email}`} value={code} onChange={setCode} mono autoComplete="one-time-code" />}
+        {sent && <TextInput label={`Code sent to ${email}`} hint="It works for 15 minutes." value={code} onChange={setCode} mono autoComplete="one-time-code" inputMode="numeric" placeholder="6-digit code" />}
         {error && <Notice>{error}</Notice>}
         <DialogFooter className="gap-2">
           {passkeysHere(rpId) && (
@@ -455,7 +455,7 @@ function ReauthDialog({ email, rpId, why, onClose, onConfirmed }: { email: strin
           {!sent ? (
             <Button disabled={busy} onClick={() => void run(async () => (await account.signin(email), setSent(true)))}>Email me a code</Button>
           ) : (
-            <Button disabled={busy || !code.trim()} onClick={() => void run(async () => (await account.verify(code), await onConfirmed()))}>
+            <Button disabled={busy || !code.trim()} onClick={() => void run(async () => (await account.verify(code, email), await onConfirmed()))}>
               {busy && <Loader2 className="size-4 animate-spin" />} Confirm
             </Button>
           )}
@@ -474,7 +474,7 @@ export function Notice({ children }: { children: ReactNode }) {
   );
 }
 
-export function TextInput({ label, hint, value, onChange, type = "text", placeholder, autoComplete, mono }: {
+export function TextInput({ label, hint, value, onChange, type = "text", placeholder, autoComplete, inputMode, mono }: {
   label: string;
   hint?: ReactNode;
   value: string;
@@ -482,12 +482,13 @@ export function TextInput({ label, hint, value, onChange, type = "text", placeho
   type?: "text" | "email" | "password";
   placeholder?: string;
   autoComplete?: string;
+  inputMode?: "text" | "email" | "numeric";
   mono?: boolean;
 }) {
   const id = useId();
   return (
     <Field label={label} hint={hint} htmlFor={id} className="min-w-0 flex-1">
-      <Input id={id} type={type} value={value} placeholder={placeholder} autoComplete={autoComplete} autoCapitalize="none" spellCheck={false} className={cn("h-10 md:h-9", mono && "font-mono text-[13px] md:text-[13px]")} onChange={(e) => onChange(e.target.value)} />
+      <Input id={id} type={type} value={value} placeholder={placeholder} autoComplete={autoComplete} inputMode={inputMode} autoCapitalize="none" spellCheck={false} className={cn("h-10 md:h-9", mono && "font-mono text-[13px] md:text-[13px]")} onChange={(e) => onChange(e.target.value)} />
     </Field>
   );
 }

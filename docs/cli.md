@@ -332,16 +332,16 @@ These work on every command, before or after the command words.
 - **sync**: Encrypted offline collection sync over a folder or etude-cloud (`etude sync` alone runs `status`)
   - [`sync status`](#sync-status) Show connection, lock and pending change status.
   - [`sync setup`](#sync-setup) Connect this collection to a shared folder or Sync server.
-  - [`sync signin`](#sync-signin) Send a one-time sign-in link to your email.
-  - [`sync verify`](#sync-verify) Redeem the code from the sign-in email.
+  - [`sync signin`](#sync-signin) Email a one-time 6-digit sign-in code (valid 15 minutes).
+  - [`sync verify`](#sync-verify) Redeem the 6-digit code from the sign-in email.
   - [`sync unlock`](#sync-unlock) Unlock the vault, or create one and return its recovery key once.
   - [`sync now`](#sync-now) Push pending encrypted changes and merge remote changes.
   - [`sync off`](#sync-off) Sign out and remove this device's saved Sync key; keep local content.
 - **account**: Etude account: sign-in, devices, Sync subscription, purchased decks and selling on the paid Market (`etude account` alone runs `status`)
   - [`account status`](#account-status) Server, sign-in state, account, Sync plan and storage.
   - [`account server`](#account-server) Show or change the Etude server this install uses (default https://sync.etude.study, or $ETUDE_CLOUD_URL).
-  - [`account signin`](#account-signin) Email a one-time sign-in code.
-  - [`account verify`](#account-verify) Redeem the code from the sign-in email. When already signed in, it re-confirms this device.
+  - [`account signin`](#account-signin) Email a one-time 6-digit sign-in code (valid 15 minutes).
+  - [`account verify`](#account-verify) Redeem the 6-digit code from the sign-in email. When already signed in, it re-confirms this device.
   - [`account signout`](#account-signout) Sign this device out of the account. Local data stays.
   - [`account devices`](#account-devices) Devices signed in to the account.
   - [`account revoke`](#account-revoke) Sign a device out. Another device needs a sign-in on this one within 10 minutes.
@@ -3443,7 +3443,7 @@ etude sync setup --server https://sync.etude.study
 
 <a id="sync-signin"></a>
 
-Send a one-time sign-in link to your email.
+Email a one-time 6-digit sign-in code (valid 15 minutes).
 
 ```
 etude sync signin [flags]
@@ -3461,7 +3461,9 @@ Output: Sync status
 
 <a id="sync-verify"></a>
 
-Redeem the code from the sign-in email.
+Redeem the 6-digit code from the sign-in email.
+
+The code goes with the address from `sync signin`. Spaces are fine (`482 913`); a long token from the email's link works too. It works once, for 15 minutes, and allows 5 wrong tries.
 
 ```
 etude sync verify <code>
@@ -3471,7 +3473,7 @@ etude sync verify <code>
 
 | Argument | Description |
 | --- | --- |
-| `code` | Single-use email code. |
+| `code` | The 6-digit code from the email (or the link's token). |
 
 Output: Sync status
 
@@ -3573,7 +3575,7 @@ etude account server http://localhost:4870
 
 <a id="account-signin"></a>
 
-Email a one-time sign-in code.
+Email a one-time 6-digit sign-in code (valid 15 minutes).
 
 ```
 etude account signin <email>
@@ -3591,7 +3593,9 @@ Output: { ok, server, email }
 
 <a id="account-verify"></a>
 
-Redeem the code from the sign-in email. When already signed in, it re-confirms this device.
+Redeem the 6-digit code from the sign-in email. When already signed in, it re-confirms this device.
+
+The code goes with the address from the last `account signin` (or --email). Spaces are fine (`482 913`). A long token from the email's link works too. A code allows 5 wrong tries, then ask for a new one.
 
 ```
 etude account verify <code> [flags]
@@ -3601,13 +3605,19 @@ etude account verify <code> [flags]
 
 | Argument | Description |
 | --- | --- |
-| `code` | The code from the email. |
+| `code` | The 6-digit code from the email (or the link's token). |
 
 | Flag | Type | Description |
 | --- | --- | --- |
 | `--name <VALUE>` | string | Name for this device. |
+| `--email <VALUE>` | string | The address the code was sent to, if not the last `account signin`. |
 
 Output: { reauth, email }
+
+```sh
+etude account signin you@example.com
+etude account verify "482 913"
+```
 
 ### etude account signout
 

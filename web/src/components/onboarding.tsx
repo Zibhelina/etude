@@ -869,13 +869,13 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
   if (stage === "code")
     return (
       <>
-        <Title lead={<>Sent to <span className="text-foreground">{email.trim()}</span>. It works for a few minutes.</>}>Enter the code</Title>
+        <Title lead={<>Sent to <span className="text-foreground">{email.trim()}</span>. It works for 15 minutes.</>}>Enter the code</Title>
         <form className="mt-5" onSubmit={(e) => (e.preventDefault(), void run(async () => {
           if (!code.trim()) throw new Error("Enter the code from the email.");
           await postJson("/api/sync/verify", { code: code.trim() });
           await afterSignIn();
         }))}>
-          <Input autoFocus autoComplete="one-time-code" spellCheck={false} value={code} onChange={(e) => setCode(e.target.value)} placeholder="Code from the email" aria-label="Sign-in code" className="h-12 rounded-xl bg-card font-mono text-[15px]" />
+          <Input autoFocus inputMode="numeric" autoComplete="one-time-code" spellCheck={false} value={code} onChange={(e) => setCode(e.target.value)} placeholder="6-digit code" aria-label="Sign-in code" className="h-12 rounded-xl bg-card font-mono text-[15px] tracking-widest" />
           {error && <Problem>{error}</Problem>}
           <Spacer />
           <Primary busy={busy} disabled={!code.trim()} onClick={() => {}}>Verify</Primary>

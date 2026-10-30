@@ -21,6 +21,14 @@ interface Saved {
   token?: string;
   email?: string;
   accountId?: string;
+  /** The address of the last emailed sign-in, so a 6-digit code can be redeemed with it. */
+  pendingEmail?: string;
+}
+
+/** The sign-in email's 6-digit code (spaces allowed, as in `482 913`), or null for anything else (a link token). */
+export function signInCode(input: string): string | null {
+  const digits = (input ?? "").replace(/\s+/g, "");
+  return /^\d{6}$/.test(digits) ? digits : null;
 }
 
 /** Server URL rules: https anywhere, http only on this machine. */
@@ -182,17 +190,30 @@ export class AccountClient {
   async signin(email: string) {
     if (!email?.trim()) throw new AccountError("enter your email address", 400, "invalid_email");
     await this.json("POST", "/v1/auth/email/start", { email: email.trim() }, false);
+    this.save({ ...this.load(), pendingEmail: email.trim() });
     return { ok: true, server: this.server(), email: email.trim() };
   }
 
-  /** Redeems the code from the email. Signed in already: it re-confirms this device (needed before deleting the account). */
-  async verify(code: string, deviceName?: string) {
-    const token = code?.trim();
-    if (!token) throw new AccountError("enter the code from the email", 400, "invalid_token");
+  /**
+   * Redeems the 6-digit code from the email (with the address of the pending sign-in, or `email`), or the long
+   * token from the link. Signed in already: it re-confirms this device (needed before deleting the account).
+   */
+  async verify(input: string, deviceName?: string, email?: string) {
+    const raw = input?.trim();
+    if (!raw) throw new AccountError("enter the code from the email", 400, "invalid_code");
+    const code = signInCode(raw);
+    const saved = this.load();
+    const address = (email?.trim() || saved.pendingEmail || saved.email || "").trim();
+    if (code && !address) throw new AccountError("ask for a code first: the code goes with the email address it was sent to", 400, "invalid_email");
     const signedIn = !!this.token();
-    const r = await this.json("POST", "/v1/auth/email/verify", { token, deviceName: deviceName || defaultDeviceName() }, signedIn);
-    if (r.reauth) return { reauth: true, email: r.account.email };
-    this.save({ ...this.load(), token: r.token, email: r.account.email, accountId: r.account.id });
+    const body = code ? { email: address, code } : { token: raw };
+    const r = await this.json("POST", "/v1/auth/email/verify", { ...body, deviceName: deviceName || defaultDeviceName() }, signedIn);
+    const { pendingEmail: _, ...rest } = this.load();
+    if (r.reauth) {
+      this.save(rest);
+      return { reauth: true, email: r.account.email };
+    }
+    this.save({ ...rest, token: r.token, email: r.account.email, accountId: r.account.id });
     return { reauth: false, email: r.account.email };
   }
 

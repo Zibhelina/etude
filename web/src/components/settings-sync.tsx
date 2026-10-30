@@ -430,7 +430,7 @@ export function SyncSection() {
       )}
 
       {status && stage === "code" && (
-        <Block title="Enter the code" description={<>Sent to <span className="text-foreground/90">{email.trim() || status.email}</span>.</>}>
+        <Block title="Enter the code" description={<>Sent to <span className="text-foreground/90">{email.trim() || status.email}</span>. It works for 15 minutes.</>}>
           <form
             className="flex flex-col gap-4"
             onSubmit={(e) => {
@@ -438,7 +438,7 @@ export function SyncSection() {
               void verify();
             }}
           >
-            <TextInput label="Sign-in code" value={code} onChange={setCode} autoComplete="one-time-code" inputMode="text" placeholder="Code from the email" mono />
+            <TextInput label="Sign-in code" value={code} onChange={setCode} autoComplete="one-time-code" inputMode="numeric" placeholder="6-digit code" mono />
             {problem && <Notice>{problem}</Notice>}
             <div className="flex flex-wrap items-center gap-2">
               <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>

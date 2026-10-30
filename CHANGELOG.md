@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.5.0
+
+- **Etude for desktop**: a real app for Mac, Windows and Linux, with nothing else to install. Mac: a .dmg for Apple Silicon or Intel (the 2.4.0 and 2.4.1 Mac downloads didn't start; this replaces them). Windows: an installer that needs no administrator. Linux: .deb, .rpm or AppImage. The collection stays in `~/.etude`, shared with the `etude` command and agents; the app reuses an `etude serve` already running for the same collection, and the engine it starts answers only its own window. Windows and the AppImage update themselves (in the background, installing when you restart or quit); the Mac app and the .deb and .rpm show a link to the new version for now. Settings → Desktop app installs the `etude` command (the Linux packages install it as `/usr/bin/etude`), running the app's own engine. Thanks to Victor Bonato.
+- Much faster with a big collection. Decks, Stats and Card types load several times faster, and Settings opens at once: Clean up checks when you press **Check now**. Sync no longer freezes the app every few minutes: it rebuilds the collection only when another device sent changes, and reads only media files that changed. Thanks to Victor Bonato.
+- Windows fixes: the app's scripts, styles and card media load, folder sync writes its files (their names had colons, which Windows forbids; they now use `~` everywhere, so a device on 2.4 sees files from 2.5 only after updating), and a git install updates itself. Thanks to Victor Bonato.
+- `etude serve --token` works on every screen (Sync, account and onboarding didn't send the token), and a server on localhost refuses foreign host names even with a token.
+- In the desktop app, Sync's folder field has a **Choose…** button.
+
 ## 2.4.1
 
 - Etude is now licensed under the GNU AGPL-3.0 (it was MIT up to 2.4.0). A commercial license is available at hello@etude.study; contributions are made under the CLA in CLA.md, and the name and logo follow TRADEMARK.md.

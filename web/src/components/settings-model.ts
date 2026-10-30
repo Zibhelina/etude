@@ -51,7 +51,15 @@ export interface SettingsDraft {
   learnAheadMinutes: number;
 }
 
+/** First-run setup. `level` only changes what setup itself offers. */
+export type OnboardingLevel = "simple" | "standard" | "tinker";
+export interface Onboarding {
+  done: boolean;
+  level: OnboardingLevel;
+}
+
 export interface SettingsResponse extends SettingsDraft {
+  onboarding?: Onboarding;
   keyStatus: Record<string, boolean>;
   dbPath: string;
   mediaDir: string;

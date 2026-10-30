@@ -2,6 +2,7 @@ import { DEFAULT_SETTINGS, type Settings } from "../../core/engine.ts";
 import { chatGptStatus, chatGptLogout, listChatGptModels, openInBrowser, beginChatGptLogin, readChatGptHostId, importChatGptCredentials, ChatGptError } from "../../core/chatgpt.ts";
 import { chatProviderKeyEnv } from "../../core/ai.ts";
 import { agentSettingRefusal } from "../../core/agent-guard.ts";
+import { EnvKeyError, setEnvKey } from "../../core/env-file.ts";
 import { command, group, CliError } from "../registry.ts";
 import { deepDelete, deepGet, deepSet, looseValue, splitPair } from "../input.ts";
 
@@ -33,7 +34,7 @@ command({
   name: "settings set",
   summary: "Change settings with dotted key=value pairs (JSON values when they parse).",
   description:
-    "Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision. API keys themselves live in the environment or $ETUDE_HOME/.env, never in settings.",
+    "Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done. API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.",
   args: [{ name: "pairs", description: "key=value pairs.", required: true, variadic: true }],
   writes: true,
   dryRun: true,
@@ -94,6 +95,55 @@ command({
   output: "{ verdict?, verdictError?, feedback?, feedbackError? }",
   run: (ctx) => ctx.e.testAi(),
 });
+
+command({
+  name: "settings onboarding",
+  summary: "Whether first-run setup would show (not done and no decks yet), and the comfort level picked there.",
+  description:
+    "Setup shows only while onboarding.done is false and the collection has no decks; a collection with decks is marked done when this is read, so existing users never see it. Settings → About → Run setup again opens it on any collection. The level (simple|standard|tinker) only changes what setup offers.",
+  examples: ["etude settings onboarding", "etude settings set onboarding.level=tinker", "etude settings set onboarding.done=false"],
+  output: "{ done, level, show, decks }",
+  run: (ctx) => ctx.e.onboardingStatus(),
+});
+
+// --------------------------------------------------------- API keys
+
+command({
+  name: "settings key set",
+  summary: "Save one API key to $ETUDE_HOME/.env (owner-only), read from stdin so it never appears in the shell history.",
+  description:
+    "The name is the environment variable the settings point at (ai.feedback.apiKeyEnv, ai.decision.apiKeyEnv), e.g. OPENROUTER_API_KEY or OPENAI_API_KEY. Other lines in the file are kept. A running server picks the key up when it is set through Settings; one started earlier needs a restart to see a key set here.",
+  args: [{ name: "name", description: "Variable name: capital letters, digits and _, at most 64.", required: true }],
+  writes: true,
+  noDb: true,
+  examples: ["printf %s \"$KEY\" | etude settings key set OPENROUTER_API_KEY", "etude settings key set OPENAI_API_KEY < key.txt"],
+  output: "{ name, set: true, path }",
+  run(ctx) {
+    const value = ctx.stdin().trim();
+    if (!value) throw new CliError("pipe the key on stdin (it is never taken as an argument); use `etude settings key unset` to remove one", "usage");
+    return keyResult(() => setEnvKey(ctx.home, ctx.args.name, value, ctx.env));
+  },
+});
+
+command({
+  name: "settings key unset",
+  summary: "Remove one API key from $ETUDE_HOME/.env.",
+  args: [{ name: "name", description: "Variable name.", required: true }],
+  writes: true,
+  noDb: true,
+  examples: ["etude settings key unset OPENAI_API_KEY"],
+  output: "{ name, set: false, path }",
+  run: (ctx) => keyResult(() => setEnvKey(ctx.home, ctx.args.name, null, ctx.env)),
+});
+
+function keyResult(fn: () => { name: string; set: boolean; path: string }) {
+  try {
+    return fn();
+  } catch (e) {
+    if (e instanceof EnvKeyError) throw new CliError(e.message, "validation");
+    throw e;
+  }
+}
 
 // --------------------------------------------------------- ChatGPT plan
 

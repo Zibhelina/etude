@@ -321,6 +321,9 @@ These work on every command, before or after the command words.
   - [`settings set`](#settings-set) Change settings with dotted key=value pairs (JSON values when they parse).
   - [`settings unset`](#settings-unset) Reset dotted keys to their defaults.
   - [`settings test-ai`](#settings-test-ai) Grade a fixed sample answer with the configured providers, to check keys and models. Costs a fraction of a cent.
+  - [`settings onboarding`](#settings-onboarding) Whether first-run setup would show (not done and no decks yet), and the comfort level picked there.
+  - [`settings key set`](#settings-key-set) Save one API key to $ETUDE_HOME/.env (owner-only), read from stdin so it never appears in the shell history.
+  - [`settings key unset`](#settings-key-unset) Remove one API key from $ETUDE_HOME/.env.
   - [`settings chatgpt login`](#settings-chatgpt-login) Sign in with ChatGPT, so grading uses the user's ChatGPT Plus or Pro plan instead of an API key.
   - [`settings chatgpt status`](#settings-chatgpt-status) Whether this install is signed in with ChatGPT, for which account, and whether plan usage is granted.
   - [`settings chatgpt logout`](#settings-chatgpt-logout) End the ChatGPT session and delete the saved tokens. The app registration is kept for a later sign-in.
@@ -3161,7 +3164,7 @@ etude settings get ai.feedback.model
 
 Change settings with dotted key=value pairs (JSON values when they parse).
 
-Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision. API keys themselves live in the environment or $ETUDE_HOME/.env, never in settings.
+Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done. API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.
 
 ```
 etude settings set <pairs...> [flags]
@@ -3222,6 +3225,75 @@ etude settings test-ai
 *read-only*
 
 Output: { verdict?, verdictError?, feedback?, feedbackError? }
+
+### etude settings onboarding
+
+<a id="settings-onboarding"></a>
+
+Whether first-run setup would show (not done and no decks yet), and the comfort level picked there.
+
+Setup shows only while onboarding.done is false and the collection has no decks; a collection with decks is marked done when this is read, so existing users never see it. Settings → About → Run setup again opens it on any collection. The level (simple|standard|tinker) only changes what setup offers.
+
+```
+etude settings onboarding
+```
+
+*read-only*
+
+Output: { done, level, show, decks }
+
+```sh
+etude settings onboarding
+etude settings set onboarding.level=tinker
+etude settings set onboarding.done=false
+```
+
+### etude settings key set
+
+<a id="settings-key-set"></a>
+
+Save one API key to $ETUDE_HOME/.env (owner-only), read from stdin so it never appears in the shell history.
+
+The name is the environment variable the settings point at (ai.feedback.apiKeyEnv, ai.decision.apiKeyEnv), e.g. OPENROUTER_API_KEY or OPENAI_API_KEY. Other lines in the file are kept. A running server picks the key up when it is set through Settings; one started earlier needs a restart to see a key set here.
+
+```
+etude settings key set <name>
+```
+
+*writes · no database*
+
+| Argument | Description |
+| --- | --- |
+| `name` | Variable name: capital letters, digits and _, at most 64. |
+
+Output: { name, set: true, path }
+
+```sh
+printf %s "$KEY" | etude settings key set OPENROUTER_API_KEY
+etude settings key set OPENAI_API_KEY < key.txt
+```
+
+### etude settings key unset
+
+<a id="settings-key-unset"></a>
+
+Remove one API key from $ETUDE_HOME/.env.
+
+```
+etude settings key unset <name>
+```
+
+*writes · no database*
+
+| Argument | Description |
+| --- | --- |
+| `name` | Variable name. |
+
+Output: { name, set: false, path }
+
+```sh
+etude settings key unset OPENAI_API_KEY
+```
 
 ### etude settings chatgpt login
 

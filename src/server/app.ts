@@ -459,6 +459,13 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.get("/api/defaults", (c) => c.json(DEFAULT_PRESET));
   app.post("/api/ai/test", async (c) => c.json(await etude.testAi()));
   app.patch("/api/settings", async (c) => c.json(etude.updateSettings(await body(c))));
+  // One API key into $ETUDE_HOME/.env. The answer says whether it is set, never what it is.
+  app.post("/api/settings/key", async (c) => {
+    const b = await body<{ name?: unknown; value?: unknown }>(c);
+    if (b.value != null && typeof b.value !== "string") throw new EtudeError("value must be text");
+    return c.json(etude.setApiKey(String(b.name ?? ""), (b.value as string | null | undefined) ?? null));
+  });
+  app.get("/api/onboarding", (c) => c.json(etude.onboardingStatus()));
 
   // ------------------------------------------------------- ChatGPT plan
   // The sign-in listener runs here, so its 127.0.0.1 callback only reaches a browser on this machine.

@@ -24,7 +24,7 @@ const OPENROUTER_CHAT = "https://openrouter.ai/api/v1/chat/completions";
 
 /** Commands the agent may never run: they restart or replace things, or touch credentials. */
 // `media prune` deletes files, which an undo (a database snapshot) can't bring back.
-export const AGENT_DENY = ["serve", "update", "settings chatgpt login", "settings chatgpt logout", "settings chatgpt import", "db restore", "market publish", "sync unlock", "sync verify", "media prune", "agent"];
+export const AGENT_DENY = ["serve", "update", "settings chatgpt login", "settings chatgpt logout", "settings chatgpt import", "settings key set", "settings key unset", "db restore", "market publish", "sync unlock", "sync verify", "media prune", "agent"];
 
 export class AgentError extends Error {
   status: number;

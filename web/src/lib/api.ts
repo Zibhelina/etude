@@ -580,6 +580,9 @@ export const api = {
   schedulers: () => call<SchedulerSummary[]>("GET", "/api/schedulers"),
   testAi: () => call<any>("POST", "/api/ai/test", {}),
   saveSettings: (patch: unknown) => call<any>("PATCH", "/api/settings", patch),
+  /** Writes one API key to $ETUDE_HOME/.env on the server; the reply never carries the key. Empty removes it. */
+  saveKey: (name: string, value: string) => call<{ name: string; set: boolean }>("POST", "/api/settings/key", { name, value }),
+  onboarding: () => call<{ done: boolean; level: "simple" | "standard" | "tinker"; show: boolean; decks: number }>("GET", "/api/onboarding"),
   chatgptStatus: () => call<any>("GET", "/api/chatgpt/status"),
   chatgptLogin: () => call<any>("POST", "/api/chatgpt/login", {}),
   chatgptLogout: () => call<any>("POST", "/api/chatgpt/logout", {}),

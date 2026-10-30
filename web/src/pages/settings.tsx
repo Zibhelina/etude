@@ -9,6 +9,7 @@ import { Logo, Wordmark } from "@/components/logo";
 import { cn } from "@/lib/utils";
 import { serverless } from "@/lib/native";
 import { PHONE_H1 } from "@/components/page";
+import { ONBOARDING_EVENT } from "@/components/onboarding";
 import { AiSection } from "@/components/settings-ai";
 import { AppearanceSection } from "@/components/settings-appearance";
 import { DataSection } from "@/components/settings-data";
@@ -132,6 +133,13 @@ export function SettingsPage() {
     navRef.current?.querySelector(`[data-id="${active}"]`)?.scrollIntoView({ block: "nearest", inline: "center" });
   }, [active]);
 
+  // /settings#sync (from first-run setup): open at that section once it has rendered.
+  useEffect(() => {
+    if (!saved || !location.hash) return;
+    const id = decodeURIComponent(location.hash.slice(1));
+    requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: "start" }));
+  }, [saved]);
+
   // Saved settings can't be invalid, so errors only show once something was edited.
   const shown = dirty ? errors : {};
 
@@ -209,6 +217,17 @@ export function SettingsPage() {
                   From a terminal: <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11.5px] text-foreground/85">etude update --check</code>
                 </p>}
               </Block>
+              <Block
+                title="First-run setup"
+                description="The questions Etude asks on a new install: AI grading, Sync, and something to start with. Your decks stay as they are."
+                stackAside
+                aside={
+                  <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => window.dispatchEvent(new Event(ONBOARDING_EVENT))}>
+                    <RotateCcw className="size-4" />
+                    Run setup again
+                  </Button>
+                }
+              />
             </Section>
 
             <AiSection ai={draft.ai} saved={saved} errors={shown} onChange={(ai) => setDraft({ ...draft, ai })} />

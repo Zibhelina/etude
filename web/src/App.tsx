@@ -22,6 +22,27 @@ import { SidebarUpdate, useUpdateDot } from "@/components/update-bar";
 import { PhoneTabBar } from "@/components/phone-shell";
 import { MorePage } from "@/pages/more";
 import { usePhone } from "@/lib/phone";
+import { Onboarding, ONBOARDING_EVENT } from "@/components/onboarding";
+import { api } from "@/lib/api";
+
+/** First-run setup: shown when the collection has no decks and setup wasn't finished or skipped, or on request. */
+function useOnboarding(skip: boolean) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (skip) return;
+    let live = true;
+    api.onboarding().then((o) => live && o.show && setOpen(true)).catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [skip]);
+  useEffect(() => {
+    const h = () => setOpen(true);
+    window.addEventListener(ONBOARDING_EVENT, h);
+    return () => window.removeEventListener(ONBOARDING_EVENT, h);
+  }, []);
+  return [open, setOpen] as const;
+}
 
 const NAV = [
   { to: "/", label: "Decks", icon: Layers, match: (p: string) => p === "/" || p === "/deck" },
@@ -67,6 +88,7 @@ export function App() {
   const phone = usePhone();
   // Bumped after the assistant changed something, so the page remounts and reloads its data.
   const [dataKey, setDataKey] = useState(0);
+  const [onboarding, setOnboarding] = useOnboarding(path === "/embed");
   if (path === "/embed") {
     const deck = params.get("deck") ?? undefined;
     const q = params.get("q") ?? undefined;
@@ -184,6 +206,14 @@ export function App() {
           )}
           <PhoneTabBar path={path} updateDot={updateDot} onAsk={() => agent.setOpen(true)} />
         </div>
+      )}
+      {onboarding && (
+        <Onboarding
+          onFinish={() => {
+            setOnboarding(false);
+            setDataKey((k) => k + 1);
+          }}
+        />
       )}
       <Toaster position={phone ? "bottom-center" : "top-center"} mobileOffset={phone ? { bottom: studying ? 104 : 92, left: 12, right: 12 } : undefined} />
     </TooltipProvider>

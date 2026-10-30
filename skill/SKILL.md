@@ -110,7 +110,7 @@ Never invent a grade, rate a card the user didn't answer, or rate on their behal
 - **Archive over delete.** Deletes need `--yes`. Only delete what the user explicitly asked to delete.
 - **Report what was actually written**: quote counts and ids from the JSON output, not what you meant to do. If a command failed, show the error `code`.
 - **Don't fake reviews.** To move cards, use `card due`, `card bury` or `card reset`, never `study rate`. Only record ratings for answers the user actually gave.
-- **Don't print API keys.** `settings get` shows only whether each key's environment variable is set. Keys belong in the environment or `$ETUDE_HOME/.env`.
+- **Don't print API keys.** `settings get` shows only whether each key's environment variable is set. Keys belong in the environment or `$ETUDE_HOME/.env`; the user saves one with `etude settings key set NAME` (value on stdin). Never pass a key as an argument.
 - Exit codes: 2 usage, 3 not found, 4 validation, 5 conflict, 6 AI/network, 1 internal. On a 2, read `--help` and retry. On a 5, inspect state before forcing anything.
 
 ## References

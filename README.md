@@ -176,10 +176,10 @@ node src/cli/main.ts pack import examples/showcase.pack.json
 
 **With your ChatGPT plan.** If you have ChatGPT Plus or Pro, open Settings → AI grading and click **Continue with ChatGPT**. Sign in in the browser and grading uses your plan's included usage, with no API key. You can cap how much Etude may use, or disconnect it, in ChatGPT's settings. Sign in from a browser on the computer that runs Etude (or run `etude settings chatgpt login` there); after that, grading works from any device.
 
-**With an API key.** Put a key in `~/.etude/.env` and restart the server:
+**With an API key.** Paste it in Settings → AI grading → API keys (or on the first-run setup screen). It is saved to `~/.etude/.env`, readable only by you, and used right away. From a terminal, pipe it in so it stays out of your shell history:
 
 ```sh
-OPENROUTER_API_KEY=sk-or-...
+printf %s "$OPENROUTER_KEY" | etude settings key set OPENROUTER_API_KEY
 ```
 
 Settings → AI grading has presets for OpenRouter, OpenAI and a local server, plus a button that grades a sample answer to test the setup. [SECURITY.md](SECURITY.md) lists exactly what is sent to the provider.
@@ -198,7 +198,7 @@ Open `http://<your-computer>:4610/?token=<token>` on the phone and add it to the
 
 | | |
 |---|---|
-| `~/.etude/.env` | API keys, one per line, e.g. `OPENROUTER_API_KEY=...`. Read at startup. Keys are never stored in the database or shown in the app. |
+| `~/.etude/.env` | API keys, one per line, e.g. `OPENROUTER_API_KEY=...`. Read at startup, and written by Settings or `etude settings key set`. Keys are never stored in the database or shown in the app. |
 | `--db PATH` or `ETUDE_DB` | Collection file. Default `~/.etude/etude.db`. Pasted media, imports and drawings are saved in a `media/` folder next to it. |
 | `ETUDE_HOME` | Where `.env` and the default database live. Default `~/.etude`. |
 | `--port` or `ETUDE_PORT` | Default 4610. |

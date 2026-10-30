@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Block, CopyValue, Field, NumberField } from "@/components/settings-ui";
 import { CHATGPT_DEFAULT_MODEL, type ChatGptProvider } from "@/components/settings-model";
 
-interface ChatGptStatus {
+export interface ChatGptStatus {
   signedIn: boolean;
   email: string | null;
   plan: "enabled" | "disabled" | "none";
@@ -33,7 +33,8 @@ interface LoginReply {
 const sec = (ms: number | undefined) => (ms == null ? undefined : ms / 1000);
 const ms = (s: number) => (Number.isNaN(s) ? NaN : Math.round(s * 1000));
 
-export function ChatGptBlock({ provider, error, onChange }: { provider: ChatGptProvider; error?: string; onChange(patch: Partial<ChatGptProvider>): void }) {
+/** The sign-in flow on its own, shared by Settings and first-run setup. */
+export function useChatGptSignIn() {
   const [status, setStatus] = useState<ChatGptStatus | null>(null);
   const [busy, setBusy] = useState<"login" | "logout" | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -123,6 +124,12 @@ export function ChatGptBlock({ provider, error, onChange }: { provider: ChatGptP
       setBusy(null);
     }
   };
+
+  return { status, busy, failure, remote, waitingUrl, start, signOut, refresh };
+}
+
+export function ChatGptBlock({ provider, error, onChange }: { provider: ChatGptProvider; error?: string; onChange(patch: Partial<ChatGptProvider>): void }) {
+  const { status, busy, failure, remote, waitingUrl, start, signOut } = useChatGptSignIn();
 
   const signedIn = !!status?.signedIn;
   const currentModel = provider.model || CHATGPT_DEFAULT_MODEL;

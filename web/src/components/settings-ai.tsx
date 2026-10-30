@@ -8,7 +8,7 @@ import { Markdown } from "@/components/markdown";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
-import { saveLocalKey, serverless } from "@/lib/native";
+import { saveApiKey, serverless } from "@/lib/native";
 import { cn } from "@/lib/utils";
 import { BigSwitch, Block, Field, NumberField, Section, TextField } from "@/components/settings-ui";
 import { ChatGptBlock } from "@/components/settings-chatgpt";
@@ -288,58 +288,38 @@ function AgentBlock({ ai, onChange }: { ai: AiSettings; onChange(patch: { model?
 function KeysBlock({ ai, saved }: { ai: AiSettings; saved: SettingsResponse }) {
   const vars = keyVars(ai);
   if (serverless()) return <LocalKeysBlock vars={vars.length ? vars : [{ name: "OPENROUTER_API_KEY", usedBy: ["feedback"] }]} saved={saved} />;
+  if (!vars.length)
+    return (
+      <Block title="API keys">
+        <p className="text-sm text-muted-foreground">The current setup doesn't need any key.</p>
+      </Block>
+    );
   return (
-    <Block
-      title="API keys"
+    <LocalKeysBlock
+      vars={vars}
+      saved={saved}
       description={
         <>
-          Etude never stores or shows keys. Put them in <code className="font-mono text-foreground/90">~/.etude/.env</code>, one per line, then restart the server:
+          Saved to <code className="font-mono text-foreground/90">~/.etude/.env</code>, readable only by you, and used right away. Etude never shows a key again after you save it.
+          {" "}From a terminal: <code className="font-mono text-foreground/90">etude settings key set NAME</code> reads the key from stdin.
         </>
       }
-    >
-      <pre className="overflow-x-auto rounded-md bg-background/70 px-3.5 py-3 ring-1 ring-border font-mono text-[13px] leading-relaxed text-foreground/80">
-        {(vars.length ? vars.map((v) => `${v.name}=...`) : ["OPENROUTER_API_KEY=..."]).join("\n")}
-      </pre>
-      {vars.length > 0 ? (
-        <ul className="flex flex-col gap-2">
-          {vars.map((v) => {
-            const known = v.name in saved.keyStatus;
-            const set = saved.keyStatus[v.name];
-            return (
-              <li key={v.name} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                {!known ? (
-                  <CircleAlert className="size-4 shrink-0 text-muted-foreground" />
-                ) : set ? (
-                  <CircleCheck className="size-4 shrink-0 text-success" />
-                ) : (
-                  <CircleAlert className="size-4 shrink-0 text-warning" />
-                )}
-                <span className="font-mono text-[13px]">{v.name}</span>
-                <span className={cn("text-xs", !known ? "text-muted-foreground" : set ? "text-success" : "text-warning")}>{!known ? "save to check" : set ? "set" : "missing"}</span>
-                <span className="text-xs text-muted-foreground">· {v.usedBy.join(", ")}</span>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p className="text-sm text-muted-foreground">The current setup doesn't need any key.</p>
-      )}
-    </Block>
+    />
   );
 }
 
 /** No server here (browser build, phone apps): keys are pasted in and kept in the app's private storage. */
-function LocalKeysBlock({ vars, saved }: { vars: { name: string; usedBy: string[] }[]; saved: SettingsResponse }) {
+function LocalKeysBlock({ vars, saved, description }: { vars: { name: string; usedBy: string[] }[]; saved: SettingsResponse; description?: React.ReactNode }) {
   const [status, setStatus] = useState<Record<string, boolean>>(saved.keyStatus);
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const save = async (name: string, value: string) => {
     setBusy(name);
     try {
-      await saveLocalKey(name, value);
+      await saveApiKey(name, value);
       setStatus((s) => ({ ...s, [name]: !!value.trim() }));
       setValues((v) => ({ ...v, [name]: "" }));
-      toast.success(value.trim() ? `${name} saved on this device` : `${name} removed`);
+      toast.success(value.trim() ? (serverless() ? `${name} saved on this device` : `${name} saved`) : `${name} removed`);
     } catch (e) {
       toast.error("Couldn't save the key", { description: (e as Error).message });
     } finally {
@@ -347,7 +327,7 @@ function LocalKeysBlock({ vars, saved }: { vars: { name: string; usedBy: string[
     }
   };
   return (
-    <Block title="API keys" description="Stored only on this device, in the app's private storage. Etude never shows a key again after you save it.">
+    <Block title="API keys" description={description ?? "Stored only on this device, in the app's private storage. Etude never shows a key again after you save it."}>
       <ul className="flex flex-col gap-4">
         {vars.map((v) => (
           <li key={v.name} className="flex flex-col gap-2" data-local-key={v.name}>
@@ -424,7 +404,7 @@ function TestBlock({ ai, saved }: { ai: AiSettings; saved: SettingsResponse }) {
           <CircleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
           <div className="min-w-0">
             <p className="break-words text-destructive">{result.verdictError}</p>
-            {/ is not set$/.test(result.verdictError ?? "") && !serverless() && <p className="mt-1 text-xs text-muted-foreground">Add it to ~/.etude/.env and restart the server, then run the test again.</p>}
+            {/ is not set$/.test(result.verdictError ?? "") && <p className="mt-1 text-xs text-muted-foreground">Paste it under API keys above, then run the test again.</p>}
           </div>
         </div>
       )}

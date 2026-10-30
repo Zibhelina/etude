@@ -24,6 +24,7 @@ import {
   type Verdict,
 } from "./model.ts";
 import { initSandbox, runScript, ScriptError } from "./sandbox.ts";
+import { EnvKeyError, setEnvKey } from "./env-file.ts";
 import { fieldDefaults, loadBuiltinTypes, validateFields, validateType, ITEM_ID, TITLE_KINDS, TYPE_ID } from "./types.ts";
 import * as sched from "./scheduler.ts";
 import {
@@ -100,9 +101,17 @@ export interface Settings {
   market: { url: string; repo: string };
   /** What card types saved for themselves (`etude.setPref` in a card): type id → key → JSON value. */
   typePrefs: Record<string, Record<string, unknown>>;
+  /** First-run setup: whether it was finished or skipped, and the comfort level picked there. */
+  onboarding: Onboarding;
 }
 
-export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {} };
+export const ONBOARDING_LEVELS = ["simple", "standard", "tinker"] as const;
+export interface Onboarding {
+  done: boolean;
+  level: (typeof ONBOARDING_LEVELS)[number];
+}
+
+export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" } };
 
 /** Card preferences: short keys, and a few KB per type, since they ride along in the synced settings. */
 export const TYPE_PREF_KEY = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -560,12 +569,21 @@ export class Etude {
 
   settings(): Settings {
     const s = this.db.setting<Partial<Settings>>("settings", {});
-    return { ...DEFAULT_SETTINGS, ...s, ai: { ...DEFAULT_AI, ...(s.ai ?? {}) }, market: { ...DEFAULT_SETTINGS.market, ...(s.market ?? {}) }, typePrefs: { ...(s.typePrefs ?? {}) } };
+    return {
+      ...DEFAULT_SETTINGS,
+      ...s,
+      ai: { ...DEFAULT_AI, ...(s.ai ?? {}) },
+      market: { ...DEFAULT_SETTINGS.market, ...(s.market ?? {}) },
+      typePrefs: { ...(s.typePrefs ?? {}) },
+      onboarding: { ...DEFAULT_SETTINGS.onboarding, ...(s.onboarding ?? {}) },
+    };
   }
 
   updateSettings(patch: Partial<Settings>): Settings {
     const cur = this.settings();
-    const next: Settings = { ...cur, ...patch, ai: { ...cur.ai, ...(patch.ai ?? {}) }, market: { ...cur.market, ...(patch.market ?? {}) } };
+    const next: Settings = { ...cur, ...patch, ai: { ...cur.ai, ...(patch.ai ?? {}) }, market: { ...cur.market, ...(patch.market ?? {}) }, onboarding: { ...cur.onboarding, ...(patch.onboarding ?? {}) } };
+    if (typeof next.onboarding.done !== "boolean") throw new EtudeError("onboarding.done must be true or false");
+    if (!ONBOARDING_LEVELS.includes(next.onboarding.level)) throw new EtudeError(`onboarding.level must be one of ${ONBOARDING_LEVELS.join(", ")}`);
     if (typeof next.market.url !== "string" || typeof next.market.repo !== "string") throw new EtudeError("market.url and market.repo must be text");
     if (next.market.repo && !/^[\w.-]+\/[\w.-]+$/.test(next.market.repo)) throw new EtudeError("market.repo must look like owner/name");
     if (!(next.dayStartHour >= 0 && next.dayStartHour < 24)) throw new EtudeError("dayStartHour must be 0 to 23");
@@ -578,6 +596,31 @@ export class Etude {
     if (patch.typePrefs !== undefined) next.typePrefs = checkTypePrefs(patch.typePrefs);
     this.db.setSetting("settings", next);
     return next;
+  }
+
+  /**
+   * Whether to show first-run setup: only while it isn't done and the collection has no decks. A
+   * collection that already has decks (an existing user) is marked done here, silently.
+   */
+  onboardingStatus(): Onboarding & { show: boolean; decks: number } {
+    const decks = Number(this.db.get("SELECT COUNT(*) AS n FROM decks")?.n ?? 0);
+    const o = this.settings().onboarding;
+    if (!o.done && decks > 0) return { ...this.updateSettings({ onboarding: { ...o, done: true } }).onboarding, show: false, decks };
+    return { ...o, show: !o.done && decks === 0, decks };
+  }
+
+  /**
+   * Saves one API key to `$ETUDE_HOME/.env` (mode 0600) and the running environment, so it works
+   * without a restart. An empty value removes it. The key itself is never returned.
+   */
+  setApiKey(name: string, value: string | null): { name: string; set: boolean } {
+    try {
+      const r = setEnvKey(this.home, name, value);
+      return { name: r.name, set: r.set };
+    } catch (e) {
+      if (e instanceof EnvKeyError) throw new EtudeError(e.message);
+      throw e;
+    }
   }
 
   // ---------------------------------------------------------------- card preferences

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.4.1
+
+- Etude is now licensed under the GNU AGPL-3.0 (it was MIT up to 2.4.0). A commercial license is available at hello@etude.study; contributions are made under the CLA in CLA.md, and the name and logo follow TRADEMARK.md.
+- First-run setup: choose how much you want to tinker, whether to use AI and which accounts you have (ChatGPT sign-in, OpenRouter or OpenAI key with a live test), how to sync, and a first deck. Existing collections skip it.
+- Etude Sync signs in with a 6-digit code from the email (onboarding, Settings, CLI); the link in the email still works. Subscribing (yearly or monthly) happens inside the setup, and Etude moves on by itself once Sync is active.
+- Sync waits out 429 Too Many Requests instead of failing, shows progress, transfers media in parallel, syncs media edits both ways, handles media names with spaces and accents, and Settings → Sync shows a single error.
+- Decks: right-click a deck row for its menu (Move to, Rename, Archive, Delete).
+
 ## 2.4.0
 
 - Etude Sync: end-to-end encrypted sync across your devices, as a subscription (US$5 a month or US$40 a year, 1 GB) bought on etude.study and handled by Polar. Settings → Account signs you in by email link; Settings → Sync sets up the vault (password and recovery key), pushes and pulls in the background, and merges changes from several devices without losing reviews. A shared folder works as a free transport, and the server is open source for self-hosting.

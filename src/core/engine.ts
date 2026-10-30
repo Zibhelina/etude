@@ -523,8 +523,9 @@ export class Etude {
     const tables = this.db.all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").map((t) => t.name);
     // Sync's own tables are most of a synced collection and say nothing new: its registers hold the
     // same values as the rows above, its events are the change history, and its media copies are
-    // encrypted. The names of the media files it keeps still count.
-    const skip = new Set(["sync_registers", "sync_events", "sync_blobs.bytes"]);
+    // encrypted; its list of file hashes names every file on disk. The names of the media files it
+    // keeps still count.
+    const skip = new Set(["sync_registers", "sync_events", "sync_media_hashes", "sync_blobs.bytes"]);
     for (const t of tables) {
       if (skip.has(t)) continue;
       const cols = this.db.all<{ name: string }>(`SELECT name FROM pragma_table_info(?)`, t).map((c) => c.name).filter((c) => !skip.has(`${t}.${c}`));

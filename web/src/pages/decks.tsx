@@ -8,11 +8,10 @@ import { api, relative, type DeckNode } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { EmptyState, Page, PageHeader, Section } from "@/components/page";
-import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { childrenOf, clashes, leafOf, moveDeck, MoveDeckDialog, parentOf } from "@/components/move-deck";
 import { usePhone } from "@/lib/phone";
 import { PhoneDecks } from "@/components/phone-decks";
-import { DeckMenu, useDeckActions } from "@/components/deck-actions";
+import { DeckContextMenu, type DeckMenuEntry, useDeckActions } from "@/components/deck-actions";
 
 /** Where a dragged deck would land: between rows (`line`) or inside a deck (`into`). */
 type Drop = { kind: "line" | "into"; parent: string; index: number | undefined; y: number; depth: number };
@@ -229,12 +228,26 @@ function DesktopDecks({ archived }: { archived: boolean }) {
             const lifted = dragged(d.name);
             const target = drag?.drop?.kind === "into" && drag.drop.parent === d.name && !isNoop(drag.name, drag.drop);
             const targetBlocked = target && blocked(drag!.name, drag!.drop!);
+            const menu = {
+              name: d.name,
+              archived,
+              disabled: deckActions.busy,
+              onArchive: () => deckActions.archive(d.name, !archived),
+              onDelete: () => deckActions.requestDelete(d.name),
+              extra: rowEntries({
+                name: d.name,
+                archived,
+                onMove: () => setMoving(d.name),
+                onTop: d.depth > 0 && !clashes(decks ?? [], d.name, "") ? () => place(d.name, "", childrenOf(decks ?? [], "").indexOf(d.name.split("::")[0]) + 1) : undefined,
+                onUp: d.depth > 1 && !clashes(decks ?? [], d.name, parentOf(parentOf(d.name))) ? () => { const gp = parentOf(parentOf(d.name)); place(d.name, gp, childrenOf(decks ?? [], gp).indexOf(parentOf(d.name)) + 1); } : undefined,
+              }),
+            };
             return (
+              <DeckContextMenu key={d.id} {...menu}>
               <div
-                key={d.id}
                 ref={(el) => { if (el) rows.current.set(d.name, el); else rows.current.delete(d.name); }}
                 className={cn(
-                  "group relative flex min-h-14 items-stretch gap-2 pr-3 pl-0.5 hover:bg-accent/40 sm:grid sm:min-h-12 sm:pr-5 sm:pl-1",
+                  "group relative flex min-h-14 items-stretch gap-2 pr-3 pl-0.5 hover:bg-accent/40 data-[state=open]:bg-accent/40 sm:grid sm:min-h-12 sm:pr-5 sm:pl-1",
                   archived ? "sm:grid-cols-[1fr_4rem_2.5rem]" : "sm:grid-cols-[1fr_4rem_repeat(3,3.5rem)_8.5rem]",
                   i > 0 && "border-t",
                   groupStart && "border-t-foreground/15",
@@ -307,16 +320,6 @@ function DesktopDecks({ archived }: { archived: boolean }) {
                   </>
                 ))}
                 <div className="flex shrink-0 items-center justify-end gap-0.5">
-                  <RowMenu
-                    name={d.name}
-                    archived={archived}
-                    disabled={deckActions.busy}
-                    onArchive={() => deckActions.archive(d.name, !archived)}
-                    onDelete={() => deckActions.requestDelete(d.name)}
-                    onMove={() => setMoving(d.name)}
-                    onTop={d.depth > 0 && !clashes(decks ?? [], d.name, "") ? () => place(d.name, "", childrenOf(decks ?? [], "").indexOf(d.name.split("::")[0]) + 1) : undefined}
-                    onUp={d.depth > 1 && !clashes(decks ?? [], d.name, parentOf(parentOf(d.name))) ? () => { const gp = parentOf(parentOf(d.name)); place(d.name, gp, childrenOf(decks ?? [], gp).indexOf(parentOf(d.name)) + 1); } : undefined}
-                  />
                   {!archived && <Button
                     size="sm"
                     variant={work || (watch && d.cards) ? "secondary" : "ghost"}
@@ -338,6 +341,7 @@ function DesktopDecks({ archived }: { archived: boolean }) {
                   </Button>}
                 </div>
               </div>
+              </DeckContextMenu>
             );
           })}
           {drag?.drop && !isNoop(drag.name, drag.drop) && (
@@ -382,19 +386,16 @@ function DesktopDecks({ archived }: { archived: boolean }) {
   );
 }
 
-/** The ⋯ on a deck row: move it somewhere, or take it out a level. */
-function RowMenu({ name, archived, disabled, onArchive, onDelete, onMove, onTop, onUp }: { name: string; archived: boolean; disabled: boolean; onArchive(): void; onDelete(): void; onMove(): void; onTop?: () => void; onUp?: () => void }) {
-  return (
-    <DeckMenu name={name} archived={archived} disabled={disabled} onArchive={onArchive} onDelete={onDelete} className="sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 sm:data-[state=open]:opacity-100">
-      {!archived && <>
-        <DropdownMenuItem className="h-10 sm:h-9" onClick={onMove}><FolderInput />Move to…</DropdownMenuItem>
-        {onUp && <DropdownMenuItem className="h-10 sm:h-9" onClick={onUp}><ArrowUpLeft />Move up a level</DropdownMenuItem>}
-        {onTop && <DropdownMenuItem className="h-10 sm:h-9" onClick={onTop}><ArrowUpToLine />Make it a deck of its own</DropdownMenuItem>}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem className="h-10 sm:h-9" onClick={() => navigate(`/deck?name=${encodeURIComponent(name)}&rename=1`)}><Pencil />Rename</DropdownMenuItem>
-      </>}
-    </DeckMenu>
-  );
+/** Row-specific entries for a deck's menu: move it somewhere, take it out a level, rename. */
+function rowEntries({ name, archived, onMove, onTop, onUp }: { name: string; archived: boolean; onMove(): void; onTop?: () => void; onUp?: () => void }): DeckMenuEntry[] {
+  if (archived) return [];
+  return [
+    { icon: <FolderInput />, label: "Move to…", onSelect: onMove },
+    ...(onUp ? [{ icon: <ArrowUpLeft />, label: "Move up a level", onSelect: onUp }] : []),
+    ...(onTop ? [{ icon: <ArrowUpToLine />, label: "Make it a deck of its own", onSelect: onTop }] : []),
+    "-",
+    { icon: <Pencil />, label: "Rename", onSelect: () => navigate(`/deck?name=${encodeURIComponent(name)}&rename=1`) },
+  ];
 }
 
 /** Desktop count column; muted when zero. */

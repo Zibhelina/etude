@@ -7,6 +7,7 @@ import { leafOf } from "@/components/move-deck";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
 
 export function useDeckActions(onChanged: () => void) {
   const [deleting, setDeleting] = useState<{ name: string; items: number; cards: number } | null>(null);
@@ -79,15 +80,30 @@ export function useDeckActions(onChanged: () => void) {
   return { archive, requestDelete, deleteDialog, busy };
 }
 
-export function DeckMenu({ name, archived, onArchive, onDelete, disabled, children, className }: {
+/** One entry in a deck's menu; `"-"` is a separator. */
+export type DeckMenuEntry = "-" | { icon: React.ReactNode; label: string; onSelect(): void; destructive?: boolean };
+
+function deckEntries(archived: boolean | undefined, onArchive: () => void, onDelete: () => void, extra: DeckMenuEntry[] = []): DeckMenuEntry[] {
+  return [
+    ...extra,
+    ...(extra.length ? ["-" as const] : []),
+    { icon: archived ? <ArchiveRestore /> : <Archive />, label: archived ? "Move out of archive" : "Move to archive", onSelect: onArchive },
+    { icon: <Trash2 />, label: "Delete", onSelect: onDelete, destructive: true },
+  ];
+}
+
+type DeckMenuProps = {
   name: string;
   archived?: boolean;
   onArchive(): void;
   onDelete(): void;
   disabled?: boolean;
-  children?: React.ReactNode;
-  className?: string;
-}) {
+  /** Entries above Archive/Delete (move, rename…). */
+  extra?: DeckMenuEntry[];
+};
+
+/** The ⋯ button on a deck row. */
+export function DeckMenu({ name, archived, onArchive, onDelete, disabled, extra, className }: DeckMenuProps & { className?: string }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -96,13 +112,24 @@ export function DeckMenu({ name, archived, onArchive, onDelete, disabled, childr
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        {children}
-        {children && <DropdownMenuSeparator />}
-        <DropdownMenuItem className="h-10 sm:h-9" onClick={onArchive}>
-          {archived ? <ArchiveRestore /> : <Archive />}{archived ? "Move out of archive" : "Move to archive"}
-        </DropdownMenuItem>
-        <DropdownMenuItem className="h-10 sm:h-9" variant="destructive" onClick={onDelete}><Trash2 />Delete</DropdownMenuItem>
+        {deckEntries(archived, onArchive, onDelete, extra).map((e, i) => e === "-"
+          ? <DropdownMenuSeparator key={i} />
+          : <DropdownMenuItem key={i} className="h-10 sm:h-9" variant={e.destructive ? "destructive" : "default"} onClick={e.onSelect}>{e.icon}{e.label}</DropdownMenuItem>)}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** The same menu as the ⋯ button, opened by right-clicking anywhere on the row. */
+export function DeckContextMenu({ archived, onArchive, onDelete, disabled, extra, children }: DeckMenuProps & { children: React.ReactNode }) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild disabled={disabled}>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="w-56">
+        {deckEntries(archived, onArchive, onDelete, extra).map((e, i) => e === "-"
+          ? <ContextMenuSeparator key={i} />
+          : <ContextMenuItem key={i} className="h-9" variant={e.destructive ? "destructive" : "default"} onSelect={e.onSelect}>{e.icon}{e.label}</ContextMenuItem>)}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }

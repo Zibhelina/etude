@@ -107,14 +107,31 @@ export class SyncClient {
     let cursor=this.meta("cursor","");let more=true;
     // A device that has never pulled downloads about the whole vault.
     const down=this.step("download",cursor===""?await t.usage?.()??null:null);
-    while(more) {const page=await t.pull(cursor);this.moved(page.events.reduce((n,e)=>n+e.ciphertext.length,0));for(const event of page.events)receive(db,event.id,await decryptEvent<Change>(key,event.id,event.ciphertext));cursor=page.cursor;more=page.more;this.set("cursor",cursor);}
+    while(more) {
+      const page=await t.pull(cursor);this.moved(page.events.reduce((n,e)=>n+e.ciphertext.length,0));
+      // A folder hands back every event each time: only new ones are decrypted, applied, and call for a rebuild.
+      const fresh=page.events.filter(event=>!db.get("SELECT 1 FROM sync_events WHERE id=?",event.id));
+      if(fresh.length)this.set("unprojected",true);
+      for(const event of fresh)receive(db,event.id,await decryptEvent<Change>(key,event.id,event.ciphertext));
+      cursor=page.cursor;more=page.more;this.set("cursor",cursor);
+    }
     // Hash the media on disk first, so a file another device already uploaded is neither downloaded nor uploaded again.
     const files:[string,string][]=[];
     const list=(dir:string,prefix="") => {if(!existsSync(dir))return;for(const name of readdirSync(dir)){const p=join(dir,name),relative=prefix+name;if(statSync(p).isDirectory())list(p,relative+"/");else if(safeMediaPath(relative))files.push([p,relative]);}};
     list(this.e.mediaDir);
     this.step("check",files.length);
     const onDisk=new Map<string,string>(),local=new Map<string,string>();
-    for(const [p,relative] of files) {const hash=await sha256Hex(new Uint8Array(readFileSync(p)));onDisk.set(relative,hash);local.set(hash,p);this.moved(1);}
+    // Hashes are kept with each file's size and modification time, so only new or changed files are read again.
+    db.sql.exec("CREATE TABLE IF NOT EXISTS sync_media_hashes (file TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime REAL NOT NULL, hash TEXT NOT NULL)");
+    const known=new Map(db.all<{file:string;size:number;mtime:number;hash:string}>("SELECT file,size,mtime,hash FROM sync_media_hashes").map(r=>[r.file,r]));
+    const fresh:[string,number,number,string][]=[];
+    for(const [p,relative] of files) {
+      const st=statSync(p),k=known.get(relative);
+      let hash=k&&k.size===st.size&&k.mtime===st.mtimeMs?k.hash:"";
+      if(!hash){hash=await sha256Hex(new Uint8Array(readFileSync(p)));fresh.push([relative,st.size,st.mtimeMs,hash]);}
+      onDisk.set(relative,hash);local.set(hash,p);this.moved(1);
+    }
+    db.tx(()=>{for(const f of fresh)db.run("INSERT INTO sync_media_hashes VALUES(?,?,?,?) ON CONFLICT(file) DO UPDATE SET size=excluded.size,mtime=excluded.mtime,hash=excluded.hash",...f);for(const file of known.keys())if(!onDisk.has(file))db.run("DELETE FROM sync_media_hashes WHERE file=?",file);});
     this.step(down);
     // Read the registers once: a collection can hold tens of thousands of media files.
     const blobs=rows(db,"blob"),media=rows(db,"media");
@@ -163,10 +180,15 @@ export class SyncClient {
       for(const r of batch) {const ciphertext=r.ciphertext??await encryptEvent(key,r.id,JSON.parse(r.body));if(!r.ciphertext)db.run("UPDATE sync_events SET ciphertext=? WHERE id=?",ciphertext,r.id);if(events.length&&bytes+ciphertext.length>PUSH_BATCH_BYTES)break;events.push({id:r.id,ciphertext});sent.push(r);bytes+=ciphertext.length;}
       await t.push(events);this.moved(bytes);db.tx(()=>{for(const r of sent)db.run("UPDATE sync_events SET sent=1 WHERE id=?",r.id);});
     }
-    // Let a status request see this step before the rebuild holds the thread.
-    this.step("apply");await new Promise(r=>setTimeout(r,0));
-    // No await while rebuilding. SQL triggers are muted only for this transaction.
-    drain(db);project(this.e);
+    // Rebuilding the rows from the registers rewrites the whole collection and holds the thread (tens
+    // of seconds on a big one), so it runs only when changes from another device arrived, now or in a
+    // run that stopped before rebuilding. Local changes are already in the rows.
+    if(this.meta("unprojected",false)) {
+      // Let a status request see this step before the rebuild holds the thread.
+      this.step("apply");await new Promise(r=>setTimeout(r,0));
+      // No await while rebuilding. SQL triggers are muted only for this transaction.
+      drain(db);project(this.e);this.set("unprojected",false);
+    } else drain(db);
     this.set("config",{...this.config(),lastSync:new Date().toISOString()});return this.status();
   }
 }

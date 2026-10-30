@@ -74,13 +74,18 @@ test("sync reports its steps, and the upload total matches the bytes sent",async
     for(let i=0;i<3;i++)writeFileSync(join(a.mediaDir,"anki",`clip ${i}.mp3`),"sound ".repeat(1000+i));
     const record=(e:Etude)=>{const s=syncFor(e) as any,seen:any[]=[],step=s.step.bind(s);s.step=(...args:any[])=>{const p=step(...args);if(!seen.includes(p))seen.push(p);return p;};return seen;};
     const sa=record(a);await syncFor(a).now();
-    assert.deepEqual(sa.map(p=>p.step),["download","check","upload","apply"]);
+    // Nothing came from another device, so there's nothing to rebuild: no "apply".
+    assert.deepEqual(sa.map(p=>p.step),["download","check","upload"]);
     const up=sa.find(p=>p.step==="upload");assert.ok(up.done>3000);assert.equal(up.done,up.total);
     assert.deepEqual(sa.find(p=>p.step==="check"),{step:"check",done:3,total:3,rate:0});
     assert.equal(syncFor(a).status().progress,null);
     const sb=record(b);await syncFor(b).now();
     assert.ok(sb.find(p=>p.step==="download").done>up.done*0.9,"b downloads what a sent");
     assert.equal(sb.find(p=>p.step==="upload").total,0);
+    // b received a's changes and rebuilt; a second sync with nothing new doesn't rebuild again.
+    assert.ok(sb.some(p=>p.step==="apply"));
+    const again=record(b);await syncFor(b).now();
+    assert.ok(!again.some(p=>p.step==="apply"));
   }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
 });
 async function login(s:ReturnType<typeof syncFor>,server:string,outbox:string,email:string){

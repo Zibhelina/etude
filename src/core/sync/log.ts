@@ -47,6 +47,7 @@ export function install(db: Db) {
     CREATE TABLE IF NOT EXISTS sync_deleted (tbl TEXT, key TEXT, stamp TEXT NOT NULL, PRIMARY KEY(tbl,key));
     CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sync_blobs (hash TEXT PRIMARY KEY, name TEXT NOT NULL, bytes BLOB);
+    CREATE INDEX IF NOT EXISTS sync_events_unsent ON sync_events(id) WHERE sent=0;
     INSERT OR IGNORE INTO sync_control(id,device) VALUES(1,lower(hex(randomblob(16))));`);
   for (const table of UUID_TABLES) {
     if (!db.all(`PRAGMA table_info(${table})`).some(r => r.name === "sync_id")) db.sql.exec(`ALTER TABLE ${table} ADD COLUMN sync_id TEXT`);

@@ -1,6 +1,6 @@
 // What the collection keeps until you decide: cards a type no longer makes, media nothing names.
-import { useCallback, useEffect, useState } from "react";
-import { Loader2, Trash2 } from "lucide-react";
+import { useCallback, useState } from "react";
+import { Loader2, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -19,12 +19,15 @@ export function CleanupSection() {
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ cards: CardTarget } | { media: true } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Checking reads every item and the whole media folder, which takes a while on a big collection, so
+  // it runs when asked rather than each time Settings opens.
+  const [asked, setAsked] = useState(false);
 
   const load = useCallback(() => {
+    setAsked(true);
     setError(null);
     api.cleanup().then(setReport, (e) => setError((e as Error).message));
   }, []);
-  useEffect(load, [load]);
 
   const remove = async (what: NonNullable<typeof confirm>) => {
     setBusy(true);
@@ -47,7 +50,7 @@ export function CleanupSection() {
   const left = report?.leftover;
   const media = report?.media;
   const target = confirm && "cards" in confirm ? confirm.cards : null;
-  const checking = !report && !error && <span className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Checking…</span>;
+  const checking = !asked ? <p className="text-sm text-muted-foreground">Not checked yet.</p> : !report && !error && <span className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Checking…</span>;
   const deleteButton = (label: string, n: number | undefined, onClick: () => void) => (
     <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!n || busy} onClick={onClick}>
       {busy ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}{label}
@@ -60,7 +63,16 @@ export function CleanupSection() {
         title="Leftover cards"
         description="Cards your card types no longer create, for example after removing a face from a type: the cards that face made for existing items stay. Saving a type never deletes cards, so review history isn't lost by accident. Until deleted they still come up in study unless suspended. View shows them in Browse."
         stackAside
-        aside={left && deleteButton(left.faces.length > 1 ? "Delete all" : "Delete", left.cards, () => setConfirm({ cards: left }))}
+        aside={
+          !asked ? (
+            <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={load}>
+              <Search className="size-4" />
+              Check now
+            </Button>
+          ) : (
+            left && deleteButton(left.faces.length > 1 ? "Delete all" : "Delete", left.cards, () => setConfirm({ cards: left }))
+          )
+        }
       >
         {error && <p className="text-sm text-destructive">{error}</p>}
         {checking}

@@ -19,6 +19,9 @@ const OUT = join(DESKTOP, "dist", "out");
 const read = (path: string) => JSON.parse(readFileSync(path, "utf8"));
 const pkg = read(join(ROOT, "package.json"));
 const desktopPkg = read(join(DESKTOP, "package.json"));
+// CI passes the signing secrets even when they don't exist yet, as empty strings, and electron-builder
+// would take an empty CSC_LINK for a certificate. Without them the Mac app is signed ad hoc.
+for (const k of ["CSC_LINK", "CSC_KEY_PASSWORD", "APPLE_API_KEY", "APPLE_API_KEY_ID", "APPLE_API_ISSUER"]) if (!process.env[k]) delete process.env[k];
 const signed = !!process.env.CSC_LINK;
 
 /** Mac downloads keep the names the download page links to; the updater's zips keep arm64/x64, which it reads. */

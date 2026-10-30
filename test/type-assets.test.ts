@@ -284,8 +284,12 @@ test("assets: built-in types load assets from types/<id>/assets and reset restor
   e.close();
   writeFileSync(join(root, "basic", "assets", "hello.json"), "{}");
   const e2 = await Etude.open(join(dir, "etude.db"), { builtinTypesDir: root, home: dir });
-  t.after(() => e2.close());
-  assert.equal(e2.typeAssets("basic")[0].hash, hashBytes(Buffer.from("{}")));
+  try {
+    assert.equal(e2.typeAssets("basic")[0].hash, hashBytes(Buffer.from("{}")));
+  } finally {
+    // Before the folder's cleanup hook: Windows can't delete an open database.
+    e2.close();
+  }
 });
 
 test("assets: market publish, check, index and install handle them", async (t) => {

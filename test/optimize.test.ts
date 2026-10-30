@@ -7,8 +7,9 @@ import { Etude } from "../src/core/engine.ts";
 import { run } from "../src/cli/run.ts";
 
 const dirs: string[] = [];
+// Best effort: Windows can't delete a database that is still open.
 process.on("exit", () => {
-  for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  for (const d of dirs) try { rmSync(d, { recursive: true, force: true }); } catch {}
 });
 
 /** Weights that badly underestimate memory, so a fit to any real-looking history beats them. */

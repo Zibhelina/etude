@@ -3,7 +3,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
-import { basename, dirname, extname, join, relative, resolve } from "node:path";
+import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Db, type Row } from "./db.ts";
 import {
@@ -456,7 +456,7 @@ export class Etude {
     let media: ReturnType<Etude["storeMedia"]> | null = null;
     if (image.startsWith("/media/")) {
       const full = resolve(this.mediaDir, image.slice("/media/".length));
-      if (!full.startsWith(resolve(this.mediaDir) + "/") || !existsSync(full)) throw new EtudeError(`no media file at ${image}`, 404);
+      if (!full.startsWith(resolve(this.mediaDir) + sep) || !existsSync(full)) throw new EtudeError(`no media file at ${image}`, 404);
       url = image;
       bytes = readFileSync(full);
     } else {

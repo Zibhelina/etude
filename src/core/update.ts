@@ -2,7 +2,7 @@
 // Only a git checkout can update itself. Package installs (npm, the Mac app) get the latest
 // release's version and a link instead.
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, renameSync, rmSync } from "node:fs";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -89,7 +89,7 @@ function git(root: string, args: string[], timeout = 60_000, raw = false): strin
 export function isCheckout(root = ETUDE_ROOT): boolean {
   if (!existsSync(join(root, ".git"))) return false;
   try {
-    return resolve(git(root, ["rev-parse", "--show-toplevel"])) === resolve(root);
+    return realpathSync.native(resolve(git(root, ["rev-parse", "--show-toplevel"]))) === realpathSync.native(resolve(root));
   } catch {
     return false;
   }

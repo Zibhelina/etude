@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { Etude } from "../src/core/engine.ts";
 
 const dirs: string[] = [];
-process.on("exit", () => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
+// Best effort: Windows can't delete a database that is still open.
+process.on("exit", () => dirs.forEach((d) => { try { rmSync(d, { recursive: true, force: true }); } catch {} }));
 async function fresh() {
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-occlusion-"));
   dirs.push(dir);

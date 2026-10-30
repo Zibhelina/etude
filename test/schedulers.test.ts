@@ -10,9 +10,9 @@ const TYPING = join(import.meta.dirname, "..", "examples", "showcase", "types", 
 
 async function open(t: { after(fn: () => void): void }) {
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-sched-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const e = await Etude.open(join(dir, "etude.db"));
   t.after(() => e.close());
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
   return e;
 }
 

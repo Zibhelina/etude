@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { checkPublicContent } from "../site/public-content.ts";
 
 function fixture(t: { after(fn: () => void): void }) {
@@ -32,5 +33,5 @@ test("site checks the actual type instead of trusting the demo filename", (t) =>
 });
 
 test("the public website sources contain only approved demos", () => {
-  checkPublicContent(new URL("../site", import.meta.url).pathname);
+  checkPublicContent(fileURLToPath(new URL("../site", import.meta.url)));
 });

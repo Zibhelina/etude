@@ -7,9 +7,9 @@ import { Etude } from "../src/core/engine.ts";
 
 test("study ahead: cards that aren't due still come up, soonest first, and rating them is a real review", async (t) => {
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-ahead-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const e = await Etude.open(join(dir, "etude.db"));
   t.after(() => e.close());
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
   e.upsertItem({ id: "a", type: "basic", deck: "D", fields: { front: "a", back: "A" } });
   e.upsertItem({ id: "b", type: "basic", deck: "D", fields: { front: "b", back: "B" } });
   const ids = e.db.all("SELECT c.id FROM cards c JOIN items i ON i.id = c.item_id ORDER BY i.id").map((r: any) => r.id as number);

@@ -302,8 +302,10 @@ test("sign-in exchanges the code, validates the ID token and stores 0600 credent
     assert.equal(fake.tokens[0].grant, "authorization_code");
 
     const paths = chatGptPaths(home);
-    assert.equal(statSync(paths.credentials).mode & 0o777, 0o600);
-    assert.equal(statSync(paths.hostId).mode & 0o777, 0o600);
+    if (process.platform !== "win32") {
+      assert.equal(statSync(paths.credentials).mode & 0o777, 0o600);
+      assert.equal(statSync(paths.hostId).mode & 0o777, 0o600);
+    }
     const onDisk = JSON.parse(readFileSync(paths.credentials, "utf8"));
     assert.equal(onDisk.refresh_token, creds.refresh_token);
     assert.equal(onDisk.ext_agent_host_id, creds.ext_agent_host_id);
@@ -551,7 +553,7 @@ test("a credential file from another machine is adopted with a new host id", asy
     assert.equal(onServer.refresh_token, creds.refresh_token);
     assert.notEqual(onServer.ext_agent_host_id, creds.ext_agent_host_id);
     assert.equal(imported.hostId, onServer.ext_agent_host_id);
-    assert.equal(statSync(chatGptPaths(server).credentials).mode & 0o777, 0o600);
+    if (process.platform !== "win32") assert.equal(statSync(chatGptPaths(server).credentials).mode & 0o777, 0o600);
     assert.equal(chatGptStatus(server).plan, "enabled");
     assert.throws(() => importChatGptCredentials(server, join(server, "missing.json")), /couldn't read/);
   } finally {

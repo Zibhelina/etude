@@ -48,7 +48,11 @@ try {
     if (!up) await new Promise((r) => setTimeout(r, 200));
   }
   check("the engine serves the API", up);
-  check("the engine serves the web app", (await get("/")).text.includes('<div id="root"'));
+  const page = (await get("/")).text;
+  check("the engine serves the web app", page.includes('<div id="root"'));
+  // The page alone isn't enough: a path bug once served it in place of every script.
+  const script = page.match(/src="(\/assets\/[^"]+\.js)"/)?.[1];
+  check("…and its scripts", !!script && (await get(script)).text.length > 0 && !(await get(script)).text.includes('<div id="root"'));
   check("cards get KaTeX and marked", (await get("/runtime/vendor/katex.js")).status === 200 && (await get("/runtime/vendor/marked.js")).status === 200);
 } finally {
   server.kill();

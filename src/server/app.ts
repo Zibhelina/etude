@@ -4,7 +4,7 @@ import { accountRoutes } from "./account.ts";
 import { syncFor } from "../core/sync/client.ts";
 import { Hono, type Context } from "hono";
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { dirname, extname, join, normalize, resolve } from "node:path";
+import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { DEFAULT_SETTINGS, Etude, EtudeError, type StudyScope } from "../core/engine.ts";
@@ -740,7 +740,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.get("/media/*", (c) => {
     const rel = normalize(c.req.path.slice("/media/".length));
     const full = resolve(etude.mediaDir, rel);
-    if (!full.startsWith(resolve(etude.mediaDir) + "/")) return c.text("not found", 404);
+    if (!full.startsWith(resolve(etude.mediaDir) + sep)) return c.text("not found", 404);
     c.header("Content-Security-Policy", "default-src 'none'; sandbox");
     c.header("X-Content-Type-Options", "nosniff");
     // Card frames have an opaque origin, and @font-face needs CORS even for same-origin paths.
@@ -751,9 +751,9 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   if (opts.webDist) {
     const dist = opts.webDist;
     app.get("*", (c) => {
-      const rel = normalize(c.req.path).replace(/^\/+/, "");
+      const rel = normalize(c.req.path).replace(/^[\\/]+/, "");
       const full = resolve(dist, rel);
-      if (rel && full.startsWith(resolve(dist)) && existsSync(full) && statSync(full).isFile())
+      if (rel && full.startsWith(resolve(dist) + sep) && existsSync(full) && statSync(full).isFile())
         return withAppCsp(sendFile(c, full, { cache: rel.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-cache" }), full);
       return withAppCsp(sendFile(c, join(dist, "index.html")), "index.html");
     });

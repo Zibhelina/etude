@@ -113,8 +113,11 @@ const config: Configuration = {
     artifactName: "Etude-mac-${arch}.${ext}",
     minimumSystemVersion: "12.0",
     hardenedRuntime: true,
-    entitlements: "build/entitlements.mac.plist",
-    entitlementsInherit: "build/entitlements.mac.plist",
+    // Absolute: codesign doesn't run from this folder.
+    entitlements: join(DESKTOP, "build", "entitlements.mac.plist"),
+    entitlementsInherit: join(DESKTOP, "build", "entitlements.mac.plist"),
+    // Inside the app folder only native modules are code; the app's seal covers the other files.
+    signIgnore: ["/Contents/Resources/app/(?!.*\\.node$)"],
     ...(signed ? { notarize: !!process.env.APPLE_API_KEY } : { identity: "-" }),
   },
   win: { target: [{ target: "nsis", arch: ["x64"] }] },

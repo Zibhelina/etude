@@ -176,6 +176,9 @@ export class Db {
     const v = this.get("SELECT value FROM meta WHERE key = 'schema_version'");
     if (!v) this.run("INSERT INTO meta (key, value) VALUES ('schema_version', ?)", String(SCHEMA_VERSION));
     if (this.get("SELECT 1 FROM sqlite_master WHERE name='sync_control'")) installSync(this);
+    // Statistics for the query planner, gathered only where missing or stale and within a budget.
+    // Without them SQLite reads every card to list one deck's.
+    this.sql.exec("PRAGMA analysis_limit = 1000; PRAGMA optimize = 0x10002;");
   }
 
   all<T = Row>(query: string, ...params: SqlValue[]): T[] {
@@ -188,6 +191,15 @@ export class Db {
 
   run(query: string, ...params: SqlValue[]) {
     return this.sql.prepare(query).run(...params);
+  }
+
+  /**
+   * Changes whenever the data may have: this connection's writes (total_changes) or another one's
+   * commits (data_version: the CLI, an agent). Cheap, so caches check it before anything costlier.
+   */
+  changeStamp(): string {
+    const r = this.get<{ d: number; t: number }>("SELECT (SELECT data_version FROM pragma_data_version) AS d, total_changes() AS t")!;
+    return `${r.d}:${r.t}`;
   }
 
   /** Runs `fn` in a transaction; nested calls join the outer one. */

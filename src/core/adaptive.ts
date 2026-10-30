@@ -96,19 +96,27 @@ export class Adaptive {
     return null;
   }
 
-  private rootCache = new Map<string, { version: string; data: RootData }>();
+  private rootCache = new Map<string, { stamp: string; version: string; data: RootData }>();
+  private paceCache = new Map<string, { key: string; pace: learn.Pace }>();
 
   /** Cards, graded history and estimates for an adaptive root, cached until anything they depend on changes. */
   private rootData(root: string): RootData {
     const cfg = this.host.configFor(root);
+    // Nothing written since the last look, here or by another process: the cached data stands. A deck
+    // tree asks once per subdeck, and the version below costs a pass over every card.
+    const stamp = this.host.db.changeStamp();
+    const hit = this.rootCache.get(root);
+    if (hit?.stamp === stamp) return hit.data;
     // Card states can change without a review (reschedule, reset), so their totals are part of the version.
     // So are deck, preset and type settings: they decide each card's scheduler.
     const v = this.host.db.get(
       "SELECT (SELECT MAX(id) FROM attempts) AS a, (SELECT MAX(id) FROM reviews) AS r, (SELECT COUNT(*) || ':' || TOTAL(state) || ':' || TOTAL(stability) || ':' || TOTAL(suspended) FROM cards) AS c, (SELECT MAX(updated) FROM items) AS i, (SELECT group_concat(COALESCE(preset_id, '') || config, ';') FROM decks) || (SELECT COALESCE(group_concat(config, ';'), '') FROM presets) || (SELECT MAX(updated) FROM types) AS s",
     )!;
     const version = JSON.stringify([v.a, v.r, v.c, v.i, v.s, cfg]);
-    const hit = this.rootCache.get(root);
-    if (hit?.version === version) return hit.data;
+    if (hit?.version === version) {
+      hit.stamp = stamp;
+      return hit.data;
+    }
     const scope = "(d.name = ? OR d.name LIKE ? ESCAPE '\\')";
     const sp = [root, root.replace(/[\\%_]/g, "\\$&") + "::%"];
     const defs = new Map<string, CardTypeDef | null>();
@@ -264,7 +272,7 @@ export class Adaptive {
       }
     }
     const data: RootData = { root, cfg, cards, attempts, model: learn.fitSkills(attempts.map((x) => x.a)), maxTs, known, assumed: assumed.size, seen, scores, placement, placementOf, levels, passed };
-    this.rootCache.set(root, { version, data });
+    this.rootCache.set(root, { stamp, version, data });
     return data;
   }
 
@@ -317,6 +325,10 @@ export class Adaptive {
   private paceFor(root: string, cfg: PresetConfig): learn.Pace {
     const day = this.host.dayStart(new Date());
     const from = new Date(day.getTime() - 7 * 86400_000).toISOString(), to = day.toISOString();
+    // The same all day until something is written (each subdeck in a deck tree asks).
+    const key = `${this.host.db.changeStamp()}|${to}|${JSON.stringify(cfg)}`;
+    const hit = this.paceCache.get(root);
+    if (hit?.key === key) return hit.pace;
     const scope = "(d.name = ? OR d.name LIKE ? ESCAPE '\\')";
     const sp = [root, root.replace(/[\\%_]/g, "\\$&") + "::%"];
     const join = "JOIN cards c ON c.id = x.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
@@ -348,7 +360,9 @@ export class Adaptive {
       to,
       ...sp,
     )!;
-    return learn.pace(cfg, { activeDays: Number(rv.days ?? 0), young, minutes: Number(rv.ms ?? 0) / 60000, newCards: news });
+    const pace = learn.pace(cfg, { activeDays: Number(rv.days ?? 0), young, minutes: Number(rv.ms ?? 0) / 60000, newCards: news });
+    this.paceCache.set(root, { key, pace });
+    return pace;
   }
 
   /**

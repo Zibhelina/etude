@@ -872,10 +872,7 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
         <Title lead={<>Sent to <span className="text-foreground">{email.trim()}</span>. It works for a few minutes.</>}>Enter the code</Title>
         <form className="mt-5" onSubmit={(e) => (e.preventDefault(), void run(async () => {
           if (!code.trim()) throw new Error("Enter the code from the email.");
-          // Without a subscription the server refuses the vault check after signing in; the plan step is for that.
-          await postJson("/api/sync/verify", { code: code.trim() }).catch(async (e) => {
-            if (!(await account.status().catch(() => null))?.signedIn) throw e;
-          });
+          await postJson("/api/sync/verify", { code: code.trim() });
           await afterSignIn();
         }))}>
           <Input autoFocus autoComplete="one-time-code" spellCheck={false} value={code} onChange={(e) => setCode(e.target.value)} placeholder="Code from the email" aria-label="Sign-in code" className="h-12 rounded-xl bg-card font-mono text-[15px]" />
@@ -892,7 +889,7 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
       <>
         <Title lead="1 GB, end-to-end encrypted: only your devices can read it. Cancel anytime.">Pick a plan</Title>
         <Options role="radiogroup">
-          <Option kind="radio" icon={CalendarDays} title="Yearly · US$40" hint="US$3.33 a month, four months free." selected={plan === "yearly"} onClick={() => setPlan("yearly")} />
+          <Option kind="radio" icon={CalendarDays} title="Yearly · US$40" hint="Works out to US$3.33 a month." selected={plan === "yearly"} onClick={() => setPlan("yearly")} />
           <Option kind="radio" icon={CalendarClock} title="Monthly · US$5" hint="Billed every month." selected={plan === "monthly"} onClick={() => setPlan("monthly")} />
         </Options>
         <Note>Payment opens on etude.study, handled by Polar. Come back here when it's done.</Note>

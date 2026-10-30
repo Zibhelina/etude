@@ -137,7 +137,18 @@ export function SettingsPage() {
   useEffect(() => {
     if (!saved || !location.hash) return;
     const id = decodeURIComponent(location.hash.slice(1));
-    requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: "start" }));
+    // Sections above it (Account, Sync's plan) load on their own and push it down: follow it until the page settles or the user scrolls.
+    let userScrolled = false;
+    const stop = () => (userScrolled = true);
+    window.addEventListener("wheel", stop, { passive: true, once: true });
+    window.addEventListener("touchmove", stop, { passive: true, once: true });
+    const go = () => !userScrolled && document.getElementById(id)?.scrollIntoView({ block: "start" });
+    const timers = [0, 250, 600, 1200, 2000].map((ms) => window.setTimeout(go, ms));
+    return () => {
+      timers.forEach(clearTimeout);
+      window.removeEventListener("wheel", stop);
+      window.removeEventListener("touchmove", stop);
+    };
   }, [saved]);
 
   // Saved settings can't be invalid, so errors only show once something was edited.

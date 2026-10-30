@@ -79,7 +79,7 @@ export class SyncClient {
   /** After setup with the account's token: learn whether the vault already has keys. */
   async probe() {const c=this.config();if(c?.kind!=="cloud"||!this.token())return this.status();try{const k=await this.transport().keys();this.set("config",{...this.config(),hasKeys:!!k});this.error=null;}catch(e){this.error=(e as Error).message;}return this.status();}
   async signin(email:string) {const c=this.config();if(c?.kind!=="cloud")throw new Error("choose a Sync server first");await new CloudTransport(c.server!,"").json("/v1/auth/email/start",{email});this.set("config",{...c,email});return this.status();}
-  async verify(code:string) {const c=this.config();if(c?.kind!=="cloud")throw new Error("choose a Sync server first");const r:any=await new CloudTransport(c.server!,"").json("/v1/auth/email/verify",{token:code.trim(),deviceName:process.versions?.node?"Etude desktop":"Etude browser"});this.saveSecrets({token:r.token});accountFor(this.e).adopt(c.server!,r.token,r.account);const k=await this.transport().keys();this.set("config",{...c,email:r.account.email,hasKeys:!!k});return this.status();}
+  async verify(code:string) {const c=this.config();if(c?.kind!=="cloud")throw new Error("choose a Sync server first");const r:any=await new CloudTransport(c.server!,"").json("/v1/auth/email/verify",{token:code.trim(),deviceName:process.versions?.node?"Etude desktop":"Etude browser"});this.saveSecrets({token:r.token});accountFor(this.e).adopt(c.server!,r.token,r.account);this.set("config",{...c,email:r.account.email});return this.probe();}
   async unlock(input:{password?:string;recovery?:string}) {
     const transport=this.transport();const found=await transport.keys();
     let vk:Uint8Array;let recoveryKey:string|undefined;

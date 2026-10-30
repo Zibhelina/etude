@@ -1,0 +1,19 @@
+#!/bin/sh
+# The etude command that comes with the desktop app: the app's own engine, run by the app's program
+# in Node mode, so it needs no Node of its own and always matches the app's version.
+self=$0
+while [ -L "$self" ]; do
+  link=$(readlink "$self")
+  case $link in
+    /*) self=$link ;;
+    *) self=$(dirname "$self")/$link ;;
+  esac
+done
+app=$(cd "$(dirname "$self")/../.." && pwd)
+case $(uname) in
+  Darwin) exe=$app/../../MacOS/Etude ;;
+  *) exe=$app/../../etude-desktop ;;
+esac
+# A checkout has no app program: use Node.
+[ -x "$exe" ] || exec node "$app/bin/etude.js" "$@"
+ELECTRON_RUN_AS_NODE=1 exec "$exe" "$app/bin/etude.js" "$@"

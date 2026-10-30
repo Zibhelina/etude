@@ -1,0 +1,26 @@
+# Maintainer: Etude <hello@etude.study>
+# The etude-bin recipe on the AUR. .github/workflows/aur.yml sets the version and checksum and
+# pushes it on each published release of https://github.com/Zibhelina/etude.
+pkgname=etude-bin
+pkgver=2.4.1
+pkgrel=1
+pkgdesc='Spaced repetition with programmable card types and AI grading (desktop app)'
+arch=('x86_64')
+url='https://etude.study'
+license=('AGPL-3.0-only')
+depends=('gtk3' 'nss' 'alsa-lib' 'libxss' 'libxtst' 'xdg-utils')
+provides=('etude')
+conflicts=('etude')
+# Prebuilt: stripping Electron's binaries can break them.
+options=('!strip' '!debug')
+source=("etude-$pkgver.deb::https://github.com/Zibhelina/etude/releases/download/v$pkgver/Etude-linux-amd64.deb")
+sha256sums=('SKIP')
+
+package() {
+  bsdtar -xf data.tar.xz -C "$pkgdir"
+  # Updates come with the system's (yay -Syu); the app says so instead of downloading them.
+  echo pacman > "$pkgdir/opt/Etude/resources/package-type"
+  install -d "$pkgdir/usr/bin"
+  ln -s /opt/Etude/resources/app/desktop/bin/etude "$pkgdir/usr/bin/etude"
+  install -Dm644 "$pkgdir/opt/Etude/resources/app/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

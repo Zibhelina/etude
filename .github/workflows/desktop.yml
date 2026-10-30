@@ -1,0 +1,79 @@
+name: Desktop app
+
+# Builds the desktop installers on Mac, Windows and Linux and tests each packaged app from a folder
+# outside the repo (desktop/smoke.ts). On a pull request the installers are kept as artifacts to try.
+# On a version tag they go into a draft release, published by hand after trying it (see the release
+# routine in the plan); only then do downloads and the apps' updaters see it.
+
+on:
+  pull_request:
+    paths: ["desktop/**", "src/**", "web/**", "bin/**", "runtime/**", "types/**", "schedulers/**", "package.json", "package-lock.json", ".github/workflows/desktop.yml"]
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: rpmbuild, for the .rpm
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+      - run: npm ci
+      - run: npm run build
+      - run: npm --prefix desktop ci
+      - name: Installers
+        run: node desktop/build.ts
+        env:
+          # Empty until the Developer ID certificate exists; then the Mac app is signed and notarized
+          # instead of signed ad hoc, and updates itself.
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      - name: The packaged app runs from outside the repo
+        run: node desktop/smoke.ts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: etude-${{ runner.os }}
+          path: |
+            desktop/dist/out/Etude-*
+            desktop/dist/out/latest*.yml
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: files
+          merge-multiple: true
+      - name: Draft release with the installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # A tag with a dash (v2.5.0-beta.1) is a pre-release: normal users and the updaters skip it.
+          pre=$([[ "$TAG" == *-* ]] && echo --prerelease || true)
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft $pre --title "Etude ${TAG#v}" --notes "See CHANGELOG.md."
+          gh release upload "$TAG" files/* --repo "$GITHUB_REPOSITORY" --clobber

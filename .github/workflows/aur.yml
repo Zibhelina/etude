@@ -1,0 +1,49 @@
+name: AUR
+
+# When a release is published (not a pre-release), points the etude-bin recipe on the AUR at its .deb,
+# so Arch, Manjaro and Omarchy get the new version with `yay -Syu`. Needs the AUR_SSH_KEY secret,
+# the private key of the AUR account that maintains etude-bin; without it this does nothing.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release to point the recipe at (vX.Y.Z)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  aur:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Update and push the recipe
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          if [ -z "$AUR_SSH_KEY" ]; then echo "No AUR_SSH_KEY secret yet: skipping."; exit 0; fi
+          pacman -Syu --noconfirm --needed git openssh
+          version=${TAG#v}
+          curl -fsSL -o etude.deb "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/Etude-linux-amd64.deb"
+          sum=$(sha256sum etude.deb | cut -d' ' -f1)
+          mkdir -p ~/.ssh && printf '%s\n' "$AUR_SSH_KEY" > ~/.ssh/aur && chmod 600 ~/.ssh/aur
+          printf 'Host aur.archlinux.org\n  IdentityFile ~/.ssh/aur\n  User aur\n' > ~/.ssh/config
+          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
+          git clone ssh://aur@aur.archlinux.org/etude-bin.git aur
+          cp desktop/aur/PKGBUILD aur/PKGBUILD
+          sed -i "s/^pkgver=.*/pkgver=$version/; s/^pkgrel=.*/pkgrel=1/; s/^sha256sums=.*/sha256sums=('$sum')/" aur/PKGBUILD
+          useradd -m builder && chown -R builder aur
+          su builder -c "cd aur && makepkg --printsrcinfo > .SRCINFO"
+          cd aur
+          git add PKGBUILD .SRCINFO
+          git -c user.name="Etude" -c user.email="hello@etude.study" commit -m "$version"
+          git push origin HEAD:master

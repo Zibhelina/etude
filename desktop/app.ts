@@ -4,10 +4,13 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, screen, session, shell, type
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { commandState, installCommand, refreshAppImageCommand } from "./command.ts";
 import { Engine } from "./engine.ts";
 import { probe } from "./find.ts";
+import { offerAppMenuEntry, offerApplicationsFolder } from "./integrate.ts";
 import { log, logDir, logEngine } from "./log.ts";
 import { loginShellEnv } from "./shell-env.ts";
+import { checkForUpdates, restartToUpdate, startUpdates, updateState } from "./updates.ts";
 
 const HERE = import.meta.dirname;
 const ROOT = join(HERE, "..");
@@ -43,6 +46,7 @@ else {
     answer();
     Menu.setApplicationMenu(menu());
     createWindow();
+    if (await offerApplicationsFolder(win!)) return;
     // What the app was given wins (the session's display, a test's ETUDE_HOME); the shell adds the
     // rest, and its fuller PATH.
     const shellEnv = await loginShellEnv();
@@ -51,6 +55,14 @@ else {
       log(`took PATH and ${Object.keys(shellEnv).length - 1} other settings from the login shell`);
     }
     await boot();
+    startUpdates((s) => win?.webContents.send("etude:update", s));
+    // Niceties: if one fails, Etude still works.
+    try {
+      refreshAppImageCommand();
+      if (win) await offerAppMenuEntry(win, ROOT);
+    } catch (e) {
+      log(`couldn't fit into the system: ${(e as Error).message}`);
+    }
   });
 }
 
@@ -157,7 +169,7 @@ function createWindow() {
     backgroundColor: bg,
     show: false,
     autoHideMenuBar: !isMac,
-    icon: isMac ? undefined : join(ROOT, "web", "public", "icon-512.png"),
+    icon: isMac ? undefined : join(ROOT, "web", "dist", "icon-512.png"),
     webPreferences: {
       preload: join(HERE, "preload.cjs"),
       contextIsolation: true,
@@ -241,6 +253,20 @@ function answer() {
   });
   ipcMain.handle("etude:show-logs", (e) => {
     if (fromWindow(e)) void shell.openPath(logDir());
+  });
+  ipcMain.handle("etude:update-status", (e, check: unknown) => (fromWindow(e) ? (check ? checkForUpdates() : updateState()) : null));
+  ipcMain.handle("etude:update-restart", (e) => {
+    if (fromWindow(e)) restartToUpdate();
+  });
+  ipcMain.handle("etude:command-status", (e) => (fromWindow(e) ? commandState(env) : null));
+  ipcMain.handle("etude:command-install", async (e) => {
+    if (!fromWindow(e)) return null;
+    try {
+      return await installCommand(env);
+    } catch (err) {
+      log(`couldn't install the etude command: ${(err as Error).message}`);
+      return { ...commandState(env), error: (err as Error).message };
+    }
   });
   ipcMain.handle("etude:pick-folder", async (e) => {
     if (!fromWindow(e) || !win) return null;

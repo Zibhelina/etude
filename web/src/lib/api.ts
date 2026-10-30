@@ -605,6 +605,8 @@ export interface UpdateCommit {
 export type UpdateStatus = { canRestart: boolean; checked: string | null; checkError?: string; version: string } & (
   | { kind: "git"; branch: string | null; upstream: string | null; commit: string; incoming: UpdateCommit[]; behind: number; ahead: number; dirty: string[]; blocked?: string }
   | { kind: "package"; latest: string | null; url: string }
+  // The desktop app's own updates (see DesktopUpdateState); `ready` once a "self" update is downloaded.
+  | { kind: "desktop"; mode: "self" | "link" | "system"; latest: string | null; ready: boolean; percent: number | null; url: string }
 );
 
 export type MarketKind = "theme" | "deck" | "type";

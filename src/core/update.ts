@@ -234,6 +234,8 @@ export async function applyUpdate(opts: Omit<Opts, "fetch"> = {}): Promise<Updat
   busy = true;
   try {
     const st = await updateStatus({ root, fetch: true, force: true });
+    // Run by the desktop app's program (its etude command), this is the app's copy.
+    if (st.kind !== "git" && process.versions.electron) throw new UpdateError("This etude came with the Etude desktop app, which updates itself.", 409);
     if (st.kind !== "git") throw new UpdateError(st.latest ? `This install can't update itself: get ${st.latest} from ${st.url}` : "This install can't update itself (it isn't a git checkout).", 409);
     if (st.checkError) throw new UpdateError(`Couldn't reach the repo: ${st.checkError}`, 502);
     if (st.blocked) throw new UpdateError(st.blocked, 409, { dirty: st.dirty });

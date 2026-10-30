@@ -51,7 +51,10 @@ export function accountRoutes(app: Hono, e: Etude) {
   app.post("/api/account/delete", async (c) => c.json(await a.deleteAccount(String((await body(c)).confirm ?? ""))));
 
   app.get("/api/account/billing", async (c) => c.json(await a.billing()));
-  app.post("/api/account/billing/checkout", async (c) => c.json(await a.syncCheckout()));
+  app.post("/api/account/billing/checkout", async (c) => {
+    const plan = (await body(c).catch(() => ({})))?.plan;
+    return c.json(await a.syncCheckout(plan === "yearly" ? "yearly" : "monthly"));
+  });
   app.post("/api/account/billing/portal", async (c) => c.json(await a.billingPortal()));
 
   app.get("/api/account/market", async (c) => c.json(await a.paidIndex()));

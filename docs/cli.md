@@ -3751,12 +3751,16 @@ Output: { ok, deleted }
 A checkout link for Etude Sync (US$5/month or US$40/year). Open it in a browser.
 
 ```
-etude account subscribe
+etude account subscribe [flags]
 ```
 
 *writes*
 
-Output: { url, id }
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--yearly` | boolean | The yearly plan (US$40) instead of monthly. |
+
+Output: { url, id, plan }
 
 ### etude account billing
 

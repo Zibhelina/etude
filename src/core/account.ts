@@ -250,7 +250,7 @@ export class AccountClient {
 
   // ── Sync subscription (Polar, on the website) ─────────────────
   billing = () => this.json("GET", "/v1/billing/sync");
-  syncCheckout = () => this.json("POST", "/v1/billing/sync/checkout", {});
+  syncCheckout = (plan: "monthly" | "yearly" = "monthly") => this.json("POST", "/v1/billing/sync/checkout", { plan });
   billingPortal = () => this.json("GET", "/v1/billing/portal");
 
   // ── paid Market ───────────────────────────────────────────────

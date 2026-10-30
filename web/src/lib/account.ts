@@ -109,7 +109,7 @@ export const account = {
   emailCancel: () => call<{ ok: boolean }>("DELETE", "/api/account/email"),
   exportData: () => call<unknown>("GET", "/api/account/export"),
   deleteAccount: (confirm: string) => call<{ ok: boolean }>("POST", "/api/account/delete", { confirm }),
-  checkout: () => call<{ url: string }>("POST", "/api/account/billing/checkout"),
+  checkout: (plan: "monthly" | "yearly" = "monthly") => call<{ url: string }>("POST", "/api/account/billing/checkout", { plan }),
   portal: () => call<{ url: string }>("POST", "/api/account/billing/portal"),
   market: () => call<{ entries: PaidEntry[]; server: string }>("GET", "/api/account/market"),
   buy: (listing: string) => call<{ url: string; price: number; fee: number }>("POST", "/api/account/market/checkout", { listing }),

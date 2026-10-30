@@ -76,7 +76,7 @@ command({
   output: "{ ok, deleted }",
   run: (c) => call(() => a(c).deleteAccount(c.flags.confirm ?? "")),
 });
-command({ name: "account subscribe", summary: "A checkout link for Etude Sync (US$5/month or US$40/year). Open it in a browser.", writes: true, output: "{ url, id }", run: (c) => call(() => a(c).syncCheckout()) });
+command({ name: "account subscribe", summary: "A checkout link for Etude Sync (US$5/month or US$40/year). Open it in a browser.", flags: [{ name: "yearly", type: "boolean", description: "The yearly plan (US$40) instead of monthly." }], writes: true, output: "{ url, id, plan }", run: (c) => call(() => a(c).syncCheckout(c.flags.yearly ? "yearly" : "monthly")) });
 command({ name: "account billing", summary: "A link to manage the Sync subscription (cancel, card, invoices).", output: "{ url }", run: (c) => call(() => a(c).billingPortal()) });
 command({ name: "account market", summary: "Paid decks on the server's Market, with price and whether you own them.", output: "{ entries: [{ id, name, price, currency, listing, owned, installed }] }", run: (c) => call(() => a(c).paidIndex()) });
 command({ name: "account buy", summary: "A checkout link for a paid deck. Open it in a browser.", args: [LISTING], writes: true, output: "{ url, id, price, fee, currency }", run: (c) => call(() => a(c).checkout(c.args.listing)) });

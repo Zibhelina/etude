@@ -14,6 +14,8 @@ import {
   Folder,
   Key,
   Loader2,
+  CalendarClock,
+  CalendarDays,
   MessageCircle,
   NotebookText,
   Server,
@@ -29,6 +31,7 @@ import { Logo } from "@/components/logo";
 import { Input } from "@/components/ui/input";
 import { CopyValue } from "@/components/settings-ui";
 import { useChatGptSignIn } from "@/components/settings-chatgpt";
+import { ACCOUNT_EVENT } from "@/components/settings-account";
 import { presetAi, type AiSettings, type OnboardingLevel, type PresetId, type SettingsResponse, type TestResult } from "@/components/settings-model";
 import { useImportPicker } from "@/pages/decks";
 import { announceDataChange } from "@/components/agent-panel";
@@ -718,6 +721,8 @@ function SyncStep({ level, onDone }: { level: OnboardingLevel; onDone(o: SyncOut
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const noFolder = serverless();
+  /** Etude Sync: sign in and subscribe without leaving the setup. */
+  const [cloud, setCloud] = useState<CloudStage | null>(null);
 
   const next = async () => {
     if (!choice) return;
@@ -744,14 +749,16 @@ function SyncStep({ level, onDone }: { level: OnboardingLevel; onDone(o: SyncOut
       }
       // Only the destination is chosen here; signing in and the password are in Settings → Sync.
       const st = await postJson<{ kind: string | null; signedIn: boolean; unlocked: boolean }>("/api/sync/setup", body);
-      const pending = st.kind === "cloud" && !st.signedIn ? "sign in next" : !st.unlocked ? "password next" : null;
-      onDone({ choice, next: pending });
+      if (st.kind === "cloud") return setCloud(st.signedIn ? "plan" : "email");
+      onDone({ choice, next: !st.unlocked ? "password next" : null });
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   };
+
+  if (cloud) return <CloudSignup stage={cloud} onStage={setCloud} onDone={(next) => onDone({ choice: "cloud", next })} />;
 
   return (
     <>
@@ -794,6 +801,125 @@ function SyncStep({ level, onDone }: { level: OnboardingLevel; onDone(o: SyncOut
       {error && <Problem>{error}</Problem>}
       <Spacer />
       <Primary onClick={next} disabled={!choice} busy={busy}>Continue</Primary>
+    </>
+  );
+}
+
+type CloudStage = "email" | "code" | "plan" | "waiting";
+
+/** Etude Sync inside the setup: email code, then the plan and checkout on etude.study, then back here. */
+function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s: CloudStage): void; onDone(next: string | null): void }) {
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [plan, setPlan] = useState<"monthly" | "yearly">("yearly");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Signed in: subscribe if this server charges and the account has no Sync yet, otherwise go on to the password. */
+  const afterSignIn = async () => {
+    window.dispatchEvent(new Event(ACCOUNT_EVENT));
+    const a = await account.status();
+    if (a.me?.sync.active || !a.offering?.billing) return onDone("password next");
+    if (!canShowPurchases()) return onDone("subscribe on etude.study");
+    onStage("plan");
+  };
+
+  // While the checkout is open in the browser, look for the subscription to land.
+  useEffect(() => {
+    if (stage !== "waiting") return;
+    const t = window.setInterval(async () => {
+      const a = await account.status().catch(() => null);
+      if (a?.me?.sync.active) {
+        window.clearInterval(t);
+        window.dispatchEvent(new Event(ACCOUNT_EVENT));
+        onDone("password next");
+      }
+    }, 3000);
+    return () => window.clearInterval(t);
+  }, [stage, onDone]);
+
+  if (stage === "email")
+    return (
+      <>
+        <Title lead="We'll email you a code. No password to remember.">Sign in to Etude Sync</Title>
+        <form className="mt-5" onSubmit={(e) => (e.preventDefault(), void run(async () => {
+          if (!email.trim()) throw new Error("Enter your email address.");
+          await postJson("/api/sync/signin", { email: email.trim() });
+          onStage("code");
+        }))}>
+          <Input autoFocus type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" aria-label="Email" className="h-12 rounded-xl bg-card text-[15px]" />
+          {error && <Problem>{error}</Problem>}
+          <Spacer />
+          <Primary busy={busy} disabled={!email.trim()} onClick={() => {}}>Send code</Primary>
+        </form>
+      </>
+    );
+
+  if (stage === "code")
+    return (
+      <>
+        <Title lead={<>Sent to <span className="text-foreground">{email.trim()}</span>. It works for a few minutes.</>}>Enter the code</Title>
+        <form className="mt-5" onSubmit={(e) => (e.preventDefault(), void run(async () => {
+          if (!code.trim()) throw new Error("Enter the code from the email.");
+          // Without a subscription the server refuses the vault check after signing in; the plan step is for that.
+          await postJson("/api/sync/verify", { code: code.trim() }).catch(async (e) => {
+            if (!(await account.status().catch(() => null))?.signedIn) throw e;
+          });
+          await afterSignIn();
+        }))}>
+          <Input autoFocus autoComplete="one-time-code" spellCheck={false} value={code} onChange={(e) => setCode(e.target.value)} placeholder="Code from the email" aria-label="Sign-in code" className="h-12 rounded-xl bg-card font-mono text-[15px]" />
+          {error && <Problem>{error}</Problem>}
+          <Spacer />
+          <Primary busy={busy} disabled={!code.trim()} onClick={() => {}}>Verify</Primary>
+        </form>
+        <Ghost onClick={() => void run(async () => void (await postJson("/api/sync/signin", { email: email.trim() })))}>Send again</Ghost>
+      </>
+    );
+
+  if (stage === "plan")
+    return (
+      <>
+        <Title lead="1 GB, end-to-end encrypted: only your devices can read it. Cancel anytime.">Pick a plan</Title>
+        <Options role="radiogroup">
+          <Option kind="radio" icon={CalendarDays} title="Yearly · US$40" hint="US$3.33 a month, four months free." selected={plan === "yearly"} onClick={() => setPlan("yearly")} />
+          <Option kind="radio" icon={CalendarClock} title="Monthly · US$5" hint="Billed every month." selected={plan === "monthly"} onClick={() => setPlan("monthly")} />
+        </Options>
+        <Note>Payment opens on etude.study, handled by Polar. Come back here when it's done.</Note>
+        {error && <Problem>{error}</Problem>}
+        <Spacer />
+        <Primary busy={busy} onClick={() => void run(async () => {
+          openOutside((await account.checkout(plan)).url);
+          onStage("waiting");
+        })}>Subscribe</Primary>
+        <Ghost onClick={() => onDone("subscribe later")}>Later</Ghost>
+      </>
+    );
+
+  return (
+    <>
+      <Title lead="Finish the payment in the browser. This page moves on by itself once Sync is active.">Waiting for the payment</Title>
+      <div className="mt-8 flex items-center gap-3 text-[14px] text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" /> Checking every few seconds…
+      </div>
+      <Spacer />
+      <Primary onClick={() => void run(async () => {
+        const a = await account.status();
+        if (a.me?.sync.active) onDone("password next");
+        else throw new Error("Sync isn't active yet. If you paid, give it a few seconds.");
+      })} busy={busy}>I've paid</Primary>
+      {error && <Problem>{error}</Problem>}
+      <Ghost onClick={() => onStage("plan")}>Back to plans</Ghost>
     </>
   );
 }

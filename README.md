@@ -392,4 +392,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and new card types are very 
 
 ## License
 
-Etude is free software under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+Etude is free software under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0). You can use it, study it, change it and share it. If you distribute a modified version, or run one as a service other people use over a network, you have to make your source code available to those users under the same license.
+
+**Commercial license.** If you want to build Etude into a closed-source product or run it as a service without the AGPL's obligations, write to hello@etude.study for a commercial license.
+
+**Name and logo.** The AGPL covers the code, not the Etude name or the ε logo. See [TRADEMARK.md](TRADEMARK.md).

@@ -32,7 +32,7 @@ test("offline field edits, tied reviews, attempts, reset/due controls, password 
     a.resetCards([c]);await sa.now();await sb.now();assert.equal(b.item("test").cards[0].reps,0);assert.equal(b.db.get("SELECT count(*) n FROM reviews")!.n,2);
     const due=new Date("2030-01-01T00:00:00Z");b.setDue([d],due);await sb.now();await sa.now();assert.equal(a.item("test").cards[0].due,due.toISOString());
     const settings=[...rows(a.db,"settings")];assert.equal(JSON.stringify(settings).includes("private-local-ai"),false);
-    const device=a.db.get("SELECT device FROM sync_control")!.device;const file=join(dir,"ha/sync",device+".json");assert.equal(statSync(file).mode&0o777,0o600);assert.equal(readFileSync(file,"utf8").includes(password),false);
+    const device=a.db.get("SELECT device FROM sync_control")!.device;const file=join(dir,"ha/sync",device+".json");if (process.platform!=="win32") assert.equal(statSync(file).mode&0o777,0o600);assert.equal(readFileSync(file,"utf8").includes(password),false);
     assert.equal((await sa.unlock({password})).recoveryKey,undefined);
   }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
 });

@@ -55,16 +55,18 @@
         <div class="dl-card os-panel" data-panel>
           <div class="easy" data-easy="mac">
             <h2>Download for Mac</h2>
-            <p>One app with everything inside. No terminal, nothing else to install.</p>
+            <p>One app with everything inside, nothing else to install.</p>
             <div class="easy-dl">
               <a class="btn btn-primary btn-lg" data-mac-main href="https://github.com/Zibhelina/etude/releases/latest/download/Etude-mac-apple-silicon.dmg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg><span data-mac-label>Download for Apple Silicon</span></a>
               <a class="easy-alt" data-mac-alt href="https://github.com/Zibhelina/etude/releases/latest/download/Etude-mac-intel.dmg">Mac with an Intel chip?</a>
             </div>
             <ol class="easy-how">
               <li><span>Open the file and drag <b>Etude</b> into <b>Applications</b>.</span></li>
-              <li><span>Open Etude. The first time, macOS asks you to confirm: go to <b>System Settings → Privacy &amp; Security</b> and click <b>Open Anyway</b>.</span></li>
+              <li><span>The first time, macOS says Etude <b>is damaged and can't be opened</b>. It isn't: Apple hasn't signed it yet. Open <b>Terminal</b>, run the two lines below, then open Etude again.</span></li>
               <li><span>That's it. A short setup asks how you want to study, and your collection stays in <code>~/.etude</code>.</span></li>
             </ol>
+            <div class="cmd" style="margin-top:1.2rem"><pre><span class="ps" data-ps>$ </span>xattr -dr com.apple.quarantine /Applications/Etude.app
+<span class="ps" data-ps>$ </span>codesign --force --deep --sign - /Applications/Etude.app</pre></div>
             <p class="fineprint">macOS 12 or newer, about 130 MB. Not sure which chip you have? Apple menu → About This Mac: "Apple M…" is Apple Silicon.</p>
             <button class="term-toggle" type="button" data-term-toggle aria-expanded="false">Prefer the terminal? Install from source <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
           </div>

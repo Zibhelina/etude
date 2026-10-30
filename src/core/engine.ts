@@ -521,12 +521,21 @@ export class Etude {
     const named = new Set<string>();
     const recent = Date.now() - 3600_000;
     const tables = this.db.all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").map((t) => t.name);
-    for (const t of tables)
-      for (const row of this.db.sql.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).all() as Record<string, unknown>[])
+    // Sync's own tables are most of a synced collection and say nothing new: its registers hold the
+    // same values as the rows above, its events are the change history, and its media copies are
+    // encrypted. The names of the media files it keeps still count.
+    const skip = new Set(["sync_registers", "sync_events", "sync_blobs.bytes"]);
+    for (const t of tables) {
+      if (skip.has(t)) continue;
+      const cols = this.db.all<{ name: string }>(`SELECT name FROM pragma_table_info(?)`, t).map((c) => c.name).filter((c) => !skip.has(`${t}.${c}`));
+      if (!cols.length) continue;
+      const list = cols.map((c) => `"${c.replace(/"/g, '""')}"`).join(", ");
+      for (const row of this.db.sql.prepare(`SELECT ${list} FROM "${t.replace(/"/g, '""')}"`).all() as Record<string, unknown>[])
         for (const v of Object.values(row)) {
           if (typeof v === "string") collectFileNames(v, exts, named);
           else if (v instanceof Uint8Array) collectFileNames(Buffer.from(v).toString("latin1"), exts, named);
         }
+    }
     return files
       .filter((f) => !named.has(basename(f).toLowerCase()))
       .map((f) => ({ f, stat: statSync(join(this.mediaDir, f)) }))
@@ -965,10 +974,11 @@ export class Etude {
       list.push({ name: a.name, size: a.size });
       files.set(a.type_id, list);
     }
+    // One pass over the items for every type's counts (a count per type read the whole table each time).
+    const counts = new Map(this.db.all<{ type: string; items: number; archived: number }>("SELECT type, TOTAL(archived = 0) AS items, TOTAL(archived = 1) AS archived FROM items GROUP BY type").map((r) => [r.type, r]));
     return this.db
-      .all(
-        "SELECT t.id, t.def, t.builtin, t.updated, (SELECT COUNT(*) FROM items i WHERE i.type = t.id AND i.archived = 0) AS items, (SELECT COUNT(*) FROM items i WHERE i.type = t.id AND i.archived = 1) AS archived, COALESCE(p.folder, '') AS folder FROM types t LEFT JOIN type_placement p ON p.type_id = t.id ORDER BY t.builtin DESC, t.id",
-      )
+      .all<{ id: string; def: string; builtin: number; updated: string; folder: string }>("SELECT t.id, t.def, t.builtin, t.updated, COALESCE(p.folder, '') AS folder FROM types t LEFT JOIN type_placement p ON p.type_id = t.id ORDER BY t.builtin DESC, t.id")
+      .map((r) => ({ ...r, items: counts.get(r.id)?.items ?? 0, archived: counts.get(r.id)?.archived ?? 0 }))
       .map((r) => {
         const def = parse<CardTypeDef>(r.def, {} as CardTypeDef);
         const isShipped = shipped.has(r.id);
@@ -1084,11 +1094,14 @@ export class Etude {
   }
 
   type(id: string): CardTypeDef & { updated: string; builtin: boolean } {
-    const row = this.db.get("SELECT def, updated, builtin FROM types WHERE id = ?", id);
+    // Called for every card in a queue or the stats: the definition (templates, scripts) is big, so
+    // it's read only when the type changed since it was cached.
+    const row = this.db.get<{ updated: string; builtin: number }>("SELECT updated, builtin FROM types WHERE id = ?", id);
     if (!row) throw new EtudeError(`unknown type "${id}"`, 404);
-    const cached = this.typeCache.get(id);
-    if (cached && (cached as any).updated === row.updated) return cached as any;
-    const def = { ...parse<CardTypeDef>(row.def, {} as CardTypeDef), updated: row.updated, builtin: !!row.builtin };
+    const cached = this.typeCache.get(id) as (CardTypeDef & { updated: string; builtin: boolean }) | undefined;
+    if (cached && cached.updated === row.updated && cached.builtin === !!row.builtin) return cached;
+    const text = this.db.get<{ def: string }>("SELECT def FROM types WHERE id = ?", id)!.def;
+    const def = { ...parse<CardTypeDef>(text, {} as CardTypeDef), updated: row.updated, builtin: !!row.builtin };
     this.typeCache.set(id, def);
     return def;
   }
@@ -1334,6 +1347,12 @@ export class Etude {
     return this.leftovers.cards.filter((c) => (!opts.type || c.type === opts.type) && (!opts.face || c.face === opts.face));
   }
 
+  /**
+   * facesWhen's answer for each item, kept until its fields or its type change: it runs a script per
+   * item. Keyed by the fields themselves, since a write (sync) can change them without `updated`.
+   */
+  private facesKnown = new Map<string, { key: string; faces: string[] | null }>();
+
   private findLeftoverCards(): LeftoverCard[] {
     const rows = this.db.all<{ id: number; item_id: string; face: string; type: string; fields: string }>(
       "SELECT c.id, c.item_id, c.face, i.type, i.fields FROM cards c JOIN items i ON i.id = c.item_id WHERE i.archived = 0 ORDER BY i.ord, i.id, c.id",
@@ -1357,7 +1376,11 @@ export class Etude {
       i = j;
       const def = defFor(cards[0].type);
       if (!def) continue;
-      for (const c of leftoversOf(cards, this.facesMade(def, parse<Record<string, unknown>>(cards[0].fields, {})))) out.push({ cardId: c.id, itemId: c.item_id, type: c.type, face: c.face, reviews: 0 });
+      const { item_id: item, fields } = cards[0];
+      const key = `${cards[0].type}|${(def as { updated?: string }).updated}|${fields.length}:${hashString(fields)}`;
+      let known = this.facesKnown.get(item);
+      if (known?.key !== key) this.facesKnown.set(item, (known = { key, faces: this.facesMade(def, parse<Record<string, unknown>>(fields, {})) }));
+      for (const c of leftoversOf(cards, known.faces)) out.push({ cardId: c.id, itemId: c.item_id, type: c.type, face: c.face, reviews: 0 });
     }
     if (out.length) {
       const reviews = this.reviewsPerCard();
@@ -3077,7 +3100,12 @@ export class Etude {
       return kinds.get(key)!;
     };
     const onScript = (deck: string, type: string) => kindOf(deck, type).kind !== "fsrs";
-    const everything = this.db.all<CardRow & { deck: string; tags: string; item_id: string; type: string; fields: string }>(`SELECT c.*, d.name AS deck, i.tags, i.type, i.fields ${from} WHERE ${where}`, ...params);
+    const metricTypes = new Map<string, boolean>();
+    const hasMetrics = (type: string) => {
+      if (!metricTypes.has(type)) metricTypes.set(type, !!this.typeMetrics(type));
+      return metricTypes.get(type)!;
+    };
+    const everything = this.db.all<CardRow & { deck: string; tags: string; item_id: string; type: string }>(`SELECT c.*, d.name AS deck, i.tags, i.type ${from} WHERE ${where}`, ...params);
     const all = everything.filter((c) => !onScript(c.deck, c.type));
     // Card states and maturity are FSRS's; a script scheduler's cards are counted in `schedulers`.
     const states = { total: all.length, new: 0, learning: 0, review: 0, mature: 0 };
@@ -3316,7 +3344,7 @@ export class Etude {
       /** Cards whose results are measurements: every graded attempt's numbers over time. */
       // Measured cards: drills, and any card whose type declares metrics. A rated script's cards (Leitner)
       // are reviews like FSRS's, not measurements, so they don't get a chart each.
-      practice: this.practiceStats(everything.filter((c) => kindOf(c.deck, c.type).kind === "drill" || !!this.typeMetrics(c.type)), sinceIso),
+      practice: this.practiceStats(everything.filter((c) => kindOf(c.deck, c.type).kind === "drill" || hasMetrics(c.type)), sinceIso),
     };
   }
 
@@ -3422,7 +3450,7 @@ export class Etude {
    * attempt (practice ones too: a result is a result). Metrics come from the type's `metrics`, or else
    * every top-level number the grader put in `details`, plus the score.
    */
-  private practiceStats(cards: (CardRow & { deck: string; item_id: string; type: string; fields: string })[], sinceIso: string) {
+  private practiceStats(cards: (CardRow & { deck: string; item_id: string; type: string })[], sinceIso: string) {
     const out: {
       cardId: number;
       itemId: string;
@@ -3482,7 +3510,7 @@ export class Etude {
         itemId: c.item_id,
         deck: c.deck,
         type: c.type,
-        title: this.titleOf(c.type, parse<Record<string, unknown>>(c.fields, {}), { private: true }),
+        title: this.titleOf(c.type, parse<Record<string, unknown>>(this.db.get<{ fields: string }>("SELECT fields FROM items WHERE id = ?", c.item_id)?.fields, {}), { private: true }),
         scheduler: this.cardConfig(c.deck, c.type).scheduler,
         sessions: grades.length,
         metrics,

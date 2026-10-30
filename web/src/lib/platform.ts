@@ -27,3 +27,7 @@ export const isIOSApp = () => nativePlatform() === "ios";
 
 /** Prices, buy buttons and links to checkout or billing pages. Off in the store apps. */
 export const canShowPurchases = () => !isNativeApp();
+
+/** What the desktop app lets the page ask for (desktop/preload.cjs); undefined in browsers and the phone apps. */
+export type DesktopBridge = { platform: string; pickFolder(): Promise<string | null>; showLogs(): Promise<void> };
+export const desktopApp = (): DesktopBridge | undefined => (globalThis as { etudeDesktop?: DesktopBridge }).etudeDesktop;

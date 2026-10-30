@@ -1,0 +1,15 @@
+{
+  "name": "etude-desktop",
+  "productName": "Etude",
+  "description": "The Etude desktop app: the engine from this repo in an Electron window.",
+  "private": true,
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "start": "electron .",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "electron": "45.1.0"
+  }
+}

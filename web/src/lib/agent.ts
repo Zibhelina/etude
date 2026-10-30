@@ -1,5 +1,5 @@
 // Client for the in-app assistant: conversations, attachments, and the streamed turn.
-import { etudeFetch } from "./transport";
+import { apiToken, etudeFetch } from "./transport";
 
 export interface Attachment {
   id: string;
@@ -87,13 +87,8 @@ export type AgentEvent =
   | { type: "done"; message: Message }
   | { type: "error"; error: string };
 
-const TOKEN = () => localStorage.getItem("etude.token");
-
 function headers(json = true): Record<string, string> {
-  const h: Record<string, string> = json ? { "Content-Type": "application/json" } : {};
-  const t = TOKEN();
-  if (t) h.Authorization = `Bearer ${t}`;
-  return h;
+  return json ? { "Content-Type": "application/json" } : {};
 }
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -115,7 +110,7 @@ export const agentApi = {
   confirm: (turn: string, callId: string, allow: boolean) => call("POST", `/api/agent/turns/${turn}/confirm`, { callId, allow }),
   stop: (turn: string) => call("POST", `/api/agent/turns/${turn}/stop`, {}),
   undo: (id: string, messageId: number) => call<{ restored: string; undone: number[] }>("POST", `/api/agent/conversations/${id}/undo`, { messageId }),
-  attachmentUrl: (conv: string, id: string) => `/api/agent/conversations/${conv}/attachments/${id}${TOKEN() ? `?token=${encodeURIComponent(TOKEN()!)}` : ""}`,
+  attachmentUrl: (conv: string, id: string) => `/api/agent/conversations/${conv}/attachments/${id}${apiToken() ? `?token=${encodeURIComponent(apiToken()!)}` : ""}`,
   async upload(conv: string, file: File): Promise<Attachment> {
     const res = await etudeFetch(`/api/agent/conversations/${conv}/attachments?name=${encodeURIComponent(file.name || "pasted.png")}`, {
       method: "POST",

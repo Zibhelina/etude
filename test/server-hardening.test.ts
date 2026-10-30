@@ -46,6 +46,13 @@ test("DNS rebinding: a foreign Host header gets 421 on API and pages; allowed na
     const tok = createApp(e, { token: "s3cret" });
     assert.equal((await tok.request("/api/settings", { headers: { host: "192.168.1.9:4610", authorization: "Bearer s3cret" } })).status, 200);
     assert.equal((await tok.request("/api/settings", { headers: { host: "192.168.1.9:4610" } })).status, 401);
+
+    // Listening on localhost only (the desktop app's engine), a foreign name is refused even with the token.
+    const local = createApp(e, { token: "s3cret", localOnly: true });
+    assert.equal((await local.request("/api/settings", { headers: { host: "127.0.0.1:4610", authorization: "Bearer s3cret" } })).status, 200);
+    assert.equal((await local.request("/api/settings", { headers: { host: "127.0.0.1:4610" } })).status, 401);
+    assert.equal((await local.request("/media/x.png", { headers: { host: "evil.example:4610" } })).status, 421);
+    assert.equal((await local.request("/api/settings", { headers: { host: "athanor.taila36162.ts.net", authorization: "Bearer s3cret" } })).status, 200);
   } finally {
     e.close();
   }

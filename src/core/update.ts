@@ -3,7 +3,7 @@
 // release's version and a link instead.
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, renameSync, rmSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const ETUDE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -191,8 +191,16 @@ function npmArgs(): [string, string[]] {
   return existsSync(cli) ? [process.execPath, [cli]] : ["npm", []];
 }
 
-/** Child processes find this node first, so `#!/usr/bin/env node` scripts work under systemd too. */
-const toolEnv = () => ({ ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}`, GIT_TERMINAL_PROMPT: "0" });
+/**
+ * Child processes find this node first, so `#!/usr/bin/env node` scripts work under systemd too.
+ * In the desktop app this "node" is Electron, which runs scripts only in its Node mode.
+ */
+const toolEnv = () => ({
+  ...process.env,
+  PATH: `${dirname(process.execPath)}${delimiter}${process.env.PATH ?? ""}`,
+  GIT_TERMINAL_PROMPT: "0",
+  ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+});
 
 function run(step: string, cmd: string, args: string[], cwd: string, env: NodeJS.ProcessEnv = toolEnv(), timeout = 10 * 60_000) {
   const r = spawnSync(cmd, args, { cwd, env, encoding: "utf8", timeout, maxBuffer: 32 * 1024 * 1024 });

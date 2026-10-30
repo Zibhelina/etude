@@ -109,6 +109,8 @@ export interface AppOptions {
   onRestart?: () => void;
   /** Extra Host names (no port) to answer for without a token, besides localhost and Tailscale's *.ts.net. */
   allowHosts?: string[];
+  /** Listening on this computer only: keep the Host check even with a token, so a rebound name can't reach the pages outside /api. */
+  localOnly?: boolean;
 }
 
 /** Hostnames always served: loopback, and Tailscale MagicDNS names, which only Tailscale can point anywhere. */
@@ -166,7 +168,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   // Only names that can't be rebound by a stranger are served without a token.
   const allowHosts = new Set((opts.allowHosts ?? []).map((h) => h.toLowerCase()));
   app.use("*", async (c, next) => {
-    if (opts.token) return next();
+    if (opts.token && !opts.localOnly) return next();
     const raw = (c.req.header("host") ?? "").toLowerCase();
     if (!raw) return next(); // HTTP/1.0 clients and in-process requests (tests, app.request) send none
     if (hostAllowed(raw, allowHosts)) return next();

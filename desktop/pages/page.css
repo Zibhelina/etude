@@ -1,0 +1,59 @@
+html {
+  background: #0f0f0f;
+  color: #e5e5e5;
+  --muted: #8a8a8a;
+  --button: #262626;
+  color-scheme: dark;
+}
+html.light {
+  color: #171717;
+  --muted: #6b6b6b;
+  --button: #e8e8e8;
+  color-scheme: light;
+}
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+main {
+  max-width: 440px;
+  padding: 0 24px;
+  text-align: center;
+}
+.mark {
+  font: 64px/1 "Times New Roman", serif;
+  color: #f472b6;
+}
+#detail {
+  color: var(--muted);
+  font-size: 13px;
+  -webkit-user-select: text;
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 20px;
+}
+button {
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: var(--button);
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+button.primary {
+  background: #f472b6;
+  color: #0f0f0f;
+}

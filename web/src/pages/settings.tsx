@@ -17,6 +17,8 @@ import { CleanupSection } from "@/components/settings-cleanup";
 import { ShortcutsSection } from "@/components/settings-shortcuts";
 import { SyncSection } from "@/components/settings-sync";
 import { AccountSection } from "@/components/settings-account";
+import { DesktopSection } from "@/components/settings-desktop";
+import { desktopApp } from "@/lib/platform";
 import { Block, NumberField, Section } from "@/components/settings-ui";
 import { draftOf, normalize, validate, type SettingsDraft, type SettingsResponse } from "@/components/settings-model";
 
@@ -29,6 +31,8 @@ const NAV = [
   { id: "cleanup", label: "Clean up" },
   { id: "account", label: "Account" },
   { id: "sync", label: "Sync" },
+  // Only inside the desktop app.
+  ...(desktopApp() ? [{ id: "desktop", label: "Desktop app" }] : []),
   { id: "keys", label: "Keyboard" },
 ];
 
@@ -273,6 +277,7 @@ export function SettingsPage() {
             <CleanupSection />
             <AccountSection />
             <SyncSection />
+            <DesktopSection />
 
             <ShortcutsSection />
 

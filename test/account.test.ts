@@ -74,7 +74,7 @@ test("account: sign in, token file 0600, purchased deck installs and updates thr
     await a.signin("a@example.test");
     await assert.rejects(a.verify("bad-code"), (err: AccountError) => err.status === 401);
     assert.deepEqual(await a.verify("good-code"), { reauth: false, email: "a@example.test" });
-    assert.equal(statSync(join(dir, "home", "account.json")).mode & 0o777, 0o600);
+    if (process.platform !== "win32") assert.equal(statSync(join(dir, "home", "account.json")).mode & 0o777, 0o600);
     assert.equal((await a.verify("good-code")).reauth, true, "a second code re-confirms this device");
     assert.throws(() => a.setServer("https://other.example"), /sign out/);
 

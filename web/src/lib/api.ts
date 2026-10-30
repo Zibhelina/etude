@@ -1,5 +1,5 @@
 // Typed client for the Etude API.
-import { etudeFetch } from "./transport";
+import { apiToken, etudeFetch } from "./transport";
 
 export type Rating = 1 | 2 | 3 | 4;
 export type Verdict = "correct" | "partial" | "incorrect" | "ungraded";
@@ -409,21 +409,12 @@ export class ApiError extends Error {
   }
 }
 
-// A server started with --token needs it on every API call. Opening the app once with ?token=…
-// stores it for this browser.
-const TOKEN = (() => {
-  const fromUrl = new URLSearchParams(location.search).get("token");
-  if (fromUrl) localStorage.setItem("etude.token", fromUrl);
-  return fromUrl ?? localStorage.getItem("etude.token");
-})();
-
 async function call<T>(method: string, path: string, body?: unknown, raw?: Blob): Promise<T> {
   // The server takes changes only as JSON (or bytes for uploads), so a change without a body sends {}.
   const json = raw || body !== undefined || method === "GET" || method === "HEAD" ? body : {};
   const headers: Record<string, string> = {};
   if (raw) headers["Content-Type"] = "application/octet-stream";
   else if (json !== undefined) headers["Content-Type"] = "application/json";
-  if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
   const res = await etudeFetch(path, {
     method,
     headers,
@@ -599,7 +590,7 @@ export const api = {
   marketInstall: (id: string, kind: MarketKind, opts: { use?: boolean; dryRun?: boolean } = {}) =>
     call<{ entry: MarketMeta; result: "created" | "updated" | "unchanged"; ids: string[]; report: any }>("POST", "/api/market/install", { id, kind, ...opts }),
   /** An <img> can't send the bearer token, so it rides in the query. */
-  marketCoverUrl: (kind: MarketKind, id: string) => `/api/market/cover/${kind}/${encodeURIComponent(id)}${TOKEN ? `?token=${encodeURIComponent(TOKEN)}` : ""}`,
+  marketCoverUrl: (kind: MarketKind, id: string) => `/api/market/cover/${kind}/${encodeURIComponent(id)}${apiToken() ? `?token=${encodeURIComponent(apiToken()!)}` : ""}`,
   marketForget: (id: string) => call<{ forgot: boolean }>("POST", "/api/market/forget", { id }),
   publishStatus: () => call<{ ok: boolean; login?: string; reason?: string; repo: string }>("GET", "/api/market/publish/status"),
   publish: (input: PublishInput & { dryRun?: boolean; full?: boolean }) => call<PublishResult>("POST", "/api/market/publish", input),
@@ -614,6 +605,8 @@ export interface UpdateCommit {
 export type UpdateStatus = { canRestart: boolean; checked: string | null; checkError?: string; version: string } & (
   | { kind: "git"; branch: string | null; upstream: string | null; commit: string; incoming: UpdateCommit[]; behind: number; ahead: number; dirty: string[]; blocked?: string }
   | { kind: "package"; latest: string | null; url: string }
+  // The desktop app's own updates (see DesktopUpdateState); `ready` once a "self" update is downloaded.
+  | { kind: "desktop"; mode: "self" | "link" | "system"; latest: string | null; ready: boolean; percent: number | null; url: string }
 );
 
 export type MarketKind = "theme" | "deck" | "type";

@@ -27,3 +27,20 @@ export const isIOSApp = () => nativePlatform() === "ios";
 
 /** Prices, buy buttons and links to checkout or billing pages. Off in the store apps. */
 export const canShowPurchases = () => !isNativeApp();
+
+/**
+ * How the desktop app gets new versions: "self" downloads and installs on restart, "link" points to
+ * the download, "system" comes with the system's updates (the AUR), "none" is a checkout (git).
+ */
+export type DesktopUpdateState = { mode: "self" | "link" | "system" | "none"; version: string; latest: string | null; ready: boolean; percent: number | null; checked: string | null; error?: string };
+export type DesktopCommandState = { path: string | null; ours: boolean; canInstall: boolean; note: string; error?: string };
+
+/** What the desktop app lets the page ask for (desktop/preload.cjs); undefined in browsers and the phone apps. */
+export type DesktopBridge = {
+  platform: string;
+  pickFolder(): Promise<string | null>;
+  showLogs(): Promise<void>;
+  updates: { status(check?: boolean): Promise<DesktopUpdateState>; restart(): Promise<void>; onChange(callback: (s: DesktopUpdateState) => void): () => void };
+  command: { status(): Promise<DesktopCommandState>; install(): Promise<DesktopCommandState> };
+};
+export const desktopApp = (): DesktopBridge | undefined => (globalThis as { etudeDesktop?: DesktopBridge }).etudeDesktop;

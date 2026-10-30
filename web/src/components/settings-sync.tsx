@@ -14,7 +14,7 @@ import { etudeFetch } from "@/lib/transport";
 import { cn } from "@/lib/utils";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
 import { account, bytes, openOutside, type AccountStatus } from "@/lib/account";
-import { canShowPurchases } from "@/lib/platform";
+import { canShowPurchases, desktopApp } from "@/lib/platform";
 
 const DEFAULT_SERVER = "https://sync.etude.study";
 
@@ -389,7 +389,7 @@ export function SyncSection() {
             }}
           >
             <TextInput label="Server" value={server} onChange={setServer} placeholder={DEFAULT_SERVER} mono autoComplete="url" hint="The sync server address. Change it to use one of your own." />
-            {!(globalThis as any).__etudeLocal && <TextInput label="Folder (optional)" value={folder} onChange={setFolder} placeholder="/home/you/Etude" mono autoComplete="off" hint="Desktop app only. Leave empty to sync through the server." />}
+            {!(globalThis as any).__etudeLocal && <TextInput label="Folder (optional)" value={folder} onChange={setFolder} placeholder="/home/you/Etude" mono autoComplete="off" hint="Desktop app only. Leave empty to sync through the server." action={<ChooseFolder onPick={setFolder} />} />}
             {problem && <Notice>{problem}</Notice>}
             <div>
               <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
@@ -754,7 +754,7 @@ function Notice({ children }: { children: ReactNode }) {
   );
 }
 
-function TextInput({ label, hint, error, value, onChange, type = "text", placeholder, autoComplete, inputMode, mono }: {
+function TextInput({ label, hint, error, value, onChange, type = "text", placeholder, autoComplete, inputMode, mono, action }: {
   label: string;
   hint?: ReactNode;
   error?: string;
@@ -765,23 +765,54 @@ function TextInput({ label, hint, error, value, onChange, type = "text", placeho
   autoComplete?: string;
   inputMode?: "text" | "email" | "numeric";
   mono?: boolean;
+  /** Beside the field, like a Choose… button. */
+  action?: ReactNode;
 }) {
   const id = useId();
+  const input = (
+    <Input
+      id={id}
+      type={type}
+      value={value}
+      placeholder={placeholder}
+      autoComplete={autoComplete}
+      inputMode={inputMode}
+      autoCapitalize="none"
+      spellCheck={false}
+      aria-invalid={!!error}
+      className={cn("h-10 md:h-9", mono && "font-mono text-[13px] md:text-[13px]", action && "min-w-0 flex-1")}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
   return (
     <Field label={label} hint={hint} error={error} htmlFor={id}>
-      <Input
-        id={id}
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        autoComplete={autoComplete}
-        inputMode={inputMode}
-        autoCapitalize="none"
-        spellCheck={false}
-        aria-invalid={!!error}
-        className={cn("h-10 md:h-9", mono && "font-mono text-[13px] md:text-[13px]")}
-        onChange={(e) => onChange(e.target.value)}
-      />
+      {action ? (
+        <div className="flex gap-2">
+          {input}
+          {action}
+        </div>
+      ) : (
+        input
+      )}
     </Field>
+  );
+}
+
+/** The system's folder picker, in the desktop app only. */
+export function ChooseFolder({ onPick, className }: { onPick(folder: string): void; className?: string }) {
+  const app = desktopApp();
+  if (!app) return null;
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className={cn("h-10 shrink-0 md:h-9", className)}
+      onClick={async () => {
+        const folder = await app.pickFolder();
+        if (folder) onPick(folder);
+      }}
+    >
+      Choose…
+    </Button>
   );
 }

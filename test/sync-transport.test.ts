@@ -1,8 +1,27 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { CloudTransport } from "../src/core/sync/transport.ts";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { CloudTransport, FolderTransport } from "../src/core/sync/transport.ts";
+
+test("folder sync: event files avoid colons (Windows can't name files with them) and older files with colons still read", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "etude-folder-"));
+  try {
+    await new FolderTransport(dir, "aaaa").push([{ id: "aaaa:1793379461315:0", ciphertext: "x" }]);
+    assert.deepEqual(readdirSync(join(dir, "events", "aaaa")), ["aaaa~1793379461315~0.json"]);
+    if (process.platform !== "win32") {
+      mkdirSync(join(dir, "events", "bbbb"));
+      writeFileSync(join(dir, "events", "bbbb", "bbbb:5:0.json"), JSON.stringify({ id: "bbbb:5:0", ciphertext: "y" }));
+    }
+    const ids = (await new FolderTransport(dir, "cccc").pull("")).events.map((e) => e.id).sort();
+    assert.deepEqual(ids, process.platform === "win32" ? ["aaaa:1793379461315:0"] : ["aaaa:1793379461315:0", "bbbb:5:0"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("the cloud transport waits out 429 Too Many Requests and retries", async () => {
   let hits = 0;

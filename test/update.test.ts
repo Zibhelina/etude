@@ -14,13 +14,13 @@ function fixture() {
   const dir = mkdtempSync(join(tmpdir(), "etude-update-"));
   const origin = join(dir, "origin.git"), app = join(dir, "app"), dev = join(dir, "dev");
   sh(dir, "init", "--quiet", "--bare", "-b", "main", origin);
-  sh(dir, "clone", "--quiet", origin, dev);
+  sh(dir, "clone", "--quiet", "-c", "core.autocrlf=false", origin, dev);
   writeFileSync(join(dev, "package.json"), JSON.stringify({ name: "etude-fixture", version: "2.0.0" }));
   writeFileSync(join(dev, "notes.txt"), "one\n");
   sh(dev, "add", ".");
   sh(dev, ...ident, "commit", "--quiet", "-m", "first");
   sh(dev, "push", "--quiet", "origin", "main");
-  sh(dir, "clone", "--quiet", origin, app);
+  sh(dir, "clone", "--quiet", "-c", "core.autocrlf=false", origin, app);
   const push = (msg: string, text: string) => {
     writeFileSync(join(dev, "notes.txt"), text);
     sh(dev, ...ident, "commit", "--quiet", "-am", msg);

@@ -1,0 +1,5 @@
+# Unix line endings in every checkout, Windows included: generated files (docs/cli.md) compare the
+# same everywhere and the shell launchers keep working. Windows batch files stay CRLF.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf

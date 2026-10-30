@@ -14,6 +14,8 @@ export interface Transport {
   usage?(): Promise<number|null>;
 }
 const VALID = /^[\w:.-]{1,128}$/;
+/** An event's file name: its id with "~" for ":", which Windows doesn't allow in file names. */
+const eventFile = (id: string) => id.replaceAll(":", "~") + ".json";
 /** Tries per request while the server answers 429 Too Many Requests. */
 const RATE_LIMIT_ATTEMPTS = 30;
 export class FolderTransport implements Transport {
@@ -33,8 +35,8 @@ export class FolderTransport implements Transport {
     mkdirSync(dir,{recursive:true});
     for (const e of events) {
       if (!VALID.test(e.id)) throw new Error("invalid event id");
-      const file=join(dir,e.id+".json");
-      if (existsSync(file)) continue;
+      const file=join(dir,eventFile(e.id));
+      if (existsSync(file) || (process.platform!=="win32" && existsSync(join(dir,e.id+".json")))) continue;
       const temp=file+".tmp";
       writeFileSync(temp,JSON.stringify(e),{mode:0o600});
       renameSync(temp,file);
@@ -43,7 +45,7 @@ export class FolderTransport implements Transport {
   async pull(_cursor:string) {
     const events:WireEvent[]=[];
     const root=join(this.folder,"events");
-    if (existsSync(root)) for (const dev of readdirSync(root)) if (VALID.test(dev)) for (const file of readdirSync(join(root,dev))) if (file.endsWith(".json") && VALID.test(file.slice(0,-5))) events.push(JSON.parse(readFileSync(join(root,dev,file),"utf8")));
+    if (existsSync(root)) for (const dev of readdirSync(root)) if (VALID.test(dev)) for (const file of readdirSync(join(root,dev))) if (file.endsWith(".json") && VALID.test(file.slice(0,-5).replaceAll("~",":"))) events.push(JSON.parse(readFileSync(join(root,dev,file),"utf8")));
     return {events,cursor:"",more:false};
   }
   async putBlob(name:string,bytes:Uint8Array) {

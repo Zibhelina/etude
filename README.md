@@ -172,6 +172,8 @@ node src/cli/main.ts pack import examples/showcase.pack.json
 
 `npm link` puts the `etude` command on your path, so `etude serve` and `etude pack import file.json` work from anywhere.
 
+`npm run desktop` opens the same app in its own window instead of a browser tab (Electron, installed into `desktop/` the first time). It runs the engine from this folder, or uses the one `etude serve` is already running for the same collection.
+
 ### Turn on AI grading
 
 **With your ChatGPT plan.** If you have ChatGPT Plus or Pro, open Settings → AI grading and click **Continue with ChatGPT**. Sign in in the browser and grading uses your plan's included usage, with no API key. You can cap how much Etude may use, or disconnect it, in ChatGPT's settings. Sign in from a browser on the computer that runs Etude (or run `etude settings chatgpt login` there); after that, grading works from any device.
@@ -366,6 +368,7 @@ src/cli/      the etude command
 runtime/      runtime.js and card.css, loaded inside every card frame
 types/        the built-in card types, one folder each
 web/          React, Tailwind and shadcn/ui app (Vite)
+desktop/      the desktop app: an Electron window around the engine (npm run desktop)
 examples/     showcase.pack.json (built from examples/showcase/ with `node examples/showcase/build.ts`)
 skill/        the agent skill for using Etude
 docs/         packs, card types and the CLI reference

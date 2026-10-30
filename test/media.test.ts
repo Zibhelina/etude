@@ -2,7 +2,7 @@ import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Etude } from "../src/core/engine.ts";
 import { MAX_MEDIA_BYTES } from "../src/core/media.ts";
@@ -26,7 +26,7 @@ test("media imports are independent copies in the collection's own folder", asyn
   const { e, original, dir } = await setup(t);
   const r = e.importMedia(pathToFileURL(original).href);
   assert.equal(e.mediaDir, join(dir, "collection", "media"));
-  assert.ok(r.path.startsWith(join(e.mediaDir, "files") + "/"));
+  assert.ok(r.path.startsWith(join(e.mediaDir, "files") + sep));
   assert.match(r.url, /^\/media\/files\/[a-f0-9]{64}\.png$/);
   assert.equal(r.kind, "image");
   assert.equal(r.mime, "image/png");
@@ -67,7 +67,8 @@ test("media dry runs, invalid files and directories do not write anything", asyn
   assert.throws(() => e.storeMedia("script.html", PNG), /unsupported media/);
   assert.throws(() => e.storeMedia("empty.png", Buffer.alloc(0)), /empty/);
   assert.throws(() => e.importMedia(join(dir, "missing.png")), /not found/);
-  assert.throws(() => e.importMedia("file://another-computer/picture.png"), /invalid local file URL/);
+  // On Windows that is a network share (\\another-computer\picture.png), so the read fails instead.
+  assert.throws(() => e.importMedia("file://another-computer/picture.png"), process.platform === "win32" ? /couldn't read media file/ : /invalid local file URL/);
   const folder = join(dir, "folder.png");
   mkdirSync(folder);
   assert.throws(() => e.importMedia(folder), /point to a file/);

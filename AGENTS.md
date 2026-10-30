@@ -16,6 +16,11 @@ src/server/    app.ts: the HTTP API the web app uses. Each route maps to an engi
 src/cli/       main.ts → run.ts (parsing, errors, dry run); registry.ts (command table);
                commands/<group>.ts (one file per noun); help.ts; pack-check.ts
 web/           React + Tailwind + shadcn/ui (Vite). Pages in web/src/pages, API client in web/src/lib/api.ts
+desktop/       the Electron app (own package.json): app.ts (window, menus, permissions, links), engine.ts (runs
+               `etude serve` in a utility process with a per-launch token), find.ts (reuse or start), shell-env.ts,
+               updates.ts (electron-updater, or a link, or the system), command.ts (the etude command), integrate.ts,
+               preload.cjs (window.etudeDesktop, top frame only), pages/ (starting and error screens), bin/ (the
+               etude launchers), build.ts (stages the app, runs electron-builder), smoke.ts, build/, aur/PKGBUILD
 runtime/       runtime.js and card.css, loaded inside every card frame
 types/         built-in card types, one directory each (same format as `etude type export`)
 docs/          packs.md, types.md, cli.md (the command reference is generated; see below)
@@ -32,6 +37,9 @@ npm run typecheck                         # tsc for the server/CLI and for web/
 node src/cli/main.ts <group> <verb> ...   # the CLI from source (Node runs .ts directly)
 node scripts/gen-cli-docs.ts              # regenerate docs/cli.md after changing any command
 ETUDE_HOME=$(mktemp -d) node src/cli/main.ts ...   # scratch collection
+npm run desktop                           # the desktop app from source (installs Electron into desktop/ once)
+npm --prefix desktop run typecheck        # the desktop code needs Electron's types, so it's checked apart
+node desktop/build.ts && node desktop/smoke.ts   # installers for this system in desktop/dist/out, then test them
 ```
 
 ## Conventions

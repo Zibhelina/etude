@@ -16,8 +16,9 @@ async function fresh() {
   opened.push({ e, dir });
   return { e, dir };
 }
+// Best effort: Windows can't delete a database that is still open.
 process.on("exit", () => {
-  for (const { dir } of opened) rmSync(dir, { recursive: true, force: true });
+  for (const { dir } of opened) try { rmSync(dir, { recursive: true, force: true }); } catch {}
 });
 
 const itemWith = (e: Etude, needle: string) => {

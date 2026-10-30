@@ -1,6 +1,6 @@
 // Updates. When this install is behind GitHub, a button sits at the bottom of the sidebar (a dot on Settings in the
 // phone tab bar); when it's current nothing shows. Settings → About has the status and "Check for updates".
-// The CLI is `etude update [--check]`.
+// The CLI is `etude update [--check]`. In the desktop app the app's own updater speaks instead (kind "desktop").
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { ArrowDownToLine, Check, CircleArrowUp, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -10,13 +10,28 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { api, relative, type UpdateStatus } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { serverless } from "@/lib/native";
+import { desktopApp } from "@/lib/platform";
 
 type Phase = "idle" | "checking" | "updating" | "restarting";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export const versionOf = (st: UpdateStatus) => (st.kind === "git" ? `${st.version} (${st.commit})` : st.version);
-const behindOf = (st: UpdateStatus) => (st.kind === "git" ? st.behind : st.latest ? 1 : 0);
+const behindOf = (st: UpdateStatus) => (st.kind === "git" ? st.behind : st.kind === "desktop" && st.mode === "self" ? (st.ready ? 1 : 0) : st.latest ? 1 : 0);
+const DOWNLOAD = "https://etude.study/download";
+
+/** The news in a few words: "3 updates available", "Etude 2.5.1 is out", "Etude 2.5.1 is ready". */
+const headline = (st: UpdateStatus) =>
+  st.kind === "git" ? (st.behind === 1 ? "1 update available" : `${st.behind} updates available`) : st.kind === "desktop" && st.ready ? `Etude ${st.latest} is ready` : `Etude ${st.latest} is out`;
+
+/** In the desktop app: its own updater, or (link, system) the engine's check worded for how this copy updates. */
+async function fetchStatus(force: boolean): Promise<UpdateStatus> {
+  const d = await desktopApp()?.updates.status(force);
+  if (!d || d.mode === "none") return api.updateStatus(true, force);
+  if (d.mode === "self") return { kind: "desktop", mode: "self", version: d.version, latest: d.latest, ready: d.ready, percent: d.percent, url: DOWNLOAD, canRestart: false, checked: d.checked, ...(d.error ? { checkError: d.error } : {}) };
+  const st = await api.updateStatus(true, force);
+  return { kind: "desktop", mode: d.mode, version: st.version, latest: st.kind === "package" ? st.latest : null, ready: false, percent: null, url: DOWNLOAD, canRestart: false, checked: st.checked, ...(st.checkError ? { checkError: st.checkError } : {}) };
+}
 
 // One status for the whole app, so the sidebar, the tab bar and Settings agree and GitHub is asked once.
 let state: { st: UpdateStatus | null; phase: Phase } = { st: null, phase: "idle" };
@@ -30,7 +45,7 @@ let started = false;
 async function check(force = false) {
   set({ phase: "checking" });
   try {
-    set({ st: await api.updateStatus(true, force) });
+    set({ st: await fetchStatus(force) });
   } catch (e) {
     if (force) toast.error("Couldn't check for updates", { description: (e as Error).message });
   } finally {
@@ -91,14 +106,43 @@ export function useUpdater() {
     if (!started && !serverless()) {
       started = true;
       check();
+      // The desktop app downloads in the background and says when the update is ready.
+      desktopApp()?.updates.onChange(() => void check());
     }
   }, []);
   const busy = s.phase === "updating" || s.phase === "restarting";
   return { ...s, busy, behind: s.st ? behindOf(s.st) : 0, check, update };
 }
 
+function DesktopDetails({ st }: { st: Extract<UpdateStatus, { kind: "desktop" }> }) {
+  const text =
+    st.mode === "self"
+      ? "Restart Etude to finish. Or keep going: it installs the next time you quit."
+      : st.mode === "system"
+        ? "It comes with your system's updates (on Arch: yay -Syu)."
+        : "Download it and install it over this one. Your collection stays as it is.";
+  return (
+    <div className="px-4 py-3 text-sm">
+      <div className="font-medium">{headline(st)}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{text}</div>
+      {st.mode === "self" ? (
+        <Button size="sm" className="mt-3" onClick={() => void desktopApp()?.updates.restart()}>
+          Restart now
+        </Button>
+      ) : st.mode === "link" ? (
+        <Button size="sm" className="mt-3" asChild>
+          <a href={st.url} target="_blank" rel="noreferrer">
+            Download
+          </a>
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 function UpdateDetails({ st, onUpdate }: { st: UpdateStatus; onUpdate(): void }) {
   const version = versionOf(st);
+  if (st.kind === "desktop") return <DesktopDetails st={st} />;
   if (st.kind !== "git")
     return (
       <div className="px-4 py-3 text-sm">
@@ -149,7 +193,7 @@ export function SidebarUpdate({ collapsed }: { collapsed: boolean }) {
   const [open, setOpen] = useState(false);
   if (!st || (!behind && !busy)) return null;
   const count = st.kind === "git" ? String(st.behind) : null;
-  const label = busy ? (phase === "updating" ? "Updating…" : "Restarting…") : st.kind === "git" ? "Update Etude" : `Etude ${st.latest} is out`;
+  const label = busy ? (phase === "updating" ? "Updating…" : "Restarting…") : st.kind === "git" ? "Update Etude" : headline(st);
   const aria = busy ? label : st.kind === "git" ? `Update available: ${st.behind} new commit${st.behind === 1 ? "" : "s"}` : label;
   const button = (
     <button
@@ -229,7 +273,12 @@ export function UpdateSettingsRow() {
         ) : behind ? (
           <>
             <span className="size-1.5 rounded-full bg-highlight" aria-hidden />
-            {st.kind === "git" ? (st.behind === 1 ? "1 update available" : `${st.behind} updates available`) : `Etude ${st.latest} is out`}
+            {headline(st)}
+          </>
+        ) : st.kind === "desktop" && st.mode === "self" && st.latest ? (
+          <>
+            <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+            Downloading Etude {st.latest}… {st.percent ?? 0}%
           </>
         ) : st.checkError ? (
           <span className="text-muted-foreground">Couldn't check: {st.checkError}</span>

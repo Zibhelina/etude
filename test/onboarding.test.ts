@@ -34,7 +34,7 @@ test("setEnvKey writes one key with mode 0600, keeps other lines, replaces and r
   assert.deepEqual({ name: r.name, set: r.set }, { name: "OPENROUTER_API_KEY", set: true });
   const text = readFileSync(join(dir, ".env"), "utf8");
   assert.equal(text, `# my keys\nOTHER_KEY=keep-me\nOPENROUTER_API_KEY=${SECRET}\n`);
-  assert.equal(statSync(join(dir, ".env")).mode & 0o777, 0o600);
+  if (process.platform !== "win32") assert.equal(statSync(join(dir, ".env")).mode & 0o777, 0o600);
   assert.equal(env.OPENROUTER_API_KEY, SECRET);
 
   setEnvKey(dir, "SPACED_KEY", "a b#c", env);
@@ -105,7 +105,7 @@ test("server: /api/onboarding and /api/settings/key never echo the key, and keep
     assert.deepEqual(JSON.parse(text), { name: "TEST_ONBOARD_API_KEY", set: true });
     assert.equal(process.env.TEST_ONBOARD_API_KEY, SECRET, "takes effect without a restart");
     assert.ok(readFileSync(join(dir, ".env"), "utf8").includes(`TEST_ONBOARD_API_KEY=${SECRET}`));
-    assert.equal(statSync(join(dir, ".env")).mode & 0o777, 0o600);
+    if (process.platform !== "win32") assert.equal(statSync(join(dir, ".env")).mode & 0o777, 0o600);
 
     // Settings show the key as set, never its value.
     e.updateSettings({ ai: { ...e.settings().ai, decision: null, feedback: { kind: "openai-chat", url: "http://127.0.0.1:9/v1/chat/completions", model: "m", apiKeyEnv: "TEST_ONBOARD_API_KEY" } } } as any);
@@ -151,7 +151,7 @@ test("CLI: settings key set reads stdin only, never prints the key; onboarding i
   assert.equal(set.json.set, true);
   assert.ok(!set.out.includes(SECRET) && !set.err.includes(SECRET));
   assert.ok(readFileSync(join(dir, ".env"), "utf8").includes(`OPENAI_API_KEY=${SECRET}`));
-  assert.equal(statSync(join(dir, ".env")).mode & 0o777, 0o600);
+  if (process.platform !== "win32") assert.equal(statSync(join(dir, ".env")).mode & 0o777, 0o600);
 
   const empty = await e(["settings", "key", "set", "OPENAI_API_KEY"], "");
   assert.equal(empty.code, 2, "no stdin is a usage error");

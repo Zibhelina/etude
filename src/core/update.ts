@@ -2,8 +2,8 @@
 // Only a git checkout can update itself. Package installs (npm, the Mac app) get the latest
 // release's version and a link instead.
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, renameSync, rmSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, readFileSync, realpathSync, renameSync, rmSync } from "node:fs";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const ETUDE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -89,7 +89,7 @@ function git(root: string, args: string[], timeout = 60_000, raw = false): strin
 export function isCheckout(root = ETUDE_ROOT): boolean {
   if (!existsSync(join(root, ".git"))) return false;
   try {
-    return resolve(git(root, ["rev-parse", "--show-toplevel"])) === resolve(root);
+    return realpathSync.native(resolve(git(root, ["rev-parse", "--show-toplevel"]))) === realpathSync.native(resolve(root));
   } catch {
     return false;
   }
@@ -191,8 +191,16 @@ function npmArgs(): [string, string[]] {
   return existsSync(cli) ? [process.execPath, [cli]] : ["npm", []];
 }
 
-/** Child processes find this node first, so `#!/usr/bin/env node` scripts work under systemd too. */
-const toolEnv = () => ({ ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}`, GIT_TERMINAL_PROMPT: "0" });
+/**
+ * Child processes find this node first, so `#!/usr/bin/env node` scripts work under systemd too.
+ * In the desktop app this "node" is Electron, which runs scripts only in its Node mode.
+ */
+const toolEnv = () => ({
+  ...process.env,
+  PATH: `${dirname(process.execPath)}${delimiter}${process.env.PATH ?? ""}`,
+  GIT_TERMINAL_PROMPT: "0",
+  ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+});
 
 function run(step: string, cmd: string, args: string[], cwd: string, env: NodeJS.ProcessEnv = toolEnv(), timeout = 10 * 60_000) {
   const r = spawnSync(cmd, args, { cwd, env, encoding: "utf8", timeout, maxBuffer: 32 * 1024 * 1024 });
@@ -226,6 +234,8 @@ export async function applyUpdate(opts: Omit<Opts, "fetch"> = {}): Promise<Updat
   busy = true;
   try {
     const st = await updateStatus({ root, fetch: true, force: true });
+    // Run by the desktop app's program (its etude command), this is the app's copy.
+    if (st.kind !== "git" && process.versions.electron) throw new UpdateError("This etude came with the Etude desktop app, which updates itself.", 409);
     if (st.kind !== "git") throw new UpdateError(st.latest ? `This install can't update itself: get ${st.latest} from ${st.url}` : "This install can't update itself (it isn't a git checkout).", 409);
     if (st.checkError) throw new UpdateError(`Couldn't reach the repo: ${st.checkError}`, 502);
     if (st.blocked) throw new UpdateError(st.blocked, 409, { dirty: st.dirty });

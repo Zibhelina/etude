@@ -16,7 +16,7 @@ command({
     { name: "port", type: "number", description: "Port. Default $ETUDE_PORT or 4610." },
     { name: "host", type: "string", description: "Interface. Default $ETUDE_HOST or 127.0.0.1. Anything beyond localhost needs --token." },
     { name: "token", type: "string", description: "Require this bearer token on the API. Default $ETUDE_TOKEN." },
-    { name: "allow-host", type: "string", multiple: true, description: "Also answer requests for this hostname without a token (repeatable; $ETUDE_ALLOW_HOSTS, comma-separated). localhost, 127.x and *.ts.net are always allowed; other names are refused to stop DNS rebinding.", placeholder: "NAME" },
+    { name: "allow-host", type: "string", multiple: true, description: "Also answer requests for this hostname (repeatable; $ETUDE_ALLOW_HOSTS, comma-separated). localhost, 127.x and *.ts.net are always allowed; other names are refused to stop DNS rebinding, on localhost even with --token.", placeholder: "NAME" },
     { name: "web", type: "string", description: "Serve another web build directory.", placeholder: "DIR" },
     { name: "dev", type: "boolean", description: "API only (Vite serves the web app)." },
   ],
@@ -31,7 +31,8 @@ command({
     const dist = ctx.flags.web ? resolve(ctx.flags.web) : join(ROOT, "web", "dist");
     let server: ReturnType<typeof serve>;
     const allowHosts = [...(ctx.flags["allow-host"] ?? []), ...(process.env.ETUDE_ALLOW_HOSTS ?? "").split(",")].map((h: string) => h.trim()).filter(Boolean);
-    const app = createApp(ctx.e, { token, allowHosts, webDist: ctx.flags.dev ? null : existsSync(dist) ? dist : null, onRestart: () => restart(server, ctx) });
+    const localOnly = host === "127.0.0.1" || host === "localhost";
+    const app = createApp(ctx.e, { token, allowHosts, localOnly, webDist: ctx.flags.dev ? null : existsSync(dist) ? dist : null, onRestart: () => restart(server, ctx) });
     server = serve({ fetch: app.fetch, port, hostname: host }, (info) => {
       ctx.note(`etude ${ctx.flags.dev ? "api (dev) " : ""}on http://${host}:${info.port}  db ${ctx.dbPath}`);
     });

@@ -10,11 +10,18 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         node: [24, 26]
+        # The desktop app ships the engine to Windows and Mac too.
+        include:
+          - os: windows-latest
+            node: 24
+          - os: macos-latest
+            node: 24
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -26,4 +33,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run typecheck
+      - name: Desktop app types
+        if: matrix.os == 'ubuntu-latest'
+        run: npm --prefix desktop ci && npm --prefix desktop run typecheck
       - run: npm run build

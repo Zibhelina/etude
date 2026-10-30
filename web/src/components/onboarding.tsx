@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { CopyValue } from "@/components/settings-ui";
 import { useChatGptSignIn } from "@/components/settings-chatgpt";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
+import { ChooseFolder } from "@/components/settings-sync";
 import { presetAi, type AiSettings, type OnboardingLevel, type PresetId, type SettingsResponse, type TestResult } from "@/components/settings-model";
 import { useImportPicker } from "@/pages/decks";
 import { announceDataChange } from "@/components/agent-panel";
@@ -782,8 +783,9 @@ function SyncStep({ level, onDone }: { level: OnboardingLevel; onDone(o: SyncOut
           onClick={() => setChoice("folder")}
         >
           {choice === "folder" && (
-            <div className="px-3.5 pb-3">
-              <Input autoFocus value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="/home/you/Dropbox/Etude" spellCheck={false} aria-label="Folder" className="h-10 rounded-xl bg-background font-mono text-[13px]" />
+            <div className="flex gap-2 px-3.5 pb-3">
+              <Input autoFocus value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="/home/you/Dropbox/Etude" spellCheck={false} aria-label="Folder" className="h-10 min-w-0 flex-1 rounded-xl bg-background font-mono text-[13px]" />
+              <ChooseFolder onPick={setFolder} className="rounded-xl md:h-10" />
             </div>
           )}
         </Option>

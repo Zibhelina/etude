@@ -5013,7 +5013,7 @@ etude serve [flags]
 | `--port <N>` | number | Port. Default $ETUDE_PORT or 4610. |
 | `--host <VALUE>` | string | Interface. Default $ETUDE_HOST or 127.0.0.1. Anything beyond localhost needs --token. |
 | `--token <VALUE>` | string | Require this bearer token on the API. Default $ETUDE_TOKEN. |
-| `--allow-host <NAME> (repeatable)` | string | Also answer requests for this hostname without a token (repeatable; $ETUDE_ALLOW_HOSTS, comma-separated). localhost, 127.x and *.ts.net are always allowed; other names are refused to stop DNS rebinding. |
+| `--allow-host <NAME> (repeatable)` | string | Also answer requests for this hostname (repeatable; $ETUDE_ALLOW_HOSTS, comma-separated). localhost, 127.x and *.ts.net are always allowed; other names are refused to stop DNS rebinding, on localhost even with --token. |
 | `--web <DIR>` | string | Serve another web build directory. |
 | `--dev` | boolean | API only (Vite serves the web app). |
 

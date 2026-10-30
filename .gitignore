@@ -19,3 +19,6 @@ src/browser/gen/
 # symlinked dependency folders in worktrees
 node_modules
 .private-backups/
+
+# desktop app build output
+desktop/dist/

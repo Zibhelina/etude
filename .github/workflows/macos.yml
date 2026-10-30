@@ -1,8 +1,8 @@
-name: macOS app
+name: macOS app (Swift, retired)
 
+# The desktop app (desktop.yml) makes the Mac downloads now, under these same file names, so this
+# no longer runs on releases: it would replace them. It stays for running by hand.
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:

@@ -79,3 +79,13 @@ test("the store apps' own Sync and account text makes sense on a phone and never
   // Onboarding: no "Desktop app only" folder option in the store apps.
   assert.match(read("web/src/components/onboarding.tsx"), /\{!isNativeApp\(\) && <Option\s+kind="radio"\s+icon=\{FolderSync\}/);
 });
+
+test("phone apps: a ChatGPT sign-in that can't start says so in phone words, with no CLI", () => {
+  const chat = read("web/src/components/settings-chatgpt.tsx");
+  assert.match(chat, /if \(inNativeShell\(\)\) setRemote\(\{ message: NATIVE_COPY\.chatGptUnavailable, cli: "" \}\)/);
+  for (const f of ["web/src/components/settings-chatgpt.tsx", "web/src/components/onboarding.tsx"]) {
+    const s = read(f);
+    assert.doesNotMatch(s, /(?<!remote\.cli && )<CopyValue label="Run on the machine that runs Etude"/, f);
+  }
+});
+

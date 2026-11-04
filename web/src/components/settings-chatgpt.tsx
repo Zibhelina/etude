@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { inNativeShell } from "@/lib/native";
+import { NATIVE_COPY } from "@/lib/native-copy";
 import { cn } from "@/lib/utils";
 import { Block, CopyValue, Field, NumberField } from "@/components/settings-ui";
 import { CHATGPT_DEFAULT_MODEL, type ChatGptProvider } from "@/components/settings-model";
@@ -98,7 +99,9 @@ export function useChatGptSignIn() {
       const r = (await api.chatgptLogin()) as LoginReply;
       if (r.remote) {
         win?.close();
-        setRemote({ message: r.message ?? "Sign-in has to finish on the machine running Etude.", cli: r.cli ?? "etude settings chatgpt login" });
+        // In the phone apps this means the app's own sign-in didn't load (see NATIVE_COPY); no CLI there.
+        if (inNativeShell()) setRemote({ message: NATIVE_COPY.chatGptUnavailable, cli: "" });
+        else setRemote({ message: r.message ?? "Sign-in has to finish on the machine running Etude.", cli: r.cli ?? "etude settings chatgpt login" });
         return;
       }
       if (r.url) {
@@ -215,7 +218,7 @@ export function ChatGptBlock({ provider, error, onChange }: { provider: ChatGptP
                 <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
                 <p className="leading-relaxed">{remote.message}</p>
               </div>
-              <CopyValue label="Run on the machine that runs Etude" value={remote.cli} />
+              {remote.cli && <CopyValue label="Run on the machine that runs Etude" value={remote.cli} />}
             </div>
           )}
           {failure && (
@@ -250,7 +253,7 @@ export function ChatGptBlock({ provider, error, onChange }: { provider: ChatGptP
                 <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
                 <p className="leading-relaxed">{remote.message}</p>
               </div>
-              <CopyValue label="Run on the machine that runs Etude" value={remote.cli} />
+              {remote.cli && <CopyValue label="Run on the machine that runs Etude" value={remote.cli} />}
             </div>
           )}
           {failure && (

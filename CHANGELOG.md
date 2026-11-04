@@ -1,11 +1,15 @@
 # Changelog
 
-## Unreleased
+## 2.6.0
 
 - **Etude on the web**, at [etude.study/app](https://etude.study/app/): the whole app in the browser, on a computer, phone or tablet, with nothing to install. The collection is kept in the browser (SQLite in its private storage) and the app keeps working offline after the first visit. On a phone, Add to Home Screen opens it like an app. Market installs, Anki import, AI grading with an OpenRouter or OpenAI key, Ask Etude and Etude Sync work there too; ChatGPT sign-in, folder sync and publishing to the Market stay in the desktop app.
 - In the browser, Settings → Data downloads a backup of the whole collection (cards, review history, settings and media in one zip) and restores it, here or in another browser.
 - In the browser, Etude opens in one tab at a time: a second tab offers **Use it here**, and the first one steps aside.
 - Market covers and screenshots, drawings in Browse, Ask Etude attachments and the Export buttons work without a server (the browser build and the phone apps).
+- In Safari, the web edition started its engine twice and opened the collection twice; it now starts once.
+- Settings → Sync: without an active Sync, Storage shows a dash and says it appears once Sync is active, instead of "0 KB of 1 GB". **Manage subscription** shows only for a subscription bought on the website; a Sync given to an account by hand showed it too. An ended plan reads "Ended · Nov 3, 2026" instead of "Ended · Ended …".
+- `etude sync now` exits 7 (`sync_required`) with a clear message when Sync isn't active on the account. It used to exit 1, the code for a bug.
+- The terms, refunds and privacy pages cover Sync bought in the iPhone and iPad app: Apple sells, bills and refunds it, and Apple's Standard EULA applies to the App Store copy.
 
 ## 2.5.0
 

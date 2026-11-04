@@ -10,6 +10,8 @@ These terms are an agreement between you and **João Henrique Costa Araujo**, a 
 
 They cover the online services: the website at etude.study, Etude accounts, Etude Sync, and buying or selling decks on the paid Market. The Etude app itself is free, open-source software under the GNU Affero General Public License v3.0 (AGPL-3.0). You can use the app without an account and without agreeing to these terms; the software license is what governs the software.
 
+If you got the app from Apple's App Store, Apple's [Licensed Application End User License Agreement](https://www.apple.com/legal/internet-services/itunes/dev/stdeula/) (the "Standard EULA") also applies to that copy of the app. These terms cover the services the app connects to. If the two disagree about the App Store copy of the app, the Standard EULA wins for that copy; for the services, these terms do. The app's source code stays available under the AGPL-3.0. Apple isn't a party to these terms and isn't responsible for the services.
+
 ## 1. Who can use the services
 
 You need to be at least 13 years old. If you're under the age of majority where you live, you need a parent or guardian's permission to buy anything, and they're responsible for those purchases.
@@ -27,9 +29,10 @@ Etude Sync keeps your collection in step across your devices.
 
 - **End-to-end encryption.** Your collection is encrypted on your device before it's uploaded, with a key that we never receive. We store data we can't read.
 - **Your Sync password and recovery key are your responsibility.** We can't reset them, and we can't recover your synced data without one of them. If you lose both, the copy on our server is unreadable for good. The copies on your devices are not affected.
-- **Price.** US$5 per month or US$40 per year, plus any tax, with 1 GB of storage per account. Prices can change; we'll tell you by email at least 30 days before a change affects your renewal.
-- **Payments are handled by Polar** (Polar Software Inc.), which acts as the merchant of record: Polar sells you the subscription, charges your card, collects tax and issues your receipt, under its own terms and privacy policy. Etude never sees your card number.
-- **Renewal and cancellation.** Subscriptions renew automatically until you cancel. You can cancel at any time from the customer portal linked in Settings; Sync keeps working until the end of the period you've paid for. If a payment fails, Sync keeps working for a 7-day grace period, then pauses. Pausing or ending Sync never deletes anything on your devices.
+- **Price.** On the website, US$5 per month or US$40 per year, plus any tax, with 1 GB of storage per account. In the iPhone and iPad app, the price is the one the App Store shows you before you subscribe. Prices can change; we'll tell you by email at least 30 days before a change affects your renewal.
+- **Bought on the website, payments are handled by Polar** (Polar Software Inc.), which acts as the merchant of record: Polar sells you the subscription, charges your card, collects tax and issues your receipt, under its own terms and privacy policy. Etude never sees your card number.
+- **Bought in the iPhone or iPad app, Sync is sold and billed by Apple** through the App Store, under Apple's own terms. Apple charges the payment method on your Apple Account; Etude never sees it. The subscription gives Sync to the Etude account you were signed in to when you bought it. Refunds for these purchases go through Apple, at [reportaproblem.apple.com](https://reportaproblem.apple.com).
+- **Renewal and cancellation.** Subscriptions renew automatically until you cancel. Cancel a website subscription at any time from the customer portal linked in Settings. Cancel an App Store subscription in your iPhone's Settings → your name → Subscriptions, at least 24 hours before the period ends. Either way, Sync keeps working until the end of the period you've paid for. If a website payment fails, Sync keeps working for a 7-day grace period, then pauses. If an App Store payment fails, Apple tries it again, and Sync can pause until it goes through. Pausing or ending Sync never deletes anything on your devices.
 - **After Sync ends**, we keep your encrypted data for 90 days so you can resubscribe without uploading again, then delete it.
 - **Storage limit.** When you reach your quota, new uploads stop until you free space. Nothing already stored is deleted.
 - Refunds are covered in the [Refund Policy](refunds).
@@ -75,7 +78,7 @@ The Etude app and the etude-cloud server are open source. You're free to run you
 ## 9. Changes and ending the service
 
 - We may change these terms. For material changes we'll email account holders at least 30 days before they take effect. Continuing to use the services after that means you accept the new terms.
-- We may change or stop offering a service. If we stop Etude Sync, we'll give at least 60 days' notice and refund any prepaid time you haven't used. The app keeps working offline without it.
+- We may change or stop offering a service. If we stop Etude Sync, we'll give at least 60 days' notice and refund any prepaid time you haven't used. Only Apple can refund App Store purchases, so for those we'll stop renewals and support your refund request to Apple. The app keeps working offline without it.
 - You can stop using the services at any time.
 
 ## 10. Disclaimers

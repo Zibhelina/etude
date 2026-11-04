@@ -13,7 +13,8 @@ Etude is free to use without paying, so you can try everything before you subscr
 - **No refunds for subscription periods**, including partly used ones. Cancel any time and Sync keeps working until the end of the period you've paid for. Nothing on your devices is ever deleted.
 - **We refund when the mistake is ours:** a duplicate charge, a charge after you cancelled, or a billing error.
 - **Outages:** if Sync is unavailable for more than 7 days in a row because of a problem on our side, we refund that billing period.
-- Sync is sold by Polar as merchant of record, so refunds are issued through Polar to your original payment method. Write to hello@etude.study or reply to your Polar receipt.
+- Bought on the website, Sync is sold by Polar as merchant of record, so refunds are issued through Polar to your original payment method. Write to hello@etude.study or reply to your Polar receipt.
+- **Bought in the iPhone or iPad app**, Sync is sold and billed by Apple, so refunds go through Apple under Apple's rules: ask at [reportaproblem.apple.com](https://reportaproblem.apple.com). We can't refund App Store charges ourselves. To stop renewing, cancel in your iPhone's Settings → your name → Subscriptions.
 
 ## Paid Market decks
 

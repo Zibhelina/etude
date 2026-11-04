@@ -700,7 +700,7 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
       setBusy(false);
     }
   };
-  const when = b?.expires ? (reason === "active" ? `Renews ${date(b.expires)}` : reason === "canceled_until_end" ? `Ends ${date(b.expires)}` : reason === "grace" ? `Syncing until ${date(b.graceUntil)}` : reason === "expired" || reason === "revoked" ? `Ended ${date(b.expires)}` : "") : "";
+  const when = b?.expires ? (reason === "active" ? `Renews ${date(b.expires)}` : reason === "canceled_until_end" ? `Ends ${date(b.expires)}` : reason === "grace" ? `Syncing until ${date(b.graceUntil)}` : reason === "expired" || reason === "revoked" ? date(b.expires) : "") : "";
   return (
     <Block title="Etude Sync" description={!billingOn ? "This server doesn't charge for Sync." : canShowPurchases() ? "US$5 a month or US$40 a year. 1 GB of end-to-end encrypted storage." : "1 GB of end-to-end encrypted storage."}>
       <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm" data-plan>

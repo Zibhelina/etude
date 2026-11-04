@@ -15,6 +15,7 @@ Etude is free to use without paying, so you can try everything before you subscr
 - **Outages:** if Sync is unavailable for more than 7 days in a row because of a problem on our side, we refund that billing period.
 - Bought on the website, Sync is sold by Polar as merchant of record, so refunds are issued through Polar to your original payment method. Write to hello@etude.study or reply to your Polar receipt.
 - **Bought in the iPhone or iPad app**, Sync is sold and billed by Apple, so refunds go through Apple under Apple's rules: ask at [reportaproblem.apple.com](https://reportaproblem.apple.com). We can't refund App Store charges ourselves. To stop renewing, cancel in your iPhone's Settings → your name → Subscriptions.
+- **Bought in the Android app**, Sync is sold and billed through Google Play, so refunds go through Google under Google Play's rules: ask at [play.google.com/store/account/orderhistory](https://play.google.com/store/account/orderhistory) or through Google Play's help. We can't refund Google Play charges ourselves. To stop renewals, cancel in the Play Store app → Payments & subscriptions → Subscriptions.
 
 ## Paid Market decks
 

@@ -9,12 +9,15 @@ import { api, type DeckNode, type LearnerSummary, type PracticeCard, type StatsS
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { PHONE_H1 } from "@/components/page";
+import { track } from "@/lib/telemetry";
 
 /** The engine window: ratings, verdicts and the heatmap cover this many weeks. */
 const WEEKS = 26;
 const pct = (v: number | null, digits = 0) => (v == null ? "—" : `${(v * 100).toFixed(digits)}%`);
 
 export function StatsPage({ deck }: { deck?: string }) {
+  // Usage count (only when the person turned usage stats on).
+  useEffect(() => track("stats.open"), []);
   const [stats, setStats] = useState<Stats | null>(null);
   const [decks, setDecks] = useState<DeckNode[]>([]);
   const [error, setError] = useState<string | null>(null);

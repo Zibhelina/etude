@@ -45,6 +45,8 @@ import { AppStorePlans } from "@/components/app-store-plans";
 import { etudeFetch } from "@/lib/transport";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
+import { NATIVE_COPY } from "@/lib/native-copy";
+import { track } from "@/lib/telemetry";
 
 /** Settings → About → Run setup again. */
 export const ONBOARDING_EVENT = "etude:onboarding";
@@ -121,9 +123,14 @@ export function Onboarding({ onFinish }: { onFinish(): void }) {
     return next;
   });
 
+  // The last step's "Help improve Etude" box: off unless ticked.
+  const [shareUsage, setShareUsage] = useState(false);
+
   const finish = async (then?: () => void) => {
     try {
-      await api.saveSettings({ onboarding: { done: true, level } });
+      const done = history[history.length - 1] === "done";
+      await api.saveSettings({ onboarding: { done: true, level }, ...(done ? { privacy: { usageStats: shareUsage } } : {}) });
+      track(done ? "onboarding.finish" : "onboarding.skip");
     } catch (e) {
       toast.error("Couldn't save setup", { description: (e as Error).message });
     }
@@ -192,7 +199,7 @@ export function Onboarding({ onFinish }: { onFinish(): void }) {
             {step === "setup" && settings && <SetupStep path={pickPath(ticked)} level={level} settings={settings} onSettings={setSettings} onDone={afterAi} />}
             {step === "setup" && !settings && <Loading />}
             {step === "sync" && <SyncStep level={level} onDone={afterSync} />}
-            {step === "done" && <DoneStep level={level} ai={ai} sync={sync} onFinish={finish} />}
+            {step === "done" && <DoneStep level={level} ai={ai} sync={sync} onFinish={finish} shareUsage={shareUsage} onShareUsage={setShareUsage} />}
           </>
         )}
       </div>
@@ -963,7 +970,7 @@ function NativePlanGate({ onCheck, error }: { onCheck(): void; error: string | n
   );
 }
 
-function DoneStep({ level, ai, sync, onFinish }: { level: OnboardingLevel; ai: AiOutcome | null; sync: SyncOutcome | null; onFinish(then?: () => void): Promise<void> }) {
+function DoneStep({ level, ai, sync, onFinish, shareUsage, onShareUsage }: { level: OnboardingLevel; ai: AiOutcome | null; sync: SyncOutcome | null; onFinish(then?: () => void): Promise<void>; shareUsage: boolean; onShareUsage(v: boolean): void }) {
   const [importing, setImporting] = useState(false);
   const pickFile = useImportPicker(() => announceDataChange());
 
@@ -1013,6 +1020,13 @@ function DoneStep({ level, ai, sync, onFinish }: { level: OnboardingLevel; ai: A
           }}
         />
       </Options>
+      <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-[14px] border bg-card px-3.5 py-3 text-[13.5px]">
+        <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-highlight" checked={shareUsage} onChange={(e) => onShareUsage(e.target.checked)} data-testid="share-usage" />
+        <span>
+          <span className="block font-medium">{NATIVE_COPY.privacyOnboarding}</span>
+          <span className="mt-0.5 block text-[12.5px] leading-relaxed text-muted-foreground">{NATIVE_COPY.privacyOnboardingHint}</span>
+        </span>
+      </label>
       <Spacer />
       <Primary onClick={() => void onFinish(() => navigate("/"))}>Go to my decks</Primary>
     </>

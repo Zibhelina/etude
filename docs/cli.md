@@ -206,6 +206,7 @@ These work on every command, before or after the command words.
 | 4 | `validation` | Input was rejected (fields, settings, search syntax, a failing pack or type check). |
 | 5 | `conflict` | The operation clashes with existing state (id taken, preset or type in use, already rated). |
 | 6 | `external` | An AI provider or the network failed. |
+| 7 | `sync_required` | Etude Sync isn't active on the signed-in account (no subscription, or the payment failed). Local data is untouched. |
 
 ### Command tree
 
@@ -3509,6 +3510,8 @@ etude sync unlock --recovery < recovery-file
 <a id="sync-now"></a>
 
 Push pending encrypted changes and merge remote changes.
+
+On a Sync server, exits 7 (`sync_required`) when Sync isn't active on the account; nothing local changes.
 
 ```
 etude sync now

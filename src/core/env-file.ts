@@ -2,11 +2,9 @@
 // here and put in the environment, and never read back out.
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { keyNameProblem } from "./env-names.ts";
 
-export const ENV_KEY_NAME = /^[A-Z_][A-Z0-9_]{0,63}$/;
-/** Only credential-shaped names can be written: never PATH, NODE_*, ETUDE_* or anything else the process reads as configuration. */
-const KEY_SHAPED = /_(API_KEY|KEY|TOKEN)$/;
-const RESERVED = /^(ETUDE_|NODE_|NPM_|PATH$|HOME$|LD_|DYLD_)/;
+export { ENV_KEY_NAME } from "./env-names.ts";
 
 export class EnvKeyError extends Error {}
 
@@ -23,8 +21,8 @@ function encode(value: string): string {
  * updates `env` so it takes effect without a restart. The file is written with mode 0600.
  */
 export function setEnvKey(home: string, name: string, value: string | null, env: Record<string, string | undefined> = process.env): { name: string; set: boolean; path: string } {
-  if (typeof name !== "string" || !ENV_KEY_NAME.test(name)) throw new EnvKeyError(`"${name}" isn't a variable name: use capital letters, digits and _ (at most 64)`);
-  if (!KEY_SHAPED.test(name) || RESERVED.test(name)) throw new EnvKeyError(`"${name}" isn't an API key name: it has to end in _API_KEY, _KEY or _TOKEN`);
+  const problem = keyNameProblem(name);
+  if (problem) throw new EnvKeyError(problem);
   if (value != null && typeof value !== "string") throw new EnvKeyError("the key must be text");
   const v = (value ?? "").trim();
   if (/[\r\n\0]/.test(v)) throw new EnvKeyError("a key can't contain line breaks");

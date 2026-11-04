@@ -5,9 +5,11 @@
 //    back in pieces ({ id, chunk }) and ends with { id, end }.
 import "./shims/globals.ts";
 import { existsSync, filesUnder, flush, mkdirSync, mountOpfs, readFileSync, rmSync, writeFileSync } from "./shims/vfs.ts";
-import { unzipSync, zipSync, type Zippable } from "fflate";
+import { zipSync, type Zippable } from "fflate";
 import { Buffer } from "buffer";
 import { localFrame } from "./frame-local.ts";
+import { readBackup } from "./backup-zip.ts";
+import { keyNameProblem } from "../core/env-names.ts";
 
 const DATA = "/etude/data";
 let etude: any = null;
@@ -19,20 +21,21 @@ const post = (msg: unknown, transfer: Transferable[] = []) => (self as any).post
 
 // API keys (OPENROUTER_API_KEY=…): the desktop reads ~/.etude/.env; here the same file lives in the
 // app's private storage and is written from Settings → AI grading.
+// Only API-key names, as on the desktop: never ETUDE_* or anything else the core reads as configuration.
 const ENV_FILE = `${DATA}/home/.env`;
-const ENV_NAME = /^[A-Z_][A-Z0-9_]{0,63}$/;
 
 function loadEnv() {
   if (!existsSync(ENV_FILE)) return;
   for (const line of String(readFileSync(ENV_FILE, "utf8")).split("\n")) {
     const m = /^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/.exec(line);
-    if (m) process.env[m[1]] = m[2];
+    if (m && !keyNameProblem(m[1])) process.env[m[1]] = m[2];
   }
 }
 
 function setEnv(name: string, value: string | null) {
-  if (!ENV_NAME.test(name)) throw new Error(`"${name}" isn't a variable name`);
-  if (value != null && /[\r\n]/.test(value)) throw new Error("a key can't contain line breaks");
+  const problem = keyNameProblem(name);
+  if (problem) throw new Error(problem);
+  if (value != null && /[\r\n\0]/.test(value)) throw new Error("a key can't contain line breaks");
   const lines = existsSync(ENV_FILE) ? String(readFileSync(ENV_FILE, "utf8")).split("\n").filter((l) => l.trim() && !l.startsWith(`${name}=`)) : [];
   if (value) lines.push(`${name}=${value.trim()}`);
   mkdirSync(`${DATA}/home`);
@@ -57,12 +60,7 @@ function backup(): Uint8Array {
 
 /** Replaces the collection with a backup. The page reloads afterwards. Sync starts over: set it up again. */
 async function restore(bytes: Uint8Array): Promise<{ media: number }> {
-  let files: Record<string, Uint8Array>;
-  try {
-    files = unzipSync(bytes);
-  } catch {
-    throw new Error("that file isn't an Etude backup (not a zip)");
-  }
+  const files = readBackup(bytes);
   const image = files["etude.db"];
   if (!image || new TextDecoder().decode(image.subarray(0, 16)) !== SQLITE_MAGIC) throw new Error("that file isn't an Etude backup (no etude.db inside)");
   // Check it opens as a collection, and drop its sync state: this device would otherwise reuse the

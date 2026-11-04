@@ -6,29 +6,12 @@
     <meta name="theme-color" content="#0f0f0f" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="color-scheme" content="dark" />
-    <!-- Card frames are srcdoc documents and inherit this policy, so scripts stay inline-capable; the sanitizer guards Markdown. -->
+    <!-- The full policy, with a fresh nonce for card frames, comes from csp-boot.js, which the build puts first in <head>. -->
     <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'; form-action 'self'" />
     <title>εtude</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <script>
-      // The last theme, before the first paint, so a light theme doesn't flash dark. Embeds follow their host instead.
-      (function () {
-        try {
-          if (/\/embed$/.test(location.pathname)) return;
-          var t = JSON.parse(localStorage.getItem("etude.theme") || "null");
-          if (!t || typeof t.css !== "string") return;
-          var s = document.createElement("style");
-          s.id = "etude-theme";
-          s.textContent = t.css;
-          document.head.appendChild(s);
-          var root = document.documentElement;
-          root.classList.toggle("dark", t.scheme !== "light");
-          root.dataset.theme = t.id;
-          document.querySelector('meta[name="color-scheme"]').content = t.scheme === "light" ? "light" : "dark";
-          if (t.bg) document.querySelector('meta[name="theme-color"]').content = t.bg;
-        } catch (e) {}
-      })();
-    </script>
+    <!-- External (web/public/theme-boot.js) so the page can run under script-src 'self'. -->
+    <script src="%BASE_URL%theme-boot.js"></script>
   </head>
   <body>
     <div id="root"></div>

@@ -58,10 +58,26 @@ const webEdition = {
   },
 };
 
+// The app page's Content-Security-Policy (./csp-boot.js), first in <head> so it covers everything
+// after it, in the web edition and the phone apps alike. Not in `vite dev`, whose inline React
+// preamble it would block.
+const appCsp = {
+  name: "etude-app-csp",
+  apply: "build" as const,
+  transformIndexHtml(html: string, ctx: { filename: string }) {
+    if (!/[\\/]index\.html$/.test(ctx.filename)) return html;
+    const src = webBase ? `${webBase}/csp-boot.js` : "./csp-boot.js";
+    return html.replace(/<meta charset="UTF-8" \/>\n/, (m) => `${m}    <script src="${src}"></script>\n`);
+  },
+  generateBundle() {
+    (this as any).emitFile({ type: "asset", fileName: "csp-boot.js", source: readFileSync(here("./csp-boot.js"), "utf8") });
+  },
+};
+
 export default defineConfig({
   root: here("."),
   base: webBase ? `${webBase}/` : "./",
-  plugins: [scanWebApp, react(), tailwindcss(), webEdition],
+  plugins: [scanWebApp, react(), tailwindcss(), webEdition, appCsp],
   publicDir: here("../../web/public"),
   resolve: {
     alias: [

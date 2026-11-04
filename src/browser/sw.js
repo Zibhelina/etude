@@ -17,7 +17,7 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
-      .then((c) => c.addAll([SHELL]))
+      .then((c) => c.addAll([SHELL, `${BASE}/csp-boot.js`, `${BASE}/theme-boot.js`]))
       .then(() => self.skipWaiting()),
   );
 });

@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
 import { account, bytes, openOutside, type AccountStatus } from "@/lib/account";
 import { canShowPurchases, desktopApp, storeSafeMessage } from "@/lib/platform";
+import { canBuyInApp, STOREKIT_EVENT } from "@/lib/storekit";
+import { AppStoreManage, AppStorePlans } from "@/components/app-store-plans";
 
 const DEFAULT_SERVER = "https://sync.etude.study";
 
@@ -679,6 +681,14 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
   const pct = Math.min(100, (used / quota) * 100);
   const purchases = canShowPurchases();
   const billingOn = !!st.offering?.billing;
+  // iOS app: Sync is bought through the App Store (prices from StoreKit), never on the website.
+  const appStore = billingOn && !purchases && canBuyInApp() && !!st.offering?.appleProducts?.length;
+  useEffect(() => {
+    if (!appStore) return;
+    const h = () => void onChanged();
+    window.addEventListener(STOREKIT_EVENT, h);
+    return () => window.removeEventListener(STOREKIT_EVENT, h);
+  }, [appStore, onChanged]);
   const open = async (fn: () => Promise<{ url: string }>) => {
     setBusy(true);
     try {
@@ -708,20 +718,22 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
           </div>
         </dd>
       </dl>
+      {appStore && !active && <AppStorePlans productIds={st.offering!.appleProducts!} onActive={onChanged} />}
+      {appStore && active && b?.source === "apple" && <AppStoreManage onChanged={onChanged} />}
       <div className="flex flex-wrap items-center gap-2">
         {billingOn && purchases && !active && (
           <Button size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => void open(account.checkout)}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />} Subscribe on etude.study
           </Button>
         )}
-        {billingOn && purchases && b?.status && (
+        {billingOn && purchases && b?.status && b.source !== "apple" && (
           <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => void open(account.portal)}>
             <ExternalLink className="size-4" /> Manage subscription
           </Button>
         )}
         <Button variant="ghost" size="sm" className="h-10 md:h-8" onClick={() => void onChanged()}>Refresh</Button>
       </div>
-      {billingOn && !purchases && !active && <p className="text-xs text-muted-foreground">Sync isn't active on this account.</p>}
+      {billingOn && !purchases && !appStore && !active && <p className="text-xs text-muted-foreground">Sync isn't active on this account.</p>}
     </Block>
   );
 }

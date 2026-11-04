@@ -40,6 +40,8 @@ import { api } from "@/lib/api";
 import { account, openOutside } from "@/lib/account";
 import { saveApiKey, serverless } from "@/lib/native";
 import { canShowPurchases } from "@/lib/platform";
+import { canBuyInApp } from "@/lib/storekit";
+import { AppStorePlans } from "@/components/app-store-plans";
 import { etudeFetch } from "@/lib/transport";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
@@ -816,6 +818,7 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
   const [plan, setPlan] = useState<"monthly" | "yearly">("yearly");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [appleProducts, setAppleProducts] = useState<string[] | null>(null);
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
     setError(null);
@@ -834,7 +837,14 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
     const a = await account.status();
     if (a.me?.sync.active || !a.offering?.billing) return onDone("password next");
     // Native apps can't point at an outside purchase (App Store 3.1.1/3.1.3): just say Sync isn't on for this account.
-    if (!canShowPurchases()) return onDone("not active");
+    if (!canShowPurchases()) {
+      // The iOS app sells Sync through the App Store; the other store apps only say it isn't on.
+      if (canBuyInApp() && a.offering?.appleProducts?.length) {
+        setAppleProducts(a.offering.appleProducts);
+        return onStage("plan");
+      }
+      return onDone("not active");
+    }
     onStage("plan");
   };
 
@@ -888,6 +898,16 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
     );
 
   // The store apps have no plan page: an account that already has Sync goes on, any other gets "not active".
+  if (stage === "plan" && !canShowPurchases() && appleProducts)
+    return (
+      <>
+        <Title lead="1 GB, end-to-end encrypted: only your devices can read it. Cancel anytime.">Pick a plan</Title>
+        <div className="mt-5">
+          <AppStorePlans productIds={appleProducts} onActive={() => { window.dispatchEvent(new Event(ACCOUNT_EVENT)); onDone("password next"); }} />
+        </div>
+        <Ghost onClick={() => onDone("not active")}>Not now</Ghost>
+      </>
+    );
   if (stage === "plan" && !canShowPurchases()) return <NativePlanGate onCheck={() => void run(afterSignIn)} error={error} />;
 
   if (stage === "plan")

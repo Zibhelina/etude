@@ -385,7 +385,7 @@ function DataAndDeletion({ st, confirmFresh, onDeleted }: { st: AccountStatus; c
             <AlertDialogTitle>Delete your Etude account?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-                <p>This removes the account, every signed-in device, your passkeys and the encrypted Sync copy on the server, and ends access to decks you bought. A Sync subscription should be canceled first. Orders are kept without your name for tax records.</p>
+                <p>This removes the account, every signed-in device, your passkeys and the encrypted Sync copy on the server, and ends access to decks you bought. A Sync subscription should be canceled first{st.billing?.source === "apple" ? " (an App Store subscription keeps renewing until you cancel it in your Apple Account settings)" : ""}. Orders are kept without your name for tax records.</p>
                 <p>The collection on this device stays.</p>
               </div>
             </AlertDialogDescription>

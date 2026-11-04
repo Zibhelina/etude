@@ -42,14 +42,15 @@ Apple counts data as "collected" when it leaves the device and is kept longer th
 | Contact Info → Email Address | Yes, only when someone creates the optional account | Yes | No | App Functionality |
 | User Content → Other User Content | No (see note) | | | |
 | Identifiers → User ID | Yes (the account id the server keeps with the email) | Yes | No | App Functionality |
-| Diagnostics, Usage Data, Location, Contacts, Health, Financial, Browsing, Search, Purchases | No | | | |
+| Purchases → Purchase History | Yes | Linked | App Functionality | No |
+| Diagnostics, Usage Data, Location, Contacts, Health, Financial, Browsing, Search | No | | | |
 
 Notes for each choice:
 
 - **Email address.** Kept by the server to sign in (one-time links) and send account email. In-app sign-in is optional; the app works without it.
 - **Other User Content: No.** Sync uploads the collection end-to-end encrypted. The server holds only ciphertext and the key never leaves the person's devices, so Etude can't read it. Apple's definition of collecting is about data you can access; encrypted data you can't open isn't collected in that sense. If you'd rather show it, add "Other User Content, linked, App Functionality" and nothing else changes.
 - **AI grading.** When someone turns on AI grading, the card and their answer go from the device straight to OpenAI or OpenRouter under the person's own key. Etude never receives them. Apple's label covers data you or your partners collect; a provider the person picked and pays for is the person's own service, so it isn't declared. The Privacy Policy says it plainly.
-- **Purchases: No.** The apps sell nothing. Subscriptions and paid decks are bought on the website.
+- **Purchases: Yes (Purchase History).** Since 2.6 the iPhone app sells Etude Sync through In-App Purchase, and the server keeps Apple's transaction and original transaction ids linked to the Etude account to give Sync. Paid decks are still bought only on the website and desktop app. Published this way in App Store Connect on Nov 4.
 - **Tracking: No.** No ads, no analytics, no third-party SDKs. The privacy manifest (`ios/App/App/PrivacyInfo.xcprivacy`) says the same: email address only, no tracking domains.
 - **Security log IP addresses.** The server keeps the IP of sign-in and account events for 12 months to fight abuse. Apple's list has no IP type; it sits under App Functionality with the account. If App Review asks, point to the Privacy Policy section 3.
 
@@ -79,7 +80,7 @@ Expected result: 4+. The Terms set 13+ for the online account; you can choose "s
 ```
 Etude is a free spaced-repetition (flashcard) app. Everything works without an account: open the app, tap More → Market → Decks, install "Countries of the World" or "Periodic table", then tap Practice.
 
-No in-app purchases, no ads, no external purchase links. The app sells nothing. An optional Etude account (email sign-in) keeps a collection in step across devices with end-to-end encryption; it can be created and deleted inside the app (Settings → Account → Delete account), as guideline 5.1.1(v) requires.
+Etude Sync, an optional auto-renewable subscription, is sold in the app through In-App Purchase. No ads, no external purchase links. An optional Etude account (email sign-in) keeps a collection in step across devices with end-to-end encryption; it can be created and deleted inside the app (Settings → Account → Delete account), as guideline 5.1.1(v) requires.
 
 Card types (guideline 4.7): some cards are small interactive HTML5/JavaScript programs, such as a map you tap or a Morse key. They run inside a sandboxed iframe (sandbox="allow-scripts", opaque origin) under a Content-Security-Policy that blocks all network access except Etude's own bundled files. They can't reach the network, the device or the app's data, and they don't download native code. They come from the built-in decks or from the Market, a public catalogue of free decks that we review before publishing (https://github.com/Zibhelina/etude-market).
 

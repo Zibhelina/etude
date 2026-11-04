@@ -263,7 +263,7 @@ export function ChatGptBlock({ provider, error, onChange }: { provider: ChatGptP
             </div>
           )}
           {inNativeShell() ? (
-            <p className="text-xs leading-relaxed text-muted-foreground">Sign-in opens auth.openai.com in a sheet and comes back to Etude. Your sign-in stays on this device.</p>
+            <p className="text-xs leading-relaxed text-muted-foreground">Sign-in opens auth.openai.com and comes back to Etude. Your sign-in stays on this device.</p>
           ) : (
             <p className="text-xs leading-relaxed text-muted-foreground">
               Sign-in opens auth.openai.com and returns to a callback on 127.0.0.1, so the browser must be on this machine. On a phone or another computer, run{" "}

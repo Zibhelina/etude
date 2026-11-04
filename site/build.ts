@@ -338,4 +338,13 @@ writeFileSync(
 // The live Stats panels: the app's own React components with the demo snapshots, into dist/live/.
 execFileSync(process.execPath, [join(root, "node_modules/vite/bin/vite.js"), "build", "--config", join(here, "stats-embed/vite.config.ts")], { cwd: root, stdio: "inherit" });
 
+// The web edition: the whole app running in the browser with no server, at /app/ (src/browser).
+// 404.html sends deep links under /app/ back to it.
+execFileSync(process.execPath, [join(root, "src/browser/tools/build-frame.mjs")], { cwd: root, stdio: "inherit" });
+execFileSync(process.execPath, [join(root, "node_modules/vite/bin/vite.js"), "build", "--config", join(root, "src/browser/vite.config.ts")], {
+  cwd: root,
+  stdio: "inherit",
+  env: { ...process.env, VITE_APP_BASE: "/app", ETUDE_BROWSER_OUT: join(out, "app") },
+});
+
 console.log(JSON.stringify({ out, version: pkg.version, demos: demos.map((d) => d.type), gallery: gallery.length }));

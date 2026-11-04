@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import type { VaultKeys } from "./crypto.ts";
+import { AccountError } from "../account.ts";
 
 export type WireEvent = {id:string;ciphertext:string};
 export interface Transport {
@@ -76,9 +77,7 @@ export class CloudTransport implements Transport {
     }
     if (!res.ok) {
       const body:any=await res.json().catch(()=>null);
-      const error=new Error(body?.error?.message ?? `Sync server returned ${res.status}`);
-      (error as any).code=body?.error?.code;
-      throw error;
+      throw new AccountError(body?.error?.message ?? `Sync server returned ${res.status}`,res.status,body?.error?.code??"error");
     }
     return res;
   }

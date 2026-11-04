@@ -5,7 +5,7 @@ import { bootstrap, drain, install, localEvent, receive, rows, type Change } fro
 import { createVault, decryptBlob, decryptEvent, encryptBlob, encryptEvent, fromB64, sha256Hex, toB64, unwrapWithPassword, unwrapWithRecovery } from "./crypto.ts";
 import { CloudTransport, FolderTransport, type Transport } from "./transport.ts";
 import { project } from "./project.ts";
-import { accountFor, AccountError, signInCode } from "../account.ts";
+import { accountFor, signInCode } from "../account.ts";
 
 /** Most ciphertext characters sent in one push. */
 const PUSH_BATCH_BYTES=6*1024*1024;
@@ -79,10 +79,34 @@ export class SyncClient {
   }
   private transport():Transport {const c=this.config();if(!c?.enabled)throw new Error("set up Sync first");if(c.kind==="folder")return new FolderTransport(c.folder!,this.e.db.get("SELECT device FROM sync_control WHERE id=1")!.device);const token=this.token();if(!token)throw new Error("sign in first");return new CloudTransport(c.server!,token);}
   /** After setup with the account's token: learn whether the vault already has keys. */
-  async probe() {const c=this.config();if(c?.kind!=="cloud"||!this.token())return this.status();try{const k=await this.transport().keys();this.set("config",{...this.config(),hasKeys:!!k});this.error=null;}catch(e){this.error=(e as Error).message;}return this.status();}
+  async probe() {
+    const c=this.config();
+    if(c?.kind!=="cloud"||!this.token())return this.status();
+    try {
+      const v=await (await (this.transport() as CloudTransport).request("/v1/vault")).json() as {hasKeys:boolean};
+      this.set("config",{...this.config(),hasKeys:v.hasKeys});
+      this.error=null;
+    } catch(e) {this.error=(e as Error).message;}
+    return this.status();
+  }
   async signin(email:string) {const c=this.config();if(c?.kind!=="cloud")throw new Error("choose a Sync server first");await new CloudTransport(c.server!,"").json("/v1/auth/email/start",{email});this.set("config",{...c,email});return this.status();}
   /** Redeems the email's 6-digit code (with the address from `signin`) or the link's long token. */
-  async verify(input:string) {const c=this.config();if(c?.kind!=="cloud")throw new Error("choose a Sync server first");const code=signInCode(input);if(code&&!c.email)throw new Error("ask for a code first: the code goes with the email address it was sent to");const r:any=await new CloudTransport(c.server!,"").json("/v1/auth/email/verify",{...(code?{email:c.email,code}:{token:input.trim()}),deviceName:process.versions?.node?"Etude desktop":"Etude browser"}).catch((e:any)=>{throw e?.code?new AccountError(e.message,401,e.code):e;});this.saveSecrets({token:r.token});accountFor(this.e).adopt(c.server!,r.token,r.account);this.set("config",{...c,email:r.account.email});return this.probe();}
+  async verify(input:string) {
+    const c=this.config();
+    if(c?.kind!=="cloud")throw new Error("choose a Sync server first");
+    const code=signInCode(input);
+    if(code&&!c.email)throw new Error("ask for a code first: the code goes with the email address it was sent to");
+    const previous=this.token();
+    const r:any=await new CloudTransport(c.server!,previous??"").json("/v1/auth/email/verify",{
+      ...(code?{email:c.email,code}:{token:input.trim()}),
+      deviceName:process.versions?.node?"Etude desktop":"Etude browser",
+    });
+    const token=r.reauth?previous:r.token;
+    if(!r.reauth)this.saveSecrets({token});
+    accountFor(this.e).adopt(c.server!,token,r.account);
+    this.set("config",{...c,email:r.account.email});
+    return this.probe();
+  }
   async unlock(input:{password?:string;recovery?:string}) {
     const transport=this.transport();const found=await transport.keys();
     let vk:Uint8Array;let recoveryKey:string|undefined;

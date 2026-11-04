@@ -14,7 +14,7 @@ import { etudeFetch } from "@/lib/transport";
 import { cn } from "@/lib/utils";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
 import { account, bytes, openOutside, type AccountStatus } from "@/lib/account";
-import { storageNote } from "@/lib/billing-ui";
+import { hasWebPortal, storageNote, storeSource } from "@/lib/billing-ui";
 import { canShowPurchases, desktopApp, isNativeApp, storeSafeMessage } from "@/lib/platform";
 import { NATIVE_COPY } from "@/lib/native-copy";
 import { canBuyInApp, STOREKIT_EVENT } from "@/lib/storekit";
@@ -735,7 +735,7 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />} Subscribe on etude.study
           </Button>
         )}
-        {billingOn && purchases && b?.status && b.source !== "apple" && (
+        {billingOn && purchases && hasWebPortal(b) && (
           <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => void open(account.portal)}>
             <ExternalLink className="size-4" /> Manage subscription
           </Button>
@@ -743,6 +743,7 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
         <Button variant="ghost" size="sm" className="h-10 md:h-8" onClick={() => void onChanged()}>Refresh</Button>
       </div>
       {billingOn && !purchases && !appStore && !active && <p className="text-xs text-muted-foreground">Sync isn't active on this account.</p>}
+      {billingOn && purchases && active && storeSource(b) && <p className="text-xs text-muted-foreground" data-store-source={b!.source}>{storeSource(b)}</p>}
     </Block>
   );
 }

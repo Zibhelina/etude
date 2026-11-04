@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api } from "@/lib/api";
+import { inNativeShell } from "@/lib/native";
 import { cn } from "@/lib/utils";
 import { Block, CopyValue, Field, NumberField } from "@/components/settings-ui";
 import { CHATGPT_DEFAULT_MODEL, type ChatGptProvider } from "@/components/settings-model";
@@ -28,6 +29,8 @@ interface LoginReply {
   remote?: boolean;
   message?: string;
   cli?: string;
+  /** The phone apps open their own sign-in sheet. */
+  opened?: boolean;
 }
 
 const sec = (ms: number | undefined) => (ms == null ? undefined : ms / 1000);
@@ -85,8 +88,8 @@ export function useChatGptSignIn() {
   }, [waitingUrl, status?.login?.state, refresh]);
 
   const start = async () => {
-    // Opened synchronously inside the click, or the browser blocks it.
-    const win = window.open("", "etude-chatgpt-signin");
+    // Opened synchronously inside the click, or the browser blocks it. The phone apps open their own sheet.
+    const win = inNativeShell() ? null : window.open("", "etude-chatgpt-signin");
     if (win) win.opener = null;
     setBusy("login");
     setFailure(null);
@@ -100,7 +103,8 @@ export function useChatGptSignIn() {
       }
       if (r.url) {
         setWaitingUrl(r.url);
-        if (win) win.location.replace(r.url);
+        if (r.opened) win?.close();
+        else if (win) win.location.replace(r.url);
         else window.open(r.url, "_blank", "noreferrer");
       } else win?.close();
       await refresh();
@@ -188,7 +192,7 @@ export function ChatGptBlock({ provider, error, onChange }: { provider: ChatGptP
             <Field
               label="Model"
               error={error}
-              hint={status.models.length ? "From your account's model list. Save to apply." : `Save to apply. Run \`etude settings chatgpt models\` to list what your plan offers.`}
+              hint={status.models.length || inNativeShell() ? "From your account's model list. Save to apply." : `Save to apply. Run \`etude settings chatgpt models\` to list what your plan offers.`}
             >
               <Select value={currentModel} onValueChange={(v) => onChange({ model: v })}>
                 <SelectTrigger className="h-10 w-full md:h-9">
@@ -232,7 +236,8 @@ export function ChatGptBlock({ provider, error, onChange }: { provider: ChatGptP
               {busy === "login" || waitingUrl ? <Loader2 className="size-4 animate-spin" /> : null}
               Continue with ChatGPT
             </Button>
-            {waitingUrl && (
+            {waitingUrl && inNativeShell() && <span className="text-xs text-muted-foreground">Finish signing in on the ChatGPT page.</span>}
+            {waitingUrl && !inNativeShell() && (
               <a href={waitingUrl} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground">
                 Waiting for the browser — open the sign-in page
               </a>
@@ -254,10 +259,14 @@ export function ChatGptBlock({ provider, error, onChange }: { provider: ChatGptP
               <p className="break-words text-destructive">{failure}</p>
             </div>
           )}
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Sign-in opens auth.openai.com and returns to a callback on 127.0.0.1, so the browser must be on this machine. On a phone or another computer, run{" "}
-            <code className="font-mono text-foreground/90">etude settings chatgpt login</code> where Etude runs.
-          </p>
+          {inNativeShell() ? (
+            <p className="text-xs leading-relaxed text-muted-foreground">Sign-in opens auth.openai.com in a sheet and comes back to Etude. Your sign-in stays on this device.</p>
+          ) : (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Sign-in opens auth.openai.com and returns to a callback on 127.0.0.1, so the browser must be on this machine. On a phone or another computer, run{" "}
+              <code className="font-mono text-foreground/90">etude settings chatgpt login</code> where Etude runs.
+            </p>
+          )}
         </div>
       )}
     </Block>

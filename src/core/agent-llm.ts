@@ -1,7 +1,7 @@
 // Streaming chat with function tools, for the in-app agent. Two protocols: the Responses API
 // (the user's ChatGPT plan) and OpenAI-compatible Chat Completions (OpenRouter, OpenAI, local servers).
 import { AiError, type AgentEffort, type ChatProvider } from "./ai.ts";
-import { chatGptEndpoints, getChatGptCredentials, failureMessage, ChatGptError, DEFAULT_CHATGPT_MODEL } from "./chatgpt.ts";
+import { chatGptEndpoints, chatGptFetch, chatGptNativeHost, getChatGptCredentials, failureMessage, ChatGptError, DEFAULT_CHATGPT_MODEL } from "./chatgpt.ts";
 
 export interface ToolSpec {
   name: string;
@@ -124,15 +124,32 @@ async function responsesTurn(req: LlmRequest, p: Extract<ChatProvider, { kind: "
     stream: true,
   } as Record<string, unknown> & { model: string };
   const timeout = AbortSignal.timeout(p.timeoutMs ?? 180_000);
-  const post = (b: unknown) =>
-    fetch(ep.responses, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "text/event-stream" },
-      body: JSON.stringify(b),
-      signal: req.signal ? AbortSignal.any([req.signal, timeout]) : timeout,
-    }).catch((e) => {
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "text/event-stream" };
+  // In the phone apps the WebView can't reach chatgpt.com (no CORS), so the request goes through
+  // the native HTTP like grading does. That answer arrives whole, so the reply shows up at once.
+  const viaNative = (b: unknown): Promise<Response> => {
+    const call = chatGptFetch(ep.responses, { method: "POST", headers, body: JSON.stringify(b), timeoutMs: p.timeoutMs ?? 180_000 });
+    const stop = req.signal
+      ? new Promise<never>((_, reject) => {
+          if (req.signal!.aborted) reject(new Error("stopped"));
+          req.signal!.addEventListener("abort", () => reject(new Error("stopped")), { once: true });
+        })
+      : null;
+    return (stop ? Promise.race([call, stop]) : call).catch((e) => {
       throw aborted(e, req.signal);
     });
+  };
+  const post = (b: unknown) =>
+    chatGptNativeHost()
+      ? viaNative(b)
+      : fetch(ep.responses, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(b),
+          signal: req.signal ? AbortSignal.any([req.signal, timeout]) : timeout,
+        }).catch((e) => {
+          throw aborted(e, req.signal);
+        });
   let res = await post(body);
   // A model that doesn't take a reasoning effort (or parallel calls): ask again without them.
   if (res.status === 400 && (body.reasoning || "parallel_tool_calls" in body)) {

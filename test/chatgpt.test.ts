@@ -31,6 +31,7 @@ import {
   type ChatGptNativeHost,
 } from "../src/core/chatgpt.ts";
 import { aiVerdict } from "../src/core/ai.ts";
+import { llmTurn } from "../src/core/agent-llm.ts";
 import { Etude } from "../src/core/engine.ts";
 import { createApp } from "../src/server/app.ts";
 import { run } from "../src/cli/run.ts";
@@ -692,6 +693,12 @@ test("phone apps: sign-in runs on the app's own listener and browser sheet, toke
     const out = await chatGptResponses({ home, model: "gpt-6.1-sol", instructions: "be brief", input: "hi", endpoints: fake.endpoints });
     assert.equal(out.text, "Hello, world!");
     assert.deepEqual(await listChatGptModels(home, fake.endpoints), [{ slug: "gpt-6.1-sol", displayName: "GPT-6.1 Sol" }]);
+
+    // Ask Etude goes through the native HTTP too (the WebView can't reach chatgpt.com).
+    const before = n.log.filter((l) => l === "POST /v1/responses").length;
+    const turn = await llmTurn({ provider: { kind: "chatgpt", model: "gpt-6.1-sol", baseUrl: fake.endpoints.responses }, home, system: "be brief", messages: [{ role: "user", content: "hi" }], tools: [] });
+    assert.equal(turn.text, "Hello, world!");
+    assert.equal(n.log.filter((l) => l === "POST /v1/responses").length, before + 1, "Ask Etude used the native HTTP");
 
     // Refresh rotates the stored refresh token in the secure store.
     const next = await refreshChatGpt(home, fake.endpoints);

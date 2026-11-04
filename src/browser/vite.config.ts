@@ -34,6 +34,7 @@ export default defineConfig({
       { find: /^node:crypto$/, replacement: here("./shims/crypto.ts") },
       { find: /^node:zlib$/, replacement: here("./shims/zlib.ts") },
       { find: /^node:module$/, replacement: here("./shims/module.ts") },
+      { find: /^node:util$/, replacement: here("./shims/util.ts") },
       { find: /^node:(child_process|http|net|sqlite)$/, replacement: unavailable },
     ],
   },

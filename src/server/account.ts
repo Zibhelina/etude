@@ -80,6 +80,11 @@ export function accountRoutes(app: Hono, e: Etude) {
   app.post("/api/account/listings/:id/versions", async (c) => c.json(await a.newVersion(c.req.param("id"), await body(c))));
   app.post("/api/account/listings/:id/submit", async (c) => c.json(await a.submit(c.req.param("id"))));
   app.post("/api/account/listings/:id/hide", async (c) => c.json(await a.hide(c.req.param("id"))));
+  app.delete("/api/account/listings/:id/revision", async (c) => c.json(await a.withdrawChanges(c.req.param("id"))));
+  app.get("/api/account/covers/:hash", async (c) => {
+    const { type, body } = await a.cover(c.req.param("hash"));
+    return c.body(body as any, 200, { "Content-Type": type, "Cache-Control": "private, no-store" });
+  });
 
   app.get("/api/account/review", async (c) => c.json(await a.reviewQueue()));
   app.post("/api/account/review/:id/approve", async (c) => c.json(await a.approve(c.req.param("id"), (await body(c)).notes)));

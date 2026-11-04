@@ -361,10 +361,12 @@ These work on every command, before or after the command words.
   - [`account listings`](#account-listings) Your listings with status, versions and review notes.
   - [`account list-deck`](#account-list-deck) Put a deck from this collection up for sale: draft listing, cover, version 1.0.0. Submit it for review afterwards.
   - [`account update-listing`](#account-update-listing) Upload the deck again as the next version. Buyers get it after review.
+  - [`account edit-listing`](#account-edit-listing) Change a listing's Market page: name, description, tags, price, cover. On a deck that has been on sale, the change waits for the Etude team's review and buyers keep the approved page.
+  - [`account withdraw-changes`](#account-withdraw-changes) Withdraw a listing's page change that is waiting for review.
   - [`account submit`](#account-submit) Send a listing for review.
   - [`account hide`](#account-hide) Take a listing off sale. Buyers keep it.
   - [`account sales`](#account-sales) Your sales and earnings (after Etude's 20% fee).
-  - [`account review`](#account-review) Admins: listings waiting for review.
+  - [`account review`](#account-review) Admins: listings waiting for review (new decks, versions and page changes). Review page changes on the server's /account/admin/review screen.
   - [`account approve`](#account-approve) Admins: approve a listing's pending versions; it goes live.
   - [`account reject`](#account-reject) Admins: turn down a listing's pending versions with a reason.
 - **theme**: Themes: pick the app's colors, or make your own with CSS variables and extra CSS (`etude theme` alone runs `list`)
@@ -3954,6 +3956,54 @@ etude account update-listing <listing> <deck> [flags]
 
 Output: the listing
 
+### etude account edit-listing
+
+<a id="account-edit-listing"></a>
+
+Change a listing's Market page: name, description, tags, price, cover. On a deck that has been on sale, the change waits for the Etude team's review and buyers keep the approved page.
+
+```
+etude account edit-listing <listing> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `listing` | Listing id (lst_…) or slug. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--name <VALUE>` | string | New name. |
+| `--description <VALUE>` | string | New description. |
+| `--tag <VALUE> (repeatable)` | string | Tag (repeatable; replaces the tags). |
+| `--price <VALUE>` | string | New price in US dollars (at least 5). |
+| `--cover <FILE>` | string | New cover image (.webp, .png or .jpg, ≤ 600 KB). |
+
+Output: the listing (top-level fields are the approved page; `revision` holds the change waiting for review)
+
+```sh
+etude account edit-listing pharmacology-101 --price 15 --description "…"
+```
+
+### etude account withdraw-changes
+
+<a id="account-withdraw-changes"></a>
+
+Withdraw a listing's page change that is waiting for review.
+
+```
+etude account withdraw-changes <listing>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `listing` | Listing id (lst_…) or slug. |
+
+Output: the listing
+
 ### etude account submit
 
 <a id="account-submit"></a>
@@ -4008,7 +4058,7 @@ Output: { sales, totals: { count, gross, earnings } }
 
 <a id="account-review"></a>
 
-Admins: listings waiting for review.
+Admins: listings waiting for review (new decks, versions and page changes). Review page changes on the server's /account/admin/review screen.
 
 ```
 etude account review

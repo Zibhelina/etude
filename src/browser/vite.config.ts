@@ -79,7 +79,7 @@ export default defineConfig({
     ],
   },
   // Vite swaps a bare `process.env` for `{}`, so the core's `process.env[name]` (API keys, see
-  // worker.ts) would always be empty. Point it at the object shims/globals.ts creates instead.
+  // worker-core.ts) would always be empty. Point it at the object shims/globals.ts creates instead.
   define: { "process.env": "globalThis.process.env", "process.env.NODE_ENV": JSON.stringify("production"), "import.meta.env.VITE_APP_BASE": JSON.stringify(webBase) },
   worker: { format: "es" },
   optimizeDeps: { exclude: ["@sqlite.org/sqlite-wasm"] },

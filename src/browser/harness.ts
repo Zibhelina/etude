@@ -47,7 +47,12 @@ try {
   if (mediaFile) log("mediaOnDisk", await core.call("_media", mediaFile));
   const hits = await core.call("searchItems", "chess", { limit: 5 });
   log("search", { total: hits.total, first: hits.items?.[0]?.id });
+  // The worker's modules ran once each (WebKit used to run the entry twice; see worker.ts).
+  const evals = await core.call("_evals");
+  log("evals", evals);
+  if (evals.entry !== 1 || evals.core !== 1) throw new Error(`worker modules ran ${JSON.stringify(evals)} times`);
   log("done", true);
 } catch (e) {
+  log("evals", await core.call("_evals").catch(() => null));
   log("error", String(e));
 }

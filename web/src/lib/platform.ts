@@ -1,7 +1,8 @@
 // Where Etude is running, read from the Capacitor bridge when there is one (no Capacitor import).
-// Store rules follow from it: the apps never sell anything inside. iOS shows purchased decks as a
-// library only (no prices, no buy buttons, no links to buy); Android has no buy links either.
-// The desktop app and the browser may link to purchase pages on etude.study.
+// Store rules follow from it. The iOS app sells one thing, Etude Sync, through Apple In-App Purchase
+// (lib/storekit.ts, prices from the App Store); everything else bought on etude.study stays out of
+// the apps: purchased decks show as a library only (no prices, no buy buttons, no links to buy), and
+// nothing points to the website to pay. The desktop app and the browser link to etude.study.
 
 type CapacitorGlobal = { isNativePlatform?: () => boolean; getPlatform?: () => string };
 
@@ -25,7 +26,7 @@ export function nativePlatform(): "ios" | "android" | "web" {
 
 export const isIOSApp = () => nativePlatform() === "ios";
 
-/** Prices, buy buttons and links to checkout or billing pages. Off in the store apps. */
+/** Website prices, buy buttons and links to checkout or billing pages. Off in the store apps (App Store Sync is lib/storekit.ts). */
 export const canShowPurchases = () => !isNativeApp();
 
 // The Sync server's messages are written for the website ("needs an active subscription", "Buy this
@@ -40,6 +41,8 @@ const STORE_SAFE: Record<string, string> = {
 /** A server or sync error message as the app may show it: unchanged on desktop and the web, neutral in the store apps. */
 export function storeSafeMessage(message: string, code?: string | null, native = isNativeApp()): string {
   if (!native) return message;
+  // App Store purchase errors are written for the app already.
+  if (code && code.startsWith("apple_")) return message;
   if (code && STORE_SAFE[code]) return STORE_SAFE[code];
   if (!/subscri|\bbuy\b|purchas|checkout|billing|pric(e|ing)|US\$/i.test(message)) return message;
   if (/paused/i.test(message)) return "Sync is paused on this account. Your local data is untouched.";

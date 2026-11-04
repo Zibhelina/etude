@@ -43,3 +43,23 @@ test("the iOS app declares the camera and photo strings its image inputs need", 
   for (const key of ["NSCameraUsageDescription", "NSPhotoLibraryUsageDescription", "NSPhotoLibraryAddUsageDescription"])
     assert.match(plist, new RegExp(`<key>${key}</key>\\s*<string>[^<]{10,}</string>`), key);
 });
+
+test("App Store purchase errors reach the iOS app as written", () => {
+  const m = "This App Store subscription belongs to another Etude account. Sign in to that account to use it.";
+  assert.equal(storeSafeMessage(m, "apple_other_account", true), m);
+});
+
+test("the iOS app sells Sync only through StoreKit, with prices from the App Store and Apple's required pieces", () => {
+  const plans = read("web/src/components/app-store-plans.tsx");
+  // No hard-coded prices or currency: everything shown comes from StoreKit's displayPrice.
+  assert.doesNotMatch(plans, /US\$|\$\d|\d+\.\d\d/);
+  assert.match(plans, /displayPrice/);
+  for (const piece of [/Restore Purchases/, /renews automatically/, /24 hours before/, /etude\.study\/terms/, /etude\.study\/privacy/]) assert.match(plans, piece);
+  // Nothing about the website or its prices in the App Store screens.
+  assert.doesNotMatch(plans, /etude\.study\/(sync|account|app)|on the web|website|cheaper/i);
+  const swift = read("ios/App/App/EtudeStorePlugin.swift");
+  for (const api of ["Product.products", ".appAccountToken(", "Transaction.updates", "Transaction.unfinished", "AppStore.sync()", "showManageSubscriptions", "jwsRepresentation"]) assert.ok(swift.includes(api), api);
+  // A transaction is finished only after the server answered.
+  const kit = read("web/src/lib/storekit.ts");
+  assert.match(kit, /await account\.appleTransaction\(t\.jws\);\s*await p\?\.finish/);
+});

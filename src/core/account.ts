@@ -275,6 +275,10 @@ export class AccountClient {
   syncCheckout = (plan: "monthly" | "yearly" = "monthly") => this.json("POST", "/v1/billing/sync/checkout", { plan });
   billingPortal = () => this.json("GET", "/v1/billing/portal");
 
+  // ── Sync subscription (App Store, in the iOS app) ─────────────
+  appleInfo = () => this.json("GET", "/v1/billing/apple");
+  appleTransaction = (jws: string) => this.json("POST", "/v1/billing/apple/transaction", { jws });
+
   // ── paid Market ───────────────────────────────────────────────
   async paidIndex() {
     const idx = await this.json("GET", "/v1/market/paid-index.json", undefined, false);

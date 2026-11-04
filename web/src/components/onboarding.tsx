@@ -511,7 +511,7 @@ function ChatGptSetup({ apply, onDone }: { apply: Apply; onDone(o: AiOutcome): v
       {remote && (
         <div className="mt-3 flex flex-col gap-3 rounded-xl border border-warning/40 bg-warning/[0.04] px-3.5 py-3">
           <p className="text-[13px] leading-relaxed">{remote.message}</p>
-          <CopyValue label="Run on the machine that runs Etude" value={remote.cli} />
+          {remote.cli && <CopyValue label="Run on the machine that runs Etude" value={remote.cli} />}
         </div>
       )}
       {failure && <Problem>{failure}</Problem>}

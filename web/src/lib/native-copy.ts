@@ -7,4 +7,6 @@ export const NATIVE_COPY = {
   syncFolder: "Syncing through a folder.",
   passkeysElsewhere: "Passkeys for this account can't be added in this app. Sign in with an email code instead.",
   selling: "Selling decks isn't available in this app.",
+  // The ChatGPT sign-in needs the Keychain; if reading it failed when the app started, there's no way in.
+  chatGptUnavailable: "ChatGPT sign-in can't start: Etude couldn't read this device's secure storage when it opened. Close Etude completely and open it again.",
 } as const;

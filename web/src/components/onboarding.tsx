@@ -38,7 +38,7 @@ import { useImportPicker } from "@/pages/decks";
 import { announceDataChange } from "@/components/agent-panel";
 import { api } from "@/lib/api";
 import { account, openOutside } from "@/lib/account";
-import { saveApiKey, serverless } from "@/lib/native";
+import { chatGptSignInHere, saveApiKey, serverless } from "@/lib/native";
 import { canShowPurchases } from "@/lib/platform";
 import { etudeFetch } from "@/lib/transport";
 import { navigate } from "@/lib/router";
@@ -405,8 +405,8 @@ function AccountsStep({ level, ticked, onChange, onNext }: { level: OnboardingLe
     onChange(next);
   };
   const rows: { id: Account; icon: typeof Key; title: string; hint: string }[] = [
-    // ChatGPT sign-in needs the loopback callback of a desktop server.
-    ...(serverless() ? [] : [{ id: "chatgpt" as const, icon: MessageCircle, title: "ChatGPT Plus or Pro", hint: "Sign in, no key. Uses your plan's limits." }]),
+    // ChatGPT sign-in needs a 127.0.0.1 listener: the desktop server's, or the phone app's own.
+    ...(!chatGptSignInHere() ? [] : [{ id: "chatgpt" as const, icon: MessageCircle, title: "ChatGPT Plus or Pro", hint: "Sign in, no key. Uses your plan's limits." }]),
     { id: "openrouter", icon: ArrowLeftRight, title: "OpenRouter", hint: "Paste a key. Pay per use, fractions of a cent." },
     { id: "openai", icon: Key, title: "OpenAI API key", hint: "Not the same as ChatGPT. Pay per use." },
     ...(level === "tinker" ? [{ id: "local" as const, icon: Server, title: "Local server", hint: "llama.cpp, Ollama or vLLM on this machine. No key." }] : []),

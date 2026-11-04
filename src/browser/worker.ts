@@ -113,6 +113,54 @@ async function boot() {
 
 const ready = boot();
 
+// ------------------------------------------------- native host (phone apps)
+// The main thread answers these with the EtudeAuth plugin (native-chatgpt.ts).
+let nid = 0;
+const nativeWaits = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
+function nativeCall<T = unknown>(op: string, args: unknown = {}): Promise<T> {
+  const n = ++nid;
+  return new Promise<T>((resolve, reject) => {
+    nativeWaits.set(n, { resolve, reject });
+    post({ native: { nid: n, op, args } });
+  });
+}
+
+/** "cancelled: …" from the plugin becomes a ChatGptError with that code. */
+function nativeFailure(ChatGptError: any, e: unknown) {
+  const m = /^([a-z_]+): (.*)$/s.exec((e as Error).message ?? String(e));
+  return m ? new ChatGptError(m[2] || m[1], m[1]) : e;
+}
+
+const CREDENTIAL_FILES = ["chatgpt.json", "chatgpt-host-id"];
+
+async function installNativeHost() {
+  const { setChatGptNativeHost, ChatGptError } = await import("../core/chatgpt.ts");
+  const cache = new Map<string, string | null>();
+  for (const name of CREDENTIAL_FILES) cache.set(name, await nativeCall<string | null>("store.get", { name }));
+  // Writes reach the Keychain in order; the core reads the copy here right away.
+  let writes = Promise.resolve();
+  const wrap = <T>(p: Promise<T>) => p.catch((e) => Promise.reject(nativeFailure(ChatGptError, e)));
+  setChatGptNativeHost({
+    http: (req) => wrap(nativeCall("http", req)),
+    store: {
+      read: (name) => cache.get(name) ?? null,
+      write: (name, text) => {
+        cache.set(name, text);
+        writes = writes.then(() => nativeCall<void>("store.set", { name, value: text })).catch((e) => console.warn("Keychain write failed:", e));
+      },
+    },
+    login: {
+      listen: (port) => wrap(nativeCall("login.listen", { port })),
+      next: () => wrap(nativeCall("login.next")),
+      open: (url) => wrap(nativeCall("login.open", { url })),
+      finish: () => wrap(nativeCall("login.finish")),
+    },
+  });
+}
+
+// The page's first message says whether it brought a native host; every later message waits for it.
+let nativeReady: Promise<void> = Promise.resolve();
+
 async function http(id: number, r: { method: string; url: string; headers: Record<string, string>; body: ArrayBuffer | null }) {
   const res = await app!.fetch(new Request(r.url, { method: r.method, headers: r.headers, body: r.body && r.method !== "GET" && r.method !== "HEAD" ? r.body : undefined }));
   const headers = Object.fromEntries(res.headers.entries());
@@ -145,9 +193,21 @@ async function http(id: number, r: { method: string; url: string; headers: Recor
 }
 
 self.onmessage = async (ev: MessageEvent) => {
+  if (ev.data?.nativeReply) {
+    const w = nativeWaits.get(ev.data.nativeReply);
+    nativeWaits.delete(ev.data.nativeReply);
+    if (ev.data.ok) w?.resolve(ev.data.value);
+    else w?.reject(new Error(ev.data.error));
+    return;
+  }
+  if (ev.data?.hello) {
+    if (ev.data.hello.native) nativeReady = installNativeHost().catch((e) => console.warn("native host:", e));
+    return;
+  }
   const { id, method } = ev.data ?? {};
   try {
     const info = await ready;
+    await nativeReady;
     if (ev.data?.http) return await http(id, ev.data.http);
     const args: unknown[] = (ev.data?.args ?? []).map(revive);
     let value: unknown;

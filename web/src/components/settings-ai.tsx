@@ -8,7 +8,7 @@ import { Markdown } from "@/components/markdown";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
-import { saveApiKey, serverless } from "@/lib/native";
+import { chatGptSignInHere, saveApiKey, serverless } from "@/lib/native";
 import { cn } from "@/lib/utils";
 import { BigSwitch, Block, Field, NumberField, Section, TextField } from "@/components/settings-ui";
 import { ChatGptBlock } from "@/components/settings-chatgpt";
@@ -64,8 +64,8 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
       }
     >
       <Block title="Quick setup" description="Fills the provider fields below. Feedback timing and language stay as they are.">
-        <div className={cn("grid gap-2 sm:grid-cols-2", serverless() ? "lg:grid-cols-3" : "lg:grid-cols-4")}>
-          {PRESETS.filter((p) => !(serverless() && p.id === "chatgpt")).map((p) => (
+        <div className={cn("grid gap-2 sm:grid-cols-2", chatGptSignInHere() ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
+          {PRESETS.filter((p) => chatGptSignInHere() || p.id !== "chatgpt").map((p) => (
             <button
               key={p.id}
               onClick={() => defaults && onChange(presetAi(p.id, defaults, ai))}
@@ -85,10 +85,10 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
         </div>
       </Block>
 
-      {fbGpt && serverless() && (
+      {fbGpt && !chatGptSignInHere() && (
         <p className="text-sm text-warning">Signing in with ChatGPT needs the desktop app. Pick OpenRouter or OpenAI above and paste a key below.</p>
       )}
-      {fbGpt && !serverless() && (
+      {fbGpt && chatGptSignInHere() && (
         <ChatGptBlock
           provider={fbGpt}
           error={errors["feedback.model"]}

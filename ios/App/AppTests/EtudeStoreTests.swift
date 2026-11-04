@@ -138,6 +138,45 @@ final class EtudeStoreTests: XCTestCase {
         if let dir = shots { try await dumpTransactions(dir) }
     }
 
+    /// The App Store Connect review screenshot: a fresh account on the local server, Settings → Sync with the
+    /// plans and StoreKit's prices, the whole plan block on screen above the tab bar. Runs only with
+    /// ETUDE_SHOT_SERVER, ETUDE_SHOT_CODES and ETUDE_SHOT_DIR (env or /tmp/etude-iap-test.json); it writes
+    /// review-plans-page.png (the page) and review-ready, then waits so a simulator screenshot can be taken.
+    func testReviewScreenshot() async throws {
+        guard let server = env["ETUDE_SHOT_SERVER"], let codes = env["ETUDE_SHOT_CODES"], let dir = env["ETUDE_SHOT_DIR"] else { throw XCTSkip("set ETUDE_SHOT_SERVER, ETUDE_SHOT_CODES and ETUDE_SHOT_DIR") }
+        let web = try await webView()
+        try await waitFor("page", web, "typeof window.__etudeTransport === 'function' && typeof window.__etudeStoreKit === 'object'")
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+        _ = try await js(web, "const b = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Skip'); if (b) b.click(); return !!b")
+        try await Task.sleep(nanoseconds: 800_000_000)
+        let email = "review-\(Int(Date().timeIntervalSince1970))@example.com"
+        let st0 = try await api(web, "GET", "/api/account") as? [String: Any]
+        if st0?["signedIn"] as? Bool == true { _ = try await api(web, "POST", "/api/account/signout") }
+        _ = try await api(web, "PUT", "/api/account/server", ["server": server])
+        _ = try await api(web, "POST", "/api/account/signin", ["email": email])
+        try await Task.sleep(nanoseconds: 500_000_000)
+        let (data, _) = try await URLSession.shared.data(from: URL(string: "\(codes)?email=\(email)")!)
+        let code = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(code.count, 6, "sign-in code")
+        _ = try await api(web, "POST", "/api/account/verify", ["code": code, "email": email])
+        try await openSync(web)
+        try await waitFor("plans", web, "document.querySelectorAll('[data-appstore-plans] [data-product]').length === 2", timeout: 60)
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        // The plan block's last row (Refresh) just above the floating tab bar.
+        _ = try await js(web, """
+        const btn = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Refresh');
+        let box = btn.parentElement;
+        while (box && !(box.scrollHeight > box.clientHeight && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+        box = box || document.scrollingElement;
+        box.scrollTop += btn.getBoundingClientRect().bottom - (innerHeight - 118);
+        return true
+        """)
+        try await Task.sleep(nanoseconds: 800_000_000)
+        try await shot(web, dir, "review-plans-page")
+        try "ready".write(toFile: dir + "/review-ready", atomically: true, encoding: .utf8)
+        try await Task.sleep(nanoseconds: 30_000_000_000)
+    }
+
     /// Every StoreKit transaction for the app, for the report (and Xcode's signing certificate from the first JWS).
     func dumpTransactions(_ dir: String) async throws {
         var all: [[String: Any]] = []

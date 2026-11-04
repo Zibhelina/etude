@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BulkBar, CheckBox, groupItems, ItemEditor, ItemRow, NewItemDialog, OrderSelect, SearchHints } from "@/components/item-editor";
 import { api, type SearchRow, type TypeSummary } from "@/lib/api";
+import { appPath, withBase } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { EmptyState, PHONE_H1 } from "@/components/page";
 import { X } from "lucide-react";
@@ -45,7 +46,7 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
     if (query) p.set("q", query);
     if (selected) p.set("item", selected);
     const url = `/browse${p.toString() ? `?${p}` : ""}`;
-    if (location.pathname + location.search !== url) history.replaceState(null, "", url);
+    if (appPath() + location.search !== url) history.replaceState(null, "", withBase(url));
   }, [query, selected]);
 
   const reloadMeta = () => {

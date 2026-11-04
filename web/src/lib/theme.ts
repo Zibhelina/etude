@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { BUILTIN_THEMES, DEFAULT_THEME, themeCss, type Scheme, type Theme } from "../../../src/core/themes.ts";
 import { api } from "@/lib/api";
+import { appPath } from "@/lib/router";
 
 export { BUILTIN_THEMES, DEFAULT_THEME, themeCss };
 export type { Scheme, Theme };
@@ -16,7 +17,7 @@ let current: Theme = BUILTIN_THEMES[0];
 let previewing = false;
 
 export const currentTheme = () => current;
-export const isEmbed = () => location.pathname === "/embed";
+export const isEmbed = () => appPath() === "/embed";
 
 /** Any CSS color as #rrggbb (or #rrggbbaa when translucent), through a 1px canvas. */
 export function toHex(color: string): string | null {

@@ -10,7 +10,7 @@ import { Markdown } from "@/components/markdown";
 import { Logo } from "@/components/logo";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { agentApi, DATA_EVENT, type AgentEvent, type AssistantContent, type Attachment, type Conversation, type Item, type Message, type ModelGroup, type ToolItem, type UserContent } from "@/lib/agent";
-import { navigate } from "@/lib/router";
+import { appPath, navigate } from "@/lib/router";
 import { refreshTheme } from "@/lib/theme";
 import { api, relative } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -183,7 +183,7 @@ function modelLabel(ref: string | null, groups: ModelGroup[], served?: string) {
 
 /** Reloads what the page shows. A deck page whose deck was moved or deleted goes back to Decks instead of asking for it. */
 async function refreshPage(onChanged: (final: boolean) => void, final: boolean) {
-  if (location.pathname === "/deck") {
+  if (appPath() === "/deck") {
     const name = new URLSearchParams(location.search).get("name") ?? "";
     const decks = await api.decks().catch(() => null);
     if (decks && !decks.some((d) => d.name === name)) {
@@ -407,7 +407,7 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
       bump();
     };
     try {
-      await agentApi.send(id, { text: msg, attachments: done.map((a) => a.id), model, page: location.pathname + location.search }, onEvent);
+      await agentApi.send(id, { text: msg, attachments: done.map((a) => a.id), model, page: appPath() + location.search }, onEvent);
     } catch (e) {
       setLive(null);
       setText(msg);

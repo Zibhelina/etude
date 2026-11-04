@@ -36,6 +36,7 @@ export default defineConfig({
       { find: /^node:module$/, replacement: here("./shims/module.ts") },
       { find: /^node:util$/, replacement: here("./shims/util.ts") },
       { find: /^node:(child_process|http|net|sqlite)$/, replacement: unavailable },
+      { find: /^@jitl\/quickjs-wasmfile-(debug-sync|debug-asyncify|release-asyncify)$/, replacement: here("./shims/quickjs-unused.ts") },
     ],
   },
   // Vite swaps a bare `process.env` for `{}`, so the core's `process.env[name]` (API keys, see

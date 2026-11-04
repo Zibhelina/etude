@@ -24,18 +24,18 @@ import { Block, NumberField, Section } from "@/components/settings-ui";
 import { draftOf, normalize, validate, type SettingsDraft, type SettingsResponse } from "@/components/settings-model";
 
 const NAV = [
-  { id: "about", label: "About" },
-  { id: "ai", label: "AI grading" },
-  { id: "appearance", label: "Appearance" },
-  { id: "study", label: "Study" },
-  { id: "data", label: "Data" },
-  { id: "cleanup", label: "Clean up" },
   { id: "account", label: "Account" },
   { id: "sync", label: "Sync" },
+  { id: "ai", label: "AI grading" },
+  { id: "study", label: "Study" },
+  { id: "appearance", label: "Appearance" },
+  { id: "data", label: "Data" },
   { id: "privacy", label: "Privacy" },
   // Only inside the desktop app.
   ...(desktopApp() ? [{ id: "desktop", label: "Desktop app" }] : []),
   { id: "keys", label: "Keyboard" },
+  { id: "cleanup", label: "Clean up" },
+  { id: "about", label: "About" },
 ];
 
 function GithubMark({ className }: { className?: string }) {
@@ -117,10 +117,36 @@ export function SettingsPage() {
     return () => window.removeEventListener("beforeunload", h);
   }, [dirty]);
 
+  // A click on a tab: highlight it at once, glide there, and land exactly on it even if sections above
+  // grew while scrolling (Account and Sync load on their own). The scroll spy waits until it lands.
+  const jumping = useRef<number | null>(null);
+  const jumpTo = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    setActive(id);
+    history.replaceState(null, "", `#${id}`);
+    if (jumping.current) window.clearTimeout(jumping.current);
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    let done = false;
+    const land = () => {
+      if (done) return;
+      done = true;
+      window.removeEventListener("scrollend", land);
+      window.clearTimeout(fallback);
+      document.getElementById(id)?.scrollIntoView({ block: "start" });
+      jumping.current = window.setTimeout(() => (jumping.current = null), 120);
+    };
+    window.addEventListener("scrollend", land);
+    // Browsers without scrollend, or a page that didn't need to move.
+    const fallback = window.setTimeout(land, 900);
+    jumping.current = fallback;
+  };
+
   // Highlight the section under the sticky nav.
   useEffect(() => {
     if (!saved) return;
     const onScroll = () => {
+      if (jumping.current) return;
       const top = (navRef.current?.getBoundingClientRect().bottom ?? 0) + 120;
       let cur = NAV[0].id;
       for (const n of NAV) {
@@ -136,7 +162,10 @@ export function SettingsPage() {
   }, [saved]);
 
   useEffect(() => {
-    navRef.current?.querySelector(`[data-id="${active}"]`)?.scrollIntoView({ block: "nearest", inline: "center" });
+    // Scroll only the strip. scrollIntoView would also move the page and cancel a jump in progress.
+    const nav = navRef.current;
+    const pill = nav?.querySelector<HTMLElement>(`[data-id="${active}"]`);
+    if (nav && pill && nav.scrollWidth > nav.clientWidth) nav.scrollTo({ left: pill.offsetLeft - (nav.clientWidth - pill.offsetWidth) / 2, behavior: "smooth" });
   }, [active]);
 
   // /settings#sync (from first-run setup): open at that section once it has rendered.
@@ -199,7 +228,7 @@ export function SettingsPage() {
                 aria-current={active === n.id ? "true" : undefined}
                 onClick={(e) => {
                   e.preventDefault();
-                  document.getElementById(n.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  jumpTo(n.id);
                 }}
                 className={cn(
                   "flex h-10 shrink-0 items-center rounded-full border border-transparent px-4 text-sm text-muted-foreground transition-colors hover:text-foreground md:h-8 md:px-3.5",
@@ -212,6 +241,46 @@ export function SettingsPage() {
           </nav>
 
           <div className="flex flex-col gap-12">
+            <AccountSection />
+
+            <SyncSection />
+
+            <AiSection ai={draft.ai} saved={saved} errors={shown} onChange={(ai) => setDraft({ ...draft, ai })} />
+
+            <Section id="study" title="Study">
+              <Block>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <NumberField
+                    label="Next day starts at"
+                    suffix="h"
+                    value={draft.dayStartHour}
+                    error={shown.dayStartHour}
+                    hint="Hour, 0–23. Reviews before this count toward the previous day."
+                    onChange={(v) => setDraft({ ...draft, dayStartHour: v })}
+                  />
+                  <NumberField
+                    label="Learn-ahead limit"
+                    suffix="min"
+                    value={draft.learnAheadMinutes}
+                    error={shown.learnAheadMinutes}
+                    hint="When nothing else is due, learning cards due this soon are shown early."
+                    onChange={(v) => setDraft({ ...draft, learnAheadMinutes: v })}
+                  />
+                </div>
+              </Block>
+            </Section>
+
+            <AppearanceSection />
+
+            <DataSection dbPath={saved.dbPath} mediaDir={saved.mediaDir} />
+
+            <PrivacySection />
+            <DesktopSection />
+
+            <ShortcutsSection />
+
+            <CleanupSection />
+
             <Section id="about" title="About">
               <Block>
                 <div className="flex items-center gap-3.5">
@@ -249,43 +318,6 @@ export function SettingsPage() {
                 }
               />
             </Section>
-
-            <AiSection ai={draft.ai} saved={saved} errors={shown} onChange={(ai) => setDraft({ ...draft, ai })} />
-
-            <AppearanceSection />
-
-            <Section id="study" title="Study">
-              <Block>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <NumberField
-                    label="Next day starts at"
-                    suffix="h"
-                    value={draft.dayStartHour}
-                    error={shown.dayStartHour}
-                    hint="Hour, 0–23. Reviews before this count toward the previous day."
-                    onChange={(v) => setDraft({ ...draft, dayStartHour: v })}
-                  />
-                  <NumberField
-                    label="Learn-ahead limit"
-                    suffix="min"
-                    value={draft.learnAheadMinutes}
-                    error={shown.learnAheadMinutes}
-                    hint="When nothing else is due, learning cards due this soon are shown early."
-                    onChange={(v) => setDraft({ ...draft, learnAheadMinutes: v })}
-                  />
-                </div>
-              </Block>
-            </Section>
-
-            <DataSection dbPath={saved.dbPath} mediaDir={saved.mediaDir} />
-
-            <CleanupSection />
-            <AccountSection />
-            <SyncSection />
-            <PrivacySection />
-            <DesktopSection />
-
-            <ShortcutsSection />
 
           </div>
 

@@ -56,6 +56,12 @@ jobs:
         run: |
           set -e
           for app in desktop/dist/out/mac-arm64/Etude.app desktop/dist/out/mac/Etude.app; do
+            if [ "$SIGNED" != true ]; then
+              # No signing secrets (pull requests): electron-builder leaves only the linker's ad hoc
+              # signature on the binaries, which --strict rejects. Seal the bundle ad hoc so the check
+              # still catches a broken bundle; the Developer ID checks below run on main and tags.
+              codesign --force --deep --sign - "$app"
+            fi
             codesign --verify --deep --strict --verbose=2 "$app"
             if [ "$SIGNED" = true ]; then
               info=$(codesign -dvv "$app" 2>&1)

@@ -1,11 +1,18 @@
 // Talks to the core worker. `core.call("next", { deck })` calls the engine directly;
 // `core.fetch("/api/decks")` is a drop-in `fetch` for the app's own URLs, answered by the worker.
+//
+// The collection is one SQLite file in the browser's private storage (OPFS), and only one worker
+// can hold it open. So only one tab runs the core: a tab takes the "etude-collection" lock before it
+// starts its worker. A second tab says Etude is open elsewhere and waits; "Use it here" asks the
+// other tab to let go, and that one steps aside the same way.
+const LOCK = "etude-collection";
+
 export function startCore() {
-  const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+  let worker: Worker | null = null;
   let n = 0;
   type Pending = { resolve: (v: any) => void; reject: (e: Error) => void; stream?: ReadableStreamDefaultController<Uint8Array> };
   const pending = new Map<number, Pending>();
-  worker.onmessage = (ev) => {
+  const onmessage = (ev: MessageEvent) => {
     const d = ev.data;
     const p = pending.get(d.id);
     if (!p) return;
@@ -26,15 +33,40 @@ export function startCore() {
     pending.delete(d.id);
     p.resolve(d.value);
   };
-  const send = <T>(msg: Record<string, unknown>, transfer: Transferable[] = []) => {
+
+  const started = takeCollection(async () => {
+    // Another tab asked for the collection: write out what's pending, then stop.
+    const w = worker;
+    worker = null;
+    if (!w) return;
+    const id = ++n;
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        pending.set(id, { resolve: () => resolve(), reject: () => resolve() });
+        w.postMessage({ id, method: "_flush", args: [] });
+      }),
+      new Promise((r) => setTimeout(r, 2000)),
+    ]);
+    w.terminate();
+  }).then(() => {
+    worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+    worker.onmessage = onmessage;
+    return worker;
+  });
+
+  const send = async <T>(msg: Record<string, unknown>, transfer: Transferable[] = []) => {
+    const w = await started;
+    if (worker !== w) return new Promise<T>(() => {}); // this tab let go; the page is covered
     const id = ++n;
     return new Promise<T>((resolve, reject) => {
       pending.set(id, { resolve, reject });
-      worker.postMessage({ id, ...msg }, transfer);
+      w.postMessage({ id, ...msg }, transfer);
     });
   };
   return {
-    worker,
+    get worker() {
+      return worker;
+    },
     call<T = any>(method: string, ...args: unknown[]): Promise<T> {
       return send<T>({ method, args });
     },
@@ -47,4 +79,67 @@ export function startCore() {
       return new Response(status === 204 || status === 304 ? null : out.body, { status, headers: out.headers });
     },
   };
+}
+
+/**
+ * Resolves once this tab holds the collection lock. `release` runs when another tab takes it over;
+ * after that this tab shows the "open in another tab" cover and reloads if it gets the lock back.
+ */
+function takeCollection(release: () => Promise<void>): Promise<void> {
+  const locks = (navigator as Navigator & { locks?: LockManager }).locks;
+  if (!locks || typeof BroadcastChannel === "undefined") return Promise.resolve();
+  const channel = new BroadcastChannel("etude-tabs");
+  let letGo: (() => void) | null = null;
+  let held = false;
+  let cover: HTMLElement | null = null;
+
+  const hold = (resolve: () => void) => () =>
+    new Promise<void>((done) => {
+      held = true;
+      cover?.remove();
+      cover = null;
+      letGo = done;
+      resolve();
+    });
+
+  return new Promise<void>((resolve) => {
+    channel.onmessage = async (e) => {
+      if (e.data !== "take" || !held) return;
+      held = false;
+      await release();
+      cover = showCover(true, () => channel.postMessage("take"));
+      letGo?.();
+      // The page's state went with the worker: start over if the lock comes back.
+      void locks.request(LOCK, () => {
+        location.reload();
+        return new Promise(() => {});
+      });
+    };
+    void locks.request(LOCK, { ifAvailable: true }, (lock) => {
+      if (lock) return hold(resolve)();
+      cover = showCover(false, () => channel.postMessage("take"));
+      void locks.request(LOCK, hold(resolve));
+      return undefined;
+    });
+  });
+}
+
+/** Covers the page: the collection is open in another tab. */
+function showCover(movedAway: boolean, useHere: () => void): HTMLElement {
+  const el = document.createElement("div");
+  el.setAttribute("role", "dialog");
+  el.setAttribute("aria-modal", "true");
+  el.setAttribute("aria-labelledby", "etude-tab-cover-h");
+  el.dataset.etudeTabCover = "";
+  el.style.cssText =
+    "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;padding:24px;background:var(--background,#0b0b0b);color:var(--foreground,#f2f2f2);font:15px/1.5 Inter,system-ui,sans-serif;text-align:center";
+  el.innerHTML = `<div style="max-width:340px">
+    <img src="${import.meta.env.BASE_URL}logo.svg" alt="" width="72" height="72" style="display:block;margin:0 auto 16px">
+    <h1 id="etude-tab-cover-h" style="font-size:20px;font-weight:600;margin:0 0 6px">Etude is open in another tab</h1>
+    <p style="margin:0 0 20px;opacity:.65">${movedAway ? "You moved it to another tab." : "Your collection can be open in one tab at a time."} Close that tab, or keep studying here.</p>
+    <button type="button" style="font:inherit;font-weight:600;padding:10px 22px;border:0;border-radius:999px;background:var(--foreground,#f2f2f2);color:var(--background,#0b0b0b);cursor:pointer">Use it here</button>
+  </div>`;
+  el.querySelector("button")!.addEventListener("click", useHere);
+  document.body.appendChild(el);
+  return el;
 }

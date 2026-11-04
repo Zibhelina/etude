@@ -182,9 +182,11 @@ export function SettingsPage() {
 
       {saved && draft && (
         <>
+          {/* On a phone the section tabs stick below the status bar, and this band keeps the page from scrolling under it. */}
+          <div aria-hidden className="fixed inset-x-0 top-0 z-20 h-[env(safe-area-inset-top)] bg-background md:hidden" />
           <nav
             ref={navRef}
-            className="sticky top-0 z-10 -mx-5 mb-8 flex gap-1.5 overflow-x-auto border-b bg-background px-5 py-3 [mask-image:linear-gradient(to_right,#000_85%,transparent)] [scrollbar-width:none] sm:-mx-8 sm:px-8 sm:[mask-image:none]"
+            className="sticky top-0 max-md:top-[env(safe-area-inset-top)] z-10 -mx-5 mb-8 flex gap-1.5 overflow-x-auto border-b bg-background px-5 py-3 [mask-image:linear-gradient(to_right,#000_85%,transparent)] [scrollbar-width:none] sm:-mx-8 sm:px-8 sm:[mask-image:none]"
             aria-label="Sections"
           >
             {NAV.map((n) => (

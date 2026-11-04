@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "id": "5E1A7C1D-6E0B-4C1A-9C77-4D0A3F2B9A01",
+      "name": "StoreKit",
+      "options": {}
+    }
+  ],
+  "defaultOptions": {
+    "storeKitConfigurationFileReference": {
+      "identifier": "App/Etude.storekit"
+    }
+  },
+  "testTargets": [
+    {
+      "target": {
+        "containerPath": "container:App.xcodeproj",
+        "identifier": "E7D0A0012F00000300000001",
+        "name": "AppTests"
+      }
+    }
+  ],
+  "version": 1
+}

@@ -4,9 +4,12 @@ import { storeSafeMessage } from "./platform";
 
 export class AccountApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** The Sync server's error code when there is one (sync_required, apple_other_account…). */
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -25,7 +28,8 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   }
   if (!res.ok) {
     const message = typeof data?.error === "string" ? data.error : data?.error?.message ?? res.statusText ?? "The request failed.";
-    throw new AccountApiError(storeSafeMessage(message, data?.code ?? data?.error?.code), res.status);
+    const code = data?.code ?? data?.error?.code;
+    throw new AccountApiError(storeSafeMessage(message, code), res.status, typeof code === "string" ? code : undefined);
   }
   return data as T;
 }
@@ -35,6 +39,8 @@ export interface Offering {
   market: boolean;
   quotaBytes: number;
   passkeys: { rpId: string };
+  /** App Store product ids for Sync, when the server takes App Store purchases. */
+  appleProducts?: string[];
   marketRules?: { minPrice: number; feeBps: number; currency: string; buyerCountries: string[] };
 }
 export interface Me {
@@ -47,7 +53,7 @@ export interface Me {
   creator: { country: string; chargesEnabled: boolean; payoutsEnabled: boolean } | null;
   admin: boolean;
 }
-export interface Billing { active: boolean; reason: string; status: string | null; expires: string | null; graceUntil: string | null; billing: boolean }
+export interface Billing { active: boolean; reason: string; source?: "polar" | "apple" | "manual" | null; status: string | null; expires: string | null; graceUntil: string | null; billing: boolean }
 export interface Vault { quotaBytes: number; usedBytes: number; events: number; blobs: number; hasKeys: boolean }
 export interface AccountStatus { server: string; offering: Offering | null; offline: string | null; signedIn: boolean; email: string | null; me: Me | null; billing: Billing | null; vault: Vault | null }
 export interface Device { id: string; name: string; via: string; created: string; lastSeen: string; current: boolean }
@@ -135,6 +141,10 @@ export const account = {
   deleteAccount: (confirm: string) => call<{ ok: boolean }>("POST", "/api/account/delete", { confirm }),
   checkout: (plan: "monthly" | "yearly" = "monthly") => call<{ url: string }>("POST", "/api/account/billing/checkout", { plan }),
   portal: () => call<{ url: string }>("POST", "/api/account/billing/portal"),
+  /** iOS app: the App Store products and the appAccountToken to buy them with. */
+  appleInfo: () => call<{ productIds: string[]; appAccountToken: string }>("GET", "/api/account/billing/apple"),
+  /** iOS app: hands a signed App Store transaction (JWS) to the Sync server. */
+  appleTransaction: (jws: string) => call<import("./storekit").AppleResult>("POST", "/api/account/billing/apple/transaction", { jws }),
   market: () => call<{ entries: PaidEntry[]; server: string }>("GET", "/api/account/market"),
   buy: (listing: string) => call<{ url: string; price: number; fee: number }>("POST", "/api/account/market/checkout", { listing }),
   library: () => call<{ library: LibraryItem[] }>("GET", "/api/account/library"),

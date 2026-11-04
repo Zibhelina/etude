@@ -14,7 +14,10 @@ import { etudeFetch } from "@/lib/transport";
 import { cn } from "@/lib/utils";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
 import { account, bytes, openOutside, type AccountStatus } from "@/lib/account";
-import { canShowPurchases, desktopApp, storeSafeMessage } from "@/lib/platform";
+import { canShowPurchases, desktopApp, isNativeApp, storeSafeMessage } from "@/lib/platform";
+import { NATIVE_COPY } from "@/lib/native-copy";
+import { canBuyInApp, STOREKIT_EVENT } from "@/lib/storekit";
+import { AppStoreManage, AppStorePlans } from "@/components/app-store-plans";
 
 const DEFAULT_SERVER = "https://sync.etude.study";
 
@@ -381,7 +384,7 @@ export function SyncSection() {
       )}
 
       {status && stage === "setup" && (
-        <Block title="Set up sync" description="Etude syncs through a server, or through a folder on this computer in the desktop app.">
+        <Block title="Set up sync" description={isNativeApp() ? NATIVE_COPY.syncSetup : "Etude syncs through a server, or through a folder on this computer in the desktop app."}>
           <form
             className="flex flex-col gap-4"
             onSubmit={(e) => {
@@ -390,7 +393,7 @@ export function SyncSection() {
             }}
           >
             <TextInput label="Server" value={server} onChange={setServer} placeholder={DEFAULT_SERVER} mono autoComplete="url" hint="The sync server address. Change it to use one of your own." />
-            {!(globalThis as any).__etudeLocal && <TextInput label="Folder (optional)" value={folder} onChange={setFolder} placeholder="/home/you/Etude" mono autoComplete="off" hint="Desktop app only. Leave empty to sync through the server." action={<ChooseFolder onPick={setFolder} />} />}
+            {!(globalThis as any).__etudeLocal && !isNativeApp() && <TextInput label="Folder (optional)" value={folder} onChange={setFolder} placeholder="/home/you/Etude" mono autoComplete="off" hint="Desktop app only. Leave empty to sync through the server." action={<ChooseFolder onPick={setFolder} />} />}
             {problem && <Notice>{problem}</Notice>}
             <div>
               <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
@@ -590,7 +593,7 @@ export function SyncSection() {
         <>
           <Block
             title="Connection"
-            description={status.kind === "folder" ? "Syncing through a folder on this computer." : "Syncing through your server."}
+            description={status.kind === "folder" ? (isNativeApp() ? NATIVE_COPY.syncFolder : "Syncing through a folder on this computer.") : "Syncing through your server."}
           >
             {problem && <Notice>{problem}</Notice>}
             <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm">
@@ -679,6 +682,14 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
   const pct = Math.min(100, (used / quota) * 100);
   const purchases = canShowPurchases();
   const billingOn = !!st.offering?.billing;
+  // iOS app: Sync is bought through the App Store (prices from StoreKit), never on the website.
+  const appStore = billingOn && !purchases && canBuyInApp() && !!st.offering?.appleProducts?.length;
+  useEffect(() => {
+    if (!appStore) return;
+    const h = () => void onChanged();
+    window.addEventListener(STOREKIT_EVENT, h);
+    return () => window.removeEventListener(STOREKIT_EVENT, h);
+  }, [appStore, onChanged]);
   const open = async (fn: () => Promise<{ url: string }>) => {
     setBusy(true);
     try {
@@ -689,7 +700,7 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
       setBusy(false);
     }
   };
-  const when = b?.expires ? (reason === "active" ? `Renews ${date(b.expires)}` : reason === "canceled_until_end" ? `Ends ${date(b.expires)}` : reason === "grace" ? `Syncing until ${date(b.graceUntil)}` : reason === "expired" || reason === "revoked" ? `Ended ${date(b.expires)}` : "") : "";
+  const when = b?.expires ? (reason === "active" ? `Renews ${date(b.expires)}` : reason === "canceled_until_end" ? `Ends ${date(b.expires)}` : reason === "grace" ? `Syncing until ${date(b.graceUntil)}` : reason === "expired" || reason === "revoked" ? date(b.expires) : "") : "";
   return (
     <Block title="Etude Sync" description={!billingOn ? "This server doesn't charge for Sync." : canShowPurchases() ? "US$5 a month or US$40 a year. 1 GB of end-to-end encrypted storage." : "1 GB of end-to-end encrypted storage."}>
       <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm" data-plan>
@@ -708,20 +719,22 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
           </div>
         </dd>
       </dl>
+      {appStore && !active && <AppStorePlans productIds={st.offering!.appleProducts!} onActive={onChanged} />}
+      {appStore && active && b?.source === "apple" && <AppStoreManage onChanged={onChanged} />}
       <div className="flex flex-wrap items-center gap-2">
         {billingOn && purchases && !active && (
           <Button size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => void open(account.checkout)}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />} Subscribe on etude.study
           </Button>
         )}
-        {billingOn && purchases && b?.status && (
+        {billingOn && purchases && b?.status && b.source !== "apple" && (
           <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => void open(account.portal)}>
             <ExternalLink className="size-4" /> Manage subscription
           </Button>
         )}
         <Button variant="ghost" size="sm" className="h-10 md:h-8" onClick={() => void onChanged()}>Refresh</Button>
       </div>
-      {billingOn && !purchases && !active && <p className="text-xs text-muted-foreground">Sync isn't active on this account.</p>}
+      {billingOn && !purchases && !appStore && !active && <p className="text-xs text-muted-foreground">Sync isn't active on this account.</p>}
     </Block>
   );
 }

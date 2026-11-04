@@ -56,6 +56,8 @@ export function accountRoutes(app: Hono, e: Etude) {
     return c.json(await a.syncCheckout(plan === "yearly" ? "yearly" : "monthly"));
   });
   app.post("/api/account/billing/portal", async (c) => c.json(await a.billingPortal()));
+  app.get("/api/account/billing/apple", async (c) => c.json(await a.appleInfo()));
+  app.post("/api/account/billing/apple/transaction", async (c) => c.json(await a.appleTransaction(need((await body(c)).jws, "jws"))));
 
   app.get("/api/account/market", async (c) => c.json(await a.paidIndex()));
   app.post("/api/account/market/checkout", async (c) => c.json(await a.checkout(need((await body(c)).listing, "listing"))));

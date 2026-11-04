@@ -4,9 +4,14 @@ import { App } from "@capacitor/app";
 import { Keyboard } from "@capacitor/keyboard";
 import { SplashScreen } from "@capacitor/splash-screen";
 import { StatusBar, Style } from "@capacitor/status-bar";
+import { registerPlugin } from "@capacitor/core";
 
 const cap = (globalThis as { Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string } }).Capacitor;
 export const native = !!cap?.isNativePlatform?.();
+
+// StoreKit 2 for Etude Sync (ios/App/App/EtudeStorePlugin.swift), handed to web/src/lib/storekit.ts.
+// Set when this module loads, before the web app starts.
+if (native && cap?.getPlatform?.() === "ios") (globalThis as { __etudeStoreKit?: unknown }).__etudeStoreKit = registerPlugin("EtudeStore");
 
 /** etude://study?deck=X and https://etude.study/app/study?deck=X both open /study?deck=X. */
 export function routeOf(url: string): string | null {

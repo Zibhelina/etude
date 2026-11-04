@@ -293,6 +293,15 @@ async function openOpfs(path: string): Promise<SqlConnection> {
   return new WasmConnection(s, { db });
 }
 
+/** In a browser: replaces a collection file in OPFS with an SQLite image (restoring a backup). Close its connection first. */
+export async function importOpfsImage(path: string, bytes: Uint8Array): Promise<void> {
+  if (!inBrowser()) throw new Error("importOpfsImage only runs in a browser");
+  const s = await loadSqliteWasm();
+  opfsPool ??= installPool(s);
+  const pool = await opfsPool;
+  await pool.importDb(path, bytes);
+}
+
 /** A collection file: OPFS in a browser; under Node, kept in WebAssembly memory and written back after every commit. */
 export async function openWasm(path: string): Promise<SqlConnection> {
   if (path === ":memory:") return createWasmConnection();

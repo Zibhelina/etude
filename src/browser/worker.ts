@@ -4,7 +4,8 @@
 //    desktop server uses and answers { status, headers, body }. A text/event-stream answer comes
 //    back in pieces ({ id, chunk }) and ends with { id, end }.
 import "./shims/globals.ts";
-import { existsSync, flush, mkdirSync, mountOpfs, readFileSync, writeFileSync } from "./shims/vfs.ts";
+import { existsSync, filesUnder, flush, mkdirSync, mountOpfs, readFileSync, rmSync, writeFileSync } from "./shims/vfs.ts";
+import { unzipSync, zipSync, type Zippable } from "fflate";
 import { Buffer } from "buffer";
 import { localFrame } from "./frame-local.ts";
 
@@ -39,6 +40,64 @@ function setEnv(name: string, value: string | null) {
   if (value) process.env[name] = value.trim();
   else delete process.env[name];
   return { name, set: !!value };
+}
+
+// A backup of the whole collection, for the browser edition where there's no file to copy: one zip
+// with the SQLite database (cards, history, settings) and the media folder. API keys stay out.
+const SQLITE_MAGIC = "SQLite format 3\u0000";
+
+function backup(): Uint8Array {
+  const zip: Zippable = {
+    "etude-backup.json": new TextEncoder().encode(JSON.stringify({ etudeBackup: 1, created: new Date().toISOString() }) + "\n"),
+    "etude.db": etude.db.sql.serialize(),
+  };
+  for (const [rel, data] of filesUnder(etude.mediaDir)) zip[`media/${rel}`] = [data, { level: 0 }];
+  return zipSync(zip, { level: 6 });
+}
+
+/** Replaces the collection with a backup. The page reloads afterwards. Sync starts over: set it up again. */
+async function restore(bytes: Uint8Array): Promise<{ media: number }> {
+  let files: Record<string, Uint8Array>;
+  try {
+    files = unzipSync(bytes);
+  } catch {
+    throw new Error("that file isn't an Etude backup (not a zip)");
+  }
+  const image = files["etude.db"];
+  if (!image || new TextDecoder().decode(image.subarray(0, 16)) !== SQLITE_MAGIC) throw new Error("that file isn't an Etude backup (no etude.db inside)");
+  // Check it opens as a collection, and drop its sync state: this device would otherwise reuse the
+  // identity of the one the backup came from.
+  const { createWasmConnection, importOpfsImage } = await import("../core/sql-wasm.ts");
+  const probe = await createWasmConnection({ bytes: image });
+  let clean: Uint8Array;
+  try {
+    const tables = (probe.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((r) => r.name);
+    if (!tables.includes("items") || !tables.includes("cards")) throw new Error("that backup has no Etude collection in it");
+    for (const t of tables) if (t.startsWith("sync_")) probe.exec(`DELETE FROM "${t}"`);
+    clean = probe.serialize!();
+  } finally {
+    probe.close();
+  }
+  const dbPath = `${DATA}/etude.db`;
+  const mediaDir = etude.mediaDir as string;
+  etude.close();
+  etude = null;
+  app = null;
+  await importOpfsImage(dbPath, clean);
+  rmSync(mediaDir, { recursive: true, force: true });
+  mkdirSync(mediaDir);
+  let media = 0;
+  for (const [name, data] of Object.entries(files)) {
+    if (!name.startsWith("media/") || name.endsWith("/")) continue;
+    const rel = name.slice("media/".length);
+    if (rel.split("/").some((p) => p === ".." || p === "")) continue;
+    const at = `${mediaDir}/${rel}`;
+    mkdirSync(at.replace(/\/[^/]*$/, ""));
+    writeFileSync(at, data);
+    media++;
+  }
+  await flush();
+  return { media };
 }
 
 async function boot() {
@@ -97,6 +156,11 @@ self.onmessage = async (ev: MessageEvent) => {
     else if (method === "_setEnv") value = setEnv(String(args[0]), args[1] == null ? null : String(args[1]));
     else if (method === "_media") value = existsSync(`${etude.mediaDir}/${args[0]}`);
     else if (method === "_sql") value = etude.db.all(args[0] as string, ...(args.slice(1) as any[]));
+    else if (method === "_backup") {
+      const zip = backup();
+      post({ id, ok: true, value: zip }, [zip.buffer as ArrayBuffer]);
+      return;
+    } else if (method === "_restore") value = await restore(new Uint8Array(args[0] as ArrayBuffer));
     else if (typeof etude[method] === "function") value = await etude[method](...args);
     else throw new Error(`no such method: ${method}`);
     if (method !== "_flush") await flush();

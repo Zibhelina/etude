@@ -13,7 +13,7 @@ import { relative } from "@/lib/api";
 import { etudeFetch } from "@/lib/transport";
 import { cn } from "@/lib/utils";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
-import { account, bytes, openOutside, type AccountStatus } from "@/lib/account";
+import { account, AccountApiError, bytes, openOutside, type AccountStatus } from "@/lib/account";
 import { hasWebPortal, storageNote, storeSource } from "@/lib/billing-ui";
 import { canShowPurchases, desktopApp, isNativeApp, storeSafeMessage } from "@/lib/platform";
 import { NATIVE_COPY } from "@/lib/native-copy";
@@ -75,7 +75,8 @@ async function callSync<T>(method: "GET" | "POST", path: string, body?: Record<s
     const err = (data as { error?: unknown } | null)?.error;
     const nested = err && typeof err === "object" ? (err as { message?: unknown }).message : undefined;
     const detail = typeof err === "string" ? err : typeof nested === "string" ? nested : res.statusText;
-    throw new Error(detail || "The sync request failed.");
+    const code = (data as { code?: string; error?: { code?: string } } | null)?.code ?? (typeof err === "object" && err ? (err as { code?: string }).code : undefined);
+    throw new AccountApiError(detail || "The sync request failed.", res.status, code);
   }
   return data as T;
 }
@@ -87,6 +88,7 @@ export function SyncSection() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [reauth, setReauth] = useState(false);
 
   const [server, setServer] = useState(DEFAULT_SERVER);
   const [folder, setFolder] = useState("");
@@ -185,6 +187,11 @@ export function SyncSection() {
     try {
       return await fn();
     } catch (e) {
+      if (name === "unlock" && e instanceof AccountApiError && e.code === "reauth_required") {
+        setReauth(true);
+        setCodeSent(false);
+        setEmail(status?.email ?? acct?.email ?? "");
+      }
       setError(errorMessage(e));
       return null;
     } finally {
@@ -219,6 +226,7 @@ export function SyncSection() {
     if (s) {
       setStatus(s);
       if (s.signedIn) {
+        setReauth(false);
         setCodeSent(false);
         setAcctLoaded(false);
         await loadAccount();
@@ -320,6 +328,7 @@ export function SyncSection() {
     if (s) {
       seenPlan.current = false;
       setStatus(s);
+      setReauth(false);
       setCodeSent(false);
       setCode("");
       setPassword("");
@@ -358,7 +367,7 @@ export function SyncSection() {
       ? "setup"
       : recoveryKey
         ? "recovery"
-        : status.kind === "cloud" && !status.signedIn
+        : status.kind === "cloud" && (!status.signedIn || reauth)
           ? codeSent
             ? "code"
             : "signin"
@@ -447,7 +456,7 @@ export function SyncSection() {
                 void start();
               }}
             >
-              <StepTitle title="Turn on Etude Sync" lead={status.configured && status.kind === "cloud" && status.server && status.server !== DEFAULT_SERVER ? <>Codes are sent by <span className="font-mono text-[13px] text-foreground/85">{status.server}</span>.</> : "We'll email you a code. No account password to remember."} />
+              <StepTitle title={reauth ? "Confirm it's you" : "Turn on Etude Sync"} lead={reauth ? "Sign in again before unlocking sync. Then enter your sync password or recovery key." : status.configured && status.kind === "cloud" && status.server && status.server !== DEFAULT_SERVER ? <>Codes are sent by <span className="font-mono text-[13px] text-foreground/85">{status.server}</span>.</> : "We'll email you a code. No account password to remember."} />
               {(!status.configured ? !folder.trim() : status.kind === "cloud") && (
                 <TextInput label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" inputMode="email" placeholder="you@example.com" />
               )}

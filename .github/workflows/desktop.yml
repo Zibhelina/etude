@@ -39,16 +39,40 @@ jobs:
       - name: Installers
         run: node desktop/build.ts
         env:
-          # Empty until the Developer ID certificate exists; then the Mac app is signed and notarized
-          # instead of signed ad hoc, and updates itself.
-          CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # Only the Mac build gets the Apple secrets, and never a pull request's. Without them (or with
+          # only the certificate) the build still works: signed ad hoc, or signed but not notarized.
+          # docs/signing.md lists what each secret holds.
+          CSC_LINK: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.MAC_CERTIFICATE || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.MAC_CERTIFICATE_PASSWORD || '' }}
+          APPLE_API_KEY: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.APPLE_API_KEY || '' }}
+          APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.APPLE_API_ISSUER || '' }}
       - name: The Mac apps' signatures hold
         if: runner.os == 'macOS'
-        run: for app in desktop/dist/out/mac-arm64/Etude.app desktop/dist/out/mac/Etude.app; do codesign --verify --deep --strict --verbose=2 "$app"; done
+        env:
+          SIGNED: ${{ github.event_name != 'pull_request' && secrets.MAC_CERTIFICATE != '' }}
+          NOTARIZED: ${{ github.event_name != 'pull_request' && secrets.MAC_CERTIFICATE != '' && secrets.APPLE_API_KEY != '' }}
+        run: |
+          set -e
+          for app in desktop/dist/out/mac-arm64/Etude.app desktop/dist/out/mac/Etude.app; do
+            codesign --verify --deep --strict --verbose=2 "$app"
+            if [ "$SIGNED" = true ]; then
+              info=$(codesign -dvv "$app" 2>&1)
+              echo "$info" | grep -E "^(Authority|TeamIdentifier)="
+              echo "$info" | grep -q "^Authority=Developer ID Application"
+              echo "$info" | grep -q "flags=.*runtime"
+            fi
+            if [ "$NOTARIZED" = true ]; then
+              xcrun stapler validate "$app"
+              spctl --assess --type execute --verbose=4 "$app"
+            fi
+          done
+          if [ "$NOTARIZED" = true ]; then
+            for dmg in desktop/dist/out/Etude-mac-*.dmg; do
+              xcrun stapler validate "$dmg"
+              spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"
+            done
+          fi
       - name: The packaged app runs from outside the repo
         run: node desktop/smoke.ts
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

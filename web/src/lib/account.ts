@@ -1,5 +1,6 @@
 // Client for /api/account/*: the Etude account, Sync plan, purchased decks and selling.
 import { etudeFetch } from "./transport";
+import { storeSafeMessage } from "./platform";
 
 export class AccountApiError extends Error {
   status: number;
@@ -22,7 +23,10 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   } catch {
     data = null;
   }
-  if (!res.ok) throw new AccountApiError(typeof data?.error === "string" ? data.error : data?.error?.message ?? res.statusText ?? "The request failed.", res.status);
+  if (!res.ok) {
+    const message = typeof data?.error === "string" ? data.error : data?.error?.message ?? res.statusText ?? "The request failed.";
+    throw new AccountApiError(storeSafeMessage(message, data?.code ?? data?.error?.code), res.status);
+  }
   return data as T;
 }
 

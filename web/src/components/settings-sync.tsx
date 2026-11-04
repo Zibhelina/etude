@@ -14,7 +14,7 @@ import { etudeFetch } from "@/lib/transport";
 import { cn } from "@/lib/utils";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
 import { account, bytes, openOutside, type AccountStatus } from "@/lib/account";
-import { canShowPurchases, desktopApp } from "@/lib/platform";
+import { canShowPurchases, desktopApp, storeSafeMessage } from "@/lib/platform";
 
 const DEFAULT_SERVER = "https://sync.etude.study";
 
@@ -49,7 +49,7 @@ export interface SyncProgress {
 type UnlockResponse = { recoveryKey?: string; status: SyncStatus };
 type Stage = "setup" | "signin" | "code" | "unlock" | "recovery" | "ready";
 
-const errorMessage = (e: unknown) => (e instanceof Error ? e.message : "The request failed.");
+const errorMessage = (e: unknown) => (e instanceof Error ? storeSafeMessage(e.message, (e as { code?: string }).code) : "The request failed.");
 const date = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "");
 
 async function callSync<T>(method: "GET" | "POST", path: string, body?: Record<string, unknown>): Promise<T> {
@@ -345,7 +345,8 @@ export function SyncSection() {
   const newVault = !!status && !status.hasKeys;
   const syncing = !!status && (status.busy || busy === "now");
   // One notice: this form's own error first, then the last sync run's. None while a new run is going.
-  const problem = syncing ? null : (error ?? status?.error ?? null);
+  const rawProblem = syncing ? null : (error ?? status?.error ?? null);
+  const problem = rawProblem && storeSafeMessage(rawProblem);
   const stateLabel = syncing
     ? "Syncing…"
     : problem
@@ -665,6 +666,8 @@ const REASON: Record<string, string> = {
   revoked: "Ended",
   none: "Not subscribed",
 };
+// The store apps say what the account has, never how to pay for it.
+const NATIVE_REASON: Record<string, string> = { none: "Not active", past_due: "Paused", grace: "Syncing for a few more days" };
 
 function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void> }) {
   const [busy, setBusy] = useState(false);
@@ -692,7 +695,7 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
       <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm" data-plan>
         <dt className="text-muted-foreground">Plan</dt>
         <dd className={cn(active ? "text-foreground" : "text-muted-foreground")} data-plan-state={reason}>
-          {REASON[reason] ?? reason}
+          {(!purchases && NATIVE_REASON[reason]) || REASON[reason] || reason}
           {when && <span className="text-muted-foreground"> · {when}</span>}
         </dd>
         <dt className="text-muted-foreground">Storage</dt>

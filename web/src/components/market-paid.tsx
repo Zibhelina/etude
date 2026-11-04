@@ -205,7 +205,7 @@ export function LibraryView() {
   if (!lib.length)
     return (
       <div className="rounded-xl border px-5 py-10 text-center text-sm text-muted-foreground" data-library-empty>
-        Decks you buy appear here, on every device signed in to your account.
+        {canShowPurchases() ? "Decks you buy appear here, on every device signed in to your account." : "Decks on your Etude account appear here."}
       </div>
     );
   const install = async (l: LibraryItem) => {

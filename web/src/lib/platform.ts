@@ -28,6 +28,25 @@ export const isIOSApp = () => nativePlatform() === "ios";
 /** Prices, buy buttons and links to checkout or billing pages. Off in the store apps. */
 export const canShowPurchases = () => !isNativeApp();
 
+// The Sync server's messages are written for the website ("needs an active subscription", "Buy this
+// deck"). In the store apps they become plain account facts, with nothing about buying.
+const STORE_SAFE: Record<string, string> = {
+  sync_required: "Sync isn't active on this account. Your local data is untouched.",
+  no_subscription: "Sync isn't active on this account.",
+  already_subscribed: "Sync is already active on this account.",
+  not_owned: "This deck isn't on your account.",
+};
+
+/** A server or sync error message as the app may show it: unchanged on desktop and the web, neutral in the store apps. */
+export function storeSafeMessage(message: string, code?: string | null, native = isNativeApp()): string {
+  if (!native) return message;
+  if (code && STORE_SAFE[code]) return STORE_SAFE[code];
+  if (!/subscri|\bbuy\b|purchas|checkout|billing|pric(e|ing)|US\$/i.test(message)) return message;
+  if (/paused/i.test(message)) return "Sync is paused on this account. Your local data is untouched.";
+  if (/sync/i.test(message)) return STORE_SAFE.sync_required;
+  return "This isn't available on this account.";
+}
+
 /**
  * How the desktop app gets new versions: "self" downloads and installs on restart, "link" points to
  * the download, "system" comes with the system's updates (the AUR), "none" is a checkout (git).

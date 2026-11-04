@@ -18,7 +18,7 @@ import { ShortcutsSection } from "@/components/settings-shortcuts";
 import { SyncSection } from "@/components/settings-sync";
 import { AccountSection } from "@/components/settings-account";
 import { DesktopSection } from "@/components/settings-desktop";
-import { desktopApp } from "@/lib/platform";
+import { canShowPurchases, desktopApp } from "@/lib/platform";
 import { Block, NumberField, Section } from "@/components/settings-ui";
 import { draftOf, normalize, validate, type SettingsDraft, type SettingsResponse } from "@/components/settings-model";
 
@@ -221,7 +221,8 @@ export function SettingsPage() {
                 </div>
                 <UpdateSettingsRow />
                 <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm" data-about-links>
-                  {ABOUT_LINKS.map((l) => (
+                  {/* The website sells Sync and paid decks, so the store apps don't link to it. */}
+                  {ABOUT_LINKS.filter((l) => canShowPurchases() || l.label !== "Website").map((l) => (
                     <a key={l.href} href={l.href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground">
                       <l.icon className="size-3.5" />
                       {l.label}

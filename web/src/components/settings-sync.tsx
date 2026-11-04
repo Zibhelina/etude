@@ -1,5 +1,5 @@
-// Settings → Sync: the Sync plan and storage, then connect a server or folder, sign in, unlock the vault
-// and sync on demand.
+// Settings → Sync: one card that walks through email → plan (where Sync is bought) → password, then
+// shows what Sync is doing: last sync, plan, storage, and Sync now / Manage / Sign out.
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Check, CircleAlert, Copy, ExternalLink, Loader2, LogOut, RefreshCw } from "lucide-react";
@@ -101,8 +101,11 @@ export function SyncSection() {
   const [recoveryConfirmed, setRecoveryConfirmed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [confirmOff, setConfirmOff] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
+  const [acctLoaded, setAcctLoaded] = useState(false);
   const seeded = useRef(false);
   const suggested = useRef<string | null>(null);
+  const seenPlan = useRef(false);
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -119,6 +122,7 @@ export function SyncSection() {
 
   const loadAccount = useCallback(async () => {
     setAcct(await account.status().catch(() => null));
+    setAcctLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -188,28 +192,6 @@ export function SyncSection() {
     }
   };
 
-  const connect = async () => {
-    if (busy) return;
-    const url = server.trim();
-    if (!url) {
-      setError("Enter the sync server address.");
-      return;
-    }
-    try {
-      const u = new URL(url);
-      if (u.protocol !== "https:" && u.protocol !== "http:") throw new Error();
-    } catch {
-      setError("Enter a full http or https address.");
-      return;
-    }
-    const f = folder.trim();
-    const s = await withBusy("setup", () => callSync<SyncStatus>("POST", "/api/sync/setup", f ? { folder: f } : { server: url }));
-    if (s) {
-      setStatus(s);
-      setCodeSent(false);
-    }
-  };
-
   const signin = async () => {
     if (busy) return;
     const addr = email.trim();
@@ -236,8 +218,43 @@ export function SyncSection() {
     setCode("");
     if (s) {
       setStatus(s);
-      if (s.signedIn) setCodeSent(false);
+      if (s.signedIn) {
+        setCodeSent(false);
+        setAcctLoaded(false);
+        await loadAccount();
+        window.dispatchEvent(new Event(ACCOUNT_EVENT));
+      }
     }
+  };
+
+  /** The first step in one go: connect to the server (or folder), then send the code. */
+  const start = async () => {
+    if (busy || !status) return;
+    if (!status.configured) {
+      const f = folder.trim();
+      if (!f) {
+        if (!email.trim()) {
+          setError("Enter your email address.");
+          return;
+        }
+      }
+      const url = server.trim() || DEFAULT_SERVER;
+      if (!f) {
+        try {
+          const u = new URL(url);
+          if (u.protocol !== "https:" && u.protocol !== "http:") throw new Error();
+        } catch {
+          setError("Enter a full http or https server address.");
+          return;
+        }
+      }
+      const s = await withBusy("setup", () => callSync<SyncStatus>("POST", "/api/sync/setup", f ? { folder: f } : { server: url }));
+      if (!s) return;
+      setStatus(s);
+      setCodeSent(false);
+      if (s.kind !== "cloud" || s.signedIn) return;
+    }
+    await signin();
   };
 
   const unlock = async () => {
@@ -273,6 +290,8 @@ export function SyncSection() {
         setRecoveryConfirmed(false);
         setCopied(false);
       }
+      // "Start syncing" means it: run the first sync right away instead of waiting for the background one.
+      void callSync<SyncStatus>("POST", "/api/sync/now", {}).then(setStatus, () => void load(true));
     }
   };
 
@@ -299,6 +318,7 @@ export function SyncSection() {
     setConfirmOff(false);
     const s = await withBusy("off", () => callSync<SyncStatus>("POST", "/api/sync/off", {}));
     if (s) {
+      seenPlan.current = false;
       setStatus(s);
       setCodeSent(false);
       setCode("");
@@ -349,7 +369,9 @@ export function SyncSection() {
   const newVault = !!status && !status.hasKeys;
   const syncing = !!status && (status.busy || busy === "now");
   // One notice: this form's own error first, then the last sync run's. None while a new run is going.
-  const rawProblem = syncing ? null : (error ?? status?.error ?? null);
+  // A run that failed for want of a plan says so until the next run; once the plan is active that's stale.
+  const lastRunError = status?.error && acct?.me?.sync.active && /needs an active subscription/i.test(status.error) ? null : (status?.error ?? null);
+  const rawProblem = syncing ? null : (error ?? lastRunError);
   const problem = rawProblem && storeSafeMessage(rawProblem);
   const stateLabel = syncing
     ? "Syncing…"
@@ -361,9 +383,38 @@ export function SyncSection() {
           ? "Not synced yet"
           : "Up to date";
 
+  // Etude Sync on a server that charges: the plan step comes between the code and the password.
+  const billingOn = !!acct?.offering?.billing;
+  const planActive = !!acct?.me?.sync.active;
+  const cloud = status?.kind === "cloud";
+  const needsPlan = cloud && billingOn && !planActive;
+  const waitingForAccount = !!status && cloud && status.signedIn && !status.unlocked && !acctLoaded;
+  const flow: Flow = stage === "setup" || stage === "signin" || stage === "code"
+    ? "email"
+    : stage === "unlock" && waitingForAccount
+      ? "loading"
+      : stage === "unlock" && needsPlan
+        ? "plan"
+        : stage === "unlock"
+          ? "password"
+          : stage === "recovery"
+            ? "recovery"
+            : "ready";
+  // The plan step shows in the progress only where Sync is bought, and only until it's paid.
+  // Before sign-in it shows unless the server is known not to charge (or a folder is the choice).
+  const folderSetup = status?.kind === "folder" || (!status?.configured && !!folder.trim());
+  // Once the plan step was part of this setup it stays in the bar (as done) until the end.
+  const showPlan = !folderSetup && (seenPlan.current || flow === "plan" || !acctLoaded || (billingOn && !planActive));
+  if (showPlan && flow !== "ready") seenPlan.current = true;
+  const steps: Flow[] = showPlan ? ["email", "plan", "password"] : ["email", "password"];
+
+  const afterPlan = useCallback(() => {
+    void loadAccount();
+    window.dispatchEvent(new Event(ACCOUNT_EVENT));
+  }, [loadAccount]);
+
   return (
-    <Section id="sync" title="Sync" description="Keep the same collection on more than one device. Sign in, unlock it with your sync password, and changes sync in the background.">
-      {acct?.signedIn && acct.me && status?.kind !== "folder" && <Plan st={acct} onChanged={loadAccount} />}
+    <Section id="sync" title="Sync" description="The same collection on every device, end-to-end encrypted: only your devices can read it.">
       {loading && !status && !loadError && (
         <Block>
           <div className="flex flex-col gap-3">
@@ -384,156 +435,131 @@ export function SyncSection() {
         </Block>
       )}
 
-      {status && stage === "setup" && (
-        <Block title="Set up sync" description={isNativeApp() ? NATIVE_COPY.syncSetup : "Etude syncs through a server, or through a folder on this computer in the desktop app."}>
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void connect();
-            }}
-          >
-            <TextInput label="Server" value={server} onChange={setServer} placeholder={DEFAULT_SERVER} mono autoComplete="url" hint="The sync server address. Change it to use one of your own." />
-            {!(globalThis as any).__etudeLocal && !isNativeApp() && <TextInput label="Folder (optional)" value={folder} onChange={setFolder} placeholder="/home/you/Etude" mono autoComplete="off" hint="Desktop app only. Leave empty to sync through the server." action={<ChooseFolder onPick={setFolder} />} />}
-            {problem && <Notice>{problem}</Notice>}
-            <div>
-              <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
-                {busy === "setup" && <Loader2 className="size-4 animate-spin" />}
-                Connect
-              </Button>
-            </div>
-          </form>
-        </Block>
-      )}
+      {status && flow !== "ready" && flow !== "recovery" && (
+        <Block>
+          <StepBar steps={steps} current={flow === "loading" ? "plan" : flow} />
 
-      {status && stage === "signin" && (
-        <Block
-          title="Sign in"
-          description={
-            status.kind === "folder"
-              ? "Etude emails a one-time code to confirm the address."
-              : <>Codes are sent by <span className="font-mono text-[13px] text-foreground/85">{status.server ?? "the sync server"}</span>.</>
-          }
-        >
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void signin();
-            }}
-          >
-            <TextInput label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" inputMode="email" placeholder="you@example.com" />
-            {problem && <Notice>{problem}</Notice>}
-            <div>
-              <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
-                {busy === "signin" && <Loader2 className="size-4 animate-spin" />}
-                Send code
-              </Button>
-            </div>
-          </form>
-        </Block>
-      )}
+          {flow === "email" && stage !== "code" && (
+            <form
+              className="flex flex-col gap-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void start();
+              }}
+            >
+              <StepTitle title="Turn on Etude Sync" lead={status.configured && status.kind === "cloud" && status.server && status.server !== DEFAULT_SERVER ? <>Codes are sent by <span className="font-mono text-[13px] text-foreground/85">{status.server}</span>.</> : "We'll email you a code. No account password to remember."} />
+              {(!status.configured ? !folder.trim() : status.kind === "cloud") && (
+                <TextInput label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" inputMode="email" placeholder="you@example.com" />
+              )}
+              {!status.configured && (
+                <details className="group text-sm" open={advanced} onToggle={(e) => setAdvanced((e.target as HTMLDetailsElement).open)}>
+                  <summary className="cursor-pointer select-none text-muted-foreground hover:text-foreground">Your own server{!(globalThis as any).__etudeLocal && !isNativeApp() ? " or a folder" : ""}</summary>
+                  <div className="mt-3 flex flex-col gap-4">
+                    <p className="text-muted-foreground">{isNativeApp() ? NATIVE_COPY.syncSetup : "Etude syncs through a server, or through a folder on this computer in the desktop app."}</p>
+                    <TextInput label="Server" value={server} onChange={setServer} placeholder={DEFAULT_SERVER} mono autoComplete="url" hint="Leave it as it is to use Etude Sync." />
+                    {!(globalThis as any).__etudeLocal && !isNativeApp() && <TextInput label="Folder (optional)" value={folder} onChange={setFolder} placeholder="/home/you/Etude" mono autoComplete="off" hint="Desktop app only. Syncs through this folder instead of a server." action={<ChooseFolder onPick={setFolder} />} />}
+                  </div>
+                </details>
+              )}
+              {problem && <Notice>{problem}</Notice>}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
+                  {(busy === "setup" || busy === "signin") && <Loader2 className="size-4 animate-spin" />}
+                  {!status.configured && folder.trim() ? "Use this folder" : "Send code"}
+                </Button>
+                {status.configured && (
+                  <Button type="button" variant="ghost" size="sm" className="h-10 md:h-8" disabled={!!busy} onClick={() => void signOut()}>
+                    Change server
+                  </Button>
+                )}
+              </div>
+            </form>
+          )}
 
-      {status && stage === "code" && (
-        <Block title="Enter the code" description={<>Sent to <span className="text-foreground/90">{email.trim() || status.email}</span>. It works for 15 minutes.</>}>
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void verify();
-            }}
-          >
-            <TextInput label="Sign-in code" value={code} onChange={setCode} autoComplete="one-time-code" inputMode="numeric" placeholder="6-digit code" mono />
-            {problem && <Notice>{problem}</Notice>}
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
-                {busy === "verify" && <Loader2 className="size-4 animate-spin" />}
-                Verify
-              </Button>
-              <Button type="button" variant="ghost" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy} onClick={() => void signin()}>
-                Send again
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-10 gap-1.5 md:h-8"
-                disabled={!!busy}
-                onClick={() => {
-                  setCodeSent(false);
-                  setCode("");
-                  setError(null);
-                }}
-              >
-                Use another email
-              </Button>
-            </div>
-          </form>
-        </Block>
-      )}
+          {stage === "code" && (
+            <form
+              className="flex flex-col gap-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void verify();
+              }}
+            >
+              <StepTitle title="Enter the code" lead={<>Sent to <span className="text-foreground/90">{email.trim() || status.email}</span>. It works for 15 minutes.</>} />
+              <TextInput label="Sign-in code" value={code} onChange={setCode} autoComplete="one-time-code" inputMode="numeric" placeholder="6-digit code" mono />
+              {problem && <Notice>{problem}</Notice>}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
+                  {busy === "verify" && <Loader2 className="size-4 animate-spin" />}
+                  Verify
+                </Button>
+                <Button type="button" variant="ghost" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy} onClick={() => void signin()}>
+                  Send again
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-10 gap-1.5 md:h-8"
+                  disabled={!!busy}
+                  onClick={() => {
+                    setCodeSent(false);
+                    setCode("");
+                    setError(null);
+                  }}
+                >
+                  Use another email
+                </Button>
+              </div>
+            </form>
+          )}
 
-      {status && stage === "unlock" && (
-        <Block
-          title={newVault ? "Create a sync password" : "Unlock sync"}
-          description={
-            newVault
-              ? "Choose a password for this collection. A recovery key is shown once after the vault is created."
-              : <>Signed in{status.email ? <> as <span className="text-foreground/90">{status.email}</span></> : null}. Enter the sync password for this collection.</>
-          }
-        >
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void unlock();
-            }}
-          >
-            {status.hasKeys && useRecovery ? (
-              <>
-                <TextInput label="Recovery key" value={recoveryInput} onChange={setRecoveryInput} autoComplete="off" mono placeholder="Your recovery key" />
-                {problem && <Notice>{problem}</Notice>}
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
-                    {busy === "unlock" && <Loader2 className="size-4 animate-spin" />}
-                    Unlock
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-10 gap-1.5 md:h-8"
-                    disabled={!!busy}
-                    onClick={() => {
-                      setUseRecovery(false);
-                      setRecoveryInput("");
-                      setError(null);
-                    }}
-                  >
-                    Use the password
-                  </Button>
-                  <Button type="button" variant="ghost" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy} onClick={() => void signOut()}>
-                    Sign out
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <TextInput
-                  label={newVault ? "Sync password" : "Password"}
-                  type="password"
-                  value={password}
-                  onChange={setPassword}
-                  autoComplete={newVault ? "new-password" : "current-password"}
-                  hint={newVault ? "You'll need it on every device that syncs this collection." : undefined}
-                />
-                {newVault && <TextInput label="Confirm password" type="password" value={confirm} onChange={setConfirm} autoComplete="new-password" />}
-                {problem && <Notice>{problem}</Notice>}
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
-                    {busy === "unlock" && <Loader2 className="size-4 animate-spin" />}
-                    {newVault ? "Create vault" : "Unlock"}
-                  </Button>
-                  {status.hasKeys && (
+          {flow === "loading" && (
+            <div className="flex flex-col gap-3">
+              <Skeleton className="h-5 w-48" />
+              <Skeleton className="h-16 w-full sm:max-w-md" />
+            </div>
+          )}
+
+          {flow === "plan" && acct && (
+            <div className="flex flex-col gap-4" data-sync-step="plan">
+              <StepTitle
+                title={canShowPurchases() ? "Pick a plan" : "Etude Sync"}
+                lead={<>Signed in{status.email ? <> as <span className="text-foreground/90">{status.email}</span></> : null}. 1 GB of end-to-end encrypted storage.</>}
+              />
+              <PlanChooser st={acct} onActive={afterPlan} onRefresh={loadAccount} />
+              <div>
+                <Button type="button" variant="ghost" size="sm" className="h-10 md:h-8" disabled={!!busy} onClick={() => void signOut()}>
+                  Use another email
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {flow === "password" && (
+            <form
+              className="flex flex-col gap-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void unlock();
+              }}
+            >
+              <StepTitle
+                title={newVault ? "Create your sync password" : "Unlock sync"}
+                lead={
+                  newVault
+                    ? "It encrypts your collection before it leaves this device. You'll type it once on each new device; Etude never sees it."
+                    : <>Signed in{status.email ? <> as <span className="text-foreground/90">{status.email}</span></> : null}. Enter the sync password you chose on your first device.</>
+                }
+              />
+              {status.hasKeys && useRecovery ? (
+                <>
+                  <TextInput label="Recovery key" value={recoveryInput} onChange={setRecoveryInput} autoComplete="off" mono placeholder="Your recovery key" />
+                  {problem && <Notice>{problem}</Notice>}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
+                      {busy === "unlock" && <Loader2 className="size-4 animate-spin" />}
+                      Unlock
+                    </Button>
                     <Button
                       type="button"
                       variant="ghost"
@@ -541,29 +567,60 @@ export function SyncSection() {
                       className="h-10 gap-1.5 md:h-8"
                       disabled={!!busy}
                       onClick={() => {
-                        setUseRecovery(true);
-                        setPassword("");
-                        setConfirm("");
+                        setUseRecovery(false);
+                        setRecoveryInput("");
                         setError(null);
                       }}
                     >
-                      Use a recovery key
+                      Use the password
                     </Button>
-                  )}
-                  {status.hasKeys && (
-                    <Button type="button" variant="ghost" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy} onClick={() => void signOut()}>
-                      Sign out
+                  </div>
+                </>
+              ) : (
+                <>
+                  <TextInput label={newVault ? "Sync password" : "Password"} type="password" value={password} onChange={setPassword} autoComplete={newVault ? "new-password" : "current-password"} />
+                  {newVault && <TextInput label="Confirm password" type="password" value={confirm} onChange={setConfirm} autoComplete="new-password" />}
+                  {problem && <Notice>{problem}</Notice>}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
+                      {busy === "unlock" && <Loader2 className="size-4 animate-spin" />}
+                      {newVault ? "Start syncing" : "Unlock"}
                     </Button>
-                  )}
-                </div>
-              </>
-            )}
-          </form>
+                    {status.hasKeys && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-10 gap-1.5 md:h-8"
+                        disabled={!!busy}
+                        onClick={() => {
+                          setUseRecovery(true);
+                          setPassword("");
+                          setConfirm("");
+                          setError(null);
+                        }}
+                      >
+                        Forgot it? Use the recovery key
+                      </Button>
+                    )}
+                  </div>
+                </>
+              )}
+              {status.kind === "cloud" && (
+                <p className="text-xs text-muted-foreground">
+                  Not you?{" "}
+                  <button type="button" className="underline underline-offset-2 hover:text-foreground" disabled={!!busy} onClick={() => void signOut()}>
+                    Sign out
+                  </button>
+                </p>
+              )}
+            </form>
+          )}
         </Block>
       )}
 
-      {status && stage === "recovery" && recoveryKey && (
-        <Block title="Save your recovery key" description="This key unlocks sync on another device if you forget the password. It is shown only once.">
+      {status && flow === "recovery" && recoveryKey && (
+        <Block title="Save your recovery key" description="If you forget the sync password, this key is the only way to unlock your collection on a new device. It's shown only once.">
           <div className="rounded-lg border border-warning/40 bg-warning/5 p-3.5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
               <code className="min-w-0 flex-1 select-all font-mono text-[13px] leading-relaxed text-foreground/90 [overflow-wrap:anywhere]">{recoveryKey}</code>
@@ -590,22 +647,16 @@ export function SyncSection() {
         </Block>
       )}
 
-      {status && stage === "ready" && (
+      {status && flow === "ready" && (
         <>
-          <Block
-            title="Connection"
-            description={status.kind === "folder" ? (isNativeApp() ? NATIVE_COPY.syncFolder : "Syncing through a folder on this computer.") : "Syncing through your server."}
-          >
+          <Block>
+            <div className="flex items-center gap-2.5" data-sync-state={syncing ? "syncing" : problem ? "problem" : "ok"}>
+              <span className={cn("size-2 shrink-0 rounded-full", syncing ? "animate-pulse bg-highlight" : problem || (cloud && billingOn && acct && !planActive) ? "bg-destructive" : "bg-success")} />
+              <h3 className="text-[15px] font-semibold">{cloud && billingOn && acct && !planActive ? "Sync is off for this account" : stateLabel}</h3>
+            </div>
             {problem && <Notice>{problem}</Notice>}
+            {syncing && status.progress && <ProgressRow p={status.progress} />}
             <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm">
-              <dt className="text-muted-foreground">Status</dt>
-              <dd className={cn(problem && "text-destructive")}>{stateLabel}</dd>
-              {syncing && status.progress && (
-                <>
-                  <dt className="text-muted-foreground">Progress</dt>
-                  <dd><ProgressRow p={status.progress} /></dd>
-                </>
-              )}
               <dt className="text-muted-foreground">Last sync</dt>
               <dd>
                 {status.lastSync ? (
@@ -617,23 +668,30 @@ export function SyncSection() {
                   <span className="text-muted-foreground">Never</span>
                 )}
               </dd>
+              {cloud && acct?.signedIn && acct.me && <PlanRows st={acct} />}
               {status.email && (
                 <>
                   <dt className="text-muted-foreground">Account</dt>
                   <dd className="[overflow-wrap:anywhere]">{status.email}</dd>
                 </>
               )}
-              <dt className="text-muted-foreground">{status.kind === "folder" ? "Folder" : "Server"}</dt>
-              <dd className="font-mono text-[13px] [overflow-wrap:anywhere]">
-                {status.kind === "folder" ? status.folder ?? "Not set" : status.server ?? "Not set"}
-              </dd>
+              {(status.kind === "folder" || (status.server && status.server !== DEFAULT_SERVER)) && (
+                <>
+                  <dt className="text-muted-foreground">{status.kind === "folder" ? "Folder" : "Server"}</dt>
+                  <dd className="font-mono text-[13px] [overflow-wrap:anywhere]" title={status.kind === "folder" ? (isNativeApp() ? NATIVE_COPY.syncFolder : "Syncing through a folder on this computer.") : undefined}>
+                    {status.kind === "folder" ? status.folder ?? "Not set" : status.server}
+                  </dd>
+                </>
+              )}
             </dl>
+            {cloud && billingOn && acct && !planActive && <PlanChooser st={acct} onActive={afterPlan} onRefresh={loadAccount} />}
             <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-              <Button type="button" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy || status.busy} onClick={() => void syncNow()}>
+              <Button type="button" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy || status.busy || (cloud && billingOn && !!acct && !planActive)} onClick={() => void syncNow()}>
                 {syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                 Sync now
               </Button>
-              <Button type="button" variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy || status.busy} onClick={() => setConfirmOff(true)}>
+              {cloud && acct?.me && <ManagePlan st={acct} onChanged={loadAccount} />}
+              <Button type="button" variant="ghost" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy || status.busy} onClick={() => setConfirmOff(true)}>
                 <LogOut className="size-4" />
                 Sign out
               </Button>
@@ -660,6 +718,32 @@ export function SyncSection() {
   );
 }
 
+type Flow = "email" | "loading" | "plan" | "password" | "recovery" | "ready";
+const STEP_LABEL: Partial<Record<Flow, string>> = { email: "Email", plan: "Plan", password: "Password" };
+
+function StepBar({ steps, current }: { steps: Flow[]; current: Flow }) {
+  const at = steps.indexOf(current);
+  return (
+    <ol className="flex gap-2" aria-label="Sync setup steps" data-sync-steps={steps.join(",")}>
+      {steps.map((s, i) => (
+        <li key={s} className="flex min-w-0 flex-1 flex-col gap-1.5" aria-current={i === at ? "step" : undefined}>
+          <span className={cn("h-[3px] rounded-full", i <= at ? "bg-highlight" : "bg-muted")} />
+          <span className={cn("text-[11px] font-medium uppercase tracking-wide", i === at ? "text-foreground" : "text-muted-foreground")}>{STEP_LABEL[s]}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function StepTitle({ title, lead }: { title: ReactNode; lead?: ReactNode }) {
+  return (
+    <div>
+      <h3 className="text-[15px] font-semibold">{title}</h3>
+      {lead && <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{lead}</p>}
+    </div>
+  );
+}
+
 const REASON: Record<string, string> = {
   billing_off: "Included on this server",
   active: "Active",
@@ -673,8 +757,8 @@ const REASON: Record<string, string> = {
 // The store apps say what the account has, never how to pay for it.
 const NATIVE_REASON: Record<string, string> = { none: "Not active", past_due: "Paused", grace: "Syncing for a few more days" };
 
-function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void> }) {
-  const [busy, setBusy] = useState(false);
+/** Plan and storage, as rows of the Sync card. */
+function PlanRows({ st }: { st: AccountStatus }) {
   const b = st.billing;
   const active = !!st.me?.sync.active;
   const reason = st.me?.sync.reason ?? "none";
@@ -683,69 +767,199 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
   const used = st.vault ? st.vault.usedBytes : null;
   const pct = used == null ? 0 : Math.min(100, (used / quota) * 100);
   const purchases = canShowPurchases();
-  const billingOn = !!st.offering?.billing;
-  // iOS and Android apps: Sync is bought through the App Store or Google Play (prices from the store), never on the website.
-  const storeIds = inAppProductIds(st.offering);
-  const appStore = billingOn && !purchases && canBuyInApp() && !!storeIds.length;
-  useEffect(() => {
-    if (!appStore) return;
-    const h = () => void onChanged();
-    window.addEventListener(STOREKIT_EVENT, h);
-    return () => window.removeEventListener(STOREKIT_EVENT, h);
-  }, [appStore, onChanged]);
-  const open = async (fn: () => Promise<{ url: string }>) => {
-    setBusy(true);
-    try {
-      openOutside((await fn()).url);
-    } catch (e) {
-      toast.error("Couldn't open the page", { description: errorMessage(e) });
-    } finally {
-      setBusy(false);
-    }
-  };
   const when = b?.expires ? (reason === "active" ? `Renews ${date(b.expires)}` : reason === "canceled_until_end" ? `Ends ${date(b.expires)}` : reason === "grace" ? `Syncing until ${date(b.graceUntil)}` : reason === "expired" || reason === "revoked" ? date(b.expires) : "") : "";
   return (
-    <Block title="Etude Sync" description={!billingOn ? "This server doesn't charge for Sync." : canShowPurchases() ? "US$5 a month or US$40 a year. 1 GB of end-to-end encrypted storage." : "1 GB of end-to-end encrypted storage."}>
-      <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm" data-plan>
-        <dt className="text-muted-foreground">Plan</dt>
-        <dd className={cn(active ? "text-foreground" : "text-muted-foreground")} data-plan-state={reason}>
-          {(!purchases && NATIVE_REASON[reason]) || REASON[reason] || reason}
-          {when && <span className="text-muted-foreground"> · {when}</span>}
-        </dd>
-        <dt className="text-muted-foreground">Storage</dt>
-        <dd>
-          {used == null ? (
-            <span className="text-muted-foreground" data-storage="unknown">
-              — <span className="text-xs">· {storageNote(st, active)}</span>
-            </span>
-          ) : (
-            <div className="flex items-center gap-3">
-              <div className="h-1.5 w-full max-w-56 overflow-hidden rounded-full bg-muted" role="meter" aria-valuemin={0} aria-valuemax={quota} aria-valuenow={used} aria-label="Storage used">
-                <div className="h-full rounded-full bg-highlight" style={{ width: `${Math.max(pct, used ? 1.5 : 0)}%` }} />
-              </div>
-              <span className="shrink-0 tabular-nums text-muted-foreground">{bytes(used)} of {bytes(quota)}</span>
+    <>
+      <dt className="text-muted-foreground">Plan</dt>
+      <dd className={cn(active ? "text-foreground" : "text-muted-foreground")} data-plan-state={reason}>
+        {(!purchases && NATIVE_REASON[reason]) || REASON[reason] || reason}
+        {when && <span className="text-muted-foreground"> · {when}</span>}
+        {purchases && active && storeSource(b) && <span className="block text-xs text-muted-foreground" data-store-source={b!.source}>{storeSource(b)}</span>}
+      </dd>
+      <dt className="text-muted-foreground">Storage</dt>
+      <dd>
+        {used == null ? (
+          <span className="text-muted-foreground" data-storage="unknown">
+            — <span className="text-xs">· {storageNote(st, active)}</span>
+          </span>
+        ) : (
+          <div className="flex items-center gap-3">
+            <div className="h-1.5 w-full max-w-56 overflow-hidden rounded-full bg-muted" role="meter" aria-valuemin={0} aria-valuemax={quota} aria-valuenow={used} aria-label="Storage used">
+              <div className="h-full rounded-full bg-highlight" style={{ width: `${Math.max(pct, used ? 1.5 : 0)}%` }} />
             </div>
-          )}
-        </dd>
-      </dl>
-      {appStore && !active && <AppStorePlans productIds={storeIds} onActive={onChanged} />}
-      {appStore && active && b?.source === thisStore() && <AppStoreManage onChanged={onChanged} />}
-      <div className="flex flex-wrap items-center gap-2">
-        {billingOn && purchases && !active && (
-          <Button size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => void open(account.checkout)}>
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />} Subscribe on etude.study
-          </Button>
+            <span className="shrink-0 tabular-nums text-muted-foreground">{bytes(used)} of {bytes(quota)}</span>
+          </div>
         )}
-        {billingOn && purchases && hasWebPortal(b) && (
-          <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => void open(account.portal)}>
-            <ExternalLink className="size-4" /> Manage subscription
-          </Button>
-        )}
-        <Button variant="ghost" size="sm" className="h-10 md:h-8" onClick={() => void onChanged()}>Refresh</Button>
+      </dd>
+    </>
+  );
+}
+
+/** "Manage subscription": the website portal for a Polar subscription, the store's own sheet in the phone apps. */
+function ManagePlan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const b = st.billing;
+  const purchases = canShowPurchases();
+  const active = !!st.me?.sync.active;
+  const appStore = !!st.offering?.billing && !purchases && canBuyInApp() && !!inAppProductIds(st.offering).length;
+  if (appStore && active && b?.source === thisStore()) return <AppStoreManage onChanged={onChanged} />;
+  if (!(st.offering?.billing && purchases && hasWebPortal(b) && true)) return null;
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-10 gap-1.5 md:h-8"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          openOutside((await account.portal()).url);
+        } catch (e) {
+          toast.error("Couldn't open the page", { description: errorMessage(e) });
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />} Manage subscription
+    </Button>
+  );
+}
+
+/**
+ * Buying Sync: on the desktop and the web, the two plans and a checkout on etude.study that this card
+ * waits for; in the store apps, the App Store or Google Play plans; anywhere else, just that it isn't on.
+ */
+function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(): void; onRefresh(): Promise<void> }) {
+  const [plan, setPlan] = useState<"monthly" | "yearly">("yearly");
+  const [waiting, setWaiting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const purchases = canShowPurchases();
+  const storeIds = inAppProductIds(st.offering);
+  const appStore = !purchases && canBuyInApp() && !!storeIds.length;
+
+  useEffect(() => {
+    if (!appStore) return;
+    const h = () => void onRefresh();
+    window.addEventListener(STOREKIT_EVENT, h);
+    return () => window.removeEventListener(STOREKIT_EVENT, h);
+  }, [appStore, onRefresh]);
+
+  // While the checkout is open in the browser, look for the subscription every few seconds and on return.
+  useEffect(() => {
+    if (!waiting) return;
+    const check = async () => {
+      const a = await account.status().catch(() => null);
+      if (a?.me?.sync.active) {
+        setWaiting(false);
+        toast.success("Sync is active");
+        onActive();
+      }
+    };
+    const t = window.setInterval(() => void check(), 3000);
+    window.addEventListener("focus", check);
+    return () => {
+      window.clearInterval(t);
+      window.removeEventListener("focus", check);
+    };
+  }, [waiting, onActive]);
+
+  if (appStore) return <AppStorePlans productIds={storeIds} onActive={onActive} />;
+  if (!purchases)
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-sm text-muted-foreground">Sync isn't active on this account.</p>
+        <div>
+          <Button variant="outline" size="sm" className="h-10 md:h-8" onClick={() => void onRefresh()}>Check again</Button>
+        </div>
       </div>
-      {billingOn && !purchases && !appStore && !active && <p className="text-xs text-muted-foreground">Sync isn't active on this account.</p>}
-      {billingOn && purchases && active && storeSource(b) && <p className="text-xs text-muted-foreground" data-store-source={b!.source}>{storeSource(b)}</p>}
-    </Block>
+    );
+
+  if (waiting)
+    return (
+      <div className="flex flex-col gap-3 rounded-lg border border-highlight/30 bg-highlight/5 p-4" data-sync-step="waiting">
+        <div className="flex items-center gap-2.5 text-sm">
+          <Loader2 className="size-4 animate-spin text-highlight" />
+          <span>Finish the payment in your browser. This moves on by itself once it goes through.</span>
+        </div>
+        {note && <p className="text-xs text-muted-foreground">{note}</p>}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            className="h-10 md:h-8"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              const a = await account.status().catch(() => null);
+              setBusy(false);
+              if (a?.me?.sync.active) {
+                setWaiting(false);
+                onActive();
+              } else setNote("Not active yet. If you just paid, give it a few seconds.");
+            }}
+          >
+            {busy && <Loader2 className="size-4 animate-spin" />} I've paid
+          </Button>
+          <Button variant="ghost" size="sm" className="h-10 md:h-8" onClick={() => setWaiting(false)}>Back to plans</Button>
+        </div>
+      </div>
+    );
+
+  const options = [
+    { id: "yearly" as const, price: "US$40", per: "/ year", hint: "US$3.33 a month · save 33%" },
+    { id: "monthly" as const, price: "US$5", per: "/ month", hint: "Cancel anytime" },
+  ];
+  return (
+    <div className="flex flex-col gap-4">
+      <div role="radiogroup" aria-label="Plan" className="grid gap-2.5 sm:grid-cols-2 sm:max-w-lg">
+        {options.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            role="radio"
+            aria-checked={plan === o.id}
+            data-plan-option={o.id}
+            onClick={() => setPlan(o.id)}
+            className={cn(
+              "flex flex-col items-start gap-0.5 rounded-xl border px-4 py-3 text-left transition-colors",
+              plan === o.id ? "border-highlight bg-highlight/5 ring-1 ring-highlight" : "hover:border-foreground/25",
+            )}
+          >
+            <span className="flex w-full items-baseline gap-1">
+              <span className="text-lg font-semibold tabular-nums">{o.price}</span>
+              <span className="text-sm text-muted-foreground">{o.per}</span>
+              {plan === o.id && <Check className="ml-auto size-4 self-center text-highlight" />}
+            </span>
+            <span className="text-xs text-muted-foreground">{o.hint}</span>
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-col gap-2">
+        <div>
+          <Button
+            size="sm"
+            className="h-10 gap-1.5 md:h-8"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                openOutside((await account.checkout(plan)).url);
+                setNote(null);
+                setWaiting(true);
+              } catch (e) {
+                toast.error("Couldn't open the checkout", { description: errorMessage(e) });
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />} Continue to checkout
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">Payment opens on etude.study, handled by Polar.</p>
+      </div>
+    </div>
   );
 }
 

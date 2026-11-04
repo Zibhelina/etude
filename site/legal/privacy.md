@@ -20,6 +20,7 @@ The Etude app stores your collection (decks, cards, reviews, media, settings) on
 | the desktop app is open (at most every 10 minutes), and when you install an update | GitHub (api.github.com, github.com) | a normal web request to check for a newer version |
 | you turn on AI grading and answer an AI-graded card, ask for feedback, use Edit for me, or use Ask Etude | the AI provider you set up (see below) | the card, your answer (including drawings and images), your message, any file you attach, and the parts of your collection Ask Etude reads to do what you asked |
 | you sign in to ChatGPT for AI features, and every few minutes while you're signed in | OpenAI | OpenAI's own sign-in, then a request for the list of models your plan offers; the sign-in token stays on your device |
+| you open the Sync plans, subscribe or restore purchases in the iPhone or iPad app | Apple's App Store | the App Store's own requests, plus a random token that links the purchase to your Etude account |
 | you use an account, Sync or the paid Market | our server (sync.etude.study) | see sections 3 to 5 |
 
 **AI providers.** AI features are off until you add a key or sign in. You choose the provider: OpenRouter, OpenAI (through an API key or your ChatGPT sign-in), or any compatible server, including one on your own computer. OpenRouter passes each request on to the company that runs the model you picked. Out of the box those are `liquid/d1-ultra` for quick grading decisions and `deepseek/deepseek-v4.1-flash-1017` for written feedback, and you can change both in Settings. Content you send to an AI provider goes straight from your device to that provider, under your own account with it. Etude never receives it. That provider's privacy policy applies.
@@ -45,13 +46,14 @@ An account is optional. You need one only for Sync and the paid Market.
 | A security log of sign-ins and account events: account id, IP address, time, and for sign-in attempts a hash of the email address | to detect abuse and investigate incidents | 12 months, also after you delete your account |
 | **Your encrypted collection** (encrypted changes, encrypted media and your wrapped keys), with its size, upload times and which of your devices uploaded each change | to sync your devices | see section 5 |
 | Subscription status from Polar (active, renewal or end date, Polar customer id) | to turn Sync on and off | while your account exists |
+| For Sync bought in the iPhone or iPad app: Apple's transaction id and original transaction id, the product (monthly or yearly), its status and renewal or end date, linked to your Etude account through a random token the app passes to Apple | to turn Sync on and off for the right account | while your account exists |
 | Paid Market orders: deck, price, fee, tax, billing country, Stripe payment ids | to deliver purchases, handle refunds and meet tax law | 6 years after the sale, as Canadian tax law requires |
 | Creators: Stripe connected-account id, country, whether the account can sell | to send your buyers' payments to your Stripe account | while you sell, then 6 years for tax |
 | Emails you send to hello@etude.study | to answer you | as long as needed to help you |
 
 **What we can't see.** Sync encrypts your collection on your device with a key that only your devices hold. That key is protected by your Sync password, your recovery key or your passkey, and we never receive any of them. The server stores only ciphertext. We cannot read your decks, cards, answers, reviews, media or deck names, and we can't hand them to anyone, including in response to a legal demand. What the server can see is how much you store, how many changes you upload and when.
 
-**Payments.** Card details go to Polar (Sync) or Stripe (paid Market) directly. We never see or store your card number. Polar is the merchant of record for Sync, so it also processes your name, address and payment data as an independent controller under [its own privacy policy](https://polar.sh/legal/privacy).
+**Payments.** Card details go to Polar (Sync) or Stripe (paid Market) directly. We never see or store your card number. In the iPhone and iPad app, Apple sells Sync and handles the payment under [its own privacy policy](https://www.apple.com/legal/privacy/); from Apple's signed record of each purchase we keep only what's listed above, and we never get your card, your name or your Apple Account. On the website, Polar is the merchant of record for Sync, so it also processes your name, address and payment data as an independent controller under [its own privacy policy](https://polar.sh/legal/privacy).
 
 ## 4. Who processes data for us
 
@@ -60,7 +62,8 @@ An account is optional. You need one only for Sync and the paid Market.
 | DigitalOcean | hosts the server, database and encrypted storage, and its backups | Toronto, Canada |
 | Resend | sends sign-in and account email (your address and the message) | United States |
 | Porkbun and Google | Porkbun forwards mail sent to hello@etude.study to a Gmail inbox, where it's read and stored | United States |
-| Polar | sells and bills Sync subscriptions (merchant of record) | United States |
+| Polar | sells and bills Sync subscriptions bought on the website (merchant of record) | United States |
+| Apple | sells and bills Sync bought in the iPhone and iPad app, and tells our server when those subscriptions renew, end or are refunded | United States |
 | Stripe | processes paid Market payments on creators' Stripe accounts | United States and Canada |
 | GitHub | hosts the website, the free Market and app downloads | United States |
 
@@ -70,7 +73,7 @@ We don't sell or rent personal information, and we don't share it for advertisin
 
 ## 5. Deleting your data
 
-- **Delete your account** in the app (Settings → Account → Delete account), on your account page at sync.etude.study/account, or by writing to hello@etude.study from the address on the account. In the app and on the web you need to have signed in within the last 10 minutes. Deleting immediately removes your email address, display name, devices, passkeys, pending sign-in and email-change links, your subscription link and your entire encrypted collection from the server. Paid Market orders are kept for tax purposes, detached from you, with only a hash of your email address so a tax or refund question can be matched to the order. A creator's listings are hidden. The security log keeps its rows until their 12 months are up.
+- **Delete your account** in the app (Settings → Account → Delete account), on your account page at sync.etude.study/account, or by writing to hello@etude.study from the address on the account. In the app and on the web you need to have signed in within the last 10 minutes. Deleting immediately removes your email address, display name, devices, passkeys, pending sign-in and email-change links, your subscription link (Polar or App Store) and your entire encrypted collection from the server. Paid Market orders are kept for tax purposes, detached from you, with only a hash of your email address so a tax or refund question can be matched to the order. A creator's listings are hidden. The security log keeps its rows until their 12 months are up.
 - **When Sync ends** (you cancel or a payment lapses), we keep your encrypted data for 90 days so you can come back, then delete it.
 - **Backups** of the server are encrypted and kept for at most 35 days, so deleted data is gone from them within 35 days.
 - Deleting your account doesn't touch the collection on your devices. To remove that, uninstall the app, or on a computer delete the `.etude` folder in your home folder.

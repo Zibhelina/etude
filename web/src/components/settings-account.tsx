@@ -14,6 +14,7 @@ import { download } from "@/components/type-editor/starter";
 import { account, AccountApiError, createPasskey, getPasskey, passkeysHere, type AccountStatus, type Device, type Passkey } from "@/lib/account";
 import { relative } from "@/lib/api";
 import { isNativeApp } from "@/lib/platform";
+import { NATIVE_COPY } from "@/lib/native-copy";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 
@@ -278,7 +279,7 @@ function Passkeys({ rpId, guarded }: { rpId?: string; guarded: Guarded }) {
   return (
     <Block
       title="Passkeys"
-      description={here ? "Sign in with your fingerprint, face or device PIN instead of an email code." : `Passkeys for this account belong to ${rpId ?? "the server"}, so they can be added from the Etude app or etude.study.`}
+      description={here ? "Sign in with your fingerprint, face or device PIN instead of an email code." : isNativeApp() ? NATIVE_COPY.passkeysElsewhere : `Passkeys for this account belong to ${rpId ?? "the server"}, so they can be added from the Etude app or etude.study.`}
       aside={here ? (
         <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => void guarded("add a passkey", async () => {
           const o = await account.passkeyRegisterOptions();
@@ -349,7 +350,7 @@ function SellingLink() {
   return (
     <Block
       title="Selling decks"
-      description={isNativeApp() ? "Creators manage their listings from the desktop app or etude.study." : "List a deck from your collection on the paid Market. You keep 80% of each sale."}
+      description={isNativeApp() ? NATIVE_COPY.selling : "List a deck from your collection on the paid Market. You keep 80% of each sale."}
       aside={isNativeApp() ? undefined : <Button variant="outline" size="sm" className="h-10 md:h-8" onClick={() => navigate("/market?tab=selling")}>Open Selling</Button>}
     />
   );
@@ -385,7 +386,7 @@ function DataAndDeletion({ st, confirmFresh, onDeleted }: { st: AccountStatus; c
             <AlertDialogTitle>Delete your Etude account?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-                <p>This removes the account, every signed-in device, your passkeys and the encrypted Sync copy on the server, and ends access to decks you bought. A Sync subscription should be canceled first. Orders are kept without your name for tax records.</p>
+                <p>This removes the account, every signed-in device, your passkeys and the encrypted Sync copy on the server, and ends access to decks you bought. A Sync subscription should be canceled first{st.billing?.source === "apple" ? " (an App Store subscription keeps renewing until you cancel it in your Apple Account settings)" : ""}. Orders are kept without your name for tax records.</p>
                 <p>The collection on this device stays.</p>
               </div>
             </AlertDialogDescription>

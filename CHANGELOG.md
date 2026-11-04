@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Etude on the web**, at [etude.study/app](https://etude.study/app/): the whole app in the browser, on a computer, phone or tablet, with nothing to install. The collection is kept in the browser (SQLite in its private storage) and the app keeps working offline after the first visit. On a phone, Add to Home Screen opens it like an app. Market installs, Anki import, AI grading with an OpenRouter or OpenAI key, Ask Etude and Etude Sync work there too; ChatGPT sign-in, folder sync and publishing to the Market stay in the desktop app.
+- In the browser, Settings → Data downloads a backup of the whole collection (cards, review history, settings and media in one zip) and restores it, here or in another browser.
+- In the browser, Etude opens in one tab at a time: a second tab offers **Use it here**, and the first one steps aside.
+- Market covers and screenshots, drawings in Browse, Ask Etude attachments and the Export buttons work without a server (the browser build and the phone apps).
+
 ## 2.5.0
 
 - **Etude for desktop**: a real app for Mac, Windows and Linux, with nothing else to install. Mac: a .dmg for Apple Silicon or Intel (the 2.4.0 and 2.4.1 Mac downloads didn't start; this replaces them). Windows: an installer that needs no administrator. Linux: .deb, .rpm or AppImage. The collection stays in `~/.etude`, shared with the `etude` command and agents; the app reuses an `etude serve` already running for the same collection, and the engine it starts answers only its own window. Windows and the AppImage update themselves (in the background, installing when you restart or quit); the Mac app and the .deb and .rpm show a link to the new version for now. Settings → Desktop app installs the `etude` command (the Linux packages install it as `/usr/bin/etude`), running the app's own engine. Thanks to Victor Bonato.

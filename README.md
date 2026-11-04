@@ -121,7 +121,7 @@ The Market also has a Morse code deck, the Showcase, single card types and 22 th
 - **Let an agent make your cards.** Give an agent your notes and the bundled [skill](skill/SKILL.md). It writes a pack, validates it with `etude pack check`, imports it, and later reads `etude stats weak` to see which topics you keep failing.
 - **Train a skill you measure.** Put a deck on the `drill` scheduler and a card comes back as often as you want, with no rating buttons. A typing test keeps your WPM and accuracy from every run, and Stats charts them over time.
 - **Get quizzed in a chat.** An agent can run a study session without the web app: `etude study next` returns the card and how to answer it, and `etude study answer` grades and schedules it.
-- **Study from anywhere on your own server.** Run Etude on your computer and open it from your phone or tablet; the layout is made for phones too. A compact study view at `/embed` fits inside other apps.
+- **Study in the browser, on any device.** [etude.study/app](https://etude.study/app/) is the whole app with nothing to install, and it works offline. Or run Etude on your computer and open it from your phone or tablet; the layout is made for phones too. A compact study view at `/embed` fits inside other apps.
 
 ## Features
 
@@ -147,6 +147,8 @@ The Market also has a Morse code deck, the Showcase, single card types and 22 th
 - **A market for themes, decks and card types.** The Market tab installs what other people shared from [etude-market](https://github.com/Zibhelina/etude-market), and Publish shares yours as a pull request; see [docs/market.md](docs/market.md).
 
 ## Quick start
+
+**In the browser**, with nothing to install: open [etude.study/app](https://etude.study/app/). Your collection stays in that browser, works offline, and Settings → Data downloads a backup of it. Etude Sync keeps it the same as on your other devices.
 
 **The app**, with everything inside, from [etude.study/download](https://etude.study/download.html) or the [latest release](https://github.com/Zibhelina/etude/releases/latest): Mac ([Apple Silicon](https://github.com/Zibhelina/etude/releases/latest/download/Etude-mac-apple-silicon.dmg), [Intel](https://github.com/Zibhelina/etude/releases/latest/download/Etude-mac-intel.dmg)), [Windows](https://github.com/Zibhelina/etude/releases/latest/download/Etude-windows-setup.exe), Linux ([.deb](https://github.com/Zibhelina/etude/releases/latest/download/Etude-linux-amd64.deb), [.rpm](https://github.com/Zibhelina/etude/releases/latest/download/Etude-linux-x86_64.rpm), [AppImage](https://github.com/Zibhelina/etude/releases/latest/download/Etude-linux-x86_64.AppImage)). Windows and the AppImage update themselves.
 

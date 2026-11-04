@@ -85,7 +85,9 @@ export interface Listing {
   pending?: string[];
   creator?: string;
 }
-export interface Creator { country: string; displayName: string; stripeAccount: string; chargesEnabled: boolean; payoutsEnabled: boolean; detailsSubmitted: boolean }
+/** `setupRequired`: the creator set up selling before Etude moved to direct charges and has to set up again (their
+ *  old Stripe account can't take sales; `stripeAccount` is then null and the three flags false). */
+export interface Creator { country: string; displayName: string; stripeAccount: string | null; chargesEnabled: boolean; payoutsEnabled: boolean; detailsSubmitted: boolean; setupRequired?: boolean }
 export interface Sales { sales: { order: string; listing: string; amount: number; fee: number; earnings: number; currency: string; country: string; status: string; at: string }[]; totals: { count: number; gross: number; earnings: number } }
 
 export const account = {

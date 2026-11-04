@@ -82,12 +82,12 @@ command({ name: "account market", summary: "Paid decks on the server's Market, w
 command({ name: "account buy", summary: "A checkout link for a paid deck. Open it in a browser.", args: [LISTING], writes: true, output: "{ url, id, price, fee, currency }", run: (c) => call(() => a(c).checkout(c.args.listing)) });
 command({ name: "account library", summary: "Decks you bought, with the latest approved version and whether it's installed here.", output: "{ library: [{ listing, slug, name, version, installed }] }", run: (c) => call(() => a(c).library()) });
 command({ name: "account install", summary: "Install or update a purchased deck in this collection.", args: [LISTING], writes: true, dryRun: "self", output: "{ entry, result, ids, report }", run: (c) => call(() => a(c).install(c.args.listing, { dryRun: c.dry })) });
-command({ name: "account creator", summary: "Your seller profile on the paid Market, or null.", output: "{ country, stripeAccount, chargesEnabled, payoutsEnabled, detailsSubmitted } | null", run: (c) => call(() => a(c).creator()) });
+command({ name: "account creator", summary: "Your seller profile on the paid Market, or null.", output: "{ country, displayName, stripeAccount, chargesEnabled, payoutsEnabled, detailsSubmitted, setupRequired } | null (setupRequired: set up again with `account sell`)", run: (c) => call(() => a(c).creator()) });
 command({
   name: "account sell",
-  summary: "Start selling: creates the payout account and returns the Stripe onboarding link.",
+  summary: "Start selling (or set up again): creates your own Stripe account, the one you sell through, and returns the Stripe onboarding link.",
   flags: [
-    { name: "country", type: "string", description: "Two-letter country of the payout account (US, CA, GB, EEA, CH)." },
+    { name: "country", type: "string", description: "Two-letter country where you live or your business is registered (US, CA, GB, EEA, CH)." },
     { name: "name", type: "string", description: "Name shown as the author." },
   ],
   writes: true,

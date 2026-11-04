@@ -1,7 +1,7 @@
 ---
 title: Privacy Policy
 description: What the Etude app, the website and Etude's server collect, who processes it, how long it's kept and how to delete it.
-last-updated: 2026-10-27
+last-updated: 2026-11-03
 ---
 
 # Privacy Policy
@@ -46,7 +46,7 @@ An account is optional. You need one only for Sync and the paid Market.
 | **Your encrypted collection** (encrypted changes, encrypted media and your wrapped keys), with its size, upload times and which of your devices uploaded each change | to sync your devices | see section 5 |
 | Subscription status from Polar (active, renewal or end date, Polar customer id) | to turn Sync on and off | while your account exists |
 | Paid Market orders: deck, price, fee, tax, billing country, Stripe payment ids | to deliver purchases, handle refunds and meet tax law | 6 years after the sale, as Canadian tax law requires |
-| Creators: Stripe connected-account id, country, payout status | to pay you | while you sell, then 6 years for tax |
+| Creators: Stripe connected-account id, country, whether the account can sell | to send your buyers' payments to your Stripe account | while you sell, then 6 years for tax |
 | Emails you send to hello@etude.study | to answer you | as long as needed to help you |
 
 **What we can't see.** Sync encrypts your collection on your device with a key that only your devices hold. That key is protected by your Sync password, your recovery key or your passkey, and we never receive any of them. The server stores only ciphertext. We cannot read your decks, cards, answers, reviews, media or deck names, and we can't hand them to anyone, including in response to a legal demand. What the server can see is how much you store, how many changes you upload and when.
@@ -61,7 +61,7 @@ An account is optional. You need one only for Sync and the paid Market.
 | Resend | sends sign-in and account email (your address and the message) | United States |
 | Porkbun and Google | Porkbun forwards mail sent to hello@etude.study to a Gmail inbox, where it's read and stored | United States |
 | Polar | sells and bills Sync subscriptions (merchant of record) | United States |
-| Stripe | processes paid Market payments and creator payouts | United States and Canada |
+| Stripe | processes paid Market payments on creators' Stripe accounts | United States and Canada |
 | GitHub | hosts the website, the free Market and app downloads | United States |
 
 Some of these are outside Canada, so your information may be processed under the laws of other countries. Each provider is bound by its contract with us to protect it and use it only to provide its service.

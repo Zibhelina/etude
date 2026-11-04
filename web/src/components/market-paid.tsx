@@ -270,6 +270,7 @@ export function SellingView() {
       const { creator } = await account.creator();
       const [listings, sales] = creator ? await Promise.all([account.listings().then((r) => r.listings), account.sales()]) : [[], null];
       setState({ signedIn: true, admin: st.me.admin, creator, listings, sales });
+      if (creator?.setupRequired && COUNTRIES.some(([k]) => k === creator.country)) setCountry(creator.country);
       setError(null);
     } catch (e) {
       setError(msg(e));
@@ -294,38 +295,42 @@ export function SellingView() {
   const c = state.creator;
   return (
     <div className="flex flex-col gap-6" data-selling>
-      {!c ? (
-        <div className="rounded-xl border p-5">
-          <h3 className="text-base font-semibold">Sell your decks</h3>
-          <p className="mt-1 max-w-prose text-sm text-muted-foreground">Set a price of US$5 or more. Etude keeps 20% and handles sales tax; you get the rest every month through Stripe once it reaches US$25. Payouts reach the US, Canada, the UK, the EEA and Switzerland.</p>
+      {!c || c.setupRequired ? (
+        <div className="rounded-xl border p-5" data-creator-setup={c ? "again" : "new"}>
+          <h3 className="text-base font-semibold">{c ? "Set up selling again" : "Sell your decks"}</h3>
+          {c && <p className="mt-2 max-w-prose rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground/90" data-setup-again>Etude now sells through your own Stripe account, so your earlier payout setup no longer works. Set it up once more; your decks stay as they are.</p>}
+          <p className="mt-2 max-w-prose text-sm text-muted-foreground">You sell through your own Stripe account. Set a price of US$5 or more; Stripe's processing fee comes out of each sale and Etude keeps 20%. Refunds, disputes and your own sales tax are yours to handle, and payouts follow your Stripe settings. Open to creators in the US, Canada, the UK, the EEA and Switzerland.</p>
           <div className="mt-4 flex flex-wrap items-end gap-2">
             <label className="flex flex-col gap-1.5 text-xs font-medium text-muted-foreground">
-              Where you get paid
+              Where you live or your business is registered
               <Select value={country} onValueChange={setCountry}>
                 <SelectTrigger className="h-10 w-56 md:h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>{COUNTRIES.map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
               </Select>
             </label>
-            <Button className="h-10 gap-1.5 md:h-9" disabled={!!busy} onClick={() => void act("start", async () => {
+            <Button className="h-10 gap-1.5 md:h-9" disabled={!!busy} data-start-selling onClick={() => void act("start", async () => {
               await account.becomeCreator(country);
               openOutside((await account.onboarding()).url);
-            }, "Finish setting up payouts with Stripe")}>
-              {busy === "start" ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />} Set up payouts
+            }, "Finish setting up your Stripe account in the browser")}>
+              {busy === "start" ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />} Set up with Stripe
             </Button>
           </div>
+          <p className="mt-3 max-w-prose text-xs text-muted-foreground">Stripe verifies your identity and holds your bank details; Etude never sees them.</p>
         </div>
-      ) : (
+      ) : null}
+      {c && (
         <>
           <div className="grid gap-3 sm:grid-cols-3" data-sales>
-            <Stat label="Payouts" value={c.payoutsEnabled ? "Ready" : c.detailsSubmitted ? "Under review by Stripe" : "Setup not finished"} tone={c.payoutsEnabled ? "ok" : "warn"} />
+            <Stat label="Stripe account" value={c.setupRequired ? "Set up again" : c.chargesEnabled ? "Ready to sell" : c.detailsSubmitted ? "Under review by Stripe" : "Setup not finished"} tone={c.chargesEnabled && !c.setupRequired ? "ok" : "warn"} />
             <Stat label="Sales" value={String(state.sales?.totals.count ?? 0)} />
-            <Stat label="Your earnings" value={money(state.sales?.totals.earnings ?? 0)} sub={state.sales?.totals.gross ? `of ${money(state.sales.totals.gross)} gross` : undefined} />
+            <Stat label="Your earnings" value={money(state.sales?.totals.earnings ?? 0)} sub={state.sales?.totals.gross ? `of ${money(state.sales.totals.gross)} gross, before Stripe's fees` : "after Etude's 20%, before Stripe's fees"} />
           </div>
           <div className="flex flex-wrap gap-2">
-            {!c.chargesEnabled && <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => void act("onb", async () => openOutside((await account.onboarding()).url))}><ExternalLink className="size-4" />Finish Stripe setup</Button>}
-            {c.detailsSubmitted && <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => void act("dash", async () => openOutside((await account.dashboard()).url))}><ExternalLink className="size-4" />Payouts and tax forms</Button>}
-            <Button size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => setCreating(true)} data-new-listing><Upload className="size-4" />List a deck</Button>
+            {!c.setupRequired && !c.chargesEnabled && <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => void act("onb", async () => openOutside((await account.onboarding()).url))}><ExternalLink className="size-4" />Finish Stripe setup</Button>}
+            {!c.setupRequired && c.detailsSubmitted && <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => void act("dash", async () => openOutside((await account.dashboard()).url))} data-stripe-dashboard><ExternalLink className="size-4" />Open Stripe dashboard</Button>}
+            {!c.setupRequired && <Button size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => setCreating(true)} data-new-listing><Upload className="size-4" />List a deck</Button>}
           </div>
+          {!c.setupRequired && c.detailsSubmitted && <p className="-mt-3 text-xs text-muted-foreground">Sign in to the Stripe Dashboard with the Stripe login you made during setup. Refunds, disputes and payouts are managed there.</p>}
           {state.listings.length === 0 ? (
             <div className="rounded-xl border px-5 py-8 text-center text-sm text-muted-foreground">No listings yet.</div>
           ) : (
@@ -355,7 +360,7 @@ export function SellingView() {
           {state.sales && state.sales.sales.length > 0 && (
             <div className="overflow-hidden rounded-xl border">
               <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-xs text-muted-foreground"><tr><th className="px-3 py-2 text-left font-medium">Date</th><th className="px-3 py-2 text-left font-medium">Deck</th><th className="px-3 py-2 text-right font-medium">Price</th><th className="px-3 py-2 text-right font-medium">You get</th></tr></thead>
+                <thead className="bg-muted/40 text-xs text-muted-foreground"><tr><th className="px-3 py-2 text-left font-medium">Date</th><th className="px-3 py-2 text-left font-medium">Deck</th><th className="px-3 py-2 text-right font-medium">Price</th><th className="px-3 py-2 text-right font-medium" title="After Etude's 20%, before Stripe's processing fee">Yours</th></tr></thead>
                 <tbody>
                   {state.sales.sales.map((s) => (
                     <tr key={s.order} className="border-t">
@@ -367,6 +372,7 @@ export function SellingView() {
                   ))}
                 </tbody>
               </table>
+              <div className="border-t px-3 py-2 text-xs text-muted-foreground">Yours: after Etude's 20%, before Stripe's processing fee.</div>
             </div>
           )}
         </>
@@ -449,7 +455,7 @@ function NewListingDialog({ onClose, onCreated }: { onClose(): void; onCreated()
               Price (US$)
               <Input className="h-10 w-32 tabular-nums" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} data-price-input />
             </label>
-            <div className="pb-2.5 text-xs text-muted-foreground">{ok ? <>You get {money(cents - Math.round(cents * 0.2))} per sale</> : "At least US$5"}</div>
+            <div className="pb-2.5 text-xs text-muted-foreground">{ok ? <>You keep {money(cents - Math.round(cents * 0.2))} per sale, less Stripe's fee</> : "At least US$5"}</div>
           </div>
           <div className="flex items-center gap-3">
             <Button type="button" variant="outline" size="sm" className="h-10 md:h-8" onClick={pick}>{cover ? "Change cover" : "Add a cover"}</Button>

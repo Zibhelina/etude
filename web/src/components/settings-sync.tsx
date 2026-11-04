@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
 import { account, bytes, openOutside, type AccountStatus } from "@/lib/account";
 import { canShowPurchases, desktopApp, storeSafeMessage } from "@/lib/platform";
-import { canBuyInApp, STOREKIT_EVENT } from "@/lib/storekit";
+import { canBuyInApp, inAppProductIds, storeSource, STOREKIT_EVENT } from "@/lib/storekit";
 import { AppStoreManage, AppStorePlans } from "@/components/app-store-plans";
 
 const DEFAULT_SERVER = "https://sync.etude.study";
@@ -681,8 +681,9 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
   const pct = Math.min(100, (used / quota) * 100);
   const purchases = canShowPurchases();
   const billingOn = !!st.offering?.billing;
-  // iOS app: Sync is bought through the App Store (prices from StoreKit), never on the website.
-  const appStore = billingOn && !purchases && canBuyInApp() && !!st.offering?.appleProducts?.length;
+  // iOS and Android apps: Sync is bought through the App Store or Google Play (prices from the store), never on the website.
+  const storeIds = inAppProductIds(st.offering);
+  const appStore = billingOn && !purchases && canBuyInApp() && !!storeIds.length;
   useEffect(() => {
     if (!appStore) return;
     const h = () => void onChanged();
@@ -718,15 +719,15 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
           </div>
         </dd>
       </dl>
-      {appStore && !active && <AppStorePlans productIds={st.offering!.appleProducts!} onActive={onChanged} />}
-      {appStore && active && b?.source === "apple" && <AppStoreManage onChanged={onChanged} />}
+      {appStore && !active && <AppStorePlans productIds={storeIds} onActive={onChanged} />}
+      {appStore && active && b?.source === storeSource() && <AppStoreManage onChanged={onChanged} />}
       <div className="flex flex-wrap items-center gap-2">
         {billingOn && purchases && !active && (
           <Button size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => void open(account.checkout)}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />} Subscribe on etude.study
           </Button>
         )}
-        {billingOn && purchases && b?.status && b.source !== "apple" && (
+        {billingOn && purchases && b?.status && b.source !== "apple" && b.source !== "google" && (
           <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => void open(account.portal)}>
             <ExternalLink className="size-4" /> Manage subscription
           </Button>

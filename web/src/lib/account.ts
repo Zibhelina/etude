@@ -41,6 +41,8 @@ export interface Offering {
   passkeys: { rpId: string };
   /** App Store product ids for Sync, when the server takes App Store purchases. */
   appleProducts?: string[];
+  /** Google Play subscription and base plans for Sync, when the server takes Google Play purchases. */
+  googleProducts?: { productIds: string[]; basePlans: string[] };
   marketRules?: { minPrice: number; feeBps: number; currency: string; buyerCountries: string[] };
 }
 export interface Me {
@@ -53,7 +55,7 @@ export interface Me {
   creator: { country: string; chargesEnabled: boolean; payoutsEnabled: boolean } | null;
   admin: boolean;
 }
-export interface Billing { active: boolean; reason: string; source?: "polar" | "apple" | "manual" | null; status: string | null; expires: string | null; graceUntil: string | null; billing: boolean }
+export interface Billing { active: boolean; reason: string; source?: "polar" | "apple" | "google" | "manual" | null; status: string | null; expires: string | null; graceUntil: string | null; billing: boolean }
 export interface Vault { quotaBytes: number; usedBytes: number; events: number; blobs: number; hasKeys: boolean }
 export interface AccountStatus { server: string; offering: Offering | null; offline: string | null; signedIn: boolean; email: string | null; me: Me | null; billing: Billing | null; vault: Vault | null }
 export interface Device { id: string; name: string; via: string; created: string; lastSeen: string; current: boolean }
@@ -145,6 +147,10 @@ export const account = {
   appleInfo: () => call<{ productIds: string[]; appAccountToken: string }>("GET", "/api/account/billing/apple"),
   /** iOS app: hands a signed App Store transaction (JWS) to the Sync server. */
   appleTransaction: (jws: string) => call<import("./storekit").AppleResult>("POST", "/api/account/billing/apple/transaction", { jws }),
+  /** Android app: the Play subscription, base plans and the obfuscatedAccountId to buy with. */
+  googleInfo: () => call<{ productIds: string[]; basePlans: string[]; obfuscatedAccountId: string }>("GET", "/api/account/billing/google"),
+  /** Android app: hands a Play purchase token to the Sync server, which checks it with Google. */
+  googlePurchase: (purchaseToken: string) => call<import("./storekit").GoogleResult>("POST", "/api/account/billing/google/purchase", { purchaseToken }),
   market: () => call<{ entries: PaidEntry[]; server: string }>("GET", "/api/account/market"),
   buy: (listing: string) => call<{ url: string; price: number; fee: number }>("POST", "/api/account/market/checkout", { listing }),
   library: () => call<{ library: LibraryItem[] }>("GET", "/api/account/library"),

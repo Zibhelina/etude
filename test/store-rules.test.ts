@@ -63,3 +63,25 @@ test("the iOS app sells Sync only through StoreKit, with prices from the App Sto
   const kit = read("web/src/lib/storekit.ts");
   assert.match(kit, /await account\.appleTransaction\(t\.jws\);\s*await p\?\.finish/);
 });
+
+test("Google Play purchase errors reach the Android app as written", () => {
+  const m = "This Google Play subscription was bought for another Etude account. Sign in to that account to use it.";
+  assert.equal(storeSafeMessage(m, "google_other_account", true), m);
+});
+
+test("the Android app sells Sync only through Play Billing, prices from Play, acknowledged after the server", () => {
+  const kt = read("android/app/src/main/java/study/etude/app/EtudeStorePlugin.kt");
+  // Same plugin name as iOS, so the page code is shared.
+  assert.match(kt, /@CapacitorPlugin\(name = "EtudeStore"\)/);
+  for (const api of ["queryProductDetailsAsync", "setObfuscatedAccountId(", "launchBillingFlow", "acknowledgePurchase", "queryPurchasesAsync", "enablePendingPurchases", "play.google.com/store/account/subscriptions", "formattedPrice"]) assert.ok(kt.includes(api), api);
+  // No hard-coded prices in the plugin either.
+  assert.doesNotMatch(kt, /US\$|\$\d|\d+\.\d\d/);
+  assert.match(read("android/app/src/main/java/study/etude/app/MainActivity.java"), /registerPlugin\(EtudeStorePlugin\.class\)/);
+  assert.match(read("android/app/build.gradle"), /com\.android\.billingclient:billing:/);
+  // The page acknowledges only when the server says so (never a pending or refused purchase).
+  const kit = read("web/src/lib/storekit.ts");
+  assert.match(kit, /const r = await account\.googlePurchase\(t\.jws\);\s*if \(r\.acknowledge\) await p\?\.finish/);
+  // The plan screen's store words for Google Play, and nothing about the website.
+  const plans = read("web/src/components/app-store-plans.tsx");
+  for (const piece of [/Google Play account/, /Payments & subscriptions/]) assert.match(plans, piece);
+});

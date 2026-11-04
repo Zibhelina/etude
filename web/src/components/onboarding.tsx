@@ -40,7 +40,7 @@ import { api } from "@/lib/api";
 import { account, openOutside } from "@/lib/account";
 import { saveApiKey, serverless } from "@/lib/native";
 import { canShowPurchases } from "@/lib/platform";
-import { canBuyInApp } from "@/lib/storekit";
+import { canBuyInApp, inAppProductIds } from "@/lib/storekit";
 import { AppStorePlans } from "@/components/app-store-plans";
 import { etudeFetch } from "@/lib/transport";
 import { navigate } from "@/lib/router";
@@ -838,9 +838,9 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
     if (a.me?.sync.active || !a.offering?.billing) return onDone("password next");
     // Native apps can't point at an outside purchase (App Store 3.1.1/3.1.3): just say Sync isn't on for this account.
     if (!canShowPurchases()) {
-      // The iOS app sells Sync through the App Store; the other store apps only say it isn't on.
-      if (canBuyInApp() && a.offering?.appleProducts?.length) {
-        setAppleProducts(a.offering.appleProducts);
+      // The store apps sell Sync through the App Store or Google Play; without the plugin they only say it isn't on.
+      if (canBuyInApp() && inAppProductIds(a.offering).length) {
+        setAppleProducts(inAppProductIds(a.offering));
         return onStage("plan");
       }
       return onDone("not active");

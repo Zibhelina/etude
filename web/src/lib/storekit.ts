@@ -1,13 +1,17 @@
-// Etude Sync through Apple In-App Purchase, in the iOS app only. The native side is
-// ios/App/App/EtudeStorePlugin.swift (StoreKit 2); src/browser/native-shell.ts exposes it here as
-// globalThis.__etudeStoreKit, so this module doesn't import Capacitor.
+// Etude Sync bought inside the store apps: Apple In-App Purchase on iOS
+// (ios/App/App/EtudeStorePlugin.swift, StoreKit 2) and Google Play Billing on Android
+// (android/app/src/main/java/study/etude/app/EtudeStorePlugin.kt). Both plugins have the same shape;
+// src/browser/native-shell.ts exposes the one for this platform as globalThis.__etudeStoreKit, so
+// this module doesn't import Capacitor. On Android a plan id is "etude_sync:monthly" (product and
+// base plan), the purchase token stands in for the JWS, and "finish" means acknowledge.
 //
 // Flow: load the products (localized prices from the App Store), buy with the appAccountToken the
 // Sync server gives for the signed-in account, send the signed transaction to the server, and finish
 // it only once the server gave a definite answer. Renewals and late approvals arrive through the
 // `transaction` event and the unfinished list, and go the same way.
 import { account, AccountApiError } from "./account";
-import { isIOSApp } from "./platform";
+import { isAndroidApp, isIOSApp } from "./platform";
+import type { Offering } from "./account";
 
 export interface StoreProduct {
   id: string;
@@ -29,6 +33,7 @@ export interface StoreTransaction {
 }
 export type PurchaseOutcome = { status: "purchased"; sync: AppleResult["sync"] } | { status: "pending" | "cancelled" | "unknown" };
 export interface AppleResult { ok: boolean; result: string; sync: { active: boolean; reason: string; source: string | null }; subscription: { productId: string; status: string; expires: string | null; environment: string } }
+export interface GoogleResult { ok: boolean; result: string; acknowledge: boolean; sync: AppleResult["sync"]; subscription: { productId: string; basePlanId: string; status: string; expires: string | null; test: boolean } }
 
 interface StorePlugin {
   getProducts(o: { ids: string[] }): Promise<{ products: StoreProduct[] }>;
@@ -43,9 +48,24 @@ interface StorePlugin {
 
 const plugin = (): StorePlugin | undefined => (globalThis as { __etudeStoreKit?: StorePlugin }).__etudeStoreKit;
 
-/** The App Store purchase path: the iOS app with the StoreKit plugin loaded. */
-export const storeKit = (): StorePlugin | undefined => (isIOSApp() ? plugin() : undefined);
+/** The in-app purchase path: the iOS app (StoreKit) or the Android app (Play Billing) with its plugin loaded. */
+export const storeKit = (): StorePlugin | undefined => (isIOSApp() || isAndroidApp() ? plugin() : undefined);
 export const canBuyInApp = () => !!storeKit();
+
+/** Whose store this app sells through, and the entitlement `source` that purchase gives. */
+export const storeSource = (): "apple" | "google" | null => (!storeKit() ? null : isAndroidApp() ? "google" : "apple");
+export const storeName = () => (storeSource() === "google" ? "Google Play" : "the App Store");
+
+/** The plan ids this app can sell, from what the Sync server offers ([] when it takes none from this store). */
+export function inAppProductIds(o: Offering | null | undefined): string[] {
+  const src = storeSource();
+  if (src === "apple") return o?.appleProducts ?? [];
+  if (src === "google") {
+    const g = o?.googleProducts;
+    return g ? g.productIds.flatMap((p) => (g.basePlans.length ? g.basePlans.map((b) => `${p}:${b}`) : [])) : [];
+  }
+  return [];
+}
 
 /** Fired after the server accepted an App Store transaction, so account views can refresh. */
 export const STOREKIT_EVENT = "etude:storekit";
@@ -59,8 +79,21 @@ export async function loadProducts(ids: string[]): Promise<StoreProduct[]> {
 /** A definite answer from the Sync server (accepted, or refused for good): the transaction can be finished. */
 const definite = (e: unknown) => e instanceof AccountApiError && [409, 422].includes(e.status);
 
+/**
+ * Google Play: the server checks the token with Google. Acknowledge only when it says so: a pending
+ * purchase can't be acknowledged yet, and one the server refused is left for Play to refund.
+ */
+async function submitGoogle(t: StoreTransaction): Promise<AppleResult> {
+  const p = storeKit();
+  const r = await account.googlePurchase(t.jws);
+  if (r.acknowledge) await p?.finish({ transactionId: t.transactionId }).catch(() => {});
+  window.dispatchEvent(new Event(STOREKIT_EVENT));
+  return { ok: r.ok, result: r.result, sync: r.sync, subscription: { productId: r.subscription.productId, status: r.subscription.status, expires: r.subscription.expires, environment: r.subscription.test ? "Test" : "Production" } };
+}
+
 /** Sends one signed transaction to the Sync server, then finishes it in StoreKit. */
 export async function submitTransaction(t: StoreTransaction): Promise<AppleResult> {
+  if (storeSource() === "google") return submitGoogle(t);
   const p = storeKit();
   try {
     const r = await account.appleTransaction(t.jws);
@@ -77,7 +110,8 @@ export async function submitTransaction(t: StoreTransaction): Promise<AppleResul
 export async function buy(productId: string): Promise<PurchaseOutcome> {
   const p = storeKit();
   if (!p) throw new Error("App Store purchases aren't available here.");
-  const { appAccountToken } = await account.appleInfo();
+  // Google Play's obfuscatedAccountId plays the part of Apple's appAccountToken.
+  const appAccountToken = storeSource() === "google" ? (await account.googleInfo()).obfuscatedAccountId : (await account.appleInfo()).appAccountToken;
   const r = await p.purchase({ productId, appAccountToken });
   if (r.status !== "purchased" || !r.jws) return { status: (r.status as "pending" | "cancelled" | "unknown") ?? "unknown" };
   const res = await submitTransaction(r as StoreTransaction);
@@ -102,6 +136,9 @@ export async function restore(): Promise<{ cancelled: boolean; found: number; ac
 }
 
 export const manageSubscriptions = () => storeKit()?.manageSubscriptions();
+
+/** Play Billing's own errors when the device can't buy (no Play Store, not signed in, a build not installed from Play). */
+export const unavailableHere = (e: unknown) => (e as { code?: string })?.code === "unavailable";
 
 let started = false;
 /** On launch: send transactions StoreKit still holds unfinished, and every new one as it arrives. Signed out, they wait. */

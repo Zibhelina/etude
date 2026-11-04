@@ -14,6 +14,7 @@ import { etudeFetch } from "@/lib/transport";
 import { cn } from "@/lib/utils";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
 import { account, bytes, openOutside, type AccountStatus } from "@/lib/account";
+import { storageNote } from "@/lib/billing-ui";
 import { canShowPurchases, desktopApp, isNativeApp, storeSafeMessage } from "@/lib/platform";
 import { NATIVE_COPY } from "@/lib/native-copy";
 import { canBuyInApp, STOREKIT_EVENT } from "@/lib/storekit";
@@ -678,8 +679,9 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
   const active = !!st.me?.sync.active;
   const reason = st.me?.sync.reason ?? "none";
   const quota = st.vault?.quotaBytes ?? st.offering?.quotaBytes ?? 1024 ** 3;
-  const used = st.vault?.usedBytes ?? 0;
-  const pct = Math.min(100, (used / quota) * 100);
+  // The server only reports storage while Sync is active; without it there's no number to show.
+  const used = st.vault ? st.vault.usedBytes : null;
+  const pct = used == null ? 0 : Math.min(100, (used / quota) * 100);
   const purchases = canShowPurchases();
   const billingOn = !!st.offering?.billing;
   // iOS app: Sync is bought through the App Store (prices from StoreKit), never on the website.
@@ -711,12 +713,18 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
         </dd>
         <dt className="text-muted-foreground">Storage</dt>
         <dd>
-          <div className="flex items-center gap-3">
-            <div className="h-1.5 w-full max-w-56 overflow-hidden rounded-full bg-muted" role="meter" aria-valuemin={0} aria-valuemax={quota} aria-valuenow={used} aria-label="Storage used">
-              <div className="h-full rounded-full bg-highlight" style={{ width: `${Math.max(pct, used ? 1.5 : 0)}%` }} />
+          {used == null ? (
+            <span className="text-muted-foreground" data-storage="unknown">
+              — <span className="text-xs">· {storageNote(st, active)}</span>
+            </span>
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="h-1.5 w-full max-w-56 overflow-hidden rounded-full bg-muted" role="meter" aria-valuemin={0} aria-valuemax={quota} aria-valuenow={used} aria-label="Storage used">
+                <div className="h-full rounded-full bg-highlight" style={{ width: `${Math.max(pct, used ? 1.5 : 0)}%` }} />
+              </div>
+              <span className="shrink-0 tabular-nums text-muted-foreground">{bytes(used)} of {bytes(quota)}</span>
             </div>
-            <span className="shrink-0 tabular-nums text-muted-foreground">{bytes(used)} of {bytes(quota)}</span>
-          </div>
+          )}
         </dd>
       </dl>
       {appStore && !active && <AppStorePlans productIds={st.offering!.appleProducts!} onActive={onChanged} />}

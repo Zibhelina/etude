@@ -181,8 +181,13 @@ export function usageLine(c: CommandSpec): string {
   return ["etude", c.name, ...args, flagsOf(c).length ? "[flags]" : ""].filter(Boolean).join(" ");
 }
 
-function errorCode(e: unknown): CliError {
+export function errorCode(e: unknown): CliError {
   if (e instanceof CliError) return e;
+  // The Sync server's 402: not a bug, the account has no active Sync.
+  if ((e as { code?: unknown })?.code === "sync_required") {
+    const m = (e as Error).message || "Etude Sync isn't active on this account. Your local data is untouched.";
+    return new CliError(`${m} See \`etude account status\` for the plan.`, "sync_required");
+  }
   if (e instanceof EtudeError) {
     const m = e.message;
     if (e.status === 404) return new CliError(m, "not_found");

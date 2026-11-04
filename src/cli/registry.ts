@@ -98,6 +98,7 @@ export const EXIT_CODES = [
   { exit: 4, code: "validation", meaning: "Input was rejected (fields, settings, search syntax, a failing pack or type check)." },
   { exit: 5, code: "conflict", meaning: "The operation clashes with existing state (id taken, preset or type in use, already rated)." },
   { exit: 6, code: "external", meaning: "An AI provider or the network failed." },
+  { exit: 7, code: "sync_required", meaning: "Etude Sync isn't active on the signed-in account (no subscription, or the payment failed). Local data is untouched." },
 ] as const;
 
 export type ErrorCode = (typeof EXIT_CODES)[number]["code"];

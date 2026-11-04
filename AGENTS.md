@@ -45,7 +45,7 @@ node desktop/build.ts && node desktop/smoke.ts   # installers for this system in
 ## Conventions
 
 - **New operations go in the engine** (`src/core/engine.ts`) and are exposed by the server and the CLI. Anything the UI can do needs a CLI command. Add it to `src/cli/commands/<group>.ts` with a summary, args, flags, examples, `writes`/`dryRun`/`confirm` and an `output` shape, then regenerate `docs/cli.md`. `test/cli-docs.test.ts` fails when the docs are stale.
-- CLI output is JSON with stable keys. Errors are `CliError` with a code (`usage`, `not_found`, `validation`, `conflict`, `external`). Don't print anything else on stdout.
+- CLI output is JSON with stable keys. Errors are `CliError` with a code (`usage`, `not_found`, `validation`, `conflict`, `external`, `sync_required`). Don't print anything else on stdout.
 - Keep dependencies light: use the Node stdlib (`node:sqlite`, `util.parseArgs`, `node:test`) before adding a package.
 - Card templates run in sandboxed iframes (`allow-scripts`, opaque origin) and user scripts run in QuickJS. Don't give either more access. Private fields stay on the server until an answer is submitted.
 - Test against temp databases, never a real collection.

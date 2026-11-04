@@ -12,6 +12,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { BulkBar, CheckBox, groupItems, ItemEditor, ItemRow, NewItemDialog, OrderSelect, SearchHints } from "@/components/item-editor";
 import { DeckOptions, formatDeadline, type DeckFull } from "@/components/deck-options";
 import { api, type DeckNode, type LearnerSummary, type Preset, type SearchRow, type TypeSummary } from "@/lib/api";
+import { etudeDownload } from "@/lib/local-url";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { Block, Breadcrumb, EmptyState, LinkRow, Page, Section } from "@/components/page";
@@ -805,7 +806,7 @@ function DangerZone({ deck, decks, hasChildren, onMoved }: { deck: DeckFull; dec
           description="A JSON pack with the items, subdecks, presets, tag notes and custom card types. Review history stays here."
           aside={
             <Button variant="outline" size="sm" className="gap-1.5" asChild>
-              <a href={api.exportUrl({ deck: deck.name })} download={`${deck.name.replace(/::/g, " - ").replace(/[/\\?%*:|"<>]/g, "")}.pack.json`}>
+              <a href={api.exportUrl({ deck: deck.name })} onClick={etudeDownload} download={`${deck.name.replace(/::/g, " - ").replace(/[/\\?%*:|"<>]/g, "")}.pack.json`}>
                 <Download className="size-4" />Download
               </a>
             </Button>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Pause, Play, X } from "lucide-react";
 import { api, type MarketEntry } from "@/lib/api";
+import { EtudeImg, useEtudeSrc } from "@/lib/local-url";
 import { cn } from "@/lib/utils";
 import "./market-gallery.css";
 
@@ -63,7 +64,7 @@ export function MarketGallery({ entry, fallback }: { entry: MarketEntry; fallbac
             <Clip key={path} src={url(i)} label={`${entry.name}, preview video`} onReady={measure} />
           ) : (
             <button type="button" className="market-shot" key={path} onClick={() => setZoom(i)} aria-label={`Open screenshot ${i + 1}`}>
-              <img src={url(i)} alt={`${entry.name}, screenshot ${i + 1}`} loading={i < 3 ? "eager" : "lazy"} onLoad={measure} />
+              <EtudeImg src={url(i)} alt={`${entry.name}, screenshot ${i + 1}`} loading={i < 3 ? "eager" : "lazy"} onLoad={measure} />
             </button>
           ),
         )}
@@ -94,7 +95,7 @@ function Lightbox({ srcs, start, name, onClose }: { srcs: string[]; start: numbe
   // Portaled to <body>: the dialog's transform would otherwise trap position:fixed inside it.
   return createPortal(
     <div className="market-lightbox" role="dialog" aria-modal="true" aria-label={`${name}, screenshot ${i + 1} of ${srcs.length}`} onClick={onClose}>
-      <img src={srcs[i]} alt={`${name}, screenshot ${i + 1}`} onClick={(e) => e.stopPropagation()} />
+      <EtudeImg src={srcs[i]} alt={`${name}, screenshot ${i + 1}`} onClick={(e) => e.stopPropagation()} />
       <button className="market-lightbox-close" aria-label="Close" onClick={(e) => { e.stopPropagation(); onClose(); }}><X className="size-5" /></button>
       {srcs.length > 1 && (
         <>
@@ -133,7 +134,7 @@ function Clip({ src, label, onReady }: { src: string; label: string; onReady(): 
   };
   return (
     <figure className="market-shot market-clip">
-      <video ref={ref} src={src} muted loop playsInline preload="auto" aria-label={label} onLoadedMetadata={onReady} onPlay={() => setPaused(false)} onPause={() => setPaused(true)} onClick={toggle} />
+      <video ref={ref} src={useEtudeSrc(src)} muted loop playsInline preload="auto" aria-label={label} onLoadedMetadata={onReady} onPlay={() => setPaused(false)} onPause={() => setPaused(true)} onClick={toggle} />
       <button className="market-clip-toggle" aria-label={paused ? "Play preview" : "Pause preview"} onClick={toggle}>
         {paused ? <Play className="size-3.5 fill-current" /> : <Pause className="size-3.5 fill-current" />}
       </button>

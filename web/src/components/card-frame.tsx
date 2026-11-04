@@ -61,6 +61,12 @@ function prefsFor(type: string | null): Promise<Record<string, unknown>> {
   return prefCache.get(type)!;
 }
 
+// The serverless builds' page runs only scripts carrying its nonce (src/browser/csp-boot.js), and a
+// srcdoc frame inherits that policy: the frame's scripts get the nonce where the worker left this
+// placeholder (src/browser/frame-local.ts, FRAME_NONCE).
+const NONCE_PLACEHOLDER = 'nonce="%ETUDE_NONCE%"';
+const withPageNonce = (html: string) => html.replaceAll(NONCE_PLACEHOLDER, `nonce="${(globalThis as { __etudeFrameNonce?: string }).__etudeFrameNonce ?? ""}"`);
+
 const THEME_VARS = [
   "--background", "--foreground", "--card", "--card-foreground", "--popover", "--popover-foreground", "--muted",
   "--muted-foreground", "--secondary", "--secondary-foreground", "--border", "--input", "--primary", "--primary-foreground",
@@ -106,7 +112,8 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
   }, [loaded, props.fitScreen, post, screenHeight]);
 
   // With no server (the core runs in this tab), a served frame can't be loaded by URL: fetch its
-  // HTML from the core and show it as srcdoc. The frame then asks for media over postMessage.
+  // HTML from the core and show it as srcdoc. The frame then asks for media over postMessage. (A
+  // sandboxed frame loaded by URL wouldn't work offline: the service worker doesn't serve it.)
   const local = isLocal() && !props.html && !!props.src;
   const [localHtml, setLocalHtml] = useState<string | null>(null);
   useEffect(() => {
@@ -216,6 +223,8 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
     return () => window.removeEventListener("message", onMessage);
   }, [props.frameKey, post]);
 
+  const localDoc = (html: string | undefined) => (html !== undefined && isLocal() ? withPageNonce(html) : html);
+
   // A theme change (or a live preview in Settings) restyles cards already on screen.
   const scheme = useScheme();
   useEffect(() => {
@@ -231,7 +240,7 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
       title="card"
       sandbox="allow-scripts"
       src={served ? (docUrl ?? undefined) : props.html !== undefined || local ? undefined : props.src}
-      srcDoc={served ? undefined : (props.html ?? (local ? (localHtml ?? "") : undefined))}
+      srcDoc={served ? undefined : localDoc(props.html ?? (local ? (localHtml ?? "") : undefined))}
       // No opacity fade: on macOS WebKit the faded-in card frame could stop painting.
       className={cn("block w-full border-0 bg-transparent", props.className)}
       style={{ height, colorScheme: scheme }}

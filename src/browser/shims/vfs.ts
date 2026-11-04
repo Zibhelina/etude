@@ -52,6 +52,12 @@ function touch(p: string, gone = false) {
   flushTimer = setTimeout(() => void flush(), 150);
 }
 
+/** Every file under `prefix`, with its path relative to it (for backups). */
+export function filesUnder(prefix: string): [string, Uint8Array][] {
+  const root = norm(prefix) + "/";
+  return [...files].filter(([p]) => p.startsWith(root)).map(([p, data]) => [p.slice(root.length), data]);
+}
+
 /** Puts a file in memory without marking it for OPFS (the app's bundled files). */
 export function preload(path: string, data: string | Uint8Array) {
   const p = norm(path);

@@ -1,6 +1,6 @@
 import { autoSync } from "@/lib/sync";
 import { Archive, BarChart3, Blocks, Layers, Library, Settings, Store } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { SidebarIcon } from "@/components/sidebar-icon";
@@ -55,6 +55,8 @@ const NAV = [
 ];
 
 const COLLAPSED_KEY = "etude.sidebar.collapsed";
+/** Pages that only show the collection, so a sync that brought changes can reload them safely. */
+const RELOAD_ON_SYNC = new Set(["/", "/archive", "/deck", "/stats", "/more"]);
 const toggleKey = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘B" : "Ctrl+B";
 
 function useSidebarCollapsed() {
@@ -77,11 +79,38 @@ export function App() {
   const { path, params } = useLocation();
   const [collapsed, setCollapsed] = useSidebarCollapsed();
   const studying = path === "/study" || path === "/watch";
+  // Sync on its own, so every device shows the same collection without anyone pressing Sync:
+  // local changes go up within ~10 s, other devices' changes come down every 30 s and whenever
+  // the app comes back to the front. Not during a study session, which syncs when it ends.
+  const received = useRef<number | null>(null);
+  const pathRef = useRef(path);
+  pathRef.current = path;
   useEffect(() => {
     if (studying) return;
-    void autoSync();
-    const timer = setInterval(() => void autoSync(), 180_000);
-    return () => clearInterval(timer);
+    let stop = false;
+    const run = async (o?: { pendingOnly?: boolean }) => {
+      const st = await autoSync(o);
+      if (stop || typeof st?.received !== "number") return;
+      const before = received.current;
+      received.current = st.received;
+      // Changes came in: reload the page's data where nothing is being edited.
+      if (before !== null && st.received > before && RELOAD_ON_SYNC.has(pathRef.current)) setDataKey((k) => k + 1);
+    };
+    void run();
+    const pull = setInterval(() => void run(), 30_000);
+    const push = setInterval(() => void run({ pendingOnly: true }), 10_000);
+    const wake = () => document.visibilityState === "visible" && void run();
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("focus", wake);
+    window.addEventListener("online", wake);
+    return () => {
+      stop = true;
+      clearInterval(pull);
+      clearInterval(push);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("focus", wake);
+      window.removeEventListener("online", wake);
+    };
   }, [studying]);
   const agent = useAgentPanel();
   const updateDot = useUpdateDot();

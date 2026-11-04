@@ -46,6 +46,8 @@ export class SyncClient {
   private samples:[number,number][]=[];
   private active:Promise<any>|null=null;
   constructor(e:Etude) { this.e=e; }
+  /** Events pulled from other devices since this process started; the app reloads its page when it grows. */
+  private received=0;
   private initialized() { return !!this.e.db.get("SELECT 1 FROM sqlite_master WHERE name='sync_control'"); }
   private meta<T>(key:string,fallback:T):T { const r=this.initialized()?this.e.db.get("SELECT value FROM sync_meta WHERE key=?",key):null;return r?JSON.parse(r.value):fallback; }
   private set(key:string,value:unknown) {this.e.db.run("INSERT INTO sync_meta VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",key,JSON.stringify(value));}
@@ -62,7 +64,7 @@ export class SyncClient {
   private rate() {const p=this.progress,first=this.samples[0];if(!p||!first)return 0;const ms=Date.now()-first[0];return ms>0?Math.round((p.done-first[1])*1000/ms):0;}
   /** Bytes the unsent events take on the wire: base64 of the encrypted body. */
   private unsentBytes() {return this.e.db.get("SELECT coalesce(sum(coalesce(length(ciphertext),(length(CAST(body AS BLOB))+29+2)/3*4)),0) n FROM sync_events WHERE sent=0")!.n as number;}
-  status() {const cfg=this.config();const sec=this.secrets();return {configured:!!cfg?.enabled,kind:cfg?.kind??null,server:cfg?.server,folder:cfg?.folder,email:cfg?.email ?? (this.shared()?accountFor(this.e).email():undefined),signedIn:!!this.token(),account:this.shared(),unlocked:!!sec.vk,hasKeys:cfg?.kind==="folder" ? existsSync(join(cfg.folder!,"keys.json")) : !!cfg?.hasKeys,lastSync:cfg?.lastSync??null,busy:this.busy,error:this.error,progress:this.progress&&this.busy?{...this.progress,rate:this.rate()}:null,pending:this.initialized()?this.e.db.get("SELECT (SELECT count(*) FROM sync_outbox)+(SELECT count(*) FROM sync_events WHERE sent=0) AS n")!.n:0};}
+  status() {const cfg=this.config();const sec=this.secrets();return {configured:!!cfg?.enabled,kind:cfg?.kind??null,server:cfg?.server,folder:cfg?.folder,email:cfg?.email ?? (this.shared()?accountFor(this.e).email():undefined),signedIn:!!this.token(),account:this.shared(),unlocked:!!sec.vk,hasKeys:cfg?.kind==="folder" ? existsSync(join(cfg.folder!,"keys.json")) : !!cfg?.hasKeys,lastSync:cfg?.lastSync??null,busy:this.busy,error:this.error,progress:this.progress&&this.busy?{...this.progress,rate:this.rate()}:null,received:this.received,pending:this.initialized()?this.e.db.get("SELECT (SELECT count(*) FROM sync_outbox)+(SELECT count(*) FROM sync_events WHERE sent=0) AS n")!.n:0};}
   setup(input:{server?:string;folder?:string}) {
     if(this.busy)throw new Error("wait for sync to finish");
     if (!!input.server === !!input.folder) throw new Error("choose a server or a folder");
@@ -99,7 +101,7 @@ export class SyncClient {
   }
   async off() {if(this.active)await this.active.catch(()=>{});const c=this.config();if(c?.kind==="cloud" && this.secrets().token && accountFor(this.e).token()!==this.secrets().token) { try { await (this.transport() as CloudTransport).json("/v1/auth/logout",{}); } catch { this.error="Signed out locally. This device could not be revoked on the server while offline."; } } if(c)this.set("config",{...c,enabled:false});if(this.initialized())rmSync(this.secretFile(),{force:true});return this.status();}
   now() {if(this.active)return this.active;this.busy=true;this.active=this.run().then(()=>(this.error=null,this.progress=null,{...this.status(),busy:false})).catch(e=>{this.error=e.message;throw e;}).finally(()=>{this.busy=false;this.active=null;this.progress=null;});return this.active;}
-  async auto() {if(!this.status().configured||!this.status().unlocked)return;try{await this.now();}catch(e){if(e instanceof TypeError || /fetch failed|network|offline|timeout/i.test((e as Error).message))this.error=null;}}
+  async auto(o:{pendingOnly?:boolean}={}) {const st=this.status();if(!st.configured||!st.unlocked)return;if(o.pendingOnly&&!st.pending)return;try{await this.now();}catch(e){if(e instanceof TypeError || /fetch failed|network|offline|timeout/i.test((e as Error).message))this.error=null;}}
   private async run() {
     const vk=this.secrets().vk;if(!vk)throw new Error("unlock Sync first");const key=fromB64(vk);const t=this.transport();const db=this.e.db;
     // Drain writes before the first await. Further local writes are drained again before projection.
@@ -112,7 +114,7 @@ export class SyncClient {
       // A folder hands back every event each time: only new ones are decrypted, applied, and call for a rebuild.
       const fresh=page.events.filter(event=>!db.get("SELECT 1 FROM sync_events WHERE id=?",event.id));
       if(fresh.length)this.set("unprojected",true);
-      for(const event of fresh)receive(db,event.id,await decryptEvent<Change>(key,event.id,event.ciphertext));
+      for(const event of fresh)receive(db,event.id,await decryptEvent<Change>(key,event.id,event.ciphertext));this.received+=fresh.length;
       cursor=page.cursor;more=page.more;this.set("cursor",cursor);
     }
     // Hash the media on disk first, so a file another device already uploaded is neither downloaded nor uploaded again.

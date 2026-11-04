@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -33,7 +34,7 @@ test("the iOS project's version follows package.json", () => {
   const pbx = read("ios/App/App.xcodeproj/project.pbxproj");
   assert.deepEqual([...new Set(pbx.match(/MARKETING_VERSION = [^;]+;/g))], [`MARKETING_VERSION = ${major}.${minor}.${patch};`]);
   assert.deepEqual([...new Set(pbx.match(/CURRENT_PROJECT_VERSION = [^;]+;/g))], [`CURRENT_PROJECT_VERSION = ${major * 10000 + minor * 100 + patch};`]);
-  const out = execFileSync(process.execPath, [new URL("../scripts/native-version.mjs", import.meta.url).pathname, "--check"], { encoding: "utf8" });
+  const out = execFileSync(process.execPath, [fileURLToPath(new URL("../scripts/native-version.mjs", import.meta.url)), "--check"], { encoding: "utf8" });
   assert.match(out, /matches package\.json/);
 });
 

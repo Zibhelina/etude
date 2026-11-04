@@ -4,7 +4,7 @@
 import { isLocal } from "@/lib/transport";
 import { api } from "@/lib/api";
 
-type CapacitorGlobal = { isNativePlatform?: () => boolean; getPlatform?: () => string };
+type CapacitorGlobal = { isNativePlatform?: () => boolean; getPlatform?: () => string; isPluginAvailable?: (name: string) => boolean };
 const cap = (): CapacitorGlobal | undefined => (globalThis as { Capacitor?: CapacitorGlobal }).Capacitor;
 
 /** True when there is no Etude server behind the app (browser build or a phone app). */
@@ -12,6 +12,13 @@ export const serverless = () => isLocal();
 
 /** True inside the Android or iOS app. */
 export const inNativeShell = () => !!cap()?.isNativePlatform?.();
+
+/**
+ * True where Sign in with ChatGPT can finish: the desktop app (its server's 127.0.0.1 listener)
+ * and the phone apps that ship the EtudeAuth plugin (iOS today). Not the plain browser build: there
+ * auth.openai.com can't be called (no CORS) and nothing can listen on 127.0.0.1.
+ */
+export const chatGptSignInHere = () => !serverless() || (inNativeShell() && !!cap()?.isPluginAvailable?.("EtudeAuth"));
 
 /** "android", "ios" or "web". */
 export const shellPlatform = () => (inNativeShell() ? (cap()?.getPlatform?.() ?? "web") : "web");

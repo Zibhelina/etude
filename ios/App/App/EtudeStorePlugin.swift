@@ -222,10 +222,3 @@ enum EtudeStore {
         return out
     }
 }
-
-/// The app's Capacitor view controller, with Etude's own native plugins registered.
-class EtudeBridgeViewController: CAPBridgeViewController {
-    override open func capacitorDidLoad() {
-        bridge?.registerPluginInstance(EtudeStorePlugin())
-    }
-}

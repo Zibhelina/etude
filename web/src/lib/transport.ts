@@ -5,15 +5,20 @@ type Transport = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respo
 const local = (): Transport | undefined => (globalThis as { __etudeTransport?: Transport }).__etudeTransport;
 
 // A server started with --token (the desktop app's engine, or one reached from a phone) needs it on
-// every API call. Opening the app once with ?token=… stores it for this browser.
+// every API call. Opening the app once with ?token=… stores it for this browser, and the address loses
+// it, so it doesn't stay in history or reach anything the page loads.
 const TOKEN = (() => {
+  let fromUrl: string | null = null;
   try {
-    const fromUrl = new URLSearchParams(location.search).get("token");
-    if (fromUrl) localStorage.setItem("etude.token", fromUrl);
-    return fromUrl ?? localStorage.getItem("etude.token");
-  } catch {
-    return null;
-  }
+    const params = new URLSearchParams(location.search);
+    fromUrl = params.get("token");
+    if (!fromUrl) return localStorage.getItem("etude.token");
+    localStorage.setItem("etude.token", fromUrl);
+    params.delete("token");
+    const q = params.toString();
+    history.replaceState(history.state, "", location.pathname + (q ? `?${q}` : "") + location.hash);
+  } catch {}
+  return fromUrl;
 })();
 
 export const apiToken = () => TOKEN;

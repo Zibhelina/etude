@@ -14,7 +14,8 @@ import { etudeFetch } from "@/lib/transport";
 import { cn } from "@/lib/utils";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
 import { account, bytes, openOutside, type AccountStatus } from "@/lib/account";
-import { canShowPurchases, desktopApp, storeSafeMessage } from "@/lib/platform";
+import { canShowPurchases, desktopApp, isNativeApp, storeSafeMessage } from "@/lib/platform";
+import { NATIVE_COPY } from "@/lib/native-copy";
 import { canBuyInApp, STOREKIT_EVENT } from "@/lib/storekit";
 import { AppStoreManage, AppStorePlans } from "@/components/app-store-plans";
 
@@ -383,7 +384,7 @@ export function SyncSection() {
       )}
 
       {status && stage === "setup" && (
-        <Block title="Set up sync" description="Etude syncs through a server, or through a folder on this computer in the desktop app.">
+        <Block title="Set up sync" description={isNativeApp() ? NATIVE_COPY.syncSetup : "Etude syncs through a server, or through a folder on this computer in the desktop app."}>
           <form
             className="flex flex-col gap-4"
             onSubmit={(e) => {
@@ -392,7 +393,7 @@ export function SyncSection() {
             }}
           >
             <TextInput label="Server" value={server} onChange={setServer} placeholder={DEFAULT_SERVER} mono autoComplete="url" hint="The sync server address. Change it to use one of your own." />
-            {!(globalThis as any).__etudeLocal && <TextInput label="Folder (optional)" value={folder} onChange={setFolder} placeholder="/home/you/Etude" mono autoComplete="off" hint="Desktop app only. Leave empty to sync through the server." action={<ChooseFolder onPick={setFolder} />} />}
+            {!(globalThis as any).__etudeLocal && !isNativeApp() && <TextInput label="Folder (optional)" value={folder} onChange={setFolder} placeholder="/home/you/Etude" mono autoComplete="off" hint="Desktop app only. Leave empty to sync through the server." action={<ChooseFolder onPick={setFolder} />} />}
             {problem && <Notice>{problem}</Notice>}
             <div>
               <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
@@ -592,7 +593,7 @@ export function SyncSection() {
         <>
           <Block
             title="Connection"
-            description={status.kind === "folder" ? "Syncing through a folder on this computer." : "Syncing through your server."}
+            description={status.kind === "folder" ? (isNativeApp() ? NATIVE_COPY.syncFolder : "Syncing through a folder on this computer.") : "Syncing through your server."}
           >
             {problem && <Notice>{problem}</Notice>}
             <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm">

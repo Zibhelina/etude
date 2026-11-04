@@ -55,7 +55,8 @@
     "site:serve": "node site/tools/serve.mjs",
     "test:wasm": "ETUDE_SQL=wasm node --test \"test/**/*.test.ts\"",
     "build:browser": "node src/browser/tools/build-frame.mjs && vite build --config src/browser/vite.config.ts",
-    "app:sync": "npm run build:browser && cap sync",
+    "app:version": "node scripts/native-version.mjs",
+    "app:sync": "npm run app:version && npm run build:browser && cap sync",
     "app:icons": "node scripts/app-icons.mjs && capacitor-assets generate --android --ios --iconBackgroundColor \"#000000\" --iconBackgroundColorDark \"#000000\" --splashBackgroundColor \"#000000\" --splashBackgroundColorDark \"#000000\"",
     "app:android:debug": "npm run app:sync && cd android && ./gradlew assembleDebug",
     "app:android:release": "npm run app:sync && cd android && ./gradlew bundleRelease"

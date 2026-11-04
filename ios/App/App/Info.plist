@@ -67,8 +67,16 @@
 			</array>
 		</dict>
 	</array>
-	<!-- Photo picker for image occlusion and image fields: the system picker needs no permission.
-	     Camera, microphone, location, contacts and tracking aren't used, so no usage strings. -->
+	<!-- Image inputs (cards, image occlusion, Ask Etude attachments, Market covers) open the system
+	     picker, which also offers "Take Photo": that needs the camera string or iOS ends the app.
+	     Long-pressing a picture in the web view offers "Save to Photos", which needs the add string.
+	     Microphone, location, contacts and tracking aren't used, so no other usage strings. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Etude uses the camera when you take a photo to add to a card.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Etude opens your photo library when you choose a picture to add to a card.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Etude saves a picture from a card to your photo library when you ask it to.</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

@@ -1,6 +1,6 @@
 # Etude for iPhone and iPad
 
-The app is the serverless browser build (`dist-browser/`) inside a Capacitor shell in `ios/`. Bundle id `study.etude.app`, display name Etude, version 2.3.0 (build 20300, the same scheme as Android's versionCode), iOS 15 or later, iPhone and iPad. Capacitor 8 uses Swift Package Manager, so there is no CocoaPods step.
+The app is the serverless browser build (`dist-browser/`) inside a Capacitor shell in `ios/`. Bundle id `study.etude.app`, display name Etude, version and build come from `package.json` (2.5.0 → Version 2.5.0, Build 20500: major × 10000 + minor × 100 + patch, the same scheme as Android's versionCode), iOS 15 or later, iPhone and iPad. Capacitor 8 uses Swift Package Manager, so there is no CocoaPods step.
 
 What's already in the project:
 
@@ -56,4 +56,4 @@ Prerequisites: a paid Apple Developer Program membership (US$99/year) on your Ap
    - App Review notes: Etude works without an account. The Market lists free decks; nothing is sold in the app.
 10. Pick the build under the version, then **Add for Review** → **Submit**.
 
-For each new version: bump `version` in `package.json`, then in Xcode set Version (MARKETING_VERSION) and Build (CURRENT_PROJECT_VERSION) to match (2.4.0 → 20400), `npm run app:sync`, Archive, upload.
+For each new version: bump `version` in `package.json`, then `npm run app:sync`, Archive, upload. `app:sync` runs `npm run app:version` (`scripts/native-version.mjs`), which writes MARKETING_VERSION and CURRENT_PROJECT_VERSION into the Xcode project (2.6.0 → 20600); commit the changed `project.pbxproj` with the version bump. Don't edit Version or Build by hand in Xcode, the next sync overwrites them. `node scripts/native-version.mjs --check` fails if they differ. App Store Connect refuses a build number it has seen, so a second upload of the same version needs a patch bump.

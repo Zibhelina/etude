@@ -833,7 +833,8 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
     window.dispatchEvent(new Event(ACCOUNT_EVENT));
     const a = await account.status();
     if (a.me?.sync.active || !a.offering?.billing) return onDone("password next");
-    if (!canShowPurchases()) return onDone("subscribe on etude.study");
+    // Native apps can't point at an outside purchase (App Store 3.1.1/3.1.3): just say Sync isn't on for this account.
+    if (!canShowPurchases()) return onDone("not active");
     onStage("plan");
   };
 
@@ -886,6 +887,9 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
       </>
     );
 
+  // The store apps have no plan page: an account that already has Sync goes on, any other gets "not active".
+  if (stage === "plan" && !canShowPurchases()) return <NativePlanGate onCheck={() => void run(afterSignIn)} error={error} />;
+
   if (stage === "plan")
     return (
       <>
@@ -919,6 +923,21 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
       })} busy={busy}>I've paid</Primary>
       {error && <Problem>{error}</Problem>}
       <Ghost onClick={() => onStage("plan")}>Back to plans</Ghost>
+    </>
+  );
+}
+
+function NativePlanGate({ onCheck, error }: { onCheck(): void; error: string | null }) {
+  const checked = useRef(false);
+  useEffect(() => {
+    if (checked.current) return;
+    checked.current = true;
+    onCheck();
+  }, [onCheck]);
+  return (
+    <>
+      <Title>Etude Sync</Title>
+      {error ? <Problem>{error}</Problem> : <div className="mt-8 flex items-center gap-3 text-[14px] text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Checking your account…</div>}
     </>
   );
 }

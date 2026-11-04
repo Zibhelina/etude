@@ -157,7 +157,11 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   opts = { ...opts, kitDir: opts.kitDir ?? [opts.webDist && join(opts.webDist, "kit"), join(ROOT, "web", "dist", "kit")].find((d) => d && existsSync(join(d, "kit.js"))) ?? null };
 
   app.onError((err, c) => {
-    if (err instanceof EtudeError) return c.json({ error: err.message }, err.status as 400);
+    if (err instanceof EtudeError) {
+      // Account errors carry the Sync server's code (sync_required, not_owned…); the store apps reword those.
+      const code = (err as { code?: unknown }).code;
+      return c.json(typeof code === "string" ? { error: err.message, code } : { error: err.message }, err.status as 400);
+    }
     if (err instanceof AgentError) return c.json({ error: err.message }, err.status as 400);
     if (err instanceof UpdateError) return c.json({ error: err.message, details: err.details }, err.status as 400);
     console.error(err);

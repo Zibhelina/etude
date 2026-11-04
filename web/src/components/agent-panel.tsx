@@ -15,6 +15,11 @@ import { EtudeImg } from "@/lib/local-url";
 import { refreshTheme } from "@/lib/theme";
 import { api, relative } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { isNativeApp } from "@/lib/platform";
+
+// In the iOS app a file input with no accept list offers "Take Video", which needs the microphone; the
+// app only takes images, PDFs, text and .apkg, so it asks for those and iOS offers photos, camera and files.
+const NATIVE_ATTACH = isNativeApp() ? "image/*,application/pdf,text/*,.md,.csv,.json,.apkg" : undefined;
 
 const OPEN_KEY = "etude.agent.open";
 const WIDTH_KEY = "etude.agent.width";
@@ -666,7 +671,7 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
             className="block max-h-52 min-h-11 w-full resize-none bg-transparent px-3 pt-3 pb-1.5 text-sm text-foreground leading-normal outline-none placeholder:text-muted-foreground [field-sizing:content] max-sm:text-base"
           />
           <div className="flex items-center gap-1.5 px-3 pb-3">
-            <input ref={fileInput} type="file" multiple hidden onChange={(e) => (addFiles([...(e.target.files ?? [])]), (e.target.value = ""))} />
+            <input ref={fileInput} type="file" multiple hidden accept={NATIVE_ATTACH} onChange={(e) => (addFiles([...(e.target.files ?? [])]), (e.target.value = ""))} />
             <Tooltip>
               <TooltipTrigger asChild>
                 <button

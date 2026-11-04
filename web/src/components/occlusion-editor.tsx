@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
+import { EtudeImg } from "@/lib/local-url";
 import { cn } from "@/lib/utils";
 
 export interface OcclusionBox {
@@ -527,7 +528,7 @@ export function OcclusionEditor({ image, boxes: propBoxes, mode, onChange, onPen
                 className="absolute left-0 top-0 origin-top-left"
                 style={{ width: size.W, height: size.H, transform: `translate(${view.tx}px, ${view.ty}px) scale(${z})` }}
               >
-                <img
+                <EtudeImg
                   src={image}
                   alt=""
                   draggable={false}

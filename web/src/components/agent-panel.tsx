@@ -11,6 +11,7 @@ import { Logo } from "@/components/logo";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { agentApi, DATA_EVENT, type AgentEvent, type AssistantContent, type Attachment, type Conversation, type Item, type Message, type ModelGroup, type ToolItem, type UserContent } from "@/lib/agent";
 import { appPath, navigate } from "@/lib/router";
+import { EtudeImg } from "@/lib/local-url";
 import { refreshTheme } from "@/lib/theme";
 import { api, relative } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -786,7 +787,7 @@ function AttachmentChip({ a, conv, onRemove }: { a: Attachment | { uploading: st
   const Icon = a.kind === "image" ? ImageIcon : a.kind === "anki" ? Package : FileText;
   return (
     <span className="flex h-7 max-w-full items-center gap-1.5 rounded-lg border bg-background pr-1 pl-2 text-xs" title={a.name}>
-      {a.kind === "image" && conv ? <img src={agentApi.attachmentUrl(conv, a.id)} alt="" className="size-4 rounded-sm object-cover" /> : <Icon className="size-3.5 text-muted-foreground" />}
+      {a.kind === "image" && conv ? <EtudeImg src={agentApi.attachmentUrl(conv, a.id)} alt="" className="size-4 rounded-sm object-cover" /> : <Icon className="size-3.5 text-muted-foreground" />}
       <span className="max-w-40 truncate">{a.name}</span>
       <span className="text-muted-foreground">{a.pages ? `${a.pages} p` : fmtBytes(a.bytes)}</span>
       {onRemove ? (

@@ -15,6 +15,7 @@ import { ThemeMiniature, ThemeSwatches } from "@/components/settings-theme-previ
 import { CardPreview } from "@/components/card-preview";
 import { download } from "@/components/type-editor/starter";
 import { api, ApiError, type CardType, type MarketEntry, type MarketFile, type MarketKind, type PublishResult } from "@/lib/api";
+import { EtudeImg } from "@/lib/local-url";
 import { MarketGallery } from "@/components/market-gallery";
 import { applyTheme } from "@/lib/theme";
 import { navigate, useLocation } from "@/lib/router";
@@ -236,7 +237,7 @@ function Cover({ entry, large }: { entry: MarketEntry; large?: boolean }) {
   if (entry.cover) {
     return (
       <div className={cn("aspect-[16/10] min-w-0 overflow-hidden rounded-lg bg-[#070707]", large && "rounded-xl")}>
-        <img src={api.marketCoverUrl(entry.kind, entry.id)} alt="" loading="lazy" className="size-full object-contain" />
+        <EtudeImg src={api.marketCoverUrl(entry.kind, entry.id)} alt="" loading="lazy" className="size-full object-contain" />
       </div>
     );
   }

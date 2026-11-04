@@ -15,6 +15,7 @@ import { ItemAiEdit } from "@/components/item-ai-edit";
 import { CardPreview } from "@/components/card-preview";
 import { Markdown } from "@/components/markdown";
 import { api, humanInterval, relative, RATING_LABEL, STATE_NAMES, type CardType, type ItemDetail, type SearchRow, type TypeSummary } from "@/lib/api";
+import { EtudeImg } from "@/lib/local-url";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { useLongPress, usePhone } from "@/lib/phone";
@@ -460,7 +461,7 @@ function History({ item }: { item: ItemDetail }) {
 function AnswerView({ answer }: { answer: unknown }) {
   if (answer && typeof answer === "object" && typeof (answer as any).image === "string") {
     const img = (answer as any).image as string;
-    return <img src={img.startsWith("media:") ? `/media/${img.slice(6)}` : img} alt="drawing" className="max-h-64 rounded border bg-white" />;
+    return <EtudeImg src={img.startsWith("media:") ? `/media/${img.slice(6)}` : img} alt="drawing" className="max-h-64 rounded border bg-white" />;
   }
   const text = typeof answer === "string" ? answer : JSON.stringify(answer);
   return <pre className="whitespace-pre-wrap break-words font-mono text-[13px]">{text || <span className="text-muted-foreground">(empty)</span>}</pre>;

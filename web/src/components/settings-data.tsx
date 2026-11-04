@@ -3,6 +3,7 @@ import { useState } from "react";
 import { CircleAlert, CircleCheck, Download, Loader2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { etudeDownload } from "@/lib/local-url";
 import { Block, CopyValue, Section } from "@/components/settings-ui";
 
 type Counts = { created: number; updated: number; unchanged: number };
@@ -104,7 +105,7 @@ export function DataSection({ dbPath, mediaDir }: { dbPath: string; mediaDir: st
         stackAside
         aside={
           <Button asChild variant="outline" size="sm" className="h-10 gap-1.5 md:h-8">
-            <a href={api.exportUrl({})} download={`etude-${stamp}.pack.json`}>
+            <a href={api.exportUrl({})} download={`etude-${stamp}.pack.json`} onClick={etudeDownload}>
               <Download className="size-4" />Export pack
             </a>
           </Button>

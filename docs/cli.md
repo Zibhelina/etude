@@ -72,6 +72,14 @@ The database is chosen in this order:
 
 Media files live in a `media/` folder next to the database. `$ETUDE_HOME/.env` is loaded if it exists, which is where AI provider keys go (settings only store the name of the environment variable, never the key). `etude db path` shows which database a command would use and why.
 
+## Error reports and usage counts
+
+The `etude` command and agents send nothing: no error reports, no usage counts, whatever Settings → Privacy says. Agents run headless, so this is off by default for them. Only the app sends (the desktop app's own engine, the web edition, the iPhone and Android apps): anonymous error reports unless **Send error reports** is turned off, and anonymous daily feature counts only when **Share usage stats** is turned on. Both go to Etude's server (sync.etude.study), never to your own Sync server, and never carry card or deck text, answers, emails, file names or the account.
+
+- A plain `etude serve` sends nothing either; `ETUDE_TELEMETRY=1 etude serve` makes it behave like the app's engine.
+- `ETUDE_TELEMETRY=0` turns both off everywhere, the desktop app included.
+- `etude settings set privacy.errorReports=false` and `privacy.usageStats=true|false` change the same switches as Settings → Privacy.
+
 ## Recipes
 
 ### Build a deck from notes

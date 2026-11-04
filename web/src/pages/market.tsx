@@ -24,6 +24,7 @@ import { serverless } from "@/lib/native";
 import { LibraryView, PaidDialog, PaidTile, SellingView, usePaidIndex } from "@/components/market-paid";
 import type { PaidEntry } from "@/lib/account";
 import { canShowPurchases, isNativeApp } from "@/lib/platform";
+import { track } from "@/lib/telemetry";
 
 const KIND_LABEL: Record<MarketKind, string> = { theme: "Theme", deck: "Deck", type: "Card type" };
 const KIND_ICON: Record<MarketKind, React.ComponentType<{ className?: string }>> = { theme: Palette, deck: Layers, type: Blocks };
@@ -35,6 +36,8 @@ type Filter = "all" | MarketKind;
 type Tab = "browse" | "library" | "selling";
 
 export function MarketPage() {
+  // Usage count (only when the person turned usage stats on).
+  useEffect(() => track("market.open"), []);
   const { params } = useLocation();
   const filter = (params.get("kind") as Filter) || "all";
   // Store apps never sell, so they don't get the Selling tab.

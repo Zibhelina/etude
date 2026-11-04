@@ -20,6 +20,10 @@ contextBridge.exposeInMainWorld("etudeDesktop", {
       return () => ipcRenderer.off("etude:update", listener);
     },
   },
+  telemetry: {
+    /** Errors the app's main process kept for an anonymous report (the page passes them on if Privacy allows). */
+    pending: () => ipcRenderer.invoke("etude:telemetry-pending"),
+  },
   command: {
     /** Where `etude` is on the PATH and whether the app can install its own. */
     status: () => ipcRenderer.invoke("etude:command-status"),

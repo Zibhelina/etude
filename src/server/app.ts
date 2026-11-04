@@ -17,6 +17,7 @@ import { ASSET_NAME, assetMime } from "../core/assets.ts";
 import { agentFor, AgentError, AGENT_MAX_ATTACHMENT_BYTES, type AgentEvent } from "../core/agent.ts";
 import { streamSSE } from "hono/streaming";
 import { applyUpdate, updateStatus, UpdateError } from "../core/update.ts";
+import { isEventName, telemetryAllowed, telemetryFor, usageEventFor } from "../core/telemetry.ts";
 import { buildSubmission, fetchMarketMedia, fetchCover, fetchEntry, fetchIndex, ghStatus, installEntry, installState, installedEntries, manualPublishUrl, marketSettings, publishFile, summarize, entryPath, entryJson, forgetInstall, type MarketKind } from "../core/market.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -165,6 +166,10 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     if (err instanceof AgentError) return c.json({ error: err.message }, err.status as 400);
     if (err instanceof UpdateError) return c.json({ error: err.message, details: err.details }, err.status as 400);
     console.error(err);
+    // A bug in the core (not a refusal): an anonymous error report, when they're on (src/core/telemetry.ts).
+    try {
+      telemetryFor(etude).report({ kind: "core.error", message: `${err?.name ?? "Error"}: ${String(err?.message ?? err)}`, stack: String(err?.stack ?? "") });
+    } catch {}
     return c.json({ error: String(err?.message ?? err) }, 500);
   });
 
@@ -203,6 +208,20 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
       }
     }
     await next();
+  });
+
+  // Usage counts by feature, from the routes the app calls (only when the person turned them on; never the content).
+  app.use("/api/*", async (c, next) => {
+    await next();
+    const t = telemetryFor(etude);
+    if (c.res.status >= 300 || !t.active || !t.prefs().usageStats) return;
+    const name = usageEventFor(c.req.method, c.req.path);
+    if (!name) return;
+    t.count(name);
+    if (c.req.path === "/api/study/submit") {
+      const j = await c.res.clone().json().catch(() => null);
+      if (j?.grade?.grader?.kind === "ai") t.count("ai.grade");
+    }
   });
 
   const body = async <T = any>(c: Context): Promise<T> => {
@@ -464,7 +483,28 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   });
   app.get("/api/defaults", (c) => c.json(DEFAULT_PRESET));
   app.post("/api/ai/test", async (c) => c.json(await etude.testAi()));
-  app.patch("/api/settings", async (c) => c.json(etude.updateSettings(await body(c))));
+  app.patch("/api/settings", async (c) => {
+    const next = etude.updateSettings(await body(c));
+    // A Privacy toggle turned off drops what was waiting to be sent, at once.
+    telemetryFor(etude).applyPrefs();
+    return c.json(next);
+  });
+  // Anonymous error reports and usage counts from the app's window (Settings → Privacy; src/core/telemetry.ts).
+  app.get("/api/telemetry", (c) => {
+    const t = telemetryFor(etude);
+    return c.json({ active: t.active, allowed: telemetryAllowed(), forced: /^(1|on|true|yes)$/i.test(process.env.ETUDE_TELEMETRY ?? ""), prefs: t.prefs(), pending: t.pending() });
+  });
+  app.post("/api/telemetry/report", async (c) => {
+    const b = await body<{ kind?: unknown; message?: unknown; stack?: unknown }>(c);
+    const kind = typeof b.kind === "string" ? b.kind : "window.error";
+    return c.json({ queued: telemetryFor(etude).report({ kind, message: String(b.message ?? "").slice(0, 2000), stack: String(b.stack ?? "").slice(0, 16_000) }) });
+  });
+  app.post("/api/telemetry/event", async (c) => {
+    const b = await body<{ name?: unknown }>(c);
+    if (!isEventName(b.name)) throw new EtudeError(`unknown event "${String(b.name)}"`);
+    return c.json({ counted: telemetryFor(etude).count(b.name) });
+  });
+  app.post("/api/telemetry/flush", async (c) => c.json(await telemetryFor(etude).flush()));
   // One API key into $ETUDE_HOME/.env. The answer says whether it is set, never what it is.
   app.post("/api/settings/key", async (c) => {
     const b = await body<{ name?: unknown; value?: unknown }>(c);

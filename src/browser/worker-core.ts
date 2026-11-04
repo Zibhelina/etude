@@ -206,6 +206,8 @@ async function handle(ev: MessageEvent) {
   }
   if (ev.data?.hello) {
     if (ev.data.hello.native) nat.ready = installNativeHost().catch((e) => console.warn("native host:", e));
+    // Before any request is answered, so the app's first look at /api/telemetry sees it running.
+    telemetryStarted = startWorkerTelemetry(ev.data.hello);
     return;
   }
   const { id, method } = ev.data ?? {};
@@ -214,6 +216,7 @@ async function handle(ev: MessageEvent) {
   try {
     const info = await ready;
     await nat.ready;
+    await telemetryStarted;
     if (ev.data?.http) return await http(id, ev.data.http);
     const args: unknown[] = (ev.data?.args ?? []).map(revive);
     let value: unknown;
@@ -235,6 +238,31 @@ async function handle(ev: MessageEvent) {
     post({ id, ok: false, error: e instanceof Error ? `${e.name}: ${e.message}` : String(e) });
   }
 }
+
+// ------------------------------------------------- telemetry
+// Anonymous error reports and usage counts from the browser and phone apps (Settings → Privacy, src/core/telemetry.ts).
+// The page says where it runs; a dev build or an automated browser sends nothing.
+let telemetryStarted: Promise<void> = Promise.resolve();
+async function startWorkerTelemetry(hello: { platform?: string; automated?: boolean }) {
+  if (import.meta.env.DEV) return;
+  try {
+    await ready;
+    const { startTelemetry, osFromUserAgent } = await import("../core/telemetry.ts");
+    const platform = hello.platform === "ios" || hello.platform === "android" ? hello.platform : "web";
+    startTelemetry(etude, { platform, os: osFromUserAgent(navigator.userAgent), automated: !!hello.automated });
+  } catch (e) {
+    console.warn("telemetry:", e);
+  }
+}
+const reportWorker = (kind: string, err: unknown) => {
+  if (!etude) return;
+  void import("../core/telemetry.ts").then(({ telemetryFor }) => {
+    const e = err as { name?: string; message?: string; stack?: string } | undefined;
+    telemetryFor(etude).report({ kind, message: e?.message ? `${e.name ?? "Error"}: ${e.message}` : String(err), stack: e?.stack ?? "" });
+  });
+};
+self.addEventListener("error", (ev) => reportWorker("worker.error", (ev as ErrorEvent).error ?? (ev as ErrorEvent).message));
+self.addEventListener("unhandledrejection", (ev) => reportWorker("worker.rejection", (ev as PromiseRejectionEvent).reason));
 
 /** Called once by worker.ts with the messages that came in while this module loaded, in order. */
 export function start(queued: MessageEvent[]) {

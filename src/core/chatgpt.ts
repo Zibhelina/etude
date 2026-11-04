@@ -98,7 +98,7 @@ export function setChatGptNativeHost(host: ChatGptNativeHost | null) {
 export const chatGptNativeHost = () => nativeHost;
 
 /** `fetch`, or the native host's HTTP when one is installed (the answer is rebuilt as a Response). */
-async function net(url: string, init: { method?: string; headers?: Record<string, string>; body?: string; timeoutMs: number }): Promise<Response> {
+export async function chatGptFetch(url: string, init: { method?: string; headers?: Record<string, string>; body?: string; timeoutMs: number }): Promise<Response> {
   if (!nativeHost) return fetch(url, { method: init.method, headers: init.headers, body: init.body, signal: AbortSignal.timeout(init.timeoutMs) });
   const r = await nativeHost.http({ url, method: init.method ?? "GET", headers: init.headers ?? {}, body: init.body, timeoutMs: init.timeoutMs });
   const empty = r.status === 204 || r.status === 304;
@@ -313,7 +313,7 @@ const JWKS_TTL_MS = 10 * 60 * 1000;
 async function fetchJwks(url: string, force = false): Promise<Jwk[]> {
   const hit = jwksCache.get(url);
   if (hit && !force && Date.now() - hit.at < JWKS_TTL_MS) return hit.keys;
-  const res = await net(url, { timeoutMs: 10_000 }).catch((e) => {
+  const res = await chatGptFetch(url, { timeoutMs: 10_000 }).catch((e) => {
     throw new ChatGptError(`couldn't fetch OpenAI's signing keys: ${(e as Error).message}`, "network");
   });
   if (!res.ok) throw new ChatGptError(`couldn't fetch OpenAI's signing keys: HTTP ${res.status}`, "network");
@@ -442,7 +442,7 @@ async function tokenError(res: Response): Promise<ChatGptError> {
 }
 
 async function postToken(ep: ChatGptEndpoints, form: Record<string, string>): Promise<TokenResponse> {
-  const res = await net(ep.token, {
+  const res = await chatGptFetch(ep.token, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: new URLSearchParams(form).toString(),
@@ -866,7 +866,7 @@ export interface ChatGptModel {
 export async function listChatGptModels(home: string, endpoints: Partial<ChatGptEndpoints> = {}): Promise<ChatGptModel[]> {
   const ep = chatGptEndpoints(endpoints);
   const creds = await getChatGptCredentials(home, ep);
-  const res = await net(ep.models, {
+  const res = await chatGptFetch(ep.models, {
     headers: { Authorization: `Bearer ${creds.access_token}`, Accept: "application/json" },
     timeoutMs: 15_000,
   }).catch((e) => {
@@ -958,7 +958,7 @@ export async function chatGptResponses(req: ResponsesRequest): Promise<Responses
     throw new ChatGptError("this sign-in doesn't include ChatGPT plan usage; sign out and sign in again, allowing plan access", "plan_disabled");
   const content: Record<string, unknown>[] = [{ type: "input_text", text: req.input }];
   if (req.image) content.push({ type: "input_image", image_url: req.image });
-  const res = await net(ep.responses, {
+  const res = await chatGptFetch(ep.responses, {
     method: "POST",
     headers: { Authorization: `Bearer ${creds.access_token}`, "Content-Type": "application/json", Accept: "text/event-stream" },
     body: JSON.stringify({ model: req.model || DEFAULT_CHATGPT_MODEL, instructions: req.instructions, input: [{ role: "user", content }], store: false, stream: true }),
@@ -1056,14 +1056,14 @@ export async function chatGptLogout(home: string, endpoints: Partial<ChatGptEndp
   if (cur.refresh_token) {
     let revokeUrl: string | null = null;
     try {
-      const res = await net(ep.discovery, { timeoutMs: 10_000 });
+      const res = await chatGptFetch(ep.discovery, { timeoutMs: 10_000 });
       if (res.ok) revokeUrl = ((await res.json()) as { revocation_endpoint?: string }).revocation_endpoint ?? null;
     } catch {
       revokeUrl = null;
     }
     if (revokeUrl) {
       try {
-        const res = await net(revokeUrl, {
+        const res = await chatGptFetch(revokeUrl, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({ token: cur.refresh_token, token_type_hint: "refresh_token", client_id: cur.client_id }).toString(),

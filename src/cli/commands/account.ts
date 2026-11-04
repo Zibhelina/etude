@@ -120,9 +120,39 @@ command({
   run: (c) => call(() => a(c).createListing({ deck: c.args.deck, price: cents(c.flags.price), name: c.flags.name, description: c.flags.description, tags: c.flags.tag, cover: cover(c.flags.cover) })),
 });
 command({ name: "account update-listing", summary: "Upload the deck again as the next version. Buyers get it after review.", args: [LISTING, { name: "deck", description: "Deck name.", required: true }], flags: [{ name: "changelog", type: "string", description: "What changed." }], writes: true, output: "the listing", run: (c) => call(() => a(c).newVersion(c.args.listing, { deck: c.args.deck, changelog: c.flags.changelog })) });
+command({
+  name: "account edit-listing",
+  summary: "Change a listing's Market page: name, description, tags, price, cover. On a deck that has been on sale, the change waits for the Etude team's review and buyers keep the approved page.",
+  args: [LISTING],
+  flags: [
+    { name: "name", type: "string", description: "New name." },
+    { name: "description", type: "string", description: "New description." },
+    { name: "tag", type: "string", multiple: true, description: "Tag (repeatable; replaces the tags)." },
+    { name: "price", type: "string", description: "New price in US dollars (at least 5)." },
+    { name: "cover", type: "string", description: "New cover image (.webp, .png or .jpg, ≤ 600 KB).", placeholder: "FILE" },
+  ],
+  writes: true,
+  examples: ['etude account edit-listing pharmacology-101 --price 15 --description "…"'],
+  output: "the listing (top-level fields are the approved page; `revision` holds the change waiting for review)",
+  run: (c) =>
+    call(async () => {
+      const id = c.args.listing;
+      const patch: { name?: string; description?: string; tags?: string[]; price?: number } = {};
+      if (c.flags.name !== undefined) patch.name = c.flags.name;
+      if (c.flags.description !== undefined) patch.description = c.flags.description;
+      if (c.flags.tag !== undefined) patch.tags = c.flags.tag;
+      if (c.flags.price !== undefined) patch.price = cents(c.flags.price);
+      const img = cover(c.flags.cover);
+      if (!Object.keys(patch).length && !img) throw new AccountError("nothing to change: pass --name, --description, --tag, --price or --cover", 400, "invalid");
+      if (Object.keys(patch).length) await a(c).updateListing(id, patch);
+      if (img) await a(c).setCover(id, img);
+      return a(c).json("GET", `/v1/listings/${encodeURIComponent(id)}`);
+    }),
+});
+command({ name: "account withdraw-changes", summary: "Withdraw a listing's page change that is waiting for review.", args: [LISTING], writes: true, output: "the listing", run: (c) => call(() => a(c).withdrawChanges(c.args.listing)) });
 command({ name: "account submit", summary: "Send a listing for review.", args: [LISTING], writes: true, output: "the listing", run: (c) => call(() => a(c).submit(c.args.listing)) });
 command({ name: "account hide", summary: "Take a listing off sale. Buyers keep it.", args: [LISTING], writes: true, output: "the listing", run: (c) => call(() => a(c).hide(c.args.listing)) });
 command({ name: "account sales", summary: "Your sales and earnings (after Etude's 20% fee).", output: "{ sales, totals: { count, gross, earnings } }", run: (c) => call(() => a(c).sales()) });
-command({ name: "account review", summary: "Admins: listings waiting for review.", output: "{ queue }", run: (c) => call(() => a(c).reviewQueue()) });
+command({ name: "account review", summary: "Admins: listings waiting for review (new decks, versions and page changes). Review page changes on the server's /account/admin/review screen.", output: "{ queue }", run: (c) => call(() => a(c).reviewQueue()) });
 command({ name: "account approve", summary: "Admins: approve a listing's pending versions; it goes live.", args: [{ name: "listing", description: "Listing id.", required: true }], flags: [{ name: "notes", type: "string", description: "Note to the creator." }], writes: true, output: "the listing", run: (c) => call(() => a(c).approve(c.args.listing, c.flags.notes)) });
 command({ name: "account reject", summary: "Admins: turn down a listing's pending versions with a reason.", args: [{ name: "listing", description: "Listing id.", required: true }], flags: [{ name: "notes", type: "string", description: "Why (sent to the creator)." }], writes: true, output: "the listing", run: (c) => call(() => a(c).reject(c.args.listing, c.flags.notes ?? "")) });

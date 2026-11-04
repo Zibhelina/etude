@@ -2,7 +2,7 @@
 // Selling (creator onboarding, listings, sales) and Review for admins.
 // Store rule: the iOS and Android apps never sell. They show no prices, no buy buttons and no links
 // to buy; only the Library of decks the account already owns.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BadgeCheck, Check, Download, ExternalLink, Layers, Loader2, RefreshCw, ShoppingBag, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { account, bytes, money, openOutside, type Creator, type LibraryItem, type Listing, type PaidEntry, type Sales } from "@/lib/account";
+import { etudeFetch } from "@/lib/transport";
 import { api } from "@/lib/api";
 import { canShowPurchases } from "@/lib/platform";
 import { navigate } from "@/lib/router";
@@ -263,9 +264,12 @@ export function SellingView() {
   const [busy, setBusy] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [versioning, setVersioning] = useState<Listing | null>(null);
+  const [editing, setEditing] = useState<Listing | null>(null);
+  const [server, setServer] = useState("");
   const load = useCallback(async () => {
     try {
       const st = await account.status();
+      setServer(st.server);
       if (!st.me) return setState({ signedIn: false, admin: false, creator: null, listings: [], sales: null });
       const { creator } = await account.creator();
       const [listings, sales] = creator ? await Promise.all([account.listings().then((r) => r.listings), account.sales()]) : [[], null];
@@ -346,11 +350,15 @@ export function SellingView() {
                     <div className="text-xs text-muted-foreground">
                       {money(l.price, l.currency)} · {l.version ? `v${l.version} on sale` : "not on sale yet"}{l.pending?.length ? ` · v${l.pending.join(", v")} waiting for review` : ""}
                     </div>
-                    {l.reviewNotes && <div className="mt-1 text-xs text-foreground/80">Reviewer: {l.reviewNotes}</div>}
+                    {/* Notes on the listing itself matter while it isn't on sale; after that, versions and page changes carry their own. */}
+                    {l.reviewNotes && l.status === "rejected" && <div className="mt-1 text-xs text-foreground/80">Reviewer: {l.reviewNotes}</div>}
+                    <VersionNote l={l} />
+                    {l.revision && <ChangesNote l={l} busy={!!busy} onEdit={() => setEditing(l)} onWithdraw={() => void act("withdraw" + l.id, () => account.withdrawChanges(l.id), "Changes withdrawn")} />}
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
                     {(l.status === "draft" || l.status === "rejected" || l.status === "hidden") && <Button size="sm" className="h-10 md:h-8" disabled={!!busy} onClick={() => void act("submit" + l.id, () => account.submit(l.id), "Sent for review")} data-submit={l.slug}>Submit for review</Button>}
                     {(l.status === "live" || l.status === "review") && <Button variant="outline" size="sm" className="h-10 md:h-8" disabled={!!busy} onClick={() => setVersioning(l)} data-new-version={l.slug}>Upload new version</Button>}
+                    <Button variant="outline" size="sm" className="h-10 md:h-8" disabled={!!busy} onClick={() => setEditing(l)} data-edit-listing={l.slug}>Edit page</Button>
                     {l.status !== "hidden" && <Button variant="ghost" size="sm" className="h-10 text-muted-foreground md:h-8" disabled={!!busy} onClick={() => void act("hide" + l.id, () => account.hide(l.id), "Taken off sale")}>Hide</Button>}
                   </div>
                 </li>
@@ -377,10 +385,165 @@ export function SellingView() {
           )}
         </>
       )}
-      {state.admin && <ReviewQueue />}
+      {state.admin && <ReviewQueue server={server} />}
       {creating && <NewListingDialog onClose={() => setCreating(false)} onCreated={() => (setCreating(false), void load())} />}
       {versioning && <NewVersionDialog listing={versioning} onClose={() => setVersioning(null)} onDone={() => (setVersioning(null), void load())} />}
+      {editing && <EditListingDialog listing={editing} onClose={() => setEditing(null)} onDone={() => (setEditing(null), void load())} />}
     </div>
+  );
+}
+
+const FIELD: Record<string, string> = { name: "name", description: "description", tags: "tags", preview: "preview cards", price: "price", cover: "cover" };
+const coverHash = (url: string | null | undefined) => url?.match(/[0-9a-f]{64}$/)?.[0] ?? null;
+
+/** A cover that isn't public yet (waiting for review): fetched with the account's token through the app's server. */
+function PrivateCover({ url, className }: { url: string | null; className?: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    const hash = coverHash(url);
+    if (!hash) return;
+    let objectUrl: string | null = null;
+    let live = true;
+    etudeFetch(`/api/account/covers/${hash}`)
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((b) => {
+        if (b && live) setSrc((objectUrl = URL.createObjectURL(b)));
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [url]);
+  return <div className={cn("overflow-hidden rounded-md bg-muted", className)}>{src && <img src={src} alt="" className="size-full object-cover" />}</div>;
+}
+
+/** The newest pack version, when it was turned down: the reviewer's notes. */
+function VersionNote({ l }: { l: Listing }) {
+  const last = l.versions?.at(-1);
+  if (!last || last.status !== "rejected" || !last.reviewNotes) return null;
+  return <div className="mt-1 text-xs text-destructive" data-version-rejected={last.version}>v{last.version} wasn't approved: <span className="text-foreground/80">{last.reviewNotes}</span></div>;
+}
+
+/** Page changes waiting for review, or the last ones turned down, under a listing. */
+function ChangesNote({ l, busy, onEdit, onWithdraw }: { l: Listing; busy: boolean; onEdit(): void; onWithdraw(): void }) {
+  const r = l.revision!;
+  const what = r.changed.map((k) => FIELD[k] ?? k).join(", ");
+  const detail = r.changed.includes("price") ? ` (${money(l.price, l.currency)} → ${money(r.price, l.currency)})` : "";
+  if (r.status === "pending")
+    return (
+      <div className="mt-2 flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs sm:flex-row sm:items-center" data-changes-pending>
+        {r.changed.includes("cover") && <PrivateCover url={r.cover} className="h-10 w-16 shrink-0" />}
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-warning">Changes waiting for review</div>
+          <div className="text-foreground/80">New {what}{detail}. Buyers still see the approved page until the Etude team approves this.</div>
+        </div>
+        <div className="flex shrink-0 gap-1.5">
+          <Button variant="outline" size="sm" className="h-9 md:h-7" disabled={busy} onClick={onEdit}>Edit</Button>
+          <Button variant="ghost" size="sm" className="h-9 text-muted-foreground md:h-7" disabled={busy} onClick={onWithdraw}>Withdraw</Button>
+        </div>
+      </div>
+    );
+  return (
+    <div className="mt-2 flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs sm:flex-row sm:items-center" data-changes-rejected>
+      <div className="min-w-0 flex-1">
+        <div className="font-medium text-destructive">Your changes to the {what} weren't approved</div>
+        <div className="text-foreground/80">Reviewer: {r.reviewNotes}</div>
+        <div className="text-muted-foreground">Buyers see the approved page, as before.</div>
+      </div>
+      <Button variant="outline" size="sm" className="h-9 shrink-0 md:h-7" disabled={busy} onClick={onEdit}>Edit again</Button>
+    </div>
+  );
+}
+
+/** Edit the Market page. After a listing has been on sale, the edit goes to review and buyers keep the approved page. */
+function EditListingDialog({ listing, onClose, onDone }: { listing: Listing; onClose(): void; onDone(): void }) {
+  // The form starts from the changes waiting or turned down; what's sent is compared with what the server builds on:
+  // the pending revision when there is one, otherwise the approved page (so a re-edit after a rejection resends them).
+  const base = listing.revision ?? listing;
+  const server = listing.revision?.status === "pending" ? listing.revision : listing;
+  const [name, setName] = useState(base.name);
+  const [description, setDescription] = useState(base.description);
+  const [tags, setTags] = useState(base.tags.join(", "));
+  const [price, setPrice] = useState(String(base.price / 100));
+  const [cover, setCover] = useState<{ type: string; data: string; name: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const reviewed = !!listing.liveAt;
+  const cents = Math.round(Number(price) * 100);
+  const tagList = tags.split(",").map((t) => t.trim()).filter(Boolean);
+  const patch: { name?: string; description?: string; tags?: string[]; price?: number } = {};
+  if (name.trim() !== server.name) patch.name = name.trim();
+  if (description !== server.description) patch.description = description;
+  if (tagList.join(",").toLowerCase() !== server.tags.join(",")) patch.tags = tagList;
+  if (cents !== server.price) patch.price = cents;
+  const changed = name.trim() !== base.name || description !== base.description || tagList.join(",").toLowerCase() !== base.tags.join(",") || cents !== base.price || !!cover || (base !== server && Object.keys(patch).length > 0);
+  const ok = name.trim().length >= 2 && Number.isFinite(cents) && cents >= 500 && changed;
+  const pick = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/webp,image/png,image/jpeg";
+    input.onchange = async () => {
+      const f = input.files?.[0];
+      if (!f) return;
+      if (f.size > 600 * 1024) return setError("The cover must be 600 KB or less.");
+      const buf = new Uint8Array(await f.arrayBuffer());
+      let s = "";
+      for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+      setCover({ type: f.type, data: btoa(s), name: f.name });
+    };
+    input.click();
+  };
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (Object.keys(patch).length) await account.updateListing(listing.id, patch);
+      if (cover) await account.setCover(listing.id, { type: cover.type, data: cover.data });
+      toast.success(reviewed ? "Changes sent for review" : "Listing updated", reviewed ? { description: "Buyers see the approved page until the Etude team approves them." } : undefined);
+      onDone();
+    } catch (e) {
+      setError(msg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg" data-edit-dialog>
+        <DialogHeader>
+          <DialogTitle>Edit {listing.name}</DialogTitle>
+          <DialogDescription>
+            {reviewed
+              ? "Every change to a deck on the Market is checked by the Etude team first. Until it's approved, buyers see the page as it is now."
+              : "This listing hasn't been on sale yet, so changes apply right away. It's reviewed when you submit it."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          {listing.revision?.status === "pending" && <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground/80">You're editing the changes already waiting for review. Buyers still see {money(listing.price, listing.currency)} and the current page.</div>}
+          {listing.revision?.status === "rejected" && <div className="rounded-lg border border-destructive/40 px-3 py-2 text-xs text-foreground/80">Reviewer: {listing.revision.reviewNotes}</div>}
+          <label className="flex flex-col gap-1.5 text-xs font-medium text-muted-foreground">Name<Input className="h-10" value={name} onChange={(e) => setName(e.target.value)} data-edit-name /></label>
+          <label className="flex flex-col gap-1.5 text-xs font-medium text-muted-foreground">Description<Textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} data-edit-description /></label>
+          <label className="flex flex-col gap-1.5 text-xs font-medium text-muted-foreground">Tags<Input className="h-10" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="e.g. medicine, pharmacology" /></label>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1.5 text-xs font-medium text-muted-foreground">
+              Price (US$)
+              <Input className="h-10 w-32 tabular-nums" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} data-edit-price />
+            </label>
+            <div className="pb-2.5 text-xs text-muted-foreground">{Number.isFinite(cents) && cents >= 500 ? <>You keep {money(cents - Math.round(cents * 0.2))} per sale, less Stripe's fee</> : "At least US$5"}</div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button type="button" variant="outline" size="sm" className="h-10 md:h-8" onClick={pick}>New cover</Button>
+            <span className="truncate text-xs text-muted-foreground">{cover ? cover.name : "16:10 image, webp, png or jpg"}</span>
+          </div>
+          {error && <div className="rounded-lg border border-destructive/40 px-3 py-2 text-sm text-destructive">{error}</div>}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button disabled={!ok || busy} onClick={() => void save()} data-save-listing>{busy && <Loader2 className="size-4 animate-spin" />}{reviewed ? "Send for review" : "Save"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -528,40 +691,31 @@ function NewVersionDialog({ listing, onClose, onDone }: { listing: Listing; onCl
   );
 }
 
-/** Admin review. João approves; the same queue answers at GET /v1/admin/review and `etude account review`. */
-function ReviewQueue() {
-  const [queue, setQueue] = useState<Listing[] | null>(null);
-  const [notes, setNotes] = useState<Record<string, string>>({});
+/**
+ * Admin review. The review itself happens on the server's review screen (/account/admin/review), which shows both
+ * copies of each page, the automatic flags and the pack diff, and approves the exact hashes it showed. This lists what
+ * is waiting and opens it there; `etude account review` gives the same queue.
+ */
+function ReviewQueue({ server }: { server: string }) {
+  const [queue, setQueue] = useState<any[] | null>(null);
   const load = useCallback(() => account.review().then((r) => setQueue(r.queue)).catch(() => setQueue([])), []);
   useEffect(() => void load(), [load]);
-  const act = async (fn: () => Promise<unknown>, done: string) => {
-    try {
-      await fn();
-      toast.success(done);
-      await load();
-    } catch (e) {
-      toast.error("That didn't work", { description: msg(e) });
-    }
-  };
-  const count = useMemo(() => queue?.length ?? 0, [queue]);
+  const open = (path: string) => openOutside(`${server.replace(/\/$/, "")}/account/admin/review${path}`);
+  const what = (l: any) => [l.review?.submission ? (l.review.submission.firstReview ? "new deck" : "resubmitted") : null, ...(l.review?.versions ?? []).map((v: any) => `pack v${v.version}`), l.review?.revision ? `page: ${l.review.revision.changed.map((k: string) => FIELD[k] ?? k).join(", ")}` : null].filter(Boolean).join(" · ");
   return (
     <section className="rounded-xl border p-4" data-review>
-      <h3 className="text-base font-semibold">Review queue <span className="text-sm font-normal text-muted-foreground">{count}</span></h3>
-      <p className="mt-1 text-xs text-muted-foreground">Check rights to the material, quality, and that the preview is honest. Approving publishes every pending version.</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-base font-semibold">Review queue <span className="text-sm font-normal text-muted-foreground">{queue?.length ?? 0}</span></h3>
+        <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => open("")}><ExternalLink className="size-4" />Open review screen</Button>
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">New decks, new versions and page changes all wait here. The review screen shows the before and after, the automatic flags and the card-type code that changed.</p>
       {!queue ? <Skeleton className="mt-3 h-16" /> : queue.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Nothing waiting.</p> : (
-        <ul className="mt-3 flex flex-col gap-3">
+        <ul className="mt-3 flex flex-col gap-2">
           {queue.map((l) => (
-            <li key={l.id} className="flex flex-col gap-2 rounded-lg border p-3" data-review-item={l.slug}>
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="font-medium">{l.name}</span>
-                <span className="text-muted-foreground">{money(l.price)} · {l.pending?.length ? `pending v${l.pending.join(", v")}` : "no new version"} · {l.versions?.at(-1) ? bytes(l.versions.at(-1)!.bytes) : ""}</span>
-              </div>
-              {l.description && <p className="line-clamp-3 text-xs text-muted-foreground">{l.description}</p>}
-              <Input className="h-9" placeholder="Note to the creator (needed to reject)" value={notes[l.id] ?? ""} onChange={(e) => setNotes({ ...notes, [l.id]: e.target.value })} />
-              <div className="flex gap-2">
-                <Button size="sm" onClick={() => void act(() => account.approve(l.id, notes[l.id]), `Approved ${l.name}`)} data-approve={l.slug}>Approve</Button>
-                <Button size="sm" variant="outline" disabled={!notes[l.id]?.trim()} onClick={() => void act(() => account.reject(l.id, notes[l.id]), `Sent back ${l.name}`)}>Request changes</Button>
-              </div>
+            <li key={l.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-3 text-sm" data-review-item={l.slug}>
+              <span className="font-medium">{l.name}</span>
+              <span className="min-w-0 flex-1 text-xs text-muted-foreground">{what(l)}</span>
+              <Button size="sm" className="h-9 md:h-7" onClick={() => open(`/${encodeURIComponent(l.id)}`)}>Review</Button>
             </li>
           ))}
         </ul>

@@ -81,9 +81,26 @@ export interface Listing {
   version: string | null;
   updated: string;
   reviewNotes?: string | null;
-  versions?: { version: string; status: string; bytes: number; changelog: string; created: string }[];
+  /** When it first went on sale; from then on, page edits wait for review as `revision`. */
+  liveAt?: string | null;
+  versions?: { version: string; status: string; bytes: number; changelog: string; created: string; reviewNotes?: string; reviewed?: string | null }[];
   pending?: string[];
+  /** Page changes waiting for review (`pending`), or the last ones turned down (`rejected`, with the reviewer's notes). */
+  revision?: ListingRevision | null;
   creator?: string;
+}
+export interface ListingRevision {
+  id: string;
+  status: "pending" | "rejected";
+  name: string;
+  description: string;
+  tags: string[];
+  price: number;
+  cover: string | null;
+  changed: ("name" | "description" | "tags" | "preview" | "price" | "cover")[];
+  reviewNotes: string;
+  updated: string;
+  reviewed: string | null;
 }
 /** `setupRequired`: the creator set up selling before Etude moved to direct charges and has to set up again (their
  *  old Stripe account can't take sales; `stripeAccount` is then null and the three flags false). */
@@ -125,7 +142,9 @@ export const account = {
   sales: () => call<Sales>("GET", "/api/account/creator/sales"),
   listings: () => call<{ listings: Listing[] }>("GET", "/api/account/listings"),
   createListing: (b: { deck: string; name?: string; description?: string; price: number; tags?: string[]; cover?: { type: string; data: string } }) => call<Listing>("POST", "/api/account/listings", b),
-  updateListing: (id: string, b: { price?: number; tags?: string[] }) => call<Listing>("PATCH", `/api/account/listings/${encodeURIComponent(id)}`, b),
+  updateListing: (id: string, b: { price?: number; tags?: string[]; name?: string; description?: string }) => call<Listing>("PATCH", `/api/account/listings/${encodeURIComponent(id)}`, b),
+  setCover: (id: string, cover: { type: string; data: string }) => call<{ cover: string; status: string; revision: string | null }>("PUT", `/api/account/listings/${encodeURIComponent(id)}/cover`, cover),
+  withdrawChanges: (id: string) => call<Listing>("DELETE", `/api/account/listings/${encodeURIComponent(id)}/revision`),
   newVersion: (id: string, b: { deck: string; changelog?: string }) => call<Listing>("POST", `/api/account/listings/${encodeURIComponent(id)}/versions`, b),
   submit: (id: string) => call<Listing>("POST", `/api/account/listings/${encodeURIComponent(id)}/submit`),
   hide: (id: string) => call<Listing>("POST", `/api/account/listings/${encodeURIComponent(id)}/hide`),

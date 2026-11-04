@@ -339,7 +339,19 @@ export class AccountClient {
   async setCover(id: string, cover: { type: string; data: string }) {
     return (await this.request("PUT", `/v1/listings/${encodeURIComponent(id)}/cover`, { raw: Buffer.from(cover.data, "base64"), type: cover.type })).json();
   }
+  /**
+   * Edits the Market page. A listing that has never been on sale changes in place; once it has been live, the change
+   * waits as the listing's `revision` until the Etude team approves it, and buyers keep seeing the approved page.
+   */
   updateListing = (id: string, patch: { price?: number; tags?: string[]; name?: string; description?: string }) => this.json("PATCH", `/v1/listings/${encodeURIComponent(id)}`, patch);
+  /** Withdraws the page change waiting for review. */
+  withdrawChanges = (id: string) => this.json("DELETE", `/v1/listings/${encodeURIComponent(id)}/revision`);
+  /** A cover by hash, with this account's token (a cover waiting for review is only served to its creator and admins). */
+  async cover(hash: string) {
+    if (!/^[0-9a-f]{64}$/.test(hash)) throw new AccountError("no such cover", 404, "not_found");
+    const res = await this.request("GET", `/v1/market/covers/${hash}`);
+    return { type: res.headers.get("content-type") ?? "application/octet-stream", body: new Uint8Array(await res.arrayBuffer()) };
+  }
   submit = (id: string) => this.json("POST", `/v1/listings/${encodeURIComponent(id)}/submit`, {});
   hide = (id: string) => this.json("POST", `/v1/listings/${encodeURIComponent(id)}/hide`, {});
 

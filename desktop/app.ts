@@ -90,6 +90,37 @@ async function boot(path = "/") {
   }
 }
 
+// ---------------------------------------------------------------- error reports
+// Errors in this main process (and an engine that stopped by itself) are kept in userData until the window opens; the
+// page hands them to the engine as anonymous reports, which go out only if Settings → Privacy allows
+// (web/src/lib/telemetry.ts, src/core/telemetry.ts). Native crashes of Electron itself aren't covered.
+const pendingPath = () => join(app.getPath("userData"), "telemetry-pending.json");
+type Pending = { kind: string; message: string; stack?: string };
+function readPending(): Pending[] {
+  try {
+    const j = JSON.parse(readFileSync(pendingPath(), "utf8"));
+    return Array.isArray(j) ? j.slice(-20) : [];
+  } catch {
+    return [];
+  }
+}
+function keepForReport(kind: string, err: unknown) {
+  try {
+    const e = err as { name?: string; message?: string; stack?: string };
+    const list = readPending();
+    list.push({ kind, message: String(e?.message ? `${e.name && e.name !== "Error" ? e.name + ": " : ""}${e.message}` : err).slice(0, 2000), stack: String(e?.stack ?? "").slice(0, 16_000) });
+    writeFileSync(pendingPath(), JSON.stringify(list.slice(-20)));
+  } catch {}
+}
+process.on("uncaughtException", (err) => {
+  log(`uncaught exception in the main process: ${err?.stack ?? err}`);
+  keepForReport("desktop.main", err);
+});
+process.on("unhandledRejection", (reason) => {
+  log(`unhandled rejection in the main process: ${(reason as Error)?.stack ?? reason}`);
+  keepForReport("desktop.rejection", reason);
+});
+
 /** The engine this app started stopped by itself. */
 function stopped(code: number) {
   const path = currentPath();
@@ -99,6 +130,7 @@ function stopped(code: number) {
     return void boot(path);
   }
   log(`the engine stopped (exit code ${code})`);
+  keepForReport("engine.exit", { message: `the engine stopped by itself (exit code ${code})` });
   if (Date.now() - lastCrash > 60_000) {
     lastCrash = Date.now();
     return void boot(path);
@@ -187,6 +219,10 @@ function createWindow() {
   win.on("closed", () => (win = null));
 
   const wc = win.webContents;
+  // The window's renderer crashing (out of memory, a GPU fault) is kept for an anonymous report too.
+  wc.on("render-process-gone", (_e, d) => {
+    if (d.reason !== "clean-exit") keepForReport("desktop.renderer", { message: `the window stopped (${d.reason}, exit code ${d.exitCode})` });
+  });
   wc.on("did-change-theme-color", (_e, color) => {
     if (color && /^#[0-9a-f]{6}$/i.test(color)) bg = color;
   });
@@ -248,6 +284,15 @@ function protect() {
 /** The requests in preload.cjs, taken only from this window's top frame showing Etude or the app's own pages. */
 function answer() {
   const fromWindow = (e: IpcMainInvokeEvent) => !!win && e.sender === win.webContents && e.senderFrame === win.webContents.mainFrame && isOwnPage(e.senderFrame.url);
+  // What keepForReport kept, handed over once (and cleared) when the page starts.
+  ipcMain.handle("etude:telemetry-pending", (e) => {
+    if (!fromWindow(e)) return [];
+    const list = readPending();
+    try {
+      writeFileSync(pendingPath(), "[]");
+    } catch {}
+    return list;
+  });
   ipcMain.handle("etude:retry", (e) => {
     if (fromWindow(e)) void boot();
   });

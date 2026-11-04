@@ -10,7 +10,7 @@ import { nativeError, type NativeHandler } from "./native-chatgpt.ts";
 const LOCK = "etude-collection";
 
 /** `native`: in the phone apps, answers the worker's requests for native HTTP, storage and sign-in. */
-export function startCore(opts: { native?: NativeHandler } = {}) {
+export function startCore(opts: { native?: NativeHandler; platform?: "ios" | "android" | "web" } = {}) {
   let worker: Worker | null = null;
   let n = 0;
   type Pending = { resolve: (v: any) => void; reject: (e: Error) => void; stream?: ReadableStreamDefaultController<Uint8Array> };
@@ -65,7 +65,8 @@ export function startCore(opts: { native?: NativeHandler } = {}) {
     worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     worker.onmessage = onmessage;
     // First message, before any call: whether the app hands the worker a native host.
-    worker.postMessage({ hello: { native: !!opts.native } });
+    // Also where it runs, for anonymous error reports (src/core/telemetry.ts); an automated browser sends none.
+    worker.postMessage({ hello: { native: !!opts.native, platform: opts.platform ?? "web", automated: !!(globalThis.navigator as { webdriver?: boolean } | undefined)?.webdriver || /HeadlessChrome/.test(globalThis.navigator?.userAgent ?? "") } });
     return worker;
   });
 

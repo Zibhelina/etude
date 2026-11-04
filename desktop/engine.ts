@@ -82,7 +82,8 @@ export class Engine {
       stdio: "pipe",
       // The password goes in the environment, which other accounts can't read (they can read command
       // lines). ETUDE_SUPERVISED: after an update the engine exits with 75 and the app starts it again.
-      env: { ...o.env, ETUDE_TOKEN: token, ETUDE_SUPERVISED: "1", NODE_NO_WARNINGS: "1" },
+      // ETUDE_APP: this engine is the app's, so it may send the Privacy-toggled error reports and usage counts.
+      env: { ...o.env, ETUDE_TOKEN: token, ETUDE_SUPERVISED: "1", ETUDE_APP: "desktop", NODE_NO_WARNINGS: "1" },
     });
     let tail = "";
     const keep = (d: Buffer) => {

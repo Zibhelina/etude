@@ -3474,7 +3474,7 @@ Output: Sync status
 
 Redeem the 6-digit code from the sign-in email.
 
-The code goes with the address from `sync signin`. Spaces are fine (`482 913`); a long token from the email's link works too. It works once, for 15 minutes, and allows 5 wrong tries.
+The code goes with the address from `sync signin`. Spaces are fine (`482 913`); a long token from the email's link works too. It works once, for 15 minutes, and allows 5 wrong tries. When already signed in, confirms the same device again and keeps its saved Sync key.
 
 ```
 etude sync verify <code>
@@ -3494,7 +3494,7 @@ Output: Sync status
 
 Unlock the vault, or create one and return its recovery key once.
 
-Read the Sync password from stdin to keep it out of shell history. With --recovery, stdin carries the recovery key. The password is never saved.
+Read the Sync password from stdin to keep it out of shell history. With --recovery, stdin carries the recovery key. The password is never saved. Cloud vaults need a sign-in within the last 10 minutes: if asked to sign in again, run `sync signin` and `sync verify`, then retry. An unlocked device keeps syncing without signing in again.
 
 ```
 etude sync unlock [flags]

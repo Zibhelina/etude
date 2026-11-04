@@ -10,6 +10,7 @@ import { accountFor, AccountError, checkServerUrl, paidId, signInCode } from "..
 import { syncFor } from "../src/core/sync/client.ts";
 import { agentRefusal } from "../src/core/agent-guard.ts";
 import { COMMANDS } from "../src/cli/registry.ts";
+import { createVault } from "../src/core/sync/crypto.ts";
 import "../src/cli/commands/index.ts";
 
 /** Just enough of etude-cloud for the client: sign-in, me, library, pack download, deletion. */
@@ -19,6 +20,8 @@ function stub() {
   let version = "1.0.0";
   const calls: string[] = [];
   const verifyBodies: any[] = [];
+  let fresh = true;
+  let vaultKeys: unknown = null;
   const srv = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     let raw = "";
     for await (const c of req) raw += c;
@@ -33,6 +36,7 @@ function stub() {
       verifyBodies.push(body);
       const good = body.token === "good-code" || (body.email === "a@example.test" && body.code === "482913" && body.token === undefined);
       if (!good) return send(401, { error: body.code ? { code: "invalid_code", message: "That code isn't right. 4 tries left.", attemptsLeft: 4 } : { code: "invalid_token", message: "bad code" } });
+      fresh = true;
       if (tokens.has(auth)) return send(200, { reauth: true, account: { id: "acc_1", email: "a@example.test" } });
       tokens.add("ecd_tok");
       return send(200, { token: "ecd_tok", account: { id: "acc_1", email: "a@example.test" } });
@@ -43,7 +47,11 @@ function stub() {
     if (path === "/v1/billing/sync") return send(200, { active: false, reason: "none", billing: true });
     if (path === "/v1/library") return send(200, { library: [{ listing: "lst_1", slug: "pharm", name: "Pharm", version, changelog: "", pack: "/v1/listings/lst_1/pack" }] });
     if (path === "/v1/listings/lst_1/pack") return send(200, pack, { "x-etude-version": version });
-    if (path === "/v1/vault/keys") return send(404, { error: { code: "no_keys", message: "none" } });
+    if (path === "/v1/vault") return send(200, { hasKeys: !!vaultKeys });
+    if (path === "/v1/vault/keys") {
+      if (!fresh) return send(403, { error: { code: "reauth_required", message: "Sign in again on this device to read the vault's keys." } });
+      return vaultKeys ? send(200, vaultKeys, { etag: '"keys"' }) : send(404, { error: { code: "no_keys", message: "none" } });
+    }
     if (path === "/v1/auth/logout") return tokens.delete(auth), send(200, { ok: true });
     // A creator from before direct charges: no usable Stripe account until they set up again.
     if (path === "/v1/creator" && req.method === "GET") return send(200, { country: "CA", displayName: "Old", stripeAccount: null, chargesEnabled: false, payoutsEnabled: false, detailsSubmitted: false, setupRequired: true });
@@ -53,6 +61,8 @@ function stub() {
   return {
     calls,
     verifyBodies,
+    expireSignin() { fresh = false; },
+    setVaultKeys(keys: unknown) { vaultKeys = keys; },
     bump(next: string) {
       version = next;
       pack = { ...pack, items: [...pack.items, { id: "p2", type: "basic", deck: "Pharm", fields: { front: "Beta blocker ending", back: "-olol" } }] };
@@ -64,6 +74,41 @@ function stub() {
     stop: () => new Promise<void>((r) => srv.close(() => r())),
   };
 }
+
+test("sync: a stale shared sign-in probes metadata, asks for reauth on unlock and keeps the same device", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sync-reauth-"));
+  const s = stub();
+  const url = await s.start();
+  const e = await Etude.open(join(dir, "etude.db"), { home: join(dir, "home") });
+  try {
+    const a = accountFor(e);
+    a.setServer(url);
+    await a.signin("a@example.test");
+    await a.verify("482913");
+    const originalToken = a.token();
+    s.setVaultKeys((await createVault("sync-password", { m: 1024, t: 1, p: 1 })).keys);
+    s.expireSignin();
+    const sy = syncFor(e);
+    sy.setup({ server: url });
+    const st = await sy.probe();
+    assert.equal(st.hasKeys, true);
+    assert.equal(st.error, null);
+    assert.equal(s.calls.includes("GET /v1/vault/keys"), false, "probing never downloads key wraps");
+    await assert.rejects(sy.unlock({ password: "sync-password" }), (err: AccountError) => err.status === 403 && err.code === "reauth_required");
+    assert.equal(sy.status().unlocked, false);
+    await sy.signin("a@example.test");
+    const confirmed = await sy.verify("482913");
+    assert.equal(a.token(), originalToken);
+    assert.equal(confirmed.account, true, "a shared account token stays shared after reauth");
+    assert.equal((await sy.unlock({ password: "sync-password" })).status.unlocked, true);
+    await sy.signin("a@example.test");
+    assert.equal((await sy.verify("482913")).unlocked, true, "reauth preserves the saved vault key");
+  } finally {
+    e.close();
+    await s.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("account: sign in, token file 0600, purchased deck installs and updates through the pack importer, delete needs the typed email", async () => {
   const dir = mkdtempSync(join((process.env.TMPDIR ?? tmpdir()), "account-"));

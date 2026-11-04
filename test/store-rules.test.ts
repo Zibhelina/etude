@@ -110,3 +110,24 @@ test("the Android app sells Sync only through Play Billing, prices from Play, ac
   const plans = read("web/src/components/app-store-plans.tsx");
   for (const piece of [/Google Play account/, /Payments & subscriptions/]) assert.match(plans, piece);
 });
+
+test("the Android ChatGPT plugin matches the iOS one and stays narrow", () => {
+  const kt = read("android/app/src/main/java/study/etude/app/EtudeAuthPlugin.kt");
+  const swift = read("ios/App/App/EtudeAuthPlugin.swift");
+  assert.match(kt, /@CapacitorPlugin\(name = "EtudeAuth"\)/);
+  // Every method the iOS plugin exposes, under the same name.
+  const iosMethods = [...swift.matchAll(/CAPPluginMethod\(name: "(\w+)"/g)].map((m) => m[1]).sort();
+  const ktMethods = [...kt.matchAll(/@PluginMethod(?:\([^)]*\))?\s+fun (\w+)\(/g)].map((m) => m[1]).sort();
+  assert.deepEqual(ktMethods, iosMethods);
+  // Same allowlists: OpenAI's two hosts only, and the two credential names only.
+  assert.match(kt, /allowedHosts = setOf\("auth\.openai\.com", "api\.openai\.com"\)/);
+  assert.match(kt, /allowedNames = setOf\("chatgpt\.json", "chatgpt-host-id"\)/);
+  assert.match(kt, /uri\.scheme == "https" && uri\.host in allowedHosts/);
+  // Credentials: an AES-GCM key in the Android Keystore, ciphertext in app-private no-backup storage.
+  for (const piece of ['"AndroidKeyStore"', "AES/GCM/NoPadding", "noBackupFilesDir"]) assert.ok(kt.includes(piece), piece);
+  // The listener is loopback only, and the page opens in a Custom Tab.
+  assert.match(kt, /InetAddress\.getByName\("127\.0\.0\.1"\)/);
+  assert.match(kt, /CustomTabsIntent/);
+  assert.match(read("android/app/src/main/java/study/etude/app/MainActivity.java"), /registerPlugin\(EtudeAuthPlugin\.class\)/);
+  assert.match(read("android/app/build.gradle"), /androidx\.browser:browser:/);
+});

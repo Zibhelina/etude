@@ -62,6 +62,8 @@ dependencies {
     implementation project(':capacitor-android')
     // Etude Sync through Google Play Billing (EtudeStorePlugin.kt).
     implementation "com.android.billingclient:billing:$playBillingVersion"
+    // Custom Tabs for the ChatGPT sign-in page (EtudeAuthPlugin.kt).
+    implementation "androidx.browser:browser:$androidxBrowserVersion"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

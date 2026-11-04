@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { DEFAULT_SETTINGS, Etude, EtudeError, type StudyScope } from "../core/engine.ts";
 import { chatProviderKeyEnv } from "../core/ai.ts";
-import { readChatGptHostId } from "../core/chatgpt.ts";
+import { chatGptNativeHost, readChatGptHostId } from "../core/chatgpt.ts";
 import { DEFAULT_PRESET, type Rating } from "../core/model.ts";
 import { MAX_MEDIA_BYTES, mediaType } from "../core/media.ts";
 import { cardFrame } from "./frame.ts";
@@ -475,7 +475,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
 
   // ------------------------------------------------------- ChatGPT plan
   // The sign-in listener runs here, so its 127.0.0.1 callback only reaches a browser on this machine.
-  let login: { url: string; started: number; error?: string } | null = null;
+  let login: { url: string; started: number; opened?: boolean; error?: string } | null = null;
   let models: { at: number; rows: { slug: string; displayName: string }[] } | null = null;
   const loginState = () => (login ? (login.error ? { state: "error", error: login.error } : { state: "pending", url: login.url }) : null);
   const requestHost = (c: Context) => (c.req.header("x-forwarded-host") ?? c.req.header("host") ?? "").split(",")[0].trim();
@@ -483,7 +483,9 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
 
   app.post("/api/chatgpt/login", async (c) => {
     const host = requestHost(c);
-    if (!localBrowser(c))
+    // The phone apps run this app in the page's worker with their own listener and browser sheet.
+    const nativeApp = !!chatGptNativeHost();
+    if (!nativeApp && !localBrowser(c))
       return c.json({
         remote: true,
         host,
@@ -491,11 +493,11 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
         message:
           "Sign-in finishes on 127.0.0.1, which this browser can't reach. Run `etude settings chatgpt login` on the machine running Etude; if that machine has no browser, sign in here and run `etude settings chatgpt import <file>` there with the copied ~/.etude/chatgpt.json.",
       });
-    if (login && !login.error) return c.json({ pending: true, url: login.url, host });
+    if (login && !login.error) return c.json({ pending: true, url: login.url, host, opened: login.opened });
     const session = await etude.chatgptLogin().catch((e) => {
       throw new EtudeError(`couldn't start ChatGPT sign-in: ${(e as Error).message}`, 502);
     });
-    const current: { url: string; started: number; error?: string } = { url: session.url, started: Date.now() };
+    const current: { url: string; started: number; opened?: boolean; error?: string } = { url: session.url, started: Date.now(), opened: session.opened };
     login = current;
     session.wait.then(
       () => {
@@ -505,7 +507,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
         if (login === current) current.error = e.message;
       },
     );
-    return c.json({ pending: true, url: session.url, host });
+    return c.json({ pending: true, url: session.url, host, opened: session.opened });
   });
 
   app.get("/api/chatgpt/status", async (c) => {

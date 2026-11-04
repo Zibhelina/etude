@@ -1,7 +1,7 @@
 // Sign in with ChatGPT: the OAuth flow for the user's ChatGPT plan (public client, PKCE,
 // loopback callback) and the Responses API call grading uses. Tokens live in one 0600 file.
 import { spawn } from "node:child_process";
-import { createHash, createPublicKey, randomBytes, randomUUID, verify as verifySignature } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -57,6 +57,71 @@ export class ChatGptError extends Error {
   }
 }
 
+// -------------------------------------------------------------- native host
+
+/**
+ * The phone apps run this module in a Web Worker inside the app's WebView. There the WebView's
+ * fetch is blocked by CORS on auth.openai.com, files would sit in the WebView's storage, and Node's
+ * loopback server doesn't exist. The app hands in a host that does those three things natively:
+ * HTTP outside the WebView, the iOS Keychain or Android Keystore for the two credential files, and a
+ * 127.0.0.1 listener plus the system browser sheet for sign-in. The OAuth flow itself stays the
+ * documented loopback flow; only who runs each piece changes.
+ */
+export interface ChatGptNativeHttpReply {
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+}
+
+export interface ChatGptNativeHost {
+  /** One request through the platform's HTTP stack. The whole body comes back as text. */
+  http(req: { url: string; method: string; headers: Record<string, string>; body?: string; timeoutMs: number }): Promise<ChatGptNativeHttpReply>;
+  /** Secure storage, read synchronously from a copy the host loaded at start; writes go through to it. */
+  store: { read(name: string): string | null; write(name: string, text: string): void };
+  /** Sign-in: listen on 127.0.0.1, open the system browser, hand back each callback, close both. */
+  login: {
+    listen(preferredPort: number): Promise<{ port: number }>;
+    /** The next request to the listener: its path and raw query string. */
+    next(): Promise<{ path: string; query: string }>;
+    open(url: string): Promise<void>;
+    finish(): Promise<void>;
+  };
+}
+
+let nativeHost: ChatGptNativeHost | null = null;
+
+/** Installs (or with null removes) the native host. Only the phone apps' worker calls this. */
+export function setChatGptNativeHost(host: ChatGptNativeHost | null) {
+  nativeHost = host;
+}
+
+export const chatGptNativeHost = () => nativeHost;
+
+/** `fetch`, or the native host's HTTP when one is installed (the answer is rebuilt as a Response). */
+async function net(url: string, init: { method?: string; headers?: Record<string, string>; body?: string; timeoutMs: number }): Promise<Response> {
+  if (!nativeHost) return fetch(url, { method: init.method, headers: init.headers, body: init.body, signal: AbortSignal.timeout(init.timeoutMs) });
+  const r = await nativeHost.http({ url, method: init.method ?? "GET", headers: init.headers ?? {}, body: init.body, timeoutMs: init.timeoutMs });
+  const empty = r.status === 204 || r.status === 304;
+  return new Response(empty ? null : r.body, { status: r.status, headers: r.headers });
+}
+
+// base64url without Buffer's "base64url" encoding, which the browser build's Buffer lacks.
+function bytesToB64url(bytes: Uint8Array): string {
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function b64urlToBytes(s: string): Uint8Array {
+  const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+const b64urlText = (s: string) => new TextDecoder().decode(b64urlToBytes(s));
+
 // ------------------------------------------------------------------ storage
 
 /** Where a host keeps its credentials: `$ETUDE_HOME` (default `~/.etude`). */
@@ -94,8 +159,12 @@ export interface ChatGptCredentials {
   needs_reauth?: boolean;
 }
 
-/** Owner-only file write: temp file, fsync, rename. */
+/** The name a credential file has in the native host's secure storage. */
+const storeName = (path: string) => path.replace(/^.*[\\/]/, "");
+
+/** Owner-only file write: temp file, fsync, rename. In the phone apps: the secure store. */
 function writePrivate(path: string, text: string) {
+  if (nativeHost) return nativeHost.store.write(storeName(path), text);
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const tmp = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
   const fd = openSync(tmp, "w", 0o600);
@@ -109,11 +178,17 @@ function writePrivate(path: string, text: string) {
   renameSync(tmp, path);
 }
 
+/** A credential file's text, or null when it doesn't exist. */
+function readPrivate(path: string): string | null {
+  if (nativeHost) return nativeHost.store.read(storeName(path));
+  return existsSync(path) ? readFileSync(path, "utf8") : null;
+}
+
 export function readChatGptCredentials(home: string): ChatGptCredentials | null {
-  const path = chatGptPaths(home).credentials;
-  if (!existsSync(path)) return null;
+  const text = readPrivate(chatGptPaths(home).credentials);
+  if (text == null) return null;
   try {
-    const c = JSON.parse(readFileSync(path, "utf8")) as ChatGptCredentials;
+    const c = JSON.parse(text) as ChatGptCredentials;
     if (!c || typeof c.client_id !== "string") return null;
     return c;
   } catch {
@@ -136,9 +211,8 @@ export function chatGptHostId(home: string): string {
 
 /** The saved host id, or null before the first sign-in. Creates nothing. */
 export function readChatGptHostId(home: string): string | null {
-  const path = chatGptPaths(home).hostId;
-  if (!existsSync(path)) return null;
-  const v = readFileSync(path, "utf8").trim();
+  const v = readPrivate(chatGptPaths(home).hostId)?.trim();
+  if (!v) return null;
   return /^(urn:uuid:[0-9a-fA-F-]{36}|urn:ietf:params:oauth:jwk-thumbprint:.+|did:key:.+)$/.test(v) ? v : null;
 }
 
@@ -178,7 +252,7 @@ export function chatGptStatus(home: string): ChatGptStatus {
 
 // -------------------------------------------------------------------- PKCE
 
-const b64url = (b: Buffer) => b.toString("base64url");
+const b64url = (b: Uint8Array) => bytesToB64url(b);
 
 export function pkcePair(): { verifier: string; challenge: string } {
   const verifier = b64url(randomBytes(32));
@@ -239,7 +313,7 @@ const JWKS_TTL_MS = 10 * 60 * 1000;
 async function fetchJwks(url: string, force = false): Promise<Jwk[]> {
   const hit = jwksCache.get(url);
   if (hit && !force && Date.now() - hit.at < JWKS_TTL_MS) return hit.keys;
-  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) }).catch((e) => {
+  const res = await net(url, { timeoutMs: 10_000 }).catch((e) => {
     throw new ChatGptError(`couldn't fetch OpenAI's signing keys: ${(e as Error).message}`, "network");
   });
   if (!res.ok) throw new ChatGptError(`couldn't fetch OpenAI's signing keys: HTTP ${res.status}`, "network");
@@ -269,7 +343,7 @@ export function decodeJwtPayload(token: string): Record<string, unknown> | null 
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   try {
-    return JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as Record<string, unknown>;
+    return JSON.parse(b64urlText(parts[1])) as Record<string, unknown>;
   } catch {
     return null;
   }
@@ -290,7 +364,7 @@ export async function verifyIdToken(token: string, opts: VerifyIdTokenOptions): 
   if (parts.length !== 3) throw new ChatGptError("the ID token is malformed", "invalid_id_token");
   let header: { alg?: string; kid?: string };
   try {
-    header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
+    header = JSON.parse(b64urlText(parts[0]));
   } catch {
     throw new ChatGptError("the ID token header is malformed", "invalid_id_token");
   }
@@ -302,15 +376,22 @@ export async function verifyIdToken(token: string, opts: VerifyIdTokenOptions): 
   if (!jwk) jwk = (await fetchJwks(url, true)).find((k) => k.kid === header.kid);
   if (!jwk) throw new ChatGptError("the ID token was signed with an unknown key", "invalid_id_token");
 
-  let key;
+  // Web Crypto, so the same check runs in Node and in the phone apps' worker.
+  const alg = { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" };
+  let key: CryptoKey;
   try {
-    key = createPublicKey({ key: jwk as unknown as Record<string, unknown>, format: "jwk" });
+    key = await globalThis.crypto.subtle.importKey("jwk", { kty: jwk.kty, n: jwk.n, e: jwk.e, ext: true }, alg, false, ["verify"]);
   } catch {
     throw new ChatGptError("OpenAI's signing key is malformed", "invalid_id_token");
   }
-  const signed = Buffer.from(`${parts[0]}.${parts[1]}`);
-  const sig = Buffer.from(parts[2], "base64url");
-  if (!verifySignature("RSA-SHA256", signed, key, sig)) throw new ChatGptError("the ID token signature is invalid", "invalid_id_token");
+  const signed = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
+  let ok = false;
+  try {
+    ok = await globalThis.crypto.subtle.verify(alg, key, b64urlToBytes(parts[2]) as BufferSource, signed as BufferSource);
+  } catch {
+    ok = false;
+  }
+  if (!ok) throw new ChatGptError("the ID token signature is invalid", "invalid_id_token");
 
   const claims = decodeJwtPayload(token) as IdTokenClaims | null;
   if (!claims) throw new ChatGptError("the ID token payload is malformed", "invalid_id_token");
@@ -361,11 +442,11 @@ async function tokenError(res: Response): Promise<ChatGptError> {
 }
 
 async function postToken(ep: ChatGptEndpoints, form: Record<string, string>): Promise<TokenResponse> {
-  const res = await fetch(ep.token, {
+  const res = await net(ep.token, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: new URLSearchParams(form).toString(),
-    signal: AbortSignal.timeout(30_000),
+    timeoutMs: 30_000,
   }).catch((e) => {
     throw new ChatGptError(`couldn't reach OpenAI's token endpoint: ${(e as Error).message}`, "network");
   });
@@ -516,6 +597,8 @@ export interface ChatGptLoginOptions {
 export interface ChatGptLoginSession {
   url: string;
   redirectUri: string;
+  /** True when the sign-in page was already opened (the phone apps open their own browser sheet). */
+  opened?: boolean;
   /** Resolves with the saved credentials after a validated callback. */
   wait: Promise<ChatGptCredentials>;
   cancel(): void;
@@ -532,25 +615,97 @@ const errorPage = (message: string) =>
 <h1 style="font-size:1.25rem">Sign-in failed</h1><p>${message.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!)}</p>
 <p>You can close this window.</p></body>`;
 
-/**
- * Starts the loopback listener and builds the authorize URL. The browser must run on this
- * machine: a 127.0.0.1 callback never reaches a server on another host.
- */
-export async function beginChatGptLogin(opts: ChatGptLoginOptions): Promise<ChatGptLoginSession> {
-  const ep = chatGptEndpoints(opts.endpoints);
-  const paths = chatGptPaths(opts.home);
-  const hostId = chatGptHostId(opts.home);
-  const existing = opts.existing === undefined ? readChatGptCredentials(opts.home) : opts.existing;
-  const returning = existing && existing.client_id ? existing : null;
-  const state = b64url(randomBytes(24));
-  const nonce = b64url(randomBytes(24));
-  const { verifier, challenge } = pkcePair();
+/** One sign-in attempt: fresh state, nonce and PKCE, and the checks its callback must pass. */
+interface LoginAttempt {
+  ep: ChatGptEndpoints;
+  hostId: string;
+  returning: ChatGptCredentials | null;
+  state: string;
+  nonce: string;
+  verifier: string;
+  challenge: string;
+}
 
-  let redirectUri = "";
+function newAttempt(opts: ChatGptLoginOptions): LoginAttempt {
+  const existing = opts.existing === undefined ? readChatGptCredentials(opts.home) : opts.existing;
+  const { verifier, challenge } = pkcePair();
+  return {
+    ep: chatGptEndpoints(opts.endpoints),
+    hostId: chatGptHostId(opts.home),
+    returning: existing && existing.client_id ? existing : null,
+    state: b64url(randomBytes(24)),
+    nonce: b64url(randomBytes(24)),
+    verifier,
+    challenge,
+  };
+}
+
+function attemptUrl(a: LoginAttempt, redirectUri: string): string {
+  return buildAuthorizeUrl({
+    endpoints: a.ep,
+    redirectUri,
+    state: a.state,
+    nonce: a.nonce,
+    challenge: a.challenge,
+    hostId: a.hostId,
+    clientId: a.returning ? a.returning.client_id : "dynamic_agent_client",
+    agentNameHint: a.returning ? undefined : CHATGPT_AGENT_NAME,
+    // The ID token hint would travel in a URL we print and open, so the email hint is used instead.
+    emailHint: a.returning?.email ?? undefined,
+  });
+}
+
+/**
+ * Checks a callback's query against the attempt, exchanges the code, validates the ID token and
+ * saves the credentials. Throws a ChatGptError with `page` set to what the browser should show.
+ */
+async function finishCallback(home: string, a: LoginAttempt, redirectUri: string, q: URLSearchParams): Promise<ChatGptCredentials> {
+  const fail = (page: string, err: ChatGptError) => Object.assign(err, { page });
+  if (q.get("state") !== a.state)
+    throw fail("This callback doesn't belong to the sign-in Etude started.", new ChatGptError("the callback state didn't match this sign-in", "state_mismatch"));
+  const oauthError = q.get("error");
+  if (oauthError) {
+    const desc = q.get("error_description");
+    throw fail(
+      desc ?? oauthError,
+      new ChatGptError(
+        oauthError === "access_denied" ? "ChatGPT sign-in was declined. You can try again and allow access to your ChatGPT plan." : `ChatGPT sign-in failed: ${desc ?? oauthError}`,
+        oauthError,
+      ),
+    );
+  }
+  const code = q.get("code");
+  if (!code) throw fail("The callback carried no authorization code.", new ChatGptError("the callback carried no authorization code", "invalid_callback"));
+  const issued = q.get("client_id");
+  if (a.returning) {
+    if (issued && issued !== a.returning.client_id)
+      throw fail("This sign-in returned a different app registration.", new ChatGptError("the callback returned a client id that doesn't match this account's registration", "client_mismatch"));
+  } else if (!issued) {
+    throw fail("OpenAI didn't finish registering Etude. Try again.", new ChatGptError("registration was incomplete: the callback carried no issued client id", "registration_incomplete"));
+  }
+  const clientId = issued ?? a.returning!.client_id;
+  try {
+    const tokens = await postToken(a.ep, { grant_type: "authorization_code", client_id: clientId, code, code_verifier: a.verifier, redirect_uri: redirectUri, resource: a.ep.resource });
+    if (!tokens.id_token) throw new ChatGptError("OpenAI returned no ID token", "invalid_id_token");
+    if (!tokens.access_token || !tokens.refresh_token) throw new ChatGptError("OpenAI returned no access or refresh token", "invalid_grant");
+    const claims = await verifyIdToken(tokens.id_token, { audience: clientId, nonce: a.nonce, issuer: a.ep.issuer, jwksUrl: a.ep.jwks });
+    if (a.returning && a.returning.subject && claims.sub !== a.returning.subject)
+      throw new ChatGptError("this sign-in belongs to a different ChatGPT account than the one saved", "account_mismatch");
+    const creds = credentialsFrom(tokens, { clientId, hostId: a.hostId, claims, endpointIssuer: a.ep.issuer });
+    saveChatGptCredentials(home, creds);
+    return creds;
+  } catch (e) {
+    const err = e instanceof ChatGptError ? e : new ChatGptError(e instanceof Error ? e.message : String(e));
+    throw fail(err.message, err);
+  }
+}
+
+/** A promise that settles once, plus a timeout that fails it. */
+function oneShot(timeoutMs: number, onTimeout: () => void) {
   let settle: (c: ChatGptCredentials) => void = () => {};
   let fail: (e: Error) => void = () => {};
   let settled = false;
-  let timer: NodeJS.Timeout | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const wait = new Promise<ChatGptCredentials>((res, rej) => {
     settle = (c) => {
       if (settled) return;
@@ -567,6 +722,26 @@ export async function beginChatGptLogin(opts: ChatGptLoginOptions): Promise<Chat
   });
   // Nothing else may observe this rejection before the caller awaits it.
   wait.catch(() => {});
+  timer = setTimeout(() => {
+    onTimeout();
+    fail(new ChatGptError("timed out waiting for the ChatGPT sign-in to finish", "timeout"));
+  }, timeoutMs);
+  (timer as { unref?: () => void }).unref?.();
+  return { wait, settle, fail, settled: () => settled };
+}
+
+/**
+ * Starts the loopback listener and builds the authorize URL. The browser must run on this
+ * machine: a 127.0.0.1 callback never reaches a server on another host. With a native host
+ * installed (the phone apps) the listener and the browser are the app's own, and the browser is
+ * opened here.
+ */
+export async function beginChatGptLogin(opts: ChatGptLoginOptions): Promise<ChatGptLoginSession> {
+  if (nativeHost) return beginNativeLogin(opts, nativeHost);
+  const a = newAttempt(opts);
+  let redirectUri = "";
+  let close = () => {};
+  const shot = oneShot(opts.timeoutMs ?? 10 * 60 * 1000, () => close());
 
   const server = createServer(async (req, res) => {
     const reply = (status: number, body: string) => {
@@ -575,56 +750,14 @@ export async function beginChatGptLogin(opts: ChatGptLoginOptions): Promise<Chat
     };
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     if (url.pathname !== "/auth/callback") return reply(404, "not found");
-    if (settled) return reply(409, errorPage("This sign-in already finished."));
-    const q = url.searchParams;
-    const stateOk = q.get("state") === state;
-    if (!stateOk) {
-      reply(400, errorPage("This callback doesn't belong to the sign-in Etude started."));
-      return fail(new ChatGptError("the callback state didn't match this sign-in", "state_mismatch"));
-    }
-    const oauthError = q.get("error");
-    if (oauthError) {
-      const desc = q.get("error_description");
-      reply(400, errorPage(desc ?? oauthError));
-      return fail(
-        new ChatGptError(
-          oauthError === "access_denied" ? "ChatGPT sign-in was declined. You can try again and allow access to your ChatGPT plan." : `ChatGPT sign-in failed: ${desc ?? oauthError}`,
-          oauthError,
-        ),
-      );
-    }
-    const code = q.get("code");
-    if (!code) {
-      reply(400, errorPage("The callback carried no authorization code."));
-      return fail(new ChatGptError("the callback carried no authorization code", "invalid_callback"));
-    }
-    const issued = q.get("client_id");
-    if (returning) {
-      if (issued && issued !== returning.client_id) {
-        reply(400, errorPage("This sign-in returned a different app registration."));
-        return fail(new ChatGptError("the callback returned a client id that doesn't match this account's registration", "client_mismatch"));
-      }
-    } else if (!issued) {
-      reply(400, errorPage("OpenAI didn't finish registering Etude. Try again."));
-      return fail(new ChatGptError("registration was incomplete: the callback carried no issued client id", "registration_incomplete"));
-    }
-    const clientId = issued ?? returning!.client_id;
-
+    if (shot.settled()) return reply(409, errorPage("This sign-in already finished."));
     try {
-      const tokens = await postToken(ep, { grant_type: "authorization_code", client_id: clientId, code, code_verifier: verifier, redirect_uri: redirectUri, resource: ep.resource });
-      if (!tokens.id_token) throw new ChatGptError("OpenAI returned no ID token", "invalid_id_token");
-      if (!tokens.access_token || !tokens.refresh_token) throw new ChatGptError("OpenAI returned no access or refresh token", "invalid_grant");
-      const claims = await verifyIdToken(tokens.id_token, { audience: clientId, nonce, issuer: ep.issuer, jwksUrl: ep.jwks });
-      if (returning && returning.subject && claims.sub !== returning.subject)
-        throw new ChatGptError("this sign-in belongs to a different ChatGPT account than the one saved", "account_mismatch");
-      const creds = credentialsFrom(tokens, { clientId, hostId, claims, endpointIssuer: ep.issuer });
-      saveChatGptCredentials(opts.home, creds);
+      const creds = await finishCallback(opts.home, a, redirectUri, url.searchParams);
       reply(200, SUCCESS_PAGE);
-      settle(creds);
+      shot.settle(creds);
     } catch (e) {
-      const message = (e as Error).message;
-      reply(400, errorPage(message));
-      fail(e instanceof Error ? e : new ChatGptError(String(e)));
+      reply(400, errorPage((e as { page?: string }).page ?? (e as Error).message));
+      shot.fail(e as Error);
     }
   });
 
@@ -639,38 +772,73 @@ export async function beginChatGptLogin(opts: ChatGptLoginOptions): Promise<Chat
   });
   const port = (server.address() as AddressInfo).port;
   redirectUri = `http://127.0.0.1:${port}/auth/callback`;
-  const url = buildAuthorizeUrl({
-    endpoints: ep,
-    redirectUri,
-    state,
-    nonce,
-    challenge,
-    hostId,
-    clientId: returning ? returning.client_id : "dynamic_agent_client",
-    agentNameHint: returning ? undefined : CHATGPT_AGENT_NAME,
-    // The ID token hint would travel in a URL we print and open, so the email hint is used instead.
-    emailHint: returning?.email ?? undefined,
-  });
+  const url = attemptUrl(a, redirectUri);
 
-  const close = () => {
+  close = () => {
     if (!server.listening) return;
     server.closeAllConnections?.();
     server.close();
   };
-  timer = setTimeout(() => {
-    close();
-    fail(new ChatGptError("timed out waiting for the ChatGPT sign-in to finish", "timeout"));
-  }, opts.timeoutMs ?? 10 * 60 * 1000);
-  timer.unref?.();
-  wait.finally(close).catch(() => {});
+  shot.wait.finally(close).catch(() => {});
 
   return {
     url,
     redirectUri,
-    wait,
+    wait: shot.wait,
     cancel: () => {
       close();
-      fail(new ChatGptError("ChatGPT sign-in was cancelled", "cancelled"));
+      shot.fail(new ChatGptError("ChatGPT sign-in was cancelled", "cancelled"));
+    },
+  };
+}
+
+/** The port the docs' example uses; any free port works when it's taken. */
+export const CHATGPT_LOOPBACK_PORT = 1455;
+
+async function beginNativeLogin(opts: ChatGptLoginOptions, host: ChatGptNativeHost): Promise<ChatGptLoginSession> {
+  const a = newAttempt(opts);
+  const shot = oneShot(opts.timeoutMs ?? 10 * 60 * 1000, () => void host.login.finish().catch(() => {}));
+  const { port } = await host.login.listen(opts.port ?? CHATGPT_LOOPBACK_PORT).catch((e) => {
+    throw new ChatGptError(`couldn't listen for the sign-in callback on 127.0.0.1: ${(e as Error).message}`, "listen_failed");
+  });
+  const redirectUri = `http://127.0.0.1:${port}/auth/callback`;
+  const url = attemptUrl(a, redirectUri);
+
+  // Callbacks arrive one at a time; anything that isn't /auth/callback (a favicon) is skipped.
+  void (async () => {
+    while (!shot.settled()) {
+      let hit: { path: string; query: string };
+      try {
+        hit = await host.login.next();
+      } catch (e) {
+        // The person closed the browser sheet, or the listener stopped.
+        shot.fail(e instanceof ChatGptError ? e : new ChatGptError((e as Error).message || "ChatGPT sign-in was cancelled", "cancelled"));
+        break;
+      }
+      if (shot.settled()) break;
+      if (hit.path !== "/auth/callback") continue;
+      try {
+        shot.settle(await finishCallback(opts.home, a, redirectUri, new URLSearchParams(hit.query)));
+      } catch (e) {
+        shot.fail(e as Error);
+      }
+    }
+    await host.login.finish().catch(() => {});
+  })();
+
+  await host.login.open(url).catch(async (e) => {
+    await host.login.finish().catch(() => {});
+    shot.fail(new ChatGptError(`couldn't open the sign-in page: ${(e as Error).message}`, "open_failed"));
+  });
+
+  return {
+    url,
+    redirectUri,
+    opened: true,
+    wait: shot.wait,
+    cancel: () => {
+      shot.fail(new ChatGptError("ChatGPT sign-in was cancelled", "cancelled"));
+      void host.login.finish().catch(() => {});
     },
   };
 }
@@ -698,9 +866,9 @@ export interface ChatGptModel {
 export async function listChatGptModels(home: string, endpoints: Partial<ChatGptEndpoints> = {}): Promise<ChatGptModel[]> {
   const ep = chatGptEndpoints(endpoints);
   const creds = await getChatGptCredentials(home, ep);
-  const res = await fetch(ep.models, {
+  const res = await net(ep.models, {
     headers: { Authorization: `Bearer ${creds.access_token}`, Accept: "application/json" },
-    signal: AbortSignal.timeout(15_000),
+    timeoutMs: 15_000,
   }).catch((e) => {
     throw new ChatGptError(`couldn't reach the model list: ${(e as Error).message}`, "network");
   });
@@ -790,13 +958,13 @@ export async function chatGptResponses(req: ResponsesRequest): Promise<Responses
     throw new ChatGptError("this sign-in doesn't include ChatGPT plan usage; sign out and sign in again, allowing plan access", "plan_disabled");
   const content: Record<string, unknown>[] = [{ type: "input_text", text: req.input }];
   if (req.image) content.push({ type: "input_image", image_url: req.image });
-  const res = await fetch(ep.responses, {
+  const res = await net(ep.responses, {
     method: "POST",
     headers: { Authorization: `Bearer ${creds.access_token}`, "Content-Type": "application/json", Accept: "text/event-stream" },
     body: JSON.stringify({ model: req.model || DEFAULT_CHATGPT_MODEL, instructions: req.instructions, input: [{ role: "user", content }], store: false, stream: true }),
-    signal: AbortSignal.timeout(req.timeoutMs ?? 60_000),
+    timeoutMs: req.timeoutMs ?? 60_000,
   }).catch((e) => {
-    const timeout = (e as Error).name === "TimeoutError";
+    const timeout = (e as Error).name === "TimeoutError" || /timed? ?out/i.test((e as Error).message ?? "");
     throw new ChatGptError(timeout ? `ChatGPT plan request timed out after ${req.timeoutMs ?? 60_000} ms` : `couldn't reach ChatGPT: ${(e as Error).message}`, timeout ? "timeout" : "network");
   });
   if (!res.ok) throw await readErrorBody(res);
@@ -830,7 +998,11 @@ export async function chatGptResponses(req: ResponsesRequest): Promise<Responses
         break;
     }
   };
-  for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+  // A reader loop: WebKit's ReadableStream has no async iterator.
+  const reader = res.body.getReader();
+  for (;;) {
+    const { done, value: chunk } = await reader.read();
+    if (done) break;
     buffer += decoder.decode(chunk, { stream: true });
     let cut: number;
     while ((cut = buffer.search(/\r?\n\r?\n/)) >= 0) {
@@ -851,6 +1023,7 @@ export async function chatGptResponses(req: ResponsesRequest): Promise<Responses
     }
     if (failure || completed) break;
   }
+  reader.cancel().catch(() => {});
   if (failure) throw failure;
   if (!completed) throw new ChatGptError("ChatGPT's stream ended without finishing the response", "incomplete_stream");
   if (!text.trim()) throw new ChatGptError("ChatGPT returned no text", "empty_response");
@@ -883,18 +1056,18 @@ export async function chatGptLogout(home: string, endpoints: Partial<ChatGptEndp
   if (cur.refresh_token) {
     let revokeUrl: string | null = null;
     try {
-      const res = await fetch(ep.discovery, { signal: AbortSignal.timeout(10_000) });
+      const res = await net(ep.discovery, { timeoutMs: 10_000 });
       if (res.ok) revokeUrl = ((await res.json()) as { revocation_endpoint?: string }).revocation_endpoint ?? null;
     } catch {
       revokeUrl = null;
     }
     if (revokeUrl) {
       try {
-        const res = await fetch(revokeUrl, {
+        const res = await net(revokeUrl, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({ token: cur.refresh_token, token_type_hint: "refresh_token", client_id: cur.client_id }).toString(),
-          signal: AbortSignal.timeout(15_000),
+          timeoutMs: 15_000,
         });
         revoked = res.ok;
         if (!res.ok) warning = `OpenAI returned HTTP ${res.status} when revoking the session`;

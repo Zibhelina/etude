@@ -5,15 +5,28 @@
 // can hold it open. So only one tab runs the core: a tab takes the "etude-collection" lock before it
 // starts its worker. A second tab says Etude is open elsewhere and waits; "Use it here" asks the
 // other tab to let go, and that one steps aside the same way.
+import { nativeError, type NativeHandler } from "./native-chatgpt.ts";
+
 const LOCK = "etude-collection";
 
-export function startCore() {
+/** `native`: in the phone apps, answers the worker's requests for native HTTP, storage and sign-in. */
+export function startCore(opts: { native?: NativeHandler } = {}) {
   let worker: Worker | null = null;
   let n = 0;
   type Pending = { resolve: (v: any) => void; reject: (e: Error) => void; stream?: ReadableStreamDefaultController<Uint8Array> };
   const pending = new Map<number, Pending>();
   const onmessage = (ev: MessageEvent) => {
     const d = ev.data;
+    if (d?.native) {
+      const { nid, op, args } = d.native;
+      const w = ev.target as Worker;
+      if (!opts.native) return w.postMessage({ nativeReply: nid, ok: false, error: "no native host in this build" });
+      opts.native(op, args).then(
+        (value) => w.postMessage({ nativeReply: nid, ok: true, value }),
+        (e) => w.postMessage({ nativeReply: nid, ok: false, error: nativeError(e) }),
+      );
+      return;
+    }
     const p = pending.get(d.id);
     if (!p) return;
     if (d.chunk) return p.stream?.enqueue(new Uint8Array(d.chunk));
@@ -51,6 +64,8 @@ export function startCore() {
   }).then(() => {
     worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     worker.onmessage = onmessage;
+    // First message, before any call: whether the app hands the worker a native host.
+    worker.postMessage({ hello: { native: !!opts.native } });
     return worker;
   });
 

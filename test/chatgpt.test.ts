@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createHash, createSign, generateKeyPairSync } from "node:crypto";
-import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -24,8 +24,11 @@ import {
   ChatGptError,
   CHATGPT_PLAN_SCOPE,
   CHATGPT_SCOPES,
+  setChatGptNativeHost,
+  refreshChatGpt,
   type ChatGptEndpoints,
   type ChatGptLoginSession,
+  type ChatGptNativeHost,
 } from "../src/core/chatgpt.ts";
 import { aiVerdict } from "../src/core/ai.ts";
 import { Etude } from "../src/core/engine.ts";
@@ -582,6 +585,196 @@ test("the HTTP routes point a remote browser at the CLI", async () => {
     assert.equal(st.login, null);
     assert.deepEqual(st.models, []);
   } finally {
+    e.close();
+  }
+});
+
+// ------------------------------------------------------- phone apps (native host)
+
+/**
+ * What the phone apps' EtudeAuth plugin does, in memory: HTTP that hands back the whole body as
+ * text (like URLSession), a Keychain-like store, a listener whose callbacks the test pushes, and
+ * a browser sheet that records the URL it was asked to open.
+ */
+function fakeNativeHost() {
+  const store = new Map<string, string>();
+  const queue: { path: string; query: string }[] = [];
+  let waiter: { resolve: (v: { path: string; query: string }) => void; reject: (e: Error) => void } | null = null;
+  let cancelled = false;
+  const log: string[] = [];
+  const opened: string[] = [];
+  const drain = () => {
+    if (!waiter) return;
+    const w = waiter;
+    if (queue.length) {
+      waiter = null;
+      w.resolve(queue.shift()!);
+    } else if (cancelled) {
+      waiter = null;
+      w.reject(new ChatGptError("ChatGPT sign-in was cancelled", "cancelled"));
+    }
+  };
+  const host: ChatGptNativeHost = {
+    async http(req) {
+      log.push(`${req.method} ${new URL(req.url).pathname}`);
+      const res = await fetch(req.url, { method: req.method, headers: req.headers, body: req.body });
+      return { status: res.status, headers: Object.fromEntries(res.headers.entries()), body: await res.text() };
+    },
+    store: { read: (name) => store.get(name) ?? null, write: (name, text) => void store.set(name, text) },
+    login: {
+      async listen(port) {
+        log.push(`listen ${port}`);
+        cancelled = false;
+        return { port };
+      },
+      next: () =>
+        new Promise((resolve, reject) => {
+          waiter = { resolve, reject };
+          drain();
+        }),
+      async open(url) {
+        opened.push(url);
+      },
+      async finish() {
+        log.push("finish");
+        cancelled = true;
+        drain();
+      },
+    },
+  };
+  const hit = (path: string, params: Record<string, string> = {}) => {
+    queue.push({ path, query: new URLSearchParams(params).toString() });
+    drain();
+  };
+  /** The person taps Cancel on the sheet. */
+  const cancel = () => {
+    cancelled = true;
+    drain();
+  };
+  return { host, store, log, opened, hit, cancel };
+}
+
+test("phone apps: sign-in runs on the app's own listener and browser sheet, tokens go to the secure store", async () => {
+  const fake = await fakeOpenAi();
+  const home = tempHome();
+  const n = fakeNativeHost();
+  setChatGptNativeHost(n.host);
+  try {
+    const session = await beginChatGptLogin({ home, endpoints: fake.endpoints, timeoutMs: 5000 });
+    assert.equal(session.opened, true);
+    assert.equal(session.redirectUri, "http://127.0.0.1:1455/auth/callback");
+    assert.deepEqual(n.opened, [session.url], "the app opened the sign-in page itself");
+    const q = new URL(session.url).searchParams;
+    assert.equal(q.get("redirect_uri"), "http://127.0.0.1:1455/auth/callback");
+    assert.equal(q.get("client_id"), "dynamic_agent_client");
+    assert.match(q.get("ext_agent_host_id") ?? "", /^urn:uuid:[0-9a-f-]{36}$/);
+
+    fake.registerAuthorize(session.url);
+    const { code, state } = fake.approve("oaiapp_phone");
+    n.hit("/favicon.ico");
+    n.hit("/auth/callback", { code, state, client_id: "oaiapp_phone" });
+    const creds = await session.wait;
+    assert.equal(creds.client_id, "oaiapp_phone");
+    assert.equal(creds.email, "joao@example.com");
+    assert.ok(n.log.includes("POST /token"), "the code exchange went through the native HTTP");
+    assert.ok(n.log.includes("GET /jwks"), "the signing keys came through the native HTTP");
+    await new Promise((r) => setTimeout(r, 10));
+    assert.ok(n.log.includes("finish"), "the listener and sheet were closed");
+
+    // Nothing touched the WebView's files: both records are in the secure store.
+    assert.equal(existsSync(chatGptPaths(home).credentials), false);
+    assert.equal(existsSync(chatGptPaths(home).hostId), false);
+    assert.equal(JSON.parse(n.store.get("chatgpt.json")!).refresh_token, creds.refresh_token);
+    assert.equal(n.store.get("chatgpt-host-id")!.trim(), creds.ext_agent_host_id);
+    assert.equal(chatGptStatus(home).signedIn, true);
+
+    // Grading reads the whole SSE body at once (no streaming over the bridge) and still completes.
+    const out = await chatGptResponses({ home, model: "gpt-6.1-sol", instructions: "be brief", input: "hi", endpoints: fake.endpoints });
+    assert.equal(out.text, "Hello, world!");
+    assert.deepEqual(await listChatGptModels(home, fake.endpoints), [{ slug: "gpt-6.1-sol", displayName: "GPT-6.1 Sol" }]);
+
+    // Refresh rotates the stored refresh token in the secure store.
+    const next = await refreshChatGpt(home, fake.endpoints);
+    assert.notEqual(next.refresh_token, creds.refresh_token);
+    assert.equal(JSON.parse(n.store.get("chatgpt.json")!).refresh_token, next.refresh_token);
+
+    // A second sign-in on the phone reuses the issued client id and the same host id.
+    const again = await beginChatGptLogin({ home, endpoints: fake.endpoints, timeoutMs: 5000 });
+    const q2 = new URL(again.url).searchParams;
+    assert.equal(q2.get("client_id"), "oaiapp_phone");
+    assert.equal(q2.get("ext_agent_host_id"), creds.ext_agent_host_id);
+    again.cancel();
+    await assert.rejects(again.wait, (e: unknown) => e instanceof ChatGptError && e.code === "cancelled");
+  } finally {
+    setChatGptNativeHost(null);
+    await fake.close();
+  }
+});
+
+test("phone apps: Cancel on the sheet, a foreign state and a declined consent all fail cleanly", async () => {
+  const fake = await fakeOpenAi();
+  const home = tempHome();
+  const n = fakeNativeHost();
+  setChatGptNativeHost(n.host);
+  try {
+    const s1 = await beginChatGptLogin({ home, endpoints: fake.endpoints, timeoutMs: 5000 });
+    n.cancel();
+    await assert.rejects(s1.wait, (e: unknown) => e instanceof ChatGptError && e.code === "cancelled");
+    assert.equal(n.store.get("chatgpt.json"), undefined);
+
+    const s2 = await beginChatGptLogin({ home, endpoints: fake.endpoints, timeoutMs: 5000 });
+    n.hit("/auth/callback", { code: "x", state: "not-ours", client_id: "oaiapp_phone" });
+    await assert.rejects(s2.wait, (e: unknown) => e instanceof ChatGptError && e.code === "state_mismatch");
+
+    const s3 = await beginChatGptLogin({ home, endpoints: fake.endpoints, timeoutMs: 5000 });
+    n.hit("/auth/callback", { state: new URL(s3.url).searchParams.get("state")!, error: "access_denied" });
+    await assert.rejects(s3.wait, (e: unknown) => e instanceof ChatGptError && e.code === "access_denied" && /declined/.test(e.message));
+    assert.equal(n.store.get("chatgpt.json"), undefined);
+    assert.equal(fake.tokens.length, 0, "no code exchange happened");
+  } finally {
+    setChatGptNativeHost(null);
+    await fake.close();
+  }
+});
+
+test("phone apps: a native timeout is reported as a timeout", async () => {
+  const home = tempHome();
+  const n = fakeNativeHost();
+  n.store.set("chatgpt.json", JSON.stringify({ email: "a@b.c", issuer: "https://auth.openai.com", subject: "s", client_id: "c", ext_agent_host_id: "urn:uuid:x", id_token: null, access_token: "at", refresh_token: "rt", token_type: "Bearer", expires_in: 3600, scopes: [CHATGPT_PLAN_SCOPE], saved_at: new Date().toISOString() }));
+  n.host.http = async () => {
+    throw new ChatGptError("the request timed out", "timeout");
+  };
+  setChatGptNativeHost(n.host);
+  try {
+    await assert.rejects(chatGptResponses({ home, model: "m", instructions: "i", input: "x", timeoutMs: 50 }), (e: unknown) => e instanceof ChatGptError && e.code === "timeout");
+  } finally {
+    setChatGptNativeHost(null);
+  }
+});
+
+test("phone apps: the login route opens the app's sheet instead of sending the person to the CLI", async () => {
+  const home = tempHome();
+  const n = fakeNativeHost();
+  setChatGptNativeHost(n.host);
+  const e = await Etude.open(":memory:", { home });
+  try {
+    const app = createApp(e);
+    // The worker's requests carry no Host header at all.
+    const res = await app.request("/api/chatgpt/login", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const body = (await res.json()) as any;
+    assert.equal(body.remote, undefined);
+    assert.equal(body.pending, true);
+    assert.equal(body.opened, true);
+    assert.equal(n.opened.length, 1);
+    assert.match(n.opened[0], /^https:\/\/auth\.openai\.com\/api\/accounts\/authorize\?/);
+    const st = (await (await app.request("/api/chatgpt/status")).json()) as any;
+    assert.equal(st.login.state, "pending");
+    n.cancel();
+    await new Promise((r) => setTimeout(r, 20));
+    const after = (await (await app.request("/api/chatgpt/status")).json()) as any;
+    assert.equal(after.login.state, "error");
+  } finally {
+    setChatGptNativeHost(null);
     e.close();
   }
 });

@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Not found · Etude</title>
+<script>
+  // The web app is one page: a link to one of its screens (/app/study?deck=…) lands here, so hand
+  // it back to the app, which opens that screen.
+  if (/^\/app(\/|$)/.test(location.pathname)) {
+    try { sessionStorage.setItem("etude.route", location.pathname + location.search + location.hash); } catch (e) {}
+    location.replace("/app/");
+  }
+</script>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
   @font-face { font-family: "Inter"; src: url("/assets/fonts/inter.woff2") format("woff2"); font-weight: 100 900; }

@@ -567,6 +567,10 @@ export const api = {
     ),
   exportUrl: (s: Scope) => `/api/export${qs({ deck: s.deck, q: s.q })}`,
   settings: () => call<any>("GET", "/api/settings"),
+  /** Anonymous error reports and usage counts (Settings → Privacy): whether this app sends them, and what waits. */
+  telemetry: () => call<{ active: boolean; allowed: boolean; forced: boolean; prefs: { errorReports: boolean; usageStats: boolean }; pending: { errors: number; counters: number } }>("GET", "/api/telemetry"),
+  telemetryReport: (r: { kind: string; message: string; stack?: string }) => call<{ queued: boolean }>("POST", "/api/telemetry/report", r),
+  telemetryEvent: (name: string) => call<{ counted: boolean }>("POST", "/api/telemetry/event", { name }),
   defaults: () => call<PresetConfig>("GET", "/api/defaults"),
   schedulers: () => call<SchedulerSummary[]>("GET", "/api/schedulers"),
   testAi: () => call<any>("POST", "/api/ai/test", {}),

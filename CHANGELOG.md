@@ -10,6 +10,7 @@
 - Settings → Sync: without an active Sync, Storage shows a dash and says it appears once Sync is active, instead of "0 KB of 1 GB". **Manage subscription** shows only for a subscription bought on the website; a Sync given to an account by hand showed it too. An ended plan reads "Ended · Nov 3, 2026" instead of "Ended · Ended …".
 - `etude sync now` exits 7 (`sync_required`) with a clear message when Sync isn't active on the account. It used to exit 1, the code for a bug.
 - The terms, refunds and privacy pages cover Sync bought in the iPhone and iPad app: Apple sells, bills and refunds it, and Apple's Standard EULA applies to the App Store copy.
+- **Anonymous error reports and usage counts.** When something breaks, the app sends Etude's server an anonymous report (the error and where in Etude's code it happened, scrubbed of paths, emails and anything quoted, never your cards); turn it off in Settings → Privacy. Daily counts of which features you use are off unless you tick **Help improve Etude** in setup or turn on **Share usage stats**. Neither is linked to your account, the `etude` command and agents never send either, and `ETUDE_TELEMETRY=0` turns both off.
 
 ## 2.5.0
 

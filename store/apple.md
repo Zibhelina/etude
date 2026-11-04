@@ -42,8 +42,11 @@ Apple counts data as "collected" when it leaves the device and is kept longer th
 | Contact Info → Email Address | Yes, only when someone creates the optional account | Yes | No | App Functionality |
 | User Content → Other User Content | No (see note) | | | |
 | Identifiers → User ID | Yes (the account id the server keeps with the email) | Yes | No | App Functionality |
-| Purchases → Purchase History | Yes | Linked | App Functionality | No |
-| Diagnostics, Usage Data, Location, Contacts, Health, Financial, Browsing, Search | No | | | |
+| Purchases → Purchase History | Yes | Yes | No | App Functionality |
+| Diagnostics → Crash Data | Yes (error reports, on unless turned off in Settings → Privacy) | No | No | App Functionality |
+| Diagnostics → Other Diagnostic Data | Yes (same reports: app version, platform, system version) | No | No | App Functionality |
+| Usage Data → Product Interaction | Yes (daily feature counts, only if the person turns them on) | No | No | Analytics |
+| Location, Contacts, Health, Financial, Browsing, Search, other Usage Data | No | | | |
 
 Notes for each choice:
 
@@ -51,7 +54,10 @@ Notes for each choice:
 - **Other User Content: No.** Sync uploads the collection end-to-end encrypted. The server holds only ciphertext and the key never leaves the person's devices, so Etude can't read it. Apple's definition of collecting is about data you can access; encrypted data you can't open isn't collected in that sense. If you'd rather show it, add "Other User Content, linked, App Functionality" and nothing else changes.
 - **AI grading.** When someone turns on AI grading, the card and their answer go from the device straight to OpenAI or OpenRouter under the person's own key. Etude never receives them. Apple's label covers data you or your partners collect; a provider the person picked and pays for is the person's own service, so it isn't declared. The Privacy Policy says it plainly.
 - **Purchases: Yes (Purchase History).** Since 2.6 the iPhone app sells Etude Sync through In-App Purchase, and the server keeps Apple's transaction and original transaction ids linked to the Etude account to give Sync. Paid decks are still bought only on the website and desktop app. Published this way in App Store Connect on Nov 4.
-- **Tracking: No.** No ads, no analytics, no third-party SDKs. The privacy manifest (`ios/App/App/PrivacyInfo.xcprivacy`) says the same: email address only, no tracking domains.
+- **Diagnostics: Crash Data + Other Diagnostic Data, not linked.** Since 2.6 the app sends anonymous error reports to Etude's own server unless the person turns them off (Settings → Privacy): kind, scrubbed message and stack, a fingerprint, a count, app version, platform, system version. No account, device or install id, and the server keeps no IP with them (etude-cloud `src/routes/telemetry.ts`), so they're **not linked**. They're JavaScript errors from the app and its core (a native crash of the iOS shell isn't reported). Purpose App Functionality: they're for finding bugs.
+- **Usage Data: Product Interaction, not linked, Analytics.** Daily counts of a fixed list of features (cards reviewed, decks made, Market installs…), only when the person ticks "Help improve Etude" in setup or turns on Share usage stats. No per-person timeline, no id. Nothing goes to a third party.
+- **Tracking: No.** No ads, no third-party analytics or SDKs; the error reports and usage counts above go only to Etude's server and are never combined with other companies' data. The privacy manifest (`ios/App/App/PrivacyInfo.xcprivacy`) says the same: email, user id, purchase history (linked), crash data, other diagnostic data and product interaction (not linked), no tracking domains.
+- **Published label.** App Store Connect still shows the Nov 4 label (email, user id, purchase history). Add the three not-linked rows above there after the server with telemetry is deployed.
 - **Security log IP addresses.** The server keeps the IP of sign-in and account events for 12 months to fight abuse. Apple's list has no IP type; it sits under App Functionality with the account. If App Review asks, point to the Privacy Policy section 3.
 
 ## Age rating questionnaire

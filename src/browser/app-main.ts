@@ -18,7 +18,9 @@ try {
 
 // In the phone apps the worker gets native HTTP, the Keychain and the sign-in sheet (ChatGPT plan).
 const hasAuthPlugin = native && !!(globalThis as any).Capacitor?.isPluginAvailable?.("EtudeAuth");
-const core = startCore(hasAuthPlugin ? { native: (await import("./native-chatgpt.ts")).nativeChatGptHandler() } : {});
+const capPlatform = (globalThis as any).Capacitor?.getPlatform?.();
+const platform = native && (capPlatform === "ios" || capPlatform === "android") ? capPlatform : "web";
+const core = startCore({ platform, ...(hasAuthPlugin ? { native: (await import("./native-chatgpt.ts")).nativeChatGptHandler() } : {}) });
 (globalThis as any).__etudeTransport = (input: RequestInfo | URL, init?: RequestInit) => core.fetch(input, init);
 (globalThis as any).__etudeLocal = true;
 (globalThis as any).__etudeCore = core; // for tests and debugging

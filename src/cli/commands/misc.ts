@@ -33,6 +33,12 @@ command({
     const allowHosts = [...(ctx.flags["allow-host"] ?? []), ...(process.env.ETUDE_ALLOW_HOSTS ?? "").split(",")].map((h: string) => h.trim()).filter(Boolean);
     const localOnly = host === "127.0.0.1" || host === "localhost";
     const app = createApp(ctx.e, { token, allowHosts, localOnly, webDist: ctx.flags.dev ? null : existsSync(dist) ? dist : null, onRestart: () => restart(server, ctx) });
+    // Anonymous error reports and usage counts (Settings → Privacy) go out only from the desktop app's engine, or when
+    // ETUDE_TELEMETRY=1 asks for it. A plain `etude serve` (an agent, a script, a server) sends nothing.
+    const { startTelemetry, telemetryAllowed } = await import("../../core/telemetry.ts");
+    if (process.env.ETUDE_APP === "desktop" || /^(1|on|true|yes)$/i.test(process.env.ETUDE_TELEMETRY ?? "")) {
+      if (telemetryAllowed() && !ctx.flags.dev) startTelemetry(ctx.e);
+    }
     server = serve({ fetch: app.fetch, port, hostname: host }, (info) => {
       ctx.note(`etude ${ctx.flags.dev ? "api (dev) " : ""}on http://${host}:${info.port}  db ${ctx.dbPath}`);
     });

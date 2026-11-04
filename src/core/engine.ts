@@ -67,6 +67,7 @@ import { convertCollection, type PlannedCard } from "./anki/convert.ts";
 import { collectFileNames, MAX_MEDIA_BYTES, mediaType } from "./media.ts";
 import { decodeAssets, hashBytes, type AssetInfo } from "./assets.ts";
 import { imagePixels, normalizeBoxes, OcclusionError } from "./occlusion.ts";
+import { DEFAULT_PRIVACY, type Privacy } from "./telemetry.ts";
 
 export class EtudeError extends Error {
   status: number;
@@ -103,6 +104,8 @@ export interface Settings {
   typePrefs: Record<string, Record<string, unknown>>;
   /** First-run setup: whether it was finished or skipped, and the comfort level picked there. */
   onboarding: Onboarding;
+  /** Settings → Privacy: anonymous error reports (on) and usage counts (off). See src/core/telemetry.ts. */
+  privacy: Privacy;
 }
 
 export const ONBOARDING_LEVELS = ["simple", "standard", "tinker"] as const;
@@ -111,7 +114,7 @@ export interface Onboarding {
   level: (typeof ONBOARDING_LEVELS)[number];
 }
 
-export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" } };
+export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" }, privacy: DEFAULT_PRIVACY };
 
 /** Card preferences: short keys, and a few KB per type, since they ride along in the synced settings. */
 export const TYPE_PREF_KEY = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -586,12 +589,15 @@ export class Etude {
       market: { ...DEFAULT_SETTINGS.market, ...(s.market ?? {}) },
       typePrefs: { ...(s.typePrefs ?? {}) },
       onboarding: { ...DEFAULT_SETTINGS.onboarding, ...(s.onboarding ?? {}) },
+      privacy: { ...DEFAULT_PRIVACY, ...(s.privacy ?? {}) },
     };
   }
 
   updateSettings(patch: Partial<Settings>): Settings {
     const cur = this.settings();
-    const next: Settings = { ...cur, ...patch, ai: { ...cur.ai, ...(patch.ai ?? {}) }, market: { ...cur.market, ...(patch.market ?? {}) }, onboarding: { ...cur.onboarding, ...(patch.onboarding ?? {}) } };
+    const next: Settings = { ...cur, ...patch, ai: { ...cur.ai, ...(patch.ai ?? {}) }, market: { ...cur.market, ...(patch.market ?? {}) }, onboarding: { ...cur.onboarding, ...(patch.onboarding ?? {}) }, privacy: { ...cur.privacy, ...(patch.privacy ?? {}) } };
+    if (typeof next.privacy.errorReports !== "boolean" || typeof next.privacy.usageStats !== "boolean") throw new EtudeError("privacy.errorReports and privacy.usageStats must be true or false");
+    next.privacy = { errorReports: next.privacy.errorReports, usageStats: next.privacy.usageStats };
     if (typeof next.onboarding.done !== "boolean") throw new EtudeError("onboarding.done must be true or false");
     if (!ONBOARDING_LEVELS.includes(next.onboarding.level)) throw new EtudeError(`onboarding.level must be one of ${ONBOARDING_LEVELS.join(", ")}`);
     if (typeof next.market.url !== "string" || typeof next.market.repo !== "string") throw new EtudeError("market.url and market.repo must be text");

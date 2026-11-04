@@ -16,6 +16,7 @@ import { refreshTheme } from "@/lib/theme";
 import { api, relative } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { isNativeApp } from "@/lib/platform";
+import { track } from "@/lib/telemetry";
 
 // In the iOS app a file input with no accept list offers "Take Video", which needs the microphone; the
 // app only takes images, PDFs, text and .apkg, so it asks for those and iOS offers photos, camera and files.
@@ -47,6 +48,9 @@ export function useAgentPanel() {
     return Math.min(720, Math.max(340, !saved || saved === 400 ? 428 : saved));
   });
   useEffect(() => localStorage.setItem(OPEN_KEY, open ? "1" : "0"), [open]);
+  useEffect(() => {
+    if (open) track("ask.open");
+  }, [open]);
   useEffect(() => localStorage.setItem(WIDTH_KEY, String(width)), [width]);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {

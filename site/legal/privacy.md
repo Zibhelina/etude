@@ -1,18 +1,18 @@
 ---
 title: Privacy Policy
 description: What the Etude app, the website and Etude's server collect, who processes it, how long it's kept and how to delete it.
-last-updated: 2026-11-03
+last-updated: 2026-11-04
 ---
 
 # Privacy Policy
 
 Etude is run by João Henrique Costa Araujo, a sole proprietor in British Columbia, Canada ("Etude", "we"). He is the person responsible for your personal information. Contact: hello@etude.study.
 
-The short version: the app works without an account and sends us nothing. If you use Sync, your collection is encrypted on your device and we can't read it. We keep the minimum needed to run accounts and payments, and we don't sell data, show ads or use analytics.
+The short version: the app works without an account. It sends us anonymous error reports when something breaks, unless you turn them off, and anonymous counts of which features you use only if you turn them on; neither carries your cards or anything that identifies you. If you use Sync, your collection is encrypted on your device and we can't read it. We keep the minimum needed to run accounts and payments, and we don't sell data, show ads or use outside analytics services. The website has no analytics at all.
 
 ## 1. The app
 
-The Etude app stores your collection (decks, cards, reviews, media, settings) on your own device. It has no analytics, crash reporting or advertising, and it never sends your collection to us. It contacts these outside services:
+The Etude app stores your collection (decks, cards, reviews, media, settings) on your own device. It has no advertising and no outside analytics or crash-reporting service, and it never sends your collection to us. It contacts these services:
 
 | When | The app contacts | What it sends |
 |---|---|---|
@@ -21,9 +21,18 @@ The Etude app stores your collection (decks, cards, reviews, media, settings) on
 | you turn on AI grading and answer an AI-graded card, ask for feedback, use Edit for me, or use Ask Etude | the AI provider you set up (see below) | the card, your answer (including drawings and images), your message, any file you attach, and the parts of your collection Ask Etude reads to do what you asked |
 | you sign in to ChatGPT for AI features, and every few minutes while you're signed in | OpenAI | OpenAI's own sign-in, then a request for the list of models your plan offers; the sign-in token stays on your device |
 | you open the Sync plans, subscribe or restore purchases in the iPhone or iPad app | Apple's App Store | the App Store's own requests, plus a random token that links the purchase to your Etude account |
+| something breaks in the app, unless you turned off **Send error reports** | our server (sync.etude.study) | an anonymous error report (below) |
+| you turned on **Share usage stats** (off unless you do) | our server (sync.etude.study) | anonymous daily feature counts (below) |
 | you use an account, Sync or the paid Market | our server (sync.etude.study) | see sections 3 to 5 |
 
 **AI providers.** AI features are off until you add a key or sign in. You choose the provider: OpenRouter, OpenAI (through an API key or your ChatGPT sign-in), or any compatible server, including one on your own computer. OpenRouter passes each request on to the company that runs the model you picked. Out of the box those are `liquid/d1-ultra` for quick grading decisions and `deepseek/deepseek-v4.1-flash-1017` for written feedback, and you can change both in Settings. Content you send to an AI provider goes straight from your device to that provider, under your own account with it. Etude never receives it. That provider's privacy policy applies.
+
+**Error reports and usage counts.** Both are anonymous and go to our own server (sync.etude.study, hosted by DigitalOcean in Toronto), even if your Sync uses a server of your own. They're never linked to your Etude account, and they carry no device or install id.
+
+- *Error reports* (on unless you turn them off): the kind of error, its message and where in Etude's code it happened, how many times, the app version, and your platform and system version (for example "macOS", "iOS 26.1"). Before anything leaves your device, home-folder paths become `~`, and email addresses, web addresses' query strings, long numbers and anything in quotes are removed, so card and deck text, answers, emails and file names stay out. The server checks this again. We keep each kind of error 90 days after it last happened.
+- *Usage counts* (off unless you turn them on, in the last step of setup or in Settings): how many times a day features were used (cards reviewed, decks made, Market installs, Ask Etude opened, and the like, from a fixed list), with the app version and platform. Never what's in them, and no record of what one person did. The app sends "opened today" at most once a day, which is how we count how many copies were used that day. We keep the daily counts 13 months.
+- Your IP address reaches the server with each batch, as with any request. It's used only to limit abuse, in memory, and is never stored or logged with them.
+- Turn either off in Settings → Privacy; what's waiting to be sent is deleted at once. Unsent reports are deleted after 7 days. The `etude` command and agents never send any, and `ETUDE_TELEMETRY=0` turns both off everywhere.
 
 **Card types.** Card types, including ones from the Market, run in a sandbox that can't reach the internet. They can only load files from Etude itself.
 
@@ -59,7 +68,7 @@ An account is optional. You need one only for Sync and the paid Market.
 
 | Provider | What it does | Where |
 |---|---|---|
-| DigitalOcean | hosts the server, database and encrypted storage, and its backups | Toronto, Canada |
+| DigitalOcean | hosts the server, database and encrypted storage, its backups, and the anonymous error reports and usage counts | Toronto, Canada |
 | Resend | sends sign-in and account email (your address and the message) | United States |
 | Porkbun and Google | Porkbun forwards mail sent to hello@etude.study to a Gmail inbox, where it's read and stored | United States |
 | Polar | sells and bills Sync subscriptions bought on the website (merchant of record) | United States |
@@ -82,7 +91,7 @@ We don't sell or rent personal information, and we don't share it for advertisin
 
 You can ask us to access, correct, export or delete your personal information, or ask questions about how we handle it, by writing to hello@etude.study. We answer within 30 days. Once you're signed in you can also do most of it yourself: change your email or display name, see and revoke devices, download a copy of your account data, and delete your account. Your collection lives on your devices, and you can export any deck as a pack at any time.
 
-If you're in Canada, you can also complain to the Office of the Privacy Commissioner of Canada or, in British Columbia, the Office of the Information and Privacy Commissioner for BC. If you're in the EU or UK, the legal bases we rely on are performing our contract with you (accounts, Sync, purchases), legal obligation (tax records) and legitimate interest (security logs), and you can complain to your local data protection authority.
+If you're in Canada, you can also complain to the Office of the Privacy Commissioner of Canada or, in British Columbia, the Office of the Information and Privacy Commissioner for BC. If you're in the EU or UK, the legal bases we rely on are performing our contract with you (accounts, Sync, purchases), legal obligation (tax records), legitimate interest (security logs and anonymous error reports) and consent (usage counts, which you turn on), and you can complain to your local data protection authority.
 
 ## 7. Security
 

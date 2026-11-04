@@ -12,6 +12,7 @@ import { Markdown } from "@/components/markdown";
 import { api, type Grade, type Scope, type StudyCard, type WatchEntry } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { navigate } from "@/lib/router";
+import { track } from "@/lib/telemetry";
 
 type Phase = "loading" | "answer" | "grading" | "result" | "done" | "empty";
 
@@ -29,6 +30,8 @@ interface Shown {
 }
 
 export function WatchPage({ scope, title }: { scope: Scope; title: string }) {
+  // Usage count (only when the person turned usage stats on).
+  useEffect(() => track("watch.open"), []);
   const [list, setList] = useState<WatchEntry[] | null>(null);
   const [index, setIndex] = useState(0);
   const [shown, setShown] = useState<Shown | null>(null);

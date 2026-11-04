@@ -8,10 +8,13 @@ import { appPath, withBase } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { EmptyState, PHONE_H1 } from "@/components/page";
 import { X } from "lucide-react";
+import { track } from "@/lib/telemetry";
 
 const PAGE = 200;
 
 export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; openItem: string | null }) {
+  // Usage count (only when the person turned usage stats on).
+  useEffect(() => track("browse.open"), []);
   const [query, setQuery] = useState(initialQuery);
   const [order, setOrder] = useState("relevance");
   const [rows, setRows] = useState<SearchRow[]>([]);

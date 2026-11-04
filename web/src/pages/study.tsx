@@ -15,6 +15,7 @@ import { navigate } from "@/lib/router";
 import { usePhone } from "@/lib/phone";
 import { ActionSheet, Tally } from "@/components/phone-shell";
 import { SketchBar, SketchLayer, sketchTransform, useSketch } from "@/components/sketch-pad";
+import { track } from "@/lib/telemetry";
 
 type Phase = "loading" | "answer" | "grading" | "result" | "done";
 
@@ -38,6 +39,8 @@ const VERDICT_TEXT: Record<string, { label: string; cls: string }> = {
 };
 
 export function StudyPage({ scope, title, startCard }: { scope: Scope; title: string; startCard?: number }) {
+  // Usage count (only when the person turned usage stats on).
+  useEffect(() => track("study.session"), []);
   const [card, setCard] = useState<StudyCard | null>(null);
   const [counts, setCounts] = useState<Counts | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");

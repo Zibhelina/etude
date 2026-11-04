@@ -2,7 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- V8 compiles JavaScript at runtime; ad-hoc signing (before the Developer ID certificate) needs library validation off. -->
+  <!-- The hardened runtime's exceptions the app needs. V8 compiles JavaScript at runtime (allow-jit, and
+       unsigned executable memory for the engine run in Node mode). Ad-hoc signing needs library validation
+       off, as the optimizer's .node file isn't signed by a team; with the Developer ID certificate it is,
+       so that line could go once a signed build is tested without it (docs/signing.md). -->
   <key>com.apple.security.cs.allow-jit</key><true/>
   <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
   <key>com.apple.security.cs.disable-library-validation</key><true/>

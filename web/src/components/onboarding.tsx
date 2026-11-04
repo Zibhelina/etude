@@ -39,7 +39,7 @@ import { announceDataChange } from "@/components/agent-panel";
 import { api } from "@/lib/api";
 import { account, openOutside } from "@/lib/account";
 import { saveApiKey, serverless } from "@/lib/native";
-import { canShowPurchases } from "@/lib/platform";
+import { canShowPurchases, isNativeApp } from "@/lib/platform";
 import { canBuyInApp } from "@/lib/storekit";
 import { AppStorePlans } from "@/components/app-store-plans";
 import { etudeFetch } from "@/lib/transport";
@@ -775,7 +775,8 @@ function SyncStep({ level, onDone }: { level: OnboardingLevel; onDone(o: SyncOut
           selected={choice === "cloud"}
           onClick={() => setChoice("cloud")}
         />
-        <Option
+        {/* A phone has no folder to pick, so the store apps leave this option out. */}
+        {!isNativeApp() && <Option
           kind="radio"
           icon={FolderSync}
           title="My own folder"
@@ -790,7 +791,7 @@ function SyncStep({ level, onDone }: { level: OnboardingLevel; onDone(o: SyncOut
               <ChooseFolder onPick={setFolder} className="rounded-xl md:h-10" />
             </div>
           )}
-        </Option>
+        </Option>}
         {level === "tinker" && (
           <Option kind="radio" icon={Server} title="My own server" hint="An Etude Sync server you run yourself." selected={choice === "server"} onClick={() => setChoice("server")}>
             {choice === "server" && (

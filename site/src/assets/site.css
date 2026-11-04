@@ -853,7 +853,7 @@ h1, h2, h3 { margin: 0; font-family: var(--font-serif); font-weight: 400; letter
 
 /* Download page: one-button Mac install, terminal steps tucked away. */
 .easy { display: none; }
-[data-panel][data-show="mac"] [data-easy="mac"], [data-panel][data-show="windows"] [data-easy="windows"], [data-panel][data-show="linux"] [data-easy="linux"] { display: block; }
+[data-panel][data-show="mac"] [data-easy="mac"], [data-panel][data-show="windows"] [data-easy="windows"], [data-panel][data-show="linux"] [data-easy="linux"], [data-panel][data-show="web"] [data-easy="web"] { display: block; }
 [data-panel] .term-install { display: none; margin-top: 2.2rem; padding-top: 1.6rem; border-top: 1px solid var(--border); }
 [data-panel].show-term .term-install { display: block; }
 .easy-dl { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.4rem; margin-top: 1.6rem; }
@@ -1176,3 +1176,8 @@ h1, h2, h3 { margin: 0; font-family: var(--font-serif); font-weight: 400; letter
 @media (max-width: 640px) and (prefers-reduced-motion: reduce) {
   .dock, .programme, .programme-back { transition: none; }
 }
+
+/* The web app link in the nav: phones reach it through Get Etude, which opens the browser tab. */
+@media (max-width: 640px) { .nav-open { display: none; } }
+/* Four tabs fit a phone without their icons. */
+@media (max-width: 480px) { .os-tabs .shots-tabs { gap: 1.2rem; } .os-tabs svg { display: none; } }

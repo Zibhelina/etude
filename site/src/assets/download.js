@@ -35,6 +35,12 @@ const OS = {
 };
 
 function detect() {
+  // Phones and tablets have no desktop app: the browser edition is the one that runs there.
+  if (navigator.userAgentData?.mobile || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) return "web";
+  return detectComputer();
+}
+
+function detectComputer() {
   const p = (navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || "").toLowerCase();
   if (p.includes("win")) return "windows";
   if (p.includes("linux") || p.includes("x11") || p.includes("cros")) return "linux";
@@ -43,7 +49,8 @@ function detect() {
 
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
 function show(os) {
-  const o = OS[os];
+  // The browser tab has no install steps; the terminal block keeps the last computer's commands.
+  const o = OS[os] ?? OS[detectComputer()];
   $$("[data-os]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.os === os)));
   $("[data-node-note]").innerHTML = o.note;
   const pre = $("[data-node-cmd]");
@@ -93,7 +100,7 @@ macChip().then((chip) => {
   $("[data-mac-label]").textContent = "Download for Intel Mac";
   alt.textContent = "Mac with Apple Silicon (M1 or newer)?";
 });
-show(OS[location.hash.slice(1)] ? location.hash.slice(1) : detect());
+show(OS[location.hash.slice(1)] || location.hash === "#web" ? location.hash.slice(1) : detect());
 
 // Every command block gets a copy button.
 const COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';

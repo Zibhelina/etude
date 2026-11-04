@@ -41,17 +41,18 @@ jobs:
         env:
           # Only the Mac build gets the Apple secrets, and never a pull request's. Without them (or with
           # only the certificate) the build still works: signed ad hoc, or signed but not notarized.
-          # docs/signing.md lists what each secret holds.
-          CSC_LINK: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.MAC_CERTIFICATE || '' }}
-          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.MAC_CERTIFICATE_PASSWORD || '' }}
-          APPLE_API_KEY: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.APPLE_API_KEY || '' }}
-          APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.APPLE_API_KEY_ID || '' }}
-          APPLE_API_ISSUER: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.APPLE_API_ISSUER || '' }}
+          # docs/signing.md lists what each secret holds. The repository variable MAC_SIGNING=off builds the Mac
+          # apps unsigned (ad hoc) even with the secrets set, while Apple's first notarization for the team is held.
+          CSC_LINK: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && vars.MAC_SIGNING != 'off' && secrets.MAC_CERTIFICATE || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && vars.MAC_SIGNING != 'off' && secrets.MAC_CERTIFICATE_PASSWORD || '' }}
+          APPLE_API_KEY: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && vars.MAC_SIGNING != 'off' && secrets.APPLE_API_KEY || '' }}
+          APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && vars.MAC_SIGNING != 'off' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && vars.MAC_SIGNING != 'off' && secrets.APPLE_API_ISSUER || '' }}
       - name: The Mac apps' signatures hold
         if: runner.os == 'macOS'
         env:
-          SIGNED: ${{ github.event_name != 'pull_request' && secrets.MAC_CERTIFICATE != '' }}
-          NOTARIZED: ${{ github.event_name != 'pull_request' && secrets.MAC_CERTIFICATE != '' && secrets.APPLE_API_KEY != '' }}
+          SIGNED: ${{ github.event_name != 'pull_request' && vars.MAC_SIGNING != 'off' && secrets.MAC_CERTIFICATE != '' }}
+          NOTARIZED: ${{ github.event_name != 'pull_request' && vars.MAC_SIGNING != 'off' && secrets.MAC_CERTIFICATE != '' && secrets.APPLE_API_KEY != '' }}
         run: |
           set -e
           for app in desktop/dist/out/mac-arm64/Etude.app desktop/dist/out/mac/Etude.app; do

@@ -92,3 +92,7 @@ Then `win.verifyUpdateCodeSignature` can stay on: the updater refuses an update 
 - electron-builder 26.18 source: `app-builder-lib/out/mac/MacTargetHelper.js` (notarization credentials), `codeSign/macCodeSign.js` (signing skipped on pull requests), `platformPackager.js` (Windows falls back to `CSC_LINK`), `dmg-builder/out/dmg.js` (`dmg.sign`), `@electron/notarize` (staples the app; the API key must be a file path).
 - Microsoft Learn, Artifact Signing quickstart and FAQ (eligibility, identity validation, regions, SmartScreen), and the Azure retail prices API for "Trusted Signing" (Basic US$9.99, Premium US$99.99, overage US$0.005), read November 3, 2026.
 - SSL.com IV and OV code signing pages; Certum shop, code signing; signpath.org/terms, read November 3, 2026.
+
+## Turning Mac signing off for a release
+
+The repository variable `MAC_SIGNING` set to `off` (Settings → Secrets and variables → Actions → Variables, or `gh variable set MAC_SIGNING --body off`) makes the desktop workflow build the Mac apps ad hoc, as before signing existed, even with the secrets in place. 2.6.0 shipped that way while Apple held the team's first notarization for extra analysis. Delete the variable (or set it to `on`) to sign and notarize again.

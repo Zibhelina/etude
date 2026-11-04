@@ -157,6 +157,17 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   const app = new Hono();
   opts = { ...opts, kitDir: opts.kitDir ?? [opts.webDist && join(opts.webDist, "kit"), join(ROOT, "web", "dist", "kit")].find((d) => d && existsSync(join(d, "kit.js"))) ?? null };
 
+  // No Referer from any page or frame: a card frame, or a site a card or the app links to, never learns
+  // the address it came from (an app page opened with ?token=… carries it until the app removes it).
+  app.use("*", async (c, next) => {
+    await next();
+    try {
+      c.res.headers.set("Referrer-Policy", "no-referrer");
+    } catch {
+      // A response with immutable headers (proxied as is) keeps its own.
+    }
+  });
+
   app.onError((err, c) => {
     if (err instanceof EtudeError) {
       // Account errors carry the Sync server's code (sync_required, not_owned…); the store apps reword those.

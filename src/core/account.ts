@@ -278,6 +278,9 @@ export class AccountClient {
   // ── Sync subscription (App Store, in the iOS app) ─────────────
   appleInfo = () => this.json("GET", "/v1/billing/apple");
   appleTransaction = (jws: string) => this.json("POST", "/v1/billing/apple/transaction", { jws });
+  // ── Sync subscription (Google Play, in the Android app) ───────
+  googleInfo = () => this.json("GET", "/v1/billing/google");
+  googlePurchase = (purchaseToken: string) => this.json("POST", "/v1/billing/google/purchase", { purchaseToken, packageName: "study.etude.app" });
 
   // ── paid Market ───────────────────────────────────────────────
   async paidIndex() {

@@ -17,7 +17,7 @@ import { account, bytes, openOutside, type AccountStatus } from "@/lib/account";
 import { hasWebPortal, storageNote, storeSource } from "@/lib/billing-ui";
 import { canShowPurchases, desktopApp, isNativeApp, storeSafeMessage } from "@/lib/platform";
 import { NATIVE_COPY } from "@/lib/native-copy";
-import { canBuyInApp, STOREKIT_EVENT } from "@/lib/storekit";
+import { canBuyInApp, inAppProductIds, storeSource as thisStore, STOREKIT_EVENT } from "@/lib/storekit";
 import { AppStoreManage, AppStorePlans } from "@/components/app-store-plans";
 
 const DEFAULT_SERVER = "https://sync.etude.study";
@@ -684,8 +684,9 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
   const pct = used == null ? 0 : Math.min(100, (used / quota) * 100);
   const purchases = canShowPurchases();
   const billingOn = !!st.offering?.billing;
-  // iOS app: Sync is bought through the App Store (prices from StoreKit), never on the website.
-  const appStore = billingOn && !purchases && canBuyInApp() && !!st.offering?.appleProducts?.length;
+  // iOS and Android apps: Sync is bought through the App Store or Google Play (prices from the store), never on the website.
+  const storeIds = inAppProductIds(st.offering);
+  const appStore = billingOn && !purchases && canBuyInApp() && !!storeIds.length;
   useEffect(() => {
     if (!appStore) return;
     const h = () => void onChanged();
@@ -727,8 +728,8 @@ function Plan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise<void>
           )}
         </dd>
       </dl>
-      {appStore && !active && <AppStorePlans productIds={st.offering!.appleProducts!} onActive={onChanged} />}
-      {appStore && active && b?.source === "apple" && <AppStoreManage onChanged={onChanged} />}
+      {appStore && !active && <AppStorePlans productIds={storeIds} onActive={onChanged} />}
+      {appStore && active && b?.source === thisStore() && <AppStoreManage onChanged={onChanged} />}
       <div className="flex flex-wrap items-center gap-2">
         {billingOn && purchases && !active && (
           <Button size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => void open(account.checkout)}>

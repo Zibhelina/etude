@@ -1,7 +1,7 @@
 ---
 title: Terms of Service
 description: The terms for Etude's online services: accounts, Sync and the paid Market.
-last-updated: 2026-10-26
+last-updated: 2026-11-03
 ---
 
 # Terms of Service
@@ -40,8 +40,8 @@ The free Market is a public catalogue of decks, card types and themes hosted on 
 
 The paid Market lets independent creators sell decks:
 
-- **Etude is the seller.** When you buy a paid deck, you buy it from Etude, which collects payment and applicable tax and pays the creator their share. Payments are processed by Stripe.
-- **The creator made the deck**, and remains responsible for its content and accuracy. We review every paid deck before it goes on sale (rights, minimum quality, an honest preview), but a review is not a guarantee that a deck is free of errors.
+- **The creator is the seller.** When you buy a paid deck, you buy it from its creator, who is paid through their own Stripe account. Etude runs the Market and takes a fee from each sale. Payments are processed by Stripe.
+- **The creator made the deck**, and remains responsible for its content, its accuracy and any tax on the sale. We review every paid deck before it goes on sale (rights, minimum quality, an honest preview), but a review is not a guarantee that a deck is free of errors.
 - **What you get.** A personal, non-transferable license to use the deck in Etude on your own devices, including its future updates for as long as the creator keeps publishing them. You may not resell, share or republish it.
 - **Availability.** The paid Market is currently available to buyers in Canada and the United States. Purchases from elsewhere are refunded in full.
 - Creators agree to the separate [Creator Terms](creators).

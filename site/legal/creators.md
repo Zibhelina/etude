@@ -1,7 +1,7 @@
 ---
 title: Creator Terms
-description: The terms for selling decks on Etude's paid Market: fee, payouts, rights and reviews.
-last-updated: 2026-10-26
+description: The terms for selling decks on Etude's paid Market: selling through your own Stripe account, the fee, rights and reviews.
+last-updated: 2026-11-03
 ---
 
 # Creator Terms (paid Market)
@@ -10,8 +10,8 @@ These terms apply when you sell decks on Etude's paid Market. They add to the [T
 
 ## 1. Who can sell
 
-- You need an Etude account and a Stripe Express account, which you set up through Stripe during onboarding. Stripe verifies your identity and bank details; Etude never sees your documents. Stripe's [Connected Account Agreement](https://stripe.com/connect-account/legal) applies between you and Stripe.
-- Payouts are currently available to creators in the United States, Canada, the United Kingdom, the European Economic Area and Switzerland, because of Stripe's cross-border payout rules. Other countries will follow when that changes.
+- You need an Etude account and your own Stripe account, which you set up through Stripe during onboarding and manage in the Stripe Dashboard. Stripe verifies your identity and bank details; Etude never sees your documents. Stripe's [Connected Account Agreement](https://stripe.com/connect-account/legal) applies between you and Stripe.
+- Selling is currently open to creators in the United States, Canada, the United Kingdom, the European Economic Area and Switzerland. Other countries may follow.
 
 ## 2. Listing a deck
 
@@ -21,10 +21,11 @@ These terms apply when you sell decks on Etude's paid Market. They add to the [T
 
 ## 3. Money
 
-- **Etude's fee is 20%** of the price, before tax. You receive the remaining 80%, less Stripe's processing costs as shown in your dashboard. Example: on a US$10 deck you receive US$8 before processing.
-- **Tax.** Etude is the seller to the buyer, so Etude calculates, collects and remits sales tax, GST/HST and VAT on paid Market sales. Tax collected never counts toward your share. You remain responsible for your own income tax.
-- **Payouts** are monthly, once your balance reaches US$25, through Stripe to your bank.
-- **Refunds and chargebacks.** When a buyer is refunded under the [Refund Policy](refunds), your share of that sale is reversed. If a chargeback is lost, your share is reversed and the dispute fee is shared in proportion to the split.
+- **You are the seller.** Each sale is made by you to the buyer, through your Stripe account. Etude runs the Market, reviews decks and delivers them to buyers.
+- **Etude's fee is 20%** of the price, taken from each sale as a platform fee. Stripe's processing fees come out of your Stripe balance. Example: on a US$10 deck, Etude keeps US$2 and you keep US$8, less Stripe's processing fees.
+- **Tax.** Because you are the seller, you are responsible for any sales tax, GST/HST or VAT on your sales, and for your own income tax. Etude doesn't add or collect tax for you. If you need to charge tax, you can turn on Stripe Tax in your own Stripe account.
+- **Payouts** follow the payout settings in your Stripe account.
+- **Refunds and chargebacks** come out of your Stripe balance, including Stripe's dispute fees. When Etude refunds a buyer under the [Refund Policy](refunds), it returns its 20% fee to you for that sale. You can also refund your buyers yourself from the Stripe Dashboard; the deck is then removed from that buyer's library.
 - We may change the fee or minimum price with 30 days' email notice. Sales made before the change keep the old terms.
 
 ## 4. Your content and rights
@@ -38,7 +39,7 @@ These terms apply when you sell decks on Etude's paid Market. They add to the [T
 
 - Keep your decks working and accurate. Fix reported errors within a reasonable time.
 - Updates reach existing buyers at no charge.
-- If a deck stops working or turns out to infringe someone's rights, we may pause sales, refund buyers and reverse your share for those sales.
+- If a deck stops working or turns out to infringe someone's rights, we may pause sales and refund buyers for those sales from your Stripe account.
 
 ## 6. Takedowns
 
@@ -46,6 +47,6 @@ If someone reports that your deck infringes their rights, we may pause it while 
 
 ## 7. Ending
 
-You can stop selling at any time by unlisting your decks; buyers keep access. We can end these terms with 30 days' notice, or immediately for fraud, infringement or a serious breach. Balances owed to you are still paid out, minus reversals.
+You can stop selling at any time by unlisting your decks; buyers keep access. We can end these terms with 30 days' notice, or immediately for fraud, infringement or a serious breach. Your Stripe account and its balance stay yours.
 
 hello@etude.study

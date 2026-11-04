@@ -32,11 +32,11 @@ The Market has three tabs. Browse shows paid listings from `GET /v1/market/paid-
 
 In Market → Selling (desktop and web only):
 
-1. Set up payouts: creates the Stripe Express account and opens Stripe's onboarding. The status updates from Stripe's `account.updated` webhook.
+1. Set up with Stripe: creates the creator's own Stripe account (full Stripe Dashboard) and opens Stripe's onboarding. The creator is the seller: each sale is a direct charge on their account, Stripe's processing fee comes out of it, Etude keeps 20% as an application fee, refunds, disputes and the creator's sales tax are theirs, and payouts follow their Stripe settings. Open Stripe dashboard goes to dashboard.stripe.com, where they sign in with the Stripe login made during setup. A creator who set up before direct charges gets `setupRequired: true` (and `stripeAccount: null`) and sets up once more; their listings stay.
 2. List a deck: pick a deck from this collection, a description, a price (US$5 minimum), and a cover. The app exports the deck as a pack and uploads it as version 1.0.0.
 3. Submit for review. The listing shows Draft, In review, Live, Rejected (with the reviewer's notes) or Hidden.
 4. New version: re-exports the deck with a changelog. Buyers get it after review.
-5. Sales: orders, gross, Etude's 20% fee, net.
+5. Sales: orders, gross, Etude's 20% fee, and the creator's share before Stripe's processing fee.
 
 The same flow is in the CLI: `etude account sell`, `list-deck`, `submit`, `update-listing`, `listings`, `sales`.
 

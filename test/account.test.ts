@@ -45,6 +45,9 @@ function stub() {
     if (path === "/v1/listings/lst_1/pack") return send(200, pack, { "x-etude-version": version });
     if (path === "/v1/vault/keys") return send(404, { error: { code: "no_keys", message: "none" } });
     if (path === "/v1/auth/logout") return tokens.delete(auth), send(200, { ok: true });
+    // A creator from before direct charges: no usable Stripe account until they set up again.
+    if (path === "/v1/creator" && req.method === "GET") return send(200, { country: "CA", displayName: "Old", stripeAccount: null, chargesEnabled: false, payoutsEnabled: false, detailsSubmitted: false, setupRequired: true });
+    if (path === "/v1/creator/onboarding-link" || path === "/v1/creator/dashboard-link") return send(409, { error: { code: "creator_setup_required", message: "Etude now sells through your own Stripe account. Set up selling again to create it (POST /v1/creator)." } });
     return send(404, { error: { code: "not_found", message: path } });
   });
   return {
@@ -168,4 +171,26 @@ test("account: Ask Etude may read the account but not buy, sell, sign in or dele
   const g = (name: string) => agentRefusal({ cmd: cmd(name), values: {}, named: {}, attachmentDir: (process.env.TMPDIR ?? tmpdir()) });
   for (const ok of ["account status", "account library", "account sales"]) assert.equal(g(ok), null, ok);
   for (const no of ["account delete", "account buy", "account install", "account signin", "account list-deck", "account approve", "account revoke", "account server"]) assert.match(g(no) ?? "", /can't change the Etude account/, no);
+});
+
+test("account: a creator from before direct charges reads as setupRequired, and Stripe links say to set up again in plain words", async () => {
+  const dir = mkdtempSync(join((process.env.TMPDIR ?? tmpdir()), "account-"));
+  const s = stub();
+  const url = await s.start();
+  const e = await Etude.open(join(dir, "etude.db"), { home: join(dir, "home") });
+  try {
+    const a = accountFor(e);
+    a.setServer(url);
+    await a.signin("a@example.test");
+    await a.verify("good-code");
+    const cr: any = await a.creator();
+    assert.equal(cr.setupRequired, true);
+    assert.equal(cr.stripeAccount, null);
+    for (const link of [a.onboardingLink, a.dashboardLink])
+      await assert.rejects(link(), (err: AccountError) => err.status === 409 && err.code === "creator_setup_required" && /Market → Sell/.test(err.message) && !/POST/.test(err.message));
+  } finally {
+    e.close();
+    await s.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

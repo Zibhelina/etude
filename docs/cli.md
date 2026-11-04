@@ -357,7 +357,7 @@ These work on every command, before or after the command words.
   - [`account library`](#account-library) Decks you bought, with the latest approved version and whether it's installed here.
   - [`account install`](#account-install) Install or update a purchased deck in this collection.
   - [`account creator`](#account-creator) Your seller profile on the paid Market, or null.
-  - [`account sell`](#account-sell) Start selling: creates the payout account and returns the Stripe onboarding link.
+  - [`account sell`](#account-sell) Start selling (or set up again): creates your own Stripe account, the one you sell through, and returns the Stripe onboarding link.
   - [`account listings`](#account-listings) Your listings with status, versions and review notes.
   - [`account list-deck`](#account-list-deck) Put a deck from this collection up for sale: draft listing, cover, version 1.0.0. Submit it for review afterwards.
   - [`account update-listing`](#account-update-listing) Upload the deck again as the next version. Buyers get it after review.
@@ -3866,13 +3866,13 @@ etude account creator
 
 *read-only*
 
-Output: { country, stripeAccount, chargesEnabled, payoutsEnabled, detailsSubmitted } | null
+Output: { country, displayName, stripeAccount, chargesEnabled, payoutsEnabled, detailsSubmitted, setupRequired } | null (setupRequired: set up again with `account sell`)
 
 ### etude account sell
 
 <a id="account-sell"></a>
 
-Start selling: creates the payout account and returns the Stripe onboarding link.
+Start selling (or set up again): creates your own Stripe account, the one you sell through, and returns the Stripe onboarding link.
 
 ```
 etude account sell [flags]
@@ -3882,7 +3882,7 @@ etude account sell [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
-| `--country <VALUE>` | string | Two-letter country of the payout account (US, CA, GB, EEA, CH). |
+| `--country <VALUE>` | string | Two-letter country where you live or your business is registered (US, CA, GB, EEA, CH). |
 | `--name <VALUE>` | string | Name shown as the author. |
 
 Output: { creator, url }

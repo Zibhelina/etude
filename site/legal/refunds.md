@@ -1,7 +1,7 @@
 ---
 title: Refund Policy
 description: When Etude refunds Sync subscriptions and paid Market decks.
-last-updated: 2026-10-26
+last-updated: 2026-11-03
 ---
 
 # Refund Policy
@@ -23,6 +23,7 @@ Etude is free to use without paying, so you can try everything before you subscr
 - Purchases from outside the regions where the paid Market is open (currently Canada and the United States) are refunded automatically.
 - If you're in the EU or UK, at checkout you're asked to agree to immediate access to the deck, which ends the 14-day withdrawal right that otherwise applies to digital content.
 - A refunded deck is removed from your library.
+- Paid decks are sold by their creators through Stripe. Refunds go back to your original payment method, whether Etude or the creator issues them. Write to hello@etude.study.
 
 ## Where the law says otherwise
 

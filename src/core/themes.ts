@@ -65,6 +65,7 @@ export const THEME_GROUPS: { title: string; vars: { name: string; label: string;
     title: "Accent and status",
     vars: [
       { name: "--highlight", label: "Accent" },
+      { name: "--card-highlight", label: "Card accent" },
       { name: "--success", label: "Success" },
       { name: "--warning", label: "Warning" },
       { name: "--danger", label: "Danger" },
@@ -138,6 +139,9 @@ function complete(v: Record<string, string>): Record<string, string> {
   o["--sidebar-accent-foreground"] ??= o["--foreground"];
   o["--sidebar-ring"] ??= o["--ring"];
   o["--chart-1"] ??= o["--highlight"];
+  // What cards point at (a target box, a point to drag, the chord to play). Kept apart from the app's accent so
+  // a green app doesn't turn every target the colour of "correct".
+  o["--card-highlight"] ??= o["--highlight"];
   o["--primary-edge"] ??= `color-mix(in oklab, ${o["--primary"]} 72%, black)`;
   o["--radius"] ??= "0.75rem";
   o["--font-sans"] ??= SANS;
@@ -170,6 +174,7 @@ const SNOW = complete({
   "--sidebar-accent": "#efefed",
   "--sidebar-border": "#e9e9e6",
   "--highlight": "#2f9a41",
+  "--card-highlight": "oklch(0.6 0.2 355)",
   "--success": "#1e6b2b",
   "--warning": "#b07a17",
   "--danger": "#a1382a",
@@ -207,6 +212,7 @@ const NIGHT = complete({
   "--sidebar-accent": "#222222",
   "--sidebar-border": "#262626",
   "--highlight": "#3fae52",
+  "--card-highlight": "oklch(0.75 0.15 350)",
   "--success": "#7ccf8a",
   "--warning": "#d4952a",
   "--danger": "#f0937e",

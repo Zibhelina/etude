@@ -4316,7 +4316,7 @@ etude theme set paper
 
 Make a custom theme from an existing one, changing variables and adding CSS.
 
-Starts from --from (default: the selected theme) and applies --var pairs and --css on top. Variables: --background, --card, --popover, --muted, --secondary, --accent, --foreground, --card-foreground, --popover-foreground, --muted-foreground, --secondary-foreground, --accent-foreground, --primary, --primary-foreground, --primary-edge, --border, --input, --ring, --destructive, --highlight, --success, --warning, --danger, --again, --hard, --good, --easy, --new, --learn, --review, --chart-1, --chart-2, --chart-3, --chart-4, --chart-5, --sidebar, --sidebar-foreground, --sidebar-accent, --sidebar-accent-foreground, --sidebar-border, --sidebar-primary, --sidebar-primary-foreground, --sidebar-ring, --radius, --font-sans, --font-mono. Any other --name is accepted too and can be used from the extra CSS.
+Starts from --from (default: the selected theme) and applies --var pairs and --css on top. Variables: --background, --card, --popover, --muted, --secondary, --accent, --foreground, --card-foreground, --popover-foreground, --muted-foreground, --secondary-foreground, --accent-foreground, --primary, --primary-foreground, --primary-edge, --border, --input, --ring, --destructive, --highlight, --card-highlight, --success, --warning, --danger, --again, --hard, --good, --easy, --new, --learn, --review, --chart-1, --chart-2, --chart-3, --chart-4, --chart-5, --sidebar, --sidebar-foreground, --sidebar-accent, --sidebar-accent-foreground, --sidebar-border, --sidebar-primary, --sidebar-primary-foreground, --sidebar-ring, --radius, --font-sans, --font-mono. Any other --name is accepted too and can be used from the extra CSS.
 
 ```
 etude theme create [id] [flags]

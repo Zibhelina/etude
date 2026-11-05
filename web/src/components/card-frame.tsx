@@ -82,6 +82,9 @@ function theme() {
     if (val) vars[v] = val;
   }
   vars["--danger"] ||= cs.getPropertyValue("--destructive").trim();
+  // Inside a card, --highlight is the card accent (pink in Snow and Night), not the app's green.
+  const cardHl = cs.getPropertyValue("--card-highlight").trim();
+  if (cardHl) vars["--highlight"] = cardHl;
   return { scheme: pageScheme(), vars };
 }
 

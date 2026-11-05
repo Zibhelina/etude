@@ -289,6 +289,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
 
   // ------------------------------------------------------------- decks
   app.get("/api/decks", (c) => c.json(etude.deckTree({ archived: c.req.query("archived") === "1" })));
+  app.get("/api/decks/archive", (c) => c.json(etude.archiveSummary()));
   app.post("/api/decks", async (c) => {
     const b = await body(c);
     etude.ensureDeck(String(b.name ?? ""));

@@ -35,21 +35,19 @@ export async function moveDeck(decks: DeckNode[], name: string, parent: string, 
   try {
     const d = await api.moveDeck(name, parent, index);
     after(d.name);
-    if (from !== parent) {
-      toast.success(parent ? `Moved ${leafOf(name)} into ${leafOf(parent)}` : `${leafOf(name)} is a deck of its own now`, {
-        action: {
-          label: "Undo",
-          onClick: async () => {
-            try {
-              const back = await api.moveDeck(d.name, from, fromIndex < 0 ? undefined : fromIndex);
-              after(back.name);
-            } catch (e) {
-              toast.error((e as Error).message);
-            }
-          },
-        },
-      });
-    }
+    const undo = {
+      label: "Undo",
+      onClick: async () => {
+        try {
+          const back = await api.moveDeck(d.name, from, fromIndex < 0 ? undefined : fromIndex);
+          after(back.name);
+        } catch (e) {
+          toast.error((e as Error).message);
+        }
+      },
+    };
+    if (from !== parent) toast.success(parent ? `Moved ${leafOf(name)} into ${leafOf(parent)}` : `${leafOf(name)} is a deck of its own now`, { action: undo });
+    else if (index !== undefined && index !== fromIndex) toast.success(`Moved ${leafOf(name)}`, { action: undo });
     return d.name;
   } catch (e) {
     toast.error((e as Error).message);

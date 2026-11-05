@@ -228,6 +228,8 @@ These work on every command, before or after the command words.
   - [`deck reorder`](#deck-reorder) Set the order of sibling decks in the deck list.
   - [`deck archive`](#deck-archive) Hide a deck from the deck list and study. Cards and history are kept.
   - [`deck unarchive`](#deck-unarchive) Bring an archived deck back.
+  - [`deck archived`](#deck-archived) The archive: each archived deck with how much of it is still remembered.
+  - [`deck icon`](#deck-icon) Get or set the picture a deck shows in the Library.
   - [`deck delete`](#deck-delete) Delete a deck and its subdecks. Use --items to also delete their items, cards and review history.
   - [`deck description`](#deck-description) Get or set a deck's markdown description.
   - [`deck instructions`](#deck-instructions) Get or set a deck's AI grading instructions (they apply to its subdecks too).
@@ -676,6 +678,58 @@ Output: { decks: [names changed], archived }
 
 ```sh
 etude deck unarchive "Old course" --subdecks
+```
+
+### etude deck archived
+
+<a id="deck-archived"></a>
+
+The archive: each archived deck with how much of it is still remembered.
+
+One entry per archived deck whose parent isn't archived, subdecks folded in. `recall` is FSRS's predicted recall right now, averaged over the studied cards (null when none were studied or they use a script scheduler). `due` is how many cards would be due if it came back today. `curve` is predicted recall from the last review to a few weeks ahead, as { days, recall } with days relative to now (negative in the past).
+
+```
+etude deck archived
+```
+
+*read-only*
+
+Output: array of { name, icon, cards, studied, recall, lastReview, due, subdecks: [{ name, cards }], curve: [{ days, recall }] }
+
+```sh
+etude deck archived
+etude deck unarchive "Old course" --subdecks
+```
+
+### etude deck icon
+
+<a id="deck-icon"></a>
+
+Get or set the picture a deck shows in the Library.
+
+`art:<id>` picks one of the built-in illustrations (the ids are listed in the app's Change icon picker, e.g. art:world, art:chess, art:piano), `emoji:<emoji>` uses one emoji, and `none` removes it.
+
+```
+etude deck icon <deck> [icon] [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `deck` | Deck name. |
+| `icon` (optional) | art:<id>, emoji:<emoji> or none. Omit to print the current one. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { deck, icon, changed? }
+
+```sh
+etude deck icon "Geography" art:world
+etude deck icon "Japanese" "emoji:🗾"
+etude deck icon "Geography" none
 ```
 
 ### etude deck delete

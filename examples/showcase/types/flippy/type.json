@@ -62,6 +62,10 @@
     }
   ],
   "showVerdict": false,
+  "scheduler": "drill",
+  "schedulerOptions": {
+    "perDay": 0
+  },
   "grader": {
     "kind": "script"
   }

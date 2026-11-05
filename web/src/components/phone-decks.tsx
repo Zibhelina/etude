@@ -70,7 +70,7 @@ export function PhoneDecks() {
       )}
 
       {!q && decks && top.length > 0 && (
-        <div className="mx-5">{allDone ? <DonePanel decks={all} stats={stats} phone /> : due > 0 ? <SessionCard decks={all} stats={stats} phone /> : null}</div>
+        <div className="@container mx-5">{allDone ? <DonePanel decks={all} stats={stats} phone /> : due > 0 ? <SessionCard decks={all} stats={stats} phone /> : null}</div>
       )}
 
       {decks && decks.length === 0 && (

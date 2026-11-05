@@ -104,7 +104,7 @@
 }
 
 /* Layout, not theme: the height of the phone tab bar, home indicator included. Sticky bars sit on top of it; pages end above it. */
-:root { --tabbar-h: calc(4.25rem + env(safe-area-inset-bottom)); }
+:root { --tabbar-h: calc(4.625rem + env(safe-area-inset-bottom)); }
 @media (min-width: 768px) {
   :root { --tabbar-h: 0px; }
 }
@@ -251,24 +251,32 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
   text-transform: uppercase;
   color: var(--muted-foreground);
 }
-/* The floating tab capsule and the ε disc: a frosted card surface with a soft drop, over a short fade
-   so rows scrolling underneath don't read through the gaps. */
+/* ---------------------------------------------------------------- Shell: sidebar and phone tab island */
+/* The island: the page fades to the background over the 1.75rem above it and is solid from the pill's top
+   edge down, so rows scrolling underneath never show beside the pill or around the Ask circle. */
 .score-island::before {
   content: "";
   position: absolute;
   inset: auto 0 0 0;
-  height: calc(100% + 2.25rem);
-  background: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--background) 85%, transparent) 45%, var(--background) 75%);
+  height: calc(100% + 1.75rem);
+  background: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--background) 88%, transparent) 1.75rem, var(--background) calc(1.75rem + 0.625rem));
   pointer-events: none;
 }
 .score-island > * { position: relative; }
 .score-capsule {
-  background: color-mix(in oklab, var(--card) 90%, transparent);
-  backdrop-filter: blur(18px) saturate(1.2);
-  border-color: color-mix(in oklab, var(--foreground) 10%, transparent);
-  box-shadow: 0 12px 28px -14px rgb(0 0 0 / 0.55);
+  background: color-mix(in oklab, var(--card) 92%, transparent);
+  backdrop-filter: blur(14px);
+  border-color: color-mix(in oklab, var(--foreground) 9%, transparent);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.07), 0 10px 28px rgb(0 0 0 / 0.08);
 }
-/* ---------------------------------------------------------------- Shell: sidebar */
+.dark .score-capsule {
+  background: color-mix(in oklab, var(--card) 94%, var(--foreground) 6%);
+  border-color: color-mix(in oklab, var(--card) 80%, var(--foreground) 20%);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.6);
+}
+/* The current tab sits on its own chip: the page colour with a soft lift in light themes, a lighter grey in dark. */
+.score-tab.is-on { background: var(--background); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 0 0 1px color-mix(in oklab, var(--foreground) 5%, transparent); }
+.dark .score-tab.is-on { background: color-mix(in oklab, var(--card) 88%, var(--foreground) 12%); box-shadow: none; }
 /* Sidebar group labels (Study, Make): small caps in a faint ink. */
 .shell-group-label {
   font-size: 11px;
@@ -277,12 +285,20 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
   text-transform: uppercase;
   color: color-mix(in oklab, var(--muted-foreground) 62%, var(--sidebar));
 }
-
+/* ---------------------------------------------------------------- end shell */
 .score-fold {
   background: color-mix(in oklab, var(--background) 94%, transparent);
   backdrop-filter: blur(18px) saturate(1.2);
-  border-bottom: 1px solid var(--border);
   padding-top: env(safe-area-inset-top);
+}
+/* No hairline under the folded bar: a short fade into the page instead. */
+.score-fold::after {
+  content: "";
+  position: absolute;
+  inset: 100% 0 auto 0;
+  height: 0.75rem;
+  background: linear-gradient(to bottom, color-mix(in oklab, var(--background) 94%, transparent), transparent);
+  pointer-events: none;
 }
 @keyframes score-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes score-up { from { transform: translateY(100%); } to { transform: none; } }

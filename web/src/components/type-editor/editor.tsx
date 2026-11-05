@@ -69,14 +69,16 @@ export function TypeEditor({ id }: { id: string }) {
       setAllTypes(types);
       setSummary(types.find((t) => t.id === id) ?? null);
       let def: CardType | null = null;
-      try {
-        def = await api.type(id);
-      } catch (e) {
-        if (!(e instanceof ApiError && e.status === 404)) {
-          toast.error((e as Error).message);
-          return;
+      // A new type that was never saved isn't in the list: go straight to its draft.
+      if (types.some((t) => t.id === id) || !types.length)
+        try {
+          def = await api.type(id);
+        } catch (e) {
+          if (!(e instanceof ApiError && e.status === 404)) {
+            toast.error((e as Error).message);
+            return;
+          }
         }
-      }
       if (!live) return;
       if (def) {
         clearPending(id);
@@ -237,7 +239,7 @@ export function TypeEditor({ id }: { id: string }) {
       if (isNew) {
         clearPending(id);
         if (draft.id !== id) {
-          navigate(`/types/${encodeURIComponent(draft.id)}`, { replace: true });
+          navigate(`/types/${encodeURIComponent(draft.id)}?edit=1`, { replace: true });
           toast.success(`Created ${draft.name}`);
           return;
         }
@@ -295,8 +297,8 @@ export function TypeEditor({ id }: { id: string }) {
   const [view, setView] = useState<"edit" | "preview">("edit");
   const [tab, setTab] = useState("info");
 
-  // Back to the folder the type lives in.
-  const home = summary?.folder ? `/types?folder=${encodeURIComponent(summary.folder)}` : "/types";
+  // Back to the type's page; a new type that was never saved has none, so back to the gallery.
+  const home = isNew ? "/types" : `/types/${encodeURIComponent(id)}`;
   const go = (to: string) => (dirty ? setLeaveTo(to) : navigate(to));
   const back = () => go(home);
   const reset = async () => {
@@ -357,7 +359,7 @@ export function TypeEditor({ id }: { id: string }) {
     <div className="mx-auto w-full max-w-[1600px]">
       {/* header */}
       <div className="flex items-start gap-2 px-4 pt-4 sm:px-6 sm:pt-6 lg:px-8">
-        <Button variant="ghost" size="icon" className="-ml-2 size-10 shrink-0" onClick={back} aria-label="All card types"><ArrowLeft className="size-4" /></Button>
+        <Button variant="ghost" size="icon" className="-ml-2 size-10 shrink-0" onClick={back} aria-label={isNew ? "All card types" : "Back to the type"}><ArrowLeft className="size-4" /></Button>
         <div className="min-w-0 flex-1 pt-1">
           <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">{draft.name || <span className="text-muted-foreground">Untitled type</span>}</h1>
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

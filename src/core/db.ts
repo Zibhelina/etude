@@ -169,6 +169,11 @@ export class Db {
     // Columns added after a table first shipped.
     if (!this.all("PRAGMA table_info(decks)").some((c) => c.name === "position")) this.sql.exec("ALTER TABLE decks ADD COLUMN position INTEGER");
     if (!this.all("PRAGMA table_info(cards)").some((c) => c.name === "sched_state")) this.sql.exec("ALTER TABLE cards ADD COLUMN sched_state TEXT");
+    if (!this.all("PRAGMA table_info(decks)").some((c) => c.name === "icon")) {
+      this.sql.exec("ALTER TABLE decks ADD COLUMN icon TEXT");
+      // Sync triggers list a table's columns when they're made; these get remade below with the icon.
+      for (const op of ["insert", "update", "delete"]) this.sql.exec(`DROP TRIGGER IF EXISTS sync_decks_${op}`);
+    }
     const itemCols = new Set(this.all("PRAGMA table_info(items)").map((c) => c.name));
     if (!itemCols.has("title")) this.sql.exec("ALTER TABLE items ADD COLUMN title TEXT NOT NULL DEFAULT ''");
     if (!itemCols.has("search")) this.sql.exec("ALTER TABLE items ADD COLUMN search TEXT NOT NULL DEFAULT ''");

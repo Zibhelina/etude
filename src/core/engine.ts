@@ -88,6 +88,18 @@ const json = (v: unknown) => JSON.stringify(v ?? null);
 export const normDeck = (name: string) => deckParts(name).join("::");
 export const normTag = (t: string) => t.trim().replace(/\s+/g, "-").split("::").filter(Boolean).join("::");
 
+/** A deck icon as stored: `art:<id>`, `emoji:<emoji>`, or null. Empty or "none" clears it. */
+export function deckIcon(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  if (!s || s === "none") return null;
+  if (/^art:[a-z0-9][a-z0-9-]{0,39}$/.test(s)) return s;
+  const m = /^emoji:(.+)$/su.exec(s);
+  // One emoji, which can be several code points (flags, skin tones, joined sequences).
+  if (m && [...m[1]].length <= 12 && /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(m[1]) && !/[\s\p{L}\p{N}]/u.test(m[1].replace(/[\u{1F1E6}-\u{1F1FF}]/gu, ""))) return `emoji:${m[1]}`;
+  throw new EtudeError(`deck icon must be art:<id>, emoji:<emoji> or none, got "${s.slice(0, 40)}"`);
+}
+
 export interface Settings {
   ai: AiSettings;
   /** Hour (local time) at which a new study day starts. */
@@ -1497,10 +1509,10 @@ export class Etude {
   }
 
   private deckFromRow(r: Row): Deck {
-    return { id: r.id, name: r.name, presetId: r.preset_id, config: parse(r.config, {}), description: r.description, instructions: r.instructions, archived: !!r.archived, position: r.position ?? null };
+    return { id: r.id, name: r.name, presetId: r.preset_id, config: parse(r.config, {}), description: r.description, instructions: r.instructions, archived: !!r.archived, position: r.position ?? null, icon: r.icon ?? null };
   }
 
-  updateDeck(nameOrId: string | number, patch: Partial<Pick<Deck, "presetId" | "config" | "description" | "instructions" | "archived">> & { name?: string }) {
+  updateDeck(nameOrId: string | number, patch: Partial<Pick<Deck, "presetId" | "config" | "description" | "instructions" | "archived" | "icon">> & { name?: string }) {
     const r = this.deckRow(nameOrId);
     if (patch.config) {
       const e = sched.validateConfig(patch.config);
@@ -1508,15 +1520,17 @@ export class Etude {
       this.checkSchedulerRef(patch.config);
     }
     if (patch.presetId) this.preset(patch.presetId);
+    const icon = patch.icon !== undefined ? deckIcon(patch.icon) : r.icon ?? null;
     this.db.tx(() => {
       if (patch.name !== undefined && normDeck(patch.name) !== r.name) this.renameDeck(r.name, patch.name);
       this.db.run(
-        "UPDATE decks SET preset_id = ?, config = ?, description = ?, instructions = ?, archived = ? WHERE id = ?",
+        "UPDATE decks SET preset_id = ?, config = ?, description = ?, instructions = ?, archived = ?, icon = ? WHERE id = ?",
         patch.presetId !== undefined ? patch.presetId : r.preset_id,
         patch.config !== undefined ? json(patch.config) : r.config,
         patch.description ?? r.description,
         patch.instructions ?? r.instructions,
         patch.archived !== undefined ? Number(patch.archived) : r.archived,
+        icon,
         r.id,
       );
     });
@@ -3079,6 +3093,75 @@ export class Etude {
       const counts = cards ? this.counts({ deck: d.name }) : { new: 0, learning: 0, learningSoon: 0, review: 0, doneToday: 0, nextDue: null };
       const cfg = this.configFor(d.name);
       return { ...this.deckFromRow(d), depth: deckParts(d.name).length - 1, cards, unseen, ...counts, deadline: cfg.deadline ?? null, mode: cfg.mode, at: iso(t) };
+    });
+  }
+
+  /**
+   * The archive, one entry per archived deck whose parent isn't archived, with its subdecks folded in:
+   * how much of it FSRS predicts is still remembered now (`recall`, over studied cards), when it was
+   * last studied, how many cards would be due if it came back, and the predicted recall from the last
+   * review to some weeks ahead (`curve`, days relative to now, negative in the past).
+   */
+  archiveSummary() {
+    const t = now();
+    const rows = this.orderedDecks(true);
+    const archived = rows.filter((r) => r.archived);
+    const names = new Set(archived.map((r) => r.name as string));
+    const roots = archived.filter((r) => !names.has(deckParts(r.name).slice(0, -1).join("::")));
+    const cfgs = new Map<string, PresetConfig>();
+    const cfgOf = (deck: string, type: string) => {
+      const key = `${deck}\0${type}`;
+      if (!cfgs.has(key)) cfgs.set(key, this.cardConfig(deck, type));
+      return cfgs.get(key)!;
+    };
+    const engines = new Map<PresetConfig, ReturnType<typeof sched.engine>>();
+    const engOf = (cfg: PresetConfig) => {
+      if (!engines.has(cfg)) engines.set(cfg, sched.engine(cfg));
+      return engines.get(cfg)!;
+    };
+    const DAY = 86400_000;
+    return roots.map((r) => {
+      const like = r.name.replace(/[\\%_]/g, "\\$&") + "::%";
+      const cards = this.db.all<CardRow & { deck: string; type: string }>(
+        "SELECT c.*, d.name AS deck, i.type FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE i.archived = 0 AND (d.name = ? OR d.name LIKE ? ESCAPE '\\')",
+        r.name,
+        like,
+      );
+      const studied: { at: number; f: ReturnType<typeof sched.toFsrs>; e: ReturnType<typeof sched.engine> }[] = [];
+      let last = 0, due = 0;
+      for (const c of cards) {
+        if (c.state === 0 || !c.last_review) continue;
+        const at = new Date(c.last_review).getTime();
+        last = Math.max(last, at);
+        if (new Date(c.due) <= t && !c.suspended) due++;
+        const cfg = cfgOf(c.deck, c.type);
+        if (this.scriptFor(cfg)) continue;
+        studied.push({ at, f: sched.toFsrs(c), e: engOf(cfg) });
+      }
+      const recallAt = (ms: number) => {
+        let sum = 0;
+        for (const s of studied) sum += ms <= s.at ? 1 : (s.e.get_retrievability(s.f, new Date(ms), false) as number);
+        return sum / studied.length;
+      };
+      const since = last ? Math.max(0, (t.getTime() - last) / DAY) : 0;
+      const ahead = Math.max(14, Math.round(since * 1.2));
+      const curve = studied.length
+        ? Array.from({ length: 25 }, (_, i) => -since + ((since + ahead) * i) / 24).map((days) => ({ days: Math.round(days * 100) / 100, recall: recallAt(t.getTime() + days * DAY) }))
+        : [];
+      const subdecks = archived
+        .filter((o) => deckParts(o.name).length === deckParts(r.name).length + 1 && o.name.startsWith(r.name + "::"))
+        .map((o) => ({ name: o.name as string, cards: cards.filter((c) => c.deck === o.name || c.deck.startsWith(o.name + "::")).length }));
+      return {
+        ...this.deckFromRow(r),
+        cards: cards.length,
+        studied: studied.length,
+        recall: studied.length ? recallAt(t.getTime()) : null,
+        lastReview: last ? new Date(last).toISOString() : null,
+        due,
+        subdecks,
+        curve,
+        at: iso(t),
+      };
     });
   }
 

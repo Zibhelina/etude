@@ -30,59 +30,70 @@ export function CoverGallery({ cover }: { cover: React.ReactNode }) {
   return <Gallery name="" slides={[{ kind: "cover" }]} cover={cover} thumb={cover} />;
 }
 
-function Gallery({ name, slides, cover, thumb }: { name: string; slides: Slide[]; cover: React.ReactNode; thumb: React.ReactNode }) {
-  const [i, setI] = useState(0);
+/**
+ * App Store style: every preview side by side in one row that scrolls sideways (swipe, trackpad, the arrows, or
+ * ← → with the row focused), snapping to each card. One preview fills the row; two or more show the next one peeking.
+ */
+function Gallery({ name, slides, cover }: { name: string; slides: Slide[]; cover: React.ReactNode; thumb?: React.ReactNode }) {
+  const row = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState<number | null>(null);
+  const [edge, setEdge] = useState<{ start: boolean; end: boolean }>({ start: true, end: slides.length < 2 });
   const shots = slides.map((s, j) => (s.kind === "image" ? j : -1)).filter((j) => j >= 0);
-  const cur = slides[Math.min(i, slides.length - 1)];
-  const step = (d: number) => setI((x) => Math.max(0, Math.min(slides.length - 1, x + d)));
+  const measure = () => {
+    const r = row.current;
+    if (r) setEdge({ start: r.scrollLeft < 4, end: r.scrollLeft + r.clientWidth >= r.scrollWidth - 4 });
+  };
+  useEffect(() => {
+    measure();
+    const r = row.current;
+    if (!r) return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(r);
+    return () => ro.disconnect();
+  }, [slides.length]);
+  const page = (d: 1 | -1) => {
+    const r = row.current;
+    const card = r?.firstElementChild as HTMLElement | null;
+    if (!r || !card) return;
+    const gap = parseFloat(getComputedStyle(r).columnGap) || 0;
+    r.scrollBy({ left: d * (card.offsetWidth + gap), behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+  };
   return (
-    <section className="mk-gal" aria-label={name ? `${name} previews` : undefined}>
+    <section className={cn("mk-gal", slides.length === 1 && "single")} aria-label={name ? `${name} previews` : "Previews"}>
       <div
-        className="mk-gal-main"
+        className="mk-gal-row"
+        ref={row}
         tabIndex={slides.length > 1 ? 0 : -1}
+        onScroll={measure}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget || (e.key !== "ArrowRight" && e.key !== "ArrowLeft")) return;
           e.preventDefault();
-          step(e.key === "ArrowRight" ? 1 : -1);
+          page(e.key === "ArrowRight" ? 1 : -1);
         }}
+        data-gallery-row
       >
-        {cur.kind === "cover" ? (
-          <div className="mk-gal-cover">{cover}</div>
-        ) : cur.kind === "video" ? (
-          <Clip key={cur.src} src={cur.src} label={`${name}, preview video`} />
-        ) : (
-          <button type="button" className="mk-gal-shot" onClick={() => setZoom(i)} aria-label="Open screenshot full size">
-            <EtudeImg src={cur.src} alt={`${name}, screenshot ${i}`} />
-          </button>
-        )}
-        {slides.length > 1 && (
-          <>
-            <button type="button" className={cn("mk-gal-arrow left", i === 0 && "gone")} aria-label="Previous preview" tabIndex={-1} onClick={() => step(-1)}><ChevronLeft className="size-5" /></button>
-            <button type="button" className={cn("mk-gal-arrow right", i === slides.length - 1 && "gone")} aria-label="Next preview" tabIndex={-1} onClick={() => step(1)}><ChevronRight className="size-5" /></button>
-          </>
-        )}
+        {slides.map((s, j) => (
+          <div key={j} className="mk-gal-card" data-slide={s.kind}>
+            {s.kind === "cover" ? (
+              <div className="mk-gal-cover">{cover}</div>
+            ) : s.kind === "video" ? (
+              <Clip src={s.src} label={`${name}, preview video`} />
+            ) : (
+              <button type="button" className="mk-gal-shot" onClick={() => setZoom(j)} aria-label="Open screenshot full size">
+                <EtudeImg src={s.src} alt={`${name}, screenshot ${j}`} loading={j > 2 ? "lazy" : undefined} />
+              </button>
+            )}
+          </div>
+        ))}
       </div>
       {slides.length > 1 && (
-        <div className="mk-gal-thumbs" role="tablist" aria-label="Previews">
-          {slides.map((s, j) => (
-            <button key={j} type="button" role="tab" aria-selected={j === i} className={cn(j === i && "on")} onClick={() => setI(j)} aria-label={s.kind === "video" ? "Preview video" : s.kind === "cover" ? "Cover" : `Screenshot ${j}`}>
-              {s.kind === "cover" ? thumb : s.kind === "image" ? <EtudeImg src={s.src} alt="" loading="lazy" /> : <VideoThumb src={s.src} />}
-            </button>
-          ))}
-        </div>
+        <>
+          <button type="button" className={cn("mk-gal-arrow left", edge.start && "gone")} aria-label="Previous preview" tabIndex={-1} onClick={() => page(-1)}><ChevronLeft className="size-5" /></button>
+          <button type="button" className={cn("mk-gal-arrow right", edge.end && "gone")} aria-label="Next preview" tabIndex={-1} onClick={() => page(1)}><ChevronRight className="size-5" /></button>
+        </>
       )}
-      {zoom !== null && <Lightbox srcs={shots.map((j) => (slides[j] as { src: string }).src)} start={shots.indexOf(zoom)} name={name} onClose={() => setZoom(null)} onMove={(k) => setI(shots[k])} />}
+      {zoom !== null && <Lightbox srcs={shots.map((j) => (slides[j] as { src: string }).src)} start={shots.indexOf(zoom)} name={name} onClose={() => setZoom(null)} onMove={() => {}} />}
     </section>
-  );
-}
-
-function VideoThumb({ src }: { src: string }) {
-  return (
-    <>
-      <video src={useEtudeSrc(src)} muted playsInline preload="metadata" tabIndex={-1} />
-      <span className="mk-gal-play"><Play className="size-3.5 fill-current" /></span>
-    </>
   );
 }
 

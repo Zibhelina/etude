@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.0.0
+
+- **Etude 3: every screen is new.** A white Snow theme by day and a neutral grey Night by dark (System follows the device and is the default for new installs), a green that only marks the main button, the εtude wordmark in ink, and a scrollbar that shows only while you scroll.
+- **Minimi**, Etude's little wizard cat, sits in the corner. Drag him anywhere; tap him (or ⌘J) for a small chat with Ask Etude beside him. On AI-graded answers he's the one giving feedback, and you can ask him about your answer. Settings → Appearance → Fun mode turns him off, and the ε button comes back.
+- **Sidebar:** Study and Make groups, you and Sync at the bottom; `[` or ⌘B folds it to a rail. On a phone, a tab island with labels and a separate Ask circle.
+- **Studying:** a fixed shell (‹ back to the deck, a small progress bar), cards on paper that flip to show the answer, the rating buttons with a ring on the one Etude suggests, and the rated card flying off as the next one rises from the deck. When you check an answer, the card morphs into its result instead of jumping. The path above the card shows where it sits inside what you opened. Watch uses the same shell.
+- **Card types look like Etude 3:** the question in a serif, no rule before the answer, underline inputs, cloze blanks as soft chips, rounder choices. Cards keep their pink accent for targets, so a green app no longer paints them the colour of correct.
+- **Library:** today's session on top, with where the cards come from; a compact panel when you're done and a celebration every fifth day of a streak. Decks get an icon (one of 72 illustrations, an emoji or none), subdecks hang off faint rounded lines, and the ⋯ menu is a right-click.
+- **Archive** is its own page: archived decks as boxes, each with how much you still remember; a box opens its forgetting curve, Restore with Undo and Delete for good.
+- **Browse** is a sortable table (card, deck, type, next, interval, recall, misses, edited). The card you pick opens in a drawer you can drag wider; it has a live preview that flips and follows unsaved edits, Memory with the card's forgetting curve, and History. Select mode does bulk changes with Undo. Search sorts by title, type, interval and recall, and `--reverse` flips any order.
+- **Stats** asks a question per section and answers it in a sentence, with the chart under it: memory and today first, then streak and heatmap, forecast, forgetting curve and your weak subdecks.
+- **Settings** is one page with a table of contents on a computer, a section list on an iPad, and one section at a time on a phone. Every section opens with one plain sentence, search finds any row, and AI models and endpoints fold away until you need them.
+- **Card types** is a gallery of live cards grouped by what you do. Each type has a page: its card, how it's checked, where it's used deck by deck (`etude type decks`) and its files. New type starts from a description, a copy or a blank.
+- **Market:** a Featured row, shelves for decks, paid decks, card types and themes, and a Coming soon shelf. Every entry has its own page with a gallery, the live card preview, and likes, dislikes, downloads and comments (an account to vote or comment, downloads counted anonymously; `etude market vote`, `comment`, `report`, `block` and friends). Themes can be tried on across the whole app before you keep them. Rows that scroll sideways get arrows with a mouse and a fade on touch. Mate in one has the new look, with three new mates.
+- **Showcase** has map, worked-math, Morse and Flippy Bit cards.
+- **Security**, thanks to Victor Bonato: the web edition and the phone apps run only their own scripts (a per-load nonce); the server token leaves the address bar once the app has it, and no page sends a Referer; an older sign-in has to confirm the same device again before unlocking Sync.
+
 ## 2.6.0
 
 - **Etude on the web**, at [etude.study/app](https://etude.study/app/): the whole app in the browser, on a computer, phone or tablet, with nothing to install. The collection is kept in the browser (SQLite in its private storage) and the app keeps working offline after the first visit. On a phone, Add to Home Screen opens it like an app. Market installs, Anki import, AI grading with an OpenRouter or OpenAI key, Ask Etude and Etude Sync work there too; ChatGPT sign-in, folder sync and publishing to the Market stay in the desktop app.

@@ -2,7 +2,7 @@
 // the result layer (verdict, Minimi's feedback, the follow-up chat) and the bottom strip whose one main
 // button changes its verb. Styles are the `st-*` block in index.css.
 import { forwardRef, useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, ChevronLeft, Plus, SendHorizontal } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Plus, SendHorizontal } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { humanInterval, RATING_LABEL, type Rating, type StudyCard } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -16,15 +16,42 @@ export const minimiFace = face;
 export const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 export const modKey = () => (typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl");
 
-/** "Etude Showcase / Recall": the deck as the back button, the subdeck path beside it. */
-export function StudyTop({ title, crumb, onBack, children }: { title: string; crumb?: string; onBack(): void; children?: ReactNode }) {
+/** Where the card sits below what you're studying: the card's deck with the studied deck's path removed.
+ *  Studying "University::CMPT 371", a card in "University::CMPT 371::Week 1::01 Delay" gives ["Week 1", "01 Delay"];
+ *  studying everything (or a search) gives the whole path. */
+export function crumbPath(cardDeck: string | undefined, scopeDeck?: string): string[] {
+  if (!cardDeck) return [];
+  const parts = cardDeck.split("::");
+  if (!scopeDeck) return parts;
+  const base = scopeDeck.split("::");
+  const inside = base.every((b, i) => parts[i] === b);
+  return inside ? parts.slice(base.length) : parts;
+}
+
+/** "Etude Showcase › Week 1 › Recall": the studied deck as the back button, the card's subdeck path beside it. */
+export function StudyTop({ title, crumb, onBack, children }: { title: string; crumb?: string[]; onBack(): void; children?: ReactNode }) {
   return (
     <header className="st-top">
       <button className="st-back" onClick={onBack} title="Back to the library" aria-label={`Back: ${title}`}>
         <ChevronLeft className="size-5" strokeWidth={1.8} />
         <span>{title}</span>
       </button>
-      {crumb && <span className="st-crumb max-md:hidden">/ {crumb}</span>}
+      {!!crumb?.length && (
+        <span className="st-crumb max-md:hidden" title={crumb.join(" › ")}>
+          {crumb.length > 1 && (
+            <span className="st-crumb-seg st-crumb-more" aria-hidden>
+              <ChevronRight className="st-crumb-sep" strokeWidth={1.8} />
+              <span className="st-crumb-txt">…</span>
+            </span>
+          )}
+          {crumb.map((c, i) => (
+            <span key={i} className={cn("st-crumb-seg", i === crumb.length - 1 && "st-crumb-last")}>
+              <ChevronRight className="st-crumb-sep" strokeWidth={1.8} aria-hidden />
+              <span className="st-crumb-txt">{c}</span>
+            </span>
+          ))}
+        </span>
+      )}
       <div className="flex-1" />
       {children}
     </header>

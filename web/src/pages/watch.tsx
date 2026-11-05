@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { navigate } from "@/lib/router";
 import { useFunMode } from "@/lib/fun";
 import { track } from "@/lib/telemetry";
-import { CardStage, cardEyebrow, Eyebrow, Feedback, IconButton, shownVerdict, Slot, StudyTop, Track, useSwapIn, Verdict } from "@/components/study-shell";
+import { CardStage, cardEyebrow, crumbPath, Eyebrow, Feedback, IconButton, shownVerdict, Slot, StudyTop, Track, useSwapIn, Verdict } from "@/components/study-shell";
 
 type Phase = "loading" | "answer" | "grading" | "result" | "done" | "empty";
 
@@ -160,7 +160,7 @@ export function WatchPage({ scope, title }: { scope: Scope; title: string }) {
 
   return (
     <div className="flex min-h-dvh w-full flex-col pb-[calc(9.5rem+env(safe-area-inset-bottom))]">
-      <StudyTop title={title} crumb={entry ? entry.deck.split("::").slice(1).join(" › ") || undefined : undefined} onBack={() => navigate("/")}>
+      <StudyTop title={title} crumb={crumbPath(entry?.deck, scope.deck)} onBack={() => navigate("/")}>
         {card && phase !== "done" && phase !== "empty" && <span className="st-tag max-md:hidden">{card.type}</span>}
         {total > 0 && phase !== "done" && (
           <div className="st-prog">

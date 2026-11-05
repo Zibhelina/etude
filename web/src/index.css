@@ -371,12 +371,22 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 .dark { --study-shadow: rgb(0 0 0 / 0.45); }
 
 .st-top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px; height: calc(64px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 16px 0 12px; background: var(--background); }
-.st-back { display: inline-flex; align-items: center; gap: 4px; padding: 8px 6px; border-radius: 10px; font-weight: 600; font-size: 15px; color: var(--foreground); white-space: nowrap; min-width: 0; cursor: pointer; }
+.st-back { flex: 0 0 auto; max-width: 40%; display: inline-flex; align-items: center; gap: 4px; padding: 8px 6px; border-radius: 10px; font-weight: 600; font-size: 15px; color: var(--foreground); white-space: nowrap; min-width: 0; cursor: pointer; }
 .st-back:hover { background: var(--accent); }
 .st-back svg { color: var(--muted-foreground); flex: none; }
 .st-back span { overflow: hidden; text-overflow: ellipsis; }
-.st-crumb { color: var(--muted-foreground); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: -6px; min-width: 0; }
-.st-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted-foreground); border: 1.5px solid var(--border); border-radius: 6px; padding: 3px 8px; white-space: nowrap; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }
+.st-crumb { display: flex; align-items: center; color: var(--muted-foreground); font-size: 14px; white-space: nowrap; overflow: hidden; margin-left: -12px; min-width: 0; flex: 0 1 auto; }
+.st-crumb-seg { display: contents; }
+.st-crumb-txt { overflow: hidden; text-overflow: ellipsis; min-width: 1.5em; flex: 0 10 auto; }
+.st-crumb-last .st-crumb-txt { flex-shrink: 1; min-width: 3em; color: var(--foreground); }
+.st-crumb-more { display: none; }
+/* Not enough room for the whole path: keep where the card is, fold what's between into "…". */
+@media (max-width: 1100px) {
+  .st-crumb-seg:not(.st-crumb-last):not(.st-crumb-more) { display: none; }
+  .st-crumb-more { display: contents; }
+}
+.st-crumb-sep { width: 14px; height: 14px; margin: 0 6px; flex: none; opacity: 0.7; }
+.st-tag { flex: none; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted-foreground); border: 1.5px solid var(--border); border-radius: 6px; padding: 3px 8px; white-space: nowrap; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }
 .st-prog { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .st-track { width: 90px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
 .st-track i { display: block; height: 100%; border-radius: 3px; background: var(--primary); transition: width 0.35s; }

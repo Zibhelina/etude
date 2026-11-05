@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -57,7 +57,7 @@ export function ItemAiEdit({ id, fields, specs, onApply }: { id: string; fields:
 
   return (
     <>
-      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => changeOpen(true)}>Edit for me</Button>
+      <Button variant="ghost" size="sm" className="-mr-2 gap-1.5 font-semibold text-muted-foreground hover:text-foreground" onClick={() => changeOpen(true)}><Sparkles className="size-4" />Improve</Button>
       <Dialog open={open} onOpenChange={changeOpen}>
         <DialogContent className="sm:max-w-3xl" onKeyDown={(e) => {
           if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
@@ -66,7 +66,7 @@ export function ItemAiEdit({ id, fields, specs, onApply }: { id: string; fields:
           }
         }}>
           <DialogHeader>
-            <DialogTitle>Edit for me</DialogTitle>
+            <DialogTitle>Improve this card</DialogTitle>
             <DialogDescription>Ask AI to change this card. Review the result, then use it in the editor and save when ready.</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">

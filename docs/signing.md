@@ -52,7 +52,7 @@ The same `.p8` and IDs work on a Mac too: `APPLE_API_KEY=~/path/AuthKey_XXXXXXXX
 
 ### After the first signed release
 
-- The download page (`site/src/download.html`) tells Mac users to run `xattr` and `codesign --sign -` and tells Windows users the installer isn't signed. Take each out once the matching signed release is published, not before.
+- The download page (`site/src/download.html`) told Mac users to run `xattr` and `codesign --sign -`; that came out with 3.0.0, the first signed and notarized Mac release. It still tells Windows users the installer isn't signed; take that out once a signed Windows release is published, not before.
 - Mac installs from before then keep updating through the download link; from the signed version on they update themselves.
 - `com.apple.security.cs.disable-library-validation` in the entitlements is only needed for ad-hoc builds. A signed build might run without it; try that in a hand-run build before removing it, since the smoke test is what shows the native optimizer still loads.
 - The certificate lasts five years. The API key doesn't expire, but anyone with it can notarize under the team: revoke it in App Store Connect if it leaks.

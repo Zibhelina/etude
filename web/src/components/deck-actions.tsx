@@ -18,7 +18,19 @@ export function useDeckActions(onChanged: () => void) {
     setBusy(true);
     try {
       await api.setDeckArchived(name, archived);
-      toast.success(`${archived ? "Archived" : "Restored"} ${leafOf(name)}`);
+      toast.success(`${archived ? "Archived" : "Restored"} ${leafOf(name)}`, {
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            try {
+              await api.setDeckArchived(name, !archived);
+              onChanged();
+            } catch (e) {
+              toast.error((e as Error).message);
+            }
+          },
+        },
+      });
       onChanged();
     } catch (e) {
       toast.error((e as Error).message);
@@ -87,8 +99,8 @@ function deckEntries(archived: boolean | undefined, onArchive: () => void, onDel
   return [
     ...extra,
     ...(extra.length ? ["-" as const] : []),
-    { icon: archived ? <ArchiveRestore /> : <Archive />, label: archived ? "Move out of archive" : "Move to archive", onSelect: onArchive },
-    { icon: <Trash2 />, label: "Delete", onSelect: onDelete, destructive: true },
+    { icon: archived ? <ArchiveRestore /> : <Archive />, label: archived ? "Restore" : "Archive", onSelect: onArchive },
+    { icon: <Trash2 />, label: archived ? "Delete for good…" : "Delete…", onSelect: onDelete, destructive: true },
   ];
 }
 

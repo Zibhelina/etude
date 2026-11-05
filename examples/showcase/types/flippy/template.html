@@ -1,0 +1,20 @@
+<div class="sc-eyebrow">Flippy Bit</div>
+{{#note}}<div class="prose e-muted fb-note only-answer">{{md:note}}</div>{{/note}}
+<div class="fb-stage only-answer" tabindex="0" autofocus aria-label="Flippy Bit. Flip the eight bits with the keys 1 to 8, or tap them, to match each invader's number.">
+  <canvas class="fb-canvas"></canvas>
+</div>
+<div class="fb-hint only-answer"><kbd>1</kbd>–<kbd>8</kbd> flip the bits from left to right (or <kbd>Q</kbd>–<kbd>I</kbd>, <kbd>A</kbd>–<kbd>K</kbd>, <kbd>Z</kbd>–<kbd>,</kbd>), or tap them. When the bits spell an invader's number, it's shot down.</div>
+<template data-on="result">
+  <div class="fb-res">
+    <div class="fb-big">
+      <div><div class="fb-k">invaders</div><div class="fb-v fb-kills"></div></div>
+      <div><div class="fb-k">per invader</div><div class="fb-s fb-per"></div></div>
+      <div><div class="fb-k">clean flips</div><div class="fb-s fb-clean"></div></div>
+      <div><div class="fb-k">time</div><div class="fb-s fb-time"></div></div>
+    </div>
+    <div class="fb-sec fb-sec-got"><div class="fb-k">what got you</div><div class="fb-got"></div></div>
+    <div class="fb-sec fb-sec-slow"><div class="fb-k">slowest to crack</div><div class="fb-slow"></div></div>
+    <div class="fb-sec fb-sec-shot"><div class="fb-k">shot down</div><div class="fb-shot"></div></div>
+  </div>
+  <p class="sc-how">Each bit is a place value: 128, 64, 32, 16, 8, 4, 2, 1. In hex, each digit is exactly four bits, so B7 is B = 1011 then 7 = 0111. Clean flips is the share of your flips that were needed; flipping a bit on and off again costs time.</p>
+</template>

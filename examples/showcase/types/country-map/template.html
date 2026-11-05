@@ -1,0 +1,36 @@
+<div class="cm-head">
+  <div class="cm-eyebrow">{{#nameFace}}Which country is this?{{/nameFace}}{{#locateFace}}Find it on the map{{/locateFace}}{{#capitalFace}}{{capitalPrompt}}{{/capitalFace}}{{#capitalOfFace}}{{capitalOfPrompt}}{{/capitalOfFace}}</div>
+  {{#locateFace}}<div class="cm-ask">{{country}}</div>{{/locateFace}}
+  {{#capitalFace}}<div class="cm-ask">{{country}}</div>{{/capitalFace}}
+  {{#capitalOfFace}}<div class="cm-ask">{{capital}}</div>{{/capitalOfFace}}
+</div>
+<div class="cm-stage {{#capitalOfFace}}only-result{{/capitalOfFace}}">
+  <svg class="cm-svg" role="img" aria-label="World map" tabindex="0" {{#locateFace}}autofocus{{/locateFace}}>
+    <rect class="cm-sea" x="-40000" y="-20000" width="80000" height="40000"></rect>
+    <g class="cm-land"></g>
+    <g class="cm-dots"></g>
+    <g class="cm-marks"></g>
+  </svg>
+  <div class="cm-zoom">
+    <button type="button" class="cm-in" tabindex="-1" aria-label="Zoom in">+</button>
+    <button type="button" class="cm-out" tabindex="-1" aria-label="Zoom out">&minus;</button>
+    <button type="button" class="cm-home" tabindex="-1" aria-label="Reset view">&#8634;</button>
+  </div>
+</div>
+{{#nameFace}}<input class="e-input cm-input" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Country name" aria-label="Country name" autofocus>{{/nameFace}}
+{{#capitalFace}}<input class="e-input cm-input" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Capital city" aria-label="Capital city" autofocus>{{/capitalFace}}
+
+{{#locateFace}}<p class="cm-status only-answer" aria-live="polite">Tap a country</p>{{/locateFace}}
+{{#capitalOfFace}}<input class="e-input cm-input" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Country name" aria-label="Country name" autofocus>{{/capitalOfFace}}
+<p class="cm-hint only-answer">Drag to move; scroll or pinch to zoom.{{#locateFace}} Small countries have a dot you can tap.{{/locateFace}}</p>
+<template data-on="result">
+  <div class="e-reveal cm-result">
+    <div class="cm-name">{{country}}</div>
+    {{#official}}<div class="cm-official">{{official}}</div>{{/official}}
+    <div class="cm-facts">
+      <span><span class="e-label">Continent</span> {{region}}</span>
+      {{#capital}}<span><span class="e-label">{{capital_label}}</span> {{capital}}</span>{{/capital}}
+    </div>
+    {{#capital_note}}<p class="e-muted">{{capital_note}}</p>{{/capital_note}}
+  </div>
+</template>

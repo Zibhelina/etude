@@ -36,6 +36,25 @@
     "source": ""
   },
   {
+    "id": "showcase.work.integral",
+    "type": "work",
+    "deck": "Etude Showcase::2 Calculate",
+    "tags": [
+      "showcase",
+      "topic::calculus"
+    ],
+    "fields": {
+      "prompt": "Evaluate\n\n$$\\int_0^1 x\\,e^{x}\\,dx$$\n\nby hand, then type the result.",
+      "answers": [
+        "1"
+      ],
+      "solution": "Choose $u = x$ and $dv = e^{x}\\,dx$, so $du = dx$ and $v = e^{x}$.\n\n$$\\begin{aligned}\\int_0^1 x\\,e^{x}\\,dx &= \\Big[x\\,e^{x}\\Big]_0^1 - \\int_0^1 e^{x}\\,dx \\\\ &= e - (e - 1) = 1\\end{aligned}$$",
+      "explanation": "Integration by parts, $\\int u\\,dv = uv - \\int v\\,du$: let $u$ be the factor that gets simpler when you differentiate it.",
+      "placeholder": "Final answer",
+      "demo": "@json:demos/work-integral.json"
+    }
+  },
+  {
     "id": "showcase.estimate.everest",
     "type": "estimate",
     "deck": "Etude Showcase::2 Calculate",

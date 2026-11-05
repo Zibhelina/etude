@@ -1,0 +1,30 @@
+.mo-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.75rem; }
+.mo-letter { font: 600 5.5rem/1 var(--font-mono); text-align: center; margin: 0.5rem 0 0; }
+.mo-letter.is-prosign { width: fit-content; margin: 0.9rem auto 0; line-height: 0.8; border-top: 0.06em solid currentColor; padding-top: 0.02em; }
+.mo-name { text-align: center; color: var(--muted-foreground); font-size: 0.9rem; margin-top: -0.6rem; }
+.mo-tape { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.7rem; min-height: 2.6rem; }
+.mo-tape.long { gap: 0.5rem; }
+.mo-tape.long .mo-sym.dot { width: 0.95rem; height: 0.95rem; }
+.mo-tape.long .mo-sym.dash { width: 2.5rem; height: 0.95rem; }
+.mo-empty { color: var(--muted-foreground); font-size: 0.9rem; }
+.mo-sym { --c: var(--highlight); display: inline-block; height: 1.1rem; border-radius: 999px; background: var(--c);
+  box-shadow: 0 0 6px color-mix(in oklab, var(--c) 80%, transparent), 0 0 18px color-mix(in oklab, var(--c) 45%, transparent); transition: transform 0.12s, filter 0.12s; }
+.mo-sym.dot { width: 1.1rem; }
+.mo-sym.dash { width: 3.3rem; }
+.mo-sym.new { animation: mo-pop 0.28s cubic-bezier(.2, 1.6, .4, 1); }
+.mo-sym.is-ok { --c: var(--success); }
+.mo-sym.is-bad { --c: var(--danger); }
+.mo-sym.is-missed { --c: var(--muted-foreground); opacity: 0.5; box-shadow: none; }
+.mo-sym.lit { filter: brightness(1.6); transform: scale(1.18); }
+@keyframes mo-pop { from { transform: scale(0.2); filter: brightness(2.2); } }
+.mo-pad { display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.6rem; max-width: 26rem; width: 100%; margin: 0 auto; }
+.mo-key { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.55rem; height: 5.5rem; border-radius: var(--radius);
+  border: 1px solid var(--border); background: color-mix(in oklab, var(--foreground) 4%, transparent); color: var(--muted-foreground); cursor: pointer; transition: background 0.1s, transform 0.08s; }
+.mo-key:hover { background: color-mix(in oklab, var(--foreground) 9%, transparent); }
+.mo-key:active, .mo-key.down { transform: scale(0.96); background: color-mix(in oklab, var(--highlight) 18%, transparent); }
+.mo-key small { font-size: 0.75rem; }
+.mo-del { width: 4rem; font-size: 1.3rem; }
+.mo-result { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; text-align: center; }
+.mo-result .e-section-title { margin: 0.3rem 0 -0.2rem; }
+.mo-lamp { flex: none; width: 3rem; height: 3rem; border-radius: 50%; background: color-mix(in oklab, var(--foreground) 10%, transparent); transition: background 0.05s, box-shadow 0.05s; }
+.mo-lamp.on { background: #ffe9a8; box-shadow: 0 0 14px #ffd36a, 0 0 42px color-mix(in oklab, #ffb02e 70%, transparent); }

@@ -205,5 +205,34 @@
       "extra": "Gray's labels are from 1918: today the pulmonary artery here is usually called the **pulmonary trunk**. The right lung sits on the viewer's left, because \"right\" means the patient's right."
     },
     "source": "Henry Gray, Anatomy of the Human Body (1918), Fig. 490. Public domain, via Wikimedia Commons."
+  },
+  {
+    "id": "showcase.country-map.brazil",
+    "type": "country-map",
+    "deck": "Etude Showcase::1 Recall",
+    "tags": [
+      "showcase",
+      "topic::geography"
+    ],
+    "fields": {
+      "country": "Brazil",
+      "map": "BRA",
+      "region": "South America",
+      "cards": [
+        "locate"
+      ],
+      "capital": "Brasília",
+      "official": "Federative Republic of Brazil",
+      "capital_choices": [
+        "Brasília"
+      ],
+      "capital_answers": [
+        "Brasilia",
+        "Brasília"
+      ],
+      "capital_prompt": "What is its capital?",
+      "capital_label": "Capital",
+      "capital_note": ""
+    }
   }
 ]

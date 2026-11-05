@@ -1,0 +1,30 @@
+.sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }
+.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }
+
+.fb-note { font-size: 0.95rem; }
+.fb-stage { width: 100%; max-width: 480px; margin: 0 auto; outline: none; border-radius: calc(var(--radius) + 2px); overflow: hidden; touch-action: manipulation; -webkit-user-select: none; user-select: none; box-shadow: 0 0 0 1px var(--border); }
+.fb-stage:focus-visible { box-shadow: 0 0 0 2px var(--ring); }
+.fb-canvas { display: block; image-rendering: pixelated; cursor: pointer; }
+.fb-hint { font-size: 0.78rem; color: var(--muted-foreground); text-align: center; max-width: 480px; margin: -0.4rem auto 0; line-height: 1.5; }
+.fb-hint kbd { font-size: 0.7rem; }
+
+.fb-res { display: flex; flex-direction: column; gap: 1.1rem; font-family: var(--font-mono); }
+.fb-big { display: grid; grid-template-columns: auto repeat(3, 1fr); gap: 1.5rem; align-items: end; }
+.fb-k { font-size: 0.78rem; color: var(--muted-foreground); line-height: 1.2; margin-bottom: 0.2rem; }
+.fb-v { font-size: 3.4rem; line-height: 1; color: var(--highlight); font-variant-numeric: tabular-nums; }
+.fb-s { font-size: 1.5rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.fb-sec { display: flex; flex-direction: column; gap: 0.35rem; }
+.fb-sec[hidden] { display: none; }
+.fb-row { display: flex; align-items: baseline; gap: 1rem; font-variant-numeric: tabular-nums; }
+.fb-hex { min-width: 2.6rem; font-size: 1.35rem; font-weight: 600; }
+.fb-bin { letter-spacing: 0.08em; color: var(--muted-foreground); }
+.fb-bin b { color: var(--foreground); font-weight: 600; }
+.fb-dec, .fb-t { color: var(--muted-foreground); font-size: 0.85rem; }
+.fb-t { margin-left: auto; }
+.fb-shot { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.fb-chip { font-size: 0.8rem; padding: 0.1rem 0.4rem; border-radius: 4px; background: color-mix(in oklab, var(--foreground) 7%, transparent); }
+
+@media (max-width: 520px) {
+  .fb-big { grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+  .fb-v { font-size: 2.8rem; }
+}

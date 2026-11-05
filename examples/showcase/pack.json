@@ -1,7 +1,7 @@
 {
   "etude": "pack/1",
   "name": "Etude Showcase",
-  "description": "A guided tour of Etude: one card for each of the 28 card types, from flipping a card to playing chess, mixing a color and writing kanji by hand. It opens in Watch mode: each card can show an example answer, graded the way a real one would be, so you see how it works without answering anything. Nothing is scheduled.",
+  "description": "A guided tour of Etude: one card for each of the 32 card types, from flipping a card to playing chess, finding a country on the map, tapping out Morse and writing kanji by hand. It opens in Watch mode: each card can show an example answer, graded the way a real one would be, so you see how it works without answering anything. Nothing is scheduled.",
   "presets": [
     {
       "id": "showcase",
@@ -23,7 +23,7 @@
     },
     {
       "name": "Etude Showcase::1 Recall",
-      "description": "Classic recall, made honest: flip, type, pick, fill and match."
+      "description": "Classic recall, made honest: flip, type, pick, fill, match and find it on a map."
     },
     {
       "name": "Etude Showcase::2 Calculate",
@@ -35,7 +35,7 @@
     },
     {
       "name": "Etude Showcase::4 Code",
-      "description": "Code that runs against hidden tests, regexes, bugs to find and bits to flip."
+      "description": "Code that runs against hidden tests, regexes, bugs to find, bits to flip and a game of them."
     },
     {
       "name": "Etude Showcase::5 Play and listen",

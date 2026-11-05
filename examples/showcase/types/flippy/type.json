@@ -1,0 +1,68 @@
+{
+  "id": "flippy",
+  "name": "Flippy Bit",
+  "description": "An arcade game after Q42's Flippy Bit and the Attack of the Hexadecimals from Base 16: invaders fall carrying a number in hex, and you flip eight bits until they spell it. Keys 1 to 8 (or tap). It speeds up until one lands. Score = invaders shot down ÷ target.",
+  "fields": [
+    {
+      "name": "note",
+      "kind": "markdown",
+      "description": "Optional line shown above the game."
+    },
+    {
+      "name": "base",
+      "kind": "number",
+      "default": 16,
+      "description": "The base the invaders' numbers are written in: 16 (hex), 10, 8 or 2."
+    },
+    {
+      "name": "speed",
+      "kind": "number",
+      "default": 1,
+      "description": "How fast invaders fall and arrive. 1 is the original pace, 0.5 half, 2 double."
+    },
+    {
+      "name": "target",
+      "kind": "number",
+      "default": 20,
+      "description": "Invaders shot down in one run that earn full credit."
+    },
+    {
+      "name": "hints",
+      "kind": "boolean",
+      "default": true,
+      "description": "Show each bit's place value under it and the number the bits spell right now."
+    },
+    {
+      "name": "sound",
+      "kind": "boolean",
+      "default": true,
+      "description": "8-bit sound effects (can also be toggled in the game)."
+    }
+  ],
+  "metrics": [
+    {
+      "key": "kills",
+      "label": "Invaders",
+      "better": "higher",
+      "digits": 0
+    },
+    {
+      "key": "perKill",
+      "label": "Seconds per invader",
+      "unit": "s",
+      "better": "lower",
+      "digits": 2
+    },
+    {
+      "key": "clean",
+      "label": "Clean flips",
+      "unit": "%",
+      "better": "higher",
+      "digits": 0
+    }
+  ],
+  "showVerdict": false,
+  "grader": {
+    "kind": "script"
+  }
+}

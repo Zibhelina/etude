@@ -1,0 +1,82 @@
+{
+  "id": "country-map",
+  "name": "Country on a map",
+  "description": "Four cards per country on a zoomable world map: name it, locate it, recall a capital, and name the country from a capital. Common spellings and translated capital names are accepted. Capitals are marked and labelled at their geographic locations after answering. Capital-island and coastal details use Natural Earth 1:10m.",
+  "faces": [
+    "name",
+    "locate",
+    "capital",
+    "capital-of"
+  ],
+  "facesWhen": "const all = [\"name\", \"locate\", \"capital\", \"capital-of\"];\nconst pick = Array.isArray(fields.cards) ? all.filter((f) => fields.cards.includes(f)) : [];\nreturn pick.length ? pick : all;",
+  "fields": [
+    {
+      "name": "country",
+      "kind": "text",
+      "required": true,
+      "description": "Country name, as shown after answering."
+    },
+    {
+      "name": "map",
+      "kind": "text",
+      "required": true,
+      "description": "Natural Earth ADM0_A3 code of its shape on the map (e.g. BRA)."
+    },
+    {
+      "name": "region",
+      "kind": "text",
+      "required": true,
+      "description": "Africa, Asia, Europe, North America, Oceania or South America: which part of the map the card opens on."
+    },
+    {
+      "name": "cards",
+      "kind": "list",
+      "description": "Only these of the four cards (name, locate, capital, capital-of). Empty: all four."
+    },
+    {
+      "name": "capital",
+      "kind": "text",
+      "private": true,
+      "description": "Shown after answering."
+    },
+    {
+      "name": "official",
+      "kind": "text",
+      "private": true,
+      "description": "Official name, shown after answering."
+    },
+    {
+      "name": "capital_choices",
+      "kind": "list",
+      "private": true,
+      "description": "Capital names used as cues for the reverse face."
+    },
+    {
+      "name": "capital_answers",
+      "kind": "list",
+      "private": true,
+      "description": "Accepted capital spellings and translations."
+    },
+    {
+      "name": "capital_prompt",
+      "kind": "text",
+      "private": true,
+      "description": "Question wording for capital or government-seat recall."
+    },
+    {
+      "name": "capital_label",
+      "kind": "text",
+      "private": true,
+      "description": "Label for the capital or government seat."
+    },
+    {
+      "name": "capital_note",
+      "kind": "text",
+      "private": true,
+      "description": "Capital-role explanation, revealed after answering."
+    }
+  ],
+  "grader": {
+    "kind": "script"
+  }
+}

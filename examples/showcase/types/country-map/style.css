@@ -1,0 +1,49 @@
+.cm-head { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: -0.4rem; }
+.cm-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); }
+.cm-ask { font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; }
+
+.cm-stage { position: relative; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
+.cm-svg { display: block; width: 100%; height: 360px; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+.cm-svg.panning { cursor: grabbing; }
+.cm-svg.done { cursor: default; }
+.cm-svg:focus { outline: none; }
+.cm-sea { fill: color-mix(in oklab, var(--foreground) 3%, var(--card, var(--background))); }
+
+.cm-land path { fill: color-mix(in oklab, var(--foreground) 17%, var(--card, var(--background))); stroke: var(--card, var(--background)); stroke-width: 0.7px; vector-effect: non-scaling-stroke; stroke-linejoin: round; transition: fill 0.12s; }
+.cm-land path.other { fill: color-mix(in oklab, var(--foreground) 11%, var(--card, var(--background))); }
+:is([data-face="locate"], [data-face="capital-of"]) .cm-svg:not(.done) .cm-land path:not(.other):not(.picked):hover { fill: color-mix(in oklab, var(--foreground) 30%, var(--card, var(--background))); }
+.cm-land path.target { fill: var(--highlight); stroke: color-mix(in oklab, var(--highlight) 60%, var(--foreground)); stroke-width: 1px; }
+.cm-land path.picked { fill: var(--highlight); stroke: var(--foreground); stroke-width: 1.2px; }
+.cm-land path.right, .cm-land path.answer { fill: var(--success); stroke: color-mix(in oklab, var(--success) 50%, var(--foreground)); stroke-width: 1.2px; }
+.cm-land path.wrong { fill: var(--danger); stroke: color-mix(in oklab, var(--danger) 50%, var(--foreground)); stroke-width: 1.2px; }
+
+.cm-dots .dot { fill: color-mix(in oklab, var(--foreground) 32%, transparent); stroke: var(--card, var(--background)); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.cm-dots .dot.hot { fill: var(--highlight); stroke: var(--foreground); }
+.cm-dots .dot.right, .cm-dots .dot.answer { fill: var(--success); }
+.cm-dots .dot.wrong { fill: var(--danger); }
+.cm-marks .ring { fill: none; stroke: var(--highlight); stroke-width: 1.6px; vector-effect: non-scaling-stroke; stroke-dasharray: 3 3; }
+[data-mode="result"] .cm-marks .ring { stroke: var(--success); stroke-dasharray: none; stroke-width: 2px; }
+[data-mode="result"] .cm-marks .ring.wrong { stroke: var(--danger); }
+.cm-marks .lbl { font-family: var(--font-sans); font-weight: 600; fill: var(--foreground); paint-order: stroke; stroke: color-mix(in oklab, var(--card, var(--background)) 92%, transparent); stroke-width: 4px; vector-effect: non-scaling-stroke; stroke-linejoin: round; pointer-events: none; }
+.cm-marks .lbl.wrong { font-weight: 500; }
+
+.cm-zoom { position: absolute; right: 0.5rem; top: 0.5rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.cm-zoom button { width: 2.25rem; height: 2.25rem; border-radius: calc(var(--radius) - 2px); border: 1px solid var(--border); background: color-mix(in oklab, var(--card, var(--background)) 88%, transparent); color: var(--foreground); font: 600 1rem/1 var(--font-sans); cursor: pointer; display: grid; place-items: center; padding: 0; }
+.cm-zoom button:hover { background: var(--secondary); }
+.cm-zoom button:focus { outline: none; }
+.cm-zoom button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+
+.cm-input { font-size: 1.1rem; }
+.cm-input.is-close { border-color: var(--warning); }
+.cm-status { margin: -0.5rem 0 0; font-size: 0.95rem; color: var(--muted-foreground); }
+.cm-hint { margin: -0.7rem 0 0; font-size: 0.8rem; color: var(--muted-foreground); }
+.cm-name { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.01em; }
+.cm-official { color: var(--muted-foreground); margin-top: -0.6rem; }
+.cm-facts { display: flex; flex-wrap: wrap; gap: 0.4rem 1.4rem; font-size: 0.95rem; }
+.cm-facts .e-label { margin-right: 0.35rem; }
+@media (max-width: 480px) { .cm-ask { font-size: 1.6rem; } .cm-zoom button { width: 2.75rem; height: 2.75rem; } }
+
+[data-face="capital-of"][data-mode="answer"] .cm-hint { display: none; }
+
+.cm-marks .cap { fill: var(--foreground); stroke: var(--card, var(--background)); stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.cm-marks .cap-label { font-weight: 500; }

@@ -69,6 +69,20 @@
     }
   },
   {
+    "id": "showcase.morse.k",
+    "type": "morse",
+    "deck": "Etude Showcase::5 Play and listen",
+    "tags": [
+      "showcase",
+      "topic::morse"
+    ],
+    "fields": {
+      "letter": "K",
+      "code": "-.-",
+      "mnemonic": "**KAN**-ga-**ROO**: long short long. Alone, K also means *go ahead*."
+    }
+  },
+  {
     "id": "showcase.color.hex",
     "type": "color",
     "deck": "Etude Showcase::5 Play and listen",

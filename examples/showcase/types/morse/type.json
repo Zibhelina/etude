@@ -1,0 +1,39 @@
+{
+  "id": "morse",
+  "name": "Morse code",
+  "description": "See a character, tap it out in dots and dashes; checked by script, then the right code blinks back. Handles prosigns and codes up to nine elements.",
+  "fields": [
+    {
+      "name": "letter",
+      "kind": "text",
+      "required": true,
+      "description": "The letter, digit, sign or prosign to send."
+    },
+    {
+      "name": "name",
+      "kind": "text",
+      "description": "What it's called, shown under it (Full stop, End of contact). Optional."
+    },
+    {
+      "name": "prosign",
+      "kind": "boolean",
+      "description": "Draw it with a bar on top: a prosign is sent as one run, with no gap between its letters."
+    },
+    {
+      "name": "code",
+      "kind": "text",
+      "required": true,
+      "private": true,
+      "description": "Its Morse code, as . and -"
+    },
+    {
+      "name": "mnemonic",
+      "kind": "markdown",
+      "private": true,
+      "description": "A memory hook, shown after answering."
+    }
+  ],
+  "grader": {
+    "kind": "script"
+  }
+}

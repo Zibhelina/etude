@@ -173,6 +173,48 @@ export const account = {
   reject: (id: string, notes: string) => call<Listing>("POST", `/api/account/review/${encodeURIComponent(id)}/reject`, { notes }),
 };
 
+// ── Market likes, dislikes, downloads and comments (free and paid entries) ──
+/** An entry as etude-cloud names it: `deck/<id>`, `theme/<id>`, `type/<id>` for the free catalog, `paid/<listing id>` for a paid deck. */
+export type MarketKey = string;
+export const freeKey = (kind: "deck" | "theme" | "type", id: string): MarketKey => `${kind}/${id}`;
+export const paidKey = (listing: string): MarketKey => `paid/${listing}`;
+
+export interface MarketCounts { likes: number; dislikes: number; downloads: number; comments: number }
+/** Every entry that has counts (entries nobody touched aren't listed: treat them as all zero). */
+export interface MarketStats { entries: Record<MarketKey, MarketCounts> }
+/** One entry; `myVote` (1 like, -1 dislike, 0 none) only when signed in. */
+export interface EntryStats extends MarketCounts { key: MarketKey; myVote?: 1 | -1 | 0 }
+export interface MarketComment {
+  id: string;
+  key: MarketKey;
+  body: string;
+  /** `id` is a public author id (au_…) for blocking; `name` is the display name, or "Etude learner". */
+  author: { id: string; name: string };
+  mine: boolean;
+  created: string;
+  edited: string | null;
+}
+export interface MarketCommentPage { key: MarketKey; comments: MarketComment[]; next: string | null }
+export interface MarketBlock { authorId: string; name: string; created: string }
+
+export const marketSocial = {
+  stats: () => call<MarketStats>("GET", "/api/account/market/stats"),
+  entry: (key: MarketKey) => call<EntryStats>("GET", `/api/account/market/entry-stats?key=${encodeURIComponent(key)}`),
+  /** Needs sign-in (401 `signed_out` otherwise). 0 takes the vote back. */
+  vote: (key: MarketKey, value: 1 | -1 | 0) => call<EntryStats & { myVote: 1 | -1 | 0 }>("PUT", "/api/account/market/votes", { key, value }),
+  /** Newest first, 20 a page; `before` is the previous page's `next`. */
+  comments: (key: MarketKey, before?: string) => call<MarketCommentPage>("GET", `/api/account/market/comments?key=${encodeURIComponent(key)}${before ? `&before=${encodeURIComponent(before)}` : ""}`),
+  /** Needs sign-in; `403 comment_banned` for an account the team stopped commenting. Body: 1–2000 characters. */
+  comment: (key: MarketKey, body: string) => call<{ comment: MarketComment }>("POST", "/api/account/market/comments", { key, body }),
+  editComment: (id: string, body: string) => call<{ comment: MarketComment }>("PATCH", `/api/account/market/comments/${encodeURIComponent(id)}`, { body }),
+  deleteComment: (id: string) => call<{ ok: boolean; deleted: string }>("DELETE", `/api/account/market/comments/${encodeURIComponent(id)}`),
+  /** One report per account; `hidden` is true when this report was the third and the comment is now hidden. */
+  report: (id: string, reason?: string) => call<{ ok: boolean; counted: boolean; hidden: boolean }>("POST", `/api/account/market/comments/${encodeURIComponent(id)}/report`, reason ? { reason } : {}),
+  blocks: () => call<{ blocks: MarketBlock[] }>("GET", "/api/account/market/blocks"),
+  block: (authorId: string) => call<{ ok: boolean; blocked: string }>("POST", `/api/account/market/blocks/${encodeURIComponent(authorId)}`),
+  unblock: (authorId: string) => call<{ ok: boolean; unblocked: string }>("DELETE", `/api/account/market/blocks/${encodeURIComponent(authorId)}`),
+};
+
 export const money = (cents: number, currency = "usd") => new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(cents / 100);
 export const bytes = (b: number) => (b < 1024 ** 2 ? `${Math.max(0, Math.round(b / 1024))} KB` : b < 1024 ** 3 ? `${(b / 1024 ** 2).toFixed(1)} MB` : `${(b / 1024 ** 3).toFixed(2)} GB`);
 

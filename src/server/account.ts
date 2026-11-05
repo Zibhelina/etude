@@ -93,4 +93,27 @@ export function accountRoutes(app: Hono, e: Etude) {
   app.get("/api/account/review", async (c) => c.json(await a.reviewQueue()));
   app.post("/api/account/review/:id/approve", async (c) => c.json(await a.approve(c.req.param("id"), (await body(c)).notes)));
   app.post("/api/account/review/:id/reject", async (c) => c.json(await a.reject(c.req.param("id"), need((await body(c)).notes, "notes"))));
+
+  // Likes, dislikes, downloads and comments on Market entries (keys: deck/<id>, theme/<id>, type/<id>, paid/<listing>).
+  app.get("/api/account/market/stats", async (c) => c.json(await a.marketStats()));
+  app.get("/api/account/market/entry-stats", async (c) => c.json(await a.entryStats(need(c.req.query("key"), "key"))));
+  app.put("/api/account/market/votes", async (c) => {
+    const b = await body(c);
+    if (b.value !== 1 && b.value !== -1 && b.value !== 0) throw new AccountError("value is 1 (like), -1 (dislike) or 0 (no vote)", 400, "invalid");
+    return c.json(await a.vote(need(b.key, "key"), b.value));
+  });
+  app.get("/api/account/market/comments", async (c) => c.json(await a.comments(need(c.req.query("key"), "key"), c.req.query("before") || undefined)));
+  app.post("/api/account/market/comments", async (c) => {
+    const b = await body(c);
+    return c.json(await a.postComment(need(b.key, "key"), need(b.body, "body")));
+  });
+  app.patch("/api/account/market/comments/:id", async (c) => c.json(await a.editComment(c.req.param("id"), need((await body(c)).body, "body"))));
+  app.delete("/api/account/market/comments/:id", async (c) => c.json(await a.deleteComment(c.req.param("id"))));
+  app.post("/api/account/market/comments/:id/report", async (c) => {
+    const reason = (await body(c)).reason;
+    return c.json(await a.reportComment(c.req.param("id"), typeof reason === "string" ? reason : undefined));
+  });
+  app.get("/api/account/market/blocks", async (c) => c.json(await a.blocks()));
+  app.post("/api/account/market/blocks/:id", async (c) => c.json(await a.block(c.req.param("id"))));
+  app.delete("/api/account/market/blocks/:id", async (c) => c.json(await a.unblock(c.req.param("id"))));
 }

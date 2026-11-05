@@ -590,7 +590,8 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 .lib-play.dim { color: var(--muted-foreground); }
 .lib-play.dim:hover { background: var(--accent); color: var(--foreground); }
 .lib-row:hover { background: color-mix(in srgb, var(--accent) 70%, transparent); }
-.lib-row .lib-grip { opacity: 0.55; }
+.lib-row .lib-grip { opacity: 0; transition: opacity 0.12s; }
+.lib-elbows path { stroke: color-mix(in oklab, var(--muted-foreground) 20%, transparent); }
 .lib-row:hover .lib-grip, .lib-row:focus-within .lib-grip, .lib-coarse .lib-grip { opacity: 1; }
 .lib-art img { filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.12)); }
 .lib-pop { animation: lib-pop 0.5s 0.2s cubic-bezier(0.3, 1.6, 0.5, 1) backwards; }
@@ -636,11 +637,21 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 .browse-hr .when { font-size: 13px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 .browse-hr .nx { font-size: 13px; color: var(--muted-foreground); text-align: right; font-variant-numeric: tabular-nums; }
 .browse-savebar { background: linear-gradient(transparent, var(--background) 30%); }
+.browse-tr:hover td { background: var(--secondary); }
+.browse-tr.on td { background: var(--accent); }
+.browse-tr mark { background: color-mix(in oklab, var(--hard) 28%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.browse-drawer { box-shadow: -1px 0 0 var(--border), -24px 0 60px rgb(0 0 0 / 0.12); animation: browse-drawer 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.dark .browse-drawer { box-shadow: -1px 0 0 var(--border), -24px 0 60px rgb(0 0 0 / 0.5); }
+.browse-resize::after { content: ""; position: absolute; inset: 0 auto 0 5px; width: 2px; background: transparent; transition: background-color 0.12s; }
+.browse-resize:hover::after, .browse-resize:focus-visible::after, .browse-resizing .browse-resize::after { background: var(--ring); }
+body.browse-resizing { cursor: col-resize; user-select: none; }
+body.browse-resizing iframe { pointer-events: none; }
+@keyframes browse-drawer { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes browse-slide { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 .browse-slide { animation: browse-slide 0.28s cubic-bezier(0.2, 0.75, 0.2, 1) both; }
 @keyframes browse-fi { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .browse-fi { animation: browse-fi 0.15s ease-out both; }
-@media (prefers-reduced-motion: reduce) { .browse-slide, .browse-fi { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .browse-slide, .browse-fi, .browse-drawer { animation: none; } }
 /* ---- end Browse ---- */
 /* ---------------------------------------------------------------- Stats (Etude 3, direction A "Answers") */
 :root {

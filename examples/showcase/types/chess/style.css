@@ -19,16 +19,22 @@
 .ch-sqs { position: absolute; inset: 0; display: grid; grid-template: repeat(8, 1fr) / repeat(8, 1fr); border-radius: inherit; overflow: hidden; }
 .sq { position: relative; background: var(--lt); }
 .sq.d { background: var(--dk); }
-.sq.l.mv { background: #e7e39a; } .sq.d.mv { background: #b6c766; }
-.sq.l.good { background: #d9ecb0; } .sq.d.good { background: #a5c96f; }
+/* The last move and the mate: one warm yellow over both squares (like lichess), never another green.
+   The square it went to is a touch stronger, so the move reads toward where the piece stands now. */
+.sq::before { content: ""; position: absolute; inset: 0; background: rgba(247, 196, 52, 0); pointer-events: none; }
+.sq.mv::before, .sq.good::before { background: rgba(247, 196, 52, .6); }
+.sq.mv.to::before, .sq.good.to::before { background: rgba(247, 196, 52, .75); }
+/* Green shows through more, so the dark squares take more yellow to stay warm. */
+.sq.d.mv::before, .sq.d.good::before { background: rgba(247, 196, 52, .72); }
+.sq.d.mv.to::before, .sq.d.good.to::before { background: rgba(247, 196, 52, .82); }
 .sq.sel { box-shadow: inset 0 0 0 4px #f2b632; }
 .sq.cur { box-shadow: inset 0 0 0 3px var(--ring, #f2b632); }
 .sq.sel.cur { box-shadow: inset 0 0 0 4px #f2b632, inset 0 0 0 7px var(--ring, #f2b632); }
 .sq.dot::after { content: ""; position: absolute; left: 37%; top: 37%; width: 26%; height: 26%; border-radius: 50%; background: rgba(30, 40, 20, .28); }
 .sq.cap::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 0 5px rgba(30, 40, 20, .28); }
 .sq.hov { box-shadow: inset 0 0 0 4px rgba(30, 40, 20, .32); }
-.sq i { position: absolute; font: 600 10px/1 var(--font-sans); font-style: normal; opacity: .62; pointer-events: none; }
-.sq.l i { color: #6f8f66; } .sq.d i { color: #f4f1e4; }
+.sq i { position: absolute; font: 600 10px/1 var(--font-sans); font-style: normal; opacity: .78; pointer-events: none; }
+.sq.l i { color: #5d7d55; } .sq.d i { color: #f7f4e8; }
 .sq .rk { left: 3px; top: 3px; } .sq .fl { right: 3px; bottom: 2px; }
 .ch-board:focus-visible { box-shadow: 0 0 0 2px var(--ring, #f2b632), 0 10px 26px var(--sh); }
 
@@ -57,6 +63,8 @@
 [data-mode="result"] .ch-head { display: none; }
 [data-mode="result"] .ch-main { flex-direction: row; justify-content: center; align-items: center; gap: 36px; }
 [data-mode="result"] .ch-board { width: min(56%, 420px); min-width: 0; }
+/* No drop shadow once graded: the frame ends just under the board and would cut it into a grey edge. */
+[data-mode="result"] .ch-board { box-shadow: none; box-shadow: 0 0 0 1px light-dark(var(--border), transparent); }
 .ch-info { flex: 0 1 300px; min-width: 0; text-align: left; }
 .ch-tag { font-size: 12px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: var(--muted-foreground); }
 .ch-tag.ok { color: var(--success); }

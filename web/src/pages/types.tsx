@@ -17,6 +17,7 @@ import { api, type TypeSummary } from "@/lib/api";
 import { useFunMode } from "@/lib/fun";
 import { navigate, useLocation } from "@/lib/router";
 import { cn } from "@/lib/utils";
+import { useHScroll } from "@/lib/hscroll";
 
 /** `/types` is the gallery, `/types/<id>` a type's page, `/types/<id>?edit=1` its editor. */
 export function TypesPage({ id }: { id: string | null }) {
@@ -455,6 +456,10 @@ function GroupSection(p: {
   phoneGrid?: boolean;
   children: React.ReactNode;
 }) {
+  // On a phone a closed group is one sideways row; the shared scroller gives it the edge fade and ← →.
+  const row = useRef<HTMLDivElement>(null);
+  const sideways = !p.phoneGrid && !p.open;
+  const hs = useHScroll(row, { dep: sideways });
   return (
     <section data-group={p.id} className={cn("mt-9 scroll-mt-6 rounded-2xl transition-shadow", p.dropping && "shadow-[0_0_0_2px_var(--ring)]")} {...p.drop}>
       <div className="mb-3 flex min-h-8 items-center gap-2.5" {...p.dragHandle}>
@@ -467,6 +472,8 @@ function GroupSection(p: {
         )}
       </div>
       <div
+        ref={row}
+        {...(sideways ? hs.rowProps : {})}
         className={cn(
           "grid gap-4 sm:[grid-template-columns:repeat(auto-fill,minmax(16rem,1fr))]",
           p.phoneGrid

@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Pause, Play, X } from "lucide-react";
 import { api, type MarketEntry } from "@/lib/api";
 import { EtudeImg, useEtudeSrc } from "@/lib/local-url";
 import { cn } from "@/lib/utils";
+import { HArrows, useHScroll } from "@/lib/hscroll";
 import "./market-gallery.css";
 
 const isVideo = (p: string) => /\.(mp4|webm)$/.test(p);
@@ -37,39 +38,14 @@ export function CoverGallery({ cover }: { cover: React.ReactNode }) {
 function Gallery({ name, slides, cover }: { name: string; slides: Slide[]; cover: React.ReactNode; thumb?: React.ReactNode }) {
   const row = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState<number | null>(null);
-  const [edge, setEdge] = useState<{ start: boolean; end: boolean }>({ start: true, end: slides.length < 2 });
   const shots = slides.map((s, j) => (s.kind === "image" ? j : -1)).filter((j) => j >= 0);
-  const measure = () => {
-    const r = row.current;
-    if (r) setEdge({ start: r.scrollLeft < 4, end: r.scrollLeft + r.clientWidth >= r.scrollWidth - 4 });
-  };
-  useEffect(() => {
-    measure();
-    const r = row.current;
-    if (!r) return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(r);
-    return () => ro.disconnect();
-  }, [slides.length]);
-  const page = (d: 1 | -1) => {
-    const r = row.current;
-    const card = r?.firstElementChild as HTMLElement | null;
-    if (!r || !card) return;
-    const gap = parseFloat(getComputedStyle(r).columnGap) || 0;
-    r.scrollBy({ left: d * (card.offsetWidth + gap), behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
-  };
+  const hs = useHScroll(row, { dep: slides.length });
   return (
     <section className={cn("mk-gal", slides.length === 1 && "single")} aria-label={name ? `${name} previews` : "Previews"}>
       <div
         className="mk-gal-row"
         ref={row}
-        tabIndex={slides.length > 1 ? 0 : -1}
-        onScroll={measure}
-        onKeyDown={(e) => {
-          if (e.target !== e.currentTarget || (e.key !== "ArrowRight" && e.key !== "ArrowLeft")) return;
-          e.preventDefault();
-          page(e.key === "ArrowRight" ? 1 : -1);
-        }}
+        {...hs.rowProps}
         data-gallery-row
       >
         {slides.map((s, j) => (
@@ -86,12 +62,7 @@ function Gallery({ name, slides, cover }: { name: string; slides: Slide[]; cover
           </div>
         ))}
       </div>
-      {slides.length > 1 && (
-        <>
-          <button type="button" className={cn("mk-gal-arrow left", edge.start && "gone")} aria-label="Previous preview" tabIndex={-1} onClick={() => page(-1)}><ChevronLeft className="size-5" /></button>
-          <button type="button" className={cn("mk-gal-arrow right", edge.end && "gone")} aria-label="Next preview" tabIndex={-1} onClick={() => page(1)}><ChevronRight className="size-5" /></button>
-        </>
-      )}
+      <HArrows edge={hs.edge} page={hs.page} label="preview" className="inset" />
       {zoom !== null && <Lightbox srcs={shots.map((j) => (slides[j] as { src: string }).src)} start={shots.indexOf(zoom)} name={name} onClose={() => setZoom(null)} onMove={() => {}} />}
     </section>
   );

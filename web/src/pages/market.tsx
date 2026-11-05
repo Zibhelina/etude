@@ -3,7 +3,7 @@
 // Themes can be tried on: the whole app repaints until you keep it or take it off. Publish opens a pull
 // request with the user's GitHub CLI.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Blocks, Check, ChevronLeft, ChevronRight, Download, ExternalLink, Eye, GitPullRequest, Layers, Loader2, Palette, RefreshCw, Search, Store, Upload, X } from "lucide-react";
+import { Blocks, Check, ChevronRight, Download, ExternalLink, Eye, GitPullRequest, Layers, Loader2, Palette, RefreshCw, Search, Store, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import { MarketGallery } from "@/components/market-gallery";
 import { DetailLayout, niceDate, paragraphs, type InfoCell } from "@/components/market-detail";
 import { Comments, socialCells, TileCounts, useEntryStats, Votes } from "@/components/market-social";
 import { useMarketStats, type EntryCounts } from "@/lib/market-social";
+import { HArrows, nearestIndex, useHScroll } from "@/lib/hscroll";
 import { applyTheme, currentTheme, setPreviewing, type Theme } from "@/lib/theme";
 import { navigate, useLocation } from "@/lib/router";
 import { cn } from "@/lib/utils";
@@ -369,13 +370,8 @@ export function MarketPage() {
 function Featured({ items, stats, onOpen, onChanged }: { items: Item[]; stats: Record<string, EntryCounts>; onOpen(it: Item): void; onChanged(): void }) {
   const row = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState(0);
+  const hs = useHScroll(row, { dep: items.length });
   if (!items.length) return null;
-  const card = () => row.current?.firstElementChild as HTMLElement | null;
-  const step = () => {
-    const c = card();
-    return c ? c.offsetWidth + (parseFloat(getComputedStyle(row.current!).columnGap) || 0) : 1;
-  };
-  const go = (i: number) => row.current?.scrollTo({ left: Math.max(0, Math.min(items.length - 1, i)) * step(), behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   return (
     <section className={cn("mk-feat", items.length === 1 && "one")} aria-label="Featured" data-featured>
       <div className="mk-shelf-head">
@@ -383,19 +379,16 @@ function Featured({ items, stats, onOpen, onChanged }: { items: Item[]; stats: R
           <h2 className="mk-serif">Featured</h2>
           <p>Picked by the Etude team.</p>
         </div>
-        {items.length > 1 && (
-          <span className="mk-arrows">
-            <Button variant="ghost" size="icon" aria-label="Previous featured" disabled={at === 0} onClick={() => go(at - 1)}><ChevronLeft className="size-[18px]" /></Button>
-            <Button variant="ghost" size="icon" aria-label="Next featured" disabled={at === items.length - 1} onClick={() => go(at + 1)}><ChevronRight className="size-[18px]" /></Button>
-          </span>
-        )}
       </div>
-      <div className="mk-feat-row" ref={row} onScroll={() => setAt(Math.round((row.current?.scrollLeft ?? 0) / step()))} data-featured-row>
-        {items.map((it) => <Hero key={it.key} it={it} counts={stats[it.key]} onOpen={() => onOpen(it)} onChanged={onChanged} />)}
+      <div className="hs-wrap">
+        <div className="mk-feat-row" ref={row} {...hs.rowProps} aria-label="Featured, scroll sideways" onScroll={() => row.current && setAt(nearestIndex(row.current))} data-featured-row>
+          {items.map((it) => <Hero key={it.key} it={it} counts={stats[it.key]} onOpen={() => onOpen(it)} onChanged={onChanged} />)}
+        </div>
+        <HArrows edge={hs.edge} page={hs.page} label="featured" />
       </div>
       {items.length > 1 && (
         <div className="mk-feat-dots" role="tablist" aria-label="Featured">
-          {items.map((it, i) => <button key={it.key} role="tab" aria-label={it.e.name} aria-current={i === at} aria-selected={i === at} onClick={() => go(i)} />)}
+          {items.map((it, i) => <button key={it.key} role="tab" aria-label={it.e.name} aria-current={i === at} aria-selected={i === at} onClick={() => hs.to(i)} />)}
         </div>
       )}
     </section>
@@ -437,7 +430,7 @@ function Hero({ it, counts, onOpen, onChanged }: { it: Item; counts?: EntryCount
   }
   return (
     <div className="mk-hero" role="link" tabIndex={0} onClick={onOpen} onKeyDown={(x) => x.key === "Enter" && x.target === x.currentTarget && onOpen()} data-market-hero={it.key}>
-      <div className="mk-hero-cover">{cover}</div>
+      <div className="mk-hero-cover" data-hs-anchor>{cover}</div>
       <div className="mk-hero-text">
         <div className="mk-eyebrow">{eyebrow}</div>
         <h2 className="mk-serif">{e.name}</h2>
@@ -454,8 +447,8 @@ function Hero({ it, counts, onOpen, onChanged }: { it: Item; counts?: EntryCount
 
 function Shelf({ title, sub, items, stats, onAll, onOpen, onTry, themes, ...rest }: { title: string; sub?: string; items: Item[]; stats: Record<string, EntryCounts>; onAll?(): void; onOpen(it: Item): void; onTry(e: MarketEntry): void; themes?: boolean; "data-paid-section"?: boolean }) {
   const row = useRef<HTMLDivElement>(null);
+  const hs = useHScroll(row, { page: "view", dep: items.length });
   if (!items.length) return null;
-  const page = (d: 1 | -1) => row.current?.scrollBy({ left: d * row.current.clientWidth * 0.8, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   return (
     <section className={cn("mk-shelf", themes && "themes")} {...rest}>
       <div className="mk-shelf-head">
@@ -464,13 +457,12 @@ function Shelf({ title, sub, items, stats, onAll, onOpen, onTry, themes, ...rest
           {sub && <p>{sub}</p>}
         </div>
         {onAll && <Button variant="ghost" size="sm" className="text-foreground" onClick={onAll}>See all</Button>}
-        <span className="mk-arrows">
-          <Button variant="ghost" size="icon" aria-label="Scroll back" onClick={() => page(-1)}><ChevronLeft className="size-[18px]" /></Button>
-          <Button variant="ghost" size="icon" aria-label="Scroll for more" onClick={() => page(1)}><ChevronRight className="size-[18px]" /></Button>
-        </span>
       </div>
-      <div className="mk-row" ref={row}>
-        {items.map((it) => <AnyTile key={it.key} it={it} counts={stats[it.key]} onOpen={() => onOpen(it)} onTry={onTry} />)}
+      <div className="hs-wrap mk-row-wrap">
+        <div className="mk-row" ref={row} {...hs.rowProps} aria-label={`${title}, scroll sideways`}>
+          {items.map((it) => <AnyTile key={it.key} it={it} counts={stats[it.key]} onOpen={() => onOpen(it)} onTry={onTry} />)}
+        </div>
+        <HArrows edge={hs.edge} page={hs.page} label={title.toLowerCase()} />
       </div>
     </section>
   );
@@ -509,7 +501,7 @@ function EntryTile({ entry, counts, onOpen, onTry }: { entry: MarketEntry; count
   const isTheme = entry.kind === "theme";
   return (
     <div role="link" tabIndex={0} className="mk-tile" onClick={onOpen} onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && onOpen()} data-entry={`${entry.kind}/${entry.id}`}>
-      <div className="mk-cover"><Cover entry={entry} /></div>
+      <div className="mk-cover" data-hs-anchor><Cover entry={entry} /></div>
       <div className="mk-tile-body">
         <div className="mk-tile-title"><b>{entry.name}</b><StateMark state={entry.installed} /></div>
         <p>{firstSentence(entry.description) || KIND_LABEL[entry.kind]}</p>

@@ -372,7 +372,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
 
   // ------------------------------------------------------------- items
   app.get("/api/items", (c) =>
-    c.json(etude.search(c.req.query("q") ?? "", { limit: Math.min(Number(c.req.query("limit") ?? 100), 1000), offset: Number(c.req.query("offset") ?? 0), order: c.req.query("order") })),
+    c.json(etude.search(c.req.query("q") ?? "", { limit: Math.min(Number(c.req.query("limit") ?? 100), 1000), offset: Number(c.req.query("offset") ?? 0), order: c.req.query("order"), reverse: c.req.query("reverse") === "1" })),
   );
   app.get("/api/items/:id", (c) => c.json(etude.item(c.req.param("id"))));
   app.put("/api/items/:id", async (c) => {

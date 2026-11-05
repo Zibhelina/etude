@@ -36,16 +36,17 @@ command({
   args: [{ name: "query", description: "Search; words are joined.", variadic: true }],
   flags: [
     DECK_FLAG,
-    { name: "order", type: "string", description: "Sort order. relevance: with free text, items whose title is or starts with a word come first; otherwise the order added.", values: ["relevance", "added", "due", "deck", "lapses", "difficulty", "updated"], default: "relevance" },
+    { name: "order", type: "string", description: "Sort order. relevance: with free text, items whose title is or starts with a word come first; otherwise the order added.", values: ["relevance", "added", "due", "deck", "lapses", "difficulty", "updated", "title", "type", "interval", "recall"], default: "relevance" },
+    { name: "reverse", type: "boolean", description: "Reverse the sort order (new cards stay last in due, interval and recall order)." },
     { name: "limit", type: "number", description: "Maximum rows.", default: 100 },
     { name: "offset", type: "number", description: "Rows to skip.", default: 0 },
     { name: "ids", type: "boolean", description: "Print only card ids, one per line." },
   ],
   examples: ["etude card list is:due --order due", 'etude card list "prop:lapses>=3" --ids | etude card suspend -'],
-  output: "{ total, rows: [{ cardId, itemId, face, type, deck, tags, title, state, stateName, due, reps, lapses, stability, difficulty, suspended, archived, generated, retrievability }] }",
+  output: "{ total, rows: [{ cardId, itemId, face, type, deck, tags, title, state, stateName, due, reps, lapses, stability, difficulty, interval, updated, suspended, archived, generated, retrievability }] }",
   run(ctx) {
     const q = [ctx.flags.deck ? `deck:"${ctx.flags.deck}"` : "", ctx.args.query.join(" ")].filter(Boolean).join(" ");
-    const r = ctx.e.search(q, { limit: ctx.flags.limit, offset: ctx.flags.offset, order: ctx.flags.order });
+    const r = ctx.e.search(q, { limit: ctx.flags.limit, offset: ctx.flags.offset, order: ctx.flags.order, reverse: ctx.flags.reverse });
     if (ctx.flags.ids) return r.rows.map((x) => x.cardId).join("\n");
     return { ...r, rows: r.rows.map((x) => ({ ...x, stateName: stateName(x.state) })) };
   },

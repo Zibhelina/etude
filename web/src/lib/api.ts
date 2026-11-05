@@ -321,6 +321,10 @@ export interface SearchRow {
   lapses: number;
   stability: number;
   difficulty: number;
+  /** Days between reviews, for cards in review; null while new or learning. */
+  interval: number | null;
+  /** When the item was last edited. */
+  updated: string;
   suspended: boolean;
   archived: boolean;
   generated: boolean;
@@ -555,7 +559,7 @@ export const api = {
   frameHtml: (def: CardType) => call<{ html: string }>("POST", "/api/frame", { def }),
   frameDoc: (html: string) => call<{ url: string }>("POST", "/api/frame-doc", { html }),
 
-  search: (q: string, opts: { limit?: number; offset?: number; order?: string } = {}) => call<{ total: number; rows: SearchRow[] }>("GET", `/api/items${qs({ q, ...opts })}`),
+  search: (q: string, opts: { limit?: number; offset?: number; order?: string; reverse?: boolean } = {}) => call<{ total: number; rows: SearchRow[] }>("GET", `/api/items${qs({ q, ...opts, reverse: opts.reverse ? 1 : undefined })}`),
   item: (id: string) => call<ItemDetail>("GET", `/api/items/${encodeURIComponent(id)}`),
   saveItem: (id: string, item: { type: string; deck: string; fields: Record<string, unknown>; tags: string[]; source?: string; notes?: string; archived?: boolean }) =>
     call<{ result: string; item: ItemDetail }>("PUT", `/api/items/${encodeURIComponent(id)}`, item),

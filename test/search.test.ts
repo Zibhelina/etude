@@ -153,3 +153,18 @@ test("CLI: item list and --query use field search and relevance", async () => {
   assert.deepEqual(JSON.parse((await cli(["item", "list", "tag:noun"])).out).rows.map((r: { id: string }) => r.id), ["junge"]);
   assert.equal((await cli(["search", "nofield:x"])).code, 4);
 });
+
+test("Browse table sorts: title, type, interval and recall, and reverse keeps new cards last", async () => {
+  const e = await setup();
+  const asc = titles(e.search("deck:German", { order: "title" }));
+  assert.deepEqual(asc, ["besonders", "Junge", "viel", "Übung"]);
+  assert.deepEqual(titles(e.search("deck:German", { order: "title", reverse: true })), [...asc].reverse());
+  // Every card is new here, so interval and recall fall back to the order added in both directions.
+  for (const order of ["interval", "recall", "type"]) {
+    assert.deepEqual(items(e.search("deck:German", { order })), ["junge", "viel", "uebung", "besonders"]);
+    assert.deepEqual(items(e.search("deck:German", { order, reverse: true })), ["junge", "viel", "uebung", "besonders"]);
+  }
+  const row = e.search("id:junge").rows[0];
+  assert.equal(row.interval, null);
+  assert.ok(typeof row.updated === "string" && row.updated.length > 0);
+});

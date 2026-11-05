@@ -1,24 +1,81 @@
 // Small layout pieces shared by the settings sections.
-import { useEffect, useId, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { createContext, useContext, useEffect, useId, useState } from "react";
+import { Check, ChevronRight, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
-export function Section({ id, title, description, children, className }: { id?: string; title: string; description?: React.ReactNode; children: React.ReactNode; className?: string }) {
+/** The page section (Account & Sync, Data, ...) a settings Section renders inside. A Section with the page
+ *  section's own id is its main part and shows no label; the others get a small group label above their card. */
+export const SettingsPageContext = createContext<string | null>(null);
+
+/** Opens a Disclosure by id, e.g. when search lands on a field inside it. */
+export const REVEAL_EVENT = "etude:settings-reveal";
+
+export function GroupLabel({ children }: { children: React.ReactNode }) {
+  return <h3 className="mb-2.5 px-0.5 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">{children}</h3>;
+}
+
+/** The rounded panel rows sit in. */
+export function Card({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={cn("settings-card rounded-[14px] bg-card ring-1 ring-border ring-inset", className)}>{children}</div>;
+}
+
+/** A small line under a card, for context that doesn't need a row of its own. */
+export function Note({ children }: { children: React.ReactNode }) {
+  return <div className="mt-2.5 px-1 text-[13px] leading-relaxed text-pretty text-muted-foreground">{children}</div>;
+}
+
+export function Section({ id, title, description, children, className, bare }: { id?: string; title: string; description?: React.ReactNode; children: React.ReactNode; className?: string; bare?: boolean }) {
+  const page = useContext(SettingsPageContext);
+  const main = !page || page === id;
   return (
-    <section id={id} className={cn("scroll-mt-24", className)}>
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-        {description && <div className="mt-1 text-sm leading-relaxed text-muted-foreground">{description}</div>}
-      </div>
-      <div className="rounded-xl border bg-card/40">{children}</div>
+    <section id={id} data-settings-section={id} aria-label={title} className={cn("scroll-mt-24", className)}>
+      {!main && <GroupLabel>{title}</GroupLabel>}
+      {bare ? children : <Card>{children}</Card>}
+      {description && <Note>{description}</Note>}
     </section>
   );
 }
 
-/** One block inside a section card, separated from its neighbours by a hairline.
+/** A labelled card inside a section that has several. */
+export function Group({ title, children, note }: { title?: string; children: React.ReactNode; note?: React.ReactNode }) {
+  return (
+    <div>
+      {title && <GroupLabel>{title}</GroupLabel>}
+      <Card>{children}</Card>
+      {note && <Note>{note}</Note>}
+    </div>
+  );
+}
+
+/** Rarely needed settings, folded under one line. */
+export function Disclosure({ id, title, open: forced, defaultOpen, children }: { id: string; title: string; open?: boolean; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  useEffect(() => {
+    const h = (e: Event) => (e as CustomEvent<string>).detail === id && setOpen(true);
+    window.addEventListener(REVEAL_EVENT, h);
+    return () => window.removeEventListener(REVEAL_EVENT, h);
+  }, [id]);
+  const shown = open || !!forced;
+  return (
+    <div data-disclosure={id}>
+      <button
+        type="button"
+        aria-expanded={shown}
+        onClick={() => setOpen(!shown)}
+        className="-ml-1 inline-flex h-10 items-center gap-1.5 rounded-md px-1 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground md:h-8"
+      >
+        <ChevronRight className={cn("size-4 transition-transform duration-200", shown && "rotate-90")} />
+        {title}
+      </button>
+      {shown && <div className="mt-2 flex flex-col gap-7">{children}</div>}
+    </div>
+  );
+}
+
+/** One row inside a section card, separated from its neighbours by an inset hairline.
  *  A switch in `aside` stays beside the title; a wider control (stackAside) drops below it on phones. */
 export function Block({ title, description, aside, stackAside, children, className }: {
   title?: React.ReactNode;
@@ -29,12 +86,12 @@ export function Block({ title, description, aside, stackAside, children, classNa
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-col gap-4 border-b px-4 py-5 last:border-b-0 sm:px-5", className)}>
+    <div data-settings-row className={cn("settings-block relative flex flex-col gap-4 px-4 py-[15px] first:rounded-t-[14px] last:rounded-b-[14px] sm:px-[18px]", className)}>
       {(title || aside) && (
-        <div className={cn("flex gap-x-4 gap-y-3", stackAside ? "flex-col sm:flex-row sm:items-start" : "items-start")}>
+        <div className={cn("flex gap-x-4 gap-y-3", stackAside ? "flex-col sm:flex-row sm:items-center" : "items-center")}>
           <div className="min-w-0 flex-1">
-            {title && <div className="text-sm font-medium text-foreground/95">{title}</div>}
-            {description && <div className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</div>}
+            {title && <div data-settings-title className="text-[14.5px] font-semibold text-foreground">{title}</div>}
+            {description && <div className="mt-[3px] text-[13px] leading-[1.45] text-pretty text-muted-foreground">{description}</div>}
           </div>
           {aside && <div className="shrink-0">{aside}</div>}
         </div>
@@ -44,10 +101,10 @@ export function Block({ title, description, aside, stackAside, children, classNa
   );
 }
 
-export function Field({ label, hint, error, children, className, htmlFor }: { label: string; hint?: React.ReactNode; error?: string; children: React.ReactNode; className?: string; htmlFor?: string }) {
+export function Field({ label, hint, error, children, className, htmlFor, hideLabel }: { label: string; hint?: React.ReactNode; error?: string; children: React.ReactNode; className?: string; htmlFor?: string; hideLabel?: boolean }) {
   return (
     <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
-      <label htmlFor={htmlFor} className="text-xs font-medium text-muted-foreground">{label}</label>
+      <label htmlFor={htmlFor} className={cn("text-xs font-medium text-muted-foreground", hideLabel && "sr-only")}>{label}</label>
       {children}
       {error ? <p className="text-xs text-destructive">{error}</p> : hint ? <p className="text-xs text-muted-foreground/80">{hint}</p> : null}
     </div>
@@ -84,8 +141,9 @@ export function TextField({ label, hint, error, value, onChange, placeholder, mo
 }
 
 /** A number input that lets the text be briefly invalid while typing; reports NaN for unparsable text. */
-export function NumberField({ label, hint, error, value, onChange, suffix, step, className, min, max }: {
+export function NumberField({ label, hint, error, value, onChange, suffix, step, className, min, max, hideLabel }: {
   label: string;
+  hideLabel?: boolean;
   hint?: React.ReactNode;
   error?: string;
   value: number | undefined;
@@ -103,8 +161,8 @@ export function NumberField({ label, hint, error, value, onChange, suffix, step,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
   return (
-    <Field label={label} hint={hint} error={error} className={className} htmlFor={id}>
-      <div className="relative sm:max-w-48">
+    <Field label={label} hint={hint} error={error} className={className} htmlFor={id} hideLabel={hideLabel}>
+      <div className={cn("relative", !hideLabel && "sm:max-w-48")}>
         <Input
           id={id}
           inputMode="decimal"
@@ -166,5 +224,5 @@ export function Kbd({ children }: { children: React.ReactNode }) {
 
 /** The shared switch with a hit area big enough for a finger. */
 export function BigSwitch(props: React.ComponentProps<typeof Switch>) {
-  return <Switch {...props} className={cn("relative mt-0.5 after:absolute after:-inset-3 after:content-['']", props.className)} />;
+  return <Switch {...props} className={cn("relative after:absolute after:-inset-3 after:content-['']", props.className)} />;
 }

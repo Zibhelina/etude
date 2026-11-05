@@ -410,6 +410,16 @@ These work on every command, before or after the command words.
   - [`market publish`](#market-publish) Share a theme, deck or card type: opens a pull request on the market repository with your GitHub account.
   - [`market check`](#market-check) Validate market entry files without a database. Exits 4 on problems.
   - [`market index`](#market-index) For the market repository: check every file under entries/ (each deck and type is dry-run imported) and write index.json.
+  - [`market stats`](#market-stats) Likes, dislikes, downloads and comment counts: one entry (with your vote when signed in), or every entry that has any.
+  - [`market vote`](#market-vote) Like or dislike an entry, or take your vote back. One vote per account.
+  - [`market comments`](#market-comments) Comments on an entry, newest first, 20 at a time. Signed in, people you blocked are left out.
+  - [`market comment`](#market-comment) Post a comment on an entry (up to 2000 characters). It shows under your account's display name right away.
+  - [`market comment-edit`](#market-comment-edit) Change one of your comments.
+  - [`market comment-delete`](#market-comment-delete) Delete one of your comments.
+  - [`market report`](#market-report) Report a comment to the Etude team. Three reports from different people hide it until the team decides.
+  - [`market block`](#market-block) Stop seeing someone's comments (by the author id a comment shows). Only you stop seeing them.
+  - [`market unblock`](#market-unblock) See someone's comments again.
+  - [`market blocks`](#market-blocks) People whose comments you blocked.
 - **agent**: The in-app assistant: ask it to change your collection, list and manage its conversations (`etude agent` alone runs `list`)
   - [`agent ask`](#agent-ask) Send a message to the assistant and wait for its reply. It can run Etude commands on the collection.
   - [`agent list`](#agent-list) Conversations with the assistant, newest first.
@@ -4878,6 +4888,212 @@ Output: { ok, entries, problems: [{ path, errors }], written? }
 etude market index .
 etude market index . --check
 ```
+
+### etude market stats
+
+<a id="market-stats"></a>
+
+Likes, dislikes, downloads and comment counts: one entry (with your vote when signed in), or every entry that has any.
+
+```
+etude market stats [key]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `key` (optional) | The entry: deck/<id>, theme/<id>, type/<id> or paid/<listing id>. |
+
+Output: { key, likes, dislikes, downloads, comments, myVote? } or { entries: { [key]: { likes, dislikes, downloads, comments } } }
+
+```sh
+etude market stats
+etude market stats deck/countries-of-the-world
+```
+
+### etude market vote
+
+<a id="market-vote"></a>
+
+Like or dislike an entry, or take your vote back. One vote per account.
+
+```
+etude market vote <key> <vote>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `key` | The entry: deck/<id>, theme/<id>, type/<id> or paid/<listing id>. |
+| `vote` | like, dislike or none. |
+
+Output: { key, likes, dislikes, downloads, comments, myVote }
+
+```sh
+etude market vote deck/periodic-table like
+etude market vote theme/nord none
+```
+
+### etude market comments
+
+<a id="market-comments"></a>
+
+Comments on an entry, newest first, 20 at a time. Signed in, people you blocked are left out.
+
+```
+etude market comments <key> [flags]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `key` | The entry: deck/<id>, theme/<id>, type/<id> or paid/<listing id>. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--before <COMMENT-ID>` | string | The page after this one: the previous answer's `next`. |
+
+Output: { key, comments: [{ id, key, body, author: { id, name }, mine, created, edited }], next }
+
+```sh
+etude market comments deck/countries-of-the-world
+```
+
+### etude market comment
+
+<a id="market-comment"></a>
+
+Post a comment on an entry (up to 2000 characters). It shows under your account's display name right away.
+
+```
+etude market comment <key> <text...>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `key` | The entry: deck/<id>, theme/<id>, type/<id> or paid/<listing id>. |
+| `text...` | The comment. |
+
+Output: { comment }
+
+```sh
+etude market comment deck/periodic-table "The lanthanide cards are great"
+```
+
+### etude market comment-edit
+
+<a id="market-comment-edit"></a>
+
+Change one of your comments.
+
+```
+etude market comment-edit <id> <text...>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Comment id (cmt_…). |
+| `text...` | The new text. |
+
+Output: { comment }
+
+### etude market comment-delete
+
+<a id="market-comment-delete"></a>
+
+Delete one of your comments.
+
+```
+etude market comment-delete <id>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Comment id (cmt_…). |
+
+Output: { ok, deleted }
+
+### etude market report
+
+<a id="market-report"></a>
+
+Report a comment to the Etude team. Three reports from different people hide it until the team decides.
+
+```
+etude market report <id> [reason...]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Comment id (cmt_…). |
+| `reason...` (optional) | What's wrong with it. |
+
+Output: { ok, counted, hidden }
+
+```sh
+etude market report cmt_abc "spam"
+```
+
+### etude market block
+
+<a id="market-block"></a>
+
+Stop seeing someone's comments (by the author id a comment shows). Only you stop seeing them.
+
+```
+etude market block <author>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `author` | Author id (au_…). |
+
+Output: { ok, blocked }
+
+### etude market unblock
+
+<a id="market-unblock"></a>
+
+See someone's comments again.
+
+```
+etude market unblock <author>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `author` | Author id (au_…). |
+
+Output: { ok, unblocked }
+
+### etude market blocks
+
+<a id="market-blocks"></a>
+
+People whose comments you blocked.
+
+```
+etude market blocks
+```
+
+*read-only*
+
+Output: { blocks: [{ authorId, name, created }] }
 
 ## agent
 

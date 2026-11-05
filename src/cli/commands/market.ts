@@ -23,6 +23,7 @@ import {
   summarize,
   type MarketKind,
 } from "../../core/market.ts";
+import { accountFor, AccountError, pingFreeInstall } from "../../core/account.ts";
 import { command, group, CliError, Failed } from "../registry.ts";
 import { parseJson, readSource } from "../input.ts";
 
@@ -86,8 +87,12 @@ command({
   async run(ctx) {
     let out;
     if (ctx.flags.file) out = installFile(ctx.e, parseJson(readSource(ctx, ctx.flags.file), ctx.flags.file), { dryRun: ctx.dry });
-    else if (ctx.args.id) out = await installEntry(ctx.e, ctx.args.id, { url: ctx.flags.url, kind: ctx.flags.kind as MarketKind | undefined, dryRun: ctx.dry });
-    else throw new CliError("give an entry id or --file", "usage");
+    else if (ctx.args.id) {
+      out = await installEntry(ctx.e, ctx.args.id, { url: ctx.flags.url, kind: ctx.flags.kind as MarketKind | undefined, dryRun: ctx.dry });
+      // The anonymous download count (official catalog only). Awaited so it isn't cut off when the CLI exits; it gives
+      // up after a few seconds and never fails the install.
+      await pingFreeInstall(ctx.e, out, ctx.flags.url ?? marketSettings(ctx.e).url);
+    } else throw new CliError("give an entry id or --file", "usage");
     if (ctx.flags.use && out.entry.kind === "theme" && !ctx.dry) ctx.e.selectTheme(out.ids[0]);
     return out;
   },
@@ -213,4 +218,121 @@ command({
     }
     return out;
   },
+});
+
+// ------------------------------------------------------------------ likes, downloads and comments
+// On the Etude server, for free and paid entries alike. Reading needs no account; voting, commenting, reporting and
+// blocking need `account signin`.
+
+const KEY_ARG = { name: "key", description: "The entry: deck/<id>, theme/<id>, type/<id> or paid/<listing id>.", required: true };
+
+/** Server answers become CLI errors with the matching exit code. */
+async function cloud<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (e instanceof AccountError) {
+      const code = e.status === 404 ? "not_found" : e.status === 409 ? "conflict" : e.status === 502 || e.status >= 500 ? "external" : e.status === 400 || e.status === 422 ? "validation" : "usage";
+      throw new CliError(e.message, code, { status: e.status, code: e.code });
+    }
+    throw e;
+  }
+}
+const acct = (c: { e: any }) => accountFor(c.e);
+const VOTES: Record<string, 1 | -1 | 0> = { like: 1, dislike: -1, none: 0 };
+
+command({
+  name: "market stats",
+  summary: "Likes, dislikes, downloads and comment counts: one entry (with your vote when signed in), or every entry that has any.",
+  args: [{ ...KEY_ARG, required: false }],
+  examples: ["etude market stats", "etude market stats deck/countries-of-the-world"],
+  output: "{ key, likes, dislikes, downloads, comments, myVote? } or { entries: { [key]: { likes, dislikes, downloads, comments } } }",
+  run: (c) => cloud(() => (c.args.key ? acct(c).entryStats(c.args.key) : acct(c).marketStats())),
+});
+
+command({
+  name: "market vote",
+  summary: "Like or dislike an entry, or take your vote back. One vote per account.",
+  args: [KEY_ARG, { name: "vote", description: "like, dislike or none.", required: true }],
+  writes: true,
+  examples: ["etude market vote deck/periodic-table like", "etude market vote theme/nord none"],
+  output: "{ key, likes, dislikes, downloads, comments, myVote }",
+  run(c) {
+    const value = VOTES[String(c.args.vote).toLowerCase()];
+    if (value === undefined) throw new CliError("the vote is like, dislike or none", "usage");
+    return cloud(() => acct(c).vote(c.args.key, value));
+  },
+});
+
+command({
+  name: "market comments",
+  summary: "Comments on an entry, newest first, 20 at a time. Signed in, people you blocked are left out.",
+  args: [KEY_ARG],
+  flags: [{ name: "before", type: "string", description: "The page after this one: the previous answer's `next`.", placeholder: "COMMENT-ID" }],
+  examples: ["etude market comments deck/countries-of-the-world"],
+  output: "{ key, comments: [{ id, key, body, author: { id, name }, mine, created, edited }], next }",
+  run: (c) => cloud(() => acct(c).comments(c.args.key, c.flags.before)),
+});
+
+command({
+  name: "market comment",
+  summary: "Post a comment on an entry (up to 2000 characters). It shows under your account's display name right away.",
+  args: [KEY_ARG, { name: "text", description: "The comment.", required: true, variadic: true }],
+  writes: true,
+  examples: ['etude market comment deck/periodic-table "The lanthanide cards are great"'],
+  output: "{ comment }",
+  run: (c) => cloud(() => acct(c).postComment(c.args.key, ([] as string[]).concat(c.args.text).join(" "))),
+});
+
+command({
+  name: "market comment-edit",
+  summary: "Change one of your comments.",
+  args: [{ name: "id", description: "Comment id (cmt_…).", required: true }, { name: "text", description: "The new text.", required: true, variadic: true }],
+  writes: true,
+  output: "{ comment }",
+  run: (c) => cloud(() => acct(c).editComment(c.args.id, ([] as string[]).concat(c.args.text).join(" "))),
+});
+
+command({
+  name: "market comment-delete",
+  summary: "Delete one of your comments.",
+  args: [{ name: "id", description: "Comment id (cmt_…).", required: true }],
+  writes: true,
+  output: "{ ok, deleted }",
+  run: (c) => cloud(() => acct(c).deleteComment(c.args.id)),
+});
+
+command({
+  name: "market report",
+  summary: "Report a comment to the Etude team. Three reports from different people hide it until the team decides.",
+  args: [{ name: "id", description: "Comment id (cmt_…).", required: true }, { name: "reason", description: "What's wrong with it.", variadic: true }],
+  writes: true,
+  examples: ['etude market report cmt_abc "spam"'],
+  output: "{ ok, counted, hidden }",
+  run: (c) => cloud(() => acct(c).reportComment(c.args.id, c.args.reason ? ([] as string[]).concat(c.args.reason).join(" ") : undefined)),
+});
+
+command({
+  name: "market block",
+  summary: "Stop seeing someone's comments (by the author id a comment shows). Only you stop seeing them.",
+  args: [{ name: "author", description: "Author id (au_…).", required: true }],
+  writes: true,
+  output: "{ ok, blocked }",
+  run: (c) => cloud(() => acct(c).block(c.args.author)),
+});
+
+command({
+  name: "market unblock",
+  summary: "See someone's comments again.",
+  args: [{ name: "author", description: "Author id (au_…).", required: true }],
+  writes: true,
+  output: "{ ok, unblocked }",
+  run: (c) => cloud(() => acct(c).unblock(c.args.author)),
+});
+
+command({
+  name: "market blocks",
+  summary: "People whose comments you blocked.",
+  output: "{ blocks: [{ authorId, name, created }] }",
+  run: (c) => cloud(() => acct(c).blocks()),
 });

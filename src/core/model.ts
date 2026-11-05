@@ -256,6 +256,8 @@ export interface Deck {
   archived: boolean;
   /** Order among sibling decks (null: unordered, after the ordered ones, by name). */
   position: number | null;
+  /** The deck's picture in the Library: `art:<id>` (a built-in illustration), `emoji:<emoji>`, or null for none. */
+  icon: string | null;
 }
 
 export interface Item {

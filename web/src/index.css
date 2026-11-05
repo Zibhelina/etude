@@ -333,3 +333,24 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 }
 /* iPad: a little smaller. */
 @media (max-width: 1023px) { .minimi { transform: scale(0.78); transform-origin: 100% 100%; } }
+
+/* ---------------------------------------------------------------- Card types (gallery and type page) */
+.types-kicker { font-size: 13.5px; line-height: 1.2; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: color-mix(in oklab, var(--foreground) 72%, var(--muted-foreground)); }
+.types-badge { display: inline-flex; flex-shrink: 0; align-items: center; height: 1.25rem; padding: 0 0.4rem; border-radius: 0.3rem; background: var(--muted); color: var(--muted-foreground); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+/* The secondary buttons stand on a small edge, like the primary one. */
+.types-raised { box-shadow: 0 2px 0 var(--border); }
+.types-raised:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--border); }
+/* A tile's card sits on the page colour, so the card's own surface reads as the card. */
+.types-well { background: color-mix(in oklab, var(--background) 55%, var(--card)); }
+.types-well-fade { mask-image: linear-gradient(to bottom, #000 78%, transparent); }
+.types-tile { transition: box-shadow 0.15s, transform 0.15s; }
+@media (hover: hover) { .types-tile:hover { box-shadow: 0 6px 22px -12px color-mix(in oklab, var(--foreground) 35%, transparent); } }
+.types-tile:has(> button:focus-visible) { box-shadow: 0 0 0 2px var(--ring); }
+.types-bubble::before { content: ""; position: absolute; left: -6px; top: 16px; width: 12px; height: 12px; background: inherit; transform: rotate(45deg); border-radius: 2px; }
+.types-search:focus-within { border-color: var(--ring); }
+.types-live { min-height: 8rem; }
+@media (max-width: 639px) {
+  .types-list > .types-tile, .types-grid2 > .types-tile { width: auto; }
+  .types-row { scrollbar-width: none; }
+  .types-row::-webkit-scrollbar { display: none; }
+}

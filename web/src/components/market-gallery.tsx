@@ -8,81 +8,88 @@ import "./market-gallery.css";
 
 const isVideo = (p: string) => /\.(mp4|webm)$/.test(p);
 
-/**
- * App Store-style screenshot strip: every preview keeps its own shape at one shared height,
- * so landscape and portrait shots sit side by side. Clips play muted while they're on screen.
- */
-export function MarketGallery({ entry, fallback }: { entry: MarketEntry; fallback: React.ReactNode }) {
-  const media = (entry as MarketEntry & { media?: string[] }).media ?? [];
-  const rail = useRef<HTMLDivElement>(null);
-  const [edges, setEdges] = useState({ start: true, end: true });
-  const [zoom, setZoom] = useState<number | null>(null);
-  const shots = media.map((p, i) => (isVideo(p) ? -1 : i)).filter((i) => i >= 0);
+type Slide = { kind: "cover" } | { kind: "image"; src: string } | { kind: "video"; src: string };
 
+/**
+ * The detail page's gallery: one large view with the cover first, then the entry's screenshots and clips,
+ * and a row of thumbnails to pick from. Screenshots open full size; clips play muted while on screen.
+ */
+export function MarketGallery({ entry, cover }: { entry: MarketEntry; cover: React.ReactNode }) {
+  const media = (entry as MarketEntry & { media?: string[] }).media ?? [];
   const url = (i: number) => {
     const u = new URL(api.marketCoverUrl(entry.kind, entry.id), location.origin);
     u.pathname = u.pathname.replace("/cover/", "/media/") + `/${i}`;
     return u.pathname + u.search;
   };
+  const slides: Slide[] = [{ kind: "cover" }, ...media.map((p, i): Slide => (isVideo(p) ? { kind: "video", src: url(i) } : { kind: "image", src: url(i) }))];
+  return <Gallery name={entry.name} slides={slides} cover={cover} thumb={entry.kind === "theme" ? cover : entry.cover ? <EtudeImg src={api.marketCoverUrl(entry.kind, entry.id)} alt="" /> : cover} />;
+}
 
-  const measure = () => {
-    const el = rail.current;
-    if (el) setEdges({ start: el.scrollLeft < 4, end: el.scrollLeft + el.clientWidth > el.scrollWidth - 4 });
-  };
-  useEffect(() => {
-    measure();
-    const el = rail.current;
-    if (!el) return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [media.length]);
+/** The same gallery for anything with just a cover (paid decks). */
+export function CoverGallery({ cover }: { cover: React.ReactNode }) {
+  return <Gallery name="" slides={[{ kind: "cover" }]} cover={cover} thumb={cover} />;
+}
 
-  const page = (dir: 1 | -1) => {
-    const el = rail.current;
-    if (!el) return;
-    el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
-  };
-
-  if (!media.length) return <section className="market-gallery market-gallery-single">{fallback}</section>;
-
+function Gallery({ name, slides, cover, thumb }: { name: string; slides: Slide[]; cover: React.ReactNode; thumb: React.ReactNode }) {
+  const [i, setI] = useState(0);
+  const [zoom, setZoom] = useState<number | null>(null);
+  const shots = slides.map((s, j) => (s.kind === "image" ? j : -1)).filter((j) => j >= 0);
+  const cur = slides[Math.min(i, slides.length - 1)];
+  const step = (d: number) => setI((x) => Math.max(0, Math.min(slides.length - 1, x + d)));
   return (
-    <section className={cn("market-gallery", !edges.start && "fade-start", !edges.end && "fade-end")} aria-label={`${entry.name} previews`}>
+    <section className="mk-gal" aria-label={name ? `${name} previews` : undefined}>
       <div
-        ref={rail}
-        className="market-gallery-rail"
-        tabIndex={0}
-        onScroll={measure}
+        className="mk-gal-main"
+        tabIndex={slides.length > 1 ? 0 : -1}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget || (e.key !== "ArrowRight" && e.key !== "ArrowLeft")) return;
           e.preventDefault();
-          page(e.key === "ArrowRight" ? 1 : -1);
+          step(e.key === "ArrowRight" ? 1 : -1);
         }}
       >
-        {media.map((path, i) =>
-          isVideo(path) ? (
-            <Clip key={path} src={url(i)} label={`${entry.name}, preview video`} onReady={measure} />
-          ) : (
-            <button type="button" className="market-shot" key={path} onClick={() => setZoom(i)} aria-label={`Open screenshot ${i + 1}`}>
-              <EtudeImg src={url(i)} alt={`${entry.name}, screenshot ${i + 1}`} loading={i < 3 ? "eager" : "lazy"} onLoad={measure} />
-            </button>
-          ),
+        {cur.kind === "cover" ? (
+          <div className="mk-gal-cover">{cover}</div>
+        ) : cur.kind === "video" ? (
+          <Clip key={cur.src} src={cur.src} label={`${name}, preview video`} />
+        ) : (
+          <button type="button" className="mk-gal-shot" onClick={() => setZoom(i)} aria-label="Open screenshot full size">
+            <EtudeImg src={cur.src} alt={`${name}, screenshot ${i}`} />
+          </button>
+        )}
+        {slides.length > 1 && (
+          <>
+            <button type="button" className={cn("mk-gal-arrow left", i === 0 && "gone")} aria-label="Previous preview" tabIndex={-1} onClick={() => step(-1)}><ChevronLeft className="size-5" /></button>
+            <button type="button" className={cn("mk-gal-arrow right", i === slides.length - 1 && "gone")} aria-label="Next preview" tabIndex={-1} onClick={() => step(1)}><ChevronRight className="size-5" /></button>
+          </>
         )}
       </div>
-      {zoom !== null && <Lightbox srcs={shots.map((s) => url(s))} start={shots.indexOf(zoom)} name={entry.name} onClose={() => setZoom(null)} />}
-      <button className={cn("market-gallery-arrow left", edges.start && "gone")} aria-label="Previous previews" tabIndex={-1} onClick={() => page(-1)}>
-        <ChevronLeft className="size-5" />
-      </button>
-      <button className={cn("market-gallery-arrow right", edges.end && "gone")} aria-label="Next previews" tabIndex={-1} onClick={() => page(1)}>
-        <ChevronRight className="size-5" />
-      </button>
+      {slides.length > 1 && (
+        <div className="mk-gal-thumbs" role="tablist" aria-label="Previews">
+          {slides.map((s, j) => (
+            <button key={j} type="button" role="tab" aria-selected={j === i} className={cn(j === i && "on")} onClick={() => setI(j)} aria-label={s.kind === "video" ? "Preview video" : s.kind === "cover" ? "Cover" : `Screenshot ${j}`}>
+              {s.kind === "cover" ? thumb : s.kind === "image" ? <EtudeImg src={s.src} alt="" loading="lazy" /> : <VideoThumb src={s.src} />}
+            </button>
+          ))}
+        </div>
+      )}
+      {zoom !== null && <Lightbox srcs={shots.map((j) => (slides[j] as { src: string }).src)} start={shots.indexOf(zoom)} name={name} onClose={() => setZoom(null)} onMove={(k) => setI(shots[k])} />}
     </section>
   );
 }
 
+function VideoThumb({ src }: { src: string }) {
+  return (
+    <>
+      <video src={useEtudeSrc(src)} muted playsInline preload="metadata" tabIndex={-1} />
+      <span className="mk-gal-play"><Play className="size-3.5 fill-current" /></span>
+    </>
+  );
+}
+
 /** Full-size screenshot viewer: ← → to move, Esc or a click outside to close. */
-function Lightbox({ srcs, start, name, onClose }: { srcs: string[]; start: number; name: string; onClose(): void }) {
+function Lightbox({ srcs, start, name, onClose, onMove }: { srcs: string[]; start: number; name: string; onClose(): void; onMove(i: number): void }) {
   const [i, setI] = useState(Math.max(0, start));
+  useEffect(() => onMove(i), [i]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); }
@@ -92,7 +99,6 @@ function Lightbox({ srcs, start, name, onClose }: { srcs: string[]; start: numbe
     window.addEventListener("keydown", key, true);
     return () => window.removeEventListener("keydown", key, true);
   }, [srcs.length, onClose]);
-  // Portaled to <body>: the dialog's transform would otherwise trap position:fixed inside it.
   return createPortal(
     <div className="market-lightbox" role="dialog" aria-modal="true" aria-label={`${name}, screenshot ${i + 1} of ${srcs.length}`} onClick={onClose}>
       <EtudeImg src={srcs[i]} alt={`${name}, screenshot ${i + 1}`} onClick={(e) => e.stopPropagation()} />
@@ -110,7 +116,7 @@ function Lightbox({ srcs, start, name, onClose }: { srcs: string[]; start: numbe
 }
 
 /** A muted looping clip that plays only while it's mostly on screen, with one small play/pause button. */
-function Clip({ src, label, onReady }: { src: string; label: string; onReady(): void }) {
+function Clip({ src, label }: { src: string; label: string }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(true);
   const userPaused = useRef(false);
@@ -133,8 +139,8 @@ function Clip({ src, label, onReady }: { src: string; label: string; onReady(): 
     else v.pause();
   };
   return (
-    <figure className="market-shot market-clip">
-      <video ref={ref} src={useEtudeSrc(src)} muted loop playsInline preload="auto" aria-label={label} onLoadedMetadata={onReady} onPlay={() => setPaused(false)} onPause={() => setPaused(true)} onClick={toggle} />
+    <figure className="mk-gal-clip">
+      <video ref={ref} src={useEtudeSrc(src)} muted loop playsInline preload="auto" aria-label={label} onPlay={() => setPaused(false)} onPause={() => setPaused(true)} onClick={toggle} />
       <button className="market-clip-toggle" aria-label={paused ? "Play preview" : "Pause preview"} onClick={toggle}>
         {paused ? <Play className="size-3.5 fill-current" /> : <Pause className="size-3.5 fill-current" />}
       </button>

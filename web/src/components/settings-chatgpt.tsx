@@ -232,7 +232,7 @@ export function ChatGptBlock({ provider, error, onChange }: { provider: ChatGptP
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <Button
-              className="h-10 gap-2 bg-foreground px-4 text-background hover:bg-foreground/85"
+              className="h-10 gap-2 bg-foreground px-4 text-background shadow-none hover:bg-foreground/85 active:shadow-none"
               onClick={start}
               disabled={busy !== null || !!waitingUrl}
             >

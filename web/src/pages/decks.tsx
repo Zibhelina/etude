@@ -11,11 +11,12 @@ import { EmptyState, Page } from "@/components/page";
 import { childrenOf, clashes, leafOf, moveDeck, MoveDeckDialog, parentOf } from "@/components/move-deck";
 import { usePhone } from "@/lib/phone";
 import { PhoneDecks } from "@/components/phone-decks";
-import { DeckContextMenu, DeckMenu, type DeckMenuEntry, useDeckActions } from "@/components/deck-actions";
+import { DeckContextMenu, type DeckMenuEntry, useDeckActions } from "@/components/deck-actions";
 import { Mark } from "@/components/phone-shell";
 import { ChangeIconDialog, DeckIcon } from "@/components/deck-icon";
 import { DonePanel, SessionCard, StreakCelebration, useMilestone } from "@/components/library-session";
 import { ArchivePage } from "@/pages/archive";
+import { ArchiveLink, useArchiveCount } from "@/components/archive-link";
 
 /** Where a dragged deck would land: between rows (`line`) or inside a deck (`into`). */
 type Drop = { kind: "line" | "into"; parent: string; index: number | undefined; y: number; depth: number };
@@ -83,6 +84,7 @@ export function DeckCounts({ d, note, className }: { d: DeckNode; note?: string;
 }
 
 function DesktopDecks() {
+  const archived = useArchiveCount();
   const { decks, stats, reload } = useLibrary();
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(JSON.parse(localStorage.getItem("etude.collapsed") ?? "[]")));
   const [creating, setCreating] = useState(false);
@@ -341,7 +343,6 @@ function DesktopDecks() {
                         {soon && <span className="inline-flex shrink-0 items-center gap-1 text-xs text-highlight"><CalendarClock className="size-3.5" />{relative(d.deadline!)}</span>}
                       </div>
                     </div>
-                    <DeckMenu {...menu} className="size-[34px] rounded-lg" />
                     <button
                       className={cn("lib-play flex size-[38px] shrink-0 items-center justify-center rounded-full transition-[transform,background-color,color] active:scale-90 disabled:opacity-40", !w && !(watch && d.cards) && "dim")}
                       disabled={!d.cards}
@@ -366,7 +367,7 @@ function DesktopDecks() {
             )}
           </div>
           {q && visible.length === 0 && <p className="px-1 py-8 text-center text-sm text-muted-foreground">No deck matches “{query}”.</p>}
-          <button onClick={() => navigate("/archive")} className="mt-6 ml-1 inline-flex h-9 items-center gap-2 text-[13.5px] text-muted-foreground hover:text-foreground">Archive<ChevronRight className="size-3.5" /></button>
+          <ArchiveLink count={archived} className="mt-6" />
         </section>
       )}
       {q && decks && visible.length === 0 && <p className="mt-10 text-center text-sm text-muted-foreground">No deck matches “{query}”.</p>}

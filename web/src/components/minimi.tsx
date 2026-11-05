@@ -1,7 +1,7 @@
 // Minimi, Etude's mascot, in the corner (Fun mode, desktop and iPad). He sits reading; on hover he looks up
 // with "Ask me"; a click opens Ask Etude. He can be dragged anywhere in the window: he lifts and tilts while
 // carried, squashes a little when dropped, and stays where he was put (per device size). Dropping him near
-// his corner sends him home.
+// his corner sends him home. While his mini chat is open he looks up at you.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import read from "@/assets/minimi/read.webp";
 import down from "@/assets/minimi/down.webp";
@@ -31,7 +31,7 @@ const savePos = (p: Pos) => {
   } catch {}
 };
 
-export function MinimiCorner({ onOpen, shortcut, rightOffset = "0px" }: { onOpen(): void; shortcut: string; rightOffset?: string }) {
+export function MinimiCorner({ onOpen, shortcut, rightOffset = "0px", talking = false }: { onOpen(): void; shortcut: string; rightOffset?: string; talking?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [page, setPage] = useState(false);
@@ -115,7 +115,7 @@ export function MinimiCorner({ onOpen, shortcut, rightOffset = "0px" }: { onOpen
       ref={ref}
       data-minimi
       onPointerDown={onPointerDown}
-      className={cn("minimi group fixed z-30 touch-none select-none", drag ? "cursor-grabbing" : "cursor-grab", drag && "is-drag", drag?.near && "is-near", land && "is-land")}
+      className={cn("minimi group fixed z-30 touch-none select-none", drag ? "cursor-grabbing" : "cursor-grab", drag && "is-drag", drag?.near && "is-near", land && "is-land", talking && "is-talk")}
       style={pos ? { left: pos.x, top: pos.y, width: W, height: H } : { right: `calc(${MARGIN}px + ${rightOffset})`, bottom: MARGIN, width: W, height: H }}
     >
       <div role="tooltip" className={cn("minimi-tip pointer-events-none absolute right-0 rounded-xl bg-card px-3 py-2 text-[13.5px] leading-snug whitespace-nowrap text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.08),0_8px_22px_rgb(0_0_0/0.10)] ring-1 ring-border", tipBelow ? "top-[calc(100%+6px)]" : "bottom-[128px] rounded-br-sm")}>
@@ -124,7 +124,7 @@ export function MinimiCorner({ onOpen, shortcut, rightOffset = "0px" }: { onOpen
         <b className="font-semibold">Ask me</b> <kbd className="ml-1 rounded-[5px] bg-muted px-1.5 py-px text-muted-foreground">{shortcut}</kbd>
         <span className="mt-0.5 block text-[11.5px] text-muted-foreground/70">or drag me</span>
       </div>
-      <button type="button" onClick={onOpen} aria-label={`Ask Minimi · ${shortcut}`} data-agent-launcher className="minimi-btn relative block size-full rounded-2xl outline-ring focus-visible:outline-2">
+      <button type="button" onClick={onOpen} aria-label={`Ask Minimi · ${shortcut}`} aria-expanded={talking} data-agent-launcher className="minimi-btn relative block size-full rounded-2xl outline-ring focus-visible:outline-2">
         <img src={read} alt="" draggable={false} className={cn("minimi-fr", !page && "on")} />
         <img src={down} alt="" draggable={false} className={cn("minimi-fr", page && "on")} />
         <img src={look} alt="" draggable={false} className="minimi-fr minimi-look" />

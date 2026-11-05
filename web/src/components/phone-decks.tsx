@@ -11,6 +11,7 @@ import { childrenOf, clashes, leafOf, moveDeck, MoveDeckDialog, parentOf } from 
 import { ActionSheet, PhoneIconButton, PhoneTitle, type SheetAction } from "@/components/phone-shell";
 import { DeckCounts, NewDeckDialog, todayKicker, useImportPicker, useLibrary } from "@/pages/decks";
 import { DeckMenu, type DeckMenuEntry, useDeckActions } from "@/components/deck-actions";
+import { ArchiveLink, useArchiveCount } from "@/components/archive-link";
 import { ChangeIconDialog, DeckIcon } from "@/components/deck-icon";
 import { DonePanel, SessionCard, StreakCelebration, useMilestone } from "@/components/library-session";
 
@@ -25,6 +26,7 @@ export function practiceUrl(d: DeckNode) {
 
 export function PhoneDecks() {
   const { decks, stats, reload } = useLibrary();
+  const archivedCount = useArchiveCount();
   const [creating, setCreating] = useState(false);
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState<string | null>(null);
@@ -92,7 +94,7 @@ export function PhoneDecks() {
         top.length > 0 && <DeckList decks={all} parent="" label="Decks" aside={`${top.length} · ${plural(cards, "card")}`} onChanged={reload} />
       )}
       {!q && decks && decks.length > 0 && (
-        <button onClick={() => navigate("/archive")} className="mx-5 mt-5 flex min-h-11 items-center gap-2 text-[14px] text-muted-foreground"><Archive className="size-4" />Archive</button>
+        <div className="mx-5 mt-5"><ArchiveLink count={archivedCount} /></div>
       )}
 
       <ActionSheet

@@ -357,6 +357,33 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 @media (prefers-reduced-motion: reduce) {
   .minimi:hover .minimi-btn, .minimi.is-land .minimi-btn { animation: none; }
 }
+/* While his mini chat is open he looks up at you, and the hover tip stays out of the way. */
+.minimi.is-talk .minimi-fr { opacity: 0; }
+.minimi.is-talk .minimi-look { opacity: 1; }
+.minimi.is-talk .minimi-tip { display: none; }
+
+/* ---------------------------------------------------------------- Minimi's mini chat (components/minimi-chat.tsx) */
+.mchat { background: var(--card); border-radius: 18px; box-shadow: 0 2px 4px rgb(0 0 0 / 0.06), 0 24px 60px rgb(0 0 0 / 0.14), inset 0 0 0 1px var(--border); animation: mchat-pop 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); transform-origin: bottom left; }
+.mchat.is-flip { transform-origin: bottom right; }
+.dark .mchat { box-shadow: inset 0 0 0 1px var(--border), 0 24px 60px rgb(0 0 0 / 0.6); }
+/* The tail points at Minimi: on the left edge when he sits left of the card, on the right when he sits right. */
+.mchat::before { content: ""; position: absolute; top: var(--ty, 40px); width: 14px; height: 14px; background: inherit; transform: rotate(45deg); pointer-events: none; }
+.mchat.is-right::before { left: -7px; box-shadow: -1px 1px 0 0 var(--border); border-radius: 0 0 0 3px; }
+.mchat.is-flip::before { right: -7px; box-shadow: 1px -1px 0 0 var(--border); border-radius: 0 3px 0 0; }
+.mchat.no-tail::before { display: none; }
+.mchat > * { position: relative; }
+.mchat-me { background: var(--background); box-shadow: inset 0 0 0 1px var(--border); }
+.dark .mchat-me { background: color-mix(in oklab, var(--card), var(--foreground) 6%); }
+.mchat-me .agent-prose { font-size: 14.5px; line-height: 1.42; }
+.mchat-you { background: color-mix(in oklab, var(--primary) 16%, var(--card)); }
+.mchat-chip { font-size: 13px; font-weight: 550; padding: 6px 10px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--border); color: var(--foreground); transition: background-color 0.12s; }
+.mchat-chip:hover { background: var(--muted); }
+.mchat-pill { background: var(--background); box-shadow: inset 0 0 0 1px var(--border); }
+.dark .mchat-pill { background: color-mix(in oklab, var(--background), black 25%); }
+.mchat-pill:focus-within { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 28%, transparent); }
+@keyframes mchat-pop { from { opacity: 0; transform: scale(0.92) translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .mchat { animation: none; } }
+
 /* iPad: a little smaller. */
 @media (max-width: 1023px) { .minimi { transform: scale(0.78); transform-origin: 100% 100%; } }
 

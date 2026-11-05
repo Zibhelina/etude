@@ -12,7 +12,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { CodeEditor } from "@/components/code-editor";
-import { Block, Section } from "@/components/settings-ui";
+import { BigSwitch, Block, Section } from "@/components/settings-ui";
+import { minimiFace } from "@/components/minimi";
+import { setFunMode, useFunMode } from "@/lib/fun";
 import { ThemeMiniature, ThemeSample, ThemeSwatches } from "@/components/settings-theme-preview";
 import { api } from "@/lib/api";
 import { applyTheme, currentTheme, setPreviewing, toHex, type Theme } from "@/lib/theme";
@@ -201,6 +203,8 @@ export function AppearanceSection() {
         />
       )}
 
+      {!editing && <FunBlock />}
+
       {themes && !editing && (
         <>
           <Block
@@ -331,6 +335,31 @@ function ThemeTile({ theme, selected, onUse, onCustomize, onDuplicate, onExport,
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
+  );
+}
+
+/** Fun mode: Minimi in the corner instead of the plain ε. Saved with the collection. */
+function FunBlock() {
+  const on = useFunMode();
+  const flip = async (v: boolean) => {
+    try {
+      await setFunMode(v);
+    } catch (e) {
+      setFunMode(!v, { save: false });
+      toast.error("Couldn't save", { description: (e as Error).message });
+    }
+  };
+  return (
+    <Block
+      title="Fun mode"
+      description="Minimi, Etude's cat, sits in the corner and answers when you ask something. Drag him anywhere. Off keeps the plain ε."
+      aside={
+        <div className="flex items-center gap-3">
+          <img src={minimiFace} alt="" className="size-9 rounded-full bg-muted object-cover" draggable={false} />
+          <BigSwitch id="fun-mode" checked={on} onCheckedChange={flip} aria-label="Fun mode" />
+        </div>
+      }
+    />
   );
 }
 

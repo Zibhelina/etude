@@ -106,6 +106,8 @@ export interface Settings {
   onboarding: Onboarding;
   /** Settings → Privacy: anonymous error reports (on) and usage counts (off). See src/core/telemetry.ts. */
   privacy: Privacy;
+  /** Fun mode: Minimi, the mascot, sits in the corner and answers instead of the plain ε. */
+  fun: boolean;
 }
 
 export const ONBOARDING_LEVELS = ["simple", "standard", "tinker"] as const;
@@ -114,7 +116,7 @@ export interface Onboarding {
   level: (typeof ONBOARDING_LEVELS)[number];
 }
 
-export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" }, privacy: DEFAULT_PRIVACY };
+export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" }, privacy: DEFAULT_PRIVACY, fun: true };
 
 /** Card preferences: short keys, and a few KB per type, since they ride along in the synced settings. */
 export const TYPE_PREF_KEY = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -598,6 +600,7 @@ export class Etude {
     const next: Settings = { ...cur, ...patch, ai: { ...cur.ai, ...(patch.ai ?? {}) }, market: { ...cur.market, ...(patch.market ?? {}) }, onboarding: { ...cur.onboarding, ...(patch.onboarding ?? {}) }, privacy: { ...cur.privacy, ...(patch.privacy ?? {}) } };
     if (typeof next.privacy.errorReports !== "boolean" || typeof next.privacy.usageStats !== "boolean") throw new EtudeError("privacy.errorReports and privacy.usageStats must be true or false");
     next.privacy = { errorReports: next.privacy.errorReports, usageStats: next.privacy.usageStats };
+    if (typeof next.fun !== "boolean") throw new EtudeError("fun must be true or false");
     if (typeof next.onboarding.done !== "boolean") throw new EtudeError("onboarding.done must be true or false");
     if (!ONBOARDING_LEVELS.includes(next.onboarding.level)) throw new EtudeError(`onboarding.level must be one of ${ONBOARDING_LEVELS.join(", ")}`);
     if (typeof next.market.url !== "string" || typeof next.market.repo !== "string") throw new EtudeError("market.url and market.repo must be text");

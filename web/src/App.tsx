@@ -17,7 +17,9 @@ import { StatsPage } from "@/pages/stats";
 import { SettingsPage } from "@/pages/settings";
 import { EmbedStudy } from "@/pages/embed";
 import { MarketPage } from "@/pages/market";
-import { AgentLauncher, AgentPanel, announceDataChange, useAgentPanel } from "@/components/agent-panel";
+import { AGENT_SHORTCUT, AgentLauncher, AgentPanel, announceDataChange, useAgentPanel } from "@/components/agent-panel";
+import { MinimiCorner } from "@/components/minimi";
+import { loadFunMode, useFunMode } from "@/lib/fun";
 import { SidebarUpdate, useUpdateDot } from "@/components/update-bar";
 import { PhoneTabBar } from "@/components/phone-shell";
 import { MorePage } from "@/pages/more";
@@ -78,6 +80,8 @@ function useSidebarCollapsed() {
 export function App() {
   const { path, params } = useLocation();
   const [collapsed, setCollapsed] = useSidebarCollapsed();
+  const fun = useFunMode();
+  useEffect(() => void loadFunMode(), []);
   const studying = path === "/study" || path === "/watch";
   // Sync on its own, so every device shows the same collection without anyone pressing Sync:
   // local changes go up within ~10 s, other devices' changes come down every 30 s and whenever
@@ -201,7 +205,7 @@ export function App() {
                     n.match(path) && "font-medium text-foreground",
                   )}
                 >
-                  <n.icon className={cn("size-4 shrink-0", n.match(path) && "text-highlight")} />
+                  <n.icon className={cn("size-4 shrink-0", n.match(path) && "text-foreground")} />
                   {!collapsed && <span className="whitespace-nowrap">{n.label}</span>}
                 </button>
               );
@@ -230,10 +234,12 @@ export function App() {
                 if (final) setDataKey((k) => k + 1);
               }}
             />
-          ) : phone ? null : (
+          ) : phone ? null : fun ? (
+            <MinimiCorner onOpen={() => agent.setOpen(true)} shortcut={AGENT_SHORTCUT} />
+          ) : (
             <AgentLauncher onOpen={() => agent.setOpen(true)} />
           )}
-          <PhoneTabBar path={path} updateDot={updateDot} onAsk={() => agent.setOpen(true)} />
+          <PhoneTabBar path={path} updateDot={updateDot} fun={fun} onAsk={() => agent.setOpen(true)} />
         </div>
       )}
       {onboarding && (

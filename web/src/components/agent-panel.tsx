@@ -65,46 +65,24 @@ export function useAgentPanel() {
   return { open, setOpen, width, setWidth };
 }
 
-const HINT_KEY = "etude.agent.hinted";
-
-/** The ε on the card surface, bottom-right. On the first visit a small "Ask Etude" label shows beside it for a few seconds. */
+/** Fun mode off: the ε in a round bubble, bottom-right. Hovering or focusing it slides out "Ask Etude ⌘J". */
 export function AgentLauncher({ onOpen }: { onOpen(): void }) {
-  const [hint, setHint] = useState(() => localStorage.getItem(HINT_KEY) !== "1");
-  useEffect(() => {
-    if (!hint) return;
-    const t = setTimeout(() => {
-      setHint(false);
-      localStorage.setItem(HINT_KEY, "1");
-    }, 5000);
-    return () => clearTimeout(t);
-  }, [hint]);
-  const open = () => {
-    localStorage.setItem(HINT_KEY, "1");
-    setHint(false);
-    onOpen();
-  };
   return (
-    <div className="fixed right-3 bottom-[calc(var(--tabbar-h)+0.5rem)] z-30 flex items-center gap-2 md:right-4 md:bottom-4">
-      {hint && (
-        <button onClick={open} tabIndex={-1} aria-hidden className="agent-rise h-8 rounded-full border bg-card px-3 text-xs font-medium whitespace-nowrap text-foreground shadow-sm">
+    <div className="fixed right-3 bottom-[calc(var(--tabbar-h)+0.5rem)] z-30 md:right-5 md:bottom-5">
+      <button
+        onClick={onOpen}
+        aria-label={`Ask Etude · ${AGENT_SHORTCUT}`}
+        data-agent-launcher
+        className="group flex h-[52px] items-center rounded-full bg-card shadow-[0_1px_2px_rgb(0_0_0/0.08),0_8px_22px_rgb(0_0_0/0.10)] ring-1 ring-border transition-shadow duration-150 outline-ring hover:shadow-[0_1px_2px_rgb(0_0_0/0.08),0_14px_34px_rgb(0_0_0/0.14)] focus-visible:outline-2 dark:shadow-[0_10px_28px_rgb(0_0_0/0.6)]"
+      >
+        <span className="grid size-[52px] shrink-0 place-items-center">
+          <Logo className="size-[28px]" />
+        </span>
+        <span className="max-w-0 overflow-hidden text-[14.5px] font-semibold whitespace-nowrap text-foreground transition-[max-width,padding] duration-250 ease-[cubic-bezier(0.3,0.7,0.2,1)] group-hover:max-w-[180px] group-hover:pr-5 group-focus-visible:max-w-[180px] group-focus-visible:pr-5 motion-reduce:transition-none">
           Ask Etude
-        </button>
-      )}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            onClick={open}
-            aria-label="Ask Etude"
-            data-agent-launcher
-            className="flex size-11 items-center justify-center rounded-full border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.18),0_4px_12px_-4px_rgb(0_0_0/0.28)] transition-[translate,border-color,box-shadow] duration-150 outline-ring hover:-translate-y-px hover:border-foreground/30 focus-visible:outline-2 active:translate-y-0 motion-reduce:transition-none"
-          >
-            <Logo className="size-[26px]" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="left">
-          Ask Etude <span className="opacity-60">· {AGENT_SHORTCUT}</span>
-        </TooltipContent>
-      </Tooltip>
+          <kbd className="ml-2 rounded-[5px] bg-muted px-1.5 py-0.5 text-muted-foreground">{AGENT_SHORTCUT}</kbd>
+        </span>
+      </button>
     </div>
   );
 }

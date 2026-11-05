@@ -63,7 +63,7 @@ command({
   args: [{ name: "id", description: "Theme id (see `etude theme list`).", required: true }],
   writes: true,
   dryRun: true,
-  examples: ["etude theme set paper", "etude theme set midnight"],
+  examples: ["etude theme set system", "etude theme set night", "etude theme set paper"],
   output: "{ selected, theme: { id, name, scheme } }",
   run(ctx) {
     const t = ctx.e.selectTheme(ctx.args.id);
@@ -132,7 +132,7 @@ command({
     if (cur.builtin) throw new CliError(`"${cur.id}" is built in; copy it first with \`etude theme create --from ${cur.id}\``, "conflict");
     const vars = { ...cur.vars, ...varPairs(ctx.flags.var) };
     const changed = Object.keys(varPairs(ctx.flags.var));
-    const fallback = BUILTIN_THEMES.find((t) => t.id === cur.base) ?? BUILTIN_THEMES.find((t) => t.scheme === cur.scheme)!;
+    const fallback = BUILTIN_THEMES.find((t) => t.id === cur.base && !t.pair) ?? BUILTIN_THEMES.find((t) => t.scheme === cur.scheme && !t.pair)!;
     for (const n0 of ctx.flags["unset-var"] ?? []) {
       const n = n0.startsWith("--") ? n0 : `--${n0}`;
       if (fallback.vars[n] !== undefined) vars[n] = fallback.vars[n];
@@ -163,7 +163,7 @@ command({
 
 command({
   name: "theme delete",
-  summary: "Delete a custom theme. If it was selected, the app goes back to Midnight.",
+  summary: "Delete a custom theme. If it was selected, the app goes back to System (Snow or Night, following the device).",
   args: [{ name: "id", description: "Custom theme id.", required: true }],
   writes: true,
   dryRun: true,

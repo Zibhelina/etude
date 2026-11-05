@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Etude } from "../src/core/engine.ts";
-import { BUILTIN_THEMES, DEFAULT_THEME, MAX_THEME_CSS, THEME_VARS, normalizeTheme, sanitizeCss, themeCss } from "../src/core/themes.ts";
+import { BUILTIN_THEMES, DEFAULT_THEME, MAX_THEME_CSS, THEME_VARS, normalizeTheme, resolveTheme, sanitizeCss, themeCss } from "../src/core/themes.ts";
 import { run } from "../src/cli/run.ts";
 
 test("built-in themes set every variable and have distinct ids", () => {
@@ -17,11 +17,27 @@ test("built-in themes set every variable and have distinct ids", () => {
   }
 });
 
-test("Midnight matches the stylesheet defaults", () => {
+test("the stylesheet defaults are Snow, and Night when the device is dark", () => {
   const css = readFileSync(new URL("../web/src/index.css", import.meta.url), "utf8");
-  const root = css.slice(css.indexOf(":root {"), css.indexOf("}", css.indexOf(":root {")));
+  const block = (from: number) => css.slice(css.indexOf(":root {", from), css.indexOf("}", css.indexOf(":root {", from)));
+  const check = (id: string, root: string) => {
+    const t = BUILTIN_THEMES.find((x) => x.id === id)!;
+    const seen = [...root.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)];
+    assert.ok(seen.length > 30, `${id}: no variables found`);
+    for (const m of seen) assert.equal(t.vars[m[1]], m[2].trim(), `${id}: ${m[1]} differs from index.css`);
+  };
+  check("snow", block(0));
+  check("night", block(css.indexOf("@media (prefers-color-scheme: dark)")));
+});
+
+test("System follows the device: Snow in light, Night in dark", () => {
+  const system = BUILTIN_THEMES.find((t) => t.id === DEFAULT_THEME)!;
+  assert.equal(DEFAULT_THEME, "system");
+  assert.deepEqual(system.pair, { light: "snow", dark: "night" });
+  assert.equal(resolveTheme(system, false).id, "snow");
+  assert.equal(resolveTheme(system, true).id, "night");
   const midnight = BUILTIN_THEMES.find((t) => t.id === "midnight")!;
-  for (const m of root.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)) assert.equal(midnight.vars[m[1]], m[2].trim(), `${m[1]} differs from index.css`);
+  assert.equal(resolveTheme(midnight, false), midnight);
 });
 
 test("sanitizeCss strips remote imports and urls, keeps data: and local ones", () => {
@@ -49,7 +65,7 @@ test("sanitizeCss strips remote imports and urls, keeps data: and local ones", (
 test("normalizeTheme validates and fills in", () => {
   const { theme } = normalizeTheme({ id: "sea", name: "Sea", scheme: "light", vars: { highlight: "teal" } });
   assert.equal(theme.vars["--highlight"], "teal");
-  assert.equal(theme.vars["--background"], BUILTIN_THEMES.find((t) => t.id === "daylight")!.vars["--background"]);
+  assert.equal(theme.vars["--background"], BUILTIN_THEMES.find((t) => t.id === "snow")!.vars["--background"]);
   assert.throws(() => normalizeTheme({ id: "Bad Id" }), /slug/);
   assert.throws(() => normalizeTheme({ id: "x", vars: { "--a": "red; } body { display: none" } }), /can't contain/);
   assert.throws(() => normalizeTheme({ id: "x", vars: { "--a": "url(https://x)" } }), /images/);
@@ -61,7 +77,7 @@ test("engine stores the selected theme and custom themes in settings", async () 
   const e = await Etude.open(":memory:");
   assert.equal(e.settings().theme, DEFAULT_THEME);
   assert.deepEqual(e.settings().themes, []);
-  assert.equal(e.currentTheme().id, "midnight");
+  assert.equal(e.currentTheme().id, "system");
 
   e.selectTheme("paper");
   assert.equal(e.settings().theme, "paper");
@@ -82,8 +98,8 @@ test("engine stores the selected theme and custom themes in settings", async () 
   assert.equal(e.settings().theme, "sea");
   assert.equal(e.settings().themes.length, 1);
 
-  assert.deepEqual(e.deleteTheme("sea"), { deleted: "sea", selected: "midnight" });
-  assert.equal(e.settings().theme, "midnight");
+  assert.deepEqual(e.deleteTheme("sea"), { deleted: "sea", selected: "system" });
+  assert.equal(e.settings().theme, "system");
   assert.throws(() => e.deleteTheme("paper"), /built in/);
   assert.throws(() => e.updateSettings({ theme: "gone" }), /unknown theme/);
   e.close();
@@ -105,7 +121,7 @@ test("CLI: theme list, set, create, edit, export, import, delete", async () => {
   const list = await cli(["theme", "list"]);
   ok(list);
   assert.deepEqual(list.json.map((t: any) => t.id), BUILTIN_THEMES.map((t) => t.id));
-  assert.equal(list.json.find((t: any) => t.selected).id, "midnight");
+  assert.equal(list.json.find((t: any) => t.selected).id, "system");
 
   ok(await cli(["theme", "set", "paper"]));
   assert.equal((await cli(["settings", "get", "theme"])).json.value, "paper");
@@ -127,7 +143,7 @@ test("CLI: theme list, set, create, edit, export, import, delete", async () => {
   const edited = await cli(["theme", "edit", "sea", "--var", "--radius=0.25rem", "--scheme", "light", "--unset-var", "highlight"]);
   ok(edited);
   assert.equal(edited.json.theme.vars["--radius"], "0.25rem");
-  assert.equal(edited.json.theme.vars["--highlight"], BUILTIN_THEMES[0].vars["--highlight"]);
+  assert.equal(edited.json.theme.vars["--highlight"], BUILTIN_THEMES.find((t) => t.id === "midnight")!.vars["--highlight"]);
   assert.equal(edited.json.theme.scheme, "light");
   assert.equal((await cli(["theme", "edit", "midnight", "--var", "radius=0"])).code, 5);
   assert.equal((await cli(["theme", "edit", "sea", "--var", "highlight=red;}"])).code, 4);
@@ -163,7 +179,7 @@ test("CLI: theme list, set, create, edit, export, import, delete", async () => {
   assert.equal((await cli(["theme", "delete", "piped-2"])).code, 2);
   const del = await cli(["theme", "delete", "piped-2", "--yes"]);
   ok(del);
-  assert.equal(del.json.selected, "midnight");
+  assert.equal(del.json.selected, "system");
   assert.equal((await cli(["theme", "delete", "midnight", "--yes"])).code, 5);
   assert.deepEqual((await cli(["theme", "list"])).json.filter((t: any) => !t.builtin).map((t: any) => t.id), ["sea", "sea-2"]);
 });

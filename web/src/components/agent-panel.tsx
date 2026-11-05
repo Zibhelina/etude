@@ -39,6 +39,14 @@ const usePhone = () => {
   return phone;
 };
 
+// Other screens can hand Ask Etude a request (e.g. "make a card type that..."): it opens a new conversation and sends it.
+const ASK_EVENT = "etude:ask";
+let asked: string | null = null;
+export function askEtude(text: string) {
+  asked = text;
+  window.dispatchEvent(new Event(ASK_EVENT));
+}
+
 /** Open state and width, shared by the launcher, the panel and the layout. */
 export function useAgentPanel() {
   const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) === "1");
@@ -60,7 +68,12 @@ export function useAgentPanel() {
       }
     };
     window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
+    const ask = () => setOpen(true);
+    window.addEventListener(ASK_EVENT, ask);
+    return () => {
+      window.removeEventListener("keydown", h);
+      window.removeEventListener(ASK_EVENT, ask);
+    };
   }, []);
   return { open, setOpen, width, setWidth };
 }
@@ -222,7 +235,7 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
 
   useEffect(() => {
     loadList();
-    openConv(localStorage.getItem(CONV_KEY));
+    openConv(asked ? null : localStorage.getItem(CONV_KEY));
     agentApi
       .models()
       .then((m) => {
@@ -311,6 +324,28 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
 
   const busy = !!live;
   const ready = atts.every((a) => !("uploading" in a));
+
+  // A request handed over by another screen (askEtude): a fresh conversation, sent once a model is known.
+  const autoSend = useRef(false);
+  useEffect(() => {
+    const take = () => {
+      if (asked == null) return;
+      setConv(null);
+      localStorage.removeItem(CONV_KEY);
+      setText(asked);
+      asked = null;
+      autoSend.current = true;
+      requestAnimationFrame(() => input.current?.focus());
+    };
+    take();
+    window.addEventListener(ASK_EVENT, take);
+    return () => window.removeEventListener(ASK_EVENT, take);
+  }, []);
+  useEffect(() => {
+    if (!autoSend.current || !text.trim() || !models || busy) return;
+    autoSend.current = false;
+    if (models.configured) send();
+  });
 
   const send = async () => {
     const msg = text.trim();

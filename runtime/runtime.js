@@ -340,7 +340,8 @@ export function boot(main, templateHtml, assets) {
       }
       observeSize();
       send("mounted");
-      if (msg.mode !== "result") focusCard(api.root);
+      // A preview (a gallery thumbnail) never takes the focus: it would scroll the page to itself.
+      if (msg.mode !== "result" && msg.mode !== "preview") focusCard(api.root);
     } else if (msg.type === "collect") api?._collect();
     else if (msg.type === "result") api?._result(msg.result);
     else if (msg.type === "theme") applyTheme(msg.theme);

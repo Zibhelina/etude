@@ -39,9 +39,13 @@ test("decks: the icon goes through the API", async (t) => {
 
 test("decks: an older synced collection gets the icon column and syncs it", async (t) => {
   const dir = mkdtempSync(join(tmpdir(), "etude-icon-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const path = join(dir, "c.db");
   let e = await Etude.open(path);
+  // One cleanup, closing before removing: Windows can't delete a database that is still open.
+  t.after(() => {
+    e.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
   e.ensureDeck("Old");
   // A collection from before icons: no column, sync triggers made without it.
   install(e.db);
@@ -50,7 +54,6 @@ test("decks: an older synced collection gets the icon column and syncs it", asyn
   install(e.db);
   e.close();
   e = await Etude.open(path);
-  t.after(() => e.close());
   e.db.run("DELETE FROM sync_outbox");
   e.updateDeck("Old", { icon: "art:memory" });
   const out = e.db.all("SELECT value FROM sync_outbox WHERE tbl = 'decks'");

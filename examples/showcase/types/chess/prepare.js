@@ -1,4 +1,4 @@
-const [placement, turn] = String(fields.fen ?? "").trim().split(/\s+/);
+const [placement, turn, rights, ep] = String(fields.fen ?? "").trim().split(/\s+/);
 const board = {};
 placement.split("/").forEach((row, r) => {
   let f = 0;
@@ -10,6 +10,6 @@ placement.split("/").forEach((row, r) => {
 const side = turn === "b" ? "b" : "w";
 const theirKing = Object.keys(board).find((sq) => board[sq] === (side === "w" ? "k" : "K"));
 return {
-  view: { prompt: fields.prompt ?? "", board, side },
+  view: { prompt: fields.prompt ?? "", board, side, castling: rights && rights !== "-" ? rights : "", ep: ep && ep !== "-" ? ep : "" },
   key: { answers: (fields.answers ?? []).map((m) => String(m).toLowerCase()), san: fields.san ?? "", king: theirKing, explanation: fields.explanation ?? "" },
 };

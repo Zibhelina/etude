@@ -1,30 +1,81 @@
-.sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }
-.sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }
+/* Mate in one, in the Etude 3 look (Design Lab round 06): cartoon pieces on a fixed green board,
+   the question above it, and an answer column beside it once graded. Text follows the app's theme. */
+:root { --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; --E: cubic-bezier(.2, .8, .2, 1); }
+.ch { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.ch-head { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.ch-prompt { font: 400 28px/1.18 var(--serif); color: var(--foreground); }
+.ch-prompt p { margin: 0; }
+.ch-turn { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted-foreground); }
+.ch-turn .dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--foreground); }
+.ch-turn .dot.w { background: #fffdf5; }
+.ch-turn .dot.b { background: #2a2520; }
+.ch-main { display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%; }
 
-.ch-prompt { font-size: 1.05rem; }
-.ch-turn { display: flex; align-items: center; gap: 0.5rem; font-size: 0.92rem; color: var(--muted-foreground); margin-top: -0.6rem; }
-.ch-turn .dot { width: 0.85rem; height: 0.85rem; border-radius: 50%; border: 1.5px solid var(--foreground); }
-.ch-turn .dot.w { background: #f4f1ea; }
-.ch-turn .dot.b { background: #1d1b19; }
-.ch-board svg { width: 100%; max-width: 28rem; height: auto; display: block; margin: 0 auto; border-radius: calc(var(--radius) - 2px); touch-action: none; user-select: none; -webkit-user-select: none; cursor: pointer; }
-/* The board keeps its own colors in every theme, like a real board. */
-.sq.lt { fill: #dcd6cc; }
-.sq.dk { fill: #8f8579; }
-.co { font: 700 19px var(--font-sans); pointer-events: none; }
-.co.on-lt { fill: #776d62; }
-.co.on-dk { fill: #ece7df; }
-.pc .fill { fill: #1d1b19; }
-.pc.w .fill { fill: #f7f4ee; }
-.pc.w .line { fill: #1d1b19; }
-.pc { pointer-events: none; }
-.pc.lifted { opacity: 0.35; }
-.ghost { opacity: 0.9; }
-.marks .sel { fill: color-mix(in oklab, var(--highlight) 55%, transparent); }
-.marks .last { fill: rgba(231, 196, 76, 0.45); }
-.marks .last.ok { fill: color-mix(in oklab, var(--success) 50%, transparent); }
-.marks .mated { fill: none; stroke: var(--danger); stroke-width: 6; animation: ring 0.4s ease-out; }
-@keyframes ring { from { r: 20; opacity: 0; } }
-.arrow.bad { stroke: var(--danger); stroke-width: 11; stroke-linecap: round; opacity: 0.85; }
-.ahb { fill: var(--danger); }
-.ch-help { font-size: 0.82rem; margin: -0.5rem 0 0; text-align: center; }
-.ch-answer p { margin: 0; font-size: 1.05rem; }
+/* The board keeps its own colours in every theme, like a real board; a1 is dark. */
+.ch-board { position: relative; width: min(100%, 440px, calc(var(--etude-screen-height, 9999px) - 190px)); min-width: 240px;
+  aspect-ratio: 1; border-radius: 6px; flex: none; outline: none; touch-action: none; user-select: none; -webkit-user-select: none;
+  --lt: #efe4c8; --lt: light-dark(#eeeeeb, #efe4c8); --dk: #8fae86; --sh: light-dark(rgba(0, 0, 0, .07), rgba(0, 0, 0, .45));
+  box-shadow: 0 10px 26px var(--sh); box-shadow: 0 0 0 1px light-dark(var(--border), transparent), 0 10px 26px var(--sh); }
+.ch-sqs { position: absolute; inset: 0; display: grid; grid-template: repeat(8, 1fr) / repeat(8, 1fr); border-radius: inherit; overflow: hidden; }
+.sq { position: relative; background: var(--lt); }
+.sq.d { background: var(--dk); }
+.sq.l.mv { background: #e7e39a; } .sq.d.mv { background: #b6c766; }
+.sq.l.good { background: #d9ecb0; } .sq.d.good { background: #a5c96f; }
+.sq.sel { box-shadow: inset 0 0 0 4px #f2b632; }
+.sq.cur { box-shadow: inset 0 0 0 3px var(--ring, #f2b632); }
+.sq.sel.cur { box-shadow: inset 0 0 0 4px #f2b632, inset 0 0 0 7px var(--ring, #f2b632); }
+.sq.dot::after { content: ""; position: absolute; left: 37%; top: 37%; width: 26%; height: 26%; border-radius: 50%; background: rgba(30, 40, 20, .28); }
+.sq.cap::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 0 5px rgba(30, 40, 20, .28); }
+.sq.hov { box-shadow: inset 0 0 0 4px rgba(30, 40, 20, .32); }
+.sq i { position: absolute; font: 600 10px/1 var(--font-sans); font-style: normal; opacity: .62; pointer-events: none; }
+.sq.l i { color: #6f8f66; } .sq.d i { color: #f4f1e4; }
+.sq .rk { left: 3px; top: 3px; } .sq .fl { right: 3px; bottom: 2px; }
+.ch-board:focus-visible { box-shadow: 0 0 0 2px var(--ring, #f2b632), 0 10px 26px var(--sh); }
+
+.ch-pcs { position: absolute; inset: 0; pointer-events: none; }
+.pc { position: absolute; width: 12.5%; height: 12.5%;
+  transition-property: left, top, opacity, transform; transition-duration: 260ms; transition-timing-function: cubic-bezier(.3, .7, .2, 1); }
+.pc img { position: absolute; left: 50%; top: 50%; width: auto; display: block; transform: translate(-50%, -50%);
+  filter: drop-shadow(0 2px 1.5px rgba(30, 25, 15, .3)); transition: transform .15s; }
+.pc.up img { transform: translate(-50%, -57%) scale(1.04); }
+.pc.drag { z-index: 5; transition-property: none; }
+.pc.drag img { transform: translate(-50%, -54%) scale(1.12); filter: drop-shadow(0 8px 6px rgba(30, 25, 15, .32)); }
+.pc.gone { opacity: 0; transform: scale(.6); }
+.ch-over { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.ch-over .tried { stroke: var(--danger); stroke-width: 16; stroke-linecap: round; opacity: .82; animation: ch-fade .3s var(--E) backwards; }
+#ch-ah path { fill: var(--danger); }
+.ch-over .mated { fill: none; stroke: var(--danger); stroke-width: 7; animation: ch-ring .45s var(--E) backwards; }
+@keyframes ch-ring { from { r: 20; opacity: 0; } }
+@keyframes ch-fade { from { opacity: 0; } }
+
+.ch-hint { margin: 0; font-size: 15px; color: var(--muted-foreground); text-align: center; min-height: 1.6em; }
+.ch-hint b { color: var(--foreground); font-family: var(--serif); font-size: 17px; font-weight: 600; }
+.ch-undo { all: unset; cursor: pointer; color: var(--foreground); text-decoration: underline; text-decoration-color: color-mix(in oklab, var(--foreground) 30%, transparent); text-underline-offset: 3px; }
+.ch-undo kbd { font-size: 11px; margin-left: 2px; }
+
+/* Graded: the question goes, the board moves left and the answer stands beside it. */
+[data-mode="result"] .ch-head { display: none; }
+[data-mode="result"] .ch-main { flex-direction: row; justify-content: center; align-items: center; gap: 36px; }
+[data-mode="result"] .ch-board { width: min(56%, 420px); min-width: 0; }
+.ch-info { flex: 0 1 300px; min-width: 0; text-align: left; }
+.ch-tag { font-size: 12px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; color: var(--muted-foreground); }
+.ch-tag.ok { color: var(--success); }
+.ch-san { font: 400 40px/1.1 var(--serif); color: var(--foreground); margin-top: 6px; }
+.ch-yours { margin: 12px 0 0; font-size: 15px; line-height: 1.5; color: var(--danger); }
+.ch-yours b { font-family: var(--serif); font-size: 16px; }
+.ch-expl { margin-top: 12px; font-size: 16px; line-height: 1.55; color: var(--muted-foreground); }
+.ch-expl p { margin: 0 0 .6em; } .ch-expl p:last-child { margin: 0; }
+.ch-expl strong { color: var(--foreground); }
+.ch-ghost { display: flex !important; flex-direction: column; align-items: center; gap: 6px; text-align: center; position: fixed; margin: 0; pointer-events: none; z-index: 20; }
+.ch-ghost .ch-prompt p { margin: 0; }
+
+@media (max-width: 600px) {
+  .ch-prompt { font-size: 24px; }
+  [data-mode="result"] .ch-main { flex-direction: column; gap: 16px; }
+  [data-mode="result"] .ch-board { width: min(100%, 420px); }
+  .ch-info { flex: none; width: 100%; text-align: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc, .pc img { transition: none !important; }
+  .ch-over .tried, .ch-over .mated { animation: none; }
+}

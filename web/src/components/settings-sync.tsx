@@ -731,13 +731,16 @@ type Flow = "email" | "loading" | "plan" | "password" | "recovery" | "ready";
 const STEP_LABEL: Partial<Record<Flow, string>> = { email: "Email", plan: "Plan", password: "Password" };
 
 function StepBar({ steps, current }: { steps: Flow[]; current: Flow }) {
-  const at = steps.indexOf(current);
+  const at = Math.max(0, steps.indexOf(current));
+  // One pill per step across the card: green where you are, a softer green for the steps behind you, a visible track ahead.
   return (
-    <ol className="flex gap-2" aria-label="Sync setup steps" data-sync-steps={steps.join(",")}>
+    <ol className="-mb-1 flex gap-1.5" aria-label="Sync setup steps" data-sync-steps={steps.join(",")}>
       {steps.map((s, i) => (
-        <li key={s} className="flex min-w-0 flex-1 flex-col gap-1.5" aria-current={i === at ? "step" : undefined}>
-          <span className={cn("h-[3px] rounded-full", i <= at ? "bg-highlight" : "bg-muted")} />
-          <span className={cn("text-[11px] font-medium uppercase tracking-wide", i === at ? "text-foreground" : "text-muted-foreground")}>{STEP_LABEL[s]}</span>
+        <li key={s} className="flex min-w-0 flex-1 flex-col gap-2" aria-current={i === at ? "step" : undefined}>
+          <span className={cn("h-1.5 rounded-full transition-colors duration-300", i === at ? "bg-highlight" : i < at ? "bg-highlight/40" : "bg-foreground/15")} />
+          <span className={cn("truncate text-[12px] font-medium", i === at ? "text-foreground" : i < at ? "text-muted-foreground" : "text-muted-foreground/70")}>
+            {STEP_LABEL[s]}
+          </span>
         </li>
       ))}
     </ol>

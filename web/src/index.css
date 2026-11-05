@@ -333,3 +333,11 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 }
 /* iPad: a little smaller. */
 @media (max-width: 1023px) { .minimi { transform: scale(0.78); transform-origin: 100% 100%; } }
+
+/* ---------------------------------------------------------------- Settings (v3 settings screen)
+   Rows inside a settings card are split by an inset hairline; search and links flash the row they land on. */
+.settings-block + .settings-block::before { content: ""; position: absolute; top: 0; left: 16px; right: 16px; height: 1px; background: var(--border); }
+@media (min-width: 640px) { .settings-block + .settings-block::before { left: 18px; right: 18px; } }
+.settings-flash { animation: settings-flash 1.6s ease-out; }
+@keyframes settings-flash { 0%, 30% { background: color-mix(in oklab, var(--foreground) 7%, transparent); } 100% { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .settings-flash { animation: none; } }

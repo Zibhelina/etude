@@ -1,21 +1,19 @@
 // The card list rows, bulk actions and item editor shared by Browse and the deck page's Cards tab.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Archive, ArchiveRestore, ArrowLeft, Check, Copy, Dices, FolderInput, Loader2, MoreHorizontal, Pause, Play, RotateCcw, Save, Tag, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, Check, ChevronLeft, Copy, Dices, FolderInput, Loader2, MoreHorizontal, Pause, Play, RotateCcw, Tag, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FieldEditor } from "@/components/field-editor";
 import { ItemAiEdit } from "@/components/item-ai-edit";
-import { CardPreview } from "@/components/card-preview";
-import { Markdown } from "@/components/markdown";
-import { api, humanInterval, relative, RATING_LABEL, STATE_NAMES, type CardType, type ItemDetail, type SearchRow, type TypeSummary } from "@/lib/api";
-import { EtudeImg } from "@/lib/local-url";
+import { ItemPreview } from "@/components/item-preview";
+import { HistoryPanel, MemoryPanel } from "@/components/item-memory";
+import { api, humanInterval, relative, STATE_NAMES, type CardType, type ItemDetail, type SearchRow, type TypeSummary } from "@/lib/api";
+import { useFunMode } from "@/lib/fun";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { useLongPress, usePhone } from "@/lib/phone";
@@ -221,15 +219,42 @@ function occlusionProblem(def: CardType | null, fields: Record<string, unknown>)
 type Draft = { deck: string; fields: Record<string, unknown>; tags: string[]; source: string; notes: string };
 const draftOf = (it: ItemDetail): Draft => ({ deck: it.deck, fields: it.fields, tags: it.tags, source: it.source, notes: it.notes });
 
-/** `closeAlways` shows the back control at every size (for editors opened in a sheet); Browse only needs it on phones. */
-export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, onBack, closeAlways }: { id: string; decks: string[]; tags: string[]; onSaved(): void; onDeleted(): void; onDuplicate(id: string): void; onBack(): void; closeAlways?: boolean }) {
+/** "Countries › Africa": the top deck and the leaf, with the full path on hover. */
+export function DeckCrumb({ deck, leafOnly, className }: { deck: string; leafOnly?: boolean; className?: string }) {
+  const parts = deck.split("::");
+  const top = parts[0], leaf = parts.length > 1 ? parts[parts.length - 1] : null;
+  return (
+    <span className={cn("flex min-w-0 items-center gap-1.5 text-[13.5px] font-medium text-muted-foreground", className)} title={parts.join(" › ")}>
+      {leafOnly && leaf ? <b className="truncate font-semibold text-foreground">{leaf}</b> : (
+        <>
+          <b className="shrink-0 truncate font-semibold text-foreground max-w-[60%]">{top}</b>
+          {leaf && <><span className="text-muted-foreground/60">{parts.length > 2 ? "› … ›" : "›"}</span><span className="truncate">{leaf}</span></>}
+        </>
+      )}
+    </span>
+  );
+}
+
+const TABS = [["edit", "Edit"], ["memory", "Memory"], ["history", "History"]] as const;
+type Tab = (typeof TABS)[number][0];
+
+/**
+ * The item inspector: header, a live preview that flips, and Edit / Memory / History.
+ * `closeAlways` shows the back control at every size (for editors opened in a sheet); Browse only needs it on phones.
+ * `gutter` keeps the save bar's buttons clear of the corner Minimi / Ask bubble.
+ */
+export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, onBack, closeAlways, gutter, onDirtyChange }: { id: string; decks: string[]; tags: string[]; onSaved(): void; onDeleted(): void; onDuplicate(id: string): void; onBack(): void; closeAlways?: boolean; gutter?: boolean; onDirtyChange?(dirty: boolean): void }) {
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [type, setType] = useState<CardType | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [mediaPending, setMediaPending] = useState(false);
   const [version, setVersion] = useState(0);
-  const [tab, setTab] = useState("edit");
+  const [tab, setTab] = useState<Tab>("edit");
+  const [flipped, setFlipped] = useState(false);
+  const [confirm, setConfirm] = useState<null | "delete" | "forget">(null);
+  const phone = usePhone();
+  const fun = useFunMode();
 
   const load = useCallback(async () => {
     try {
@@ -246,6 +271,7 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
   }, [load]);
 
   const dirty = !!item && !!draft && JSON.stringify(draftOf(item)) !== JSON.stringify(draft);
+  useEffect(() => onDirtyChange?.(dirty), [dirty]);
 
   const save = useCallback(async () => {
     if (!item || !draft || mediaPending) return;
@@ -271,23 +297,44 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         if (dirty) save();
+        return;
+      }
+      // Space flips the preview, unless you're typing or a dialog is open.
+      const t = e.target as HTMLElement | null;
+      if (e.key === " " && !e.ctrlKey && !e.metaKey && !e.altKey && !t?.closest("input, textarea, select, button, [contenteditable=true], [role=dialog], [role=menu], .cm-editor")) {
+        e.preventDefault();
+        setFlipped((f) => !f);
       }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [dirty, save]);
 
-  const loadPreview = useCallback(async (seed: number, face: string) => {
-    if (!item) return null;
-    return api.previewItem(item.id, seed, face);
-  }, [item?.id, version]);
+  if (!item || !draft || !type) return <div className="flex h-full min-h-60 items-center justify-center text-muted-foreground"><Loader2 className="animate-spin" /></div>;
 
-  if (!item || !draft || !type) return <div className="flex h-full items-center justify-center text-muted-foreground"><Loader2 className="animate-spin" /></div>;
-
+  const allSuspended = item.cards.every((c) => c.suspended);
   const archive = async () => {
     await api.bulkItems(item.archived ? "unarchive" : "archive", [item.id]);
     await load();
     onSaved();
+    toast(item.archived ? "Unarchived" : "Archived. It's hidden from study and keeps its history", {
+      action: { label: "Undo", onClick: async () => { await api.bulkItems(item.archived ? "archive" : "unarchive", [item.id]); load(); onSaved(); } },
+    });
+  };
+  const suspend = async () => {
+    const ids = item.cards.map((c) => c.id);
+    await api.bulkCards(allSuspended ? "unsuspend" : "suspend", ids);
+    await load();
+    onSaved();
+    toast(allSuspended ? "Unsuspended" : "Suspended. It won't come up until you unsuspend it", {
+      action: { label: "Undo", onClick: async () => { await api.bulkCards(allSuspended ? "suspend" : "unsuspend", ids); load(); onSaved(); } },
+    });
+  };
+  const forget = async () => {
+    await api.bulkCards("reset", item.cards.map((c) => c.id));
+    await load();
+    onSaved();
+    toast("Starts over as a new card");
   };
   const duplicate = async () => {
     const existing = new Set((await api.search(`id:${item.id}*`, { limit: 1000 })).rows.map((r) => r.itemId));
@@ -296,7 +343,7 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
     const newId = `${item.id}-${n}`;
     try {
       await api.saveItem(newId, { type: item.type, ...draft });
-      toast.success(`Duplicated as ${newId}`);
+      toast.success("Duplicated. You're editing the copy");
       onDuplicate(newId);
     } catch (e) {
       toast.error((e as Error).message);
@@ -307,164 +354,135 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
     toast.success("Deleted");
     onDeleted();
   };
-  const allSuspended = item.cards.every((c) => c.suspended);
+  const practice = () => navigate(`/study?card=${item.cards[0]?.id}&deck=${encodeURIComponent(item.deck)}`);
+  const count = item.reviews.length + item.attempts.length;
+
+  const actions = (
+    <>
+      <Button variant="secondary" className="h-9 gap-2 rounded-[10px] px-3.5 font-semibold" onClick={practice}><Play className="size-3 fill-current text-muted-foreground" />Practice</Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild><Button size="icon" variant="ghost" className="size-9 text-muted-foreground" aria-label="More"><MoreHorizontal className="size-5" /></Button></DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem disabled={mediaPending} onClick={duplicate}><Copy />Duplicate</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate(`/types/${encodeURIComponent(item.type)}`)}><Dices />Edit card type</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => { navigator.clipboard.writeText(item.id); toast("Copied id"); }}><Copy />Copy id</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setConfirm("forget")}><RotateCcw />Start over</DropdownMenuItem>
+          <DropdownMenuItem onClick={suspend}><Pause />{allSuspended ? "Unsuspend" : "Suspend"}</DropdownMenuItem>
+          <DropdownMenuItem onClick={archive}>{item.archived ? <ArchiveRestore /> : <Archive />}{item.archived ? "Unarchive" : "Archive"}</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onClick={() => setConfirm("delete")}><Trash2 />Delete…</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  );
+  const badges = (
+    <>
+      {item.archived && <span className="shrink-0 rounded-full px-2 py-0.5 text-[11.5px] font-semibold text-muted-foreground shadow-[inset_0_0_0_1.2px_var(--border)]">archived</span>}
+      {allSuspended && <span className="shrink-0 rounded-full px-2 py-0.5 text-[11.5px] font-semibold text-muted-foreground shadow-[inset_0_0_0_1.2px_var(--border)]">suspended</span>}
+    </>
+  );
+  const back = closeAlways || phone;
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 pt-4 sm:px-6 sm:pt-6 xl:px-10">
-      <div className="flex items-start gap-2 sm:gap-3">
-        <Button size="icon" variant="ghost" className={cn("-ml-2 size-9", !closeAlways && "md:hidden")} onClick={onBack} aria-label="Back to list"><ArrowLeft className="size-4" /></Button>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 pt-1.5 md:pt-0">
-          <Badge variant="outline" className="font-normal">{type.name}</Badge>
-          {item.archived && <Badge variant="outline" className="font-normal text-muted-foreground">archived</Badge>}
-          {allSuspended && <Badge variant="outline" className="font-normal text-muted-foreground">suspended</Badge>}
-          <button className="truncate font-mono text-xs text-muted-foreground hover:text-foreground" title="Copy id" onClick={() => { navigator.clipboard.writeText(item.id); toast("Copied id"); }}>{item.id}</button>
+    <div className="@container/insp min-h-full w-full">
+    <div className={cn("@container mx-auto flex min-h-full w-full max-w-[760px] flex-col px-[34px] pt-[22px] @max-[44rem]/insp:px-6 @max-[44rem]/insp:pt-[18px] max-md:px-5! max-md:pt-[calc(0.5rem+env(safe-area-inset-top))]!", phone && !closeAlways && "browse-slide")}>
+      {phone && !closeAlways ? (
+        <>
+          <div className="-mx-2 mb-1 flex h-12 items-center gap-1">
+            <button className="flex items-center gap-0.5 py-1.5 pr-2 pl-0.5 text-base font-semibold" onClick={onBack} aria-label="Back to list"><ChevronLeft className="size-6" />Browse</button>
+            <div className="flex-1" />
+            {actions}
+          </div>
+          <div className="mb-3 flex items-center gap-2"><DeckCrumb deck={item.deck} />{badges}</div>
+        </>
+      ) : (
+        <div className="mb-3.5 flex min-h-10 items-center gap-2">
+          {back && <Button size="icon" variant="ghost" className="-ml-2 size-9" onClick={onBack} aria-label="Back to list"><ArrowLeft className="size-4" /></Button>}
+          <DeckCrumb deck={item.deck} className="flex-1 @max-[36rem]:hidden" />
+          <DeckCrumb deck={item.deck} leafOnly className="hidden flex-1 @max-[36rem]:flex" />
+          {badges}
+          {actions}
         </div>
-        <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => navigate(`/study?card=${item.cards[0]?.id}&deck=${encodeURIComponent(item.deck)}`)}><Play className="size-4" />Practice</Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild><Button size="icon" variant="ghost" className="size-8"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem disabled={mediaPending} onClick={duplicate}><Copy />Duplicate</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate(`/types/${encodeURIComponent(item.type)}`)}><Dices />Edit card type</DropdownMenuItem>
-            <DropdownMenuItem onClick={async () => { await api.bulkCards("reset", item.cards.map((c) => c.id)); load(); onSaved(); }}><RotateCcw />Forget scheduling</DropdownMenuItem>
-            <DropdownMenuItem onClick={async () => { await api.bulkCards(allSuspended ? "unsuspend" : "suspend", item.cards.map((c) => c.id)); load(); onSaved(); }}>
-              <Pause />{allSuspended ? "Unsuspend" : "Suspend"}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={archive}>{item.archived ? <ArchiveRestore /> : <Archive />}{item.archived ? "Unarchive" : "Archive"}</DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onClick={del}><Trash2 />Delete</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      )}
+
+      <ItemPreview item={item} type={type} fields={draft.fields} dirty={dirty} version={version} flipped={flipped} onFlip={() => setFlipped((f) => !f)} />
+
+      <div role="tablist" className="mt-[22px] mb-[18px] flex w-max max-w-full gap-1 rounded-[11px] bg-secondary p-[3px] max-md:grid max-md:w-auto max-md:grid-cols-3">
+        {TABS.map(([k, label]) => (
+          <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={cn("inline-flex items-center justify-center gap-1.5 rounded-[9px] px-3.5 py-[7px] text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground", tab === k && "bg-background text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.08),inset_0_0_0_1px_var(--border)] dark:bg-[color-mix(in_oklab,var(--foreground)_14%,var(--card))] dark:shadow-none")}>
+            {label}{k === "history" && count > 0 && <small className="text-xs tabular text-muted-foreground/70">{count}</small>}
+          </button>
+        ))}
       </div>
 
-      <CardPreview
-        src={`/frame/${encodeURIComponent(item.type)}?v=${encodeURIComponent(type.updated ?? "")}`}
-        version={`${item.id}:${version}:${type.updated}`}
-        load={loadPreview}
-        faces={type.facesWhen ? item.cards.map((c) => c.face) : type.faces}
-        generated={typeof item.fields.generator === "string"}
-      />
-      {dirty && <p className="-mt-3 text-xs text-muted-foreground">The preview shows the saved version. Save to see your edits.</p>}
-
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="edit">Edit</TabsTrigger>
-          <TabsTrigger value="schedule">Scheduling</TabsTrigger>
-          <TabsTrigger value="history">History <span className="ml-1 tabular text-muted-foreground">{item.reviews.length + item.attempts.length}</span></TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="edit" className="mt-5 flex flex-col gap-5">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">Deck</label>
-              <DeckInput value={draft.deck} decks={decks} onChange={(deck) => setDraft({ ...draft, deck })} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">Source</label>
-              <Input value={draft.source} onChange={(e) => setDraft({ ...draft, source: e.target.value })} placeholder="Where this comes from" />
-            </div>
+      {tab === "edit" && (
+        <div className="flex flex-col gap-4 pb-6">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-[14.5px] font-semibold">Content</h3>
+            <ItemAiEdit key={item.id} id={item.id} fields={draft.fields} specs={type.fields} onApply={(fields) => setDraft((current) => current && { ...current, fields })} />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Tags</label>
-            <TagInput value={draft.tags} known={tags} onChange={(t) => setDraft({ ...draft, tags: t })} />
-          </div>
-          <div className="border-t pt-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className="text-sm font-medium">Content</h3>
-              <ItemAiEdit key={item.id} id={item.id} fields={draft.fields} specs={type.fields} onApply={(fields) => setDraft((current) => current && { ...current, fields })} />
-            </div>
+          <div className="browse-fields">
             <FieldEditor key={item.id} fields={type.fields} value={draft.fields} onChange={(fields) => setDraft((current) => current && { ...current, fields })} onMediaPendingChange={setMediaPending} />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Notes</label>
-            <Input value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} placeholder="Private notes, not shown on the card" />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="schedule" className="mt-5">
-          <div className="flex flex-col gap-3">
-            {item.cards.map((c) => (
-              <div key={c.id} className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg border p-4 text-sm sm:grid-cols-4">
-                {item.cards.length > 1 && <div className="col-span-full text-xs font-medium text-muted-foreground">Face: {c.face}</div>}
-                <Stat label="State" value={<span className={STATE_CLS[c.state]}>{c.suspended ? "suspended" : STATE_NAMES[c.state]}</span>} />
-                <Stat label="Due" value={c.state === 0 ? "new" : relative(c.due)} />
-                <Stat label="Recall now" value={c.retrievability == null ? "n/a" : `${Math.round(c.retrievability * 100)}%`} />
-                <Stat label="Reviews" value={`${c.reps} (${c.lapses} lapses)`} />
-                <Stat label="Stability" value={c.state === 0 ? "n/a" : `${Number(c.stability).toFixed(1)} days`} />
-                <Stat label="Difficulty" value={c.state === 0 ? "n/a" : `${Number(c.difficulty).toFixed(1)} / 10`} />
-                <Stat label="Last review" value={c.last_review ? relative(c.last_review) : "never"} />
-              </div>
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="history" className="mt-5">
-          <History item={item} />
-        </TabsContent>
-      </Tabs>
-
-      <div className={cn("sticky bottom-0 -mx-4 mt-2 flex items-center gap-2 border-t bg-background px-4 py-3 transition-opacity sm:-mx-6 sm:px-6 xl:-mx-10 xl:px-10", dirty || mediaPending ? "opacity-100" : "pointer-events-none opacity-0")}>
-        <span className="text-sm text-muted-foreground">{mediaPending ? "Copying media…" : "Unsaved changes"}</span>
-        <div className="flex-1" />
-        <Button variant="ghost" size="sm" disabled={mediaPending} onClick={() => setDraft(draftOf(item))}>Discard</Button>
-        <Button size="sm" className="gap-1.5" onClick={save} disabled={saving || mediaPending}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Save <kbd className="hidden text-[10px] opacity-60 sm:inline">Ctrl S</kbd></Button>
-      </div>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="tabular">{value}</div>
-    </div>
-  );
-}
-
-const fmtTs = (ts: string) => new Date(ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-
-function History({ item }: { item: ItemDetail }) {
-  const events = [
-    ...item.reviews.map((r) => ({ kind: "review" as const, ts: r.ts, r })),
-    ...item.attempts.map((a) => ({ kind: "attempt" as const, ts: a.ts, a })),
-  ].sort((x, y) => y.ts.localeCompare(x.ts));
-  if (!events.length) return <p className="text-sm text-muted-foreground">Not studied yet.</p>;
-  return (
-    <div className="flex flex-col gap-2 pb-4">
-      {events.map((e, i) =>
-        e.kind === "review" ? (
-          <div key={i} className="flex items-center gap-3 px-1 text-sm">
-            <span className="w-24 shrink-0 text-xs tabular text-muted-foreground sm:w-32">{fmtTs(e.ts)}</span>
-            <span className={cn("font-medium", ["", "text-again", "text-hard", "text-good", "text-easy"][e.r.rating])}>{RATING_LABEL[e.r.rating as 1]}</span>
-            {e.r.practice ? <span className="text-xs text-muted-foreground">practice</span> : <span className="text-xs text-muted-foreground">next in {humanInterval(e.r.due_after, new Date(e.ts))}</span>}
-            {e.r.duration_ms != null && <span className="ml-auto text-xs tabular text-muted-foreground">{Math.round(e.r.duration_ms / 1000)}s</span>}
-          </div>
-        ) : (
-          <div key={i} className="rounded-lg border p-3 text-sm">
-            <div className="mb-1.5 flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="tabular">{fmtTs(e.ts)}</span>
-              <span className={cn({ correct: "text-good", partial: "text-hard", incorrect: "text-again", ungraded: "" }[e.a.grade.verdict])}>
-                {e.a.grade.verdict}{e.a.grade.score != null && e.a.grade.verdict === "partial" ? ` ${Math.round(e.a.grade.score * 100)}%` : ""}
-              </span>
-              {e.a.practice ? <span>· practice</span> : null}
-              {e.a.grade.grader.model && <span className="truncate">· {e.a.grade.grader.model}</span>}
+          <div className="mt-1 grid gap-3.5 @xl:grid-cols-2">
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <label className="browse-label">Deck</label>
+              <DeckInput value={draft.deck} decks={decks} onChange={(deck) => setDraft({ ...draft, deck })} />
             </div>
-            <AnswerView answer={e.a.answer} />
-            {e.a.grade.feedback && <Markdown className="mt-2 border-t pt-2 text-[0.9rem] text-muted-foreground">{e.a.grade.feedback}</Markdown>}
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <label className="browse-label">Tags</label>
+              <TagInput value={draft.tags} known={tags} onChange={(t) => setDraft({ ...draft, tags: t })} />
+            </div>
           </div>
-        ),
+          <div className="grid gap-3.5 @xl:grid-cols-2">
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <label className="browse-label">Notes <span className="font-medium text-muted-foreground/70">only you see these</span></label>
+              <Input value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} placeholder="A hint, a mnemonic" className="h-11 rounded-[11px]" />
+            </div>
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <label className="browse-label">Source</label>
+              <Input value={draft.source} onChange={(e) => setDraft({ ...draft, source: e.target.value })} placeholder="Where this comes from" className="h-11 rounded-[11px]" />
+            </div>
+          </div>
+          <div className="text-[13px] text-muted-foreground">
+            Card type: <button className="font-semibold text-foreground underline-offset-2 hover:underline" onClick={() => navigate(`/types/${encodeURIComponent(item.type)}`)}>{type.name}</button>
+            {" · "}added {relative(item.created)}
+            {" · "}<button className="font-mono text-xs hover:text-foreground" title="Copy id" onClick={() => { navigator.clipboard.writeText(item.id); toast("Copied id"); }}>{item.id}</button>
+          </div>
+        </div>
       )}
+      {tab === "memory" && <MemoryPanel item={item} onPractice={practice} onForget={() => setConfirm("forget")} onSuspend={suspend} />}
+      {tab === "history" && <HistoryPanel item={item} />}
+
+      <div
+        data-savebar
+        className={cn(
+          "browse-savebar sticky bottom-0 z-[3] -mx-[34px] mt-auto flex items-center gap-2.5 px-[34px] pt-3.5 pb-[18px] transition-[opacity,transform] duration-200 @max-[44rem]/insp:-mx-6 @max-[44rem]/insp:px-6 max-md:-mx-5! max-md:px-5!",
+          gutter && (fun ? "md:pr-[112px]!" : "md:pr-[84px]!"),
+          dirty || mediaPending ? "opacity-100" : "pointer-events-none translate-y-2 opacity-0",
+        )}
+      >
+        <span className="text-[13.5px] font-medium text-muted-foreground">{mediaPending ? "Copying media…" : "Unsaved changes"}</span>
+        <div className="flex-1" />
+        <Button variant="outline" className="h-10 rounded-[11px] px-4" disabled={mediaPending} onClick={() => setDraft(draftOf(item))}>Discard</Button>
+        <Button className="h-10 gap-1.5 rounded-[11px] px-[18px] font-semibold" onClick={save} disabled={saving || mediaPending}>{saving && <Loader2 className="size-4 animate-spin" />}Save <kbd className="hidden text-[10px] opacity-70 sm:inline">{navigator.platform.startsWith("Mac") ? "⌘S" : "Ctrl S"}</kbd></Button>
+      </div>
+
+      <AlertDialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirm === "delete" ? "Delete this card?" : "Start over?"}</AlertDialogTitle>
+            <AlertDialogDescription>{confirm === "delete" ? "This removes it with all its review history. Archiving hides it and keeps the history." : "It comes back as a new card. Its past reviews stay in History."}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant={confirm === "delete" ? "destructive" : "default"} onClick={() => (confirm === "delete" ? del() : forget())}>{confirm === "delete" ? "Delete" : "Start over"}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
     </div>
   );
-}
-
-function AnswerView({ answer }: { answer: unknown }) {
-  if (answer && typeof answer === "object" && typeof (answer as any).image === "string") {
-    const img = (answer as any).image as string;
-    return <EtudeImg src={img.startsWith("media:") ? `/media/${img.slice(6)}` : img} alt="drawing" className="max-h-64 rounded border bg-white" />;
-  }
-  const text = typeof answer === "string" ? answer : JSON.stringify(answer);
-  return <pre className="whitespace-pre-wrap break-words font-mono text-[13px]">{text || <span className="text-muted-foreground">(empty)</span>}</pre>;
 }
 
 export function DeckInput({ value, decks, onChange }: { value: string; decks: string[]; onChange(v: string): void }) {

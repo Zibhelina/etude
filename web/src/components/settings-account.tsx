@@ -224,6 +224,7 @@ function Profile({ st, onChanged, guarded }: { st: AccountStatus; onChanged(): P
       }
       stackAside
     >
+      <DisplayName me={me} onChanged={onChanged} />
       {pending && !changing && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>Waiting for confirmation from <span className="text-foreground/90">{pending.email}</span>.</span>
@@ -267,6 +268,27 @@ function Profile({ st, onChanged, guarded }: { st: AccountStatus; onChanged(): P
         </div>
       )}
     </Block>
+  );
+}
+
+/** The name beside Market comments. Saved on blur or Enter; empty shows "Etude learner". */
+function DisplayName({ me, onChanged }: { me: NonNullable<AccountStatus["me"]>; onChanged(): Promise<void> }) {
+  const [name, setName] = useState(me.displayName ?? "");
+  const save = async () => {
+    const n = name.trim();
+    if (n === (me.displayName ?? "").trim()) return;
+    try {
+      await account.setName(n);
+      toast.success(n ? "Name saved" : "Name cleared");
+      await onChanged();
+    } catch (e) {
+      toast.error("Couldn't save the name", { description: e instanceof Error ? e.message : "" });
+    }
+  };
+  return (
+    <div onBlur={() => void save()} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLElement).blur()} data-display-name>
+      <TextInput label="Name" hint="Shown beside your Market comments. Your email never is." value={name} onChange={setName} autoComplete="nickname" placeholder="Etude learner" />
+    </div>
   );
 }
 

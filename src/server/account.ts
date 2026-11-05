@@ -18,6 +18,7 @@ export function accountRoutes(app: Hono, e: Etude) {
   };
 
   app.get("/api/account", async (c) => c.json(await a.status()));
+  app.patch("/api/account/me", async (c) => c.json(await a.setDisplayName(String((await body(c)).displayName ?? ""))));
   app.put("/api/account/server", async (c) => c.json(a.setServer(String((await body(c)).server ?? ""))));
   app.post("/api/account/signin", async (c) => c.json(await a.signin(need((await body(c)).email, "email"))));
   app.post("/api/account/verify", async (c) => {

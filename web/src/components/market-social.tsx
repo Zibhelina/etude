@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ago, compact, social, type EntryCounts, type EntryStats, type MarketComment } from "@/lib/market-social";
+import { account } from "@/lib/account";
+import { Input } from "@/components/ui/input";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 
@@ -105,6 +107,10 @@ export function Comments({ k, signedIn, onCount }: { k: string; signedIn: boolea
   const [reporting, setReporting] = useState<MarketComment | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
+  // The name beside your comments: asked for once, right before your first post, if the account has none.
+  const named = useRef<boolean | null>(null);
+  const [askName, setAskName] = useState(false);
+  const [name, setName] = useState("");
 
   const load = useCallback(async (before?: string) => {
     try {
@@ -124,6 +130,15 @@ export function Comments({ k, signedIn, onCount }: { k: string; signedIn: boolea
     if (!body) return;
     setSending(true);
     try {
+      if (named.current === null) named.current = !!(await account.status().catch(() => null))?.me?.displayName?.trim();
+      if (!named.current) {
+        if (!askName) return setAskName(true);
+        const n = name.trim();
+        if (!n) return;
+        await account.setName(n);
+        named.current = true;
+        setAskName(false);
+      }
       const c = await social.comment(k, body);
       setList((l) => [c, ...(l ?? [])]);
       setText("");
@@ -175,11 +190,18 @@ export function Comments({ k, signedIn, onCount }: { k: string; signedIn: boolea
             maxLength={2000}
             aria-label="Write a comment"
           />
+          {askName && (
+            <div className="mk-name" data-name-step>
+              <label htmlFor="mk-name">Name people see beside your comments</label>
+              <Input id="mk-name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void send()} maxLength={80} autoFocus placeholder="Your name" />
+              <span>Your email stays private. You can change the name in Settings → Account.</span>
+            </div>
+          )}
           {text.trim() && (
             <div className="mk-compose-bar">
               <span>{text.length > 1800 ? `${2000 - text.length} left` : "⌘ Enter to post"}</span>
-              <Button variant="ghost" size="sm" onClick={() => setText("")}>Cancel</Button>
-              <Button size="sm" disabled={sending} onClick={() => void send()} data-post>{sending && <Loader2 className="size-3.5 animate-spin" />}Post</Button>
+              <Button variant="ghost" size="sm" onClick={() => (setText(""), setAskName(false))}>Cancel</Button>
+              <Button size="sm" disabled={sending || (askName && !name.trim())} onClick={() => void send()} data-post>{sending && <Loader2 className="size-3.5 animate-spin" />}{askName ? "Save name and post" : "Post"}</Button>
             </div>
           )}
         </div>

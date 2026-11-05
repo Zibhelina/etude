@@ -355,6 +355,7 @@ These work on every command, before or after the command words.
   - [`account signin`](#account-signin) Email a one-time 6-digit sign-in code (valid 15 minutes).
   - [`account verify`](#account-verify) Redeem the 6-digit code from the sign-in email. When already signed in, it re-confirms this device.
   - [`account signout`](#account-signout) Sign this device out of the account. Local data stays.
+  - [`account name`](#account-name) The name people see beside your Market comments.
   - [`account devices`](#account-devices) Devices signed in to the account.
   - [`account revoke`](#account-revoke) Sign a device out. Another device needs a sign-in on this one within 10 minutes.
   - [`account passkeys`](#account-passkeys) Passkeys on the account (add them in Settings → Account; the browser holds them).
@@ -3732,6 +3733,30 @@ etude account signout
 *writes*
 
 Output: { signedIn }
+
+### etude account name
+
+<a id="account-name"></a>
+
+The name people see beside your Market comments.
+
+Without a name, comments show "Etude learner". Up to 80 characters; an empty string clears it. The email is never shown.
+
+```
+etude account name <name>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `name` | Display name. |
+
+Output: { id, email, displayName, … }
+
+```sh
+etude account name "Ana"
+```
 
 ### etude account devices
 

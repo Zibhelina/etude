@@ -238,6 +238,9 @@ export class AccountClient {
     return { reauth: !!r.reauth, email: r.account.email };
   }
 
+  /** The name shown beside your Market comments (and nowhere else public). Empty clears it. */
+  setDisplayName = (name: string) => this.json("PATCH", "/v1/me", { displayName: String(name ?? "").trim().slice(0, 80) });
+
   // ── devices ───────────────────────────────────────────────────
   devices = () => this.json("GET", "/v1/devices");
   renameDevice = (id: string, name: string) => this.json("PATCH", `/v1/devices/${encodeURIComponent(id)}`, { name });

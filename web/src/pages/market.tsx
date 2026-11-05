@@ -1,7 +1,9 @@
 // The market: themes, decks and card types other people shared, from a public GitHub repository.
-// Browse and install here; Publish opens a pull request with the user's GitHub CLI.
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Blocks, Check, Download, ExternalLink, Eye, GitPullRequest, Layers, Loader2, Palette, RefreshCw, Search, Store, Upload } from "lucide-react";
+// Discover is a featured entry and one shelf per kind; each entry opens its own page (?entry=kind/id).
+// Themes can be tried on: the whole app repaints until you keep it or take it off. Publish opens a pull
+// request with the user's GitHub CLI.
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Blocks, Check, ChevronLeft, ChevronRight, Download, ExternalLink, Eye, GitPullRequest, Layers, Loader2, Palette, RefreshCw, Search, Store, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,30 +12,68 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Field, Page, PageHeader } from "@/components/page";
+import { Field, Page } from "@/components/page";
 import { ThemeMiniature, ThemeSwatches } from "@/components/settings-theme-preview";
 import { CardPreview } from "@/components/card-preview";
 import { download } from "@/components/type-editor/starter";
 import { api, ApiError, type CardType, type MarketEntry, type MarketFile, type MarketKind, type PublishResult } from "@/lib/api";
 import { EtudeImg } from "@/lib/local-url";
 import { MarketGallery } from "@/components/market-gallery";
-import { applyTheme } from "@/lib/theme";
+import { DetailLayout, Hook, niceDate, paragraphs } from "@/components/market-detail";
+import { applyTheme, currentTheme, setPreviewing, type Theme } from "@/lib/theme";
 import { navigate, useLocation } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { serverless } from "@/lib/native";
-import { LibraryView, PaidDialog, PaidTile, SellingView, usePaidIndex } from "@/components/market-paid";
-import type { PaidEntry } from "@/lib/account";
+import { LibraryView, PaidDetail, PaidTile, SellingView, usePaidIndex } from "@/components/market-paid";
+import { money, type PaidEntry } from "@/lib/account";
 import { canShowPurchases, isNativeApp } from "@/lib/platform";
 import { track } from "@/lib/telemetry";
 
 const KIND_LABEL: Record<MarketKind, string> = { theme: "Theme", deck: "Deck", type: "Card type" };
 const KIND_ICON: Record<MarketKind, React.ComponentType<{ className?: string }>> = { theme: Palette, deck: Layers, type: Blocks };
-const GRADER_WORD: Record<string, string> = { self: "self-rated", script: "graded by script", ai: "AI-graded", hybrid: "script + AI" };
-const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+const GRADER_WORD: Record<string, string> = { self: "self-rated", script: "checked by script", ai: "AI-graded", hybrid: "script + AI" };
+const plural = (n: number, w: string) => `${n.toLocaleString("en-US")} ${w}${n === 1 ? "" : "s"}`;
 const kb = (b: number) => (b < 1e6 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1e6).toFixed(1)} MB`);
+/** The shelves' order: these first, the rest after, what you already have last. */
+const FEATURED = ["kanji-mage", "countries-of-the-world", "anatomy-3d", "flippy-bit", "periodic-table", "piano", "logic-puzzles", "geometry-puzzles", "etude-showcase", "morse-code-letters"];
+const official = (author: string) => /^(Joao|João|Zibhelina)\b/.test(author);
 
 type Filter = "all" | MarketKind;
 type Tab = "browse" | "library" | "selling";
+type Item = { paid: false; key: string; e: MarketEntry } | { paid: true; key: string; e: PaidEntry };
+
+const s_ = (e: MarketEntry) => e.summary as any;
+const parts = (decks: string[] = []) => decks.filter((d) => d.includes("::")).map((d) => d.split("::").pop()!);
+const words = (q: string) => q.toLowerCase().split(/\s+/).filter(Boolean);
+const matches = (e: { name: string; description: string; author: string; tags: string[] }, w: string[]) => w.every((x) => [e.name, e.description, e.author, ...e.tags].join(" ").toLowerCase().includes(x));
+function firstSentence(d: string, max = 120) {
+  let s = (d || "").split(/(?<=[.!?])\s/)[0] ?? "";
+  if (s.length > max) s = s.slice(0, max - 3).replace(/\s\S*$/, "") + "…";
+  return s;
+}
+function pitch(d: string) {
+  const ss = (d || "").split(/(?<=[.!?])\s+/);
+  let out = "";
+  for (const s of ss) {
+    if (out && (out + " " + s).length > 200) break;
+    out += (out ? " " : "") + s;
+  }
+  return out;
+}
+function featRank(key: string, installed: boolean, kind: MarketKind) {
+  const i = FEATURED.indexOf(key.split("/").pop()!);
+  return (i < 0 ? 99 + (kind === "theme" ? 50 : 0) : i) + (installed ? 500 : 0);
+}
+function metaLine(e: MarketEntry): string {
+  const s = s_(e);
+  if (e.kind === "theme") return `${s.theme.scheme === "light" ? "Light" : "Dark"} theme`;
+  if (e.kind === "type") return `Card type · ${(s.types as any[]).map((t) => GRADER_WORD[t.grader] ?? t.grader).join(", ")}`;
+  const p = parts(s.decks).length;
+  return `${plural(s.items, "card")}${p > 1 ? ` · ${p} parts` : ""}${s.watch ? " · tour" : ""}`;
+}
+function By({ author }: { author: string }) {
+  return official(author) ? <span className="inline-flex items-center gap-1 whitespace-nowrap"><span className="score-serif text-[15px] text-foreground">ε</span>Etude</span> : <span className="whitespace-nowrap">{author}</span>;
+}
 
 export function MarketPage() {
   // Usage count (only when the person turned usage stats on).
@@ -44,13 +84,12 @@ export function MarketPage() {
   const tabs: Tab[] = isNativeApp() ? ["browse", "library"] : ["browse", "library", "selling"];
   const tab: Tab = tabs.includes(params.get("tab") as Tab) ? (params.get("tab") as Tab) : "browse";
   const paid = usePaidIndex();
-  const [openPaid, setOpenPaid] = useState<PaidEntry | null>(null);
   const [data, setData] = useState<{ repo: string; url: string; selectedTheme: string; entries: MarketEntry[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [open, setOpen] = useState<MarketEntry | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async (refresh = false) => {
     setRefreshing(refresh);
@@ -70,250 +109,480 @@ export function MarketPage() {
     load();
   }, [load]);
 
-  // ?entry=<kind>/<id> opens an entry directly (shareable links).
-  useEffect(() => {
-    const want = params.get("entry");
-    if (!want || !data) return;
-    const [k, id] = want.split("/");
-    const hit = data.entries.find((e) => e.kind === k && e.id === id);
-    if (hit) setOpen(hit);
-  }, [data, params.get("entry")]);
-
-  const shown = useMemo(() => {
-    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-    return (data?.entries ?? [])
-      .filter((e) => filter === "all" || e.kind === filter)
-      .filter((e) => words.every((w) => [e.name, e.description, e.author, ...e.tags].join(" ").toLowerCase().includes(w)));
-  }, [data, filter, query]);
-
-  const paidShown = useMemo(() => {
-    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-    return filter === "all" || filter === "deck" ? paid.entries.filter((e) => words.every((w) => [e.name, e.description, e.author, ...e.tags].join(" ").toLowerCase().includes(w))) : [];
-  }, [paid.entries, filter, query]);
-
-  const counts = useMemo(() => {
-    const c = { all: 0, theme: 0, deck: 0, type: 0 } as Record<Filter, number>;
-    for (const e of data?.entries ?? []) (c.all++, c[e.kind]++);
-    c.all += paid.entries.length;
-    c.deck += paid.entries.length;
-    return c;
-  }, [data, paid.entries]);
-  const setTab = (t: Tab) => navigate(t === "browse" ? "/market" : `/market?tab=${t}`, { replace: true });
-
-  const setFilter = (f: Filter) => navigate(f === "all" ? "/market" : `/market?kind=${f}`, { replace: true });
-  const tabLabel: Record<Tab, string> = { browse: "Browse", library: "Library", selling: "Selling" };
-  const closeEntry = () => {
-    setOpen(null);
-    if (params.get("entry")) navigate(filter === "all" ? "/market" : `/market?kind=${filter}`, { replace: true });
+  // ---- theme try-on: repaint the whole app with a market theme, then keep it or put the old one back.
+  const [trying, setTrying] = useState<MarketEntry | null>(null);
+  const before = useRef<Theme | null>(null);
+  const takeOff = useCallback(() => {
+    if (before.current) applyTheme(before.current, { persist: false });
+    before.current = null;
+    setPreviewing(false);
+    setTrying(null);
+  }, []);
+  const tryOn = (e: MarketEntry) => {
+    if (!before.current) before.current = currentTheme();
+    setPreviewing(true);
+    applyTheme(s_(e).theme as Theme, { persist: false });
+    setTrying(e);
+  };
+  useEffect(() => () => {
+    // Leaving the Market takes it off.
+    if (before.current) applyTheme(before.current, { persist: false });
+    before.current = null;
+    setPreviewing(false);
+  }, []);
+  const [keeping, setKeeping] = useState(false);
+  const keep = async () => {
+    if (!trying) return;
+    setKeeping(true);
+    try {
+      const r = await api.marketInstall(trying.id, "theme", { use: true });
+      const t = await api.themes();
+      const sel = t.themes.find((x) => x.id === r.ids[0]);
+      before.current = null;
+      setPreviewing(false);
+      if (sel) applyTheme(sel);
+      toast.success(`${trying.name} is on`, { description: "Change it any time in Settings → Appearance." });
+      setTrying(null);
+      void load(true);
+    } catch (e) {
+      toast.error("Couldn't keep the theme", { description: (e as Error).message });
+    } finally {
+      setKeeping(false);
+    }
   };
 
-  return (
-    <Page wide>
-      <PageHeader
-        title="Market"
-        description={
-          <>
-            Themes, decks and card types people made and shared.{" "}
-            {data && (
-              <a className="whitespace-nowrap underline decoration-muted-foreground/40 underline-offset-2 hover:text-foreground" href={`https://github.com/${data.repo}`} target="_blank" rel="noreferrer">
-                Browse on GitHub
-              </a>
-            )}
-          </>
-        }
-        actions={
-          <>
-            <Button variant="ghost" size="icon" aria-label="Refresh" onClick={() => load(true)} disabled={refreshing}>
-              <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
-            </Button>
-            {/* Publishing opens a pull request with the GitHub CLI on the desktop. */}
-            {tab === "browse" && !serverless() && (
-              <Button className="gap-1.5" onClick={() => setPublishing(true)}>
-                <Upload className="size-4" /> Publish
-              </Button>
-            )}
-          </>
-        }
+  // ---- the open entry, from ?entry=<kind>/<id> (shareable links); paid decks are paid/<listing>.
+  const want = params.get("entry");
+  const openFree = useMemo(() => {
+    if (!want || !data) return null;
+    const [k, id] = want.split("/");
+    return data.entries.find((e) => e.kind === k && e.id === id) ?? null;
+  }, [data, want]);
+  const openPaid = useMemo(() => (want?.startsWith("paid/") ? paid.entries.find((e) => e.listing === want.slice(5)) ?? null : null), [paid.entries, want]);
+  const open = (it: Item) => navigate(`/market?entry=${it.paid ? `paid/${it.e.listing}` : `${it.e.kind}/${it.e.id}`}`);
+  const leaveDetail = () => navigate(filter === "all" ? "/market" : `/market?kind=${filter}`);
+
+  // ---- what Discover shows
+  const items = useMemo<Item[]>(() => [
+    ...paid.entries.map((e): Item => ({ paid: true, key: `paid/${e.listing}`, e })),
+    ...(data?.entries ?? []).map((e): Item => ({ paid: false, key: `${e.kind}/${e.id}`, e })),
+  ], [paid.entries, data]);
+  const kindOf = (it: Item): MarketKind => (it.paid ? "deck" : it.e.kind);
+  const counts = useMemo(() => {
+    const c = { all: 0, theme: 0, deck: 0, type: 0 } as Record<Filter, number>;
+    for (const it of items) (c.all++, c[kindOf(it)]++);
+    return c;
+  }, [items]);
+  const sorted = (list: Item[]) => [...list].sort((a, b) => featRank(a.key, !!a.e.installed, kindOf(a)) - featRank(b.key, !!b.e.installed, kindOf(b)));
+  const shown = useMemo(() => sorted(items.filter((it) => (filter === "all" || kindOf(it) === filter) && matches(it.e, words(query)))), [items, filter, query]);
+  const hero = useMemo(() => {
+    const buyable = canShowPurchases() ? sorted(items.filter((it) => it.paid && !it.e.owned && it.e.cover)) : [];
+    const free = sorted(items.filter((it) => !it.paid && it.e.kind === "deck" && it.e.cover)).sort((a, b) => featRank(a.key, false, "deck") - featRank(b.key, false, "deck"));
+    return buyable[0] ?? free[0] ?? null;
+  }, [items]);
+
+  const setTab = (t: Tab) => navigate(t === "browse" ? "/market" : `/market?tab=${t}`, { replace: true });
+  const setFilter = (f: Filter) => navigate(f === "all" ? "/market" : `/market?kind=${f}`, { replace: true });
+  const tabLabel: Record<Tab, string> = { browse: "Discover", library: "Yours", selling: "Selling" };
+  const yoursCount = (data?.entries ?? []).filter((e) => e.installed && e.kind !== "theme").length + paid.entries.filter((e) => e.owned).length;
+  const detail = !!want && (openFree || openPaid);
+
+  // "/" searches; Esc takes a theme off, then leaves an entry's page.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const typing = !!t?.closest?.("input, textarea, select, [contenteditable=true]");
+      if (document.querySelector("[role=dialog]")) return;
+      if (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && tab === "browse" && !detail) {
+        e.preventDefault();
+        searchRef.current?.focus();
+      } else if (e.key === "Escape") {
+        if (typing) return void t!.blur();
+        if (trying) return void (e.preventDefault(), takeOff());
+        if (detail) return void (e.preventDefault(), leaveDetail());
+      }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [tab, detail, trying, takeOff, filter]);
+
+  const tryBar = trying && (
+    <div className="mk-trybar" role="status" data-tryon={trying.id}>
+      <span><ThemeSwatches theme={s_(trying).theme} />Trying on <b className="truncate">{trying.name}</b></span>
+      <Button variant="outline" onClick={takeOff} data-tryoff>Take it off</Button>
+      <Button onClick={() => void keep()} disabled={keeping} data-keep>{keeping && <Loader2 className="size-4 animate-spin" />}Keep it</Button>
+    </div>
+  );
+
+  const repo = data?.repo ?? "";
+  let body: React.ReactNode;
+  if (detail && openFree) {
+    body = (
+      <EntryDetail
+        key={`${openFree.kind}/${openFree.id}`}
+        entry={openFree}
+        all={data?.entries ?? []}
+        repo={repo}
+        inUse={openFree.kind === "theme" && openFree.installedIds[0] === data?.selectedTheme}
+        trying={trying?.id === openFree.id && openFree.kind === "theme"}
+        onTry={() => tryOn(openFree)}
+        onKeep={() => void keep()}
+        onBack={leaveDetail}
+        onOpen={(e) => open({ paid: false, key: `${e.kind}/${e.id}`, e })}
+        onInstalled={() => void load(true)}
       />
-
-      <nav className="mb-5 flex gap-1.5 border-b pb-3" aria-label="Market sections" data-market-tabs>
-        {tabs.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            aria-current={tab === t ? "page" : undefined}
-            className={cn("flex h-10 items-center rounded-full border border-transparent px-4 text-sm text-muted-foreground transition-colors hover:text-foreground md:h-8 md:px-3.5", tab === t && "border-border bg-accent text-foreground")}
-          >
-            {tabLabel[t]}
-          </button>
-        ))}
-      </nav>
-
-      {tab === "library" && <LibraryView />}
-      {tab === "selling" && <SellingView />}
-
-      {tab === "browse" && (<>
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <ToggleGroup type="single" variant="outline" value={filter} onValueChange={(v) => v && setFilter(v as Filter)} className="h-10 w-full sm:w-auto">
-          {(["all", "theme", "deck", "type"] as Filter[]).map((f) => (
-            <ToggleGroupItem key={f} value={f} className="h-10 flex-1 gap-1.5 px-2.5 text-[13px] sm:flex-none sm:px-3">
-              {f === "all" ? "All" : f === "type" ? "Types" : `${KIND_LABEL[f]}s`}
-              {data && <span className="text-muted-foreground tabular-nums">{counts[f]}</span>}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search names, tags, authors" className="h-10 pl-9" aria-label="Search the market" />
-        </div>
-      </div>
-
-      {error ? (
-        <div className="rounded-xl border px-5 py-10 text-center">
-          <Store className="mx-auto mb-3 size-6 text-muted-foreground" />
-          <div className="text-sm font-medium">Couldn't load the market</div>
-          <div className="mx-auto mt-1 max-w-md text-[13px] text-muted-foreground">{error}</div>
-          <Button variant="outline" size="sm" className="mt-4" onClick={() => load(true)}>Try again</Button>
-        </div>
-      ) : !data ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-64 rounded-xl" />)}
-        </div>
-      ) : shown.length === 0 && paidShown.length === 0 ? (
-        <div className="rounded-xl border px-5 py-10 text-center text-sm text-muted-foreground">{query ? `Nothing matches “${query}”.` : "Nothing here yet. Be the first to publish one."}</div>
-      ) : (
-        <>
-          {paidShown.length > 0 && (
-            <section className="mb-8" data-paid-section>
-              <div className="mb-3 flex items-baseline gap-2">
-                <h2 className="text-base font-semibold">{canShowPurchases() ? "Paid decks" : "Your decks"}</h2>
-                <span className="text-xs text-muted-foreground">{canShowPurchases() ? "From creators, sold on etude.study" : "Bought with your Etude account"}</span>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {paidShown.map((e) => <PaidTile key={e.listing} entry={e} onOpen={() => setOpenPaid(e)} />)}
-              </div>
-            </section>
-          )}
-          {shown.length > 0 && paidShown.length > 0 && <h2 className="mb-3 text-base font-semibold">Free</h2>}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {shown.map((e) => <EntryTile key={`${e.kind}/${e.id}`} entry={e} onOpen={() => setOpen(e)} />)}
+    );
+  } else if (detail && openPaid) {
+    body = <PaidDetail key={openPaid.listing} entry={openPaid} signedIn={paid.signedIn} onBack={leaveDetail} onChanged={() => void paid.reload()} />;
+  } else {
+    body = (
+      <>
+        <header className="mb-[18px] flex items-end gap-3.5">
+          <div className="min-w-0 flex-1">
+            <h1 className="mk-serif text-[34px] leading-[1.1] font-semibold max-md:text-[30px]">Market</h1>
+            <p className="mt-2 max-w-[560px] text-[14.5px] leading-snug text-muted-foreground">
+              {canShowPurchases() ? "Decks, card types and themes people made. Most of it is free." : "Decks, card types and themes people made, free to install."}{" "}
+              {data && <a className="whitespace-nowrap underline decoration-muted-foreground/40 underline-offset-2 hover:text-foreground" href={`https://github.com/${data.repo}`} target="_blank" rel="noreferrer">Browse on GitHub</a>}
+            </p>
           </div>
-        </>
-      )}
-      </>)}
-      {openPaid && <PaidDialog entry={openPaid} signedIn={paid.signedIn} onClose={() => setOpenPaid(null)} onChanged={() => void paid.reload().then(() => setOpenPaid(null))} />}
+          <Button variant="ghost" size="icon" aria-label="Refresh" onClick={() => load(true)} disabled={refreshing}>
+            <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
+          </Button>
+          {/* Publishing opens a pull request with the GitHub CLI on the desktop. */}
+          {tab === "browse" && !serverless() && (
+            <Button variant="outline" className="h-10 gap-1.5 shadow-[0_2px_0_var(--border)] max-md:w-10 max-md:px-0" onClick={() => setPublishing(true)} aria-label="Publish">
+              <Upload className="size-4" /> <span className="max-md:hidden">Publish</span>
+            </Button>
+          )}
+        </header>
 
-      {open && (
-        <EntryDialog
-          entry={open}
-          repo={data?.repo ?? ""}
-          inUse={open.kind === "theme" && open.installedIds[0] === data?.selectedTheme}
-          onClose={closeEntry}
-          onInstalled={async () => {
-            const d = await load(true);
-            const fresh = d?.entries.find((x) => x.kind === open.kind && x.id === open.id);
-            if (fresh) setOpen(fresh);
-          }}
-        />
+        <nav className="mk-tabs" aria-label="Market sections" data-market-tabs>
+          {tabs.map((t) => (
+            <button key={t} onClick={() => setTab(t)} aria-current={tab === t ? "page" : undefined}>
+              {tabLabel[t]}
+              {t === "library" && yoursCount > 0 && <span>{yoursCount}</span>}
+            </button>
+          ))}
+        </nav>
+
+        {tab === "library" && <Yours data={data} showBought={paid.available || paid.signedIn} onOpen={(e) => open({ paid: false, key: `${e.kind}/${e.id}`, e })} onChanged={() => void load(true)} onThemes={() => setFilter("theme")} />}
+        {tab === "selling" && <SellingView />}
+
+        {tab === "browse" && (
+          <>
+            <label className="mk-search">
+              <Search className="size-[18px]" />
+              <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search decks, card types, themes" aria-label="Search the market" autoComplete="off" />
+              {query ? <button type="button" aria-label="Clear search" onClick={() => (setQuery(""), searchRef.current?.focus())}><X className="size-4" /></button> : <kbd>/</kbd>}
+            </label>
+            <div className="mk-chips" role="group" aria-label="Kind">
+              {(["all", "deck", "type", "theme"] as Filter[]).map((f) => (
+                <button key={f} aria-pressed={filter === f} onClick={() => setFilter(f)}>
+                  {f === "all" ? "All" : f === "type" ? "Card types" : `${KIND_LABEL[f]}s`}
+                  {data && <span>{counts[f]}</span>}
+                </button>
+              ))}
+            </div>
+
+            {error ? (
+              <section className="mk-panel mk-none">
+                <h3 className="mk-serif">Can't reach the Market.</h3>
+                <p>{error}. Everything you already installed still works; it lives on this device.</p>
+                <div className="flex flex-wrap items-center gap-3"><Button variant="outline" onClick={() => load(true)}>Try again</Button><Button variant="ghost" onClick={() => setTab("library")}>See what you have</Button></div>
+              </section>
+            ) : !data ? (
+              <>
+                <Skeleton className="mb-10 h-72 rounded-[18px]" />
+                <div className="grid gap-5 sm:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="aspect-[16/10] rounded-xl" />)}</div>
+              </>
+            ) : query || filter !== "all" ? (
+              shown.length === 0 ? (
+                <section className="mk-panel mk-none">
+                  <h3 className="mk-serif">Nothing matches “{query}”.</h3>
+                  <p>Try a shorter word, or make it yourself: anything you build in Etude can be published here.</p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button variant="outline" onClick={() => (setQuery(""), setFilter("all"))}>Clear search</Button>
+                    {!serverless() && <Button variant="ghost" onClick={() => setPublishing(true)}>Publish one</Button>}
+                  </div>
+                </section>
+              ) : (
+                <>
+                  <div className="mk-results-head">
+                    {shown.length} {shown.length === 1 ? "result" : "results"}{query && <> for “{query}”</>}
+                    {filter !== "all" && <Button variant="ghost" size="sm" className="text-foreground" onClick={() => setFilter("all")}>Show everything</Button>}
+                  </div>
+                  <div className="mk-grid">{shown.map((it) => <AnyTile key={it.key} it={it} onOpen={() => open(it)} onTry={tryOn} />)}</div>
+                </>
+              )
+            ) : (
+              <>
+                {hero && <Hero it={hero} onOpen={() => open(hero)} onChanged={() => void load(true)} />}
+                <Shelf title="Decks" sub="Install one and it shows up in your Library." items={sorted(items.filter((it) => !it.paid && it.e.kind === "deck"))} onAll={() => setFilter("deck")} onOpen={open} onTry={tryOn} />
+                <Shelf
+                  title={canShowPurchases() ? "Paid decks" : "Your decks"}
+                  sub={canShowPurchases() ? "From creators, sold on etude.study. The creator sets the price." : "Bought with your Etude account"}
+                  items={items.filter((it) => it.paid)}
+                  onOpen={open}
+                  onTry={tryOn}
+                  data-paid-section
+                />
+                <Shelf title="Card types" sub="New kinds of cards. Try one here before you install it." items={sorted(items.filter((it) => !it.paid && it.e.kind === "type"))} onAll={() => setFilter("type")} onOpen={open} onTry={tryOn} />
+                <Shelf title="Themes" sub="Try one on. Nothing changes until you keep it." items={sorted(items.filter((it) => !it.paid && it.e.kind === "theme"))} onAll={() => setFilter("theme")} onOpen={open} onTry={tryOn} themes />
+              </>
+            )}
+          </>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <Page wide className="mk-page">
+      {tryBar}
+      {want && !detail && data && (!want.startsWith("paid/") || paid.loaded) ? (
+        <section className="mk-panel mk-none">
+          <h3 className="mk-serif">That isn't in the Market anymore.</h3>
+          <p>It may have been renamed or taken down.</p>
+          <Button variant="outline" onClick={() => navigate("/market")}>Back to the Market</Button>
+        </section>
+      ) : want && !detail && !error ? (
+        <Skeleton className="h-96 rounded-2xl" />
+      ) : (
+        body
       )}
-      {publishing && <PublishDialog repo={data?.repo ?? ""} onClose={() => setPublishing(false)} />}
+      {publishing && <PublishDialog repo={repo} onClose={() => setPublishing(false)} />}
     </Page>
   );
 }
 
-// ------------------------------------------------------------------ tiles
+// ------------------------------------------------------------------ discover
 
-function InstalledMark({ state }: { state: MarketEntry["installed"] }) {
-  if (!state) return null;
+function Hero({ it, onOpen, onChanged }: { it: Item; onOpen(): void; onChanged(): void }) {
+  const [busy, setBusy] = useState(false);
+  const e = it.e;
+  const stop = (x: React.MouseEvent) => x.stopPropagation();
+  let cover: React.ReactNode, meta: string, btn: React.ReactNode, eyebrow: string;
+  if (it.paid) {
+    const p = it.e;
+    cover = <img src={p.cover} alt="" />;
+    meta = plural(p.summary?.items ?? 0, "card");
+    eyebrow = canShowPurchases() && !p.owned ? "New · paid deck" : "Yours";
+    btn = <Button className="mk-big gap-1.5" onClick={(x) => (stop(x), onOpen())}>{p.owned || !canShowPurchases() ? "Open" : `Buy · ${money(p.price, p.currency)}`}</Button>;
+  } else {
+    const f = it.e;
+    cover = <EtudeImg src={api.marketCoverUrl(f.kind, f.id)} alt="" />;
+    meta = metaLine(f);
+    eyebrow = f.installed ? "Featured" : "Start here";
+    const get = async () => {
+      setBusy(true);
+      try {
+        const r = await api.marketInstall(f.id, f.kind);
+        toast.success(`${r.result === "updated" ? "Updated" : "Installed"} ${f.name}`, { description: f.kind === "deck" ? "It's in your Library." : undefined });
+        onChanged();
+      } catch (err) {
+        toast.error("Install failed", { description: (err as Error).message });
+      } finally {
+        setBusy(false);
+      }
+    };
+    const goTo = () => navigate(f.kind === "deck" ? `/deck?name=${encodeURIComponent(s_(f).decks[0])}` : `/types/${encodeURIComponent(s_(f).types[0].id)}`);
+    btn = f.installed === "installed"
+      ? <Button className="mk-big" onClick={(x) => (stop(x), goTo())}>Open</Button>
+      : <Button className="mk-big gap-1.5" disabled={busy} onClick={(x) => (stop(x), void get())}>{busy ? <Loader2 className="size-4 animate-spin" /> : f.installed === "update" ? <RefreshCw className="size-4" /> : <Check className="size-[18px]" strokeWidth={2.4} />}{f.installed === "update" ? "Update" : "Get it"}</Button>;
+  }
   return (
-    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium", state === "update" ? "bg-highlight/15 text-highlight" : "bg-success/12 text-success")}>
-      {state === "update" ? <RefreshCw className="size-3" /> : <Check className="size-3" strokeWidth={3} />}
-      {state === "update" ? "Update" : "Installed"}
-    </span>
+    <div className="mk-hero" role="link" tabIndex={0} onClick={onOpen} onKeyDown={(x) => x.key === "Enter" && x.target === x.currentTarget && onOpen()} data-market-hero={it.key}>
+      <div className="mk-hero-cover">{cover}</div>
+      <div className="mk-hero-text">
+        <div className="mk-eyebrow">{eyebrow}</div>
+        <h2 className="mk-serif">{e.name}</h2>
+        <p>{pitch(e.description)}</p>
+        <div className="mk-meta mb-[18px]">{meta}<span aria-hidden="true">·</span><By author={e.author} /></div>
+        <div className="mk-actions">
+          {btn}
+          <Button variant="ghost" className="h-10 text-muted-foreground" onClick={(x) => (x.stopPropagation(), onOpen())}>Details</Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
-function Cover({ entry, large }: { entry: MarketEntry; large?: boolean }) {
-  const s = entry.summary as any;
-  if (entry.kind === "theme") return <ThemeMiniature theme={s.theme} className={large ? "" : "rounded-lg"} />;
-  const Icon = KIND_ICON[entry.kind];
-  if (entry.cover) {
-    return (
-      <div className={cn("aspect-[16/10] min-w-0 overflow-hidden rounded-lg bg-[#070707]", large && "rounded-xl")}>
-        <EtudeImg src={api.marketCoverUrl(entry.kind, entry.id)} alt="" loading="lazy" className="size-full object-contain" />
-      </div>
-    );
-  }
-  const samples: string[] = s.samples ?? [];
-  const chips: string[] =
-    entry.kind === "deck"
-      ? (s.decks as string[]).filter((d) => d.includes("::")).map((d) => d.split("::").pop()!)
-      : (s.types as { fields: string[] }[]).flatMap((t) => t.fields);
-  const meta =
-    entry.kind === "deck"
-      ? `${plural(s.items, "card")}${s.watch ? " · tour" : ""}`
-      : (s.types as any[]).map((t) => GRADER_WORD[t.grader] ?? t.grader).join(", ");
+function Shelf({ title, sub, items, onAll, onOpen, onTry, themes, ...rest }: { title: string; sub?: string; items: Item[]; onAll?(): void; onOpen(it: Item): void; onTry(e: MarketEntry): void; themes?: boolean; "data-paid-section"?: boolean }) {
+  const row = useRef<HTMLDivElement>(null);
+  if (!items.length) return null;
+  const page = (d: 1 | -1) => row.current?.scrollBy({ left: d * row.current.clientWidth * 0.8, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   return (
-    <div className={cn("flex aspect-[16/9] min-w-0 flex-col gap-2.5 overflow-hidden rounded-lg bg-muted/50 p-3.5 sm:aspect-[16/10]", large && "rounded-xl p-5")}>
-      <div className="flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-        <Icon className="size-3.5 text-highlight" />
-        <span>{KIND_LABEL[entry.kind]}</span>
-        <span className="font-normal tracking-normal normal-case opacity-80">· {meta}</span>
+    <section className={cn("mk-shelf", themes && "themes")} {...rest}>
+      <div className="mk-shelf-head">
+        <div className="min-w-0 flex-1">
+          <h2 className="mk-serif">{title}</h2>
+          {sub && <p>{sub}</p>}
+        </div>
+        {onAll && <Button variant="ghost" size="sm" className="text-foreground" onClick={onAll}>See all</Button>}
+        <span className="mk-arrows">
+          <Button variant="ghost" size="icon" aria-label="Scroll back" onClick={() => page(-1)}><ChevronLeft className="size-[18px]" /></Button>
+          <Button variant="ghost" size="icon" aria-label="Scroll for more" onClick={() => page(1)}><ChevronRight className="size-[18px]" /></Button>
+        </span>
       </div>
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-1.5">
-        {(samples.length ? samples : [entry.name]).slice(0, large ? 3 : 2).map((line, i) => (
-          <div
-            key={i}
-            className={cn("rounded-md border bg-card px-3 py-2 font-[Latin_Modern_Roman,CMU_Serif,Georgia,serif] text-[15px] leading-snug text-card-foreground shadow-sm", samples.length > 1 ? "truncate" : "line-clamp-2")}
-            style={{ marginLeft: i * 10, marginRight: -i * 10, opacity: 1 - i * 0.3 }}
-          >
-            {line}
-          </div>
-        ))}
+      <div className="mk-row" ref={row}>
+        {items.map((it) => <AnyTile key={it.key} it={it} onOpen={() => onOpen(it)} onTry={onTry} />)}
       </div>
-      <div className="flex max-h-[22px] min-w-0 flex-wrap gap-1 overflow-hidden">
-        {chips.slice(0, 8).map((l, i) => (
-          <span key={i} className="max-w-full truncate rounded bg-background/60 px-1.5 py-0.5 font-mono text-[10.5px] text-muted-foreground">{l}</span>
+    </section>
+  );
+}
+
+function AnyTile({ it, onOpen, onTry }: { it: Item; onOpen(): void; onTry(e: MarketEntry): void }) {
+  return it.paid ? <PaidTile entry={it.e} onOpen={onOpen} /> : <EntryTile entry={it.e} onOpen={onOpen} onTry={() => onTry(it.e)} />;
+}
+
+function StateMark({ state }: { state: MarketEntry["installed"] }) {
+  if (state === "installed") return <span className="mk-state"><Check className="size-3.5" strokeWidth={3} />Installed</span>;
+  if (state === "update") return <span className="mk-state update">Update</span>;
+  return <span className="mk-price">Free</span>;
+}
+
+/** The entry's cover: its image, its theme in miniature, or its first sample cards. */
+function Cover({ entry }: { entry: MarketEntry }) {
+  const s = s_(entry);
+  if (entry.kind === "theme") return <ThemeMiniature theme={s.theme} />;
+  if (entry.cover) return <EtudeImg src={api.marketCoverUrl(entry.kind, entry.id)} alt="" loading="lazy" />;
+  const Icon = KIND_ICON[entry.kind];
+  const samples: string[] = s.samples ?? [];
+  return (
+    <div className="flex size-full min-w-0 flex-col gap-2.5 overflow-hidden p-4">
+      <div className="mk-eyebrow flex items-center gap-1.5"><Icon className="size-3.5" />{KIND_LABEL[entry.kind]}</div>
+      <div className="flex min-h-0 flex-1 flex-col justify-center gap-1.5">
+        {(samples.length ? samples : [entry.name]).slice(0, 2).map((line, i) => (
+          <div key={i} className="mk-serif truncate rounded-md border bg-card px-3 py-2 text-[15px] text-card-foreground shadow-sm" style={{ marginLeft: i * 10, marginRight: -i * 10, opacity: 1 - i * 0.3 }}>{line}</div>
         ))}
       </div>
     </div>
   );
 }
 
-function metaLine(entry: MarketEntry): string {
-  const s = entry.summary as any;
-  if (entry.kind === "theme") return `Theme · ${s.theme.scheme}`;
-  if (entry.kind === "deck") return `Deck · ${plural(s.items, "card")}${s.watch ? " · tour" : ""}`;
-  return `Card type · ${(s.types as any[]).map((t) => GRADER_WORD[t.grader] ?? t.grader).join(", ")}`;
-}
-
-function EntryTile({ entry, onOpen }: { entry: MarketEntry; onOpen(): void }) {
+function EntryTile({ entry, onOpen, onTry }: { entry: MarketEntry; onOpen(): void; onTry(): void }) {
+  const isTheme = entry.kind === "theme";
   return (
-    <button onClick={onOpen} className="group flex min-w-0 flex-col gap-3 rounded-xl border p-2 text-left transition-colors hover:border-ring/70 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none">
-      <Cover entry={entry} />
-      <div className="flex flex-col gap-1 px-1.5 pb-1.5">
-        <div className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">{entry.name}</span>
-          <InstalledMark state={entry.installed} />
-        </div>
-        <div className="line-clamp-2 min-h-[2.5em] text-[13px] leading-snug text-muted-foreground">{entry.description || KIND_LABEL[entry.kind]}</div>
-        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="truncate">{metaLine(entry)}</span>
-          <span aria-hidden="true">·</span>
-          <span className="truncate">by {entry.author}</span>
-          {entry.kind === "theme" && <ThemeSwatches theme={(entry.summary as any).theme} className="ml-auto" />}
+    <div role="link" tabIndex={0} className="mk-tile" onClick={onOpen} onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && onOpen()} data-entry={`${entry.kind}/${entry.id}`}>
+      <div className="mk-cover"><Cover entry={entry} /></div>
+      <div className="mk-tile-body">
+        <div className="mk-tile-title"><b>{entry.name}</b><StateMark state={entry.installed} /></div>
+        <p>{firstSentence(entry.description) || KIND_LABEL[entry.kind]}</p>
+        <div className="mk-tile-meta">
+          <span>{metaLine(entry)}</span>
+          {isTheme ? <ThemeSwatches theme={s_(entry).theme} className="ml-auto" /> : !official(entry.author) && <><span aria-hidden="true">·</span><span>{entry.author}</span></>}
         </div>
       </div>
-    </button>
+      {isTheme ? (
+        <button type="button" className="mk-try" onClick={(e) => (e.stopPropagation(), onTry())} data-try-on={entry.id}>Try it on</button>
+      ) : entry.kind === "type" ? (
+        <span className="mk-try" aria-hidden="true">Try it</span>
+      ) : null}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ yours
+
+/** A theme at thumbnail size: four of its colours in a square. */
+function Palette4({ theme }: { theme: Theme }) {
+  const v = theme.vars;
+  return (
+    <span className="grid size-full grid-cols-2" aria-hidden="true">
+      {[v["--background"], v["--highlight"] ?? v["--primary"], v["--card"], v["--again"]].map((c, i) => <i key={i} style={{ background: c }} />)}
+    </span>
+  );
+}
+
+function Yours({ data, showBought, onOpen, onChanged, onThemes }: { data: { selectedTheme: string; entries: MarketEntry[] } | null; showBought: boolean; onOpen(e: MarketEntry): void; onChanged(): void; onThemes(): void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  if (!data) return <Skeleton className="h-64 rounded-2xl" />;
+  const inst = [...data.entries.filter((e) => e.installed && e.kind !== "theme")].sort((a, b) => featRank(a.id, false, a.kind) - featRank(b.id, false, b.kind));
+  const themes = data.entries.filter((e) => e.installed && e.kind === "theme");
+  const ups = inst.filter((e) => e.installed === "update");
+  const install = async (list: MarketEntry[], key: string, use = false) => {
+    setBusy(key);
+    try {
+      for (const e of list) {
+        const r = await api.marketInstall(e.id, e.kind, { use });
+        if (use && e.kind === "theme") {
+          const t = await api.themes();
+          const sel = t.themes.find((x) => x.id === r.ids[0]);
+          if (sel) applyTheme(sel);
+        }
+      }
+      toast.success(use ? `${list[0].name} is on` : list.length > 1 ? `Updated ${list.length}` : `Updated ${list[0].name}`, use ? undefined : { description: "Your reviews and scheduling stay as they are." });
+      onChanged();
+    } catch (e) {
+      toast.error("That didn't work", { description: (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  };
+  const goTo = (e: MarketEntry) => {
+    const s = s_(e);
+    if (e.kind === "deck") navigate(`/deck?name=${encodeURIComponent(s.decks[0])}`);
+    else navigate(`/types/${encodeURIComponent(s.types[0].id)}`);
+  };
+  return (
+    <div data-yours>
+      {ups.length > 0 && (
+        <div className="mk-panel mk-update" data-updates>
+          <div>
+            <b>{ups.length === 1 ? "1 update" : `${ups.length} updates`}</b>
+            <span>{ups.map((e) => e.name).join(" and ")}. Your reviews and scheduling stay as they are.</span>
+          </div>
+          <Button className="mk-big" disabled={!!busy} onClick={() => void install(ups, "all")}>{busy === "all" && <Loader2 className="size-4 animate-spin" />}{ups.length === 1 ? "Update" : "Update all"}</Button>
+        </div>
+      )}
+      {showBought && <LibraryView />}
+      <section className="mk-lsec">
+        <div className="mk-lhead"><span>Installed from the Market{inst.length > 0 && <i>{inst.length}</i>}</span></div>
+        <div className="mk-panel mk-list">
+          {inst.length === 0 && <div className="px-3 py-3 text-sm text-muted-foreground">Nothing yet. Decks and card types you install show up here.</div>}
+          {inst.map((e) => (
+            <div key={`${e.kind}/${e.id}`} className="mk-li" role="button" tabIndex={0} onClick={() => onOpen(e)} onKeyDown={(x) => x.key === "Enter" && x.target === x.currentTarget && onOpen(e)}>
+              <div className="mk-li-thumb"><Cover entry={e} /></div>
+              <div className="mk-li-text"><b>{e.name}</b><small>{metaLine(e)} · v{e.version}{e.installed === "update" && <em> · new version</em>}</small></div>
+              <div className="mk-li-acts" onClick={(x) => x.stopPropagation()}>
+                {e.installed === "update" ? (
+                  <button className="mk-get" disabled={!!busy} onClick={() => void install([e], e.id)}>{busy === e.id ? <Loader2 className="size-4 animate-spin" /> : "Update"}</button>
+                ) : (
+                  <button className="mk-get ghost" onClick={() => goTo(e)}>Open</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="mk-lsec">
+        <div className="mk-lhead"><span>Themes{themes.length > 0 && <i>{themes.length}</i>}</span><Button variant="ghost" size="sm" className="text-foreground" onClick={onThemes}>Browse themes</Button></div>
+        <div className="mk-panel mk-list">
+          {themes.length === 0 && <div className="px-3 py-3 text-sm text-muted-foreground">You're on {currentTheme().name}. Themes you install from the Market show up here.</div>}
+          {themes.map((e) => {
+            const inUse = e.installedIds[0] === data.selectedTheme;
+            return (
+              <div key={e.id} className="mk-li" role="button" tabIndex={0} onClick={() => onOpen(e)} onKeyDown={(x) => x.key === "Enter" && x.target === x.currentTarget && onOpen(e)}>
+                <div className="mk-li-thumb"><Palette4 theme={s_(e).theme} /></div>
+                <div className="mk-li-text"><b>{e.name}</b><small>{metaLine(e)}{e.installed === "update" && <em> · new version</em>}</small></div>
+                <div className="mk-li-acts" onClick={(x) => x.stopPropagation()}>
+                  <button className={cn("mk-get", inUse && "ghost")} disabled={inUse || !!busy} onClick={() => void install([e], e.id, true)}>{busy === e.id ? <Loader2 className="size-4 animate-spin" /> : inUse ? "In use" : "Use"}</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>
   );
 }
 
 // ------------------------------------------------------------------ detail
 
-function EntryDialog({ entry, repo, inUse, onClose, onInstalled }: { entry: MarketEntry; repo: string; inUse: boolean; onClose(): void; onInstalled(): void }) {
+function EntryDetail({ entry, all, repo, inUse, trying, onTry, onKeep, onBack, onOpen, onInstalled }: { entry: MarketEntry; all: MarketEntry[]; repo: string; inUse: boolean; trying: boolean; onTry(): void; onKeep(): void; onBack(): void; onOpen(e: MarketEntry): void; onInstalled(): void }) {
   const [file, setFile] = useState<MarketFile | null>(null);
   const [busy, setBusy] = useState<null | "install" | "use">(null);
-  const s = entry.summary as any;
+  const s = s_(entry);
 
   useEffect(() => {
     if (entry.kind === "type") api.marketEntry(entry.kind, entry.id).then(setFile).catch((e) => toast.error("Couldn't load the card type", { description: (e as Error).message }));
@@ -344,84 +613,113 @@ function EntryDialog({ entry, repo, inUse, onClose, onInstalled }: { entry: Mark
   };
 
   const goTo = () => {
-    onClose();
     if (entry.kind === "deck") navigate(`/deck?name=${encodeURIComponent(s.decks[0])}`);
     else if (entry.kind === "type") navigate(`/types/${encodeURIComponent(s.types[0].id)}`);
     else navigate("/settings#appearance");
   };
 
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent
-        className="market-detail"
-        aria-describedby="market-about"
-        // The screenshot lightbox is portaled to <body>; clicks in it aren't "outside" the dialog.
-        onInteractOutside={(e) => { if ((e.target as Element | null)?.closest?.(".market-lightbox")) e.preventDefault(); }}
-      >
-        <div className="market-detail-scroll">
-        <DialogHeader className="text-left">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pr-8 text-xs text-muted-foreground [&>span]:whitespace-nowrap">
-            <span>{KIND_LABEL[entry.kind]}</span>
-            <span aria-hidden="true">·</span>
-            <span>by {entry.author}</span>
-            <span aria-hidden="true">·</span>
-            <span>v{entry.version}{entry.updated && `, ${entry.updated}`}</span>
-            <InstalledMark state={entry.installed} />
-          </div>
-          <DialogTitle className="pr-6 text-2xl leading-tight tracking-tight sm:text-3xl">{entry.name}</DialogTitle>
-        </DialogHeader>
-
-        <div className="market-facts">
-          <div className="market-fact"><span>{entry.kind === "theme" ? "Appearance" : "Includes"}</span><strong>{entry.kind === "deck" ? plural(s.items, "card") : entry.kind === "theme" ? (s.theme.scheme === "light" ? "Light theme" : "Dark theme") : plural(s.items, "example")}</strong></div>
-          <div className="market-fact"><span>{entry.kind === "deck" ? "Collection" : "Version"}</span><strong>{entry.kind === "deck" ? plural(s.decks.filter((d: string) => !s.decks.some((x: string) => x.startsWith(d + "::"))).length, "topic") : `v${entry.version}`}</strong></div>
-          <div className="market-fact"><span>Download</span><strong>{kb(entry.bytes)}</strong></div>
-          <div className="market-fact"><span>Creator</span><strong>{entry.author}</strong></div>
-        </div>
-        <MarketGallery key={`${entry.kind}/${entry.id}`} entry={entry} fallback={<Cover entry={entry} large />} />
-
-        <section id="market-about" className="market-description mb-6">
-          <h3 className="mb-3 text-base font-semibold">About this {entry.kind === "type" ? "card type" : entry.kind}</h3>
-          <div className="text-sm leading-relaxed text-muted-foreground whitespace-pre-line">{(entry.description || "No description yet.").split(/\n\s*\n/).map((p, i) => <p key={i}>{p}</p>)}</div>
-        </section>
-        {entry.kind === "theme" && <Button variant="link" className="mb-5 h-auto p-0 text-xs text-muted-foreground" disabled={!!busy} onClick={() => install(false)}>Install without changing my theme</Button>}
-        {entry.kind === "type" && <section className="mb-6"><h3 className="mb-3 text-base font-semibold">Try it</h3><TypePreview file={file} /></section>}
-
-        <div className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-muted-foreground">
-          {entry.kind === "deck" && (
-            <>
-              {s.types.length > 0 && <span>Includes {s.types.map((t: any) => t.name).join(", ")}</span>}
-              {s.watch && <span>Watch tour</span>}
-            </>
-          )}
-          {entry.kind === "type" &&
-            s.types.map((t: any) => (
-              <span key={t.id}>
-                <code className="text-foreground">{t.id}</code> · {GRADER_WORD[t.grader] ?? t.grader} · fields {t.fields.join(", ")}
-              </span>
-            ))}
-          {entry.kind === "type" && s.items > 0 && <span>{plural(s.items, "example card")}</span>}
-          {entry.kind === "theme" && <span>{s.theme.scheme === "light" ? "Light" : "Dark"}{s.theme.css ? ", with extra CSS" : ""}</span>}
-          <span>{kb(entry.bytes)}</span>
-          {entry.tags.length > 0 && <span>{entry.tags.map((t) => `#${t}`).join(" ")}</span>}
-        </div>
-        </div>
-
-        <DialogFooter className="flex-row items-center justify-between gap-3 border-t bg-background px-5 py-4 sm:justify-between">
-          <Button variant="ghost" size="sm" className="gap-1.5" asChild>
-            <a href={`https://github.com/${repo}/blob/main/${entry.path}`} target="_blank" rel="noreferrer">
-              <ExternalLink className="size-4" /> Source
-            </a>
+  const spin = <Loader2 className="size-4 animate-spin" />;
+  let actions: React.ReactNode;
+  if (entry.kind === "theme") {
+    actions = (
+      <>
+        {inUse ? (
+          <Button className="mk-big gap-1.5" disabled><Check className="size-4" />In use</Button>
+        ) : trying ? (
+          <Button className="mk-big" onClick={onKeep} data-keep-detail>Keep it</Button>
+        ) : (
+          <Button className="mk-big" onClick={onTry} data-try-on={entry.id}>Try it on</Button>
+        )}
+        {!inUse && (
+          <Button variant="outline" className="mk-big gap-1.5" disabled={!!busy} onClick={() => install(true)}>
+            {busy === "use" ? spin : <Download className="size-4" />}
+            {entry.installed === "installed" ? "Use" : entry.installed === "update" ? "Update and use" : "Install and use"}
           </Button>
-          <div className="flex flex-wrap justify-end gap-2">
-            {entry.installed && <Button variant="outline" onClick={goTo}>Open</Button>}
-            <Button className="gap-1.5" disabled={!!busy || (entry.installed === "installed" && (entry.kind !== "theme" || inUse))} onClick={() => install(entry.kind === "theme")}>
-              {busy ? <Loader2 className="size-4 animate-spin" /> : entry.installed === "installed" && (entry.kind !== "theme" || inUse) ? <Check className="size-4" /> : <Download className="size-4" />}
-              {entry.kind === "theme" ? (entry.installed === "installed" ? (inUse ? "In use" : "Use") : entry.installed === "update" ? "Update and use" : "Install and use") : entry.installed === "update" ? "Update" : entry.installed ? "Installed" : "Install"}
-            </Button>
+        )}
+      </>
+    );
+  } else if (entry.installed === "installed") {
+    actions = <Button className="mk-big" onClick={goTo}>{entry.kind === "deck" ? "Open in Library" : "Open"}</Button>;
+  } else if (entry.installed === "update") {
+    actions = (
+      <>
+        <Button className="mk-big gap-1.5" disabled={!!busy} onClick={() => install(false)}>{busy ? spin : <RefreshCw className="size-4" />}Update to v{entry.version}</Button>
+        <Button variant="outline" className="mk-big" onClick={goTo}>Open</Button>
+      </>
+    );
+  } else {
+    actions = (
+      <Button className="mk-big gap-2" disabled={!!busy} onClick={() => install(false)} data-install={entry.id}>
+        {busy ? spin : <Download className="size-4" />}Get it<span className="rounded-[5px] bg-primary-foreground/20 px-1.5 py-0.5 text-[12.5px] font-semibold opacity-80">Free</span>
+      </Button>
+    );
+  }
+
+  const facts: [string, React.ReactNode][] = [];
+  if (entry.kind === "deck") facts.push(["Card types", s.types.length]);
+  if (entry.kind === "type") facts.push(["Checks", (s.types as any[]).map((t) => GRADER_WORD[t.grader] ?? t.grader).join(", ")], ["Example cards", s.items || 1]);
+  if (entry.kind === "theme") facts.push(["Look", s.theme.scheme === "light" ? "Light" : "Dark"]);
+  facts.push(["Size", kb(entry.bytes)]);
+  if (entry.updated) facts.push(["Updated", niceDate(entry.updated)]);
+  facts.push(["Version", `v${entry.version}`]);
+
+  const p = parts(entry.kind === "deck" ? s.decks : []);
+  const hook: [string, string][] = entry.kind === "deck" ? [[Number(s.items).toLocaleString("en-US"), s.items === 1 ? "card" : "cards"], ...(p.length > 1 ? [[String(p.length), "parts"] as [string, string]] : [])] : [];
+  const types: { id: string; name: string }[] = entry.kind === "deck" ? s.types : [];
+
+  return (
+    <DetailLayout
+      onBack={onBack}
+      gallery={<MarketGallery entry={entry} cover={entry.kind === "theme" ? <div className="mk-theme-big"><ThemeMiniature theme={s.theme} /></div> : <Cover entry={entry} />} />}
+      facts={facts}
+      box={
+        <>
+          <div className="mk-eyebrow">{KIND_LABEL[entry.kind]}</div>
+          <h1 className="mk-serif">{entry.name}</h1>
+          <div className="mk-by">
+            by <By author={entry.author} />
+            {entry.installed === "installed" && <span className="mk-pill"><Check className="size-3" strokeWidth={3} />Installed</span>}
+            {entry.installed === "update" && <span className="mk-pill update"><RefreshCw className="size-3" />Update</span>}
           </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <div className="mk-actions">{actions}</div>
+          {entry.kind === "theme" && !entry.installed && <Button variant="link" className="mt-2 h-auto p-0 text-xs text-muted-foreground" disabled={!!busy} onClick={() => install(false)}>Install without changing my theme</Button>}
+          {entry.kind === "theme" && <p className="mk-fine">Try it on to see the whole app in it. Nothing changes until you keep it.</p>}
+          <Hook items={hook} />
+        </>
+      }
+    >
+      <section id="market-about" className="mk-sec">
+        <h3 className="mk-serif">About this {entry.kind === "type" ? "card type" : entry.kind}</h3>
+        {paragraphs(entry.description || "No description yet.").map((x, i) => <p key={i}>{x}</p>)}
+      </section>
+      {p.length > 1 && (
+        <section className="mk-sec">
+          <h3 className="mk-serif">What's inside</h3>
+          <div className="mk-parts">{p.map((x, i) => <span key={i}>{x}</span>)}</div>
+        </section>
+      )}
+      {types.length > 0 && (
+        <section className="mk-sec">
+          <h3 className="mk-serif">Comes with {types.length === 1 ? "a card type" : `${types.length} card types`}</h3>
+          <div className="mk-parts">
+            {types.map((t) => {
+              const m = all.find((x) => x.kind === "type" && (x.summary as any).types?.[0]?.id === t.id);
+              return m ? <button key={t.id} onClick={() => onOpen(m)}>{t.name}<ChevronRight className="size-3.5" /></button> : <span key={t.id}>{t.name}</span>;
+            })}
+          </div>
+        </section>
+      )}
+      {entry.kind === "type" && (
+        <section className="mk-sec">
+          <h3 className="mk-serif">Try it</h3>
+          <TypePreview file={file} />
+        </section>
+      )}
+      <div className="mk-source">
+        <a href={`https://github.com/${repo}/blob/main/${entry.path}`} target="_blank" rel="noreferrer"><ExternalLink className="size-4" />See the files on GitHub</a>
+        {entry.tags.length > 0 && <span>{entry.tags.slice(0, 6).map((t) => `#${t}`).join(" ")}</span>}
+      </div>
+    </DetailLayout>
   );
 }
 
@@ -449,8 +747,8 @@ function TypePreview({ file }: { file: MarketFile | null }) {
   if (err) return <div className="rounded-xl border p-4 text-sm text-destructive">{err}</div>;
   if (!def || !html) return <Skeleton className="h-72 rounded-xl" />;
   return (
-    <div>
-      <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground"><Eye className="size-3.5" /> Try it: this preview runs the card here and saves nothing.</div>
+    <div data-type-preview>
+      <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground"><Eye className="size-3.5" /> This preview runs the card here and saves nothing.</div>
       <CardPreview html={html} version={`market:${def.id}`} load={load} faces={def.faces} generated={!!def.prepare} grade={def.grader.kind === "script" || def.grader.kind === "hybrid" ? grade : undefined} />
     </div>
   );

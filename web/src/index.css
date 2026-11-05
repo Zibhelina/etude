@@ -333,3 +333,43 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 }
 /* iPad: a little smaller. */
 @media (max-width: 1023px) { .minimi { transform: scale(0.78); transform-origin: 100% 100%; } }
+
+/* ---------------------------------------------------------------- Stats (Etude 3, direction A "Answers") */
+:root {
+  --stats-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  /* Streak orange is the same in every theme, like a game's flame. */
+  --stats-streak: #ff9a2e;
+  --stats-streak-ink: #e07a12;
+  /* Bars that aren't the point of the chart: ink, quiet. */
+  --stats-ink-bar: color-mix(in oklab, var(--foreground) 30%, var(--card));
+  --stats-track: color-mix(in oklab, var(--foreground) 7%, var(--card));
+  --stats-inset: color-mix(in oklab, var(--foreground) 3.5%, var(--card));
+  --stats-bubble: color-mix(in oklab, var(--foreground) 6%, var(--card));
+}
+.dark {
+  --stats-ink-bar: color-mix(in oklab, var(--foreground) 44%, var(--card));
+  --stats-track: color-mix(in oklab, var(--foreground) 9%, var(--card));
+  --stats-inset: color-mix(in oklab, var(--foreground) 4%, var(--background));
+  --stats-bubble: color-mix(in oklab, var(--foreground) 9%, var(--card));
+}
+.stats-serif { font-family: var(--stats-serif); }
+/* A utility, so a phone can turn one block into its own card (max-md:stats-card). */
+@utility stats-card {
+  position: relative;
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: 0 0 0 1px var(--border), 0 2px 4px color-mix(in oklab, var(--foreground) 4%, transparent), 0 14px 34px color-mix(in oklab, var(--foreground) 4%, transparent);
+  &:is(.dark *) { box-shadow: inset 0 0 0 1px var(--border), 0 14px 34px rgb(0 0 0 / 0.25); }
+}
+.stats-a b { font-weight: 700; }
+.stats-foot b { color: var(--foreground); font-weight: 600; }
+.stats-chart text { font: 500 11px var(--font-sans); fill: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.stats-chart text.lab { font-weight: 600; fill: var(--foreground); }
+@media (max-width: 767px) { .stats-chart text { font-size: 12px; } }
+.stats-grow { animation: stats-grow 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+.stats-grow-x { animation: stats-grow-x 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; transform-origin: left center; }
+@keyframes stats-grow { from { transform: scaleY(0); } }
+@keyframes stats-grow-x { from { transform: scaleX(0); } }
+.stats-pop { animation: stats-pop 0.35s cubic-bezier(0.3, 1.6, 0.5, 1) backwards; }
+@keyframes stats-pop { from { transform: scale(0.4); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .stats-grow, .stats-grow-x, .stats-pop { animation: none; } }

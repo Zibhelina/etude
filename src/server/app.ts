@@ -19,7 +19,7 @@ import { agentFor, AgentError, AGENT_MAX_ATTACHMENT_BYTES, type AgentEvent } fro
 import { streamSSE } from "hono/streaming";
 import { applyUpdate, updateStatus, UpdateError } from "../core/update.ts";
 import { isEventName, telemetryAllowed, telemetryFor, usageEventFor } from "../core/telemetry.ts";
-import { buildSubmission, fetchMarketMedia, fetchCover, fetchEntry, fetchIndex, ghStatus, installEntry, installState, installedEntries, manualPublishUrl, marketSettings, publishFile, summarize, entryPath, entryJson, forgetInstall, type MarketKind } from "../core/market.ts";
+import { buildSubmission, fetchComingSoon, fetchComingSoonAsset, fetchMarketMedia, fetchCover, fetchEntry, fetchIndex, ghStatus, installEntry, installState, installedEntries, manualPublishUrl, marketSettings, publishFile, summarize, entryPath, entryJson, forgetInstall, type MarketKind } from "../core/market.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const require = createRequire(import.meta.url);
@@ -690,9 +690,10 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   // ------------------------------------------------------------- market
   app.get("/api/market", async (c) => {
     const cfg = marketSettings(etude);
-    const index = await fetchIndex(cfg.url, { refresh: c.req.query("refresh") === "1" });
+    const refresh = c.req.query("refresh") === "1";
+    const [index, soon] = await Promise.all([fetchIndex(cfg.url, { refresh }), fetchComingSoon(cfg.url, { refresh })]);
     const installed = installedEntries(etude);
-    return c.json({ ...cfg, generated: index.generated, entries: index.entries.map((x) => ({ ...x, installed: installState(etude, x, installed), installedIds: installed[x.id]?.kind === x.kind ? installed[x.id].ids : [] })), selectedTheme: etude.currentTheme().id });
+    return c.json({ ...cfg, generated: index.generated, comingSoon: soon.entries, entries: index.entries.map((x) => ({ ...x, installed: installState(etude, x, installed), installedIds: installed[x.id]?.kind === x.kind ? installed[x.id].ids : [] })), selectedTheme: etude.currentTheme().id });
   });
   app.get("/api/market/entry/:kind/:id", async (c) => {
     const kind = c.req.param("kind") as MarketKind;
@@ -713,6 +714,17 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const path = /^\d+$/.test(slot) ? hit?.media?.[Number(slot)] : undefined;
     if (!path) return c.json({ error: "no media" }, 404);
     const { body, type } = await fetchMarketMedia(url, path);
+    return c.body(new Uint8Array(body), 200, { "Content-Type": type, "Cache-Control": "max-age=600", "X-Content-Type-Options": "nosniff" });
+  });
+  // Coming soon: decks being made, listed in the catalog's coming-soon.json. Pictures only by slot, never by path.
+  app.get("/api/market/coming-soon", async (c) => c.json(await fetchComingSoon(marketSettings(etude).url, { refresh: c.req.query("refresh") === "1" })));
+  app.get("/api/market/coming-soon/:id/:slot{cover|[0-9]+}", async (c) => {
+    const url = marketSettings(etude).url;
+    const hit = (await fetchComingSoon(url)).entries.find((x) => x.id === c.req.param("id"));
+    const slot = c.req.param("slot");
+    const path = slot === "cover" ? hit?.cover : hit?.media[Number(slot)];
+    if (!path) return c.json({ error: slot === "cover" ? "no cover" : "no media" }, 404);
+    const { body, type } = await fetchComingSoonAsset(url, path);
     return c.body(new Uint8Array(body), 200, { "Content-Type": type, "Cache-Control": "max-age=600", "X-Content-Type-Options": "nosniff" });
   });
   app.post("/api/market/install", async (c) => {

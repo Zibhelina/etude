@@ -26,6 +26,12 @@ export function MarketGallery({ entry, cover }: { entry: MarketEntry; cover: Rea
   return <Gallery name={entry.name} slides={slides} cover={cover} thumb={entry.kind === "theme" ? cover : entry.cover ? <EtudeImg src={api.marketCoverUrl(entry.kind, entry.id)} alt="" /> : cover} />;
 }
 
+/** The same gallery from catalog paths and a URL for each (Coming soon decks). */
+export function MediaGallery({ name, media, url, cover }: { name: string; media: string[]; url(i: number): string; cover: React.ReactNode }) {
+  const slides: Slide[] = [{ kind: "cover" }, ...media.map((p, i): Slide => (isVideo(p) ? { kind: "video", src: url(i) } : { kind: "image", src: url(i) }))];
+  return <Gallery name={name} slides={slides} cover={cover} />;
+}
+
 /** The same gallery for anything with just a cover (paid decks). */
 export function CoverGallery({ cover }: { cover: React.ReactNode }) {
   return <Gallery name="" slides={[{ kind: "cover" }]} cover={cover} thumb={cover} />;

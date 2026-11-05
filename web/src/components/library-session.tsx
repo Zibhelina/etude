@@ -52,28 +52,32 @@ export function SessionCard({ decks, stats, phone }: { decks: DeckNode[]; stats:
   const max = Math.max(1, ...shown.map(work));
   const done = stats?.today.reviews ?? t.done;
   return (
-    <section aria-label="Today's session" className={cn("lib-panel rounded-2xl p-6 sm:p-8", !phone && "@3xl:grid @3xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] @3xl:gap-10")}>
-      <div className="min-w-0">
-        <div className="score-kicker font-semibold">Today’s session</div>
-        <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="lib-title text-[3.4rem] leading-[0.9] font-semibold tabular sm:text-[3.6rem]">{due.toLocaleString()}</span>
-          <span className="text-[16px] text-muted-foreground">card{due === 1 ? "" : "s"} · {minutes(due * perCard(stats))}</span>
+    <section aria-label="Today's session" className={cn("lib-panel rounded-2xl p-6 sm:p-8", "@3xl:grid @3xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] @3xl:gap-10")}>
+      <div className="min-w-0 @min-[36rem]:grid @min-[36rem]:grid-cols-[minmax(0,1fr)_minmax(13rem,16rem)] @min-[36rem]:items-center @min-[36rem]:gap-x-8 @3xl:block">
+        <div className="min-w-0">
+          <div className="score-kicker font-semibold">Today’s session</div>
+          <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="lib-title text-[3.4rem] leading-[0.9] font-semibold tabular sm:text-[3.6rem]">{due.toLocaleString()}</span>
+            <span className="text-[16px] text-muted-foreground">card{due === 1 ? "" : "s"} · {minutes(due * perCard(stats))}</span>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] font-semibold tabular">
+            {t.n > 0 && <span className="inline-flex items-center gap-1.5 text-new"><Mark kind="new" />{t.n.toLocaleString()} new</span>}
+            {t.l > 0 && <span className="inline-flex items-center gap-1.5 text-learn"><Mark kind="learn" />{t.l.toLocaleString()} learning</span>}
+            {t.r > 0 && <span className="inline-flex items-center gap-1.5 text-review"><Mark kind="due" />{t.r.toLocaleString()} due</span>}
+          </div>
         </div>
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] font-semibold tabular">
-          {t.n > 0 && <span className="inline-flex items-center gap-1.5 text-new"><Mark kind="new" />{t.n.toLocaleString()} new</span>}
-          {t.l > 0 && <span className="inline-flex items-center gap-1.5 text-learn"><Mark kind="learn" />{t.l.toLocaleString()} learning</span>}
-          {t.r > 0 && <span className="inline-flex items-center gap-1.5 text-review"><Mark kind="due" />{t.r.toLocaleString()} due</span>}
+        <div className="mt-7 min-w-0 @min-[36rem]:mt-0 @3xl:mt-7">
+          <PrimaryButton className="w-full" onClick={() => navigate("/study")} aria-label="Start today's session">
+            <Play className="size-4 fill-current" />Start
+          </PrimaryButton>
+          {done > 0 && <p className="mt-3 text-[13.5px] text-muted-foreground @min-[36rem]:text-center @3xl:text-left">{plural(done, "card")} done today</p>}
         </div>
-        <PrimaryButton className="mt-7 w-full max-w-[22rem]" onClick={() => navigate("/study")} aria-label="Start today's session">
-          <Play className="size-4 fill-current" />Start
-        </PrimaryButton>
-        {done > 0 && <p className="mt-3 text-[13.5px] text-muted-foreground">{plural(done, "card")} done today</p>}
       </div>
       {shown.length > 0 && (
-        <ul className={cn("min-w-0 self-center", phone ? "mt-6" : "mt-7 @3xl:mt-0")} aria-label="Where today's cards come from">
+        <ul className="mt-6 grid min-w-0 grid-cols-[1.5rem_fit-content(11rem)_minmax(0,1fr)_2.25rem] gap-x-3 self-center @min-[36rem]:mt-7 @min-[36rem]:grid-cols-[1.5rem_fit-content(14rem)_minmax(0,1fr)_2.5rem] @3xl:mt-0 @3xl:grid-cols-[1.5rem_fit-content(10rem)_minmax(0,1fr)_2.5rem]" aria-label="Where today's cards come from">
           {shown.map((d) => (
-            <li key={d.id}>
-              <button onClick={() => navigate(`/study?deck=${encodeURIComponent(d.name)}`)} className="group grid h-[2.15rem] w-full grid-cols-[auto_minmax(0,1fr)_4.5rem_2.25rem] items-center gap-3 rounded-lg text-left text-[15px] sm:grid-cols-[auto_minmax(0,1fr)_minmax(5rem,42%)_2.5rem] @3xl:grid-cols-[auto_minmax(0,1fr)_5rem_2.5rem]">
+            <li key={d.id} className="col-span-4 grid grid-cols-subgrid">
+              <button onClick={() => navigate(`/study?deck=${encodeURIComponent(d.name)}`)} className={cn(ROW, "group w-full rounded-lg text-left")}>
                 <span className="flex w-6 justify-center">{d.icon ? <DeckIcon icon={d.icon} size={24} /> : <span className="size-1.5 rounded-full bg-muted-foreground/40" />}</span>
                 <span className="truncate group-hover:underline">{leafOf(d.name)}</span>
                 <Bar d={d} max={max} />
@@ -82,7 +86,7 @@ export function SessionCard({ decks, stats, phone }: { decks: DeckNode[]; stats:
             </li>
           ))}
           {rest.length > 0 && (
-            <li className="grid h-[2.15rem] grid-cols-[auto_minmax(0,1fr)_4.5rem_2.25rem] items-center gap-3 text-[15px] text-muted-foreground sm:grid-cols-[auto_minmax(0,1fr)_minmax(5rem,42%)_2.5rem] @3xl:grid-cols-[auto_minmax(0,1fr)_5rem_2.5rem]">
+            <li className={cn(ROW, "text-muted-foreground")}>
               <span className="w-6" />
               <span className="truncate">and {plural(rest.length, "more deck")}</span>
               <span />
@@ -94,6 +98,12 @@ export function SessionCard({ decks, stats, phone }: { decks: DeckNode[]; stats:
     </section>
   );
 }
+
+/**
+ * One row of the "where from" list. Rows share the list's columns (subgrid), so the name column is as wide
+ * as the longest name (capped), every bar starts right after it at the same x and takes the rest.
+ */
+const ROW = "col-span-4 grid h-[2.15rem] grid-cols-subgrid items-center text-[15px]";
 
 /** One deck's share of the session: new, learning and due as one bar with straight joins. */
 function Bar({ d, max }: { d: DeckNode; max: number }) {

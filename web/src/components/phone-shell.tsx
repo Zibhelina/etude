@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BarChart3, Layers, Library, MoreHorizontal } from "lucide-react";
 import { Logo } from "@/components/logo";
+import { minimiFace } from "@/components/minimi";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +19,7 @@ const TABS = [
  * "Ilha": a floating capsule with the four tabs as icons, where only the active one opens up and shows
  * its name, and the ε in its own disc beside it. The list scrolls under both, behind a short fade.
  */
-export function PhoneTabBar({ path, updateDot, onAsk }: { path: string; updateDot: boolean; onAsk(): void }) {
+export function PhoneTabBar({ path, updateDot, fun, onAsk }: { path: string; updateDot: boolean; fun?: boolean; onAsk(): void }) {
   return (
     <nav aria-label="Main" className="score-island pointer-events-none fixed inset-x-0 bottom-0 z-20 md:hidden">
       <div className="pointer-events-auto mx-auto flex max-w-md items-center gap-2 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] min-[360px]:gap-2.5 min-[360px]:px-3.5">
@@ -40,7 +41,7 @@ export function PhoneTabBar({ path, updateDot, onAsk }: { path: string; updateDo
                 )}
               >
                 <span className="relative">
-                  <t.icon className={cn("size-[21px] transition-colors duration-300", on && "text-highlight")} strokeWidth={on ? 2.1 : 1.7} />
+                  <t.icon className={cn("size-[21px] transition-colors duration-300", on && "text-foreground")} strokeWidth={on ? 2.1 : 1.7} />
                   {t.to === "/more" && updateDot && <span data-update-dot aria-label="Update available" className="absolute -top-0.5 -right-1 size-2 rounded-full bg-highlight ring-2 ring-card" />}
                 </span>
                 <span aria-hidden={!on} className={cn("grid transition-[grid-template-columns,opacity,margin] duration-300 ease-[cubic-bezier(0.22,0.9,0.3,1)] motion-reduce:transition-none", on ? "ml-1.5 grid-cols-[1fr] opacity-100" : "ml-0 grid-cols-[0fr] opacity-0")}>
@@ -50,8 +51,8 @@ export function PhoneTabBar({ path, updateDot, onAsk }: { path: string; updateDo
             );
           })}
         </div>
-        <button onClick={onAsk} aria-label="Ask Etude" data-agent-launcher className="score-capsule flex size-[3.375rem] shrink-0 items-center justify-center rounded-full border transition-transform active:scale-95">
-          <Logo className="size-[26px]" />
+        <button onClick={onAsk} aria-label={fun ? "Ask Minimi" : "Ask Etude"} data-agent-launcher className="score-capsule flex size-[3.375rem] shrink-0 items-center justify-center overflow-hidden rounded-full border transition-transform active:scale-95">
+          {fun ? <img src={minimiFace} alt="" className="size-full object-cover" draggable={false} /> : <Logo className="size-[26px]" />}
         </button>
       </div>
     </nav>

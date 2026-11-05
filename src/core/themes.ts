@@ -15,12 +15,15 @@ export interface Theme {
   css?: string;
   /** The theme it was made from, for reference. */
   base?: string;
+  /** Built-in only: a theme that follows the device, using `light` or `dark` as the device is set. */
+  pair?: { light: string; dark: string };
 }
 
 export const THEME_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 export const MAX_THEME_CSS = 20_000;
 export const MAX_CUSTOM_THEMES = 100;
-export const DEFAULT_THEME = "midnight";
+/** New collections follow the device: Snow by day, Night by dark. */
+export const DEFAULT_THEME = "system";
 
 /** Every variable a theme sets, grouped the way the editor shows them. */
 export const THEME_GROUPS: { title: string; vars: { name: string; label: string; kind?: "color" | "length" | "font" }[] }[] = [
@@ -51,6 +54,7 @@ export const THEME_GROUPS: { title: string; vars: { name: string; label: string;
     vars: [
       { name: "--primary", label: "Primary button" },
       { name: "--primary-foreground", label: "Primary button text" },
+      { name: "--primary-edge", label: "Primary button edge" },
       { name: "--border", label: "Borders" },
       { name: "--input", label: "Input borders" },
       { name: "--ring", label: "Focus ring" },
@@ -134,13 +138,92 @@ function complete(v: Record<string, string>): Record<string, string> {
   o["--sidebar-accent-foreground"] ??= o["--foreground"];
   o["--sidebar-ring"] ??= o["--ring"];
   o["--chart-1"] ??= o["--highlight"];
+  o["--primary-edge"] ??= `color-mix(in oklab, ${o["--primary"]} 72%, black)`;
   o["--radius"] ??= "0.75rem";
   o["--font-sans"] ??= SANS;
   o["--font-mono"] ??= MONO;
   return o;
 }
 
+const SNOW = complete({
+  "--background": "#ffffff",
+  "--foreground": "#1b1b1a",
+  "--card": "#ffffff",
+  "--popover": "#ffffff",
+  "--primary": "#2f9a41",
+  "--primary-foreground": "#ffffff",
+  "--primary-edge": "#1e6b2b",
+  "--secondary": "#f6f6f5",
+  "--muted": "#f6f6f5",
+  "--muted-foreground": "#6b6b68",
+  "--accent": "#efefed",
+  "--destructive": "#a1382a",
+  "--border": "#e9e9e6",
+  "--input": "#dededa",
+  "--ring": "#b4b4b0",
+  "--chart-1": "#2f9a41",
+  "--chart-2": "#3b78c9",
+  "--chart-3": "#d4952a",
+  "--chart-4": "#cf5a40",
+  "--chart-5": "#b4b4b0",
+  "--sidebar": "#f7f7f6",
+  "--sidebar-accent": "#efefed",
+  "--sidebar-border": "#e9e9e6",
+  "--highlight": "#2f9a41",
+  "--success": "#1e6b2b",
+  "--warning": "#b07a17",
+  "--danger": "#a1382a",
+  "--again": "#c2513a",
+  "--hard": "#b07a17",
+  "--good": "#2f9a41",
+  "--easy": "#3b78c9",
+  "--new": "#3b78c9",
+  "--learn": "#cf5a40",
+  "--review": "#2f9a41",
+});
+
+const NIGHT = complete({
+  "--background": "#171717",
+  "--foreground": "#ededed",
+  "--card": "#222222",
+  "--popover": "#222222",
+  "--primary": "#3fae52",
+  "--primary-foreground": "#ffffff",
+  "--primary-edge": "#2a7d39",
+  "--secondary": "#2a2a2a",
+  "--muted": "#222222",
+  "--muted-foreground": "#a3a3a3",
+  "--accent": "#2a2a2a",
+  "--destructive": "#d0583f",
+  "--border": "#333333",
+  "--input": "#3a3a3a",
+  "--ring": "#5c5c5c",
+  "--chart-1": "#3fae52",
+  "--chart-2": "#7aa7e6",
+  "--chart-3": "#d4952a",
+  "--chart-4": "#f0937e",
+  "--chart-5": "#5c5c5c",
+  "--sidebar": "#121212",
+  "--sidebar-accent": "#222222",
+  "--sidebar-border": "#262626",
+  "--highlight": "#3fae52",
+  "--success": "#7ccf8a",
+  "--warning": "#d4952a",
+  "--danger": "#f0937e",
+  "--again": "#e06e56",
+  "--hard": "#d4952a",
+  "--good": "#3fae52",
+  "--easy": "#6b9be0",
+  "--new": "#7aa7e6",
+  "--learn": "#f0937e",
+  "--review": "#7ccf8a",
+});
+
 export const BUILTIN_THEMES: Theme[] = [
+  // Etude 3: follows the device. Its own variables are Snow's, for places that can't ask the device (CLI, previews).
+  { id: "system", name: "System", scheme: "light", vars: SNOW, pair: { light: "snow", dark: "night" } },
+  { id: "snow", name: "Snow", scheme: "light", vars: SNOW },
+  { id: "night", name: "Night", scheme: "dark", vars: NIGHT },
   {
     id: "midnight",
     name: "Midnight",
@@ -389,6 +472,12 @@ export const BUILTIN_THEMES: Theme[] = [
 
 export const builtinTheme = (id: string) => BUILTIN_THEMES.find((t) => t.id === id);
 
+/** The theme to actually paint: a device-following theme resolves to its light or dark half. */
+export function resolveTheme(t: Theme, prefersDark: boolean): Theme {
+  if (!t.pair) return t;
+  return builtinTheme(prefersDark ? t.pair.dark : t.pair.light) ?? t;
+}
+
 export class ThemeError extends Error {}
 
 const VAR_NAME = /^--[a-z][a-z0-9-]{0,63}$/;
@@ -435,7 +524,7 @@ function cleanValue(name: string, raw: unknown): string {
 
 /**
  * Checks and normalizes a theme: a valid id and name, a scheme, every known variable present
- * (missing ones come from the base theme, or Midnight/Daylight for the scheme), clean values and CSS.
+ * (missing ones come from the base theme, or Snow/Night for the scheme), clean values and CSS.
  */
 export function normalizeTheme(input: unknown): { theme: Theme; removed: string[] } {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new ThemeError("a theme must be an object");
@@ -447,7 +536,7 @@ export function normalizeTheme(input: unknown): { theme: Theme; removed: string[
     throw new ThemeError(`scheme must be "dark" or "light"`);
   })();
   const baseId = typeof t.base === "string" && builtinTheme(t.base) ? t.base : undefined;
-  const fallback = builtinTheme(baseId ?? "")?.scheme === scheme ? builtinTheme(baseId!)! : builtinTheme(scheme === "light" ? "daylight" : "midnight")!;
+  const fallback = builtinTheme(baseId ?? "")?.scheme === scheme ? builtinTheme(baseId!)! : builtinTheme(scheme === "light" ? "snow" : "night")!;
   const rawVars = t.vars ?? {};
   if (typeof rawVars !== "object" || Array.isArray(rawVars)) throw new ThemeError("vars must be an object of --name: value");
   const vars: Record<string, string> = { ...fallback.vars };

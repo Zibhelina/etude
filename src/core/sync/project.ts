@@ -66,11 +66,12 @@ export function project(e: Etude) {
         // taken, and each goes through the same checks as a local change: provider URLs, key
         // names and the Market catalog stay this device's own, and theme CSS is sanitized again.
         const incoming = safeSettings(clean(r.value));
-        for (const k of ["themes","theme","dayStartHour","learnAheadMinutes","typePrefs"]) {
+        for (const k of ["themes","theme","dayStartHour","learnAheadMinutes","typePrefs","fun"]) {
           if (!(k in incoming)) continue;
           const v = incoming[k];
           if (k === "learnAheadMinutes" && !(typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 24 * 60)) continue;
           if (k === "dayStartHour" && !(typeof v === "number" && Number.isInteger(v))) continue;
+          if (k === "fun" && typeof v !== "boolean") continue;
           try { e.updateSettings({[k]:v}); } catch { /* an invalid value from another device is ignored */ }
         }
       }

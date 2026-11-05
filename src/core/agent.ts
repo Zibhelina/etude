@@ -1232,7 +1232,7 @@ export function consequence(e: Etude, name: string, argv: string[], dry: any, fa
       }
       case "theme delete": {
         const t = e.listThemes().find((x) => x.id === arg);
-        return { summary: `Deletes the custom theme ${t?.name ?? arg}${t?.selected ? ". It's in use, so the app goes back to Midnight" : ""}.`, action: "Delete theme", target: t?.name ?? arg };
+        return { summary: `Deletes the custom theme ${t?.name ?? arg}${t?.selected ? ". It's in use, so the app goes back to System" : ""}.`, action: "Delete theme", target: t?.name ?? arg };
       }
       case "type delete": {
         let n = arg;

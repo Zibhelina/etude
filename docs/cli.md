@@ -384,7 +384,7 @@ These work on every command, before or after the command words.
   - [`theme set`](#theme-set) Use a theme in the app (every device; open pages pick it up on their next load).
   - [`theme create`](#theme-create) Make a custom theme from an existing one, changing variables and adding CSS.
   - [`theme edit`](#theme-edit) Change a custom theme: name, scheme, variables or extra CSS.
-  - [`theme delete`](#theme-delete) Delete a custom theme. If it was selected, the app goes back to Midnight.
+  - [`theme delete`](#theme-delete) Delete a custom theme. If it was selected, the app goes back to System (Snow or Night, following the device).
   - [`theme export`](#theme-export) Write a theme as JSON to share or back up.
   - [`theme import`](#theme-import) Add a theme from a JSON file made by `theme export` (or the app's Export).
 - **pack**: Packs: JSON files with decks, presets, tags, types and items (import, export, check, scaffold)
@@ -3175,7 +3175,7 @@ etude settings get ai.feedback.model
 
 Change settings with dotted key=value pairs (JSON values when they parse).
 
-Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done. API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.
+Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.
 
 ```
 etude settings set <pairs...> [flags]
@@ -4192,8 +4192,9 @@ etude theme set <id> [flags]
 Output: { selected, theme: { id, name, scheme } }
 
 ```sh
+etude theme set system
+etude theme set night
 etude theme set paper
-etude theme set midnight
 ```
 
 ### etude theme create
@@ -4202,7 +4203,7 @@ etude theme set midnight
 
 Make a custom theme from an existing one, changing variables and adding CSS.
 
-Starts from --from (default: the selected theme) and applies --var pairs and --css on top. Variables: --background, --card, --popover, --muted, --secondary, --accent, --foreground, --card-foreground, --popover-foreground, --muted-foreground, --secondary-foreground, --accent-foreground, --primary, --primary-foreground, --border, --input, --ring, --destructive, --highlight, --success, --warning, --danger, --again, --hard, --good, --easy, --new, --learn, --review, --chart-1, --chart-2, --chart-3, --chart-4, --chart-5, --sidebar, --sidebar-foreground, --sidebar-accent, --sidebar-accent-foreground, --sidebar-border, --sidebar-primary, --sidebar-primary-foreground, --sidebar-ring, --radius, --font-sans, --font-mono. Any other --name is accepted too and can be used from the extra CSS.
+Starts from --from (default: the selected theme) and applies --var pairs and --css on top. Variables: --background, --card, --popover, --muted, --secondary, --accent, --foreground, --card-foreground, --popover-foreground, --muted-foreground, --secondary-foreground, --accent-foreground, --primary, --primary-foreground, --primary-edge, --border, --input, --ring, --destructive, --highlight, --success, --warning, --danger, --again, --hard, --good, --easy, --new, --learn, --review, --chart-1, --chart-2, --chart-3, --chart-4, --chart-5, --sidebar, --sidebar-foreground, --sidebar-accent, --sidebar-accent-foreground, --sidebar-border, --sidebar-primary, --sidebar-primary-foreground, --sidebar-ring, --radius, --font-sans, --font-mono. Any other --name is accepted too and can be used from the extra CSS.
 
 ```
 etude theme create [id] [flags]
@@ -4271,7 +4272,7 @@ etude theme edit ocean --rename deep-ocean
 
 <a id="theme-delete"></a>
 
-Delete a custom theme. If it was selected, the app goes back to Midnight.
+Delete a custom theme. If it was selected, the app goes back to System (Snow or Night, following the device).
 
 ```
 etude theme delete <id> [flags]

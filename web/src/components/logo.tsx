@@ -9,16 +9,16 @@ export function Logo({ className, tile = false }: { className?: string; tile?: b
     </svg>
   ) : (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <path d={EPSILON_PATH} className="fill-highlight" transform="translate(2.324 21.144) scale(0.04253 -0.04253)" />
+      <path d={EPSILON_PATH} className="fill-foreground" transform="translate(2.324 21.144) scale(0.04253 -0.04253)" />
     </svg>
   );
 }
 
-/** The wordmark: "εtude" in Computer Modern, with the epsilon in the accent color. */
+/** The wordmark (Etude 3, "Grotesque"): a Computer Modern italic ε and "tude" in Bricolage Grotesque bold, all in ink. */
 export function Wordmark({ className }: { className?: string }) {
   return (
-    <span className={className} style={{ fontFamily: "KaTeX_Main, 'Latin Modern Roman', serif" }} aria-label="Etude">
-      <span className="text-highlight" style={{ fontFamily: "KaTeX_Math, 'Latin Modern Math', serif" }}>ε</span>tude
+    <span className={className} style={{ fontFamily: "'Bricolage Grotesque', Inter, sans-serif", fontWeight: 700, letterSpacing: "-0.04em" }} aria-label="Etude">
+      <span style={{ fontFamily: "KaTeX_Math, 'Latin Modern Math', serif", fontWeight: 400, fontStyle: "italic", fontSize: "1.13em", marginRight: "0.04em" }}>ε</span>tude
     </span>
   );
 }

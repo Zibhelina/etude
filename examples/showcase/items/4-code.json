@@ -132,5 +132,23 @@
       "generator": "// Skip easy targets with fewer than three bits set.\nlet t;\ndo t = rng.int(40, 254); while (t.toString(2).split(\"1\").length - 1 < 3);\nreturn { target: t };",
       "explanation": "Work from the left: take the biggest place value that still fits, subtract it, and move right. Every 4 bits make one hex digit."
     }
+  },
+  {
+    "id": "showcase.flippy.hex",
+    "type": "flippy",
+    "deck": "Etude Showcase::4 Code",
+    "tags": [
+      "showcase",
+      "topic::binary",
+      "game"
+    ],
+    "fields": {
+      "note": "Hex invaders incoming. Shoot down 12 for full credit.",
+      "base": 16,
+      "speed": 1,
+      "target": 12,
+      "hints": true,
+      "sound": true
+    }
   }
 ]

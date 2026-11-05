@@ -1,0 +1,17 @@
+<div class="mo-eyebrow">Tap it out in Morse</div>
+<div class="mo-letter">{{letter}}</div>
+{{#name}}<div class="mo-name">{{name}}</div>{{/name}}
+<div class="mo-tape mo-mine" aria-live="polite"></div>
+<div class="mo-pad only-answer">
+  <button type="button" class="mo-key" data-s="."><span class="mo-sym dot"></span><small>dot <kbd>.</kbd></small></button>
+  <button type="button" class="mo-key" data-s="-"><span class="mo-sym dash"></span><small>dash <kbd>-</kbd></small></button>
+  <button type="button" class="mo-key mo-del" data-s="del" aria-label="Delete">⌫</button>
+</div>
+<template data-on="result">
+  <div class="e-reveal mo-result">
+    <div class="mo-lamp"></div>
+    <div class="e-section-title">{{letter}} in Morse</div>
+    <div class="mo-tape mo-correct"></div>
+    {{#mnemonic}}<div class="prose e-muted">{{md:mnemonic}}</div>{{/mnemonic}}
+  </div>
+</template>

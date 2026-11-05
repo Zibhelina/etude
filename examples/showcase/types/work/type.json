@@ -1,0 +1,14 @@
+{
+  "id": "work",
+  "name": "Work it out",
+  "description": "Work the problem by hand on a scratchpad, then type the final answer. The answer is checked for equivalence like a Math answer, and your scratch work is kept with the attempt and shown next to the worked solution.",
+  "fields": [
+    { "name": "prompt", "kind": "markdown", "required": true },
+    { "name": "answers", "kind": "list", "required": true, "private": true, "description": "Accepted final answers in LaTeX or plain notation. Any one is enough." },
+    { "name": "form", "kind": "text", "default": "any", "description": "any (every equivalent form) | exact (no decimals) | same (also the same form)" },
+    { "name": "solution", "kind": "markdown", "private": true, "description": "The worked solution, shown after answering." },
+    { "name": "explanation", "kind": "markdown", "private": true },
+    { "name": "placeholder", "kind": "text" }
+  ],
+  "grader": { "kind": "script" }
+}

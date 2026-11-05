@@ -1,0 +1,36 @@
+.wk-pad { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem; }
+.wk-pad[hidden] { display: none; }
+.wk-tools { display: flex; align-items: center; gap: 0.35rem; }
+.wk-tools .e-btn { height: 2.25rem; min-width: 2.25rem; padding: 0 0.75rem; font-size: 0.82rem; }
+.wk-tools .e-btn.is-on { background: var(--accent); border-color: var(--foreground); }
+.wk-tools .wk-icon { padding: 0; font-size: 1.05rem; }
+.wk-gap { flex: 1; }
+.wk-canvas {
+  width: 100%; display: block; touch-action: none; cursor: crosshair;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: color-mix(in oklab, var(--foreground) 2.5%, transparent);
+}
+.wk-canvas.locked { cursor: default; }
+.wk-row { display: flex; gap: 0.5rem; align-items: stretch; }
+.wk-input { flex: 1; min-width: 0; font-size: 1rem; }
+.wk-toggle { flex: none; height: auto; white-space: nowrap; padding: 0 0.85rem; }
+.wk-toggle[aria-pressed="true"] { background: var(--accent); border-color: var(--foreground); }
+.wk-preview {
+  margin-top: 0.5rem; min-height: 3.4rem; display: flex; align-items: center; justify-content: center;
+  padding: 0.6rem 1rem; border-radius: var(--radius);
+  background: color-mix(in oklab, var(--foreground) 4%, transparent);
+  font-size: 1.3rem; overflow-x: auto; overflow-y: hidden;
+}
+.wk-empty { font-size: 0.9rem; color: var(--muted-foreground); }
+.wk-preview.is-unread { opacity: 0.55; }
+.wk-preview.is-correct { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--success) 60%, transparent); background: color-mix(in oklab, var(--success) 9%, transparent); }
+.wk-preview.is-wrong { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--danger) 60%, transparent); background: color-mix(in oklab, var(--danger) 9%, transparent); }
+.wk-preview.is-partial { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--warning) 60%, transparent); background: color-mix(in oklab, var(--warning) 9%, transparent); }
+.wk-note { font-size: 0.82rem; color: var(--muted-foreground); min-height: 1.2em; margin-top: 0.3rem; text-align: center; }
+.wk-note.is-error { color: var(--warning); }
+.wk-accepted { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center; font-size: 1.15rem; }
+.wk-solution .katex-display { margin: 0.4rem 0; overflow-x: auto; overflow-y: hidden; }
+[data-mode="result"] .wk-row { display: none; }
+@media (max-width: 520px) {
+  .wk-tools .e-btn { height: 2.6rem; min-width: 2.6rem; }
+}

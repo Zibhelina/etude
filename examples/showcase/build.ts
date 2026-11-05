@@ -24,11 +24,12 @@ for (const f of existsSync(itemsDir) ? readdirSync(itemsDir).filter((f) => f.end
   items.push(...list);
 }
 // Item fields may say "@inline:images/x.webp": the file next to this script, inlined as a data URL,
-// so the pack carries its own images.
+// so the pack carries its own images. "@json:demos/x.json" inlines a JSON value (a long example answer).
 const MIME: Record<string, string> = { ".webp": "image/webp", ".png": "image/png", ".jpg": "image/jpeg", ".svg": "image/svg+xml" };
 for (const it of items as { fields?: Record<string, unknown> }[])
   for (const [k, v] of Object.entries(it.fields ?? {}))
-    if (typeof v === "string" && v.startsWith("@inline:")) {
+    if (typeof v === "string" && v.startsWith("@json:")) it.fields![k] = JSON.parse(readFileSync(join(here, v.slice(6)), "utf8"));
+    else if (typeof v === "string" && v.startsWith("@inline:")) {
       const rel = v.slice(8);
       const mime = MIME[extname(rel).toLowerCase()];
       if (!mime) throw new Error(`${rel}: unknown image type`);

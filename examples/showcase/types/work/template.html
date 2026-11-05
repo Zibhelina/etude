@@ -1,0 +1,25 @@
+<div class="prose wk-prompt">{{md:prompt}}</div>
+<div class="wk-pad" hidden>
+  <div class="wk-tools only-answer">
+    <button type="button" class="e-btn is-on" data-tool="pen" title="Pen (P)">Pen</button>
+    <button type="button" class="e-btn" data-tool="eraser" title="Eraser (E)">Eraser</button>
+    <span class="wk-gap"></span>
+    <button type="button" class="e-btn wk-icon" data-act="undo" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+    <button type="button" class="e-btn" data-act="clear">Clear</button>
+  </div>
+  <div class="e-section-title wk-mine only-result">Your work</div>
+  <canvas class="wk-canvas"></canvas>
+</div>
+<div class="wk-row">
+  <input class="e-input mono wk-input" id="answer" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="{{placeholder}}" aria-label="Answer">
+  <button type="button" class="e-btn wk-toggle only-answer" aria-pressed="false" title="Show the scratchpad">✎ Scratchpad</button>
+</div>
+<div class="wk-preview" aria-live="polite"><span class="wk-empty">Your answer renders here</span></div>
+<div class="wk-note"></div>
+<template data-on="result">
+  <div class="e-reveal">
+    <div><div class="e-section-title">Accepted</div><div class="wk-accepted"></div></div>
+    {{#solution}}<div><div class="e-section-title">Worked solution</div><div class="prose wk-solution">{{md:solution}}</div></div>{{/solution}}
+    {{#explanation}}<div class="prose e-muted">{{md:explanation}}</div>{{/explanation}}
+  </div>
+</template>

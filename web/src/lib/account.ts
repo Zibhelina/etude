@@ -121,6 +121,8 @@ export interface Sales { sales: { order: string; listing: string; amount: number
 
 export const account = {
   status: () => call<AccountStatus>("GET", "/api/account"),
+  /** The name shown beside your Market comments. */
+  setName: (displayName: string) => call<Me>("PATCH", "/api/account/me", { displayName }),
   setServer: (server: string) => call<{ server: string }>("PUT", "/api/account/server", { server }),
   signin: (email: string) => call<{ ok: boolean; email: string }>("POST", "/api/account/signin", { email }),
   /** `email` is the address the code was sent to (the server falls back to the last sign-in it started). */

@@ -87,6 +87,9 @@
 .mk-compose textarea { min-height: 46px; resize: none; field-sizing: content; max-height: 260px; font-size: 15px; border-radius: 12px; }
 .mk-compose.signed-out { display: flex; align-items: center; gap: 9px; width: 100%; height: 46px; padding: 0 16px; border-radius: 12px; font-size: 14.5px; color: var(--muted-foreground); box-shadow: inset 0 0 0 1px var(--border); text-align: left; }
 .mk-compose.signed-out:hover { color: var(--foreground); background: var(--muted); }
+.mk-name { display: grid; gap: 6px; margin-top: 10px; }
+.mk-name label { font-size: 13.5px; font-weight: 600; }
+.mk-name span { font-size: 12.5px; color: var(--muted-foreground); }
 .mk-compose-bar { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
 .mk-compose-bar > span { flex: 1; font-size: 12.5px; color: var(--muted-foreground); }
 @media (hover: none) { .mk-compose-bar > span { visibility: hidden; } }

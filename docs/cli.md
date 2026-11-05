@@ -1736,12 +1736,13 @@ etude card list [query...] [flags]
 | Flag | Type | Description |
 | --- | --- | --- |
 | `--deck <NAME>` | string | Limit to this deck and its subdecks. |
-| `--order <relevance\|added\|due\|deck\|lapses\|difficulty\|updated>` | string | Sort order. relevance: with free text, items whose title is or starts with a word come first; otherwise the order added. Default `"relevance"`. |
+| `--order <relevance\|added\|due\|deck\|lapses\|difficulty\|updated\|title\|type\|interval\|recall>` | string | Sort order. relevance: with free text, items whose title is or starts with a word come first; otherwise the order added. Default `"relevance"`. |
+| `--reverse` | boolean | Reverse the sort order (new cards stay last in due, interval and recall order). |
 | `--limit <N>` | number | Maximum rows. Default `100`. |
 | `--offset <N>` | number | Rows to skip. Default `0`. |
 | `--ids` | boolean | Print only card ids, one per line. |
 
-Output: { total, rows: [{ cardId, itemId, face, type, deck, tags, title, state, stateName, due, reps, lapses, stability, difficulty, suspended, archived, generated, retrievability }] }
+Output: { total, rows: [{ cardId, itemId, face, type, deck, tags, title, state, stateName, due, reps, lapses, stability, difficulty, interval, updated, suspended, archived, generated, retrievability }] }
 
 ```sh
 etude card list is:due --order due
@@ -5445,7 +5446,8 @@ etude search [query...] [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
-| `--order <relevance\|added\|due\|deck\|lapses\|difficulty\|updated>` | string | Sort order. relevance: with free text, items whose title is or starts with a word come first; otherwise the order added. Default `"relevance"`. |
+| `--order <relevance\|added\|due\|deck\|lapses\|difficulty\|updated\|title\|type\|interval\|recall>` | string | Sort order. relevance: with free text, items whose title is or starts with a word come first; otherwise the order added. Default `"relevance"`. |
+| `--reverse` | boolean | Reverse the sort order (new cards stay last in due, interval and recall order). |
 | `--limit <N>` | number | Maximum rows to return. Default `50`. |
 | `--offset <N>` | number | Rows to skip (for paging). Default `0`. |
 

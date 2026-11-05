@@ -2054,22 +2054,32 @@ export class Etude {
   }
 
   /** Browse: cards matching a search, with their item. "relevance" (the default) is the order added unless there's free text. */
-  search(query: string, opts: { limit?: number; offset?: number; order?: string } = {}) {
+  search(query: string, opts: { limit?: number; offset?: number; order?: string; reverse?: boolean } = {}) {
     const c = this.compileSearch(query);
-    const orders: Record<string, string> = {
-      added: "i.ord, c.id",
-      due: "CASE WHEN c.state = 0 THEN 1 ELSE 0 END, c.due",
-      deck: "d.name, i.ord",
-      lapses: "c.lapses DESC, i.ord",
-      difficulty: "c.difficulty DESC, i.ord",
-      updated: "i.updated DESC",
+    // Each order is a list of [expression, direction]; `reverse` flips every direction except the terms
+    // marked fixed, so cards without a value (new, learning, untitled) stay last either way.
+    type Term = [string, "ASC" | "DESC", fixed?: true];
+    const newLast: Term = ["CASE WHEN c.state = 0 THEN 1 ELSE 0 END", "ASC", true];
+    const orders: Record<string, Term[]> = {
+      added: [["i.ord", "ASC"], ["c.id", "ASC"]],
+      due: [newLast, ["c.due", "ASC"]],
+      deck: [["d.name", "ASC"], ["i.ord", "ASC"]],
+      lapses: [["c.lapses", "DESC"], ["i.ord", "ASC", true]],
+      difficulty: [["c.difficulty", "DESC"], ["i.ord", "ASC", true]],
+      updated: [["i.updated", "DESC"]],
+      title: [["CASE WHEN i.title = '' THEN 1 ELSE 0 END", "ASC", true], ["i.title COLLATE NOCASE", "ASC"], ["i.ord", "ASC", true]],
+      type: [["i.type", "ASC"], ["i.ord", "ASC", true]],
+      interval: [["CASE WHEN c.state = 2 AND c.scheduled_days > 0 THEN 0 ELSE 1 END", "ASC", true], ["c.scheduled_days", "ASC"], ["i.ord", "ASC", true]],
+      // Time since the last review over stability: recall falls as it grows, so the weakest come first.
+      recall: [["CASE WHEN c.state = 0 OR c.stability <= 0 THEN 1 ELSE 0 END", "ASC", true], ["CASE WHEN c.state = 0 OR c.stability <= 0 THEN 0 ELSE (julianday('now') - julianday(COALESCE(c.last_review, c.due))) / c.stability END", "DESC"], ["i.ord", "ASC", true]],
     };
+    const sql = (terms: Term[]) => terms.map(([e, d, fixed]) => `${e} ${opts.reverse && !fixed ? (d === "ASC" ? "DESC" : "ASC") : d}`).join(", ");
     const ranked = (opts.order ?? "relevance") === "relevance" && c.rank;
-    const order = ranked ? `${c.rank!.sql}, ${orders.added}` : (orders[opts.order ?? ""] ?? orders.added);
+    const order = ranked ? `${c.rank!.sql}, ${sql(orders.added)}` : sql(orders[opts.order ?? ""] ?? orders.added);
     const from = "FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
     const total = this.db.get(`SELECT COUNT(*) AS n ${from} WHERE ${c.where}`, ...c.params)!.n;
     const rows = this.db.all(
-      `SELECT c.*, i.type, i.fields, i.tags, i.source, i.archived, i.title, d.name AS deck ${from} WHERE ${c.where} ORDER BY ${order} LIMIT ? OFFSET ?`,
+      `SELECT c.*, i.type, i.fields, i.tags, i.source, i.archived, i.title, i.updated, d.name AS deck ${from} WHERE ${c.where} ORDER BY ${order} LIMIT ? OFFSET ?`,
       ...c.params,
       ...(ranked ? c.rank!.params : []),
       opts.limit ?? 100,
@@ -2097,6 +2107,8 @@ export class Etude {
           lapses: r.lapses,
           stability: r.stability,
           difficulty: r.difficulty,
+          interval: r.state === 2 ? r.scheduled_days : null,
+          updated: r.updated,
           suspended: !!r.suspended,
           archived: !!r.archived,
           generated: typeof fields.generator === "string",

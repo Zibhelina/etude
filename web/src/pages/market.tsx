@@ -16,7 +16,7 @@ import { Field, Page } from "@/components/page";
 import { ThemeMiniature, ThemeSwatches } from "@/components/settings-theme-preview";
 import { CardPreview } from "@/components/card-preview";
 import { download } from "@/components/type-editor/starter";
-import { api, ApiError, type CardType, type MarketEntry, type MarketFile, type MarketKind, type PublishResult } from "@/lib/api";
+import { api, ApiError, type CardType, type ComingSoonEntry, type MarketEntry, type MarketFile, type MarketKind, type PublishResult } from "@/lib/api";
 import { EtudeImg } from "@/lib/local-url";
 import { MarketGallery } from "@/components/market-gallery";
 import { DetailLayout, niceDate, paragraphs, type InfoCell } from "@/components/market-detail";
@@ -30,6 +30,7 @@ import { serverless } from "@/lib/native";
 import { LibraryView, PaidDetail, PaidTile, SellingView, usePaidIndex } from "@/components/market-paid";
 import { money, type PaidEntry } from "@/lib/account";
 import { canShowPurchases, isNativeApp } from "@/lib/platform";
+import { SoonDetail, SoonTile } from "@/components/market-soon";
 import { track } from "@/lib/telemetry";
 
 const KIND_LABEL: Record<MarketKind, string> = { theme: "Theme", deck: "Deck", type: "Card type" };
@@ -44,11 +45,16 @@ const official = (author: string) => /^(Joao|João|Zibhelina)\b/.test(author);
 type Filter = "all" | MarketKind;
 type Tab = "browse" | "library" | "selling";
 type Item = { paid: false; key: string; e: MarketEntry } | { paid: true; key: string; e: PaidEntry };
+/** A Coming soon deck: shown beside the rest in search and the Decks filter, never installed, never featured. */
+type SoonItem = ComingSoonEntry & { author: string; installed: null };
+type Soon = { paid: false; soon: true; key: string; e: SoonItem };
+type AnyItem = Item | Soon;
+const isSoon = (it: AnyItem): it is Soon => "soon" in it;
 
 const s_ = (e: MarketEntry) => e.summary as any;
 const parts = (decks: string[] = []) => decks.filter((d) => d.includes("::")).map((d) => d.split("::").pop()!);
 const words = (q: string) => q.toLowerCase().split(/\s+/).filter(Boolean);
-const matches = (e: { name: string; description: string; author: string; tags: string[] }, w: string[]) => w.every((x) => [e.name, e.description, e.author, ...e.tags].join(" ").toLowerCase().includes(x));
+const matches = (e: { name: string; description: string; author: string; tags: string[]; tagline?: string }, w: string[]) => w.every((x) => [e.name, e.tagline ?? "", e.description, e.author, ...e.tags].join(" ").toLowerCase().includes(x));
 function firstSentence(d: string, max = 120) {
   let s = (d || "").split(/(?<=[.!?])\s/)[0] ?? "";
   if (s.length > max) s = s.slice(0, max - 3).replace(/\s\S*$/, "") + "…";
@@ -88,7 +94,7 @@ export function MarketPage() {
   const tab: Tab = tabs.includes(params.get("tab") as Tab) ? (params.get("tab") as Tab) : "browse";
   const paid = usePaidIndex();
   const { stats, reload: reloadStats } = useMarketStats();
-  const [data, setData] = useState<{ repo: string; url: string; selectedTheme: string; entries: MarketEntry[] } | null>(null);
+  const [data, setData] = useState<{ repo: string; url: string; selectedTheme: string; entries: MarketEntry[]; comingSoon?: ComingSoonEntry[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [publishing, setPublishing] = useState(false);
@@ -163,7 +169,11 @@ export function MarketPage() {
     return data.entries.find((e) => e.kind === k && e.id === id) ?? null;
   }, [data, want]);
   const openPaid = useMemo(() => (want?.startsWith("paid/") ? paid.entries.find((e) => e.listing === want.slice(5)) ?? null : null), [paid.entries, want]);
-  const open = (it: Item) => navigate(`/market?entry=${it.paid ? `paid/${it.e.listing}` : `${it.e.kind}/${it.e.id}`}`);
+  // Coming soon decks only where purchases may be shown: the store apps don't list them at all.
+  const soon = useMemo<Soon[]>(() => (canShowPurchases() ? (data?.comingSoon ?? []).map((e): Soon => ({ paid: false, soon: true, key: `soon/${e.id}`, e: { ...e, author: "Etude", installed: null } })) : []), [data]);
+  const openSoon = useMemo(() => (want?.startsWith("soon/") ? soon.find((x) => x.e.id === want.slice(5))?.e ?? null : null), [soon, want]);
+  // Keys are the ?entry= value: kind/id, paid/<listing> or soon/<id>.
+  const open = (it: AnyItem) => navigate(`/market?entry=${it.key}`);
   const leaveDetail = () => navigate(filter === "all" ? "/market" : `/market?kind=${filter}`);
 
   // ---- what Discover shows
@@ -171,14 +181,14 @@ export function MarketPage() {
     ...paid.entries.map((e): Item => ({ paid: true, key: `paid/${e.listing}`, e })),
     ...(data?.entries ?? []).map((e): Item => ({ paid: false, key: `${e.kind}/${e.id}`, e })),
   ], [paid.entries, data]);
-  const kindOf = (it: Item): MarketKind => (it.paid ? "deck" : it.e.kind);
+  const kindOf = (it: AnyItem): MarketKind => (it.paid ? "deck" : it.e.kind);
   const counts = useMemo(() => {
     const c = { all: 0, theme: 0, deck: 0, type: 0 } as Record<Filter, number>;
-    for (const it of items) (c.all++, c[kindOf(it)]++);
+    for (const it of [...items, ...soon]) (c.all++, c[kindOf(it)]++);
     return c;
-  }, [items]);
-  const sorted = (list: Item[]) => [...list].sort((a, b) => featRank(a.key, !!a.e.installed, kindOf(a)) - featRank(b.key, !!b.e.installed, kindOf(b)));
-  const shown = useMemo(() => sorted(items.filter((it) => (filter === "all" || kindOf(it) === filter) && matches(it.e, words(query)))), [items, filter, query]);
+  }, [items, soon]);
+  const sorted = <T extends AnyItem>(list: T[]) => [...list].sort((a, b) => featRank(a.key, !!a.e.installed, kindOf(a)) - featRank(b.key, !!b.e.installed, kindOf(b)));
+  const shown = useMemo(() => sorted([...items, ...soon].filter((it) => (filter === "all" || kindOf(it) === filter) && matches(it.e, words(query)))), [items, soon, filter, query]);
   // Featured: the paid decks on sale first, then the free picks in FEATURED order (installed or not), then the most
   // liked of the rest, up to eight. Only entries with a cover, so every card has a picture.
   const featured = useMemo(() => {
@@ -192,7 +202,7 @@ export function MarketPage() {
   const setFilter = (f: Filter) => navigate(f === "all" ? "/market" : `/market?kind=${f}`, { replace: true });
   const tabLabel: Record<Tab, string> = { browse: "Discover", library: "Yours", selling: "Selling" };
   const yoursCount = (data?.entries ?? []).filter((e) => e.installed && e.kind !== "theme").length + paid.entries.filter((e) => e.owned).length;
-  const detail = !!want && (openFree || openPaid);
+  const detail = !!want && (openFree || openPaid || openSoon);
 
   // "/" searches; Esc takes a theme off, then leaves an entry's page.
   useEffect(() => {
@@ -240,6 +250,8 @@ export function MarketPage() {
         signedIn={paid.signedIn}
       />
     );
+  } else if (detail && openSoon) {
+    body = <SoonDetail key={openSoon.id} entry={openSoon} onBack={leaveDetail} />;
   } else if (detail && openPaid) {
     body = <PaidDetail key={openPaid.listing} entry={openPaid} signedIn={paid.signedIn} onBack={leaveDetail} onChanged={() => (void paid.reload(), void reloadStats())} />;
   } else {
@@ -335,6 +347,7 @@ export function MarketPage() {
                   onTry={tryOn}
                   data-paid-section
                 />
+                <Shelf title="Coming soon" sub="Decks we're still making. Here's a first look." items={soon} stats={stats} onOpen={open} onTry={tryOn} data-soon-section />
                 <Shelf title="Card types" sub="New kinds of cards. Try one here before you install it." items={sorted(items.filter((it) => !it.paid && it.e.kind === "type"))} stats={stats} onAll={() => setFilter("type")} onOpen={open} onTry={tryOn} />
                 <Shelf title="Themes" sub="Try one on. Nothing changes until you keep it." items={sorted(items.filter((it) => !it.paid && it.e.kind === "theme"))} stats={stats} onAll={() => setFilter("theme")} onOpen={open} onTry={tryOn} themes />
               </>
@@ -445,7 +458,7 @@ function Hero({ it, counts, onOpen, onChanged }: { it: Item; counts?: EntryCount
   );
 }
 
-function Shelf({ title, sub, items, stats, onAll, onOpen, onTry, themes, ...rest }: { title: string; sub?: string; items: Item[]; stats: Record<string, EntryCounts>; onAll?(): void; onOpen(it: Item): void; onTry(e: MarketEntry): void; themes?: boolean; "data-paid-section"?: boolean }) {
+function Shelf({ title, sub, items, stats, onAll, onOpen, onTry, themes, ...rest }: { title: string; sub?: string; items: AnyItem[]; stats: Record<string, EntryCounts>; onAll?(): void; onOpen(it: AnyItem): void; onTry(e: MarketEntry): void; themes?: boolean; "data-paid-section"?: boolean; "data-soon-section"?: boolean }) {
   const row = useRef<HTMLDivElement>(null);
   const hs = useHScroll(row, { page: "view", dep: items.length });
   if (!items.length) return null;
@@ -468,7 +481,8 @@ function Shelf({ title, sub, items, stats, onAll, onOpen, onTry, themes, ...rest
   );
 }
 
-function AnyTile({ it, counts, onOpen, onTry }: { it: Item; counts?: EntryCounts; onOpen(): void; onTry(e: MarketEntry): void }) {
+function AnyTile({ it, counts, onOpen, onTry }: { it: AnyItem; counts?: EntryCounts; onOpen(): void; onTry(e: MarketEntry): void }) {
+  if (isSoon(it)) return <SoonTile entry={it.e} onOpen={onOpen} />;
   return it.paid ? <PaidTile entry={it.e} counts={counts} onOpen={onOpen} /> : <EntryTile entry={it.e} counts={counts} onOpen={onOpen} onTry={() => onTry(it.e)} />;
 }
 

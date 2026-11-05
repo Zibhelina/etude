@@ -9,6 +9,7 @@ import {
   checkEntry,
   entryJson,
   entryPath,
+  fetchComingSoon,
   fetchEntry,
   fetchIndex,
   forgetInstall,
@@ -53,6 +54,17 @@ command({
       .filter((x) => words.every((w) => [x.name, x.description, x.author, ...x.tags].join(" ").toLowerCase().includes(w)))
       .map(({ summary: _s, path: _p, ...x }) => ({ ...x, installed: installState(ctx.e, x, installed) }));
   },
+});
+
+command({
+  name: "market coming-soon",
+  summary: "Decks the catalog lists as coming soon: names, descriptions and previews, nothing to install yet.",
+  description:
+    "Read from the catalog's coming-soon.json. A catalog without the file has none. Entries that don't pass the checks are left out and listed in `problems`.",
+  flags: [{ name: "refresh", type: "boolean", description: "Skip the one-minute cache." }, URL_FLAG],
+  examples: ["etude market coming-soon", "etude market coming-soon --url ./my-market"],
+  output: "{ entries: [{ id, kind: deck, name, tagline, description, tags, facts, parts, cover, media }], problems: string[] }",
+  run: (ctx) => fetchComingSoon(ctx.flags.url ?? marketSettings(ctx.e).url, { refresh: ctx.flags.refresh }),
 });
 
 command({

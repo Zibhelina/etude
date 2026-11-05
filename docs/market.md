@@ -30,6 +30,43 @@ The index exposes `media: string[]`, also returned by `etude market show`. The a
 
 Deck details count leaf topics separately from parent folders. A collection with 20 topics and 6 grouping folders displays **20 topics**.
 
+## Coming soon
+
+The Market can show decks that aren't ready yet on a **Coming soon** shelf, after Paid decks. Each one has a tile and a page like any other deck (cover, previews, description, facts, what's inside), with "Coming soon" where the price or the button would be. There is nothing to install, buy or sign up for, and they never count as installed. Search finds them and the **Decks** filter includes them. The iPhone and Android apps don't show them at all, like paid decks.
+
+The list is `coming-soon.json` at the root of the catalog, written by hand. CI doesn't build or check it, so it needs no installable content:
+
+```json
+{
+  "etude": "coming-soon/1",
+  "entries": [
+    {
+      "id": "kanji-mage",
+      "kind": "deck",
+      "name": "Kanji Mage",
+      "tagline": "One line for the tile.",
+      "description": "The page's text. Blank lines start paragraphs.",
+      "tags": ["japanese", "kanji"],
+      "facts": [{ "value": "1,026", "label": "Kanji" }, { "value": "6", "label": "Grades" }],
+      "parts": ["Grade 1", "Grade 2"],
+      "cover": "covers/coming-soon/kanji-mage.webp",
+      "media": ["media/coming-soon/kanji-mage/01-writing.webp"]
+    }
+  ]
+}
+```
+
+- `id` is a lowercase slug, unique in the file. `kind` is `deck` (the only kind for now) and can be left out.
+- `name` (up to 80 characters) is required. `tagline` (140), `description` (2000), `tags` (12 short words), `facts` (up to 6 `{ value, label }` pairs, 24 characters each; the tile shows the first two) and `parts` (up to 30 names) are optional.
+- `cover` must be `covers/coming-soon/<id>.<webp|png|jpg>`, at most 600 KB (800×500 works best). `media` lists up to 12 files under `media/coming-soon/<id>/`, lowercase slug names, WebP, PNG, JPG, MP4 or WebM, at most 12 MiB each, shown in order after the cover.
+
+An entry that breaks a rule is left out and the rest still show. A catalog without the file, or one the app can't read, has an empty shelf and the rest of the Market works as before. The app reads the file beside `index.json` with the same one-minute cache and refresh, and serves pictures by position only (`/api/market/coming-soon/<id>/cover`, `/api/market/coming-soon/<id>/<n>`), so a request never carries a path, and only paths that pass the rules above are read.
+
+```sh
+etude market coming-soon                    # { entries, problems } as JSON
+etude market coming-soon --url ./my-market  # check a folder before you push it
+```
+
 ## Publishing
 
 **Market → Publish**, pick the deck, card type or theme, describe it and press **Open pull request**. Etude uses the GitHub CLI on the machine running the server (`gh auth login`): it forks the market repository when you can't push to it, adds the entry file on a new branch and opens the pull request. It goes live once a maintainer merges it.

@@ -276,6 +276,139 @@ export async function fetchCover(url: string, cover: string): Promise<{ body: Bu
   return { body, type: COVER_TYPE[m[2]] };
 }
 
+// ------------------------------------------------------------------ coming soon
+//
+//   coming-soon.json                    { etude: "coming-soon/1", entries: [ComingSoonEntry] }
+//   covers/coming-soon/<id>.<webp|png|jpg>
+//   media/coming-soon/<id>/<name>.<webp|png|jpg|mp4|webm>
+//
+// Decks the catalog's owners are still making: a name, a description and pictures, nothing to install. The file is
+// written by hand (CI never touches it) and is optional, so older catalogs and local folders without it show nothing.
+
+export interface ComingSoonFact {
+  label: string;
+  value: string;
+}
+
+export interface ComingSoonEntry {
+  id: string;
+  kind: "deck";
+  name: string;
+  /** One line for the tile. */
+  tagline: string;
+  description: string;
+  tags: string[];
+  /** Facts for the detail page's numbers row, like { value: "1,026", label: "Kanji" }. */
+  facts: ComingSoonFact[];
+  /** What's inside, as short names (subdecks, puzzle kinds). */
+  parts: string[];
+  cover?: string;
+  media: string[];
+}
+
+export const COMING_SOON_FILE = "coming-soon.json";
+export const COMING_SOON_COVER = /^covers\/coming-soon\/([a-z0-9][a-z0-9-]{1,63})\.(webp|png|jpg)$/;
+export const COMING_SOON_MEDIA = /^media\/coming-soon\/([a-z0-9][a-z0-9-]{1,63})\/[a-z0-9-]+\.(webp|png|jpg|mp4|webm)$/;
+const MAX_COMING_SOON = 24;
+const shortText = (v: unknown, max: number) => typeof v === "string" && !!v.trim() && v.length <= max;
+
+/** Reads a coming-soon.json body. Bad entries are dropped with a reason; the rest stay usable. */
+export function parseComingSoon(raw: unknown): { entries: ComingSoonEntry[]; problems: string[] } {
+  const problems: string[] = [];
+  const file = raw as any;
+  if (!file || typeof file !== "object" || Array.isArray(file) || file.etude !== "coming-soon/1" || !Array.isArray(file.entries)) {
+    return { entries: [], problems: ['coming-soon.json must be { "etude": "coming-soon/1", "entries": [...] }'] };
+  }
+  const entries: ComingSoonEntry[] = [];
+  const seen = new Set<string>();
+  for (const [i, x] of (file.entries as any[]).entries()) {
+    const where = `entry ${i + 1}${typeof x?.id === "string" ? ` (${x.id})` : ""}`;
+    const errors: string[] = [];
+    if (!x || typeof x !== "object" || Array.isArray(x)) {
+      problems.push(`${where}: must be an object`);
+      continue;
+    }
+    if (typeof x.id !== "string" || !ENTRY_ID.test(x.id)) errors.push("id must be a lowercase slug (a-z, 0-9, -), 2 to 64 characters");
+    else if (seen.has(x.id)) errors.push("id is used twice");
+    if ((x.kind ?? "deck") !== "deck") errors.push('kind must be "deck"');
+    if (!shortText(x.name, 80)) errors.push("name is required, at most 80 characters");
+    if (x.tagline !== undefined && !shortText(x.tagline, 140)) errors.push("tagline must be text, at most 140 characters");
+    if (x.description !== undefined && (typeof x.description !== "string" || x.description.length > 2000)) errors.push("description must be text, at most 2000 characters");
+    if (x.tags !== undefined && (!Array.isArray(x.tags) || x.tags.length > 12 || x.tags.some((t: unknown) => !shortText(t, 32)))) errors.push("tags must be a list of at most 12 short words");
+    if (x.facts !== undefined && (!Array.isArray(x.facts) || x.facts.length > 6 || x.facts.some((f: any) => !shortText(f?.label, 24) || !shortText(f?.value, 24)))) errors.push("facts must be at most 6 { label, value } pairs of short text");
+    if (x.parts !== undefined && (!Array.isArray(x.parts) || x.parts.length > 30 || x.parts.some((p: unknown) => !shortText(p, 48)))) errors.push("parts must be a list of at most 30 short names");
+    // Pictures must sit in this entry's own folders: nothing else in the catalog, no URLs, no way up.
+    const cover = COMING_SOON_COVER.exec(typeof x.cover === "string" ? x.cover : "");
+    if (x.cover !== undefined && cover?.[1] !== x.id) errors.push(`cover must be covers/coming-soon/${x.id}.webp (or .png, .jpg)`);
+    const media: string[] = x.media === undefined ? [] : Array.isArray(x.media) ? x.media : [null];
+    if (media.length > 12 || media.some((p) => typeof p !== "string" || COMING_SOON_MEDIA.exec(p)?.[1] !== x.id)) errors.push(`media must be at most 12 files under media/coming-soon/${x.id}/ with lowercase slug names`);
+    if (errors.length) {
+      problems.push(`${where}: ${errors.join("; ")}`);
+      continue;
+    }
+    if (entries.length >= MAX_COMING_SOON) {
+      problems.push(`more than ${MAX_COMING_SOON} entries; the rest are ignored`);
+      break;
+    }
+    seen.add(x.id);
+    entries.push({
+      id: x.id,
+      kind: "deck",
+      name: x.name.trim(),
+      tagline: (x.tagline ?? "").trim(),
+      description: (x.description ?? "").trim(),
+      tags: (x.tags ?? []).map((t: string) => t.trim()),
+      facts: (x.facts ?? []).map((f: any) => ({ label: f.label.trim(), value: f.value.trim() })),
+      parts: (x.parts ?? []).map((p: string) => p.trim()),
+      ...(x.cover ? { cover: x.cover } : {}),
+      media,
+    });
+  }
+  return { entries, problems };
+}
+
+const soonCache = new Map<string, { at: number; entries: ComingSoonEntry[]; problems: string[] }>();
+
+/**
+ * The catalog's coming-soon list, cached like the index. A catalog without the file has an empty list, and so does
+ * one that can't be read: the rest of the Market never fails because of it. `problems` says what was dropped.
+ */
+export async function fetchComingSoon(url: string, opts: { refresh?: boolean } = {}): Promise<{ entries: ComingSoonEntry[]; problems: string[] }> {
+  const hit = soonCache.get(url);
+  if (hit && !opts.refresh && Date.now() - hit.at < 60_000) return { entries: hit.entries, problems: hit.problems };
+  let out: { entries: ComingSoonEntry[]; problems: string[] };
+  try {
+    const { text, bytes } = await readMarketFile(url, COMING_SOON_FILE, { fresh: opts.refresh });
+    out = bytes > 256 * 1024 ? { entries: [], problems: [`${COMING_SOON_FILE} is larger than 256 KB`] } : parseComingSoon(parseJson(text, COMING_SOON_FILE));
+  } catch (e) {
+    out = { entries: [], problems: e instanceof MarketError && e.status === 404 ? [] : [(e as Error).message] };
+  }
+  soonCache.set(url, { at: Date.now(), ...out });
+  return out;
+}
+
+/** A coming-soon entry's cover or one of its previews, as bytes and a content type. */
+export async function fetchComingSoonAsset(url: string, path: string): Promise<{ body: Buffer; type: string }> {
+  const m = COMING_SOON_COVER.exec(path) ?? COMING_SOON_MEDIA.exec(path);
+  if (!m) throw new MarketError(`unexpected coming-soon path ${path}`);
+  const max = COMING_SOON_COVER.test(path) ? MAX_COVER_BYTES : MAX_MEDIA_BYTES;
+  let body: Buffer;
+  if (!isRemote(url)) {
+    const p = join(localDir(url), path);
+    if (!existsSync(p)) throw new MarketError(`the market has no ${path}`, 404);
+    body = readFileSync(p);
+  } else {
+    const res = await fetch(`${url.replace(/\/+$/, "")}/${path}`, { signal: AbortSignal.timeout(20_000) }).catch((e) => {
+      throw new MarketError(`couldn't reach the market (${(e as Error).message})`, 502);
+    });
+    if (!res.ok) throw new MarketError(`the market answered ${res.status} for ${path}`, res.status === 404 ? 404 : 502);
+    if (Number(res.headers.get("content-length")) > max) throw new MarketError(`${path} is too large`);
+    body = Buffer.from(await res.arrayBuffer());
+  }
+  if (body.length > max) throw new MarketError(`${path} is too large`);
+  return { body, type: ({ ...COVER_TYPE, mp4: "video/mp4", webm: "video/webm" } as Record<string, string>)[m[2]] };
+}
+
 export async function fetchIndex(url: string, opts: { refresh?: boolean } = {}): Promise<MarketIndex> {
   const hit = indexCache.get(url);
   if (hit && !opts.refresh && Date.now() - hit.at < 60_000) return hit.index;

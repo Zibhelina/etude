@@ -404,6 +404,7 @@ These work on every command, before or after the command words.
   - [`media add`](#media-add) Copy an image, audio or video file into the collection's media folder.
 - **market**: Market: browse, install and publish shared themes, decks and card types (`etude market` alone runs `list`)
   - [`market list`](#market-list) Entries in the market, newest first, with whether each is installed here.
+  - [`market coming-soon`](#market-coming-soon) Decks the catalog lists as coming soon: names, descriptions and previews, nothing to install yet.
   - [`market show`](#market-show) One entry: its details from the index and what it contains.
   - [`market install`](#market-install) Add an entry to your collection. Installing again updates it; decks keep your scheduling.
   - [`market installed`](#market-installed) What you installed from the market, with what each put in your collection.
@@ -4728,6 +4729,32 @@ Output: array of { id, kind, name, description, author, tags, version, updated, 
 etude market list
 etude market list --kind theme
 etude market list -q "japanese"
+```
+
+### etude market coming-soon
+
+<a id="market-coming-soon"></a>
+
+Decks the catalog lists as coming soon: names, descriptions and previews, nothing to install yet.
+
+Read from the catalog's coming-soon.json. A catalog without the file has none. Entries that don't pass the checks are left out and listed in `problems`.
+
+```
+etude market coming-soon [flags]
+```
+
+*read-only*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--refresh` | boolean | Skip the one-minute cache. |
+| `--url <URL>` | string | Read the market from this URL or folder instead of the configured one (`settings set market.url=…`). |
+
+Output: { entries: [{ id, kind: deck, name, tagline, description, tags, facts, parts, cover, media }], problems: string[] }
+
+```sh
+etude market coming-soon
+etude market coming-soon --url ./my-market
 ```
 
 ### etude market show

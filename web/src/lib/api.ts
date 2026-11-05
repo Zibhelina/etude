@@ -638,6 +638,8 @@ export const api = {
     call<{ entry: MarketMeta; result: "created" | "updated" | "unchanged"; ids: string[]; report: any }>("POST", "/api/market/install", { id, kind, ...opts }),
   /** An <img> can't send the bearer token, so it rides in the query. */
   marketCoverUrl: (kind: MarketKind, id: string) => `/api/market/cover/${kind}/${encodeURIComponent(id)}${apiToken() ? `?token=${encodeURIComponent(apiToken()!)}` : ""}`,
+  /** Coming soon pictures: "cover" or a preview's position. */
+  comingSoonUrl: (id: string, slot: "cover" | number) => `/api/market/coming-soon/${encodeURIComponent(id)}/${slot}${apiToken() ? `?token=${encodeURIComponent(apiToken()!)}` : ""}`,
   marketForget: (id: string) => call<{ forgot: boolean }>("POST", "/api/market/forget", { id }),
   publishStatus: () => call<{ ok: boolean; login?: string; reason?: string; repo: string }>("GET", "/api/market/publish/status"),
   publish: (input: PublishInput & { dryRun?: boolean; full?: boolean }) => call<PublishResult>("POST", "/api/market/publish", input),
@@ -690,6 +692,22 @@ export interface MarketListing {
   generated: string;
   selectedTheme: string;
   entries: MarketEntry[];
+  /** Decks being made (the catalog's coming-soon.json); missing from older servers. */
+  comingSoon?: ComingSoonEntry[];
+}
+
+/** A deck on the Coming soon shelf: pictures and words, nothing to install or buy (src/core/market.ts). */
+export interface ComingSoonEntry {
+  id: string;
+  kind: "deck";
+  name: string;
+  tagline: string;
+  description: string;
+  tags: string[];
+  facts: { label: string; value: string }[];
+  parts: string[];
+  cover?: string;
+  media: string[];
 }
 
 export interface MarketFile extends MarketMeta {

@@ -160,6 +160,22 @@ export interface DeckNode {
   nextDue: string | null;
   deadline: string | null;
   mode: "study" | "watch";
+  /** `art:<id>`, `emoji:<emoji>` or null. */
+  icon: string | null;
+}
+
+/** An archived deck with its subdecks folded in (GET /api/decks/archive). */
+export interface ArchivedDeck {
+  id: number;
+  name: string;
+  icon: string | null;
+  cards: number;
+  studied: number;
+  recall: number | null;
+  lastReview: string | null;
+  due: number;
+  subdecks: { name: string; cards: number }[];
+  curve: { days: number; recall: number }[];
 }
 
 export interface Counts {
@@ -475,6 +491,7 @@ export const api = {
   uploadMedia: (file: File) => call<StoredMedia>("POST", `/api/media${qs({ name: file.name })}`, undefined, file),
   importMedia: (path: string) => call<StoredMedia>("POST", "/api/media/import", { path }),
   decks: (archived = false) => call<DeckNode[]>("GET", `/api/decks${qs({ archived: archived ? 1 : undefined })}`),
+  archive: () => call<ArchivedDeck[]>("GET", "/api/decks/archive"),
   deckUsage: (name: string) => call<{ items: number; cards: number }>("GET", `/api/deck/usage${qs({ name })}`),
   setDeckArchived: (name: string, archived: boolean) => call<{ decks: string[]; archived: boolean }>("POST", `/api/deck/archive${qs({ name })}`, { archived, subdecks: true }),
   deck: (name: string) => call<DeckDetail>("GET", `/api/deck${qs({ name })}`),
@@ -483,7 +500,7 @@ export const api = {
   createDeck: (name: string) => call("POST", "/api/decks", { name }),
   reorderDecks: (parent: string, order: string[]) => call<{ order: string[] }>("POST", "/api/decks/order", { parent, order }),
   moveDeck: (name: string, parent: string, index?: number) => call<DeckNode>("POST", "/api/decks/move", { name, parent, index }),
-  updateDeck: (name: string, patch: Partial<{ name: string; presetId: string | null; config: Partial<PresetConfig>; description: string; instructions: string; archived: boolean }>) =>
+  updateDeck: (name: string, patch: Partial<{ name: string; presetId: string | null; config: Partial<PresetConfig>; description: string; instructions: string; archived: boolean; icon: string | null }>) =>
     call<DeckNode & { resolved: PresetConfig }>("PATCH", `/api/deck${qs({ name })}`, patch),
   // Mutations must be JSON (the server refuses anything else), so body-less deletes send {}.
   deleteDeck: (name: string, items = false) => call("DELETE", `/api/deck${qs({ name })}`, { items }),

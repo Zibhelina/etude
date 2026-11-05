@@ -167,6 +167,40 @@ for (const archived of [true, false]) {
 }
 
 command({
+  name: "deck archived",
+  summary: "The archive: each archived deck with how much of it is still remembered.",
+  description:
+    "One entry per archived deck whose parent isn't archived, subdecks folded in. `recall` is FSRS's predicted recall right now, averaged over the studied cards (null when none were studied or they use a script scheduler). `due` is how many cards would be due if it came back today. `curve` is predicted recall from the last review to a few weeks ahead, as { days, recall } with days relative to now (negative in the past).",
+  examples: ["etude deck archived", "etude deck unarchive \"Old course\" --subdecks"],
+  output: "array of { name, icon, cards, studied, recall, lastReview, due, subdecks: [{ name, cards }], curve: [{ days, recall }] }",
+  run(ctx) {
+    return ctx.e.archiveSummary().map(({ at, config, description, instructions, ...d }) => d);
+  },
+});
+
+command({
+  name: "deck icon",
+  summary: "Get or set the picture a deck shows in the Library.",
+  description:
+    "`art:<id>` picks one of the built-in illustrations (the ids are listed in the app's Change icon picker, e.g. art:world, art:chess, art:piano), `emoji:<emoji>` uses one emoji, and `none` removes it.",
+  args: [
+    { name: "deck", description: "Deck name.", required: true },
+    { name: "icon", description: "art:<id>, emoji:<emoji> or none. Omit to print the current one." },
+  ],
+  writes: true,
+  dryRun: true,
+  examples: ['etude deck icon "Geography" art:world', 'etude deck icon "Japanese" "emoji:🗾"', 'etude deck icon "Geography" none'],
+  output: "{ deck, icon, changed? }",
+  run(ctx) {
+    const e = ctx.e;
+    const d = e.deck(ctx.args.deck);
+    if (ctx.args.icon === undefined) return { deck: d.name, icon: d.icon };
+    const icon = e.updateDeck(d.name, { icon: ctx.args.icon }).icon;
+    return { deck: d.name, icon, changed: icon !== d.icon };
+  },
+});
+
+command({
   name: "deck delete",
   summary: "Delete a deck and its subdecks. Use --items to also delete their items, cards and review history.",
   args: [{ name: "deck", description: "Deck name.", required: true }],

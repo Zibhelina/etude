@@ -3282,12 +3282,24 @@ export class Etude {
     const buckets = new Array(30).fill(0);
     let overdue = 0;
     const nowMs = t.getTime();
+    const dueByDeck = new Map<string, number>();
     for (const r of dueRows) {
       const ms = new Date(r.due).getTime();
       if (ms <= nowMs) overdue++;
-      if (ms < bounds[1]) buckets[0]++;
+      if (ms < bounds[1]) {
+        buckets[0]++;
+        dueByDeck.set(r.deck, (dueByDeck.get(r.deck) ?? 0) + 1);
+      }
       else for (let i = 1; i < 30; i++) if (ms < bounds[i + 1]) { buckets[i]++; break; }
     }
+    // Per deck, each deck's own cards only (not its subdecks): a client adds subtrees up itself.
+    const perDeck = new Map<string, { deck: string; cards: number; new: number; learning: number; review: number; mature: number; seen: number; recall: number | null; due: number; scripted: number }>();
+    const deckRow = (deck: string) => {
+      let e = perDeck.get(deck);
+      if (!e) perDeck.set(deck, (e = { deck, cards: 0, new: 0, learning: 0, review: 0, mature: 0, seen: 0, recall: null, due: dueByDeck.get(deck) ?? 0, scripted: 0 }));
+      return e;
+    };
+    for (const c of everything) if (onScript(c.deck, c.type)) deckRow(c.deck).scripted++;
     for (let i = 0; i < 30; i++) forecast.push({ day: dayKey(dayAt(i)), due: buckets[i] });
 
     // Predicted recall now, with each card's own deck settings (weights can differ per deck).
@@ -3300,6 +3312,18 @@ export class Etude {
       if (r != null) {
         rSum += r;
         seenN++;
+      }
+      const dr = deckRow(c.deck);
+      dr.cards++;
+      if (c.state === 0) dr.new++;
+      else if (c.state === 1 || c.state === 3) dr.learning++;
+      else if (c.state === 2) {
+        dr.review++;
+        if (c.stability >= 21) dr.mature++;
+      }
+      if (r != null) {
+        dr.seen++;
+        dr.recall = (dr.recall ?? 0) + r;
       }
       const tags = parse<string[]>(c.tags, []);
       const credited = new Set<string>();
@@ -3410,6 +3434,9 @@ export class Etude {
       tags: [...byTag.entries()].map(([tag, v]) => ({ tag, cards: v.n, recall: v.r / v.n })).sort((a, b) => a.tag.localeCompare(b.tag)),
       /** Every tag with its ancestors: a card under a::b also counts toward a. */
       tagTree,
+      /** One row per deck with cards in scope, its own cards only: FSRS states, mean recall over seen cards,
+       *  cards due before tomorrow, and how many cards follow a script scheduler instead. */
+      decks: [...perDeck.values()].map((d) => ({ ...d, recall: d.seen ? d.recall! / d.seen : null })).sort((a, b) => a.deck.localeCompare(b.deck)),
       today: { ...todayStats, ...todayRuns, day: dayKey(today) },
       ratings,
       verdicts,

@@ -1,29 +1,30 @@
-// The phone shell ("Score", see docs/mobile-design.md): a floating tab capsule with the ε beside it,
+// The phone shell ("Score", see docs/mobile-design.md): a floating tab pill with the Ask circle beside it,
 // the big serif page title that folds into a slim bar on scroll, and the bottom action sheet.
 // Nothing here renders at md (768 px) and up.
 import { useEffect, useRef, useState } from "react";
-import { BarChart3, Layers, Library, MoreHorizontal } from "lucide-react";
+import { BrowseIcon, LibraryIcon, MoreIcon, StatsIcon } from "@/components/nav-icons";
 import { Logo } from "@/components/logo";
 import { minimiFace } from "@/components/minimi";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { to: "/", label: "Decks", icon: Layers, match: (p: string) => p === "/" || p === "/deck" || p === "/archive" },
-  { to: "/browse", label: "Browse", icon: Library, match: (p: string) => p === "/browse" },
-  { to: "/stats", label: "Stats", icon: BarChart3, match: (p: string) => p === "/stats" },
-  { to: "/more", label: "More", icon: MoreHorizontal, match: (p: string) => p === "/more" || p.startsWith("/types") || p === "/market" || p === "/settings" },
+  { to: "/", label: "Library", icon: LibraryIcon, match: (p: string) => p === "/" || p === "/deck" || p === "/archive" },
+  { to: "/browse", label: "Browse", icon: BrowseIcon, match: (p: string) => p === "/browse" },
+  { to: "/stats", label: "Stats", icon: StatsIcon, match: (p: string) => p === "/stats" },
+  { to: "/more", label: "More", icon: MoreIcon, match: (p: string) => p === "/more" || p.startsWith("/types") || p === "/market" || p === "/settings" },
 ];
 
 /**
- * "Ilha": a floating capsule with the four tabs as icons, where only the active one opens up and shows
- * its name, and the ε in its own disc beside it. The list scrolls under both, behind a short fade.
+ * The tab island: a floating pill with the four tabs (icon over a short label, the current one lifted onto
+ * its own chip) and the Ask circle beside it, Minimi's face in Fun mode. The page fades out to the background
+ * just above the island and stays solid behind it, so nothing scrolling underneath shows through the gaps.
  */
 export function PhoneTabBar({ path, updateDot, fun, onAsk }: { path: string; updateDot: boolean; fun?: boolean; onAsk(): void }) {
   return (
-    <nav aria-label="Main" className="score-island pointer-events-none fixed inset-x-0 bottom-0 z-20 md:hidden">
-      <div className="pointer-events-auto mx-auto flex max-w-md items-center gap-2 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] min-[360px]:gap-2.5 min-[360px]:px-3.5">
-        <div className="score-capsule flex h-[3.375rem] min-w-0 flex-1 items-center justify-between rounded-full border px-[5px]">
+    <nav aria-label="Main" data-shell-tabs className="score-island pointer-events-none fixed inset-x-0 bottom-0 z-20 md:hidden">
+      <div className="pointer-events-auto mx-auto flex max-w-md items-center gap-2.5 px-4 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-[359px]:gap-2 max-[359px]:px-3">
+        <div className="score-capsule flex min-w-0 flex-1 items-center rounded-full border p-[5px]">
           {TABS.map((t) => {
             const on = t.match(path);
             return (
@@ -33,26 +34,21 @@ export function PhoneTabBar({ path, updateDot, fun, onAsk }: { path: string; upd
                 aria-current={on ? "page" : undefined}
                 aria-label={t.label}
                 className={cn(
-                  // The pill grows out of the icon: padding, the label's width and the fill all ease together,
-                  // so the old tab folds while the new one opens. An inactive tab's box is exactly its icon, so
-                  // space-between keeps the visible gaps equal; the ::before keeps a 45 px touch target.
-                  "relative flex h-11 shrink-0 items-center justify-center rounded-full text-[13px] text-muted-foreground transition-[background-color,color,padding,margin] duration-300 ease-[cubic-bezier(0.22,0.9,0.3,1)] before:absolute before:-inset-x-3 before:inset-y-0 before:content-[''] active:scale-95 motion-reduce:transition-none",
-                  on ? "bg-accent px-3.5 font-medium text-foreground" : "bg-transparent px-0 first:ml-3.5 last:mr-3.5",
+                  "score-tab relative flex h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-full text-[10.5px] font-[650] text-muted-foreground transition-[background-color,color,box-shadow] duration-200 active:scale-95 motion-reduce:transition-none",
+                  on && "is-on text-foreground",
                 )}
               >
                 <span className="relative">
-                  <t.icon className={cn("size-[21px] transition-colors duration-300", on && "text-foreground")} strokeWidth={on ? 2.1 : 1.7} />
+                  <t.icon className="size-[22px]" />
                   {t.to === "/more" && updateDot && <span data-update-dot aria-label="Update available" className="absolute -top-0.5 -right-1 size-2 rounded-full bg-highlight ring-2 ring-card" />}
                 </span>
-                <span aria-hidden={!on} className={cn("grid transition-[grid-template-columns,opacity,margin] duration-300 ease-[cubic-bezier(0.22,0.9,0.3,1)] motion-reduce:transition-none", on ? "ml-1.5 grid-cols-[1fr] opacity-100" : "ml-0 grid-cols-[0fr] opacity-0")}>
-                  <span className="overflow-hidden whitespace-nowrap">{t.label}</span>
-                </span>
+                <span className="max-w-full truncate leading-tight">{t.label}</span>
               </button>
             );
           })}
         </div>
-        <button onClick={onAsk} aria-label={fun ? "Ask Minimi" : "Ask Etude"} data-agent-launcher className="score-capsule flex size-[3.375rem] shrink-0 items-center justify-center overflow-hidden rounded-full border transition-transform active:scale-95">
-          {fun ? <img src={minimiFace} alt="" className="size-full object-cover" draggable={false} /> : <Logo className="size-[26px]" />}
+        <button onClick={onAsk} aria-label={fun ? "Ask Minimi" : "Ask Etude"} data-agent-launcher className="score-capsule flex size-[58px] shrink-0 items-center justify-center overflow-hidden rounded-full border transition-transform active:scale-95">
+          {fun ? <img src={minimiFace} alt="" className="size-full object-cover" draggable={false} /> : <Logo className="size-[28px]" />}
         </button>
       </div>
     </nav>

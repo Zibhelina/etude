@@ -1017,6 +1017,9 @@ export class Etude {
           grader: def.grader?.kind,
           folder: r.folder as string,
           assetFiles: files.get(r.id) ?? [],
+          faces: def.faces?.length ? def.faces : ["main"],
+          scheduler: def.scheduler ?? null,
+          showVerdict: def.showVerdict !== false,
         };
       });
   }
@@ -1292,6 +1295,18 @@ export class Etude {
       id,
     )!;
     return { items: r.items, archived: r.archived, cards: r.cards, reviews: r.reviews };
+  }
+
+  /** The decks holding a type's items (archived ones left out), most cards first. */
+  typeDecks(id: string): { deck: string; items: number; cards: number }[] {
+    return this.db
+      .all<{ deck: string; items: number; cards: number }>(
+        `SELECT d.name AS deck, COUNT(DISTINCT i.id) AS items, COUNT(c.id) AS cards
+       FROM items i JOIN decks d ON d.id = i.deck_id LEFT JOIN cards c ON c.item_id = i.id
+       WHERE i.type = ? AND i.archived = 0 GROUP BY d.name ORDER BY cards DESC, d.name`,
+        id,
+      )
+      .map((r) => ({ deck: r.deck, items: r.items, cards: r.cards }));
   }
 
   /**

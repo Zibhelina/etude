@@ -286,6 +286,7 @@ These work on every command, before or after the command words.
   - [`tag items`](#tag-items) Items with a tag (or a tag below it).
 - **type**: Card types: fields, template (HTML/CSS/JS), prepare script and grader (`etude type` alone runs `list`)
   - [`type list`](#type-list) Card types with their grader, item count and whether they are shipped, edited or custom.
+  - [`type decks`](#type-decks) Where a type is used: each deck holding its items (archived ones left out), with item and card counts, most cards first.
   - [`type show`](#type-show) A type's full definition: fields (with kinds, private flags, defaults), template, prepare and grader code, plus its asset files (name, size, hash).
   - [`type export`](#type-export) Write a type as editable files (type.json, template.html, style.css, card.js, prepare.js, grade.js, assets/), or print it as JSON (assets as base64).
   - [`type import`](#type-import) Create or update a type from a directory, a JSON file, or JSON on stdin (`-`). Saving an edited built-in makes it yours.
@@ -2174,7 +2175,29 @@ etude type list
 
 *read-only*
 
-Output: array of { id, name, description, builtin, shipped, edited, updated, items, archived, grader, folder }
+Output: array of { id, name, description, builtin, shipped, edited, updated, items, archived, grader, folder, assetFiles, faces, scheduler, showVerdict }
+
+### etude type decks
+
+<a id="type-decks"></a>
+
+Where a type is used: each deck holding its items (archived ones left out), with item and card counts, most cards first.
+
+```
+etude type decks <id>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Type id. |
+
+Output: array of { deck, items, cards }
+
+```sh
+etude type decks country-map
+```
 
 ### etude type show
 

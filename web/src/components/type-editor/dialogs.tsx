@@ -1,16 +1,22 @@
-// New type (blank or copied from another) and import dialogs.
+// New type (described to Ask Etude, copied from another, or blank) and import dialogs.
 import { useEffect, useState } from "react";
-import { Check, FileJson, Loader2, Upload } from "lucide-react";
+import { Check, Code2, Copy, FileJson, Loader2, Plus, Upload, WandSparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Textarea } from "@/components/ui/textarea";
+import { askEtude } from "@/components/agent-panel";
+import { minimiFace } from "@/components/minimi";
+import { useFunMode } from "@/lib/fun";
 import { api, type CardType, type TypeSummary } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { BLANK_SAMPLE, blankType, exportShape, slugify, stashPending, TYPE_ID, typesFromJson } from "./starter";
+import { TypeThumb } from "./type-card";
+
+export type Start = "describe" | "copy" | "blank";
 
 export function NewTypeDialog({
   open,
@@ -19,52 +25,84 @@ export function NewTypeDialog({
   from,
   initialSource,
   folder,
+  start,
 }: {
   open: boolean;
   onOpenChange(o: boolean): void;
   types: TypeSummary[];
   /** Duplicate this draft (from the editor) instead of offering a choice. */
   from?: { def: CardType; sample: Record<string, unknown> };
-  /** Preselect "copy" with this type id (from the list's row menu). */
+  /** Preselect "copy" with this type id (from a type's menu). */
   initialSource?: string;
   /** File the new type in this Types-page folder when it's saved. */
   folder?: string;
+  /** Which way to start when the dialog opens. */
+  start?: Start;
 }) {
-  const [mode, setMode] = useState<"blank" | "copy">("blank");
+  const fun = useFunMode();
+  const [mode, setMode] = useState<Start>("describe");
   const [source, setSource] = useState("");
   const [name, setName] = useState("");
   const [id, setId] = useState("");
   const [idTouched, setIdTouched] = useState(false);
+  const [nameTouched, setNameTouched] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [describe, setDescribe] = useState("");
+  const shipped = types.filter((t) => t.shipped).sort((a, b) => a.name.localeCompare(b.name));
+
+  const pickSource = (v: string, force = false) => {
+    setSource(v);
+    const t = types.find((x) => x.id === v);
+    if (t && (force || !nameTouched)) setName(`${t.name} copy`);
+    if (force || !idTouched) setId(freeId(`${v}-copy`, types));
+  };
 
   useEffect(() => {
     if (!open) return;
     setBusy(false);
     setIdTouched(false);
+    setNameTouched(false);
+    setDescribe("");
     if (from) {
       setMode("copy");
       setName(`${from.def.name} copy`);
       setId(freeId(`${from.def.id}-copy`, types));
     } else if (initialSource) {
-      const t = types.find((x) => x.id === initialSource);
       setMode("copy");
-      setSource(initialSource);
-      setName(t ? `${t.name} copy` : "");
-      setId(freeId(`${initialSource}-copy`, types));
+      pickSource(initialSource, true);
     } else {
-      setMode("blank");
-      setSource(types[0]?.id ?? "");
-      setName("");
-      setId("");
+      setMode(start ?? "describe");
+      if (start === "copy") pickSource(shipped.find((t) => t.id === "typed")?.id ?? shipped[0]?.id ?? "", true);
+      else {
+        setSource("");
+        setName("");
+        setId("");
+      }
     }
   }, [open]);
 
+  const choose = (m: Start) => {
+    setMode(m);
+    if (m === "copy" && !source) pickSource(shipped.find((t) => t.id === "typed")?.id ?? shipped[0]?.id ?? "", true);
+    if (m === "blank" && !nameTouched) {
+      setName("");
+      if (!idTouched) setId("");
+    }
+  };
+
   const taken = types.some((t) => t.id === id);
   const validId = TYPE_ID.test(id);
-  const canCreate = !!name.trim() && validId && !taken && (mode === "blank" || !!from || !!source) && !busy;
+  const canCreate =
+    mode === "describe" ? describe.trim().length > 3 && !busy : !!name.trim() && validId && !taken && (mode === "blank" || !!from || !!source) && !busy;
+  const sourceName = types.find((t) => t.id === source)?.name ?? source;
 
   const create = async () => {
     if (!canCreate) return;
+    if (mode === "describe") {
+      onOpenChange(false);
+      askEtude(`Make a new card type${folder ? ` in the Types folder "${folder}"` : ""}: ${describe.trim()}`);
+      return;
+    }
     setBusy(true);
     try {
       let def: CardType;
@@ -84,88 +122,158 @@ export function NewTypeDialog({
       }
       stashPending({ def, sample, from: fromId, ...(folder ? { folder } : {}) });
       onOpenChange(false);
-      navigate(`/types/${encodeURIComponent(id)}`);
+      navigate(`/types/${encodeURIComponent(id)}?edit=1`);
     } catch (e) {
       toast.error((e as Error).message);
       setBusy(false);
     }
   };
 
+  const who = fun ? "Minimi" : "Etude";
+  const starts: { k: Start; icon: React.ReactNode; title: string; sub: string }[] = [
+    {
+      k: "describe",
+      icon: fun ? <img src={minimiFace} alt="" className="size-full object-cover" /> : <span className="score-serif text-[1.35rem] leading-none">ε</span>,
+      title: "Describe it",
+      sub: `Say what you want to practice. ${who} writes it, you check it.`,
+    },
+    { k: "copy", icon: <Copy className="size-5" />, title: "Copy a type", sub: "Start from one that's close and change it." },
+    { k: "blank", icon: <Code2 className="size-5" />, title: "Blank", sub: "Fields, HTML, CSS and a grader, from zero." },
+  ];
+
+  const nameAndId = (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <label className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium">Name</span>
+        <Input
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            setNameTouched(true);
+            if (!idTouched) setId(slugify(e.target.value));
+          }}
+          onKeyDown={(e) => e.key === "Enter" && create()}
+          placeholder="True or false"
+          className="h-10"
+        />
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium">Id</span>
+        <Input
+          value={id}
+          onChange={(e) => {
+            setIdTouched(true);
+            setId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 64));
+          }}
+          onKeyDown={(e) => e.key === "Enter" && create()}
+          className={cn("h-10 font-mono text-[13px]", id && (!validId || taken) && "border-destructive")}
+          spellCheck={false}
+          placeholder="true-false"
+        />
+      </label>
+      <span className={cn("-mt-1 text-xs sm:col-span-2", id && (!validId || taken) ? "text-destructive" : "text-muted-foreground")}>
+        {taken ? `"${id}" is already a type.` : id && !validId ? "Lowercase letters, digits and dashes, starting with a letter or digit." : "Items refer to the type by this id. It can't change after saving."}
+      </span>
+    </div>
+  );
+
+  if (from)
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Duplicate {from.def.name}</DialogTitle>
+            <DialogDescription>Makes an independent copy, including unsaved edits. Nothing is created until you save it.</DialogDescription>
+          </DialogHeader>
+          {nameAndId}
+          <DialogFooter>
+            <Button onClick={create} disabled={!canCreate} className="h-10 gap-1.5 sm:h-9">
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}Open in editor
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[92dvh] gap-5 overflow-y-auto p-5 sm:max-w-2xl sm:p-7" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
-          <DialogTitle>{from ? `Duplicate ${from.def.name}` : folder ? `New card type in “${folder.split("::").pop()}”` : "New card type"}</DialogTitle>
-          <DialogDescription>
-            {from ? "Makes an independent copy, including unsaved edits. Nothing is created until you save it." : "Nothing is created until you save it in the editor."}
-          </DialogDescription>
+          <DialogTitle className="score-serif text-[1.65rem] font-normal">{folder ? `New card type in “${folder.split("::").pop()}”` : "New card type"}</DialogTitle>
+          <DialogDescription>How do you want to start?</DialogDescription>
         </DialogHeader>
-        {!from && (
-          <ToggleGroup type="single" variant="outline" value={mode} onValueChange={(v) => v && setMode(v as "blank" | "copy")} className="w-full">
-            <ToggleGroupItem value="blank" className="h-10 flex-1">Start blank</ToggleGroupItem>
-            <ToggleGroupItem value="copy" className="h-10 flex-1">Copy a type</ToggleGroupItem>
-          </ToggleGroup>
-        )}
-        {!from && mode === "blank" && (
-          <p className="-mt-1 text-xs text-muted-foreground">A minimal working type: a prompt, a typed answer checked by script, and an explanation. Change anything from there.</p>
-        )}
-        {!from && mode === "copy" && (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">Copy from</span>
-            <Select
-              value={source}
-              onValueChange={(v) => {
-                setSource(v);
-                const t = types.find((x) => x.id === v);
-                if (t && !name.trim()) setName(`${t.name} copy`);
-                if (!idTouched) setId(freeId(`${v}-copy`, types));
-              }}
+        <div className="grid gap-2.5 sm:grid-cols-3" role="radiogroup" aria-label="Start from">
+          {starts.map((o) => (
+            <button
+              key={o.k}
+              role="radio"
+              aria-checked={mode === o.k}
+              data-start={o.k}
+              onClick={() => choose(o.k)}
+              className={cn(
+                "flex flex-col items-start gap-1.5 rounded-xl border p-3.5 text-left transition-colors hover:bg-accent/50 max-sm:grid max-sm:grid-cols-[2.5rem_1fr] max-sm:gap-x-3",
+                mode === o.k ? "border-foreground shadow-[inset_0_0_0_1px_var(--foreground)]" : "border-border",
+              )}
             >
-              <SelectTrigger className="h-10 w-full"><SelectValue placeholder="Pick a type" /></SelectTrigger>
-              <SelectContent>
-                {types.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>{t.name} <span className="font-mono text-xs text-muted-foreground">{t.id}</span></SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <span className={cn("flex size-11 items-center justify-center overflow-hidden rounded-xl bg-muted max-sm:row-span-2", o.k === "describe" && fun && "rounded-full bg-transparent", mode === o.k ? "text-foreground" : "text-muted-foreground")}>{o.icon}</span>
+              <b className="text-[15px] font-semibold">{o.title}</b>
+              <span className="text-[13px] leading-snug text-muted-foreground">{o.sub}</span>
+            </button>
+          ))}
+        </div>
+
+        {mode === "describe" && (
+          <div className="flex flex-col gap-2">
+            <Textarea
+              autoFocus
+              value={describe}
+              onChange={(e) => setDescribe(e.target.value)}
+              onKeyDown={(e) => (e.metaKey || e.ctrlKey) && e.key === "Enter" && create()}
+              placeholder="e.g. Show me a guitar chord diagram and I strum the strings in order. Check the fingering, not the sound."
+              className="min-h-28 text-[15px]"
+            />
+            <p className="text-[13px] text-muted-foreground">{who} writes the fields, the HTML and a grader in Ask Etude, then you open it in the editor with a live preview. Nothing is saved until you press Save.</p>
           </div>
         )}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">Name</span>
-          <Input
-            autoFocus
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              if (!idTouched) setId(slugify(e.target.value));
-            }}
-            onKeyDown={(e) => e.key === "Enter" && create()}
-            placeholder="True or false"
-            className="h-10"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">Id</span>
-          <Input
-            value={id}
-            onChange={(e) => {
-              setIdTouched(true);
-              setId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 64));
-            }}
-            onKeyDown={(e) => e.key === "Enter" && create()}
-            className={cn("h-10 font-mono text-[13px]", id && (!validId || taken) && "border-destructive")}
-            spellCheck={false}
-            placeholder="true-false"
-          />
-          <span className={cn("text-xs", id && (!validId || taken) ? "text-destructive" : "text-muted-foreground")}>
-            {taken ? `"${id}" is already a type.` : id && !validId ? "Lowercase letters, digits and dashes, starting with a letter or digit." : "Items refer to the type by this id. It can't change after saving."}
-          </span>
-        </div>
-        <DialogFooter>
-          <Button onClick={create} disabled={!canCreate} className="h-10 gap-1.5 sm:h-9">
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}Open in editor
+        {mode === "copy" && (
+          <div className="flex flex-col gap-3">
+            <div className="grid max-h-[15.5rem] auto-rows-max grid-cols-2 gap-2 overflow-y-auto p-0.5 sm:grid-cols-3" role="listbox" aria-label="Built-in types">
+              {shipped.map((t) => (
+                <button key={t.id} role="option" aria-selected={source === t.id} data-pick={t.id} onClick={() => pickSource(t.id)} className={cn("overflow-hidden rounded-xl border text-left transition-colors hover:bg-accent/40", source === t.id ? "border-foreground shadow-[inset_0_0_0_1px_var(--foreground)]" : "border-border")}>
+                  <TypeThumb t={t} className="h-[4.75rem]" base={620} />
+                  <span className={cn("block truncate px-3 py-2 text-[13.5px] font-medium", source === t.id && "text-highlight")}>{t.name}</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[13px] text-muted-foreground">or copy any type</span>
+              <Select value={source} onValueChange={(v) => pickSource(v)}>
+                <SelectTrigger className="h-10 w-full"><SelectValue placeholder="Pick a type" /></SelectTrigger>
+                <SelectContent>
+                  {types.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name} <span className="font-mono text-xs text-muted-foreground">{t.id}</span></SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {nameAndId}
+          </div>
+        )}
+        {mode === "blank" && (
+          <div className="flex flex-col gap-3">
+            <p className="text-[13px] text-muted-foreground">A minimal working type: a prompt, a typed answer checked by script, and an explanation. Change anything from there.</p>
+            {nameAndId}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className="mr-auto text-[13px] text-muted-foreground">{mode === "copy" ? "Copies its fields, code and grader" : ""}</span>
+          <Button variant="outline" className="types-raised h-10 px-4 text-[15px]" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={create} disabled={!canCreate} className="h-10 gap-1.5 px-4 text-[15px]">
+            {busy ? <Loader2 className="size-4 animate-spin" /> : mode === "describe" ? <WandSparkles className="size-4" /> : mode === "copy" ? <Copy className="size-4" /> : <Plus className="size-4" />}
+            {mode === "describe" ? "Write it" : mode === "copy" ? `Copy ${sourceName}` : "Create"}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

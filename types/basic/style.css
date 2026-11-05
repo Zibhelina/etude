@@ -1,0 +1,7 @@
+/* Etude 3 look: the question in the study serif, no rule above the answer. */
+#card > .prose:first-child, #card > .io-header:first-child { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.005em; }
+#card > .prose:first-child code { font-size: 0.8em; }
+.e-reveal { border-top: 0; padding-top: 0.25rem; }
+#card > .prose:first-child { font-size: clamp(1.6rem, 4.2vw, 2.3rem); line-height: 1.2; }
+.e-reveal > .prose:first-child { font-size: 1.15rem; line-height: 1.6; }
+.e-reveal > .prose.e-muted { font-size: 0.97rem; line-height: 1.55; }

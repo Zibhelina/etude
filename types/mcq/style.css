@@ -3,3 +3,13 @@
 .e-option .body { flex: 1; display: flex; flex-direction: column; }
 .e-option:disabled { cursor: default; }
 .e-option.dim { opacity: 0.55; }
+/* Etude 3 look: the question in the study serif, no rule above the answer. */
+#card > .prose:first-child, #card > .io-header:first-child { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.005em; }
+#card > .prose:first-child code { font-size: 0.8em; }
+.e-reveal { border-top: 0; padding-top: 0.25rem; }
+.e-option { border-radius: 12px; border-width: 1.5px; padding: 0.85rem 1rem; font-size: 1.05rem; }
+.e-option .e-key { border-radius: 7px; width: 1.65rem; height: 1.65rem; border-width: 1.5px; font-weight: 650; }
+.e-option[aria-pressed="true"] { border-color: var(--highlight); background: transparent; box-shadow: 0 0 0 3px color-mix(in oklab, var(--highlight) 22%, transparent); }
+.e-option[aria-pressed="true"] .e-key { background: var(--highlight); border-color: var(--highlight); color: #fff; }
+.e-option.is-correct .e-key { background: var(--success); border-color: var(--success); color: #fff; }
+.e-option.is-wrong .e-key { background: var(--danger); border-color: var(--danger); color: #fff; }

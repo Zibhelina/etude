@@ -12,3 +12,7 @@
 .code-test .got { color: var(--muted-foreground); }
 .code-test .got b { color: var(--danger); font-weight: 500; }
 .code-test code { white-space: pre-wrap; word-break: break-word; }
+/* Etude 3 look: the question in the study serif, no rule above the answer. */
+#card > .prose:first-child, #card > .io-header:first-child { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.005em; }
+#card > .prose:first-child code { font-size: 0.8em; }
+.e-reveal { border-top: 0; padding-top: 0.25rem; }

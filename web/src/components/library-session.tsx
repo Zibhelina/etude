@@ -64,7 +64,7 @@ export function SessionCard({ decks, stats, phone }: { decks: DeckNode[]; stats:
           {t.l > 0 && <span className="inline-flex items-center gap-1.5 text-learn"><Mark kind="learn" />{t.l.toLocaleString()} learning</span>}
           {t.r > 0 && <span className="inline-flex items-center gap-1.5 text-review"><Mark kind="due" />{t.r.toLocaleString()} due</span>}
         </div>
-        <PrimaryButton className={cn("mt-7", phone && "w-full")} onClick={() => navigate("/study")} aria-label="Start today's session">
+        <PrimaryButton className="mt-7 w-full max-w-[22rem]" onClick={() => navigate("/study")} aria-label="Start today's session">
           <Play className="size-4 fill-current" />Start
         </PrimaryButton>
         {done > 0 && <p className="mt-3 text-[13.5px] text-muted-foreground">{plural(done, "card")} done today</p>}

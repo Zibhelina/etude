@@ -91,3 +91,31 @@ test("deleting a type with --items takes its items, archived ones too, with thei
   e.close();
   rmSync(dir, { recursive: true, force: true });
 });
+
+test("a type's decks, and the summary fields the gallery groups by", async () => {
+  const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-types-"));
+  const e = await Etude.open(join(dir, "etude.db"));
+  const app = createApp(e, { webDist: null });
+  e.saveType({ id: "two", name: "Two", faces: ["a", "b"], scheduler: "drill", showVerdict: false, fields: [{ name: "claim", kind: "markdown" }], template: { html: "{{claim}}" }, grader: { kind: "self" } });
+  e.upsertItem({ id: "x1", type: "two", deck: "Big::Sub", fields: { claim: "1" } });
+  e.upsertItem({ id: "x2", type: "two", deck: "Big::Sub", fields: { claim: "2" } });
+  e.upsertItem({ id: "x3", type: "two", deck: "Small", fields: { claim: "3" } });
+  e.upsertItem({ id: "x4", type: "two", deck: "Gone", fields: { claim: "4" } });
+  e.setArchived(["x4"], true);
+
+  const want = [{ deck: "Big::Sub", items: 2, cards: 4 }, { deck: "Small", items: 1, cards: 2 }];
+  assert.deepEqual(e.typeDecks("two"), want);
+  assert.deepEqual(await (await app.request("/api/types/two/decks")).json(), want);
+
+  const t = e.listTypes().find((x) => x.id === "two")!;
+  assert.deepEqual([t.faces, t.scheduler, t.showVerdict], [["a", "b"], "drill", false]);
+  const b = e.listTypes().find((x) => x.id === "basic")!;
+  assert.deepEqual([b.faces, b.scheduler, b.showVerdict], [["main"], null, true]);
+
+  let out = "";
+  const code = await run(["--db", e.path, "type", "decks", "two"], { stdout: (s) => (out += s), stderr: () => {}, stdin: () => "", isTTY: false, env: { ETUDE_HOME: dir } });
+  assert.equal(code, 0);
+  assert.deepEqual(JSON.parse(out), want);
+  e.close();
+  rmSync(dir, { recursive: true, force: true });
+});

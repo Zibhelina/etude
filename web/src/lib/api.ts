@@ -283,6 +283,12 @@ export interface TypeSummary {
   folder: string;
   /** Asset files the type ships with. */
   assetFiles: { name: string; size: number }[];
+  /** The cards each item makes (["main"] for one). */
+  faces: string[];
+  /** The type's own scheduler (e.g. "drill"), null for the deck's. */
+  scheduler: string | null;
+  /** false: the card shows its own result, without Correct / Not quite. */
+  showVerdict: boolean;
 }
 
 export interface SearchRow {
@@ -504,6 +510,7 @@ export const api = {
   deleteUnusedMedia: () => call<{ files: number; bytes: number }>("POST", "/api/cleanup/media", {}),
   /** `items`: also delete the items using the type (archived ones too), with their cards and history. */
   deleteType: (id: string, opts: { items?: boolean } = {}) => call<{ ok: true; items: number; cards: number; reviews: number }>("DELETE", `/api/types/${encodeURIComponent(id)}`, opts),
+  typeDecks: (id: string) => call<{ deck: string; items: number; cards: number }[]>("GET", `/api/types/${encodeURIComponent(id)}/decks`),
   typeUsage: (id: string) => call<{ items: number; archived: number; cards: number; reviews: number }>("GET", `/api/types/${encodeURIComponent(id)}/usage`),
   typeFolders: () => call<string[]>("GET", "/api/type-folders"),
   createTypeFolder: (path: string) => call<{ path: string }>("POST", "/api/type-folders", { path }),

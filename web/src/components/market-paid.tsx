@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CoverGallery } from "@/components/market-gallery";
+import { DetailLayout, Hook, niceDate, paragraphs } from "@/components/market-detail";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { account, bytes, money, openOutside, type Creator, type LibraryItem, type Listing, type PaidEntry, type Sales } from "@/lib/account";
 import { etudeFetch } from "@/lib/transport";
@@ -17,33 +19,68 @@ import { api } from "@/lib/api";
 import { canShowPurchases } from "@/lib/platform";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
+import { useFunMode } from "@/lib/fun";
+import minimiShop from "@/assets/market/minimi-shop.webp";
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : "The request failed.");
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
-function SignInFirst({ what }: { what: string }) {
+/** The Selling tab before a Stripe account is set up: what selling means, in three steps, then the setup itself. */
+function SellPitch({ again, country, setCountry, busy, disabled, onStart }: { again?: boolean; country?: string; setCountry?(c: string): void; busy: boolean; disabled?: boolean; onStart?(): void }) {
+  const fun = useFunMode();
   return (
-    <div className="rounded-xl border px-5 py-10 text-center">
-      <ShoppingBag className="mx-auto mb-3 size-6 text-muted-foreground" />
-      <div className="text-sm font-medium">Sign in to see {what}</div>
-      <div className="mx-auto mt-1 max-w-md text-[13px] text-muted-foreground">Purchased decks and selling are tied to your Etude account.</div>
-      <Button variant="outline" size="sm" className="mt-4" onClick={() => navigate("/settings#account")}>Sign in</Button>
-    </div>
+    <section className="mk-panel mk-sell" data-creator-setup={onStart ? (again ? "again" : "new") : undefined}>
+      <div className="min-w-0">
+        <div className="mk-eyebrow">Selling</div>
+        <h2 className="mk-serif">{again ? "Set up selling again" : "Made a deck people would pay for?"}</h2>
+        {again && <p className="mb-4 max-w-prose rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground/90" data-setup-again>Etude now sells through your own Stripe account, so your earlier payout setup no longer works. Set it up once more; your decks stay as they are.</p>}
+        <p className="mk-sell-lead">You set the price, from US$5. Etude keeps 20% and Stripe's processing fee comes out of each sale; the rest goes to your own Stripe account. Refunds, disputes and your own sales tax are yours to handle there, and payouts follow your Stripe settings.</p>
+        <ol className="mk-steps">
+          <li><b>Connect Stripe</b><span>Stripe verifies your identity and holds your bank details; Etude never sees them.</span></li>
+          <li><b>List a deck and set a price</b><span>The Etude team looks at it before it goes on sale.</span></li>
+          <li><b>People buy it on etude.study</b><span>It works on every device they sign in on, with every version you upload later.</span></li>
+        </ol>
+        {onStart && setCountry ? (
+          <>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex flex-col gap-1.5 text-xs font-medium text-muted-foreground">
+                Where you live or your business is registered
+                <Select value={country} onValueChange={setCountry}>
+                  <SelectTrigger className="h-10 w-56"><SelectValue /></SelectTrigger>
+                  <SelectContent>{COUNTRIES.map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
+                </Select>
+              </label>
+              <Button className="h-10 gap-1.5" disabled={disabled} data-start-selling onClick={onStart}>
+                {busy ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />} Set up with Stripe
+              </Button>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">Open to creators in the US, Canada, the UK, the EEA and Switzerland.</p>
+          </>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button className="h-10" onClick={() => navigate("/settings#account")}>Sign in to start</Button>
+            <span className="text-xs text-muted-foreground">Selling is tied to your Etude account.</span>
+          </div>
+        )}
+      </div>
+      {fun && (
+        <div className="mk-keeper" aria-hidden="true">
+          <div className="mk-bubble">I take my cut in <b>naps</b>.</div>
+          <img src={minimiShop} alt="" />
+        </div>
+      )}
+    </section>
   );
 }
 
 // ── paid tiles in Browse ────────────────────────────────────────
-export function PaidCover({ entry, large }: { entry: PaidEntry; large?: boolean }) {
-  if (entry.cover)
-    return (
-      <div className={cn("aspect-[16/10] min-w-0 overflow-hidden rounded-lg bg-[#070707]", large && "rounded-xl")}>
-        <img src={entry.cover} alt="" loading="lazy" className="size-full object-contain" />
-      </div>
-    );
+/** The deck's cover, or its first sample cards when it has none. Fills whatever frame it's put in. */
+export function PaidCover({ entry }: { entry: PaidEntry }) {
+  if (entry.cover) return <img src={entry.cover} alt="" loading="lazy" className="size-full object-cover" />;
   return (
-    <div className={cn("flex aspect-[16/10] min-w-0 flex-col justify-center gap-1.5 overflow-hidden rounded-lg bg-muted/50 p-3.5", large && "rounded-xl p-5")}>
+    <div className="flex size-full min-w-0 flex-col justify-center gap-1.5 overflow-hidden p-4">
       {(entry.preview.length ? entry.preview : [{ fields: { front: entry.name } }]).slice(0, 2).map((p: any, i: number) => (
-        <div key={i} className="truncate rounded-md border bg-card px-3 py-2 font-[Latin_Modern_Roman,CMU_Serif,Georgia,serif] text-[15px] text-card-foreground shadow-sm" style={{ marginLeft: i * 10, opacity: 1 - i * 0.3 }}>
+        <div key={i} className="mk-serif truncate rounded-md border bg-card px-3 py-2 text-[15px] text-card-foreground shadow-sm" style={{ marginLeft: i * 10, opacity: 1 - i * 0.3 }}>
           {String(Object.values(p.fields ?? {})[0] ?? entry.name).replace(/<[^>]+>/g, "")}
         </div>
       ))}
@@ -51,33 +88,38 @@ export function PaidCover({ entry, large }: { entry: PaidEntry; large?: boolean 
   );
 }
 
+/** Owned, or the price where purchases may be shown; nothing in the store apps. */
 export function PriceMark({ entry }: { entry: PaidEntry }) {
-  if (entry.owned) return <span className="inline-flex items-center gap-1 rounded-full bg-success/12 px-2 py-0.5 text-[11px] font-medium text-success"><BadgeCheck className="size-3" />Owned</span>;
+  if (entry.owned) return <span className="mk-state"><BadgeCheck className="size-3.5" />Owned</span>;
   if (!canShowPurchases()) return null;
-  return <span className="rounded-full bg-highlight/15 px-2 py-0.5 text-[11px] font-medium text-highlight tabular-nums" data-price>{money(entry.price, entry.currency)}</span>;
+  return <span className="mk-price paid" data-price>{money(entry.price, entry.currency)}</span>;
 }
 
 export function PaidTile({ entry, onOpen }: { entry: PaidEntry; onOpen(): void }) {
+  const items = entry.summary?.items ?? 0;
   return (
-    <button onClick={onOpen} data-paid={entry.id} className="group flex min-w-0 flex-col gap-3 rounded-xl border p-2 text-left transition-colors hover:border-ring/70 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none">
-      <PaidCover entry={entry} />
-      <div className="flex flex-col gap-1 px-1.5 pb-1.5">
-        <div className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">{entry.name}</span>
-          <PriceMark entry={entry} />
+    <button onClick={onOpen} data-paid={entry.id} className="mk-tile">
+      <div className="mk-cover"><PaidCover entry={entry} /></div>
+      <div className="mk-tile-body">
+        <div className="mk-tile-title">
+          <b>{entry.name}</b>
+          {entry.installed === "installed" ? <span className="mk-state"><Check className="size-3.5" strokeWidth={3} />Installed</span> : entry.installed === "update" ? <span className="mk-state update">Update</span> : <PriceMark entry={entry} />}
         </div>
-        <div className="line-clamp-2 min-h-[2.5em] text-[13px] leading-snug text-muted-foreground">{entry.description || "Deck"}</div>
-        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="truncate">Deck · {plural(entry.summary?.items ?? 0, "card")}</span>
-          <span aria-hidden="true">·</span>
-          <span className="truncate">by {entry.author}</span>
-        </div>
+        <p>{firstSentence(entry.description) || "Deck"}</p>
+        <div className="mk-tile-meta"><span>{plural(items, "card")}</span><span aria-hidden="true">·</span><span>{entry.author}</span></div>
       </div>
     </button>
   );
 }
 
-export function PaidDialog({ entry, signedIn, onClose, onChanged }: { entry: PaidEntry; signedIn: boolean; onClose(): void; onChanged(): void }) {
+const firstSentence = (d: string) => {
+  let s = (d || "").split(/(?<=[.!?])\s/)[0] ?? "";
+  if (s.length > 120) s = s.slice(0, 117).replace(/\s\S*$/, "") + "…";
+  return s;
+};
+
+/** A paid deck's page in the Market: the same layout as a free entry, with Buy where purchases may be shown. */
+export function PaidDetail({ entry, signedIn, onBack, onChanged }: { entry: PaidEntry; signedIn: boolean; onBack(): void; onChanged(): void }) {
   const [busy, setBusy] = useState<null | "buy" | "install">(null);
   const buy = async () => {
     if (!signedIn) return navigate("/settings#account");
@@ -104,59 +146,61 @@ export function PaidDialog({ entry, signedIn, onClose, onChanged }: { entry: Pai
     }
   };
   const s = entry.summary ?? {};
+  const parts: string[] = (s.decks ?? []).filter((d: string) => d.includes("::")).map((d: string) => d.split("::").pop()!);
+  const action = entry.owned ? (
+    <>
+      <Button className="mk-big gap-1.5" disabled={!!busy || entry.installed === "installed"} onClick={install}>
+        {busy ? <Loader2 className="size-4 animate-spin" /> : entry.installed === "installed" ? <Check className="size-4" /> : <Download className="size-4" />}
+        {entry.installed === "installed" ? "Installed" : entry.installed === "update" ? "Update" : "Install"}
+      </Button>
+      {entry.installed && <Button variant="outline" className="mk-big" onClick={() => navigate("/")}>Open</Button>}
+    </>
+  ) : canShowPurchases() ? (
+    <Button className="mk-big gap-1.5" disabled={!!busy} onClick={buy} data-buy>
+      {busy ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />}
+      {signedIn ? `Buy · ${money(entry.price, entry.currency)}` : "Sign in to buy"}
+    </Button>
+  ) : null;
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="market-detail" aria-describedby="paid-about">
-        <div className="market-detail-scroll">
-          <DialogHeader className="text-left">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pr-8 text-xs text-muted-foreground [&>span]:whitespace-nowrap">
-              <span>Deck</span><span aria-hidden="true">·</span><span>by {entry.author}</span><span aria-hidden="true">·</span><span>v{entry.version}</span>
-              <PriceMark entry={entry} />
-            </div>
-            <DialogTitle className="pr-6 text-2xl leading-tight tracking-tight sm:text-3xl">{entry.name}</DialogTitle>
-          </DialogHeader>
-          <div className="market-facts">
-            <div className="market-fact"><span>Includes</span><strong>{plural(s.items ?? 0, "card")}</strong></div>
-            <div className="market-fact"><span>Updates</span><strong>Included</strong></div>
-            <div className="market-fact"><span>Download</span><strong>{bytes(entry.bytes)}</strong></div>
-            <div className="market-fact"><span>Creator</span><strong>{entry.author}</strong></div>
-          </div>
-          <div className="mb-6"><PaidCover entry={entry} large /></div>
-          <section id="paid-about" className="market-description mb-6">
-            <h3 className="mb-3 text-base font-semibold">About this deck</h3>
-            <div className="text-sm leading-relaxed whitespace-pre-line text-muted-foreground">{entry.description || "No description yet."}</div>
-          </section>
-          {entry.preview.length > 0 && (
-            <section className="mb-6">
-              <h3 className="mb-3 text-base font-semibold">Sample cards</h3>
-              <ul className="grid gap-2 sm:grid-cols-2">
-                {entry.preview.map((p: any, i: number) => (
-                  <li key={i} className="rounded-lg border bg-card px-3 py-2 text-sm">
-                    {Object.entries(p.fields ?? {}).slice(0, 2).map(([k, v]) => (
-                      <div key={k} className="truncate"><span className="text-xs text-muted-foreground">{k} </span>{String(v).replace(/<[^>]+>/g, "")}</div>
-                    ))}
-                  </li>
-                ))}
-              </ul>
-            </section>
+    <DetailLayout
+      onBack={onBack}
+      gallery={<CoverGallery cover={<PaidCover entry={entry} />} />}
+      facts={[["Updates", "Included"], ["Size", bytes(entry.bytes)], ...(entry.updated ? [["Updated", niceDate(entry.updated)] as [string, string]] : []), ["Version", `v${entry.version}`]]}
+      box={
+        <>
+          <div className="mk-eyebrow">Deck{canShowPurchases() ? " · paid" : ""}</div>
+          <h1 className="mk-serif">{entry.name}</h1>
+          <div className="mk-by">by {entry.author}{entry.owned && <span className="mk-pill"><BadgeCheck className="size-3" />Owned</span>}{entry.installed === "update" && <span className="mk-pill update">Update</span>}</div>
+          {canShowPurchases() && !entry.owned && (
+            <div className="mk-pricebig"><b className="mk-serif">{money(entry.price, entry.currency)}</b><span>once · every future version included</span></div>
           )}
-          {canShowPurchases() && !entry.owned && <p className="text-xs text-muted-foreground">Prices in US dollars before tax. Sold to buyers in Canada and the United States. Buying gives you every future version.</p>}
-        </div>
-        <DialogFooter className="flex-row items-center justify-end gap-2 border-t bg-background px-5 py-4">
-          {entry.owned ? (
-            <Button className="gap-1.5" disabled={!!busy || entry.installed === "installed"} onClick={install}>
-              {busy ? <Loader2 className="size-4 animate-spin" /> : entry.installed === "installed" ? <Check className="size-4" /> : <Download className="size-4" />}
-              {entry.installed === "installed" ? "Installed" : entry.installed === "update" ? "Update" : "Install"}
-            </Button>
-          ) : canShowPurchases() ? (
-            <Button className="gap-1.5" disabled={!!busy} onClick={buy} data-buy>
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />}
-              {signedIn ? `Buy on etude.study · ${money(entry.price, entry.currency)}` : "Sign in to buy"}
-            </Button>
-          ) : null}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          {action && <div className="mk-actions">{action}</div>}
+          {canShowPurchases() && !entry.owned && <p className="mk-fine">Prices in US dollars before tax. Sold to buyers in Canada and the United States. Buying gives you every future version.</p>}
+          <Hook items={[[(s.items ?? 0).toLocaleString("en-US"), (s.items ?? 0) === 1 ? "card" : "cards"], ...(parts.length > 1 ? [[String(parts.length), "parts"] as [string, string]] : [])]} />
+        </>
+      }
+    >
+      <section id="paid-about" className="mk-sec">
+        <h3 className="mk-serif">About this deck</h3>
+        {paragraphs(entry.description || "No description yet.").map((p, i) => <p key={i}>{p}</p>)}
+      </section>
+      {parts.length > 1 && <section className="mk-sec"><h3 className="mk-serif">What's inside</h3><div className="mk-parts">{parts.map((p, i) => <span key={i}>{p}</span>)}</div></section>}
+      {entry.preview.length > 0 && (
+        <section className="mk-sec">
+          <h3 className="mk-serif">Sample cards</h3>
+          <ul className="mk-samples">
+            {entry.preview.map((p: any, i: number) => (
+              <li key={i}>
+                {Object.entries(p.fields ?? {}).slice(0, 2).map(([k, v]) => (
+                  <div key={k} className="truncate"><span className="text-xs text-muted-foreground">{k} </span>{String(v).replace(/<[^>]+>/g, "")}</div>
+                ))}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {entry.tags.length > 0 && <div className="mk-source"><span>{entry.tags.slice(0, 6).map((t) => `#${t}`).join(" ")}</span></div>}
+    </DetailLayout>
   );
 }
 
@@ -165,6 +209,7 @@ export function usePaidIndex() {
   const [entries, setEntries] = useState<PaidEntry[]>([]);
   const [signedIn, setSignedIn] = useState(false);
   const [available, setAvailable] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const load = useCallback(async () => {
     try {
       const st = await account.status();
@@ -175,13 +220,16 @@ export function usePaidIndex() {
       setEntries(canShowPurchases() ? r.entries : r.entries.filter((e) => e.owned));
     } catch {
       setEntries([]);
+    } finally {
+      setLoaded(true);
     }
   }, []);
   useEffect(() => void load(), [load]);
-  return { entries, signedIn, available, reload: load };
+  return { entries, signedIn, available, loaded, reload: load };
 }
 
 // ── Library ─────────────────────────────────────────────────────
+/** Decks the account owns, as the "Bought" section of the Market's Yours tab. */
 export function LibraryView() {
   const [lib, setLib] = useState<LibraryItem[] | null>(null);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
@@ -199,15 +247,6 @@ export function LibraryView() {
     }
   }, []);
   useEffect(() => void load(), [load]);
-  if (signedIn === false) return <SignInFirst what="your library" />;
-  if (error) return <div className="rounded-xl border p-6 text-sm text-destructive">{error}</div>;
-  if (!lib) return <div className="grid gap-3">{[0, 1].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div>;
-  if (!lib.length)
-    return (
-      <div className="rounded-xl border px-5 py-10 text-center text-sm text-muted-foreground" data-library-empty>
-        {canShowPurchases() ? "Decks you buy appear here, on every device signed in to your account." : "Decks on your Etude account appear here."}
-      </div>
-    );
   const install = async (l: LibraryItem) => {
     setBusy(l.listing);
     try {
@@ -220,30 +259,58 @@ export function LibraryView() {
       setBusy(null);
     }
   };
+  const head = (
+    <div className="mk-lhead">
+      <span>Bought{lib && lib.length > 0 && <i>{lib.length}</i>}</span>
+      <small>Tied to your Etude account, on every device.</small>
+    </div>
+  );
+  let body: React.ReactNode;
+  if (signedIn === false)
+    body = (
+      <div className="mk-li">
+        <div className="mk-li-thumb"><ShoppingBag className="size-5" /></div>
+        <div className="mk-li-text"><b>Sign in to see your decks</b><small>Purchased decks are tied to your Etude account.</small></div>
+        <button className="mk-get" onClick={() => navigate("/settings#account")}>Sign in</button>
+      </div>
+    );
+  else if (error) body = <div className="px-3 py-3 text-sm text-destructive">{error}</div>;
+  else if (!lib) body = <Skeleton className="h-16 rounded-lg" />;
+  else if (!lib.length)
+    body = (
+      <div className="px-3 py-3 text-sm text-muted-foreground" data-library-empty>
+        {canShowPurchases() ? "Decks you buy appear here, on every device signed in to your account." : "Decks on your Etude account appear here."}
+      </div>
+    );
+  else
+    body = lib.map((l) => (
+      <div key={l.listing} className="mk-li" data-library-item={l.slug}>
+        <div className="mk-li-thumb">{l.cover ? <img src={l.cover} alt="" /> : <Layers className="size-5" />}</div>
+        <div className="mk-li-text">
+          <b>{l.name}</b>
+          <small>
+            v{l.version}
+            {l.installed === "update" && <em> · update from v{l.installedVersion}</em>}
+            {l.installed === "update" && l.changelog && <span> · {l.changelog}</span>}
+            {l.bytes ? ` · ${bytes(l.bytes)}` : ""}
+          </small>
+        </div>
+        <div className="mk-li-acts">
+          {l.installed && <button className="mk-get ghost" onClick={() => navigate("/")}>Open</button>}
+          {l.installed !== "installed" && (
+            <button className="mk-get" disabled={busy === l.listing} onClick={() => void install(l)} data-install={l.slug}>
+              {busy === l.listing ? <Loader2 className="size-4 animate-spin" /> : l.installed === "update" ? <RefreshCw className="size-3.5" /> : <Download className="size-3.5" />}
+              {l.installed === "update" ? "Update" : "Install"}
+            </button>
+          )}
+        </div>
+      </div>
+    ));
   return (
-    <ul className="flex flex-col gap-3" data-library>
-      {lib.map((l) => (
-        <li key={l.listing} className="flex items-center gap-4 rounded-xl border p-3" data-library-item={l.slug}>
-          <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-muted">{l.cover ? <img src={l.cover} alt="" className="size-full object-cover" /> : <Layers className="m-auto mt-5 size-6 text-muted-foreground" />}</div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium">{l.name}</div>
-            <div className="text-xs text-muted-foreground">
-              v{l.version}
-              {l.installed === "update" && <span className="text-highlight"> · update from v{l.installedVersion}</span>}
-              {l.installed === "update" && l.changelog && <span> · {l.changelog}</span>}
-              {l.bytes ? ` · ${bytes(l.bytes)}` : ""}
-            </div>
-          </div>
-          <div className="flex shrink-0 gap-2">
-            {l.installed && <Button variant="outline" size="sm" className="h-10 md:h-8" onClick={() => navigate("/")}>Open</Button>}
-            <Button size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy === l.listing || l.installed === "installed"} onClick={() => void install(l)} data-install={l.slug}>
-              {busy === l.listing ? <Loader2 className="size-4 animate-spin" /> : l.installed === "installed" ? <Check className="size-4" /> : l.installed === "update" ? <RefreshCw className="size-4" /> : <Download className="size-4" />}
-              {l.installed === "installed" ? "Installed" : l.installed === "update" ? "Update" : "Install"}
-            </Button>
-          </div>
-        </li>
-      ))}
-    </ul>
+    <section className="mk-lsec" data-library>
+      {head}
+      <div className="mk-panel mk-list">{body}</div>
+    </section>
   );
 }
 
@@ -295,33 +362,15 @@ export function SellingView() {
   };
   if (error) return <div className="rounded-xl border p-6 text-sm text-destructive">{error}</div>;
   if (!state) return <Skeleton className="h-48 rounded-xl" />;
-  if (!state.signedIn) return <SignInFirst what="selling" />;
+  const start = () => void act("start", async () => {
+    await account.becomeCreator(country);
+    openOutside((await account.onboarding()).url);
+  }, "Finish setting up your Stripe account in the browser");
+  if (!state.signedIn) return <SellPitch busy={false} />;
   const c = state.creator;
   return (
     <div className="flex flex-col gap-6" data-selling>
-      {!c || c.setupRequired ? (
-        <div className="rounded-xl border p-5" data-creator-setup={c ? "again" : "new"}>
-          <h3 className="text-base font-semibold">{c ? "Set up selling again" : "Sell your decks"}</h3>
-          {c && <p className="mt-2 max-w-prose rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground/90" data-setup-again>Etude now sells through your own Stripe account, so your earlier payout setup no longer works. Set it up once more; your decks stay as they are.</p>}
-          <p className="mt-2 max-w-prose text-sm text-muted-foreground">You sell through your own Stripe account. Set a price of US$5 or more; Stripe's processing fee comes out of each sale and Etude keeps 20%. Refunds, disputes and your own sales tax are yours to handle, and payouts follow your Stripe settings. Open to creators in the US, Canada, the UK, the EEA and Switzerland.</p>
-          <div className="mt-4 flex flex-wrap items-end gap-2">
-            <label className="flex flex-col gap-1.5 text-xs font-medium text-muted-foreground">
-              Where you live or your business is registered
-              <Select value={country} onValueChange={setCountry}>
-                <SelectTrigger className="h-10 w-56 md:h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>{COUNTRIES.map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
-              </Select>
-            </label>
-            <Button className="h-10 gap-1.5 md:h-9" disabled={!!busy} data-start-selling onClick={() => void act("start", async () => {
-              await account.becomeCreator(country);
-              openOutside((await account.onboarding()).url);
-            }, "Finish setting up your Stripe account in the browser")}>
-              {busy === "start" ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />} Set up with Stripe
-            </Button>
-          </div>
-          <p className="mt-3 max-w-prose text-xs text-muted-foreground">Stripe verifies your identity and holds your bank details; Etude never sees them.</p>
-        </div>
-      ) : null}
+      {!c || c.setupRequired ? <SellPitch again={!!c} country={country} setCountry={setCountry} busy={busy === "start"} disabled={!!busy} onStart={start} /> : null}
       {c && (
         <>
           <div className="grid gap-3 sm:grid-cols-3" data-sales>

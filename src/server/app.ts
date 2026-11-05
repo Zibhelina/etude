@@ -1,6 +1,7 @@
 // HTTP API, card frames, the card runtime and the web app.
 import { syncRoutes } from "./sync.ts";
 import { accountRoutes } from "./account.ts";
+import { pingFreeInstall } from "../core/account.ts";
 import { syncFor } from "../core/sync/client.ts";
 import { Hono, type Context } from "hono";
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -718,6 +719,8 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const b = await body(c);
     const out = await installEntry(etude, String(b.id ?? ""), { kind: b.kind, dryRun: !!b.dryRun });
     if (b.use && out.entry.kind === "theme" && !b.dryRun) etude.selectTheme(out.ids[0]);
+    // The anonymous download count: not awaited, and a server that's down never fails the install.
+    void pingFreeInstall(etude, out, marketSettings(etude).url);
     return c.json(out);
   });
   app.post("/api/market/forget", async (c) => c.json({ forgot: forgetInstall(etude, String((await body(c)).id ?? "")) }));

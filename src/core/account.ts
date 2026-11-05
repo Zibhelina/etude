@@ -4,7 +4,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { EtudeError, type Etude } from "./engine.ts";
-import { installedEntries, installFile } from "./market.ts";
+import { DEFAULT_MARKET, installedEntries, installFile } from "./market.ts";
 
 export const DEFAULT_CLOUD = "https://sync.etude.study";
 
@@ -114,14 +114,15 @@ export class AccountClient {
     this.save({ ...s, server: checkServerUrl(server), token, email: account.email, accountId: account.id });
   }
 
-  async request(method: string, path: string, opts: { body?: unknown; raw?: Uint8Array; type?: string; auth?: boolean } = {}): Promise<Response> {
+  /** `auth: "optional"` sends the token when signed in (public routes that add `myVote` or hide blocked authors). */
+  async request(method: string, path: string, opts: { body?: unknown; raw?: Uint8Array; type?: string; auth?: boolean | "optional" } = {}): Promise<Response> {
     const headers: Record<string, string> = {};
     const auth = opts.auth ?? true;
     const token = this.token();
-    if (auth) {
+    if (auth === true) {
       if (!token) throw new AccountError("sign in to your Etude account first", 401, "signed_out");
       headers.Authorization = `Bearer ${token}`;
-    }
+    } else if (auth === "optional" && token) headers.Authorization = `Bearer ${token}`;
     let body: BodyInit | undefined;
     if (opts.raw) {
       headers["Content-Type"] = opts.type ?? "application/octet-stream";
@@ -142,12 +143,12 @@ export class AccountClient {
       // A creator from before direct charges asks for a Stripe link: the server's message names its API route.
       const message = code === "creator_setup_required" ? "Etude now sells through your own Stripe account. Set up selling again in Market → Sell." : (data?.error?.message ?? `the Etude server answered ${res.status}`);
       // A revoked or expired device: forget the token so the app shows "signed out" instead of failing forever.
-      if (res.status === 401 && auth && ["unauthorized", "invalid_token", "token_expired", "signed_out"].includes(code)) this.forget();
+      if (res.status === 401 && auth === true && ["unauthorized", "invalid_token", "token_expired", "signed_out"].includes(code)) this.forget();
       throw new AccountError(message, res.status, code);
     }
     return res;
   }
-  async json(method: string, path: string, body?: unknown, auth = true): Promise<Json> {
+  async json(method: string, path: string, body?: unknown, auth: boolean | "optional" = true): Promise<Json> {
     const res = await this.request(method, path, { body, auth });
     const text = await res.text();
     return text ? JSON.parse(text) : null;
@@ -305,7 +306,40 @@ export class AccountClient {
     const res = await this.request("GET", `/v1/listings/${encodeURIComponent(lib.listing)}/pack`);
     const pack = await res.json();
     const version = res.headers.get("x-etude-version") ?? lib.version ?? "1";
-    return installFile(this.e, { etudeMarket: 1, kind: "deck", id: paidId(lib.slug), name: lib.name, author: "Etude Market", description: "", tags: [], version, updated: version, content: pack } as any, opts);
+    const out = installFile(this.e, { etudeMarket: 1, kind: "deck", id: paidId(lib.slug), name: lib.name, author: "Etude Market", description: "", tags: [], version, updated: version, content: pack } as any, opts);
+    // The server is up (it just sent the pack), so waiting for the ping costs nothing; it never fails the install.
+    if (!opts.dryRun && out.result !== "unchanged" && /^lst_/.test(lib.listing)) await this.marketDownload(`paid/${lib.listing}`);
+    return out;
+  }
+
+  // ── Market likes, downloads and comments (free and paid entries) ──
+  /** Counts for every entry anyone voted on, commented on or downloaded: `{ entries: { [key]: MarketCounts } }`. */
+  marketStats = () => this.json("GET", "/v1/market/stats", undefined, false);
+  /** One entry's counts, plus `myVote` when signed in. */
+  entryStats = async (key: string) => this.json("GET", `/v1/market/entry-stats?key=${encodeURIComponent(marketKey(key))}`, undefined, "optional");
+  vote = async (key: string, value: 1 | -1 | 0) => this.json("PUT", "/v1/market/votes", { key: marketKey(key), value });
+  /** Newest first, 20 a page; pass the previous page's `next` as `before`. Signed in, authors you blocked are left out. */
+  comments = async (key: string, before?: string) => this.json("GET", `/v1/market/comments?key=${encodeURIComponent(marketKey(key))}${before ? `&before=${encodeURIComponent(before)}` : ""}`, undefined, "optional");
+  postComment = async (key: string, body: string) => this.json("POST", "/v1/market/comments", { key: marketKey(key), body });
+  editComment = (id: string, body: string) => this.json("PATCH", `/v1/market/comments/${encodeURIComponent(id)}`, { body });
+  deleteComment = (id: string) => this.json("DELETE", `/v1/market/comments/${encodeURIComponent(id)}`);
+  reportComment = (id: string, reason?: string) => this.json("POST", `/v1/market/comments/${encodeURIComponent(id)}/report`, reason ? { reason } : {});
+  blocks = () => this.json("GET", "/v1/market/blocks");
+  block = (authorId: string) => this.json("POST", `/v1/market/blocks/${encodeURIComponent(authorId)}`, {});
+  unblock = (authorId: string) => this.json("DELETE", `/v1/market/blocks/${encodeURIComponent(authorId)}`);
+
+  /**
+   * The anonymous "installed" ping: only the entry key goes to the server, no token, no device id. It never throws
+   * and gives up after `timeoutMs`; the answer is `{ counted }`, or null when the server couldn't be reached.
+   */
+  async marketDownload(key: string, timeoutMs = 4000): Promise<{ counted: boolean } | null> {
+    try {
+      const res = await fetch(this.server() + "/v1/market/downloads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: marketKey(key) }), signal: AbortSignal.timeout(timeoutMs) });
+      if (!res.ok) return null;
+      return (await res.json()) as { counted: boolean };
+    } catch {
+      return null;
+    }
   }
 
   // ── selling ───────────────────────────────────────────────────
@@ -378,6 +412,25 @@ export class AccountClient {
 
 /** Purchased decks are recorded among installed Market entries under their own id, apart from free entries. */
 export const paidId = (slug: string) => `paid-${slug}`.slice(0, 64);
+
+/** How etude-cloud names a Market entry for likes, downloads and comments: `deck|theme|type/<id>` or `paid/<listing id>`. */
+export const MARKET_KEY = /^(?:(?:deck|theme|type)\/[a-z0-9][a-z0-9-]{1,63}|paid\/lst_[A-Za-z0-9_-]{22})$/;
+export function marketKey(key: string): string {
+  const k = String(key ?? "").trim();
+  if (!MARKET_KEY.test(k)) throw new AccountError(`"${k}" isn't a Market entry: use deck/<id>, theme/<id>, type/<id> or paid/<listing id>`, 400, "invalid");
+  return k;
+}
+
+/**
+ * After a free entry was installed or updated from the official catalog, counts it as a download. Fire and forget:
+ * the promise never rejects, and a custom catalog (market.url) sends nothing, since its ids aren't the official ones.
+ */
+export function pingFreeInstall(e: Etude, out: { entry: { kind: string; id: string }; result: string; dryRun: boolean }, marketUrl: string): Promise<unknown> {
+  if (out.dryRun || out.result === "unchanged" || marketUrl.replace(/\/+$/, "") !== DEFAULT_MARKET.url) return Promise.resolve(null);
+  const key = `${out.entry.kind}/${out.entry.id}`;
+  if (!MARKET_KEY.test(key)) return Promise.resolve(null);
+  return accountFor(e).marketDownload(key);
+}
 
 function libraryState(rec: { version: string } | undefined, version: string | null): "installed" | "update" | null {
   if (!rec) return null;

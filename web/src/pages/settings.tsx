@@ -559,9 +559,9 @@ export function SettingsPage() {
   };
 
   const hits = searchHits(q);
-  const searchBox = (placeholder: string, className?: string) => (
+  const searchBox = (placeholder: string, className?: string, big = false) => (
     <div className={cn("relative", className)}>
-      <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Search className={cn("pointer-events-none absolute top-1/2 -translate-y-1/2 text-muted-foreground", big ? "left-4 size-[18px]" : "left-3 size-4")} />
       <input
         ref={searchRef}
         type="search"
@@ -580,8 +580,11 @@ export function SettingsPage() {
         aria-label="Search settings"
         autoComplete="off"
         spellCheck={false}
-        className="h-10 w-full rounded-[10px] bg-card pr-9 pl-9 text-[16px] text-foreground ring-[1.5px] ring-border outline-none ring-inset placeholder:text-muted-foreground focus:ring-foreground/40 md:text-[14.5px] [&::-webkit-search-cancel-button]:hidden"
+        className={cn("w-full rounded-[10px] bg-card pr-9 pl-9 text-[16px] text-foreground ring-[1.5px] ring-border outline-none ring-inset placeholder:text-muted-foreground focus:ring-foreground/40 md:text-[14.5px] [&::-webkit-search-cancel-button]:hidden", big ? "h-12 rounded-[12px] pl-11 pr-12 md:text-[15.5px]" : "h-10")}
       />
+      {big && !q && (
+        <kbd className="pointer-events-none absolute top-1/2 right-3 grid h-6 min-w-6 -translate-y-1/2 place-items-center rounded-md px-1.5 font-mono text-[12px] text-muted-foreground ring-1 ring-border ring-inset">/</kbd>
+      )}
       {q && (
         <button type="button" aria-label="Clear search" onClick={() => setQ("")} className="absolute top-1/2 right-2 grid size-7 -translate-y-1/2 place-items-center rounded-md text-muted-foreground hover:text-foreground">
           <X className="size-4" />
@@ -709,11 +712,12 @@ export function SettingsPage() {
   return (
     <div ref={rootRef} className="mx-auto w-full max-w-[1140px] px-12 py-10" data-settings-mode="page">
       <div className="grid grid-cols-[minmax(0,1fr)_180px] items-start gap-x-14">
-        <h1 className="score-serif score-display mb-9 self-end text-[2rem] leading-[1.1] text-foreground">Settings</h1>
-        <div className="relative col-start-2 mb-9 self-end">
-          {searchBox("Search settings")}
-          {q && <div className="absolute top-full right-0 z-30 mt-2 w-[300px] rounded-[14px] bg-popover p-1.5 shadow-[0_10px_30px_rgb(0_0_0/0.14)] ring-1 ring-border ring-inset">{results}</div>}
+        <div className="relative mb-11">
+          <h1 className="score-serif score-display mb-5 text-[2rem] leading-[1.1] text-foreground">Settings</h1>
+          {searchBox("Search settings", undefined, true)}
+          {q && <div className="absolute top-full right-0 left-0 z-30 mt-2 rounded-[14px] bg-popover p-1.5 shadow-[0_10px_30px_rgb(0_0_0/0.14)] ring-1 ring-border ring-inset">{results}</div>}
         </div>
+        <div />
         <div className="flex min-w-0 flex-col gap-[54px]">
           {GROUPS.map((g) => sectionView(g.id))}
           {saveBar}

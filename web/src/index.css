@@ -333,3 +333,34 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 }
 /* iPad: a little smaller. */
 @media (max-width: 1023px) { .minimi { transform: scale(0.78); transform-origin: 100% 100%; } }
+
+/* ---- Browse (Etude 3): list + inspector ---- */
+.browse-serif { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif; font-weight: 600; letter-spacing: -0.01em; }
+.browse-paper { background: var(--card); border-radius: 14px; box-shadow: 0 0 0 1px var(--border), 0 2px 4px rgb(40 30 10 / 0.06), 0 18px 40px rgb(40 30 10 / 0.08); }
+.dark .browse-paper { box-shadow: 0 0 0 1px var(--border), 0 18px 40px rgb(0 0 0 / 0.45); }
+.browse-exp { margin: 18px 0 0; max-width: 560px; font-size: 14px; line-height: 1.55; color: var(--muted-foreground); }
+.browse-exp b { color: var(--foreground); font-weight: 600; }
+.browse-search { box-shadow: inset 0 0 0 1.5px var(--border); }
+.browse-search:focus-within { box-shadow: inset 0 0 0 1.5px var(--foreground); }
+.browse-chip { box-shadow: inset 0 0 0 1.5px var(--border); }
+.browse-chips { -webkit-mask: linear-gradient(90deg, #000 calc(100% - 36px), transparent); mask: linear-gradient(90deg, #000 calc(100% - 36px), transparent); scrollbar-width: none; }
+.browse-chips::-webkit-scrollbar { display: none; }
+.browse-row mark, .browse-hl mark { background: color-mix(in oklab, var(--hard) 28%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+/* Inspector fields: the field editor's inputs, as the redesign's soft boxes. */
+.browse-fields input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), .browse-fields textarea { border-radius: 11px; }
+.browse-fields label, .browse-label { font-size: 12.5px; font-weight: 650; color: var(--muted-foreground); }
+.browse-hr { position: relative; display: grid; grid-template-columns: 22px 108px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; }
+@media (max-width: 767px) { .browse-hr { grid-template-columns: 22px 86px minmax(0, 1fr) auto; } }
+.browse-hr::before { content: ""; position: absolute; left: 10px; top: 0; bottom: 0; width: 1.5px; background: var(--border); }
+.browse-hr:first-child::before { top: 22px; }
+.browse-hr:last-child::before { bottom: calc(100% - 22px); }
+.browse-hr .dt { position: relative; z-index: 1; width: 12px; height: 12px; margin-left: 4px; border-radius: 50%; box-shadow: 0 0 0 3px var(--background); }
+.browse-hr .when { font-size: 13px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.browse-hr .nx { font-size: 13px; color: var(--muted-foreground); text-align: right; font-variant-numeric: tabular-nums; }
+.browse-savebar { background: linear-gradient(transparent, var(--background) 30%); }
+@keyframes browse-slide { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.browse-slide { animation: browse-slide 0.28s cubic-bezier(0.2, 0.75, 0.2, 1) both; }
+@keyframes browse-fi { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.browse-fi { animation: browse-fi 0.15s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .browse-slide, .browse-fi { animation: none; } }
+/* ---- end Browse ---- */

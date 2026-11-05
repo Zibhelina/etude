@@ -1,5 +1,5 @@
 // "Ask Etude": the assistant's launcher and side panel. The panel pushes the page on desktop and is a full-screen sheet on phones.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, Ban, CalendarCheck, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsRight, CornerDownRight, Ellipsis, FileText, FileUp, FolderTree, ImageIcon, Loader2, Package, Palette, Pencil, Plus, RotateCcw, Settings2, Square, SquarePen, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -47,9 +47,24 @@ export function askEtude(text: string) {
   window.dispatchEvent(new Event(ASK_EVENT));
 }
 
-/** Open state and width, shared by the launcher, the panel and the layout. */
-export function useAgentPanel() {
-  const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) === "1");
+/**
+ * Open state and width, shared by the launcher, the panel and the layout. `mini` is Minimi's small chat beside him
+ * (Fun mode, desktop and iPad); `preferMini` says when ⌘J should open that one instead of the side panel.
+ */
+export function useAgentPanel(preferMini: () => boolean = () => false) {
+  const [open, setOpenRaw] = useState(() => localStorage.getItem(OPEN_KEY) === "1");
+  const [mini, setMini] = useState(false);
+  const openNow = useRef(open);
+  openNow.current = open;
+  const prefer = useRef(preferMini);
+  prefer.current = preferMini;
+  const setOpen = useCallback((v: boolean | ((o: boolean) => boolean)) => {
+    setOpenRaw((o) => {
+      const next = typeof v === "function" ? v(o) : v;
+      if (next) setMini(false);
+      return next;
+    });
+  }, []);
   const [width, setWidth] = useState(() => {
     const saved = Number(localStorage.getItem(WIDTH_KEY));
     // 400 was the old default; the panel now opens at 428.
@@ -64,7 +79,9 @@ export function useAgentPanel() {
     const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "j") {
         e.preventDefault();
-        setOpen((o) => !o);
+        if (openNow.current) setOpen(false);
+        else if (prefer.current()) setMini((m) => !m);
+        else setOpen(true);
       }
     };
     window.addEventListener("keydown", h);
@@ -75,7 +92,7 @@ export function useAgentPanel() {
       window.removeEventListener(ASK_EVENT, ask);
     };
   }, []);
-  return { open, setOpen, width, setWidth };
+  return { open, setOpen, mini, setMini, width, setWidth };
 }
 
 /** Fun mode off: the ε in a round bubble, bottom-right. Hovering or focusing it slides out "Ask Etude ⌘J". */
@@ -162,6 +179,9 @@ function HeaderButton({ label, tip, onClick, disabled, children, ...rest }: { la
   );
 }
 
+/** Inside Minimi's mini chat, replies and your messages sit in bubbles. */
+export const BubbleContext = createContext(false);
+
 // ---------------------------------------------------------------- live turn
 
 interface Live {
@@ -195,7 +215,8 @@ async function refreshPage(onChanged: (final: boolean) => void, final: boolean) 
   onChanged(final);
 }
 
-export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: number; setWidth(w: number): void; onClose(): void; onChanged(final: boolean): void }) {
+/** One Ask Etude conversation: history, model, composer, attachments and the live turn. The side panel and Minimi's mini chat share it. */
+export function useAgentChat({ onClose, onChanged, takeAsk = true }: { onClose(): void; onChanged(final: boolean): void; takeAsk?: boolean }) {
   const phone = usePhone();
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [conv, setConv] = useState<(Conversation & { messages: Message[] }) | null>(null);
@@ -204,13 +225,10 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
   const [text, setText] = useState("");
   const [atts, setAtts] = useState<(Attachment | { uploading: string; key: string })[]>([]);
   const [live, setLive] = useState<Live | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const stick = useRef(true);
-  const panel = useRef<HTMLDivElement>(null);
 
   const loadList = useCallback(() => agentApi.list().then((r) => setConvs(r.conversations)).catch(() => {}), []);
 
@@ -235,7 +253,7 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
 
   useEffect(() => {
     loadList();
-    openConv(asked ? null : localStorage.getItem(CONV_KEY));
+    openConv(asked && takeAsk ? null : localStorage.getItem(CONV_KEY));
     agentApi
       .models()
       .then((m) => {
@@ -328,6 +346,7 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
   // A request handed over by another screen (askEtude): a fresh conversation, sent once a model is known.
   const autoSend = useRef(false);
   useEffect(() => {
+    if (!takeAsk) return;
     const take = () => {
       if (asked == null) return;
       setConv(null);
@@ -491,6 +510,33 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
     }
   };
 
+  const notConfigured = models && !models.configured;
+  const messages = conv?.messages ?? [];
+  const empty = !messages.length && !live;
+  const canSend = (!!text.trim() || atts.length > 0) && ready && !notConfigured;
+
+  const suggest = (t: string) => {
+    if (busy) return;
+    setText(t);
+    pendingSend.current = true;
+  };
+  // A suggestion fills the composer, then sends on the next render (so `send` sees the text).
+  const pendingSend = useRef(false);
+  useEffect(() => {
+    if (pendingSend.current && text) {
+      pendingSend.current = false;
+      send();
+    }
+  }, [text]);
+  return { phone, convs, conv, models, model, text, setText, atts, setAtts, live, busy, ready, scroller, input, fileInput, stick, openConv, pickModel, addFiles, send, stop, answer, undo, rename, removeConv, notConfigured, messages, empty, canSend, suggest };
+}
+
+export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: number; setWidth(w: number): void; onClose(): void; onChanged(final: boolean): void }) {
+  const { phone, convs, conv, models, model, text, setText, atts, setAtts, live, busy, scroller, input, fileInput, stick, openConv, pickModel, addFiles, send, stop, answer, undo, rename, removeConv, notConfigured, messages, empty, canSend, suggest } = useAgentChat({ onClose, onChanged });
+  const [dragging, setDragging] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
+
   // Desktop resize from the left edge.
   const startResize = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -507,27 +553,9 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
     window.addEventListener("pointerup", up);
   };
 
-  const notConfigured = models && !models.configured;
-  const messages = conv?.messages ?? [];
-  const empty = !messages.length && !live;
   const vv = useVisualViewport(phone);
   const sendText = useReadableOn("--highlight");
-  const canSend = (!!text.trim() || atts.length > 0) && ready && !notConfigured;
   const [renaming, setRenaming] = useState(false);
-
-  const suggest = (t: string) => {
-    if (busy) return;
-    setText(t);
-    pendingSend.current = true;
-  };
-  // A suggestion fills the composer, then sends on the next render (so `send` sees the text).
-  const pendingSend = useRef(false);
-  useEffect(() => {
-    if (pendingSend.current && text) {
-      pendingSend.current = false;
-      send();
-    }
-  }, [text]);
 
   return (
     <div
@@ -731,7 +759,7 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
   );
 }
 
-function openAiSettings() {
+export function openAiSettings() {
   navigate("/settings");
   setTimeout(() => document.getElementById("ai")?.scrollIntoView({ block: "start" }), 120);
 }
@@ -798,7 +826,7 @@ function EmptyState({ onPick, onFile }: { onPick(t: string): void; onFile(): voi
   );
 }
 
-function AttachmentChip({ a, conv, onRemove }: { a: Attachment | { uploading: string; key: string }; conv?: string; onRemove?(): void }) {
+export function AttachmentChip({ a, conv, onRemove }: { a: Attachment | { uploading: string; key: string }; conv?: string; onRemove?(): void }) {
   if ("uploading" in a)
     return (
       <span className="flex h-7 max-w-full items-center gap-1.5 rounded-lg border bg-background px-2 text-xs text-muted-foreground">
@@ -823,7 +851,8 @@ function AttachmentChip({ a, conv, onRemove }: { a: Attachment | { uploading: st
   );
 }
 
-function MessageView({ m, conv, last, groups, onUndo }: { m: Message; conv: string; last?: boolean; groups?: ModelGroup[]; onUndo?(): void }) {
+export function MessageView({ m, conv, last, groups, onUndo }: { m: Message; conv: string; last?: boolean; groups?: ModelGroup[]; onUndo?(): void }) {
+  const bubble = useContext(BubbleContext);
   if (m.role === "user") {
     const c = m.content as UserContent;
     return (
@@ -835,7 +864,7 @@ function MessageView({ m, conv, last, groups, onUndo }: { m: Message; conv: stri
             ))}
           </div>
         )}
-        {c.text && <div className="max-w-[85%] rounded-2xl bg-[color-mix(in_oklab,var(--background),var(--foreground)_8%)] px-3.5 py-2 text-sm leading-normal whitespace-pre-wrap [overflow-wrap:anywhere]">{c.text}</div>}
+        {c.text && <div className={cn("max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-normal whitespace-pre-wrap [overflow-wrap:anywhere]", bubble ? "mchat-you rounded-tr-[4px] text-[14.5px] leading-[1.42]" : "bg-[color-mix(in_oklab,var(--background),var(--foreground)_8%)]")}>{c.text}</div>}
       </div>
     );
   }
@@ -875,7 +904,7 @@ function MessageView({ m, conv, last, groups, onUndo }: { m: Message; conv: stri
   );
 }
 
-function LiveView({ live, onAnswer }: { live: Live; onAnswer(item: ToolItem, allow: boolean): void }) {
+export function LiveView({ live, onAnswer }: { live: Live; onAnswer(item: ToolItem, allow: boolean): void }) {
   const waiting = live.items.some((i) => i.type === "tool" && i.status === "waiting");
   const running = live.items.some((i) => i.type === "tool" && i.status === "running" && !i.lookup);
   const lastIsText = live.items[live.items.length - 1]?.type === "text";
@@ -939,13 +968,20 @@ function blocks(items: Item[], live: boolean): Block[] {
 }
 
 function Items({ items, onAnswer, live = false }: { items: Item[]; onAnswer?(item: ToolItem, allow: boolean): void; live?: boolean }) {
+  const bubble = useContext(BubbleContext);
   return (
     <>
       {blocks(items, live && !!onAnswer).map((b) =>
         b.kind === "text" ? (
-          <Markdown key={b.key} className="agent-prose">
-            {b.text}
-          </Markdown>
+          bubble ? (
+            <div key={b.key} className="mchat-me max-w-[88%] rounded-[14px] rounded-tl-[4px] px-[13px] py-[3px]">
+              <Markdown className="agent-prose text-[14.5px]">{b.text}</Markdown>
+            </div>
+          ) : (
+            <Markdown key={b.key} className="agent-prose">
+              {b.text}
+            </Markdown>
+          )
         ) : b.kind === "ui" ? (
           <NavRow key={b.key} path={b.item.path!} />
         ) : b.kind === "confirm" ? (

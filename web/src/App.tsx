@@ -16,6 +16,7 @@ import { EmbedStudy } from "@/pages/embed";
 import { MarketPage } from "@/pages/market";
 import { AGENT_SHORTCUT, AgentLauncher, AgentPanel, announceDataChange, useAgentPanel } from "@/components/agent-panel";
 import { MinimiCorner } from "@/components/minimi";
+import { MinimiChat } from "@/components/minimi-chat";
 import { loadFunMode, useFunMode } from "@/lib/fun";
 import { useUpdateDot } from "@/components/update-bar";
 import { PhoneTabBar } from "@/components/phone-shell";
@@ -96,12 +97,21 @@ function useMedia(q: string) {
 
 export function App() {
   const { path, params } = useLocation();
-  const agent = useAgentPanel();
+  const fun = useFunMode();
+  const phone = usePhone();
+  // Fun mode on desktop and iPad: ⌘J and a tap on Minimi open his mini chat; the side panel is one click away from it.
+  const funRef = useRef({ fun, phone });
+  funRef.current = { fun, phone };
+  const agent = useAgentPanel(() => funRef.current.fun && !funRef.current.phone && !studyingRef.current);
   const narrow = useMedia(NARROW);
   const [collapsed, toggleSidebar] = useSidebar(agent.open && narrow);
-  const fun = useFunMode();
   useEffect(() => void loadFunMode(), []);
   const studying = path === "/study" || path === "/watch";
+  const studyingRef = useRef(studying);
+  studyingRef.current = studying;
+  useEffect(() => {
+    if (!fun || phone || studying) agent.setMini(false);
+  }, [fun, phone, studying]);
   // Sync on its own, so every device shows the same collection without anyone pressing Sync:
   // local changes go up within ~10 s, other devices' changes come down every 30 s and whenever
   // the app comes back to the front. Not during a study session, which syncs when it ends.
@@ -136,7 +146,6 @@ export function App() {
     };
   }, [studying]);
   const updateDot = useUpdateDot();
-  const phone = usePhone();
   // Bumped after the assistant changed something, so the page remounts and reloads its data.
   const [dataKey, setDataKey] = useState(0);
   const [onboarding, setOnboarding] = useOnboarding(path === "/embed");
@@ -196,7 +205,19 @@ export function App() {
               }}
             />
           ) : phone ? null : fun ? (
-            <MinimiCorner onOpen={() => agent.setOpen(true)} shortcut={AGENT_SHORTCUT} />
+            <>
+              <MinimiCorner onOpen={() => agent.setMini((m) => !m)} shortcut={AGENT_SHORTCUT} talking={agent.mini} />
+              {agent.mini && (
+                <MinimiChat
+                  onClose={() => agent.setMini(false)}
+                  onExpand={() => agent.setOpen(true)}
+                  onChanged={(final) => {
+                    announceDataChange();
+                    if (final) setDataKey((k) => k + 1);
+                  }}
+                />
+              )}
+            </>
           ) : (
             <AgentLauncher onOpen={() => agent.setOpen(true)} />
           )}

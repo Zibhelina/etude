@@ -1,4 +1,4 @@
-.sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }
+.sc-eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: -0.5rem; }
 .sc-how { font-size: 0.8rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.7rem; margin: 0.25rem 0 0; }
 
 .tl-prompt { font-size: 1.05rem; }
@@ -120,3 +120,7 @@ body[data-mode="result"] .tl-pins .tl-chip { transition: left 0.6s cubic-bezier(
 .tl-pins [data-side="up"][data-dir="l"] { border-bottom-right-radius: 0; }
 .tl-pins [data-side="down"][data-dir="r"] { border-top-left-radius: 0; }
 .tl-pins [data-side="down"][data-dir="l"] { border-top-right-radius: 0; }
+
+/* Etude 3 look: a quiet grey eyebrow and the question in the study serif, as in the Design Lab. */
+.sc-eyebrow + .prose, .sc-eyebrow + .uc-prompt .uc-ask, .sc-eyebrow + .bt-ask, .sp-title, .wk-prompt, .cm-ask { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.005em; }
+.sc-eyebrow + .prose code, .wk-prompt code { font-size: 0.8em; }

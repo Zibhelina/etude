@@ -1,4 +1,4 @@
-.sc-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--highlight); margin-bottom: -0.5rem; }
+.sc-eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: -0.5rem; }
 .sc-how { font-size: 0.85rem; color: var(--muted-foreground); border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 0.25rem 0 0; }
 
 /* Code should read literally: no fused glyphs from ligature fonts. */
@@ -56,3 +56,7 @@
 .rx-hidden-results .rx-tests { margin-top: 0.25rem; }
 .rx-hidden-results .sub { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: color-mix(in oklab, var(--muted-foreground) 75%, transparent); margin-bottom: 0.35rem; }
 .rx-solution { font: 0.95rem var(--font-mono); background: var(--muted); padding: 0.2em 0.5em; border-radius: 0.35em; word-break: break-all; }
+
+/* Etude 3 look: a quiet grey eyebrow and the question in the study serif, as in the Design Lab. */
+.sc-eyebrow + .prose, .sc-eyebrow + .uc-prompt .uc-ask, .sc-eyebrow + .bt-ask, .sp-title, .wk-prompt, .cm-ask { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.005em; }
+.sc-eyebrow + .prose code, .wk-prompt code { font-size: 0.8em; }

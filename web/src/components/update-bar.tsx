@@ -185,7 +185,7 @@ function UpdateDetails({ st, onUpdate }: { st: UpdateStatus; onUpdate(): void })
 }
 
 /** Accent-tinted surface for the sidebar button: theme tokens only, no gradient. */
-const TINT = "border border-sidebar-border bg-sidebar-accent/60 text-foreground";
+const TINT = "bg-sidebar-accent/70 text-foreground";
 
 /** Bottom of the sidebar, only while this install is behind. Collapsed: an icon with an accent dot. */
 export function SidebarUpdate({ collapsed }: { collapsed: boolean }) {
@@ -202,12 +202,12 @@ export function SidebarUpdate({ collapsed }: { collapsed: boolean }) {
       aria-label={aria}
       disabled={busy}
       className={cn(
-        "relative flex h-9 w-full shrink-0 items-center rounded-lg text-[13px] font-medium transition-colors outline-ring hover:bg-sidebar-accent focus-visible:outline-2 disabled:opacity-90",
+        "relative flex h-10 w-full shrink-0 items-center rounded-[10px] text-[13.5px] font-medium transition-colors outline-ring hover:bg-sidebar-accent focus-visible:outline-2 disabled:opacity-90",
         TINT,
-        collapsed ? "justify-center px-0" : "gap-2.5 px-2",
+        collapsed ? "mx-auto w-[52px] justify-center px-0" : "gap-3 px-3",
       )}
     >
-      {busy ? <Loader2 className="size-4 shrink-0 animate-spin text-highlight" /> : <CircleArrowUp className="size-4 shrink-0 text-highlight" />}
+      {busy ? <Loader2 className="size-5 shrink-0 animate-spin text-highlight" strokeWidth={1.8} /> : <CircleArrowUp className="size-5 shrink-0 text-highlight" strokeWidth={1.8} />}
       {collapsed ? (
         !busy && <span className="absolute top-1 right-1 size-2 rounded-full bg-highlight ring-2 ring-sidebar" aria-hidden />
       ) : (

@@ -1,12 +1,9 @@
 import { autoSync } from "@/lib/sync";
-import { Archive, BarChart3, Blocks, Layers, Library, Settings, Store } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { SidebarIcon } from "@/components/sidebar-icon";
-import { navigate, useLocation } from "@/lib/router";
-import { Wordmark } from "@/components/logo";
-import { cn } from "@/lib/utils";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { useLocation } from "@/lib/router";
+import { Sidebar } from "@/components/sidebar";
 import { DecksPage } from "@/pages/decks";
 import { StudyPage } from "@/pages/study";
 import { WatchPage } from "@/pages/watch";
@@ -20,7 +17,7 @@ import { MarketPage } from "@/pages/market";
 import { AGENT_SHORTCUT, AgentLauncher, AgentPanel, announceDataChange, useAgentPanel } from "@/components/agent-panel";
 import { MinimiCorner } from "@/components/minimi";
 import { loadFunMode, useFunMode } from "@/lib/fun";
-import { SidebarUpdate, useUpdateDot } from "@/components/update-bar";
+import { useUpdateDot } from "@/components/update-bar";
 import { PhoneTabBar } from "@/components/phone-shell";
 import { MorePage } from "@/pages/more";
 import { usePhone } from "@/lib/phone";
@@ -46,40 +43,62 @@ function useOnboarding(skip: boolean) {
   return [open, setOpen] as const;
 }
 
-const NAV = [
-  { to: "/", label: "Decks", icon: Layers, match: (p: string) => p === "/" || p === "/deck" },
-  { to: "/archive", label: "Archive", icon: Archive, match: (p: string) => p === "/archive" },
-  { to: "/browse", label: "Browse", icon: Library, match: (p: string) => p === "/browse" },
-  { to: "/types", label: "Card types", icon: Blocks, match: (p: string) => p.startsWith("/types") },
-  { to: "/market", label: "Market", icon: Store, match: (p: string) => p === "/market" },
-  { to: "/stats", label: "Stats", icon: BarChart3, match: (p: string) => p === "/stats" },
-  { to: "/settings", label: "Settings", icon: Settings, match: (p: string) => p === "/settings" },
-];
-
 const COLLAPSED_KEY = "etude.sidebar.collapsed";
 /** Pages that only show the collection, so a sync that brought changes can reload them safely. */
 const RELOAD_ON_SYNC = new Set(["/", "/archive", "/deck", "/stats", "/more"]);
-const toggleKey = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘B" : "Ctrl+B";
 
-function useSidebarCollapsed() {
+const typing = (t: EventTarget | null) => {
+  const el = t as HTMLElement | null;
+  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || !!el.closest?.("[contenteditable=true], .cm-editor, iframe"));
+};
+
+const NARROW = "(max-width: 1279px)";
+
+/**
+ * Sidebar or rail. The choice is remembered; `auto` (Ask Etude open on a window too narrow for both) shows the
+ * rail for the moment without changing it, and the toggle then only peeks the full sidebar.
+ */
+function useSidebar(auto: boolean) {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSED_KEY) === "1");
+  const [peek, setPeek] = useState(false);
   useEffect(() => localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0"), [collapsed]);
+  useEffect(() => setPeek(false), [auto]);
+  const toggle = useRef(() => {});
+  toggle.current = () => (auto ? setPeek((p) => !p) : setCollapsed((c) => !c));
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "b") {
+      const mod = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "b";
+      // A bare [ outside a text field, like Linear and Notion, only while the sidebar is on screen
+      // (not in a study session, a dialog or on a phone).
+      const bracket =
+        e.key === "[" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.defaultPrevented && !typing(e.target) && !document.querySelector("[role=dialog]") && !!document.querySelector<HTMLElement>("[data-shell-sidebar]")?.offsetWidth;
+      if (mod || bracket) {
         e.preventDefault();
-        setCollapsed((c) => !c);
+        toggle.current();
       }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, []);
-  return [collapsed, setCollapsed] as const;
+  return [auto ? !peek : collapsed, () => toggle.current()] as const;
+}
+
+function useMedia(q: string) {
+  const [on, setOn] = useState(() => window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const h = () => setOn(m.matches);
+    m.addEventListener("change", h);
+    return () => m.removeEventListener("change", h);
+  }, [q]);
+  return on;
 }
 
 export function App() {
   const { path, params } = useLocation();
-  const [collapsed, setCollapsed] = useSidebarCollapsed();
+  const agent = useAgentPanel();
+  const narrow = useMedia(NARROW);
+  const [collapsed, toggleSidebar] = useSidebar(agent.open && narrow);
   const fun = useFunMode();
   useEffect(() => void loadFunMode(), []);
   const studying = path === "/study" || path === "/watch";
@@ -116,7 +135,6 @@ export function App() {
       window.removeEventListener("online", wake);
     };
   }, [studying]);
-  const agent = useAgentPanel();
   const updateDot = useUpdateDot();
   const phone = usePhone();
   // Bumped after the assistant changed something, so the page remounts and reloads its data.
@@ -164,66 +182,9 @@ export function App() {
           data-agent-open={agent.open}
           style={{ "--agent-offset": agent.open ? `${agent.width}px` : "0px", } as React.CSSProperties}
         >
-          <aside
-            className={cn(
-              "sticky top-0 hidden h-dvh shrink-0 flex-col gap-1 overflow-hidden bg-sidebar py-4 transition-[width] duration-200 ease-out md:flex",
-              collapsed ? "w-14 px-2" : "w-52 px-3",
-            )}
-          >
-            <div className={cn("mb-6 flex h-8 items-center", collapsed ? "justify-center" : "justify-between pl-2")}>
-              {!collapsed && (
-                <button onClick={() => navigate("/")} className="text-left">
-                  <Wordmark className="text-[1.45rem] leading-none" />
-                </button>
-              )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => setCollapsed((c) => !c)}
-                    aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                    aria-expanded={!collapsed}
-                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
-                  >
-                    <SidebarIcon className="size-[18px]" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  {collapsed ? "Expand" : "Collapse"} <span className="opacity-60">{toggleKey}</span>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-            {NAV.map((n) => {
-              const btn = (
-                <button
-                  key={n.to}
-                  onClick={() => navigate(n.to)}
-                  aria-label={n.label}
-                  aria-current={n.match(path) ? "page" : undefined}
-                  className={cn(
-                    "flex h-8 items-center gap-2.5 rounded-md text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground",
-                    collapsed ? "justify-center px-0" : "px-2",
-                    n.match(path) && "font-medium text-foreground",
-                  )}
-                >
-                  <n.icon className={cn("size-4 shrink-0", n.match(path) && "text-foreground")} />
-                  {!collapsed && <span className="whitespace-nowrap">{n.label}</span>}
-                </button>
-              );
-              return collapsed ? (
-                <Tooltip key={n.to}>
-                  <TooltipTrigger asChild>{btn}</TooltipTrigger>
-                  <TooltipContent side="right">{n.label}</TooltipContent>
-                </Tooltip>
-              ) : (
-                btn
-              );
-            })}
-            <div className="mt-auto pt-4">
-              <SidebarUpdate collapsed={collapsed} />
-            </div>
-          </aside>
-          {/* Room under the last row for the corner launcher, so it never sits on it for good. */}
-          <main key={dataKey} className="min-w-0 flex-1 pb-[calc(var(--tabbar-h)+1.5rem)] md:pb-16">{page}</main>
+          <Sidebar path={path} collapsed={collapsed} onToggle={toggleSidebar} />
+          {/* Room under the last row for the corner Minimi or ε, and on a phone for the tab island and its fade. */}
+          <main key={dataKey} className="min-w-0 flex-1 max-md:overflow-x-clip pb-[calc(var(--tabbar-h)+2.5rem)] md:pb-32">{page}</main>
           {agent.open ? (
             <AgentPanel
               width={agent.width}

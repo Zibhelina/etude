@@ -2,8 +2,8 @@
 // collection (site/tools/stats-snapshot.mjs). Each `[data-live]` element on the page gets one panel.
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { ForgettingCurve, Histogram, StudyClock, useWidth } from "@/components/stats-viz";
-import { Forecast, Overview, PracticePanel, Schedulers, WeakTags } from "@/pages/stats";
+import { ForgettingCurve, Histogram, StudyClock, useWidth } from "./legacy/stats-viz";
+import { Forecast, Overview, PracticePanel, Schedulers, WeakTags } from "./legacy/stats";
 import type { Stats } from "@/lib/api";
 import demoSnap from "../src/assets/stats-data/demo.json";
 import drillSnap from "../src/assets/stats-data/drill.json";

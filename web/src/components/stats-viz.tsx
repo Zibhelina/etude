@@ -1,268 +1,119 @@
-// The richer Stats visuals: recall ring, sparklines, forgetting curve, memory ladder, study clock, donuts.
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+// The Stats line charts: the forgetting curve, a measured card's runs, and the small labelled histogram.
+import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { ChartTip, recallFill, useWidth } from "@/components/stats-charts";
 
-/** Computer Modern for the big numerals, matching the wordmark. */
-export const SERIF = { fontFamily: "KaTeX_Main, 'Latin Modern Roman', 'CMU Serif', Georgia, serif" } as const;
+const spanWord = (t: number) => (t < 1 ? "today" : t < 1.5 ? "tomorrow" : t < 14 ? `${Math.round(t)} days` : t < 60 ? `${Math.round(t / 7)} weeks` : `${Math.round(t / 30)} months`);
 
-/** Width of an element in CSS pixels. */
-export function useWidth<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const [w, setW] = useState(0);
-  useEffect(() => {
-    if (!ref.current) return;
-    const ro = new ResizeObserver(([e]) => setW(Math.floor(e.contentRect.width)));
-    ro.observe(ref.current);
-    return () => ro.disconnect();
-  }, []);
-  return [ref, w] as const;
-}
-
-/** False on the first frame, then true: lets SVG shapes animate in from zero with CSS transitions. */
-export function useShown(delay = 30) {
-  const [on, setOn] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setOn(true), delay);
-    return () => clearTimeout(t);
-  }, [delay]);
-  return on;
-}
-
-/** Recall color: below target by a lot is again, a little is hard, at or above is good. */
-export const recallColor = (v: number, target = 0.9) => (v < target - 0.15 ? "var(--again)" : v < target - 0.005 ? "var(--hard)" : "var(--good)");
-
-// ------------------------------------------------------------------ ring
-
-export function RecallRing({ value, target, size = 176, label, sub }: { value: number | null; target: number; size?: number; label: string; sub?: string }) {
-  const shown = useShown();
-  const id = useId();
-  const stroke = 11;
-  const r = size / 2 - stroke;
-  const C = 2 * Math.PI * r;
-  const v = value ?? 0;
-  const color = value == null ? "var(--muted-foreground)" : recallColor(v, target);
-  return (
-    <div className="relative shrink-0" style={{ width: size, height: size }}>
-      <svg width={size} height={size} role="img" aria-label={`${label}: ${value == null ? "no data" : `${(v * 100).toFixed(1)}%`}, target ${Math.round(target * 100)}%`}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--muted)" strokeWidth={stroke} />
-        {value != null && (
-          <>
-            <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={r}
-              fill="none"
-              stroke={color}
-              strokeWidth={stroke}
-              strokeLinecap="round"
-              strokeDasharray={C}
-              strokeDashoffset={shown ? C * (1 - v) : C}
-              transform={`rotate(-90 ${size / 2} ${size / 2})`}
-              className="viz-anim"
-              style={{ transition: "stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)" }}
-            />
-          </>
-        )}
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-        <div className="tabular text-[40px] leading-none tracking-tight" style={SERIF}>
-          {value == null ? "—" : (v * 100).toFixed(1)}
-          {value != null && <span className="ml-0.5 text-xl text-muted-foreground">%</span>}
-        </div>
-        <div className="mt-1.5 text-xs text-muted-foreground">{label}</div>
-        {sub && <div className="mt-0.5 text-[11px] text-muted-foreground/80">{sub}</div>}
-      </div>
-    </div>
-  );
-}
-
-// ------------------------------------------------------------- sparkline
-
-export function Sparkline({ values, color = "var(--highlight)", height = 34, domain }: { values: (number | null)[]; color?: string; height?: number; domain?: [number, number] }) {
-  const [ref, width] = useWidth<HTMLDivElement>();
-  const id = useId();
-  const W = Math.max(60, width || 160);
-  const pts = values.map((v, i) => ({ i, v })).filter((p): p is { i: number; v: number } => p.v != null);
-  if (pts.length < 2) return <div ref={ref} style={{ height }} />;
-  const lo = domain?.[0] ?? Math.min(...pts.map((p) => p.v));
-  const hi = domain?.[1] ?? Math.max(...pts.map((p) => p.v));
-  const span = hi - lo || 1;
-  const x = (i: number) => 2 + (i / (values.length - 1)) * (W - 6);
-  const y = (v: number) => 3 + (height - 6) * (1 - (v - lo) / span);
-  const line = pts.map((p, k) => `${k ? "L" : "M"}${x(p.i).toFixed(1)},${y(p.v).toFixed(1)}`).join("");
-  const last = pts[pts.length - 1];
-  return (
-    <div ref={ref} className="w-full">
-      <svg width={W} height={height} className="block max-w-full overflow-visible" aria-hidden>
-        <path d={line} fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
-        <circle cx={x(last.i)} cy={y(last.v)} r={3} fill={color} />
-      </svg>
-    </div>
-  );
-}
-
-// -------------------------------------------------------- forgetting curve
-
-const fmtSpan = (d: number) => (d === 0 ? "today" : d < 7 ? `${d} day${d === 1 ? "" : "s"}` : d < 30 ? `${Math.round(d / 7)} wk` : `${Math.round(d / 30)} mo`);
-
-/**
- * Mean predicted recall of the studied cards if nothing were reviewed from now on.
- * The x axis is square-root scaled so the steep first days get room.
- */
-export function ForgettingCurve({ curve, target, height = 220 }: { curve: { days: number; recall: number }[]; target: number; height?: number }) {
-  const [ref, width] = useWidth<HTMLDivElement>();
-  const shown = useShown(60);
-  const id = useId();
-  const [hover, setHover] = useState<number | null>(null);
-  const W = Math.max(260, width || 600), H = height, L = 38, R = 14, T = 16, B = 26;
-  const maxD = curve[curve.length - 1]?.days ?? 90;
-  const fx = (d: number) => L + (W - L - R) * Math.sqrt(d / maxD);
-  const minR = Math.min(target, ...curve.map((p) => p.recall));
-  const lo = Math.max(0, Math.floor((minR - 0.04) * 20) / 20);
-  const fy = (v: number) => T + (H - T - B) * (1 - (v - lo) / (1 - lo));
-  // A smooth path through the samples (Catmull-Rom → Bézier).
-  const P = curve.map((p) => [fx(p.days), fy(p.recall)] as const);
-  let d = `M${P[0][0]},${P[0][1]}`;
-  for (let i = 0; i < P.length - 1; i++) {
-    const p0 = P[i - 1] ?? P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] ?? p2;
-    d += `C${p1[0] + (p2[0] - p0[0]) / 6},${p1[1] + (p2[1] - p0[1]) / 6} ${p2[0] - (p3[0] - p1[0]) / 6},${p2[1] - (p3[1] - p1[1]) / 6} ${p2[0]},${p2[1]}`;
-  }
-  const area = `${d}L${P[P.length - 1][0]},${H - B}L${P[0][0]},${H - B}Z`;
-  // When the mean drops under the target, interpolated between samples.
-  let cross: number | null = null;
+/** When the mean predicted recall falls under the target, interpolated between samples; 0 if it already is, null if never. */
+export function crossing(curve: { days: number; recall: number }[], target: number) {
+  if (!curve.length) return null;
+  if (curve[0].recall < target) return 0;
   for (let i = 1; i < curve.length; i++) {
     const a = curve[i - 1], b = curve[i];
-    if (a.recall >= target && b.recall < target) {
-      cross = a.days + ((a.recall - target) / (a.recall - b.recall)) * (b.days - a.days);
-      break;
+    if (a.recall >= target && b.recall < target) return a.days + ((a.recall - target) / (a.recall - b.recall)) * (b.days - a.days);
+  }
+  return null;
+}
+export { spanWord };
+
+/** Mean predicted recall of the studied cards if nothing were reviewed from now on, for the next two months. */
+export function ForgettingCurve({ curve, target, height = 210, maxT = 60 }: { curve: { days: number; recall: number }[]; target: number; height?: number; maxT?: number }) {
+  const [ref, w] = useWidth<HTMLDivElement>();
+  const [hover, setHover] = useState<number | null>(null);
+  const W = w || 600, h = height, pl = 40, pr = 12, pt = 14, pb = 26;
+  const pts = curve.filter((p) => p.days <= maxT);
+  const mn = Math.max(0, Math.floor(Math.min(target, ...pts.map((p) => p.recall)) * 20 - 1) / 20);
+  const X = (t: number) => pl + ((W - pl - pr) * t) / maxT;
+  const Y = (r: number) => pt + (h - pt - pb) * (1 - (r - mn) / (1 - mn));
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${X(p.days).toFixed(1)},${Y(p.recall).toFixed(1)}`).join("");
+  const area = `${line}L${X(pts[pts.length - 1].days)},${Y(mn)}L${X(0)},${Y(mn)}Z`;
+  const yt: number[] = [];
+  for (let v = Math.ceil(mn * 10) / 10; v <= 1.001; v += 0.1) yt.push(Math.round(v * 10) / 10);
+  const xt: [number, string][] = [];
+  let lastX = -99;
+  for (const t of [[0, "today"], [7, "1 week"], [14, "2 weeks"], [30, "1 month"], [60, "2 months"]] as [number, string][]) {
+    if (t[0] > maxT) continue;
+    if (X(t[0]) - lastX >= 70) {
+      xt.push(t);
+      lastX = X(t[0]);
     }
   }
-  if (cross == null && curve[0] && curve[0].recall < target) cross = 0;
-  const yTicks = [lo, (lo + 1) / 2, 1].map((v) => Math.round(v * 100) / 100);
-  // Keep ticks at least 30 px apart: on a phone the first days crowd together.
-  const xTicks = [0, 1, 3, 7, 14, 30, 60, 90].filter((t) => t <= maxD).reduce<number[]>((acc, t) => (acc.length && fx(t) - fx(acc[acc.length - 1]) < 30 ? acc : [...acc, t]), []);
-  const hp = hover != null ? curve[hover] : null;
-  const clipW = shown ? W : L;
-
+  const cross = crossing(curve, target);
+  const p30 = pts.find((p) => p.days === 30);
+  const hp = hover != null ? pts[hover] : null;
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    const box = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
-    const px = e.clientX - box.left;
+    const px = e.clientX - e.currentTarget.getBoundingClientRect().left;
     let best = 0;
-    for (let i = 1; i < curve.length; i++) if (Math.abs(fx(curve[i].days) - px) < Math.abs(fx(curve[best].days) - px)) best = i;
+    for (let i = 1; i < pts.length; i++) if (Math.abs(X(pts[i].days) - px) < Math.abs(X(pts[best].days) - px)) best = i;
     setHover(best);
   };
-
   return (
-    <div ref={ref} className="relative w-full">
-      <div className="mb-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        {cross == null ? (
-          <p className="text-sm text-pretty">
-            Even with <span className="text-foreground">no reviews for {fmtSpan(maxD)}</span>, your average recall stays above {Math.round(target * 100)}%.
-          </p>
-        ) : cross === 0 ? (
-          <p className="text-sm text-pretty">Your average recall is already under your {Math.round(target * 100)}% target. Reviewing what's due brings it back.</p>
-        ) : (
-          <p className="text-sm text-pretty text-muted-foreground">
-            Stop reviewing today and your average recall drops under <span className="text-foreground">{Math.round(target * 100)}%</span> in about{" "}
-            <span className="tabular text-highlight">{cross < 1.5 ? "a day" : `${Math.round(cross)} days`}</span>, and to{" "}
-            <span className="tabular text-foreground">{Math.round(curve[curve.length - 1].recall * 100)}%</span> in {fmtSpan(maxD)}.
-          </p>
-        )}
-      </div>
-      <svg width={W} height={H} className="block max-w-full touch-none" role="img" aria-label={`Forgetting curve: average recall falls from ${Math.round(curve[0].recall * 100)}% today to ${Math.round(curve[curve.length - 1].recall * 100)}% in ${maxD} days without reviews`} onPointerMove={onMove} onPointerLeave={() => setHover(null)}>
-        <defs>
-          <clipPath id={`${id}c`}>
-            <rect x={0} y={0} width={clipW} height={H} className="viz-anim" style={{ transition: "width 1.3s cubic-bezier(.3,.7,.2,1)" }} />
-          </clipPath>
-        </defs>
-        {yTicks.map((v) => (
-          <g key={v}>
-            <line x1={L} x2={W - R} y1={fy(v)} y2={fy(v)} stroke="var(--border)" />
-            <text x={L - 7} y={fy(v) + 4} textAnchor="end" fontSize={11} className="tabular fill-muted-foreground">{Math.round(v * 100)}%</text>
-          </g>
-        ))}
-        {xTicks.map((t) => (
-          <g key={t}><line x1={fx(t)} x2={fx(t)} y1={H - B} y2={H - B + 4} stroke="var(--border)" /><text x={fx(t)} y={H - 7} textAnchor={t === 0 ? "start" : t === maxD ? "end" : "middle"} fontSize={11} className="fill-muted-foreground">{t === 0 ? "now" : t < 7 ? `${t}d` : t < 30 ? `${t / 7}w` : `${t / 30}mo`}</text></g>
-        ))}
-        {/* Target line. */}
-        <line x1={L} x2={W - R} y1={fy(target)} y2={fy(target)} stroke="var(--foreground)" strokeOpacity={0.45} strokeDasharray="4 4" />
-        <text x={W - R} y={fy(target) - 6} textAnchor="end" fontSize={11} className="fill-muted-foreground">target {Math.round(target * 100)}%</text>
-        <g clipPath={`url(#${id}c)`}>
-          <path d={area} fill="var(--highlight)" fillOpacity={0.1} />
-          <path d={d} fill="none" stroke="var(--highlight)" strokeWidth={2.25} strokeLinecap="round" />
-          {cross != null && cross > 0 && (
+    <div ref={ref} className="stats-chart relative w-full">
+      {w > 0 ? (
+        <svg width={W} height={h} className="block touch-pan-y overflow-visible" role="img" aria-label={`Forgetting curve: average recall falls from ${Math.round(curve[0].recall * 100)}% today to ${Math.round(pts[pts.length - 1].recall * 100)}% in ${maxT} days without reviews`} onPointerMove={onMove} onPointerLeave={() => setHover(null)}>
+          <defs>
+            <linearGradient id="stats-curve-fill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0" stopColor="var(--foreground)" stopOpacity={0.1} />
+              <stop offset="1" stopColor="var(--foreground)" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          {yt.map((v) => (
+            <g key={v}>
+              <line x1={pl} x2={W - pr} y1={Y(v)} y2={Y(v)} stroke="var(--border)" />
+              <text x={pl - 8} y={Y(v) + 4} textAnchor="end">{Math.round(v * 100)}%</text>
+            </g>
+          ))}
+          <line x1={pl} x2={W - pr} y1={Y(target)} y2={Y(target)} stroke="var(--good)" strokeWidth={1.5} strokeDasharray="5 4" />
+          <text x={W - pr} y={Y(target) - 6} textAnchor="end" className="lab" style={{ fill: "var(--good)" }}>target</text>
+          <path d={area} fill="url(#stats-curve-fill)" />
+          <path d={line} fill="none" stroke="var(--foreground)" strokeWidth={2.2} strokeLinejoin="round" />
+          {xt.map(([t, l]) => (
+            <text key={t} x={X(t)} y={h - 6} textAnchor={t === 0 ? "start" : t === maxT ? "end" : "middle"}>{l}</text>
+          ))}
+          {cross != null && cross > 0 && cross <= maxT && (
             <g>
-              <line x1={fx(cross)} x2={fx(cross)} y1={fy(target)} y2={H - B} stroke="var(--highlight)" strokeOpacity={0.6} strokeDasharray="2 3" />
-              <circle cx={fx(cross)} cy={fy(target)} r={4.5} fill="var(--background)" stroke="var(--highlight)" strokeWidth={2} />
-              <text x={fx(cross) - 8} y={fy(target) + 17} textAnchor="end" fontSize={11} className="tabular fill-highlight">{Math.round(cross)} days</text>
+              <line x1={X(cross)} x2={X(cross)} y1={Y(target)} y2={h - pb} stroke="var(--foreground)" strokeDasharray="3 3" opacity={0.5} />
+              <circle cx={X(cross)} cy={Y(target)} r={5} fill="var(--card)" stroke="var(--foreground)" strokeWidth={2} />
+              <text x={X(cross) + 8} y={Y(target) - 8} className="lab">{spanWord(cross)}</text>
             </g>
           )}
-        </g>
-        {hp && (
-          <g pointerEvents="none">
-            <line x1={fx(hp.days)} x2={fx(hp.days)} y1={T} y2={H - B} stroke="var(--foreground)" strokeOpacity={0.25} />
-            <circle cx={fx(hp.days)} cy={fy(hp.recall)} r={4} fill="var(--highlight)" />
-          </g>
-        )}
-      </svg>
-      {hp && (
-        <div
-          className="pointer-events-none absolute z-10 rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md"
-          style={{ left: Math.max(4, Math.min(W - 150, fx(hp.days) - 70)), top: fy(hp.recall) + 30 }}
-        >
-          <div className="font-medium">{hp.days === 0 ? "Now" : `In ${hp.days} day${hp.days === 1 ? "" : "s"}`}</div>
-          <div className="tabular text-muted-foreground">{(hp.recall * 100).toFixed(1)}% average recall</div>
-        </div>
+          {p30 && (
+            <g>
+              <circle cx={X(30)} cy={Y(p30.recall)} r={4} fill={recallFill(p30.recall, target)} />
+              <text x={X(30) + 8} y={Y(p30.recall) - 9} className="lab">{Math.round(p30.recall * 100)}%</text>
+            </g>
+          )}
+          {hp && (
+            <g pointerEvents="none">
+              <line x1={X(hp.days)} x2={X(hp.days)} y1={pt} y2={h - pb} stroke="var(--foreground)" strokeOpacity={0.2} />
+              <circle cx={X(hp.days)} cy={Y(hp.recall)} r={4} fill="var(--foreground)" />
+            </g>
+          )}
+        </svg>
+      ) : (
+        <div style={{ height: h }} />
       )}
+      {hp && <ChartTip tip={{ x: X(hp.days), y: Y(hp.recall), lines: [hp.days === 0 ? "Now" : `In ${hp.days} day${hp.days === 1 ? "" : "s"}`, `${(hp.recall * 100).toFixed(1)}% average recall`] }} width={W} />}
     </div>
   );
 }
 
-// ------------------------------------------------------------ histograms
-
-/** Small vertical histogram; each bar has its own color, label under it and a hover readout. */
-export function Histogram({
-  bars,
-  height = 96,
-  label,
-  onPick,
-}: {
-  bars: { key: string; value: number; color: string; label?: string; tip: string }[];
-  height?: number;
-  label: string;
-  onPick?(i: number): void;
-}) {
-  const shown = useShown(80);
+/** Small vertical histogram: a number above each bar and a label under it. */
+export function Histogram({ bars, height = 130, label, onPick }: { bars: { key: string; value: number; color: string; label?: string; tip: string }[]; height?: number; label: string; onPick?(i: number): void }) {
   const [hover, setHover] = useState<number | null>(null);
   const max = Math.max(1, ...bars.map((b) => b.value));
   return (
     <div className="w-full">
-      <div className="flex items-end gap-[3px] pt-4" style={{ height: height + 16 }} role="img" aria-label={`${label}: ${bars.map((b) => `${b.tip}`).join(", ")}`} onMouseLeave={() => setHover(null)}>
+      <div className="flex items-end gap-2.5 pt-5" style={{ height: height + 20 }} role="img" aria-label={`${label}: ${bars.map((b) => b.tip).join(", ")}`} onMouseLeave={() => setHover(null)}>
         {bars.map((b, i) => (
-          <button
-            key={b.key}
-            type="button"
-            tabIndex={onPick ? 0 : -1}
-            onMouseEnter={() => setHover(i)}
-            onFocus={() => setHover(i)}
-            onClick={() => onPick?.(i)}
-            className={cn("group relative flex h-full flex-1 items-end rounded-sm outline-none", onPick ? "cursor-pointer" : "cursor-default")}
-            aria-label={b.tip}
-          >
-            {b.value > 0 && <span className="tabular absolute inset-x-0 text-center text-[10px] text-muted-foreground" style={{ bottom: `calc(${shown ? Math.max(4, (b.value / max) * 100) : 0}% + 2px)`, opacity: shown ? 1 : 0, transition: `bottom .8s cubic-bezier(.2,.8,.2,1) ${i * 35}ms, opacity .4s` }}>{b.value}</span>}
-            <span
-              className="viz-anim block w-full rounded-[3px]"
-              style={{
-                height: shown ? `${Math.max(b.value ? 4 : 1.5, (b.value / max) * 100)}%` : "0%",
-                background: b.value ? b.color : "var(--muted)",
-                opacity: hover == null || hover === i ? 1 : 0.55,
-                transition: `height .8s cubic-bezier(.2,.8,.2,1) ${i * 35}ms, opacity .15s`,
-              }}
-            />
+          <button key={b.key} type="button" tabIndex={onPick ? 0 : -1} onMouseEnter={() => setHover(i)} onFocus={() => setHover(i)} onClick={() => onPick?.(i)} className={cn("relative flex h-full flex-1 items-end rounded-md outline-none", onPick ? "cursor-pointer" : "cursor-default")} aria-label={b.tip}>
+            {b.value > 0 && <span className="tabular absolute inset-x-0 text-center text-[11px] text-muted-foreground" style={{ bottom: `calc(${Math.max(3, (b.value / max) * 100)}% + 4px)` }}>{b.value}</span>}
+            <span className="stats-grow block w-full rounded-[5px]" style={{ transformOrigin: "bottom", height: `${Math.max(b.value ? 3 : 1.5, (b.value / max) * 100)}%`, background: b.value ? b.color : "var(--stats-track)", opacity: hover == null || hover === i ? 1 : 0.55, animationDelay: `${i * 35}ms` }} />
           </button>
         ))}
       </div>
-      <div className="mt-1.5 flex gap-[3px] text-[10.5px] text-muted-foreground">
+      <div className="mt-1.5 flex gap-2.5 text-[11px] text-muted-foreground">
         {bars.map((b) => (
           <span key={b.key} className="flex-1 truncate text-center">{b.label ?? ""}</span>
         ))}
@@ -272,222 +123,53 @@ export function Histogram({
   );
 }
 
-// ---------------------------------------------------------- study clock
-
-/** A 24-hour clock: wedge length is how much you study at that hour, color is how well. */
-export function StudyClock({ hours, target, size = 232 }: { hours: { hour: number; reviews: number; rated?: number; passed: number }[]; target: number; size?: number }) {
-  // Wedge length is every answer; colour is the pass rate over rated ones (a drill run has none).
-  const ratedOf = (h: { reviews: number; rated?: number }) => h.rated ?? h.reviews;
-  const shown = useShown(100);
-  const [hover, setHover] = useState<number | null>(null);
-  const S = size, c = S / 2, r0 = 34, r1 = c - 28;
-  const max = Math.max(1, ...hours.map((h) => h.reviews));
-  const total = hours.reduce((a, h) => a + h.reviews, 0);
-  // Best hour: highest pass rate among hours carrying at least 5% of reviews.
-  // Only hours with enough answers to mean something; a 3-for-3 hour is luck, not sharpness.
-  const totalRated = hours.reduce((a, h) => a + ratedOf(h), 0);
-  const eligible = totalRated >= 40 ? hours.filter((h) => ratedOf(h) >= Math.max(10, totalRated * 0.05)) : [];
-  const best = eligible.length ? eligible.reduce((a, b) => (b.passed / ratedOf(b) > a.passed / ratedOf(a) ? b : a)) : null;
-  const busiest = hours.reduce((a, b) => (b.reviews > a.reviews ? b : a));
-  const wedge = (h: number, len: number) => {
-    const a0 = ((h / 24) * 2 - 0.5) * Math.PI + 0.025, a1 = (((h + 1) / 24) * 2 - 0.5) * Math.PI - 0.025;
-    const r = r0 + (r1 - r0) * len;
-    const p = (a: number, rr: number) => `${(c + Math.cos(a) * rr).toFixed(2)},${(c + Math.sin(a) * rr).toFixed(2)}`;
-    return `M${p(a0, r0)}L${p(a0, r)}A${r},${r} 0 0 1 ${p(a1, r)}L${p(a1, r0)}A${r0},${r0} 0 0 0 ${p(a0, r0)}Z`;
-  };
-  const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
-  const hv = hover != null ? hours[hover] : null;
-  return (
-    <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-6">
-      <div className="relative shrink-0" style={{ width: S, height: S }}>
-        <svg width={S} height={S} role="img" aria-label={`Reviews by hour of day; busiest ${hh(busiest.hour)}`} onMouseLeave={() => setHover(null)}>
-          {[0.33, 0.66, 1].map((k) => (
-            <circle key={k} cx={c} cy={c} r={r0 + (r1 - r0) * k} fill="none" stroke="var(--border)" />
-          ))}
-          {[0, 6, 12, 18].map((h) => {
-            const a = ((h / 24) * 2 - 0.5) * Math.PI;
-            return (
-              <text key={h} x={c + Math.cos(a) * (r1 + 17)} y={c + Math.sin(a) * (r1 + 17) + 4} textAnchor="middle" fontSize={11} className="tabular fill-muted-foreground">{h}h</text>
-            );
-          })}
-          <g className="viz-anim" style={{ transform: `scale(${shown ? 1 : 0.15})`, transformOrigin: `${c}px ${c}px`, opacity: shown ? 1 : 0, transition: "transform 1s cubic-bezier(.2,.8,.2,1), opacity .5s" }}>
-            {hours.map((h, i) => {
-              const len = h.reviews ? Math.sqrt(h.reviews / max) : 0;
-              const rate = ratedOf(h) ? h.passed / ratedOf(h) : null;
-              return (
-                <g key={h.hour} onMouseEnter={() => setHover(i)}>
-                  <path d={wedge(h.hour, 1)} fill="transparent" />
-                  {h.reviews > 0 && (
-                    <path
-                      d={wedge(h.hour, Math.max(len, 0.06))}
-                      fill={rate == null ? "var(--chart-2)" : recallColor(rate, target)}
-                      fillOpacity={hover == null || hover === i ? 0.9 : 0.4}
-                      style={{ transition: "fill-opacity .15s" }}
-                      pointerEvents="none"
-                    />
-                  )}
-                </g>
-              );
-            })}
-          </g>
-        </svg>
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-          {hv ? (
-            <>
-              <div className="tabular text-lg leading-none" style={SERIF}>{hh(hv.hour)}</div>
-              <div className="tabular mt-1 text-[11px] text-muted-foreground">{hv.reviews}{ratedOf(hv) ? ` · ${Math.round((hv.passed / ratedOf(hv)) * 100)}%` : ""}</div>
-            </>
-          ) : (
-            <div className="text-[11px] text-muted-foreground">24 h</div>
-          )}
-        </div>
-      </div>
-      <dl className="grid w-full grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-1">
-        <div>
-          <dt className="text-xs text-muted-foreground">Busiest hour</dt>
-          <dd className="tabular mt-0.5 text-lg" style={SERIF}>{hh(busiest.hour)}</dd>
-          <dd className="tabular text-xs text-muted-foreground">{busiest.reviews} answer{busiest.reviews === 1 ? "" : "s"}</dd>
-        </div>
-        {totalRated > 0 && <div>
-          <dt className="text-xs text-muted-foreground">Sharpest hour</dt>
-          <dd className="tabular mt-0.5 text-lg" style={SERIF}>{best ? hh(best.hour) : "—"}</dd>
-          <dd className="tabular text-xs text-muted-foreground">{best ? `${Math.round((best.passed / ratedOf(best)) * 100)}% not Again` : "Needs more rated answers"}</dd>
-        </div>}
-        <p className="col-span-2 text-xs text-pretty text-muted-foreground sm:col-span-1">{totalRated ? "Longer wedges, more answers. Color is how often you didn't press Again at that hour." : "Longer wedges, more runs at that hour."}</p>
-      </dl>
-    </div>
-  );
-}
-
-// ------------------------------------------------------------------ donut
-
-export function Donut({ parts, center, sub, size = 132, onPick }: { parts: { key: string; label: string; value: number; color: string }[]; center: ReactNode; sub?: string; size?: number; onPick?(i: number): void }) {
-  const shown = useShown(120);
-  const [hover, setHover] = useState<number | null>(null);
-  const total = parts.reduce((a, p) => a + p.value, 0);
-  const stroke = 16, r = size / 2 - stroke / 2 - 2, C = 2 * Math.PI * r;
-  const gap = total && parts.filter((p) => p.value).length > 1 ? 2.5 : 0;
-  let acc = 0;
-  const pct = (v: number) => (total ? ((v / total) * 100).toFixed(1) : "0");
-  return (
-    <div className="flex flex-col items-center gap-5 min-[480px]:flex-row">
-      <div className="relative shrink-0" style={{ width: size, height: size }}>
-        <svg width={size} height={size} role="img" aria-label={parts.map((p) => `${p.label} ${p.value} (${pct(p.value)}%)`).join(", ")} onMouseLeave={() => setHover(null)}>
-          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--muted)" strokeWidth={stroke} />
-          {parts.map((p, i) => {
-            if (!p.value) return null;
-            const len = (p.value / total) * C;
-            const start = acc;
-            acc += len;
-            return (
-              <circle
-                key={p.key}
-                cx={size / 2}
-                cy={size / 2}
-                r={r}
-                fill="none"
-                stroke={p.color}
-                strokeWidth={hover === i ? stroke + 4 : stroke}
-                strokeDasharray={`${shown ? Math.max(0.5, len - gap) : 0} ${C}`}
-                strokeDashoffset={-start}
-                transform={`rotate(-90 ${size / 2} ${size / 2})`}
-                opacity={hover == null || hover === i ? 1 : 0.45}
-                onMouseEnter={() => setHover(i)}
-                className="viz-anim"
-                style={{ transition: `stroke-dasharray .9s cubic-bezier(.2,.8,.2,1) ${i * 90}ms, opacity .15s, stroke-width .15s` }}
-              />
-            );
-          })}
-        </svg>
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-          {hover != null ? (
-            <>
-              <div className="tabular text-2xl leading-none" style={SERIF}>{pct(parts[hover].value)}%</div>
-              <div className="mt-1 text-[11px] text-muted-foreground">{parts[hover].label}</div>
-            </>
-          ) : (
-            <>
-              <div className="tabular text-2xl leading-none" style={SERIF}>{center}</div>
-              {sub && <div className="mt-1 text-[11px] text-muted-foreground">{sub}</div>}
-            </>
-          )}
-        </div>
-      </div>
-      <div className="grid w-full gap-y-1.5">
-        {parts.map((p, i) => {
-          const Row = onPick ? "button" : "div";
-          return (
-            <Row
-              key={p.key}
-              {...(onPick ? { type: "button" as const, onClick: () => onPick(i) } : {})}
-              className={cn("flex min-h-9 min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left text-sm transition-colors", hover === i && "bg-accent/50", !p.value && "opacity-45")}
-              onMouseEnter={() => setHover(i)}
-              onMouseLeave={() => setHover(null)}
-            >
-              <span className="size-2.5 shrink-0 rounded-full" style={{ background: p.color }} />
-              <span className="text-muted-foreground">{p.label}</span>
-              <span className="tabular ml-auto shrink-0 font-medium">{p.value}</span>
-              <span className="tabular w-12 shrink-0 text-right text-xs text-muted-foreground">{total ? `${pct(p.value)}%` : ""}</span>
-            </Row>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ------------------------------------------------------------ practice progress
-
 /**
- * One measured number over a card's sessions (WPM, accuracy...), oldest left. Sessions are evenly
- * spaced so a burst of runs on one day reads as clearly as one run a week; the best one is ringed.
+ * One measured number over a card's runs, oldest left: each run a faint dot, the line the average of the
+ * last five, the best run green. Runs are evenly spaced, so a burst on one day reads like a run a week.
  */
-export function ProgressChart({ points, better, unit, digits, height = 168 }: { points: { at: string; value: number }[]; better: "higher" | "lower"; unit: string; digits: number; height?: number }) {
-  const [ref, width] = useWidth<HTMLDivElement>();
-  const W = Math.max(240, width || 480);
-  const padL = 36, padR = 12, padT = 12, padB = 22;
-  const vals = points.map((p) => p.value);
-  let lo = Math.min(...vals), hi = Math.max(...vals);
-  if (hi - lo < 1e-9) {
-    lo -= 1;
-    hi += 1;
-  }
-  const pad = (hi - lo) * 0.12;
-  lo -= pad;
-  hi += pad;
-  const n = points.length;
-  const x = (i: number) => padL + (n === 1 ? (W - padL - padR) / 2 : (i / (n - 1)) * (W - padL - padR));
-  const y = (v: number) => padT + (height - padT - padB) * (1 - (v - lo) / (hi - lo));
-  const fmt = (v: number) => `${v.toFixed(digits)}${unit === "%" ? "%" : ""}`;
-  const best = better === "lower" ? Math.min(...vals) : Math.max(...vals);
-  const bestAt = vals.lastIndexOf(best);
-  const line = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join("");
-  const ticks = [lo + pad, (lo + hi) / 2, hi - pad];
-  const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  const labels = n > 1 ? [0, n - 1] : [0];
-  // Runs on the same day read better as session numbers than as one repeated date.
-  const sameDay = n > 1 && day(points[0].at) === day(points[n - 1].at);
-  const xLabel = (i: number) => (sameDay ? `#${i + 1}` : day(points[i].at));
+export function ProgressChart({ points, better, unit, digits, height = 220 }: { points: { at: string; value: number }[]; better: "higher" | "lower"; unit: string; digits: number; height?: number }) {
+  const [ref, w] = useWidth<HTMLDivElement>();
+  const W = w || 480, pl = 38, pr = 10, pt = 16, pb = 24;
+  const p = points.map((x) => x.value), n = p.length;
+  const mn = Math.min(...p), mx = Math.max(...p);
+  const step = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500].find((k) => (mx - mn) / k <= 4) ?? 1000;
+  const t0 = Math.floor(mn / step) * step, t1 = Math.max(t0 + step, Math.ceil((mx + step * 0.3) / step) * step);
+  const ticks: number[] = [];
+  for (let v = t0; v <= t1 + 1e-9; v += step) ticks.push(v);
+  const X = (i: number) => pl + (n === 1 ? (W - pl - pr) / 2 : ((W - pl - pr) * i) / (n - 1));
+  const Y = (v: number) => pt + (height - pt - pb) * (1 - (v - t0) / (t1 - t0));
+  const best = better === "lower" ? mn : mx, bi = p.lastIndexOf(best);
+  const avg = p.map((_, i) => {
+    const s = p.slice(Math.max(0, i - 4), i + 1);
+    return s.reduce((a, b) => a + b, 0) / s.length;
+  });
+  const fmt = (v: number) => `${v.toFixed(digits)}${unit === "%" ? "%" : unit ? ` ${unit}` : ""}`;
+  const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const tickDigits = step < 1 ? 1 : 0;
   return (
-    <div ref={ref} className="w-full">
-      <svg width={W} height={height} className="block max-w-full" role="img" aria-label={`${n} sessions, best ${fmt(best)}`}>
-        {ticks.map((t, i) => (
-          <g key={i}>
-            <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="var(--border)" strokeDasharray={i === 1 ? "2 4" : undefined} />
-            <text x={padL - 6} y={y(t) + 3.5} textAnchor="end" className="tabular fill-muted-foreground text-[10px]">{t.toFixed(digits && hi - lo < 10 ? 1 : 0)}</text>
-          </g>
-        ))}
-        {n > 1 && <path d={line} fill="none" stroke="var(--highlight)" strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />}
-        {points.map((p, i) => (
-          <circle key={i} cx={x(i)} cy={y(p.value)} r={n > 40 ? 1.8 : 3} fill={i === bestAt ? "var(--good)" : "var(--highlight)"}>
-            <title>{`${day(p.at)} ${new Date(p.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })} · ${fmt(p.value)}`}</title>
-          </circle>
-        ))}
-        <circle cx={x(bestAt)} cy={y(best)} r={7} fill="none" stroke="var(--good)" strokeWidth={1.4} />
-        {labels.map((i) => (
-          <text key={i} x={x(i)} y={height - 6} textAnchor={n === 1 ? "middle" : i === 0 ? "start" : "end"} className="fill-muted-foreground text-[10px]">{xLabel(i)}</text>
-        ))}
-      </svg>
+    <div ref={ref} className="stats-chart w-full">
+      {w > 0 ? (
+        <svg width={W} height={height} className="block overflow-visible" role="img" aria-label={`${n} runs, best ${fmt(best)}`}>
+          {ticks.map((v) => (
+            <g key={v}>
+              <line x1={pl} x2={W - pr} y1={Y(v)} y2={Y(v)} stroke="var(--border)" />
+              <text x={pl - 8} y={Y(v) + 4} textAnchor="end">{v.toFixed(tickDigits)}</text>
+            </g>
+          ))}
+          {p.map((v, i) => (
+            <circle key={i} cx={X(i)} cy={Y(v)} r={n > 80 ? 2.2 : 3.2} fill="var(--foreground)" opacity={0.28}>
+              <title>{`Run ${i + 1} · ${day(points[i].at)} · ${fmt(v)}`}</title>
+            </circle>
+          ))}
+          {n > 1 && <path d={avg.map((v, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join("")} fill="none" stroke="var(--foreground)" strokeWidth={2.2} strokeLinejoin="round" />}
+          <circle cx={X(bi)} cy={Y(best)} r={6} fill="var(--highlight)" />
+          <text x={X(bi)} y={Y(best) - 10} textAnchor="middle" className="lab">best</text>
+          <text x={pl} y={height - 5}>{n > 1 ? "first run" : day(points[0].at)}</text>
+          {n > 1 && <text x={W - pr} y={height - 5} textAnchor="end">last run</text>}
+        </svg>
+      ) : (
+        <div style={{ height }} />
+      )}
     </div>
   );
 }

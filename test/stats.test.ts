@@ -220,3 +220,20 @@ test("memory and habit stats: stability, curve, hours, weeks, best streak", asyn
   assert.equal(s.weeks[2].reviews, 2);
   assert.equal(s.bestStreak, 2);
 });
+
+test("stats count each deck's own cards: states, recall over seen cards and due today", async () => {
+  const e = await setup();
+  e.rate(cardOf(e, "a"), 3, { at: daysAgo(3) });
+  const s = e.stats({ deck: "Net" });
+  assert.deepEqual(s.decks.map((d) => d.deck), ["Net::A", "Net::B"]);
+  const [a, b] = s.decks;
+  assert.equal(a.cards, 2);
+  assert.equal(a.new, 1);
+  assert.equal(a.seen, 1);
+  assert.ok(a.recall! > 0 && a.recall! <= 1);
+  assert.equal(b.cards, 3);
+  assert.equal(b.seen, 0);
+  assert.equal(b.recall, null);
+  assert.equal(a.due + b.due, s.forecast[0].due);
+  assert.equal(a.scripted + b.scripted, 0);
+});

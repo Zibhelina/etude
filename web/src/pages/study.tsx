@@ -16,7 +16,7 @@ import { ActionSheet, Tally } from "@/components/phone-shell";
 import { SketchBar, SketchLayer, sketchTransform, useSketch } from "@/components/sketch-pad";
 import { track } from "@/lib/telemetry";
 import {
-  AskTab, CardStage, cardEyebrow, Composer, shownVerdict, Eyebrow, Feedback, IconButton, modKey, Ratings, reducedMotion, Slot, StudyTop, Suggestion, Thread, Track, useSwapIn, Verdict,
+  AskTab, CardStage, cardEyebrow, Composer, crumbPath, shownVerdict, Eyebrow, Feedback, IconButton, modKey, Ratings, reducedMotion, Slot, StudyTop, Suggestion, Thread, Track, useSwapIn, Verdict,
   type ChatMsg,
 } from "@/components/study-shell";
 
@@ -566,7 +566,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const showBar = !bare || !idleBar;
   const verdictShown = card?.showVerdict !== false ? shownVerdict(result?.grade.verdict) : null;
   const slotSwap = useSwapIn(`${currentKey}:${phase === "result" ? "r" : "a"}`);
-  const deckPath = card ? card.deck.split("::").slice(1).join(" › ") : "";
+  const deckPath = crumbPath(card?.deck, scope.deck);
   const canAct = !!card && (phase === "answer" || phase === "result");
 
   const renderCard = (c: StudyCard, key: string, live: boolean, isPaper: boolean, style?: React.CSSProperties) => (
@@ -611,7 +611,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       className={cn("flex min-h-dvh w-full flex-col", showBar ? "pb-[calc(9.5rem+env(safe-area-inset-bottom))]" : "pb-6", bare && "pt-[env(safe-area-inset-top)]", bare && phone && !showBar && "pb-0", sk.on && "overflow-x-clip")}
     >
       {!bare && (
-        <StudyTop title={title} crumb={deckPath || undefined} onBack={() => navigate("/")}>
+        <StudyTop title={title} crumb={deckPath} onBack={() => navigate("/")}>
           {card && phase !== "done" && <span className="st-tag max-md:hidden">{card.type}</span>}
           {counts && (
             <div className="st-prog">

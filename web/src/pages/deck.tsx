@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, ArchiveRestore, ArrowUpToLine, BarChart3, CalendarClock, Check, ChevronDown, ChevronRight, Download, Eye, FastForward, FolderInput, Library, Pencil, Play, Plus, Search, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowUpToLine, BarChart3, CalendarClock, Check, ChevronDown, ChevronRight, Download, Eye, FastForward, FolderInput, Library, Pencil, Play, Plus, Search, Smile, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,8 @@ import { etudeDownload } from "@/lib/local-url";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { Block, Breadcrumb, EmptyState, LinkRow, Page, Section } from "@/components/page";
-import { TreeGuides } from "@/pages/decks";
+import { DeckCounts } from "@/pages/decks";
+import { ChangeIconDialog, DeckIcon } from "@/components/deck-icon";
 import { childrenOf, clashes, leafOf, moveDeck, MoveDeckDialog, parentOf } from "@/components/move-deck";
 import { usePhone } from "@/lib/phone";
 import { DeckList } from "@/components/phone-decks";
@@ -138,19 +139,19 @@ export function DeckPage({ name }: { name: string }) {
     return (
       <div>
         <PhoneTitle
-          back={{ label: deck.archived ? "Archive" : back ? leafOf(back) : "Decks", onClick: () => navigate(deck.archived ? "/archive" : back ? `/deck?name=${enc(back)}` : "/") }}
+          back={{ label: deck.archived ? "Archive" : back ? leafOf(back) : "Library", onClick: () => navigate(deck.archived ? "/archive" : back ? `/deck?name=${enc(back)}` : "/") }}
           kicker={parts.length > 2 ? parts.slice(0, -2).join(" › ") : undefined}
           title={leafOf(deck.name)}
-          className="pb-3"
+          className="pb-1 [&_h1]:hidden"
         />
         <div className="px-5">
-          <Header deck={deck} node={node} work={work} tags={tags} phone onRenamed={(to) => navigate(`/deck?name=${enc(to)}`, { replace: true })} onAddCards={tab === "cards" ? undefined : () => switchTab("cards")} />
+          <Header deck={deck} node={node} work={work} tags={tags} phone subdecks={childrenOf(decks, deck.name).length} onChanged={reload} onRenamed={(to) => navigate(`/deck?name=${enc(to)}`, { replace: true })} onAddCards={tab === "cards" ? undefined : () => switchTab("cards")} />
         </div>
         <Tabs value={tab} onValueChange={switchTab} className="mt-7">
           <div className="sticky top-[calc(3rem+env(safe-area-inset-top))] z-10 border-b bg-background/95 px-5 backdrop-blur">
             <TabsList variant="line" className="h-11 w-full justify-start gap-5 bg-transparent p-0">
               {(["overview", "cards", "options", "manage"] as const).map((t) => (
-                <TabsTrigger key={t} value={t} className="h-11 flex-none rounded-none border-0 px-0 text-[15px] capitalize shadow-none after:!bottom-0 after:bg-highlight data-[state=active]:bg-transparent data-[state=active]:shadow-none">{t}</TabsTrigger>
+                <TabsTrigger key={t} value={t} className="h-11 flex-none rounded-none border-0 px-0 text-[15px] capitalize shadow-none after:!bottom-0 after:bg-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none">{t}</TabsTrigger>
               ))}
             </TabsList>
           </div>
@@ -169,8 +170,8 @@ export function DeckPage({ name }: { name: string }) {
 
   return (
     <Page>
-      <Breadcrumb items={[{ label: deck.archived ? "Archive" : "Decks", onClick: () => navigate(deck.archived ? "/archive" : "/") }, ...parts.slice(0, -1).map((p, i) => ({ label: p, onClick: () => navigate(`/deck?name=${enc(parts.slice(0, i + 1).join("::"))}`) }))]} />
-      <Header deck={deck} node={node} work={work} tags={tags} onRenamed={(to) => navigate(`/deck?name=${enc(to)}`, { replace: true })} onAddCards={tab === "cards" ? undefined : () => switchTab("cards")} />
+      <Breadcrumb items={[{ label: deck.archived ? "Archive" : "Library", onClick: () => navigate(deck.archived ? "/archive" : "/") }, ...parts.slice(0, -1).map((p, i) => ({ label: p, onClick: () => navigate(`/deck?name=${enc(parts.slice(0, i + 1).join("::"))}`) }))]} />
+      <Header deck={deck} node={node} work={work} tags={tags} onChanged={reload} onRenamed={(to) => navigate(`/deck?name=${enc(to)}`, { replace: true })} onAddCards={tab === "cards" ? undefined : () => switchTab("cards")} />
 
       <Tabs value={tab} onValueChange={switchTab} className="mt-8">
         <TabsList className="w-full sm:w-auto">
@@ -389,7 +390,8 @@ function DeckCards({ deck, hasChildren, active, onChanged }: { deck: string; has
   );
 }
 
-function Header({ deck, node, work, tags, onRenamed, onAddCards, phone }: { deck: DeckFull; node?: DeckNode; work: number; tags: string[]; onRenamed(to: string): void; onAddCards?(): void; phone?: boolean }) {
+function Header({ deck, node, work, tags, onRenamed, onAddCards, onChanged, phone, subdecks = 0 }: { deck: DeckFull; node?: DeckNode; work: number; tags: string[]; onRenamed(to: string): void; onAddCards?(): void; onChanged(): void; phone?: boolean; subdecks?: number }) {
+  const [iconOpen, setIconOpen] = useState(false);
   // The deck list's ⋯ → Rename lands here with ?rename=1.
   const [editing, setEditing] = useState(() => new URLSearchParams(location.search).has("rename"));
   useEffect(() => {
@@ -419,7 +421,7 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards, phone }: { deck
   const deadline = deck.resolved.deadline && new Date(deck.resolved.deadline) > new Date() ? deck.resolved.deadline : null;
 
   return (
-    <header>
+    <header className={cn(phone && "lib-panel rounded-3xl p-5")}>
       {editing ? (
         <div className="flex items-center gap-2">
           <Input
@@ -440,16 +442,21 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards, phone }: { deck
           <Button size="icon" variant="outline" className="size-10 shrink-0" onClick={() => { setText(leaf); setEditing(false); }} aria-label="Cancel"><X /></Button>
         </div>
       ) : phone ? null : (
-        <div className="group flex items-start gap-1">
-          <h1 className="min-w-0 py-0.5 text-2xl font-semibold tracking-tight break-words">{leaf}</h1>
-          <Button variant="ghost" size="icon" className="-my-0.5 size-10 shrink-0 text-muted-foreground hover:text-foreground" onClick={() => setEditing(true)} aria-label="Rename deck">
+        <div className="group flex items-center gap-3">
+          {deck.icon && <DeckIcon icon={deck.icon} size={52} className="lib-art" />}
+          <h1 className="lib-title min-w-0 py-0.5 text-[2rem] leading-tight font-semibold break-words">{leaf}</h1>
+          <Button variant="ghost" size="icon" className="size-10 shrink-0 text-muted-foreground hover:text-foreground" onClick={() => setEditing(true)} aria-label="Rename deck">
             <Pencil className="size-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="-ml-2 size-10 shrink-0 text-muted-foreground hover:text-foreground" onClick={() => setIconOpen(true)} aria-label="Change icon" title="Change icon">
+            <Smile className="size-4" />
           </Button>
         </div>
       )}
+      <ChangeIconDialog deck={deck.name} icon={deck.icon ?? null} open={iconOpen} onOpenChange={setIconOpen} onSaved={onChanged} />
 
       {phone && !editing && (
-        <PhoneDeckStats deck={deck} node={node} onRename={() => setEditing(true)} />
+        <PhoneDeckHero deck={deck} node={node} work={work} subdecks={subdecks} onRename={() => setEditing(true)} onIcon={() => setIconOpen(true)} />
       )}
       <div className={cn("mt-5 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between", phone && "mt-4")}>
         <div className={cn("grid grid-cols-4 items-end gap-x-4 sm:flex sm:gap-x-8", phone && "hidden")}>
@@ -474,11 +481,11 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards, phone }: { deck
             <>
               <CustomStudy deck={deck.name} tags={tags} disabled={!node?.cards} phone={phone} adaptive={deck.resolved.adaptiveChallenge || deck.resolved.adaptivePace} />
               {work || !node?.cards ? (
-                <Button size="lg" className={cn("flex-1 gap-2 px-6 sm:flex-none", phone && "h-[3.25rem] rounded-full text-[16px] pointer-coarse:h-[3.25rem]")} disabled={!work} onClick={() => navigate(`/study?deck=${enc(deck.name)}`)}>
-                  <Play className="size-4" />Practice
+                <Button size="lg" className={cn("flex-1 gap-2 px-6 sm:flex-none", phone && "h-[3.25rem] rounded-xl text-[16px] font-semibold shadow-[0_3px_0_var(--primary-edge)] pointer-coarse:h-[3.25rem]")} disabled={!work} onClick={() => navigate(`/study?deck=${enc(deck.name)}`)}>
+                  <Play className="size-4 fill-current" />{phone && work ? `Study · ${work.toLocaleString()}` : "Practice"}
                 </Button>
               ) : (
-                <Button size="lg" className={cn("flex-1 gap-2 px-6 sm:flex-none", phone && "h-[3.25rem] rounded-full text-[16px] pointer-coarse:h-[3.25rem]")} title="Nothing due right now: review early. FSRS counts an early review for less." onClick={() => navigate(`/study?deck=${enc(deck.name)}&ahead=1`)}>
+                <Button size="lg" className={cn("flex-1 gap-2 px-6 sm:flex-none", phone && "h-[3.25rem] rounded-xl text-[16px] font-semibold shadow-[0_3px_0_var(--primary-edge)] pointer-coarse:h-[3.25rem]")} title="Nothing due right now: review early. FSRS counts an early review for less." onClick={() => navigate(`/study?deck=${enc(deck.name)}&ahead=1`)}>
                   <FastForward className="size-4" />Practice ahead
                 </Button>
               )}
@@ -487,6 +494,7 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards, phone }: { deck
         </div>
       </div>
 
+      {phone && <p className="mt-3 text-center text-[13.5px] text-muted-foreground tabular">{(node?.cards ?? 0).toLocaleString()} card{node?.cards === 1 ? "" : "s"}{subdecks ? ` · ${subdecks} subdeck${subdecks === 1 ? "" : "s"}` : ""}{node?.doneToday ? ` · ${node.doneToday} done today` : ""}</p>}
       {!deck.archived && deadline && <Countdown deadline={deadline} margin={deck.resolved.deadlineMargin} />}
       {!deck.archived && deck.resolved.mode !== "watch" && (deck.resolved.adaptiveChallenge || deck.resolved.adaptivePace) && <AdaptiveSummary deck={deck.name} hasNew={(node?.new ?? 0) > 0} />}
       {node && node.cards === 0 && onAddCards && (
@@ -501,33 +509,26 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards, phone }: { deck
   );
 }
 
-/** Phone: the deck's counts as one quiet line with shape marks, and the total plus a rename button. */
-function PhoneDeckStats({ deck, node, onRename }: { deck: DeckFull; node?: DeckNode; onRename(): void }) {
+/** Phone: the deck's picture, its name large, and today's counts as one line of marks. */
+function PhoneDeckHero({ deck, node, work, onRename, onIcon }: { deck: DeckFull; node?: DeckNode; work: number; subdecks: number; onRename(): void; onIcon(): void }) {
   const watch = deck.resolved.mode === "watch";
-  const parts = [
-    { v: node?.new ?? 0, label: "new", cls: "text-new", kind: "new" as const },
-    { v: node?.learning ?? 0, label: "learning", cls: "text-learn", kind: "learn" as const },
-    { v: node?.review ?? 0, label: "due", cls: "text-review", kind: "due" as const },
-  ];
   return (
-    <div className="flex items-end justify-between gap-3">
-      {watch ? (
-        <div className="text-[15px] text-muted-foreground">A tour of {node?.cards ?? 0} cards. Nothing is scheduled.</div>
-      ) : (
-        <div className="flex gap-5 max-[359px]:gap-3.5">
-          {parts.map((p) => (
-            <div key={p.label}>
-              <div className={cn("inline-flex items-center gap-1.5 text-[1.5rem] leading-none font-medium tabular max-[359px]:text-[1.3rem]", p.v ? p.cls : "text-muted-foreground/45")}><Mark kind={p.kind} className="size-2.5" />{p.v}</div>
-              <div className="mt-1.5 text-[12.5px] text-muted-foreground">{p.label}</div>
-            </div>
-          ))}
-          <div className="border-l pl-5 max-[359px]:pl-3.5">
-            <div className="text-[1.5rem] leading-none font-medium tabular">{node?.cards ?? 0}</div>
-            <div className="mt-1.5 text-[12.5px] text-muted-foreground">cards</div>
-          </div>
+    <div>
+      <div className="flex items-start justify-between gap-2">
+        {deck.icon ? <DeckIcon icon={deck.icon} size={64} className="lib-art" /> : <span />}
+        <div className="-mt-1 -mr-2 flex">
+          <button onClick={onIcon} aria-label="Change icon" className="flex size-10 items-center justify-center rounded-full text-muted-foreground active:bg-accent"><Smile className="size-[18px]" /></button>
+          <button onClick={onRename} aria-label="Rename deck" className="flex size-10 items-center justify-center rounded-full text-muted-foreground active:bg-accent"><Pencil className="size-[18px]" /></button>
         </div>
-      )}
-      <button onClick={onRename} aria-label="Rename deck" className="-mr-2 flex size-10 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent"><Pencil className="size-[18px]" /></button>
+      </div>
+      <h1 className={cn("lib-title text-[1.9rem] leading-[1.12] font-semibold break-words", deck.icon && "mt-3")}>{leafOf(deck.name)}</h1>
+      <div className="mt-2">
+        {watch ? (
+          <span className="text-[14.5px] text-muted-foreground">A tour of {node?.cards ?? 0} cards. Nothing is scheduled.</span>
+        ) : node ? (
+          <DeckCounts d={node} className="text-[14px]" note={!work && node.nextDue ? `next ${relativeShort(node.nextDue)}` : undefined} />
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -615,7 +616,7 @@ function CustomStudy({ deck, tags, disabled, phone, adaptive }: { deck: string; 
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="lg" className={cn("flex-1 gap-1.5 px-4 sm:flex-none", phone && "h-[3.25rem] flex-none rounded-full px-5 text-[15px] pointer-coarse:h-[3.25rem]")} disabled={disabled}>{phone ? "Custom" : "Custom study"}<ChevronDown className="size-4" /></Button>
+          <Button variant="outline" size="lg" className={cn("flex-1 gap-1.5 px-4 sm:flex-none", phone && "h-[3.25rem] flex-none rounded-xl px-4 text-[15px] pointer-coarse:h-[3.25rem]")} disabled={disabled}>{phone ? "Custom" : "Custom study"}<ChevronDown className="size-4" /></Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64 sm:w-64" collisionPadding={16}>
           <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Practice a slice of this deck</DropdownMenuLabel>
@@ -676,27 +677,31 @@ function CustomStudy({ deck, tags, disabled, phone, adaptive }: { deck: string; 
 function Subdecks({ parent, decks }: { parent: string; decks: DeckNode[] }) {
   const depth0 = parent.split("::").length;
   return (
-    <Section title="Subdecks" aside={<span className="hidden tabular sm:inline">New · Learn · Due</span>}>
+    <section>
+      <div className="score-kicker mb-2 px-1 font-semibold">Subdecks</div>
       {decks.map((d) => {
         const depth = d.name.split("::").length - depth0 - 1;
+        const w = d.new + d.learning + d.review;
+        const kids = decks.filter((o) => parentOf(o.name) === d.name).length;
         return (
-          <button
-            key={d.id}
-            onClick={() => navigate(`/deck?name=${enc(d.name)}`)}
-            className="flex min-h-12 w-full items-stretch gap-2 border-b pr-3 pl-4 text-left transition-colors last:border-b-0 hover:bg-accent/40 sm:pr-4 sm:pl-5"
-          >
-            <TreeGuides depth={depth} />
-            <span className="flex min-w-0 flex-1 items-center py-2.5 text-[0.95rem] leading-snug">{d.name.split("::").pop()}</span>
-            <span className="tabular grid grid-cols-[repeat(3,2rem)] items-center text-right text-sm sm:grid-cols-[repeat(3,3.5rem)]" aria-label={`${d.new} new, ${d.learning} learning, ${d.review} due`}>
-              <span className={d.new ? "text-new" : "text-muted-foreground/40"}>{d.new}</span>
-              <span className={d.learning ? "text-learn" : "text-muted-foreground/40"}>{d.learning}</span>
-              <span className={d.review ? "text-review" : "text-muted-foreground/40"}>{d.review}</span>
-            </span>
-            <ChevronRight className="my-auto size-4 shrink-0 text-muted-foreground" />
-          </button>
+          <div key={d.id} className="lib-row flex min-h-[3.4rem] items-center gap-3 rounded-xl py-1.5 pr-2.5" style={{ paddingLeft: 12 + depth * 20 }}>
+            <button onClick={() => navigate(`/deck?name=${enc(d.name)}`)} className="min-w-0 flex-1 text-left">
+              <span className="block truncate text-[15px] font-medium hover:underline">{leafOf(d.name)}</span>
+              <DeckCounts d={d} note={kids ? `${kids} subdeck${kids === 1 ? "" : "s"}` : `${d.cards.toLocaleString()} card${d.cards === 1 ? "" : "s"}`} className="mt-0.5" />
+            </button>
+            {!d.archived && d.cards > 0 && (
+              <button
+                className={cn("lib-play flex size-[38px] shrink-0 items-center justify-center rounded-full active:scale-90", !w && "dim")}
+                onClick={() => navigate(d.mode === "watch" ? `/watch?deck=${enc(d.name)}` : `/study?deck=${enc(d.name)}${w ? "" : "&ahead=1"}`)}
+                aria-label={`${w ? "Practice" : "Practice ahead"} ${leafOf(d.name)}`}
+              >
+                {w ? <Play className="size-3.5 translate-x-px fill-current" /> : <FastForward className="size-4" />}
+              </button>
+            )}
+          </div>
         );
       })}
-    </Section>
+    </section>
   );
 }
 

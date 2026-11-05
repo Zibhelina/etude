@@ -1,20 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpLeft, ArrowUpToLine, CalendarClock, ChevronRight, Eye, FastForward, FolderInput, GripVertical, Pencil, Play, Plus, Upload } from "lucide-react";
+import { ArrowUpLeft, ArrowUpToLine, BarChart3, CalendarClock, ChevronRight, FastForward, FolderInput, GripVertical, Pencil, Play, Plus, Search, SlidersHorizontal, Smile, Upload, X, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { api, relative, type DeckNode } from "@/lib/api";
+import { api, relative, type DeckNode, type Stats } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
-import { EmptyState, Page, PageHeader, Section } from "@/components/page";
+import { EmptyState, Page } from "@/components/page";
 import { childrenOf, clashes, leafOf, moveDeck, MoveDeckDialog, parentOf } from "@/components/move-deck";
 import { usePhone } from "@/lib/phone";
 import { PhoneDecks } from "@/components/phone-decks";
-import { DeckContextMenu, type DeckMenuEntry, useDeckActions } from "@/components/deck-actions";
+import { DeckContextMenu, DeckMenu, type DeckMenuEntry, useDeckActions } from "@/components/deck-actions";
+import { Mark } from "@/components/phone-shell";
+import { ChangeIconDialog, DeckIcon } from "@/components/deck-icon";
+import { DonePanel, SessionCard, StreakCelebration, useMilestone } from "@/components/library-session";
+import { ArchivePage } from "@/pages/archive";
 
 /** Where a dragged deck would land: between rows (`line`) or inside a deck (`into`). */
 type Drop = { kind: "line" | "into"; parent: string; index: number | undefined; y: number; depth: number };
+
+const enc = encodeURIComponent;
+const work = (d: DeckNode) => d.new + d.learning + d.review;
+const plural = (n: number, w: string) => `${n.toLocaleString()} ${w}${n === 1 ? "" : "s"}`;
+const ROW_INDENT = 20;
 
 function ancestorsOf(name: string) {
   const parts = name.split("::");
@@ -22,26 +31,64 @@ function ancestorsOf(name: string) {
 }
 
 export function DecksPage({ archived = false }: { archived?: boolean }) {
-  return usePhone() && !archived ? <PhoneDecks /> : <DesktopDecks archived={archived} />;
+  const phone = usePhone();
+  if (archived) return <ArchivePage />;
+  return phone ? <PhoneDecks /> : <DesktopDecks />;
 }
 
-function DesktopDecks({ archived }: { archived: boolean }) {
-  const [decks, setDecks] = useState<(DeckNode & { displayDepth: number })[] | null>(null);
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(JSON.parse(localStorage.getItem("etude.collapsed") ?? "[]")));
-  const [creating, setCreating] = useState(false);
-
-  const reload = () => api.decks(archived).then((all) => {
-    const filtered = all.filter((d) => d.archived === archived);
-    const names = new Set(filtered.map((d) => d.name));
-    setDecks(filtered.map((d) => ({ ...d, displayDepth: ancestorsOf(d.name).filter((n) => names.has(n)).length })));
-  }).catch((e) => toast.error(e.message));
-  const deckActions = useDeckActions(reload);
+/** The decks and today's numbers, reloaded when the window comes back into focus. */
+export function useLibrary() {
+  const [decks, setDecks] = useState<DeckNode[] | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const reload = () =>
+    Promise.all([
+      api.decks().then((all) => setDecks(all.filter((d) => !d.archived))),
+      api.stats({}, 14).then(setStats).catch(() => {}),
+    ]).catch((e) => toast.error((e as Error).message));
   useEffect(() => {
     reload();
     const onFocus = () => reload();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, []);
+  return { decks, stats, reload };
+}
+
+/** The date over the title, like "Thursday, Nov 5". */
+export const todayKicker = () => new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+
+/** New, learning and due as marks with numbers, then a quiet note (subdecks, cards, or nothing due). */
+export function DeckCounts({ d, note, className }: { d: DeckNode; note?: string; className?: string }) {
+  const watch = d.mode === "watch";
+  const items = watch
+    ? []
+    : [
+        { v: d.new, kind: "new" as const, cls: "text-new", label: "new" },
+        { v: d.learning, kind: "learn" as const, cls: "text-learn", label: "learning" },
+        { v: d.review, kind: "due" as const, cls: "text-review", label: "due" },
+      ].filter((i) => i.v);
+  const lead = watch ? `tour · ${plural(d.cards, "card")}` : !items.length ? (d.cards ? "Nothing due" : "Empty") : null;
+  return (
+    <span className={cn("flex min-w-0 items-center gap-x-3 overflow-hidden text-[13px] whitespace-nowrap text-muted-foreground tabular", className)}>
+      {items.map((i) => (
+        <span key={i.kind} className={cn("inline-flex items-center gap-1 font-semibold", i.cls)} aria-label={`${i.v} ${i.label}`}>
+          <Mark kind={i.kind} />
+          {i.v.toLocaleString()}
+        </span>
+      ))}
+      {lead && <span>{lead}</span>}
+      {note && <span className="inline-flex min-w-0 items-center gap-3 truncate"><span aria-hidden className="text-muted-foreground/50">·</span>{note}</span>}
+    </span>
+  );
+}
+
+function DesktopDecks() {
+  const { decks, stats, reload } = useLibrary();
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(JSON.parse(localStorage.getItem("etude.collapsed") ?? "[]")));
+  const [creating, setCreating] = useState(false);
+  const [iconFor, setIconFor] = useState<DeckNode | null>(null);
+  const [query, setQuery] = useState<string | null>(null);
+  const deckActions = useDeckActions(reload);
 
   const toggle = (name: string) => {
     const next = new Set(collapsed);
@@ -50,22 +97,32 @@ function DesktopDecks({ archived }: { archived: boolean }) {
     localStorage.setItem("etude.collapsed", JSON.stringify([...next]));
   };
 
-  const visible = useMemo(() => {
+  const withDepth = useMemo(() => {
     if (!decks) return [];
     const names = new Set(decks.map((d) => d.name));
-    const hasChildren = new Set<string>();
-    for (const d of decks) {
-      const parent = ancestorsOf(d.name).findLast((n) => names.has(n));
-      if (parent) hasChildren.add(parent);
-    }
-    return decks
-      .filter((d) => {
-        return !ancestorsOf(d.name).some((n) => names.has(n) && collapsed.has(n));
-      })
-      .map((d) => ({ ...d, hasChildren: hasChildren.has(d.name) }));
-  }, [decks, collapsed]);
+    return decks.map((d) => ({ ...d, displayDepth: ancestorsOf(d.name).filter((n) => names.has(n)).length }));
+  }, [decks]);
 
-  const due = (decks ?? []).filter((d) => d.displayDepth === 0).reduce((a, d) => a + d.new + d.learning + d.review, 0);
+  const q = query?.trim().toLowerCase() ?? "";
+  const visible = useMemo(() => {
+    const names = new Set(withDepth.map((d) => d.name));
+    const kids = new Map<string, number>();
+    for (const d of withDepth) {
+      const parent = ancestorsOf(d.name).findLast((n) => names.has(n));
+      if (parent) kids.set(parent, (kids.get(parent) ?? 0) + 1);
+    }
+    // A search shows the matching decks with the decks they sit in, whatever is folded.
+    const keep = q ? new Set(withDepth.filter((d) => leafOf(d.name).toLowerCase().includes(q)).flatMap((d) => [d.name, ...ancestorsOf(d.name)])) : null;
+    return withDepth
+      .filter((d) => (keep ? keep.has(d.name) : !ancestorsOf(d.name).some((n) => names.has(n) && collapsed.has(n))))
+      .map((d) => ({ ...d, kids: kids.get(d.name) ?? 0, hasChildren: (kids.get(d.name) ?? 0) > 0 }));
+  }, [withDepth, collapsed, q]);
+
+  const top = withDepth.filter((d) => d.displayDepth === 0);
+  const due = top.filter((d) => d.mode !== "watch").reduce((a, d) => a + work(d), 0);
+  const totalCards = top.reduce((a, d) => a + d.cards, 0);
+  const allDone = !!decks && decks.length > 0 && due === 0 && totalCards > 0;
+  const milestone = useMilestone(stats, allDone);
 
   // ------------------------------------------------------------ moving
   // Drag a deck by its grip anywhere in the tree: onto a deck to put it inside, or between rows to
@@ -77,6 +134,7 @@ function DesktopDecks({ archived }: { archived: boolean }) {
   const expandTimer = useRef<{ name: string; t: number } | null>(null);
   const [drag, setDrag] = useState<{ name: string; x: number; y: number; drop: Drop | null } | null>(null);
   const [moving, setMoving] = useState<string | null>(null);
+  const all = decks ?? [];
 
   const after = (focus?: string) => {
     reload().then(() => focus && requestAnimationFrame(() => rows.current.get(focus)?.querySelector<HTMLElement>("[data-grip]")?.focus()));
@@ -84,12 +142,11 @@ function DesktopDecks({ archived }: { archived: boolean }) {
   const place = async (name: string, parent: string, index: number | undefined, focus = false) => {
     // Opening the new parent so the moved deck stays in sight.
     if (parent && collapsed.has(parent)) toggle(parent);
-    await moveDeck(decks ?? [], name, parent, index, (n) => after(focus ? n : undefined));
+    await moveDeck(all, name, parent, index, (n) => after(focus ? n : undefined));
   };
 
-  /** Where a drop at (x, y) would put `name`, or null for "nowhere new". */
+  /** Where a drop at y would put `name`, or null for "nowhere new". */
   const dropAt = (name: string, y: number): Drop | null => {
-    const all = decks ?? [];
     const others = visible.filter((d) => !(d.name === name || d.name.startsWith(name + "::")));
     if (!others.length) return null;
     const indexAmong = (parent: string, before: string | null) => {
@@ -118,9 +175,9 @@ function DesktopDecks({ archived }: { archived: boolean }) {
   };
   const isNoop = (name: string, drop: Drop) => {
     if (drop.parent !== parentOf(name)) return false;
-    return drop.kind === "into" || drop.index === childrenOf(decks ?? [], drop.parent).indexOf(name);
+    return drop.kind === "into" || drop.index === childrenOf(all, drop.parent).indexOf(name);
   };
-  const blocked = (name: string, drop: Drop) => drop.parent !== parentOf(name) && clashes(decks ?? [], name, drop.parent);
+  const blocked = (name: string, drop: Drop) => drop.parent !== parentOf(name) && clashes(all, name, drop.parent);
 
   const startDrag = (name: string, e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -165,7 +222,6 @@ function DesktopDecks({ archived }: { archived: boolean }) {
     setDrag({ name, x: e.clientX, y: y0, drop: null });
   };
   const keyMove = (name: string, e: React.KeyboardEvent) => {
-    const all = decks ?? [];
     const parent = parentOf(name);
     const sibs = childrenOf(all, parent);
     const i = sibs.indexOf(name);
@@ -185,88 +241,75 @@ function DesktopDecks({ archived }: { archived: boolean }) {
   };
   const dragged = (n: string) => !!drag && (n === drag.name || n.startsWith(drag.name + "::"));
   const listTop = () => listRef.current?.getBoundingClientRect().top ?? 0;
+  const anyIcon = top.some((d) => d.icon);
+
+  const menuFor = (d: DeckNode): DeckMenuEntry[] => [
+    { icon: <Pencil />, label: "Rename", onSelect: () => navigate(`/deck?name=${enc(d.name)}&rename=1`) },
+    { icon: <Smile />, label: "Change icon…", onSelect: () => setIconFor(d) },
+    { icon: <SlidersHorizontal />, label: "Options", onSelect: () => navigate(`/deck?name=${enc(d.name)}&tab=options`) },
+    { icon: <BarChart3 />, label: "Stats", onSelect: () => navigate(`/stats?deck=${enc(d.name)}`) },
+    { icon: <FolderInput />, label: "Move to…", onSelect: () => setMoving(d.name) },
+    ...(d.depth > 1 && !clashes(all, d.name, parentOf(parentOf(d.name)))
+      ? [{ icon: <ArrowUpLeft />, label: "Move up a level", onSelect: () => { const gp = parentOf(parentOf(d.name)); place(d.name, gp, childrenOf(all, gp).indexOf(parentOf(d.name)) + 1); } }]
+      : []),
+    ...(d.depth > 0 && !clashes(all, d.name, "") ? [{ icon: <ArrowUpToLine />, label: "Make it a deck of its own", onSelect: () => place(d.name, "", childrenOf(all, "").indexOf(d.name.split("::")[0]) + 1) }] : []),
+  ];
 
   return (
-    <Page>
-      <PageHeader
-        title={archived ? "Archived Decks" : "Decks"}
-        crumbs={archived ? [{ label: "Decks", onClick: () => navigate("/") }] : undefined}
-        description={archived ? "Cards and review history are kept. Move a deck out of the archive to study it again." : decks ? (due ? `${due} cards to study today` : "Nothing due right now") : "\u00a0"}
-        actions={!archived &&
-          <>
-            <ImportButton onDone={reload} />
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" />New deck</Button>
-          </>
-        }
-      />
+    <Page className="max-w-[52rem]">
+      <LibraryHeader onImport={reload} onNew={() => setCreating(true)} query={query} setQuery={setQuery} hasDecks={!!decks?.length} />
 
       {decks && decks.length === 0 && (
-        <EmptyState title={archived ? "No archived decks" : "No decks yet"} action={!archived && <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" />New deck</Button>}>
-          {archived ? "Decks you move to the archive will appear here." : "Import a pack or create a deck to start."}
+        <EmptyState title="No decks yet" action={<><ImportButton onDone={reload} /><Button size="sm" className="gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" />New deck</Button></>}>
+          Import a pack or create a deck to start.
         </EmptyState>
       )}
+      {!decks && <div className="h-56 animate-pulse rounded-2xl bg-muted/60" />}
+
+      {decks && decks.length > 0 && !q && <div className="@container">{allDone ? <DonePanel decks={decks} stats={stats} /> : due > 0 ? <SessionCard decks={decks} stats={stats} /> : null}</div>}
 
       {visible.length > 0 && (
-        <Section>
-          <div ref={listRef} className="relative">
-          <div className={cn("hidden items-center gap-2 border-b px-5 py-2.5 text-xs font-medium text-muted-foreground sm:grid", archived ? "grid-cols-[1fr_4rem_2.5rem]" : "grid-cols-[1fr_4rem_repeat(3,3.5rem)_8.5rem]")}>
-            <span>Deck</span>
-            <span className="text-right">Cards</span>
-            {!archived && <><span className="text-right">New</span>
-            <span className="text-right">Learn</span>
-            <span className="text-right">Due</span></>}
-            <span />
+        <section className="mt-10" aria-label="Decks">
+          <div className="mb-2 flex items-baseline justify-between px-1">
+            <span className="score-kicker font-semibold">Decks</span>
+            <span className="text-[13px] text-muted-foreground tabular">{plural(top.length, "deck")} · {plural(totalCards, "card")}</span>
           </div>
-          {visible.map((d, i) => {
-            const name = d.name.split("::").pop()!;
-            const work = d.new + d.learning + d.review;
-            const soon = d.displayDepth === 0 && d.deadline && new Date(d.deadline) > new Date();
-            const watch = d.mode === "watch";
-            const study = () => navigate(`/${watch ? "watch" : "study"}?deck=${encodeURIComponent(d.name)}${!watch && !work ? "&ahead=1" : ""}`);
-            // A new top-level deck after a subtree gets a stronger rule, so groups read as groups.
-            const groupStart = i > 0 && d.displayDepth === 0;
-            const lifted = dragged(d.name);
-            const target = drag?.drop?.kind === "into" && drag.drop.parent === d.name && !isNoop(drag.name, drag.drop);
-            const targetBlocked = target && blocked(drag!.name, drag!.drop!);
-            const menu = {
-              name: d.name,
-              archived,
-              disabled: deckActions.busy,
-              onArchive: () => deckActions.archive(d.name, !archived),
-              onDelete: () => deckActions.requestDelete(d.name),
-              extra: rowEntries({
-                name: d.name,
-                archived,
-                onMove: () => setMoving(d.name),
-                onTop: d.depth > 0 && !clashes(decks ?? [], d.name, "") ? () => place(d.name, "", childrenOf(decks ?? [], "").indexOf(d.name.split("::")[0]) + 1) : undefined,
-                onUp: d.depth > 1 && !clashes(decks ?? [], d.name, parentOf(parentOf(d.name))) ? () => { const gp = parentOf(parentOf(d.name)); place(d.name, gp, childrenOf(decks ?? [], gp).indexOf(parentOf(d.name)) + 1); } : undefined,
-              }),
-            };
-            return (
-              <DeckContextMenu key={d.id} {...menu}>
-              <div
-                ref={(el) => { if (el) rows.current.set(d.name, el); else rows.current.delete(d.name); }}
-                className={cn(
-                  "group relative flex min-h-14 items-stretch gap-2 pr-3 pl-0.5 hover:bg-accent/40 data-[state=open]:bg-accent/40 sm:grid sm:min-h-12 sm:pr-5 sm:pl-1",
-                  archived ? "sm:grid-cols-[1fr_4rem_2.5rem]" : "sm:grid-cols-[1fr_4rem_repeat(3,3.5rem)_8.5rem]",
-                  i > 0 && "border-t",
-                  groupStart && "border-t-foreground/15",
-                  !drag && "transition-colors",
-                  lifted && "opacity-35",
-                  target && !targetBlocked && "bg-highlight/10 ring-1 ring-highlight/60 ring-inset",
-                  targetBlocked && "bg-destructive/10 ring-1 ring-destructive/50 ring-inset",
-                )}
-              >
-                <div className="flex min-w-0 flex-1 items-stretch">
-                  <TreeGuides depth={d.displayDepth} />
-                  <div className="flex shrink-0 items-center">
+          <div ref={listRef} className="relative">
+            {visible.map((d) => {
+              const name = leafOf(d.name);
+              const w = work(d);
+              const soon = d.displayDepth === 0 && d.deadline && new Date(d.deadline) > new Date();
+              const watch = d.mode === "watch";
+              const sub = d.displayDepth > 0;
+              const lifted = dragged(d.name);
+              const target = drag?.drop?.kind === "into" && drag.drop.parent === d.name && !isNoop(drag.name, drag.drop);
+              const targetBlocked = target && blocked(drag!.name, drag!.drop!);
+              const open = d.hasChildren && (q ? true : !collapsed.has(d.name));
+              const study = () => navigate(watch ? `/watch?deck=${enc(d.name)}` : `/study?deck=${enc(d.name)}${w ? "" : "&ahead=1"}`);
+              const note = d.kids ? plural(d.kids, "subdeck") : sub ? plural(d.cards, "card") : undefined;
+              const menu = { name: d.name, archived: false, disabled: deckActions.busy, onArchive: () => deckActions.archive(d.name, true), onDelete: () => deckActions.requestDelete(d.name), extra: menuFor(d) };
+              return (
+                <DeckContextMenu key={d.id} {...menu}>
+                  <div
+                    ref={(el) => { if (el) rows.current.set(d.name, el); else rows.current.delete(d.name); }}
+                    data-deck={d.name}
+                    className={cn(
+                      "lib-row group relative flex cursor-pointer items-center gap-3 rounded-xl py-2 pr-2.5 select-none",
+                      sub ? "min-h-[3.4rem]" : "min-h-[4.25rem]",
+                      !drag && "transition-colors",
+                      lifted && "opacity-35",
+                      target && !targetBlocked && "bg-primary/10 ring-[1.5px] ring-primary ring-inset",
+                      targetBlocked && "bg-destructive/10 ring-1 ring-destructive/50 ring-inset",
+                    )}
+                    style={{ paddingLeft: 2 + d.displayDepth * (anyIcon ? ROW_INDENT : 14) }}
+                    onClick={(e) => { if (!(e.target as HTMLElement).closest("button,[role=menuitem]")) navigate(`/deck?name=${enc(d.name)}`); }}
+                  >
                     <button
                       data-grip
-                      disabled={archived}
                       className={cn(
-                        "flex h-10 w-6 touch-none items-center justify-center rounded-md hover:!text-foreground sm:h-8 sm:w-5",
-                        drag?.name === d.name ? "cursor-grabbing text-foreground" : "cursor-grab text-muted-foreground/50 group-hover:text-muted-foreground",
-                        (archived || visible.length < 2 || (drag && drag.name !== d.name)) && "invisible",
+                        "lib-grip -mr-2 flex h-10 w-[22px] shrink-0 touch-none items-center justify-center rounded-md hover:!text-foreground",
+                        drag?.name === d.name ? "cursor-grabbing text-foreground" : "cursor-grab text-muted-foreground/60",
+                        (visible.length < 2 || (drag && drag.name !== d.name)) && "invisible",
                       )}
                       onPointerDown={(e) => startDrag(d.name, e)}
                       onKeyDown={(e) => keyMove(d.name, e)}
@@ -275,94 +318,63 @@ function DesktopDecks({ archived }: { archived: boolean }) {
                     >
                       <GripVertical className="size-4" />
                     </button>
-                    <button
-                      className={cn("flex size-10 items-center justify-center rounded-md text-muted-foreground hover:text-foreground sm:size-8", !d.hasChildren && "invisible")}
-                      onClick={() => toggle(d.name)}
-                      aria-label={collapsed.has(d.name) ? `Expand ${name}` : `Collapse ${name}`}
-                      aria-expanded={!collapsed.has(d.name)}
-                    >
-                      <ChevronRight className={cn("size-4 transition-transform", !collapsed.has(d.name) && "rotate-90")} />
-                    </button>
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col justify-center py-2">
-                    <button
-                      className={cn("text-left text-[0.95rem] leading-snug hover:underline sm:truncate", d.displayDepth === 0 ? "font-medium" : "text-foreground/90")}
-                      onClick={() => navigate(`/deck?name=${encodeURIComponent(d.name)}`)}
-                    >
-                      {d.displayDepth === 0 ? d.name : name}
-                      {soon && <span className="ml-2 inline-flex items-center gap-1 align-middle text-xs font-normal text-highlight"><CalendarClock className="size-3.5" />{relative(d.deadline!)}</span>}
-                    </button>
-                    {/* Phone: counts on one line under the name instead of three narrow columns. */}
-                    <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs tabular text-muted-foreground sm:hidden [&>span]:whitespace-nowrap">
-                      {archived ? <span>{d.cards} card{d.cards === 1 ? "" : "s"}</span> : watch ? (
-                        <span>{d.cards} card{d.cards === 1 ? "" : "s"} to watch</span>
-                      ) : work ? (
-                        <>
-                          <span>{d.cards} card{d.cards === 1 ? "" : "s"}</span>
-                          {d.new > 0 && <span className="text-new">{d.new} new</span>}
-                          {d.learning > 0 && <span className="text-learn">{d.learning} learning</span>}
-                          {d.review > 0 && <span className="text-review">{d.review} due</span>}
-                        </>
-                      ) : (
-                        <span>{d.cards ? `${d.cards} card${d.cards === 1 ? "" : "s"} · nothing due` : "empty"}</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <span className="hidden items-center justify-end tabular text-sm text-muted-foreground sm:flex" title={`${d.cards} card${d.cards === 1 ? "" : "s"} in this deck`}>{d.cards}</span>
-                {!archived && (watch ? (
-                  <span className="hidden items-center justify-end text-xs text-muted-foreground sm:col-span-3 sm:flex">tour</span>
-                ) : (
-                  <>
-                    <Count value={d.new} cls="text-new" />
-                    <Count value={d.learning} cls="text-learn" />
-                    <Count value={d.review} cls="text-review" />
-                  </>
-                ))}
-                <div className="flex shrink-0 items-center justify-end gap-0.5">
-                  {!archived && <Button
-                    size="sm"
-                    variant={work || (watch && d.cards) ? "secondary" : "ghost"}
-                    className="size-10 gap-1.5 self-center rounded-full px-0 sm:h-8 sm:w-auto sm:rounded-md sm:px-3"
-                    disabled={!d.cards}
-                    onClick={study}
-                    title={!watch && !work && d.cards ? "Nothing due: practice ahead anyway" : undefined}
-                    aria-label={`${watch ? "Watch" : work || !d.cards ? "Practice" : "Practice ahead"} ${name}`}
-                  >
-                    {watch ? (
-                      <><Eye className="size-4 text-highlight sm:size-3.5 sm:text-current" /> <span className="hidden sm:inline">Watch</span></>
-                    ) : (
-                      work || !d.cards ? (
-                      <><Play className={cn("size-4 sm:size-3.5", work && "fill-current text-highlight sm:fill-none sm:text-current")} /> <span className="hidden sm:inline">Practice</span></>
-                    ) : (
-                      <><FastForward className="size-4 sm:size-3.5" /> <span className="hidden sm:inline">Ahead</span></>
-                    )
+                    {(
+                      <button
+                        className={cn("-mr-0.5 flex h-[30px] w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground", !d.hasChildren && "invisible")}
+                        onClick={() => toggle(d.name)}
+                        aria-label={open ? `Collapse ${name}` : `Expand ${name}`}
+                        aria-expanded={open}
+                      >
+                        <ChevronRight className={cn("size-4 transition-transform duration-200", open && "rotate-90")} />
+                      </button>
                     )}
-                  </Button>}
-                </div>
-              </div>
-              </DeckContextMenu>
-            );
-          })}
-          {drag?.drop && !isNoop(drag.name, drag.drop) && (
-            drag.drop.kind === "line" ? (
+                    {!sub && d.icon && <DeckIcon icon={d.icon} size={46} className="lib-art" />}
+                    <div className="min-w-0 flex-1">
+                      <button
+                        className={cn("block max-w-full truncate text-left hover:underline", sub ? "text-[15px] font-medium" : "text-[15.5px] font-semibold")}
+                        onClick={() => navigate(`/deck?name=${enc(d.name)}`)}
+                      >
+                        {q || d.displayDepth === 0 ? (d.displayDepth === 0 ? d.name : name) : name}
+                      </button>
+                      <div className="mt-[3px] flex items-center gap-3">
+                        <DeckCounts d={d} note={note} />
+                        {soon && <span className="inline-flex shrink-0 items-center gap-1 text-xs text-highlight"><CalendarClock className="size-3.5" />{relative(d.deadline!)}</span>}
+                      </div>
+                    </div>
+                    <DeckMenu {...menu} className="size-[34px] rounded-lg" />
+                    <button
+                      className={cn("lib-play flex size-[38px] shrink-0 items-center justify-center rounded-full transition-[transform,background-color,color] active:scale-90 disabled:opacity-40", !w && !(watch && d.cards) && "dim")}
+                      disabled={!d.cards}
+                      onClick={study}
+                      title={!watch && !w && d.cards ? "Nothing due: practice ahead anyway" : undefined}
+                      aria-label={`${watch ? "Watch" : w || !d.cards ? "Practice" : "Practice ahead"} ${name}`}
+                    >
+                      {watch ? <Eye className="size-4" /> : w || !d.cards ? <Play className="size-3.5 translate-x-px fill-current" /> : <FastForward className="size-4" />}
+                    </button>
+                  </div>
+                </DeckContextMenu>
+              );
+            })}
+            {drag?.drop && !isNoop(drag.name, drag.drop) && drag.drop.kind === "line" && (
               <div
                 aria-hidden
-                className={cn("pointer-events-none absolute right-3 z-20 h-0.5 -translate-y-1/2 rounded-full", blocked(drag.name, drag.drop) ? "bg-destructive" : "bg-highlight")}
-                style={{ top: drag.drop.y - listTop(), left: `calc(${0.25 + drag.drop.depth * 1.25}rem + 1.5rem)` }}
+                className={cn("pointer-events-none absolute right-3 z-20 h-0.5 -translate-y-1/2 rounded-full", blocked(drag.name, drag.drop) ? "bg-destructive" : "bg-primary")}
+                style={{ top: drag.drop.y - listTop(), left: 2 + drag.drop.depth * (anyIcon ? ROW_INDENT : 14) + 24 }}
               >
-                <span className={cn("absolute -top-[3px] -left-1.5 size-2 rounded-full border-2 bg-background", blocked(drag.name, drag.drop) ? "border-destructive" : "border-highlight")} />
+                <span className={cn("absolute -top-[3px] -left-1.5 size-2 rounded-full border-2 bg-background", blocked(drag.name, drag.drop) ? "border-destructive" : "border-primary")} />
               </div>
-            ) : null
-          )}
+            )}
           </div>
-        </Section>
+          {q && visible.length === 0 && <p className="px-1 py-8 text-center text-sm text-muted-foreground">No deck matches “{query}”.</p>}
+          <button onClick={() => navigate("/archive")} className="mt-6 ml-1 inline-flex h-9 items-center gap-2 text-[13.5px] text-muted-foreground hover:text-foreground">Archive<ChevronRight className="size-3.5" /></button>
+        </section>
       )}
+      {q && decks && visible.length === 0 && <p className="mt-10 text-center text-sm text-muted-foreground">No deck matches “{query}”.</p>}
       {deckActions.deleteDialog}
       {drag && (
         <div
           aria-hidden
-          className="pointer-events-none fixed z-50 flex h-9 max-w-64 -translate-x-[17px] -translate-y-1/2 cursor-grabbing items-center gap-1.5 rounded-lg border bg-card pr-3 pl-2 text-sm font-medium shadow-xl ring-1 ring-highlight/40"
+          className="pointer-events-none fixed z-50 flex h-9 max-w-64 -translate-x-[17px] -translate-y-1/2 cursor-grabbing items-center gap-1.5 rounded-lg border bg-card pr-3 pl-2 text-sm font-medium shadow-xl"
           style={{ left: drag.x, top: drag.y }}
         >
           <GripVertical className="size-4 shrink-0 text-muted-foreground" />
@@ -380,37 +392,45 @@ function DesktopDecks({ archived }: { archived: boolean }) {
                 : "Out to the top level"}
         </div>
       )}
-      <MoveDeckDialog deck={moving} decks={decks ?? []} onOpenChange={(o) => !o && setMoving(null)} onMoved={(n) => after(n)} />
+      <MoveDeckDialog deck={moving} decks={all} onOpenChange={(o) => !o && setMoving(null)} onMoved={(n) => after(n)} />
       <NewDeckDialog open={creating} onOpenChange={setCreating} onDone={reload} />
+      <ChangeIconDialog deck={iconFor?.name ?? null} icon={iconFor?.icon ?? null} open={!!iconFor} onOpenChange={(o) => !o && setIconFor(null)} onSaved={() => reload()} />
+      {milestone.show && stats && <StreakCelebration stats={stats} onClose={milestone.close} />}
     </Page>
   );
 }
 
-/** Row-specific entries for a deck's menu: move it somewhere, take it out a level, rename. */
-function rowEntries({ name, archived, onMove, onTop, onUp }: { name: string; archived: boolean; onMove(): void; onTop?: () => void; onUp?: () => void }): DeckMenuEntry[] {
-  if (archived) return [];
-  return [
-    { icon: <FolderInput />, label: "Move to…", onSelect: onMove },
-    ...(onUp ? [{ icon: <ArrowUpLeft />, label: "Move up a level", onSelect: onUp }] : []),
-    ...(onTop ? [{ icon: <ArrowUpToLine />, label: "Make it a deck of its own", onSelect: onTop }] : []),
-    "-",
-    { icon: <Pencil />, label: "Rename", onSelect: () => navigate(`/deck?name=${encodeURIComponent(name)}&rename=1`) },
-  ];
-}
-
-/** Desktop count column; muted when zero. */
-function Count({ value, cls }: { value: number; cls: string }) {
-  return <span className={cn("hidden items-center justify-end tabular text-sm sm:flex", value ? cls : "text-muted-foreground/40")}>{value}</span>;
-}
-
-/** Indentation for one nesting level per depth. */
-export function TreeGuides({ depth }: { depth: number }) {
+/** Date, title, and the page's actions: search the decks, import, new deck. */
+function LibraryHeader({ onImport, onNew, query, setQuery, hasDecks }: { onImport(): void; onNew(): void; query: string | null; setQuery(q: string | null): void; hasDecks: boolean }) {
+  const pick = useImportPicker(onImport);
   return (
-    <>
-      {Array.from({ length: depth }, (_, i) => (
-        <span key={i} aria-hidden className="w-4 shrink-0 sm:w-5" />
-      ))}
-    </>
+    <header className="mb-7 flex flex-wrap items-end gap-x-4 gap-y-3">
+      <div className="min-w-0 flex-1">
+        <div className="score-kicker font-semibold">{todayKicker()}</div>
+        <h1 className="lib-title mt-1.5 text-[2rem] leading-[1.1] font-semibold">Library</h1>
+      </div>
+      <div className="flex items-center gap-2">
+        {query !== null ? (
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && setQuery(null)}
+              placeholder="Find a deck"
+              aria-label="Find a deck"
+              className="h-10 w-52 rounded-xl pr-8 pl-8"
+            />
+            <button className="absolute top-1/2 right-1.5 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground" onClick={() => setQuery(null)} aria-label="Close search"><X className="size-4" /></button>
+          </div>
+        ) : (
+          hasDecks && <button className="flex size-10 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setQuery("")} aria-label="Find a deck" title="Find a deck"><Search className="size-[18px]" /></button>
+        )}
+        <button onClick={pick} className="lib-quiet inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold"><Upload className="size-4" />Import</button>
+        <button onClick={onNew} className="lib-quiet inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold"><Plus className="size-4" />New deck</button>
+      </div>
+    </header>
   );
 }
 
@@ -432,7 +452,7 @@ export function NewDeckDialog({ open, onOpenChange, onDone }: { open: boolean; o
       <DialogContent>
         <DialogHeader>
           <DialogTitle>New deck</DialogTitle>
-          <DialogDescription>Use :: for subdecks, like Course::Week 1.</DialogDescription>
+          <DialogDescription>Use :: for subdecks, like Course::Week 1. You can pick an icon for it from its menu afterwards.</DialogDescription>
         </DialogHeader>
         <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} placeholder="Deck name" aria-label="Deck name" />
         <DialogFooter>

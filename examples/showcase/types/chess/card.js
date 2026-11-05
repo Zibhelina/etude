@@ -181,6 +181,7 @@ const paint = () => {
   for (const el of host.querySelectorAll(".sq")) {
     const s = el.dataset.sq, tg = targets.find((m) => m.slice(2, 4) === s);
     el.classList.toggle("mv", !!move && (move.slice(0, 2) === s || move.slice(2, 4) === s));
+    el.classList.toggle("to", !!move && move.slice(2, 4) === s);
     el.classList.toggle("sel", sel === s);
     el.classList.toggle("dot", !!tg && !start[s]);
     el.classList.toggle("cap", !!tg && !!start[s]);
@@ -328,7 +329,11 @@ const arrow = (mv) => {
   const x2 = c1 * 100 + 50 + (c2 - c1) * 100 * k, y2 = r1 * 100 + 50 + (r2 - r1) * 100 * k;
   over.insertAdjacentHTML("beforeend", `<line class="tried" x1="${c1 * 100 + 50}" y1="${r1 * 100 + 50}" x2="${x2}" y2="${y2}" marker-end="url(#ch-ah)"/>`);
 };
-const mark = (mv, cls) => { for (const s of [mv.slice(0, 2), mv.slice(2, 4)]) sqEl(s)?.classList.add(cls); };
+const mark = (mv, cls) => {
+  host.querySelectorAll(".sq.to").forEach((el) => el.classList.remove("to"));
+  for (const s of [mv.slice(0, 2), mv.slice(2, 4)]) sqEl(s)?.classList.add(cls);
+  sqEl(mv.slice(2, 4))?.classList.add("to");
+};
 
 /** Grows the answer layout out of the question one: the board glides and scales from where it was. */
 function morph() {

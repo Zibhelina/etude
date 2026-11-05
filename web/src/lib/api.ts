@@ -356,6 +356,8 @@ export interface Stats {
   tags: { tag: string; cards: number; recall: number }[];
   /** Every tag with its ancestors; recall is over seen cards, null when none are seen. */
   tagTree: { tag: string; depth: number; direct: boolean; cards: number; seen: number; recall: number | null }[];
+  /** Each deck's own cards (not its subdecks): FSRS states, recall over seen cards, due before tomorrow, script-scheduled cards. */
+  decks?: StatsDeck[];
   today: { day: string; reviews: number; again: number; runs: number; ms: number; new: number };
   ratings: { again: number; hard: number; good: number; easy: number };
   verdicts: { correct: number; partial: number; incorrect: number; ungraded: number };
@@ -374,6 +376,19 @@ export interface Stats {
   scheduler: string | null;
   schedulers: StatsScheduler[];
   practice: PracticeCard[];
+}
+
+export interface StatsDeck {
+  deck: string;
+  cards: number;
+  new: number;
+  learning: number;
+  review: number;
+  mature: number;
+  seen: number;
+  recall: number | null;
+  due: number;
+  scripted: number;
 }
 
 /** One scheduler's cards in a Stats scope. */

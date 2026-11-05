@@ -653,6 +653,19 @@ body.browse-resizing iframe { pointer-events: none; }
 .browse-fi { animation: browse-fi 0.15s ease-out both; }
 @media (prefers-reduced-motion: reduce) { .browse-slide, .browse-fi, .browse-drawer { animation: none; } }
 /* ---- end Browse ---- */
+/* ---- Archive (Etude 3, direction C "Boxes") ---- */
+.archive-tile { transition: transform 0.15s, box-shadow 0.15s; outline: none; }
+.archive-tile:hover, .archive-tile:focus-visible { transform: translateY(-2px); box-shadow: 0 0 0 1px var(--border), 0 10px 24px -8px rgb(0 0 0 / 0.16); }
+.dark .archive-tile:hover, .dark .archive-tile:focus-visible { box-shadow: 0 0 0 1px var(--border), 0 10px 24px -8px rgb(0 0 0 / 0.6); }
+.archive-tile:focus-visible { box-shadow: 0 0 0 2px var(--ring); }
+.archive-tile.on, .archive-tile.on:hover, .dark .archive-tile.on, .dark .archive-tile.on:hover { box-shadow: 0 0 0 2px var(--foreground); transform: none; }
+.archive-tile.chk, .archive-tile.chk:hover, .dark .archive-tile.chk, .dark .archive-tile.chk:hover { box-shadow: 0 0 0 2px var(--primary); }
+.archive-art img { filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.12)) saturate(0.6); opacity: 0.85; transition: filter 0.2s, opacity 0.2s; }
+.archive-tile:hover .archive-art img, .archive-tile.on .archive-art img { filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.12)); opacity: 1; }
+.archive-blank { background: var(--muted); }
+.archive-drawer { box-shadow: -1px 0 0 var(--border), -18px 0 40px rgb(0 0 0 / 0.1); animation: browse-drawer 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.dark .archive-drawer { box-shadow: -1px 0 0 var(--border), -18px 0 40px rgb(0 0 0 / 0.5); }
+@media (prefers-reduced-motion: reduce) { .archive-drawer, .archive-tile { animation: none; transition: none; } }
 /* ---------------------------------------------------------------- Stats (Etude 3, direction A "Answers") */
 :root {
   --stats-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;

@@ -34,3 +34,7 @@
 @media (max-width: 520px) {
   .wk-tools .e-btn { height: 2.6rem; min-width: 2.6rem; }
 }
+
+/* Etude 3 look: a quiet grey eyebrow and the question in the study serif, as in the Design Lab. */
+.sc-eyebrow + .prose, .sc-eyebrow + .uc-prompt .uc-ask, .sc-eyebrow + .bt-ask, .sp-title, .wk-prompt, .cm-ask { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.005em; }
+.sc-eyebrow + .prose code, .wk-prompt code { font-size: 0.8em; }

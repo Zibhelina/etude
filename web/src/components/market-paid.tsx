@@ -101,7 +101,7 @@ export function PaidTile({ entry, counts, onOpen }: { entry: PaidEntry; counts?:
   const items = entry.summary?.items ?? 0;
   return (
     <button onClick={onOpen} data-paid={entry.id} className="mk-tile">
-      <div className="mk-cover"><PaidCover entry={entry} /></div>
+      <div className="mk-cover" data-hs-anchor><PaidCover entry={entry} /></div>
       <div className="mk-tile-body">
         <div className="mk-tile-title">
           <b>{entry.name}</b>

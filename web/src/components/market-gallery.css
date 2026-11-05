@@ -116,9 +116,6 @@
 .mk-shelf-head { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 14px; }
 .mk-shelf-head h2 { font-size: 22px; line-height: 1.15; font-weight: 600; margin: 0; }
 .mk-shelf-head p { margin: 4px 0 0; font-size: 13.5px; color: var(--muted-foreground); }
-.mk-shelf-head .mk-arrows { display: flex; }
-@media (hover: none) { .mk-shelf-head .mk-arrows { display: none; } }
-@container (max-width: 860px) { .mk-shelf-head .mk-arrows { display: none; } }
 .mk-row { display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 40px) / 3); gap: 20px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; padding: 4px 4px 12px; margin: -4px -4px 0; }
 .mk-row::-webkit-scrollbar { display: none; }
 .mk-row > * { scroll-snap-align: start; }
@@ -226,12 +223,6 @@
 .mk-gal-shot img, .mk-gal-clip video { display: block; width: 100%; height: 100%; object-fit: contain; }
 .mk-gal-clip { position: relative; margin: 0; width: 100%; height: 100%; }
 .mk-gal-clip video { cursor: pointer; }
-.mk-gal-arrow { position: absolute; z-index: 2; top: calc(50% - 3px); width: 36px; height: 36px; margin-top: -18px; display: grid; place-items: center; border-radius: 50%; color: var(--foreground); background: color-mix(in oklab, var(--popover) 88%, transparent); box-shadow: inset 0 0 0 1px var(--border), 0 4px 14px rgb(0 0 0 / .25); backdrop-filter: blur(8px); opacity: 0; transition: opacity .15s; }
-.mk-gal-arrow.left { left: 10px; }
-.mk-gal-arrow.right { right: 10px; }
-.mk-gal:hover .mk-gal-arrow:not(.gone) { opacity: 1; }
-.mk-gal-arrow.gone { pointer-events: none; }
-@media (hover: none) { .mk-gal-arrow { display: none; } }
 
 .market-lightbox { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: rgb(0 0 0 / .95); backdrop-filter: blur(6px); cursor: zoom-out; animation: market-fade .15s ease-out; pointer-events: auto; }
 .market-lightbox > img { max-width: min(92vw, 1100px); max-height: 88dvh; border-radius: 14px; cursor: default; box-shadow: 0 0 0 1px rgb(255 255 255 / .14), 0 20px 60px rgb(0 0 0 / .5); }

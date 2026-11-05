@@ -1,7 +1,7 @@
-// The Archive: decks put away. Each one says how much of it is probably still remembered, comes back
-// with Restore, and opens to its forgetting curve. Select several to restore or delete them at once.
+// The Archive: decks put away, as boxes. Each box says how much of it is probably still remembered; clicking one
+// opens a drawer (a sheet on phones) with its forgetting curve and Restore. Select several to restore or delete them at once.
 import { useEffect, useMemo, useState } from "react";
-import { ArchiveRestore, ArrowDownUp, Check, ChevronLeft, ChevronRight, MoreHorizontal, SearchCode, Trash2, X } from "lucide-react";
+import { ArchiveRestore, ArrowDownUp, Check, ChevronLeft, MoreHorizontal, SearchCode, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { api, type ArchivedDeck } from "@/lib/api";
 import { navigate } from "@/lib/router";
@@ -19,6 +19,7 @@ const n = (x: number) => x.toLocaleString();
 const cardsTxt = (x: number) => `${n(x)} card${x === 1 ? "" : "s"}`;
 const pct = (r: number) => `${Math.round(r * 100)}%`;
 const DAY = 86400_000;
+const DRAWER_W = 400;
 
 function ago(iso: string | null) {
   if (!iso) return "never studied";
@@ -124,10 +125,22 @@ export function ArchivePage() {
     setSel(next);
   };
   const openDeck = list?.find((d) => d.name === open) ?? null;
-  const anyIcon = sorted.some((d) => d.icon);
+
+  // Esc closes the drawer (or stops selecting).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || (e.target as HTMLElement).closest?.("input,textarea,[role=dialog],[role=menu]")) return;
+      if (open) setOpen(null);
+      else if (selecting) { setSelecting(false); setSel(new Set()); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, selecting]);
+  const drawer = !phone && !!openDeck;
 
   return (
-    <Page className={cn("max-w-[54rem]", selecting && "pb-28")}>
+    <div className="transition-[padding] duration-200" style={{ paddingRight: drawer ? DRAWER_W : 0 }}>
+    <Page className={cn("max-w-[60rem]", selecting && "pb-28")}>
       <header className="mb-6">
         <button onClick={() => navigate("/")} className="-ml-1.5 mb-1 inline-flex h-9 items-center gap-1 rounded-md px-1.5 text-[15px] text-muted-foreground hover:text-foreground"><ChevronLeft className="size-4" />Library</button>
         <h1 className="lib-title text-[2rem] leading-[1.1] font-semibold">Archive</h1>
@@ -164,80 +177,21 @@ export function ArchivePage() {
       {list && list.length === 0 && <ArchiveEmpty />}
 
       {sorted.length > 0 && (
-        <div role="list" aria-label="Archived decks">
-          {sorted.map((d, i) => {
-            const isOpen = !phone && open === d.name;
-            return (
-              <div key={d.name} role="listitem" className={cn(leaving.has(d.name) && "lib-out")}>
-                <div
-                  data-archived={d.name}
-                  className={cn(
-                    "lib-row relative flex cursor-pointer items-center gap-3.5 rounded-xl px-2 py-2.5 select-none sm:gap-4",
-                    phone ? "min-h-[4.4rem]" : "min-h-[4.9rem]",
-                    isOpen && "rounded-b-none bg-muted hover:bg-muted",
-                    !isOpen && i > 0 && sorted[i - 1].name !== open && (anyIcon && !selecting ? "lib-hair" : "lib-hair flat"),
-                  )}
-                  onClick={(e) => {
-                    if ((e.target as HTMLElement).closest("button,[role=menuitem]")) return;
-                    if (selecting) toggleSel(d.name);
-                    else setOpen(open === d.name ? null : d.name);
-                  }}
-                  aria-expanded={!phone ? isOpen : undefined}
-                >
-                  {selecting && (
-                    <button
-                      className={cn("flex size-6 shrink-0 items-center justify-center rounded-md border-2", sel.has(d.name) ? "border-foreground bg-foreground text-background" : "border-muted-foreground/40")}
-                      onClick={() => toggleSel(d.name)}
-                      aria-label={`Select ${leafOf(d.name)}`}
-                      aria-pressed={sel.has(d.name)}
-                    >
-                      {sel.has(d.name) && <Check className="size-3.5" strokeWidth={3} />}
-                    </button>
-                  )}
-                  {d.icon ? <DeckIcon icon={d.icon} size={phone ? 42 : 46} className="lib-art" /> : anyIcon ? <span className={cn("shrink-0", phone ? "w-[42px]" : "w-[46px]")} /> : null}
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[16px] font-semibold">
-                      {!phone && parentOf(d.name) && <span className="font-normal text-muted-foreground">{leafOf(parentOf(d.name))} › </span>}
-                      {leafOf(d.name)}
-                    </div>
-                    <div className="mt-0.5 truncate text-[14px] text-muted-foreground">
-                      {phone
-                        ? `${parentOf(d.name) ? `${leafOf(parentOf(d.name))} · ` : `${cardsTxt(d.cards)} · `}${ago(d.lastReview)}`
-                        : `${cardsTxt(d.cards)}${d.subdecks.length ? ` · ${d.subdecks.length} subdeck${d.subdecks.length === 1 ? "" : "s"}` : ""} · ${d.lastReview ? `last studied ${ago(d.lastReview)}` : "never studied"}`}
-                    </div>
-                  </div>
-                  {phone ? (
-                    <>
-                      {d.recall != null && (
-                        <span className="flex flex-col items-end leading-tight" title="Predicted recall if you were quizzed on every card today">
-                          <b className="text-[15px] font-bold tabular">{pct(d.recall)}</b>
-                          <small className="text-[12px] text-muted-foreground">known</small>
-                        </span>
-                      )}
-                      {!selecting && <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
-                    </>
-                  ) : (
-                    <>
-                      <Kept d={d} />
-                      {!selecting && (
-                        <>
-                          <button className="lib-quiet inline-flex h-10 shrink-0 items-center gap-2 rounded-xl px-3.5 text-[15px] font-semibold disabled:opacity-50" disabled={busy} onClick={() => restore([d])}>
-                            <ArchiveRestore className="size-4" />Restore
-                          </button>
-                          <RowMenu d={d} onRestore={() => restore([d])} onDelete={() => setDeleting([d])} />
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-                {isOpen && (
-                  <div className="rounded-b-xl bg-muted px-4 pt-1 pb-5 sm:pl-[4.6rem]">
-                    <Detail d={d} onDelete={() => setDeleting([d])} />
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <div role="list" aria-label="Archived decks" className={cn("grid auto-rows-fr", phone ? "grid-cols-2 gap-2.5" : "grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-3.5")}>
+          {sorted.map((d) => (
+            <Tile
+              key={d.name}
+              d={d}
+              phone={phone}
+              open={open === d.name}
+              selecting={selecting}
+              checked={sel.has(d.name)}
+              leaving={leaving.has(d.name)}
+              onOpen={() => (selecting ? toggleSel(d.name) : setOpen(open === d.name ? null : d.name))}
+              onRestore={() => restore([d])}
+              onDelete={() => setDeleting([d])}
+            />
+          ))}
         </div>
       )}
       {list && list.length > 0 && <p className="mt-8 text-center text-[13.5px] text-muted-foreground/80">Archiving never deletes anything. Cards only leave Etude when you choose Delete for good.</p>}
@@ -265,12 +219,26 @@ export function ArchivePage() {
                     <SheetDescription className="text-[14px]">{parentOf(openDeck.name) ? `in ${leafOf(parentOf(openDeck.name))} · ` : ""}{cardsTxt(openDeck.cards)}</SheetDescription>
                   </div>
                 </div>
-                <div className="mt-4"><Detail d={openDeck} onDelete={() => setDeleting([openDeck])} /></div>
-                <button className="lib-primary mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl text-[16px] font-semibold disabled:opacity-50" disabled={busy} onClick={() => restore([openDeck])}><ArchiveRestore className="size-4" />Restore</button>
+                <div className="mt-4"><Body d={openDeck} busy={busy} onRestore={() => restore([openDeck])} onDelete={() => setDeleting([openDeck])} /></div>
               </>
             )}
           </SheetContent>
         </Sheet>
+      )}
+
+      {!phone && openDeck && (
+        <aside className="archive-drawer fixed inset-y-0 z-30 overflow-y-auto bg-background px-6 pt-6 pb-36" style={{ width: DRAWER_W, right: "var(--agent-offset, 0px)" }} aria-label={leafOf(openDeck.name)}>
+          <div className="mb-4 flex items-center gap-3.5">
+            <DeckIcon icon={openDeck.icon} size={60} className="lib-art" />
+            <div className="min-w-0 flex-1">
+              {parentOf(openDeck.name) && <div className="truncate text-[13.5px] text-muted-foreground">{leafOf(parentOf(openDeck.name))} ›</div>}
+              <h2 className="lib-title text-[1.5rem] leading-tight font-semibold">{leafOf(openDeck.name)}</h2>
+              <div className="mt-0.5 text-[14px] text-muted-foreground">{cardsTxt(openDeck.cards)}{openDeck.subdecks.length ? ` · ${openDeck.subdecks.length} subdeck${openDeck.subdecks.length === 1 ? "" : "s"}` : ""}</div>
+            </div>
+            <button className="flex size-9 shrink-0 items-center justify-center self-start rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setOpen(null)} aria-label="Close" title="Close · Esc"><X className="size-4" /></button>
+          </div>
+          <Body d={openDeck} busy={busy} onRestore={() => restore([openDeck])} onDelete={() => setDeleting([openDeck])} />
+        </aside>
       )}
 
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && !busy && setDeleting(null)}>
@@ -288,6 +256,7 @@ export function ArchivePage() {
         </AlertDialogContent>
       </AlertDialog>
     </Page>
+    </div>
   );
 }
 
@@ -305,16 +274,74 @@ function ArchiveEmpty() {
   );
 }
 
-/** "96% still known" over a quiet bar. */
-function Kept({ d }: { d: ArchivedDeck }) {
+/** One box: the deck's picture, name, size, when it was last studied and how much is still known. */
+function Tile({ d, phone, open, selecting, checked, leaving, onOpen, onRestore, onDelete }: {
+  d: ArchivedDeck; phone: boolean; open: boolean; selecting: boolean; checked: boolean; leaving: boolean;
+  onOpen(): void; onRestore(): void; onDelete(): void;
+}) {
+  const parent = parentOf(d.name);
   return (
-    <div className="hidden w-[9.5rem] shrink-0 sm:block" title="Predicted recall if you were quizzed on every card today">
-      <div className="text-[14px] text-muted-foreground">{d.recall != null ? <><b className="font-bold text-foreground tabular">{pct(d.recall)}</b> still known</> : "Not studied yet"}</div>
-      {d.recall != null && (
-        <span className="lib-track mt-1.5 h-1 rounded-full">
-          <span className="block h-full rounded-full bg-muted-foreground/60" style={{ width: `${d.recall * 100}%` }} />
-        </span>
+    <div
+      role="listitem"
+      tabIndex={0}
+      data-archived={d.name}
+      aria-label={leafOf(d.name)}
+      aria-pressed={selecting ? checked : undefined}
+      className={cn(
+        "archive-tile lib-panel relative flex min-w-0 cursor-pointer flex-col rounded-2xl select-none",
+        phone ? "p-3 pb-3.5" : "p-3.5 pb-4",
+        open && "on",
+        checked && "chk",
+        leaving && "lib-out",
       )}
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest("button,[role=menuitem]")) return;
+        onOpen();
+      }}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+        e.preventDefault();
+        onOpen();
+      }}
+    >
+      {(d.icon || !phone) && (
+        <div className="mb-2.5 flex min-h-9 items-start">
+          {d.icon && <DeckIcon icon={d.icon} size={phone ? 46 : 56} className="lib-art archive-art" />}
+          <span className="flex-1" />
+          {selecting ? (
+            <button
+              className={cn("flex size-6 shrink-0 items-center justify-center rounded-md border-2", checked ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40")}
+              onClick={onOpen}
+              aria-label={`Select ${leafOf(d.name)}`}
+              aria-pressed={checked}
+            >
+              {checked && <Check className="size-3.5" strokeWidth={3} />}
+            </button>
+          ) : (
+            !phone && <span className="-mt-1 -mr-1.5"><RowMenu d={d} onRestore={onRestore} onDelete={onDelete} /></span>
+          )}
+        </div>
+      )}
+      {phone && !d.icon && selecting && <span className={cn("absolute top-3 right-3 flex size-6 items-center justify-center rounded-md border-2", checked ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40")}>{checked && <Check className="size-3.5" strokeWidth={3} />}</span>}
+      {parent && <div className="truncate text-[13px] text-muted-foreground">{leafOf(parent)} ›</div>}
+      <div className={cn("truncate font-semibold", phone ? "text-[15px]" : "text-[16px]", phone && !d.icon && selecting && "pr-8")}>{leafOf(d.name)}</div>
+      <div className="mt-0.5 truncate text-[13.5px] text-muted-foreground">{cardsTxt(d.cards)}</div>
+      {d.lastReview && <div className="truncate text-[13.5px] text-muted-foreground">studied {ago(d.lastReview)}</div>}
+      <div className="mt-auto pt-3" title="Predicted recall if you were quizzed on every card today">
+        {d.recall != null ? (
+          <>
+            <span className="lib-track h-1 rounded-full">
+              <span className="block h-full rounded-full bg-muted-foreground/60" style={{ width: `${d.recall * 100}%` }} />
+            </span>
+            <div className="mt-1.5 text-[13px] text-muted-foreground"><b className="font-bold text-foreground tabular">{pct(d.recall)}</b> still known</div>
+          </>
+        ) : (
+          <>
+            <span className="lib-track h-1 rounded-full" />
+            <div className="mt-1.5 text-[13px] text-muted-foreground">Never studied</div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -335,34 +362,39 @@ function RowMenu({ d, onRestore, onDelete }: { d: ArchivedDeck; onRestore(): voi
   );
 }
 
-/** When it was last studied, what would be due, its subdecks, and the forgetting curve. */
-function Detail({ d, onDelete }: { d: ArchivedDeck; onDelete(): void }) {
+/** The drawer and the phone sheet: the forgetting curve, the facts, the subdecks, then Restore. */
+function Body({ d, busy, onRestore, onDelete }: { d: ArchivedDeck; busy: boolean; onRestore(): void; onDelete(): void }) {
   return (
-    <div className="grid gap-6 @container sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      <div className="min-w-0">
-        <div className="grid grid-cols-3 gap-3">
-          <Fact label="Last studied" value={d.lastReview ? fmtDate(d.lastReview) : "Never"} />
-          <Fact label="Cards" value={n(d.cards)} />
-          <Fact label="Due if restored" value={`${n(d.due)} card${d.due === 1 ? "" : "s"}`} />
+    <div className="min-w-0">
+      {d.curve.length > 1 && (
+        <div className="rounded-2xl bg-muted px-4 pt-3.5 pb-3">
+          <Curve d={d} />
+          {d.recall != null && d.lastReview && (
+            <p className="mt-2 text-[14px] leading-relaxed text-pretty text-muted-foreground">
+              You studied it until {fmtDate(d.lastReview)}. Since then memory has faded the way it always does: you’d get about <b className="font-semibold text-foreground">{pct(d.recall)}</b> right today.{d.due ? ` The ${n(d.due)} card${d.due === 1 ? "" : "s"} that dropped below your target would be due.` : ""}
+            </p>
+          )}
         </div>
-        {d.subdecks.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-1.5">
-            {d.subdecks.map((s) => (
-              <span key={s.name} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-card px-3 text-[14px] shadow-[0_0_0_1px_var(--border)]">{leafOf(s.name)}<i className="text-muted-foreground not-italic tabular">{n(s.cards)}</i></span>
-            ))}
-          </div>
-        )}
-        {d.recall != null && d.lastReview && (
-          <p className="mt-4 text-[14px] leading-relaxed text-pretty text-muted-foreground">
-            You studied it until {fmtDate(d.lastReview)}. Since then memory has faded the way it always does: you’d get about <b className="font-semibold text-foreground">{pct(d.recall)}</b> right today.{d.due ? ` The ${n(d.due)} card${d.due === 1 ? "" : "s"} that dropped below your target would be due.` : ""}
-          </p>
-        )}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-          <button className="inline-flex h-9 items-center gap-2 rounded-lg px-1 text-[14.5px] font-medium text-muted-foreground hover:text-foreground" onClick={() => navigate(`/deck?name=${enc(d.name)}&tab=cards`)}><SearchCode className="size-4" />See its cards</button>
-          <button className="inline-flex h-9 items-center rounded-lg px-1 text-[14.5px] font-medium text-destructive hover:underline" onClick={onDelete}>Delete for good…</button>
-        </div>
+      )}
+      <div className="mt-4 grid grid-cols-3 gap-3">
+        <Fact label="Last studied" value={d.lastReview ? fmtDate(d.lastReview) : "Never"} />
+        <Fact label="Cards" value={n(d.cards)} />
+        <Fact label="Due if restored" value={`${n(d.due)} card${d.due === 1 ? "" : "s"}`} />
       </div>
-      {d.curve.length > 1 && <Curve d={d} />}
+      {d.subdecks.length > 0 && (
+        <div className="mt-4 flex flex-wrap gap-1.5">
+          {d.subdecks.map((s) => (
+            <span key={s.name} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-card px-3 text-[14px] shadow-[0_0_0_1px_var(--border)]">{leafOf(s.name)}<i className="text-muted-foreground not-italic tabular">{n(s.cards)}</i></span>
+          ))}
+        </div>
+      )}
+      <div className="mt-6 flex gap-2.5">
+        <button className="lib-primary inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-[15.5px] font-semibold disabled:opacity-50" disabled={busy} onClick={onRestore}><ArchiveRestore className="size-4" />Restore</button>
+        <button className="lib-quiet inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl text-[15.5px] font-semibold" onClick={() => navigate(`/deck?name=${enc(d.name)}&tab=cards`)}><SearchCode className="size-4" />See its cards</button>
+      </div>
+      <div className="mt-3 flex justify-center">
+        <button className="inline-flex h-9 items-center rounded-lg px-2 text-[14.5px] font-medium text-destructive hover:underline" onClick={onDelete}>Delete for good…</button>
+      </div>
     </div>
   );
 }
@@ -408,7 +440,7 @@ function Curve({ d }: { d: ArchivedDeck }) {
         {past.length > 0 && <path d={path([...past, { days: 0, recall: now }])} fill="none" stroke="var(--foreground)" strokeWidth="2" strokeLinecap="round" />}
         <path d={path(future)} fill="none" stroke="var(--muted-foreground)" strokeOpacity="0.8" strokeWidth="1.8" strokeDasharray="4 4" />
         <circle cx={X(0)} cy={Y(now)} r="5" fill="var(--card)" stroke="var(--foreground)" strokeWidth="2" />
-        <text x={X(0) + 10} y={Y(now) + 18} fontSize="13.5" fontWeight="700" fill="var(--foreground)">{pct(now)}</text>
+        <text x={X(0) + 9} y={Y(now) < pt + 22 ? Y(now) + 20 : Y(now) - 9} fontSize="13.5" fontWeight="700" fill="var(--foreground)">{pct(now)}</text>
         <text x={W - pr} y={Math.min(H - pb - 6, Y(end.recall) + 18)} textAnchor="end" fontSize="12.5" fill="var(--muted-foreground)">{note}</text>
       </svg>
     </figure>

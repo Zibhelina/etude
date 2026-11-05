@@ -1,30 +1,26 @@
 import { autoSync } from "@/lib/sync";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowLeftToLine, ChevronLeft, Plus, X as XIcon, FastForward, CornerDownLeft, Dices, EyeOff, Loader2, Maximize2, MessageSquareText, Minimize2, MoreHorizontal, Pause, Pencil, RotateCcw, Undo2 } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowLeftToLine, EyeOff, FastForward, Loader2, Maximize2, MessageSquareText, Minimize2, MoreHorizontal, Pause, Pencil, Plus, RotateCcw, Undo2, X as XIcon } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { CardFrame, type CardFrameHandle, type CardResult } from "@/components/card-frame";
 import { AnswerRetry } from "@/components/answer-retry";
-import { Markdown } from "@/components/markdown";
-import { api, humanInterval, relative, RATING_LABEL, type Counts, type LearnerSummary, type Rating, type Scope, type StudyCard } from "@/lib/api";
+import { api, relative, type Counts, type LearnerSummary, type Rating, type Scope, type StudyCard } from "@/lib/api";
+import { agentApi } from "@/lib/agent";
 import { cn } from "@/lib/utils";
-import { navigate } from "@/lib/router";
+import { appPath, navigate } from "@/lib/router";
 import { usePhone } from "@/lib/phone";
+import { useFunMode } from "@/lib/fun";
 import { ActionSheet, Tally } from "@/components/phone-shell";
 import { SketchBar, SketchLayer, sketchTransform, useSketch } from "@/components/sketch-pad";
 import { track } from "@/lib/telemetry";
+import {
+  AskTab, CardStage, cardEyebrow, Composer, shownVerdict, Eyebrow, Feedback, IconButton, modKey, Ratings, reducedMotion, Slot, StudyTop, Suggestion, Thread, Track, useSwapIn, Verdict,
+  type ChatMsg,
+} from "@/components/study-shell";
 
 type Phase = "loading" | "answer" | "grading" | "result" | "done";
-
-const RATING_STYLE: Record<Rating, string> = {
-  1: "text-again border-again/30 hover:bg-again/10",
-  2: "text-hard border-hard/30 hover:bg-hard/10",
-  3: "text-good border-good/30 hover:bg-good/10",
-  4: "text-easy border-easy/30 hover:bg-easy/10",
-};
 
 const FOCUS_KEY = "etude.study.focus";
 
@@ -32,11 +28,22 @@ const FOCUS_KEY = "etude.study.focus";
 // so the button never covers the card.
 const PHONE_FOCUS_STRIP = 56;
 
-const VERDICT_TEXT: Record<string, { label: string; cls: string }> = {
-  correct: { label: "Correct", cls: "text-good" },
-  partial: { label: "Partly right", cls: "text-hard" },
-  incorrect: { label: "Not quite", cls: "text-again" },
+// Once per session the page dips toward the follow-up chat, to show there's more below the feedback.
+let nudged = false;
+
+const frameKeyOf = (c: StudyCard, retries: number) => `${c.cardId}:${c.seed}:${c.typeVersion}:${retries}`;
+const clip = (v: unknown, n: number) => {
+  const s = typeof v === "string" ? v : JSON.stringify(v ?? null);
+  return s.length > n ? s.slice(0, n) + "…" : s;
 };
+
+interface Leaving {
+  key: string;
+  card: StudyCard;
+  rect: { left: number; top: number; width: number };
+  paper: boolean;
+  done: boolean;
+}
 
 export function StudyPage({ scope, title, startCard }: { scope: Scope; title: string; startCard?: number }) {
   // Usage count (only when the person turned usage stats on).
@@ -51,6 +58,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const [ready, setReady] = useState(true);
   const [practice, setPractice] = useState(false);
   const phone = usePhone();
+  const fun = useFunMode();
   const [tools, setTools] = useState(false);
   const [plus, setPlus] = useState(false);
   // Focus mode: only the card, for cards that fill the screen (games). Remembered per browser.
@@ -61,19 +69,44 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const shownAt = useRef(Date.now());
   const lastCard = useRef<number | undefined>(undefined);
   const busy = useRef(false);
-  const resultRef = useRef<HTMLElement>(null);
   const sk = useSketch(card ? `${card.cardId}:${card.seed}` : null);
 
-  useEffect(() => {
-    if (phase === "result") setTimeout(() => resultRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }), 60);
-  }, [phase, feedback?.text]);
+  // Motion: the card on the stage, the one flying off after a rating, and a basic card's flip.
+  const cardEls = useRef(new Map<string, HTMLDivElement>());
+  const [leaving, setLeaving] = useState<Leaving | null>(null);
+  const [exiting, setExiting] = useState(false);
+  const flip = useRef<{ half: Promise<unknown>; anim: Animation; el: HTMLElement } | null>(null);
+  const [flipping, setFlipping] = useState(false);
 
-  const load = useCallback(async (exclude?: number) => {
-    setPhase("loading");
+  // The follow-up chat under AI feedback.
+  const [chat, setChat] = useState<ChatMsg[]>([]);
+  const [chatting, setChatting] = useState(false);
+  const [sawChat, setSawChat] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [attached, setAttached] = useState<{ id: string; name: string } | null>(null);
+  const conv = useRef<{ id: string; model: string | null; primed: boolean } | null>(null);
+  const fbRef = useRef<HTMLDivElement>(null);
+  const padRef = useRef<HTMLDivElement>(null);
+  const slotRef = useRef<HTMLDivElement>(null);
+  const askInput = useRef<HTMLInputElement>(null);
+  const quiet = useRef(0);
+
+  const resetCard = () => {
     setResult(null);
     setRetry(null);
     setAttemptId(null);
     setFeedback(null);
+    setChat([]);
+    setChatting(false);
+    setSawChat(false);
+    setAttached(null);
+    setExiting(false);
+    conv.current = null;
+  };
+
+  const load = useCallback(async (exclude?: number) => {
+    setPhase("loading");
+    resetCard();
     setReady(true);
     try {
       const r = await api.next(scope, exclude);
@@ -82,6 +115,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       setPractice(false);
       setPhase(r.card ? "answer" : "done");
       shownAt.current = Date.now();
+      window.scrollTo({ top: 0 });
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -128,39 +162,96 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       const res: CardResult = { grade: r.grade, key: r.key, answer };
       setResult(res);
       setAttemptId(r.attemptId);
-      frame.current?.showResult(res);
+      const f = flip.current;
+      if (f) {
+        // Turn the card over: the answer goes on while it's edge-on, then the front comes back round.
+        await f.half;
+        frame.current?.showResult(res);
+        await new Promise((ok) => setTimeout(ok, 70));
+        const back = f.el.animate([{ transform: "perspective(1600px) rotateY(-90deg)" }, { transform: "perspective(1600px) rotateY(0deg)" }], { duration: 420, easing: "cubic-bezier(.2,.7,.3,1)" });
+        f.anim.cancel();
+        flip.current = null;
+        back.finished.then(() => setFlipping(false), () => setFlipping(false));
+      } else {
+        frame.current?.showResult(res);
+      }
       setPhase("result");
       if (r.grade.feedback && card.showVerdict !== false) setFeedback({ text: r.grade.feedback });
       else if (r.wantsFeedback && r.attemptId !== null) askFeedback(r.attemptId);
       if (r.grade.grader.error) toast.warning("Couldn't grade automatically", { description: r.grade.grader.error.slice(0, 200) });
     } catch (e) {
       toast.error((e as Error).message);
+      if (flip.current) {
+        flip.current.anim.cancel();
+        flip.current = null;
+        setFlipping(false);
+      }
       setPhase("answer");
     } finally {
       busy.current = false;
     }
   }, [card, practice, askFeedback]);
 
+  const bare = focus && !!card && phase !== "done" && phase !== "loading";
+  const paper = !!card && card.grader === "self" && !bare;
+  const currentKey = card ? frameKeyOf(card, retry?.count ?? 0) : null;
+
   const reveal = useCallback(() => {
-    if (!card || phase !== "answer") return;
+    if (!card || phase !== "answer" || flip.current) return;
     // Cards say when an answer is complete enough to submit (e.g. not an empty box).
     if (!ready && card.grader !== "self") return;
+    const el = currentKey ? cardEls.current.get(currentKey)?.querySelector<HTMLElement>("[data-paper]") : null;
+    if (paper && el && !reducedMotion()) {
+      const anim = el.animate([{ transform: "perspective(1600px) rotateY(0deg)" }, { transform: "perspective(1600px) rotateY(90deg)" }], { duration: 300, easing: "cubic-bezier(.55,.05,.8,.4)", fill: "forwards" });
+      flip.current = { half: anim.finished.catch(() => {}), anim, el };
+      setFlipping(true);
+    }
     frame.current?.collect();
-  }, [card, phase, ready]);
+  }, [card, phase, ready, paper, currentKey]);
 
   const rate = useCallback(async (rating: Rating | 0) => {
     if (!card || phase !== "result" || busy.current) return;
     busy.current = true;
+    // The card flies off to the left while the next one is fetched; the next rises off the deck.
+    const el = currentKey ? cardEls.current.get(currentKey) : null;
+    if (el && currentKey && !reducedMotion() && !bare) {
+      const r = el.getBoundingClientRect();
+      setLeaving({ key: currentKey, card, rect: { left: r.left, top: r.top, width: r.width }, paper, done: false });
+    }
+    setExiting(true);
     try {
       await api.rate(card.cardId, rating, { attemptId: attemptId ?? undefined, durationMs: Date.now() - shownAt.current, practice });
       lastCard.current = card.cardId;
+      await new Promise((ok) => setTimeout(ok, 120));
       await load(card.cardId);
     } catch (e) {
       toast.error((e as Error).message);
+      setLeaving(null);
+      setExiting(false);
     } finally {
       busy.current = false;
     }
-  }, [card, phase, attemptId, practice, load]);
+  }, [card, phase, attemptId, practice, load, currentKey, paper, bare]);
+
+  // Start the fly-off once the leaving card is pinned where it was.
+  useLayoutEffect(() => {
+    if (!leaving || leaving.done) return;
+    const el = cardEls.current.get(leaving.key);
+    if (!el) return setLeaving(null);
+    const target = leaving.paper ? el.querySelector<HTMLElement>("[data-paper]") ?? el : el;
+    const anim = target.animate(
+      leaving.paper
+        ? [{ transform: "none", opacity: 1 }, { transform: "translate(-30%,-4px) rotate(-2deg)", opacity: 1, offset: 0.2 }, { transform: "translate(-118%,-18px) rotate(-8deg)", opacity: 0 }]
+        : [{ transform: "none", opacity: 1 }, { transform: "translateX(-40%)", opacity: 0 }],
+      { duration: 480, easing: "cubic-bezier(.45,0,.7,1)", fill: "forwards" },
+    );
+    el.querySelectorAll(".st-sheet").forEach((s) => (s as HTMLElement).animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: "forwards" }));
+    const k = leaving.key;
+    anim.finished.then(() => setLeaving((l) => (l && l.key === k ? { ...l, done: true } : l)), () => {});
+  }, [leaving?.key, leaving?.done]);
+  useEffect(() => {
+    if (leaving?.done && leaving.key !== currentKey) setLeaving(null);
+  }, [leaving?.done, leaving?.key, currentKey]);
 
   const undo = useCallback(async () => {
     if (busy.current) return;
@@ -172,10 +263,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       const cnt = await api.counts(scope);
       setCounts(cnt);
       setCard(c);
-      setResult(null);
-      setRetry(null);
-      setAttemptId(null);
-      setFeedback(null);
+      resetCard();
       setReady(true);
       setPractice(false);
       setPhase("answer");
@@ -197,10 +285,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       const [c, cnt] = await Promise.all([api.card(card.cardId), api.counts(scope)]);
       setCounts(cnt);
       setCard(c);
-      setResult(null);
-      setRetry(null);
-      setAttemptId(null);
-      setFeedback(null);
+      resetCard();
       setReady(false);
       setPractice(false);
       setPhase("answer");
@@ -217,10 +302,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     if (!card) return;
     const c = await api.card(card.cardId);
     setCard(c);
-    setResult(null);
-    setRetry(null);
-    setAttemptId(null);
-    setFeedback(null);
+    resetCard();
     setPractice(true);
     setPhase("answer");
   }, [card]);
@@ -245,10 +327,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
               const [c, cnt] = await Promise.all([api.card(shown), api.counts(scope)]);
               setCard(c);
               setCounts(cnt);
-              setResult(null);
-              setRetry(null);
-              setAttemptId(null);
-              setFeedback(null);
+              resetCard();
               setReady(true);
               setPractice(false);
               setPhase("answer");
@@ -268,8 +347,171 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     }
   }, [card, phase, load, scope.deck, scope.q, scope.ahead]);
 
+  // ---------------------------------------------------------------- the follow-up chat
+  const hasAsk = phase === "result" && !!feedback?.text && !bare && !exiting;
+  const headerH = () => document.querySelector<HTMLElement>(".st-top")?.offsetHeight ?? 64;
+  const maxScroll = () => document.documentElement.scrollHeight - window.innerHeight;
+  const chatPos = () => {
+    const el = fbRef.current;
+    return el ? Math.max(0, el.getBoundingClientRect().top + window.scrollY - headerH() - 14) : 0;
+  };
+  const chatTop = () => Math.min(chatPos(), maxScroll());
+  // The page ends where the chat starts: scrolled to the bottom, the feedback sits under the header.
+  const sizePad = useCallback(() => {
+    const pad = padRef.current;
+    if (!pad) return;
+    let h = 0;
+    // Resizing the pad can clamp the scroll position; that isn't the reader scrolling back up.
+    quiet.current = Math.max(quiet.current, Date.now() + 250);
+    pad.style.height = "0px";
+    for (let i = 0; i < 8; i++) {
+      const need = chatPos() - maxScroll();
+      if (Math.abs(need) < 1) break;
+      h = Math.max(0, h + need);
+      pad.style.height = `${h}px`;
+    }
+  }, []);
+  const glide = (top: number) => {
+    quiet.current = Date.now() + 700;
+    window.scrollTo({ top, behavior: reducedMotion() ? "auto" : "smooth" });
+  };
+  const openChat = useCallback(() => {
+    setChatting(true);
+    setSawChat(true);
+    requestAnimationFrame(() => {
+      sizePad();
+      glide(chatTop());
+      if (!phone) askInput.current?.focus({ preventScroll: true });
+    });
+  }, [phone, sizePad]);
+  const backToRating = useCallback(() => {
+    setChatting(false);
+    askInput.current?.blur();
+    glide(0);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (hasAsk) sizePad();
+  }, [hasAsk, chat.length, feedback?.text, sizePad]);
+  useEffect(() => {
+    if (!hasAsk) return;
+    const onScroll = () => {
+      if (Date.now() < quiet.current) return;
+      const fb = fbRef.current;
+      if (!fb) return;
+      const slotH = slotRef.current?.offsetHeight ?? 96;
+      const bottom = fb.getBoundingClientRect().bottom + window.scrollY;
+      const T = Math.min(chatTop(), Math.max(30, bottom - (window.innerHeight - slotH) + 30));
+      const y = window.scrollY;
+      setChatting((on) => {
+        if (!on && y >= T) {
+          setSawChat(true);
+          return true;
+        }
+        if (on && y < Math.max(8, T - 80)) return false;
+        return on;
+      });
+    };
+    const onResize = () => sizePad();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize);
+    if (!nudged && !reducedMotion()) {
+      nudged = true;
+      const t1 = window.setTimeout(() => {
+        quiet.current = Date.now() + 1600;
+        window.scrollTo({ top: Math.min(120, chatTop()), behavior: "smooth" });
+        window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 650);
+      }, 700);
+      return () => {
+        window.clearTimeout(t1);
+        window.removeEventListener("scroll", onScroll);
+        window.removeEventListener("resize", onResize);
+      };
+    }
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [hasAsk, sizePad]);
+
+  const ensureConv = async () => {
+    if (conv.current) return conv.current;
+    const m = await agentApi.models();
+    if (!m.configured || !m.default) throw new Error("AI isn't set up yet. Pick a model in Settings → AI.");
+    const c = await agentApi.create(m.default);
+    conv.current = { id: c.id, model: m.default, primed: false };
+    return conv.current;
+  };
+
+  const askSend = useCallback(async (q: string) => {
+    if (!card || asking) return;
+    setAsking(true);
+    quiet.current = Date.now() + 900;
+    setChat((m) => [...m, { me: true, text: q }, { text: "", typing: true }]);
+    requestAnimationFrame(() => { sizePad(); glide(maxScroll()); });
+    const setLast = (f: (m: ChatMsg) => ChatMsg) => setChat((all) => [...all.slice(0, -1), f(all[all.length - 1])]);
+    try {
+      const c = await ensureConv();
+      let text = q;
+      if (!c.primed) {
+        // The first question carries the card, so the assistant knows what's being asked about.
+        text = [
+          "I'm in a study session and just answered this card. Answer my question about it briefly and plainly.",
+          `Deck: ${card.deck}. Card type: ${card.type}.`,
+          `Card: ${clip(card.view, 1500)}`,
+          result ? `Answer key: ${clip(result.key, 1500)}` : "",
+          result ? `My answer: ${clip(result.answer, 800)}` : "",
+          result?.grade.verdict ? `Verdict: ${result.grade.verdict}.` : "",
+          feedback?.text ? `Feedback I got: ${feedback.text}` : "",
+          "",
+          `My question: ${q}`,
+        ].filter(Boolean).join("\n");
+      }
+      let acc = "";
+      let failed = "";
+      await agentApi.send(c.id, { text, attachments: attached ? [attached.id] : [], model: c.model, page: appPath() + location.search }, (e) => {
+        if (e.type === "text") {
+          acc += e.delta;
+          setLast((m) => ({ ...m, text: acc }));
+        } else if (e.type === "error") failed = e.error;
+        else if (e.type === "done") {
+          const content = e.message.content as { text?: string; error?: string };
+          if (content.text) acc = content.text;
+          if (content.error && !acc) failed = content.error;
+        }
+      });
+      c.primed = true;
+      setAttached(null);
+      setLast(() => (failed && !acc ? { text: `Couldn't answer: ${failed}`, error: true } : { text: acc || "…" }));
+    } catch (e) {
+      setLast(() => ({ text: (e as Error).message, error: true }));
+    } finally {
+      setAsking(false);
+      requestAnimationFrame(() => { sizePad(); glide(maxScroll()); });
+    }
+  }, [card, asking, attached, result, feedback?.text, sizePad]);
+
+  const askAttach = useCallback(async (f: File) => {
+    try {
+      const c = await ensureConv();
+      const meta = await agentApi.upload(c.id, f);
+      setAttached({ id: meta.id, name: meta.name });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }, []);
+
+  const usedChips = new Set(chat.filter((m) => m.me).map((m) => m.text));
+  const chips = (result?.grade.verdict === "correct" ? ["Explain it more simply", "Give me another example"] : ["What did I miss?", "Explain it more simply", "Give me another example"]).filter((c) => !usedChips.has(c));
+
+  // ---------------------------------------------------------------- keys
   const onKey = useCallback((key: string) => {
+    if (chatting) {
+      if (key === "Escape") backToRating();
+      return;
+    }
     if (key === "Escape") return void setFocus(false);
+    if (flipping) return;
     if (phase === "answer" || phase === "result") {
       // As in Anki: - and = bury the card or the note, @ and ! suspend them.
       if (key === "-" || key === "=") return void setAside("bury", key === "=");
@@ -292,189 +534,167 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
         rate(s);
       }
     }
-  }, [phase, card, reveal, rate, result, undo, setAside, again]);
+  }, [phase, card, reveal, rate, result, undo, setAside, again, chatting, backToRating, flipping]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.repeat && (["u", "U", "=", "-", "@", "!"].includes(e.key) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z"))) return;
       const t = e.target as HTMLElement;
       if (t?.closest("input, textarea, [contenteditable]")) return;
-      if (e.key === "Escape") return focus ? setFocus(false) : navigate("/");
+      if (e.key === " " && t?.closest("button")) e.preventDefault();
+      if (e.key === "Escape") return chatting ? backToRating() : focus ? setFocus(false) : navigate("/");
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") return onKey("Mod+Enter");
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "z") {
         e.preventDefault();
         return onKey("Undo");
       }
-      if (!e.ctrlKey && !e.metaKey && !e.altKey) onKey(e.key);
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (e.key === " ") e.preventDefault();
+        onKey(e.key);
+      }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [onKey, focus]);
+  }, [onKey, focus, chatting, backToRating]);
 
   const suggested = result?.grade.suggested ?? null;
-  const verdict = card?.showVerdict !== false && result?.grade.verdict && VERDICT_TEXT[result.grade.verdict];
   const total = counts ? counts.new + counts.learning + counts.review : 0;
+  const done = counts?.doneToday ?? 0;
   // In focus mode the header and the card's badges go, and the bottom bar only shows when it has
   // something to press: not while grading, nor while a card that submits by itself keeps Check disabled.
-  const bare = focus && !!card && phase !== "done" && phase !== "loading";
   const idleBar = phase === "grading" || (phase === "answer" && !ready && card?.grader !== "self");
   const showBar = !bare || !idleBar;
+  const verdictShown = card?.showVerdict !== false ? shownVerdict(result?.grade.verdict) : null;
+  const slotSwap = useSwapIn(`${currentKey}:${phase === "result" ? "r" : "a"}`);
+  const deckPath = card ? card.deck.split("::").slice(1).join(" › ") : "";
+  const canAct = !!card && (phase === "answer" || phase === "result");
+
+  const renderCard = (c: StudyCard, key: string, live: boolean, isPaper: boolean, style?: React.CSSProperties) => (
+    <CardStage
+      key={key}
+      ref={(el) => { if (el) cardEls.current.set(key, el); else cardEls.current.delete(key); }}
+      paper={isPaper}
+      style={style}
+      className={cn(!live && "st-leaving")}
+      eyebrow={!bare && <Eyebrow items={cardEyebrow(c, { ahead: scope.ahead, practice })} />}
+      aside={live && !isPaper && phase === "result" && verdictShown ? <Verdict verdict={verdictShown} score={result?.grade.score} /> : undefined}
+    >
+      <CardFrame
+        ref={live ? frame : undefined}
+        src={`/frame/${encodeURIComponent(c.type)}?v=${encodeURIComponent(c.typeVersion)}`}
+        frameKey={key}
+        view={c.view}
+        onSubmit={live ? onSubmit : undefined}
+        onReady={live ? setReady : undefined}
+        onKey={live ? onKey : undefined}
+        onError={live ? (m) => toast.error("Card error", { description: m }) : undefined}
+        fitScreen={live && bare}
+        fitMargin={live && bare && phone && !showBar ? PHONE_FOCUS_STRIP : undefined}
+      />
+    </CardStage>
+  );
+
+  const stageCards: React.ReactNode[] = [];
+  if (leaving) stageCards.push(renderCard(leaving.card, leaving.key, false, leaving.paper, { left: leaving.rect.left, top: leaving.rect.top, width: leaving.rect.width }));
+  if (card && currentKey && currentKey !== leaving?.key && phase !== "done") stageCards.push(renderCard(card, currentKey, true, paper));
+
+  const tallyTip = counts && (
+    <span className="flex items-center gap-2.5 tabular">
+      <Tooltip><TooltipTrigger asChild><span className="text-new">{counts.new}</span></TooltipTrigger><TooltipContent>New</TooltipContent></Tooltip>
+      <Tooltip><TooltipTrigger asChild><span className="text-learn">{counts.learning}</span></TooltipTrigger><TooltipContent>Learning</TooltipContent></Tooltip>
+      <Tooltip><TooltipTrigger asChild><span className="text-review">{counts.review}</span></TooltipTrigger><TooltipContent>Review</TooltipContent></Tooltip>
+    </span>
+  );
 
   return (
-    <div className={cn("mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-4 sm:px-8", showBar ? "pb-44" : "pb-6", bare && "pt-[env(safe-area-inset-top)]", bare && phone && "px-0", bare && phone && !showBar && "pb-0", sk.on && "overflow-x-clip")}>
-      {bare ? null : phone ? (
-        <header className="sticky top-0 z-10 -mx-4 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-end bg-background/92 px-1 pt-[env(safe-area-inset-top)] backdrop-blur">
-          <div className="flex h-14 w-full items-center gap-1">
-            <button onClick={() => navigate("/")} className="flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent" aria-label="Back to decks"><ChevronLeft className="size-6" /></button>
-            <div className="min-w-0 flex-1">
-              <div className="score-serif truncate text-[1.15rem] leading-tight">{title}</div>
-              {counts && <Tally n={counts.new} l={counts.learning} r={counts.review} className="mt-0.5 text-[12px]" />}
+    <div
+      className={cn("flex min-h-dvh w-full flex-col", showBar ? "pb-[calc(9.5rem+env(safe-area-inset-bottom))]" : "pb-6", bare && "pt-[env(safe-area-inset-top)]", bare && phone && !showBar && "pb-0", sk.on && "overflow-x-clip")}
+    >
+      {!bare && (
+        <StudyTop title={title} crumb={deckPath || undefined} onBack={() => navigate("/")}>
+          {card && phase !== "done" && <span className="st-tag max-md:hidden">{card.type}</span>}
+          {counts && (
+            <div className="st-prog">
+              {total > 0 && (phone ? <Tally n={counts.new} l={counts.learning} r={counts.review} className="text-[12px]" /> : tallyTip)}
+              <Track value={done + total ? done / (done + total) : 0} />
             </div>
-            {card && (phase === "answer" || phase === "result") && (
-              <button onClick={() => setFocus(true)} className="flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent" aria-label="Focus on the card"><Maximize2 className="size-5" /></button>
+          )}
+          <div className="flex items-center gap-0.5">
+            <IconButton label="Undo last rating" title={`Undo last rating (${modKey()} Z)`} disabled={phase === "loading" || phase === "grading"} onClick={undo}>
+              <Undo2 className="size-5" strokeWidth={1.8} />
+            </IconButton>
+            {card && !phone && (
+              <IconButton label="Edit card" className="max-md:hidden" disabled={!canAct} onClick={() => navigate(`/browse?item=${encodeURIComponent(card.itemId)}`)}>
+                <Pencil className="size-5" strokeWidth={1.8} />
+              </IconButton>
             )}
-            {card && (phase === "answer" || phase === "result") && (
-              <button onClick={() => setTools(true)} className="flex size-11 shrink-0 items-center justify-center rounded-full text-muted-foreground active:bg-accent" aria-label="Card actions"><MoreHorizontal className="size-5" /></button>
-            )}
-          </div>
-        </header>
-      ) : (
-      <header className="sticky top-0 z-10 -mx-4 flex items-center gap-2 bg-background/90 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur sm:-mx-8 sm:gap-3 sm:px-8 sm:py-4">
-        <Button variant="ghost" size="icon" className="-ml-2" onClick={() => navigate("/")} aria-label="Back to decks">
-          <ArrowLeft />
-        </Button>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">{title}</div>
-          {card && <div className="truncate text-xs text-muted-foreground">{card.deck.split("::").slice(1).join(" › ") || card.deck}</div>}
-        </div>
-        {counts && (
-          <div className="flex items-center gap-3 text-sm tabular">
-            <Tooltip><TooltipTrigger asChild><span className="text-new">{counts.new}</span></TooltipTrigger><TooltipContent>New</TooltipContent></Tooltip>
-            <Tooltip><TooltipTrigger asChild><span className="text-learn">{counts.learning}</span></TooltipTrigger><TooltipContent>Learning</TooltipContent></Tooltip>
-            <Tooltip><TooltipTrigger asChild><span className="text-review">{counts.review}</span></TooltipTrigger><TooltipContent>Review</TooltipContent></Tooltip>
-          </div>
-        )}
-        {card && (phase === "answer" || phase === "result") && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => setAside("bury", true)} aria-label="Bury note until tomorrow" aria-keyshortcuts="="><EyeOff /></Button>
-            </TooltipTrigger>
-            <TooltipContent>Bury until tomorrow: <kbd className="opacity-70">=</kbd> the note, <kbd className="opacity-70">-</kbd> just this card</TooltipContent>
-          </Tooltip>
-        )}
-        {card && (phase === "answer" || phase === "result") && (
-          <DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
+            {phone ? (
+              <IconButton label="Card actions" disabled={!canAct} onClick={() => setTools(true)}>
+                <MoreHorizontal className="size-5" strokeWidth={1.8} />
+              </IconButton>
+            ) : (
+              <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label="Suspend"><Pause /></Button>
+                  <button className="st-ib" aria-label="More" title="More" disabled={!canAct}>
+                    <MoreHorizontal className="size-5" strokeWidth={1.8} />
+                  </button>
                 </DropdownMenuTrigger>
-              </TooltipTrigger>
-              <TooltipContent>Suspend: <kbd className="opacity-70">@</kbd> just this card, <kbd className="opacity-70">!</kbd> the note</TooltipContent>
-            </Tooltip>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setAside("suspend", false)}>Suspend this card<kbd className="ml-auto pl-4 text-xs opacity-60">@</kbd></DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setAside("suspend", true)}>Suspend the whole note<kbd className="ml-auto pl-4 text-xs opacity-60">!</kbd></DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        {card && (phase === "answer" || phase === "result") && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => setFocus(true)} aria-label="Focus on the card"><Maximize2 /></Button>
-            </TooltipTrigger>
-            <TooltipContent>Focus: hide everything but the card. <kbd className="opacity-70">Esc</kbd> leaves</TooltipContent>
-          </Tooltip>
-        )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" disabled={phase === "loading" || phase === "grading"} onClick={undo} aria-label="Undo"><Undo2 /></Button>
-          </TooltipTrigger>
-          <TooltipContent>Undo last rating <kbd className="ml-1 opacity-70">Ctrl Z</kbd></TooltipContent>
-        </Tooltip>
-      </header>
+                <DropdownMenuContent align="end" className="w-60">
+                  <DropdownMenuItem onClick={() => setAside("bury", false)}><EyeOff />Bury this card<kbd className="ml-auto pl-4 text-xs opacity-60">-</kbd></DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setAside("bury", true)}><EyeOff />Bury the whole note<kbd className="ml-auto pl-4 text-xs opacity-60">=</kbd></DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setAside("suspend", false)}><Pause />Suspend this card<kbd className="ml-auto pl-4 text-xs opacity-60">@</kbd></DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setAside("suspend", true)}><Pause />Suspend the whole note<kbd className="ml-auto pl-4 text-xs opacity-60">!</kbd></DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setFocus(true)}><Maximize2 />Focus on the card<kbd className="ml-auto pl-4 text-xs opacity-60">Esc leaves</kbd></DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        </StudyTop>
       )}
 
       {phase === "done" && (scope.placement ? <PlacementDone deck={scope.deck ?? ""} /> : <Done counts={counts} scope={scope} />)}
 
-      {card && phase !== "done" && (
-        <main ref={mainRef} style={phone ? sketchTransform(sk.view, mainRef.current) : undefined} className={cn("flex flex-1 flex-col gap-5 pt-3 sm:gap-6 sm:pt-6", bare && phone && "pt-0")}>
-          <div className={cn("flex flex-wrap items-center gap-2 text-xs text-muted-foreground", bare && "hidden")}>
-            <Badge variant="outline" className="font-normal">{card.type}</Badge>
-            {card.scheduler.id !== "fsrs" && <Badge variant="outline" className="font-normal">{card.scheduler.name.toLowerCase()}</Badge>}
-            {card.state === 0 && <Badge variant="outline" className="border-new/30 font-normal text-new">new</Badge>}
-            {card.generated && (
-              <Tooltip>
-                <TooltipTrigger asChild><Badge variant="outline" className="gap-1 font-normal"><Dices className="size-3" />variant</Badge></TooltipTrigger>
-                <TooltipContent>Generated: the numbers change every review</TooltipContent>
-              </Tooltip>
+      {(stageCards.length > 0 || (card && phase !== "done")) && (
+        <main ref={mainRef} style={phone ? sketchTransform(sk.view, mainRef.current) : undefined} className={cn("st-stage", bare && "p-0 sm:px-8", bare && !phone && "pt-4")}>
+          <div className={cn("st-col", bare && "w-full max-w-3xl")}>
+            {retry && phase === "answer" && <AnswerRetry hint={retry.hint} />}
+            {stageCards}
+
+            {card && phase === "result" && result && currentKey !== leaving?.key && (
+              <section className={cn("flex flex-col gap-4", exiting && "st-fade-out")}>
+                {paper && verdictShown && <div><Verdict verdict={verdictShown} score={result.grade.score} /></div>}
+                {(result.grade.adaptive?.reason || (verdictShown && result.grade.grader.kind === "ai" && result.grade.grader.model)) && (
+                  <div className="st-rise flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                    {result.grade.adaptive?.reason && <span>Picked for you: {result.grade.adaptive.reason}.</span>}
+                    {verdictShown && result.grade.grader.kind === "ai" && result.grade.grader.model && <span className="truncate">Graded by {result.grade.grader.model.split("/").pop()}</span>}
+                  </div>
+                )}
+                {feedback?.loading && (
+                  <div className="st-rise flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> {fun ? "Minimi is writing…" : "Writing feedback…"}</div>
+                )}
+                {feedback?.text && <Feedback ref={fbRef} text={feedback.text} fun={fun} />}
+                {feedback?.error && <div className="text-sm text-danger">Feedback failed: {feedback.error}</div>}
+                {hasAsk && <Thread msgs={chat} fun={fun} />}
+                {(!feedback && attemptId && card.showVerdict !== false) || card.generated || card.source ? (
+                  <div className="st-rise flex flex-wrap items-center gap-2">
+                    {!feedback && attemptId && card.showVerdict !== false && (
+                      <button className="st-chip inline-flex items-center gap-1.5" onClick={() => askFeedback(attemptId)}>
+                        <MessageSquareText className="size-4" /> {card.grader === "self" ? "Explain this card" : "Explain my answer"}
+                      </button>
+                    )}
+                    {card.generated && (
+                      <button className="st-chip inline-flex items-center gap-1.5" onClick={anotherVariant}>
+                        <RotateCcw className="size-4" /> Try another variant
+                      </button>
+                    )}
+                    {card.source && <span className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto">Source: {card.source}</span>}
+                  </div>
+                ) : null}
+                {hasAsk && <div ref={padRef} aria-hidden />}
+              </section>
             )}
-            {scope.ahead && <Badge variant="outline" className="gap-1 font-normal"><FastForward className="size-3" />practicing ahead</Badge>}
-            {card.placement && <Badge variant="outline" className="border-highlight/40 font-normal text-highlight">finding your level</Badge>}
-            {card.quickCheck && (
-              <Tooltip>
-                <TooltipTrigger asChild><Badge variant="outline" className="font-normal">quick check</Badge></TooltipTrigger>
-                <TooltipContent>Your placement suggests you know this. Right on first sight sends it weeks away.</TooltipContent>
-              </Tooltip>
-            )}
-            {practice && <Badge variant="outline" className="border-highlight/40 font-normal text-highlight">practice, not scheduled</Badge>}
-            <div className="flex-1" />
-            <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs text-muted-foreground max-md:hidden" onClick={() => navigate(`/browse?item=${encodeURIComponent(card.itemId)}`)}>
-              <Pencil className="size-3.5" /> Edit
-            </Button>
           </div>
-
-          {retry && phase === "answer" && <AnswerRetry hint={retry.hint} />}
-          <CardFrame
-            ref={frame}
-            src={`/frame/${encodeURIComponent(card.type)}?v=${encodeURIComponent(card.typeVersion)}`}
-            frameKey={`${card.cardId}:${card.seed}:${card.typeVersion}:${retry?.count ?? 0}`}
-            view={card.view}
-            onSubmit={onSubmit}
-            onReady={setReady}
-            onKey={onKey}
-            onError={(m) => toast.error("Card error", { description: m })}
-            fitScreen={bare}
-            fitMargin={bare && phone && !showBar ? PHONE_FOCUS_STRIP : undefined}
-          />
-
-          {phase === "result" && result && (
-            <section ref={resultRef} className="flex scroll-mb-36 flex-col gap-3 pt-1">
-              {verdict && (
-                <div className="flex items-center gap-2 text-sm">
-                  <span className={cn("font-medium", verdict.cls)}>{verdict.label}</span>
-                  {result.grade.score != null && result.grade.verdict === "partial" && <span className="tabular text-muted-foreground">{Math.round(result.grade.score * 100)}%</span>}
-                  {result.grade.grader.kind === "ai" && result.grade.grader.model && (
-                    <span className="truncate text-xs text-muted-foreground">· graded by {result.grade.grader.model.split("/").pop()}</span>
-                  )}
-                </div>
-              )}
-              {result.grade.adaptive?.reason && <div className="text-xs text-muted-foreground">Picked for you: {result.grade.adaptive.reason}.</div>}
-              {feedback?.loading && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Writing feedback…</div>
-              )}
-              {feedback?.text && (
-                <div className="rounded-lg border bg-card/60 px-4 py-3">
-                  <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">Feedback</div>
-                  <Markdown className="text-[0.95rem]">{feedback.text}</Markdown>
-                </div>
-              )}
-              {feedback?.error && <div className="text-sm text-destructive">Feedback failed: {feedback.error}</div>}
-              <div className="flex flex-wrap items-center gap-2">
-                {!feedback && attemptId && card.showVerdict !== false && (
-                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => askFeedback(attemptId)}>
-                    <MessageSquareText className="size-4" /> Explain my answer
-                  </Button>
-                )}
-                {card.generated && (
-                  <Button variant="outline" size="sm" className="gap-1.5" onClick={anotherVariant}>
-                    <RotateCcw className="size-4" /> Try another variant
-                  </Button>
-                )}
-                {card.source && <span className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto">Source: {card.source}</span>}
-              </div>
-            </section>
-          )}
         </main>
       )}
 
@@ -491,75 +711,59 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
           <Minimize2 className="size-4" />
         </button>
       )}
-      {card && showBar && (phase === "answer" || phase === "grading" || phase === "result") && (
-        <footer className="fixed inset-x-0 bottom-0 z-20 border-t bg-background pb-[env(safe-area-inset-bottom)] max-md:border-t-0 max-md:pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-          <div className="mx-auto flex max-w-3xl items-center justify-center gap-2 px-3 py-3 max-md:px-4 sm:px-8 sm:py-4">
-            {phone && sk.on ? (
-              <SketchBar sk={sk} />
-            ) : <>
-            {phone && phase !== "result" && (
-              <div className="relative shrink-0">
-                {plus && (
-                  <div className="absolute bottom-[calc(100%+0.6rem)] left-0 z-20 w-60 rounded-[1.6rem] border bg-card p-1.5 shadow-2xl">
-                    {[
-                      { label: "Rascunho", icon: Pencil, hl: true, onClick: () => { setPlus(false); sk.setOn(true); } },
-                      { label: "Card anterior", icon: ArrowLeftToLine, onClick: () => { setPlus(false); undo(); } },
-                      { label: "Suspender", icon: Pause, onClick: () => { setPlus(false); setAside("suspend", false); } },
-                      { label: "Mais ações", icon: MoreHorizontal, onClick: () => { setPlus(false); setTools(true); } },
-                    ].map((a) => (
-                      <button key={a.label} onClick={a.onClick} className={cn("flex h-[2.9rem] w-full items-center gap-3 rounded-full px-4 text-[15px] active:bg-accent", a.hl ? "bg-highlight/10 text-highlight" : "text-foreground/85")}>
-                        <a.icon className="size-5" />{a.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <button onClick={() => setPlus((v) => !v)} disabled={phase === "grading"} aria-label={plus ? "Fechar" : "Mais"} aria-expanded={plus} className="flex size-[3.25rem] items-center justify-center rounded-full border bg-card text-foreground active:bg-accent disabled:opacity-40">
-                  {plus ? <XIcon className="size-5" /> : <Plus className="size-5" />}
-                </button>
-              </div>
-            )}
-            {phase !== "result" ? (
-              <Button size="lg" className="h-[3.25rem] flex-1 gap-2 rounded-full text-[16px] pointer-coarse:h-[3.25rem] sm:h-10 sm:w-auto sm:min-w-48 sm:flex-none sm:rounded-md sm:text-sm" disabled={phase === "grading" || (!ready && card.grader !== "self")} onClick={reveal}>
-                {phase === "grading" ? <><Loader2 className="size-4 animate-spin" /> Grading…</> : card.grader === "self" ? <>Show answer <kbd className="hidden text-xs opacity-60 sm:inline">Space</kbd></> : <>Check <span className="hidden items-center gap-0.5 text-xs opacity-60 sm:flex"><kbd>Ctrl</kbd><CornerDownLeft className="size-3" /></span></>}
-              </Button>
-            ) : !card.scheduler.ratings ? (
-              <>
-                <Button variant="outline" size="lg" className="h-[3.25rem] flex-1 gap-2 rounded-full pointer-coarse:h-[3.25rem] sm:h-10 sm:max-w-44 sm:flex-none sm:rounded-md" onClick={again}>
-                  <RotateCcw className="size-4" /> Go again <kbd className="hidden text-xs opacity-60 sm:inline">R</kbd>
-                </Button>
-                <Button size="lg" className="h-[3.25rem] flex-1 gap-2 rounded-full pointer-coarse:h-[3.25rem] sm:h-10 sm:max-w-56 sm:flex-none sm:rounded-md" onClick={() => rate(0)}>
-                  Next
-                  <span className="text-xs font-normal opacity-70">{practice ? "practice" : card.scheduler.next ? (new Date(card.scheduler.next).getTime() <= Date.now() + 60_000 ? "again today" : `back ${relative(card.scheduler.next)}`) : ""}</span>
-                </Button>
-              </>
-            ) : (
-              ([1, 2, 3, 4] as Rating[]).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => rate(r)}
-                  className={cn(
-                    "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-2xl border px-1 py-3 text-[15px] font-medium transition-[colors,transform] active:scale-95 sm:max-w-36 sm:rounded-lg sm:px-3 sm:py-2 sm:text-sm",
-                    RATING_STYLE[r],
-                    suggested === r && "ring-2 ring-current/60 max-sm:bg-current/10 max-md:ring-inset",
+      {card && showBar && (phase === "answer" || phase === "grading" || phase === "result" || (phase === "loading" && exiting)) && (
+        <Slot ref={(el) => { slotRef.current = el; (slotSwap as React.MutableRefObject<HTMLDivElement | null>).current = el; }} className={cn((exiting || flipping) && "leaving")}>
+          {hasAsk && !sawChat && !chatting && <AskTab fun={fun} onClick={openChat} />}
+          {phone && sk.on ? (
+            <div className="st-row"><SketchBar sk={sk} /></div>
+          ) : hasAsk && chatting ? (
+            <Composer fun={fun} chips={chips} busy={asking} onSend={askSend} onAttach={askAttach} attached={attached?.name} onBack={backToRating} inputRef={askInput} />
+          ) : phase !== "result" ? (
+            <div className="st-row">
+              {phone && (
+                <div className="relative shrink-0">
+                  {plus && (
+                    <div className="absolute bottom-[calc(100%+0.6rem)] left-0 z-20 w-60 rounded-[1.6rem] border bg-card p-1.5 shadow-2xl">
+                      {[
+                        { label: "Scratchpad", icon: Pencil, hl: true, onClick: () => { setPlus(false); sk.setOn(true); } },
+                        { label: "Previous card", icon: ArrowLeftToLine, onClick: () => { setPlus(false); undo(); } },
+                        { label: "Suspend", icon: Pause, onClick: () => { setPlus(false); setAside("suspend", false); } },
+                        { label: "More actions", icon: MoreHorizontal, onClick: () => { setPlus(false); setTools(true); } },
+                      ].map((a) => (
+                        <button key={a.label} onClick={a.onClick} className={cn("flex h-[2.9rem] w-full items-center gap-3 rounded-full px-4 text-[15px] active:bg-accent", a.hl ? "bg-highlight/10 text-highlight" : "text-foreground/85")}>
+                          <a.icon className="size-5" />{a.label}
+                        </button>
+                      ))}
+                    </div>
                   )}
-                >
-                  <span>{RATING_LABEL[r]}</span>
-                  <span className="tabular text-xs font-normal opacity-70">{practice ? "practice" : humanInterval(card.intervals[r])}</span>
-                </button>
-              ))
-            )}
-            </>}
-          </div>
-          {phase === "result" && (
-            <div className="hidden pb-3 text-center text-xs text-muted-foreground sm:block">
-              {card.scheduler.ratings ? (
-                <><kbd>1</kbd>–<kbd>4</kbd> to rate{suggested ? <>, <kbd>Space</kbd> for {RATING_LABEL[suggested]}</> : null}</>
-              ) : (
-                <>Your result is saved either way. <kbd>Space</kbd> for next, <kbd>R</kbd> to go again</>
+                  <button onClick={() => setPlus((v) => !v)} disabled={phase === "grading"} aria-label={plus ? "Close" : "More"} aria-expanded={plus} className="st-round disabled:opacity-40">
+                    {plus ? <XIcon className="size-5" /> : <Plus className="size-5" />}
+                  </button>
+                </div>
               )}
+              <button className="st-pri" id="study-main" disabled={phase === "grading" || phase === "loading" || flipping || (!ready && card.grader !== "self")} onClick={reveal}>
+                {phase === "grading" && !flipping ? <><Loader2 className="size-4 animate-spin" /> Checking…</> : card.grader === "self" ? <>Show answer <kbd>Space</kbd></> : <>Check <kbd>{modKey()} ↵</kbd></>}
+              </button>
             </div>
+          ) : !card.scheduler.ratings ? (
+            <div className="st-row">
+              <button className="st-sec" onClick={again}>
+                <RotateCcw className="size-4" /> Go again <kbd>R</kbd>
+              </button>
+              <button className="st-pri" onClick={() => rate(0)}>
+                Next
+                <span className="text-sm font-normal opacity-80">{practice ? "practice" : card.scheduler.next ? (new Date(card.scheduler.next).getTime() <= Date.now() + 60_000 ? "again today" : `back ${relative(card.scheduler.next)}`) : ""}</span>
+                <kbd>Space</kbd>
+              </button>
+            </div>
+          ) : (
+            <>
+              <Suggestion suggested={suggested} />
+              <Ratings card={card} selected={(suggested ?? 3) as Rating} practice={practice} onRate={rate} />
+            </>
           )}
-        </footer>
+          {phase === "result" && !card.scheduler.ratings && !chatting && <div className="st-sugg st-kbd">Your result is saved either way.</div>}
+        </Slot>
       )}
       {phone && card && <SketchLayer sk={sk} />}
       {phone && plus && <div className="fixed inset-0 z-[9] bg-background/60" onClick={() => setPlus(false)} />}
@@ -587,7 +791,6 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       {phase === "loading" && !card && (
         <div className="flex flex-1 items-center justify-center text-muted-foreground"><Loader2 className="animate-spin" /></div>
       )}
-      {total === 0 && phase === "loading" && null}
     </div>
   );
 }
@@ -599,8 +802,8 @@ function PlacementDone({ deck }: { deck: string }) {
   }, [deck]);
   const skills = summary?.adaptive ? summary.skills.filter((s) => s.placement) : [];
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 py-24 text-center">
-      <div className="text-2xl font-semibold tracking-tight">Placement done</div>
+    <div className="st-rise flex flex-1 flex-col items-center justify-center gap-3 px-6 py-24 text-center">
+      <h2 className="st-serif text-4xl font-semibold tracking-tight sm:text-[2.6rem]">Placement done</h2>
       {skills.length > 0 ? (
         <ul className="flex flex-col gap-1 text-muted-foreground">
           {skills.map((s) => (
@@ -613,9 +816,9 @@ function PlacementDone({ deck }: { deck: string }) {
         <p className="max-w-sm text-muted-foreground">There was nothing to place: the deck has no new cards for it.</p>
       )}
       <p className="max-w-sm text-sm text-muted-foreground">Earlier cards come up as quick checks. Right on first sight sends them weeks away.</p>
-      <div className="mt-4 flex gap-2">
-        <Button variant="outline" onClick={() => navigate(`/deck?${new URLSearchParams({ name: deck })}`)}>Back to the deck</Button>
-        <Button onClick={() => navigate(`/study?${new URLSearchParams({ deck })}`)}>Start studying</Button>
+      <div className="mt-5 flex flex-wrap justify-center gap-3">
+        <button className="st-sec" onClick={() => navigate(`/deck?${new URLSearchParams({ name: deck })}`)}>Back to the deck</button>
+        <button className="st-pri" onClick={() => navigate(`/study?${new URLSearchParams({ deck })}`)}>Start studying</button>
       </div>
     </div>
   );
@@ -631,18 +834,18 @@ function Done({ counts, scope }: { counts: Counts | null; scope: Scope }) {
     return `/study?${p}`;
   };
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 py-24 text-center">
-      <div className="text-2xl font-semibold tracking-tight">{scope.ahead ? "Nothing left to study" : "All done for now"}</div>
+    <div className="st-rise flex flex-1 flex-col items-center justify-center gap-3 px-6 py-24 text-center">
+      <h2 className="st-serif text-4xl font-semibold tracking-tight sm:text-[2.9rem]">{scope.ahead ? "Nothing left to study" : "All done for now"}</h2>
       <p className="max-w-sm text-muted-foreground">
         {counts?.doneToday ? `${counts.doneToday} reviews today. ` : ""}
         {scope.ahead ? "There are no cards in this deck." : counts?.nextDue ? `The next card comes back ${relative(counts.nextDue)}.` : "Nothing else is scheduled."}
       </p>
-      <div className="mt-4 flex gap-2">
-        <Button variant="outline" onClick={() => navigate("/")}>Back to decks</Button>
+      <div className="mt-5 flex flex-wrap justify-center gap-3">
+        <button className="st-sec" onClick={() => navigate("/")}>Back to the library</button>
         {!scope.ahead && counts?.nextDue && (
-          <Button className="gap-1.5" onClick={() => navigate(aheadUrl())} title="Review cards before they're due. FSRS counts an early review for less.">
+          <button className="st-pri" onClick={() => navigate(aheadUrl())} title="Review cards before they're due. FSRS counts an early review for less.">
             <FastForward className="size-4" />Practice ahead
-          </Button>
+          </button>
         )}
       </div>
     </div>

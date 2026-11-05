@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpLeft, ArrowUpToLine, BarChart3, CalendarClock, ChevronRight, FastForward, FolderInput, GripVertical, Pencil, Play, Plus, Search, SlidersHorizontal, Smile, Upload, X, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -243,6 +243,49 @@ function DesktopDecks() {
   };
   const dragged = (n: string) => !!drag && (n === drag.name || n.startsWith(drag.name + "::"));
   const listTop = () => listRef.current?.getBoundingClientRect().top ?? 0;
+
+  // Tree elbows: a trunk hangs from each open deck's chevron, and every subdeck joins it with a rounded elbow
+  // that ends at its own chevron (or at its name when it has no subdecks). One SVG path over the list.
+  const [elbows, setElbows] = useState("");
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const measure = () => {
+      const base = list.getBoundingClientRect();
+      const R = 7;
+      let path = "";
+      const at = (name: string) => rows.current.get(name);
+      for (const d of visible) {
+        if (!d.hasChildren || (!q && collapsed.has(d.name))) continue;
+        const chev = at(d.name)?.querySelector<SVGElement>("button[aria-expanded] svg")?.getBoundingClientRect();
+        if (!chev) continue;
+        const kids = visible.filter((k) => k.name.lastIndexOf("::") === d.name.length && k.name.startsWith(d.name + "::"));
+        if (!kids.length) continue;
+        const x = Math.round(chev.left + chev.width / 2 - base.left) + 0.5;
+        const top = chev.bottom - base.top + 2;
+        let lastMid = top;
+        for (const k of kids) {
+          const row = at(k.name);
+          if (!row) continue;
+          const r = row.getBoundingClientRect();
+          // Subdecks join at their chevron; leaves at the middle of their name, not between name and counts.
+          const own = k.hasChildren ? row.querySelector<SVGElement>("button[aria-expanded] svg")?.getBoundingClientRect() : null;
+          const nm = row.querySelector<HTMLElement>("[data-deck-name]")?.getBoundingClientRect();
+          const target = own ?? nm ?? r;
+          const mid = Math.round(target.top + target.height / 2 - base.top) + 0.5;
+          const end = (own ? own.left - 1 : (nm?.left ?? r.left) - 6) - base.left;
+          path += `M${x} ${mid - R}Q${x} ${mid} ${x + R} ${mid}H${Math.round(end)}`;
+          lastMid = mid;
+        }
+        if (lastMid - R > top) path += `M${x} ${top}V${lastMid - R}`;
+      }
+      setElbows(path);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(list);
+    return () => ro.disconnect();
+  }, [visible, collapsed, q]);
   const anyIcon = top.some((d) => d.icon);
 
   const menuFor = (d: DeckNode): DeckMenuEntry[] => [
@@ -277,6 +320,9 @@ function DesktopDecks() {
             <span className="text-[13px] text-muted-foreground tabular">{plural(top.length, "deck")} · {plural(totalCards, "card")}</span>
           </div>
           <div ref={listRef} className="relative">
+            {!drag && elbows && (
+              <svg aria-hidden className="lib-elbows pointer-events-none absolute inset-0 z-[1] size-full overflow-visible"><path d={elbows} fill="none" strokeWidth="1.5" strokeLinecap="round" /></svg>
+            )}
             {visible.map((d) => {
               const name = leafOf(d.name);
               const w = work(d);
@@ -333,6 +379,7 @@ function DesktopDecks() {
                     {!sub && d.icon && <DeckIcon icon={d.icon} size={46} className="lib-art" />}
                     <div className="min-w-0 flex-1">
                       <button
+                        data-deck-name
                         className={cn("block max-w-full truncate text-left hover:underline", sub ? "text-[15px] font-medium" : "text-[15.5px] font-semibold")}
                         onClick={() => navigate(`/deck?name=${enc(d.name)}`)}
                       >

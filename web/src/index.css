@@ -268,6 +268,16 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
   border-color: color-mix(in oklab, var(--foreground) 10%, transparent);
   box-shadow: 0 12px 28px -14px rgb(0 0 0 / 0.55);
 }
+/* ---------------------------------------------------------------- Shell: sidebar */
+/* Sidebar group labels (Study, Make): small caps in a faint ink. */
+.shell-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--muted-foreground) 62%, var(--sidebar));
+}
+
 .score-fold {
   background: color-mix(in oklab, var(--background) 94%, transparent);
   backdrop-filter: blur(18px) saturate(1.2);

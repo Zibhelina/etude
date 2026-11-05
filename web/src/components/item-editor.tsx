@@ -242,8 +242,10 @@ type Tab = (typeof TABS)[number][0];
  * The item inspector: header, a live preview that flips, and Edit / Memory / History.
  * `closeAlways` shows the back control at every size (for editors opened in a sheet); Browse only needs it on phones.
  * `gutter` keeps the save bar's buttons clear of the corner Minimi / Ask bubble.
+ * `closeX` puts a close button after the actions (for a drawer beside a table) instead of a back arrow;
+ * it also lets the inspector fill a wide drawer instead of stopping at 760px.
  */
-export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, onBack, closeAlways, gutter, onDirtyChange }: { id: string; decks: string[]; tags: string[]; onSaved(): void; onDeleted(): void; onDuplicate(id: string): void; onBack(): void; closeAlways?: boolean; gutter?: boolean; onDirtyChange?(dirty: boolean): void }) {
+export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, onBack, closeAlways, closeX, gutter, onDirtyChange }: { id: string; decks: string[]; tags: string[]; onSaved(): void; onDeleted(): void; onDuplicate(id: string): void; onBack(): void; closeAlways?: boolean; closeX?: boolean; gutter?: boolean; onDirtyChange?(dirty: boolean): void }) {
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [type, setType] = useState<CardType | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -385,7 +387,7 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
 
   return (
     <div className="@container/insp min-h-full w-full">
-    <div className={cn("@container mx-auto flex min-h-full w-full max-w-[760px] flex-col px-[34px] pt-[22px] @max-[44rem]/insp:px-6 @max-[44rem]/insp:pt-[18px] max-md:px-5! max-md:pt-[calc(0.5rem+env(safe-area-inset-top))]!", phone && !closeAlways && "browse-slide")}>
+    <div className={cn("@container mx-auto flex min-h-full w-full flex-col px-[34px] pt-[22px] @max-[44rem]/insp:px-6 @max-[44rem]/insp:pt-[18px] max-md:px-5! max-md:pt-[calc(0.5rem+env(safe-area-inset-top))]!", closeX ? "max-w-[1100px]" : "max-w-[760px]", phone && !closeAlways && "browse-slide")}>
       {phone && !closeAlways ? (
         <>
           <div className="-mx-2 mb-1 flex h-12 items-center gap-1">
@@ -402,6 +404,7 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
           <DeckCrumb deck={item.deck} leafOnly className="hidden flex-1 @max-[36rem]:flex" />
           {badges}
           {actions}
+          {closeX && <Button size="icon" variant="ghost" className="-mr-2 size-9 text-muted-foreground" onClick={onBack} aria-label="Close" title="Close · Esc"><X className="size-5" /></Button>}
         </div>
       )}
 

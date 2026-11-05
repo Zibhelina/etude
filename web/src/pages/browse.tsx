@@ -1,7 +1,7 @@
-// Browse (Etude 3): every card in one list, with the selected card's inspector beside it. Phones show the
-// list, then the inspector as its own page. An empty library is one page without the split.
+// Browse (Etude 3): every card in a sortable table; the picked card opens in a drawer on the right.
+// Phones show a list, then the card as its own page. An empty library is one page without the table.
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, Check, ChevronDown, FolderInput, MoreHorizontal, Pause, Play, Plus, RotateCcw, Search, Tag, Trash2, Upload, X, Archive, ArchiveRestore } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, ChevronDown, FolderInput, MoreHorizontal, Pause, Play, Plus, RotateCcw, Search, Tag, Trash2, Upload, X, Archive, ArchiveRestore } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -9,7 +9,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { groupItems, ItemEditor, MoveDialog, NewItemDialog, ORDERS, TagDialog, type ItemRowData } from "@/components/item-editor";
 import { daysWords } from "@/components/item-memory";
 import { useImportPicker } from "@/pages/decks";
-import { api, type DeckNode, type SearchRow, type TypeSummary } from "@/lib/api";
+import { api, relative, type DeckNode, type SearchRow, type TypeSummary } from "@/lib/api";
+import { DeckIcon } from "@/components/deck-icon";
 import { appPath, withBase } from "@/lib/router";
 import { useLongPress, usePhone } from "@/lib/phone";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,21 @@ const CHIPS = [
   ["today", "Missed today", "rated:1:1"],
   ["suspended", "Suspended", "is:suspended"],
 ] as const;
+
+/** Table columns: [key, header, engine sort order, numbers (right-aligned)]. */
+const COLS = [
+  ["card", "Card", "title", false],
+  ["deck", "Deck", "deck", false],
+  ["type", "Type", "type", false],
+  ["next", "Next", "due", false],
+  ["every", "Every", "interval", true],
+  ["recall", "Recall", "recall", true],
+  ["missed", "Missed", "lapses", true],
+  ["edited", "Edited", "updated", true],
+] as const;
+type ColKey = (typeof COLS)[number][0];
+/** Columns iPad drops so the card text keeps its room. */
+const TABLET_HIDDEN = new Set<ColKey>(["deck", "edited"]);
 
 const quote = (s: string) => (/[\s()"]/.test(s) ? `"${s.replace(/"/g, "")}"` : s);
 
@@ -120,6 +136,42 @@ function Row({ r, typeName, words, active, checked, selecting, dirty, phone, tab
   );
 }
 
+function TableRow({ r, typeName, icon, words, active, checked, selecting, dirty, cols, onOpen, onToggle }: { r: ItemRowData; typeName: string; icon: string | null; words: string[]; active: boolean; checked: boolean; selecting: boolean; dirty: boolean; cols: Set<ColKey>; onOpen(): void; onToggle(): void }) {
+  const parts = r.deck.split("::");
+  const R = r.retrievability;
+  const td = "h-[46px] px-2.5 shadow-[inset_0_-1px_0_var(--border)] whitespace-nowrap overflow-hidden text-ellipsis max-w-0";
+  const none = <span className="text-muted-foreground/50">–</span>;
+  return (
+    <tr
+      data-item-row
+      data-id={r.itemId}
+      aria-current={active || undefined}
+      aria-selected={active}
+      onClick={(e) => (e.metaKey || e.ctrlKey || e.shiftKey ? onToggle() : onOpen())}
+      className={cn("browse-tr group cursor-pointer select-none", active && "on", r.suspended && "text-muted-foreground/70")}
+    >
+      <td className={cn(td, "w-[38px] pr-0 pl-1.5")}>
+        <Box on={checked} label="Select" className={cn("transition-opacity", !(selecting || checked) && "opacity-40 group-hover:opacity-100")} onClick={(e) => { e.stopPropagation(); onToggle(); }} />
+      </td>
+      <td className={cn(td, "text-[14.5px] font-[550]", !r.suspended && "text-foreground")} title={r.title || r.itemId}>
+        {r.title ? <Highlight text={r.title} words={words} /> : <span className="text-muted-foreground">{r.itemId}</span>}
+        {dirty && <i className="ml-1.5 inline-block size-1.5 rounded-full bg-hard align-middle" title="Unsaved changes" />}
+      </td>
+      {cols.has("deck") && (
+        <td className={cn(td, "text-[13.5px] text-muted-foreground")} title={parts.join(" › ")}>
+          <span className="flex min-w-0 items-center gap-1.5">{icon && <DeckIcon icon={icon} size={18} className="shrink-0" />}<span className="truncate">{parts[parts.length - 1]}</span></span>
+        </td>
+      )}
+      <td className={cn(td, "text-[13.5px] text-muted-foreground")} title={typeName}>{typeName}{r.faces > 1 && <span className="text-muted-foreground/60"> · {r.faces}</span>}</td>
+      <td className={td}><State r={r} /></td>
+      <td className={cn(td, "text-right text-[13.5px] text-muted-foreground tabular")}>{r.interval != null && r.interval > 0 ? daysWords(r.interval) : none}</td>
+      <td className={cn(td, "text-right text-[13.5px] tabular")}>{R != null && r.state !== 0 ? <span className={cn("font-semibold", R < 0.85 ? "text-hard" : "text-foreground")}>{Math.round(R * 100)}%</span> : none}</td>
+      <td className={cn(td, "text-right text-[13.5px] tabular", r.lapses >= 2 ? "font-semibold text-learn" : r.lapses ? "text-foreground" : "text-muted-foreground/50")}>{r.lapses}</td>
+      {cols.has("edited") && <td className={cn(td, "text-right text-[13px] text-muted-foreground tabular")} title={new Date(r.updated).toLocaleString()}>{r.updated ? relative(r.updated) : ""}</td>}
+    </tr>
+  );
+}
+
 function Blank({ plus, className }: { plus?: boolean; className?: string }) {
   // Three stacked blank cards: the empty-state drawing.
   return (
@@ -148,6 +200,7 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
   const [deckF, setDeckF] = useState("");
   const [typeF, setTypeF] = useState("");
   const [order, setOrder] = useState("relevance");
+  const [reverse, setReverse] = useState(false);
   const [rows, setRows] = useState<SearchRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -166,7 +219,45 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
   const [confirm, setConfirm] = useState<null | "delete" | "reset">(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const autoPicked = useRef(!!openItem);
+  // The card drawer's width: dragged by its left edge, remembered per device size, double-click resets.
+  const drawerRef = useRef<HTMLElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const wKey = () => `etude.browse.drawer.${tablet ? "tablet" : "desktop"}`;
+  const [pageW, setPageW] = useState(0);
+  const [savedW, setSavedW] = useState<number | null>(() => Number(localStorage.getItem(`etude.browse.drawer.${matchMedia(TABLET).matches ? "tablet" : "desktop"}`)) || null);
+  useEffect(() => setSavedW(Number(localStorage.getItem(wKey())) || null), [tablet]);
+  useEffect(() => {
+    const el = pageRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setPageW(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
+  const minW = 420, maxW = Math.max(minW, pageW - (tablet ? 220 : 320));
+  const defW = Math.round(pageW * (tablet ? 0.66 : 0.6));
+  const drawerW = Math.min(maxW, Math.max(minW, savedW ?? defW));
+  const setDrawerW = (w: number | null) => {
+    setSavedW(w == null ? null : Math.min(maxW, Math.max(minW, w)));
+    try { w == null ? localStorage.removeItem(wKey()) : localStorage.setItem(wKey(), String(Math.round(Math.min(maxW, Math.max(minW, w))))); } catch {}
+  };
+  const startResize = (e: React.PointerEvent) => {
+    if (e.button > 0) return;
+    e.preventDefault();
+    const right = pageRef.current!.getBoundingClientRect().right;
+    let w = drawerW;
+    document.body.classList.add("browse-resizing");
+    const move = (ev: PointerEvent) => { w = Math.min(maxW, Math.max(minW, right - ev.clientX)); setSavedW(w); };
+    const up = () => {
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", up);
+      removeEventListener("pointercancel", up);
+      document.body.classList.remove("browse-resizing");
+      setDrawerW(w);
+    };
+    addEventListener("pointermove", move);
+    addEventListener("pointerup", up);
+    addEventListener("pointercancel", up);
+  };
 
   const fullQuery = useMemo(() => {
     const extra = [...CHIPS.filter(([k]) => chips.has(k)).map(([, , q]) => q), deckF && `deck:${quote(deckF)}`, typeF && `type:${quote(typeF)}`].filter(Boolean);
@@ -177,7 +268,7 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
 
   const run = useCallback(async (q = fullQuery, limit = PAGE) => {
     try {
-      const r = await api.search(q, { limit, order });
+      const r = await api.search(q, { limit, order, reverse });
       setRows(r.rows);
       setTotal(r.total);
       setError(null);
@@ -186,13 +277,13 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
     } finally {
       setLoaded(true);
     }
-  }, [fullQuery, order]);
+  }, [fullQuery, order, reverse]);
   const refresh = () => run(fullQuery, Math.max(PAGE, rows.length));
 
   useEffect(() => {
     const t = setTimeout(() => run(fullQuery), 180);
     return () => clearTimeout(t);
-  }, [fullQuery, order]);
+  }, [fullQuery, order, reverse]);
 
   useEffect(() => {
     const p = new URLSearchParams();
@@ -218,13 +309,8 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
   const deckNames = useMemo(() => decks.map((d) => d.name), [decks]);
   const topDecks = useMemo(() => new Set(decks.map((d) => d.name.split("::")[0])).size, [decks]);
 
-  // Desktop and iPad open on the first card, like a mail app; phones start on the list.
-  useEffect(() => {
-    if (!autoPicked.current && !phone && loaded && items.length) {
-      autoPicked.current = true;
-      setSelected(items[0].itemId);
-    }
-  }, [loaded, items, phone]);
+  // The row the arrow keys are on. The drawer opens with Enter or a click and then follows it.
+  const [cursor, setCursor] = useState<string | null>(openItem);
 
   const toggle = (id: string) => {
     setSelecting(true);
@@ -239,10 +325,11 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
 
   const step = (k: number) => {
     if (!items.length) return;
-    let i = items.findIndex((r) => r.itemId === selected);
+    let i = items.findIndex((r) => r.itemId === (selected ?? cursor));
     i = i < 0 ? 0 : Math.max(0, Math.min(items.length - 1, i + k));
     const id = items[i].itemId;
-    setSelected(id);
+    setCursor(id);
+    if (selected) setSelected(id);
     requestAnimationFrame(() => listRef.current?.querySelector(`[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" }));
   };
 
@@ -260,7 +347,7 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
       if (e.key === "Escape" && !overlay) {
         if (typing && t === searchRef.current) return void searchRef.current?.blur();
         if (selecting) return endSelect();
-        if (phone && selected) return setSelected(null);
+        if (selected) return setSelected(null);
         return;
       }
       if (typing || overlay || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -268,12 +355,13 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
       if (phone) return;
       if (e.key === "ArrowDown" || e.key === "j") { e.preventDefault(); step(1); return; }
       if (e.key === "ArrowUp" || e.key === "k") { e.preventDefault(); step(-1); return; }
-      if (e.key === "x" && selected) { toggle(selected); return; }
+      if (e.key === "Enter" && !selected && cursor && !(t && t.closest("button, a"))) { e.preventDefault(); setSelected(cursor); return; }
+      if (e.key === "x" && (selected ?? cursor)) { toggle((selected ?? cursor)!); return; }
       if (e.key === "n") { e.preventDefault(); setCreating(true); }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [items, selected, selecting, phone]);
+  }, [items, selected, cursor, selecting, phone]);
 
   // ---------------------------------------------------------------- bulk actions, with Undo where it can be undone
   const ids = [...checked];
@@ -399,7 +487,7 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
   const count = error
     ? <span className="min-w-0 truncate text-destructive">{error}</span>
     : <span className="tabular min-w-0 truncate whitespace-nowrap">{library != null && total !== library ? `${total.toLocaleString("en-US")} of ${library.toLocaleString("en-US")}` : `${total.toLocaleString("en-US")} card${total === 1 ? "" : "s"}`}</span>;
-  const orderLabel = ORDERS.find(([v]) => v === order)?.[1] ?? "Sorted";
+  const orderLabel = (ORDERS.find(([v]) => v === order)?.[1] ?? COLS.find(([, , o]) => o === order)?.[1] ?? "Sorted") + (reverse ? " ↑" : "");
   const toolbar = selecting && checked.size > 0 && !phone ? (
     bulkBar()
   ) : (
@@ -412,7 +500,7 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
         <DropdownMenuTrigger asChild><button className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 font-semibold whitespace-nowrap hover:bg-accent hover:text-foreground"><ArrowUpDown className="size-[15px]" />{orderLabel}</button></DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuLabel className="text-xs text-muted-foreground">Sort by</DropdownMenuLabel>
-          {ORDERS.map(([v, label]) => <DropdownMenuItem key={v} onClick={() => setOrder(v)}>{label}{v === order && <Check className="ml-auto" />}</DropdownMenuItem>)}
+          {ORDERS.map(([v, label]) => <DropdownMenuItem key={v} onClick={() => { setOrder(v); setReverse(false); }}>{label}{v === order && <Check className="ml-auto" />}</DropdownMenuItem>)}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -508,60 +596,122 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
       </div>
     );
 
-  const showList = !phone || !selected;
-  return (
-    <div className={cn(H, "flex min-w-0")}>
-      {showList && (
-        <section className={cn("min-h-0 min-w-0 [&>*]:shrink-0", phone ? "block w-full overflow-y-auto px-5 pt-[calc(0.5rem+env(safe-area-inset-top))]" : cn("flex shrink-0 flex-col shadow-[inset_-1px_0_0_var(--border)]", tablet ? "w-[304px] pt-5 pr-3 pl-[18px]" : "w-[400px] pt-[26px] pr-[22px] pl-[26px]"))}>
-          {header}{search}{chipRow(false)}{toolbar}
-          <div ref={listRef} className={cn(phone ? "pb-[150px]" : "-mx-3 mt-1 min-h-0 flex-1 shrink! overflow-y-auto pb-6")}>
-            {items.map((r) => (
-              <Row
-                key={r.itemId}
-                r={r}
-                typeName={typeName.get(r.type) ?? r.type}
-                words={words}
-                active={selected === r.itemId}
-                checked={checked.has(r.itemId)}
-                selecting={selecting}
-                dirty={dirtyId === r.itemId}
-                phone={phone}
-                tablet={tablet}
-                onOpen={() => setSelected(r.itemId)}
-                onToggle={() => toggle(r.itemId)}
-              />
-            ))}
-            {phone && loaded && !items.length && !error && noMatch}
-            {more}
-          </div>
-          {phone && selecting && checked.size > 0 && bulkBar()}
-        </section>
-      )}
+  const editor = selected && (
+    <ItemEditor
+      key={selected}
+      id={selected}
+      gutter={!phone}
+      closeX={!phone}
+      onBack={() => setSelected(null)}
+      decks={deckNames}
+      tags={tags}
+      onDirtyChange={(d) => setDirtyId(d ? selected : null)}
+      onSaved={changed}
+      onDeleted={() => { setSelected(null); changed(); }}
+      onDuplicate={(newId) => { setSelected(newId); setCursor(newId); changed(); }}
+    />
+  );
 
-      {(!phone || selected) && (
-        <section className="relative min-h-0 min-w-0 flex-1 overflow-y-auto" id="browse-inspector">
-          {selected ? (
-            <ItemEditor
-              key={selected}
-              id={selected}
-              gutter
-              onBack={() => setSelected(null)}
-              decks={deckNames}
-              tags={tags}
-              onDirtyChange={(d) => setDirtyId(d ? selected : null)}
-              onSaved={changed}
-              onDeleted={() => { setSelected(null); changed(); }}
-              onDuplicate={(newId) => { setSelected(newId); changed(); }}
-            />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-2.5 p-10 text-center text-[14.5px] text-muted-foreground">
-              <Blank className="mb-2" />
-              <b className="text-foreground">Pick a card</b>
-              <span>Its preview, fields and memory open here.</span>
-              <span className="mt-1.5 hidden text-[12.5px] text-muted-foreground/70 pointer-fine:inline"><kbd className="mx-0.5 rounded-[5px] px-1.5 py-0.5 shadow-[inset_0_0_0_1px_var(--border)]">↑</kbd><kbd className="mx-0.5 rounded-[5px] px-1.5 py-0.5 shadow-[inset_0_0_0_1px_var(--border)]">↓</kbd> to move · <kbd className="mx-0.5 rounded-[5px] px-1.5 py-0.5 shadow-[inset_0_0_0_1px_var(--border)]">/</kbd> to search</span>
+  // Phones: the list, then the card as its own page.
+  if (phone)
+    return (
+      <div className={cn(H, "flex min-w-0")}>
+        {!selected && (
+          <section className="block min-h-0 w-full min-w-0 overflow-y-auto px-5 pt-[calc(0.5rem+env(safe-area-inset-top))] [&>*]:shrink-0">
+            {header}{search}{chipRow(false)}{toolbar}
+            <div ref={listRef} className="pb-[150px]">
+              {items.map((r) => (
+                <Row key={r.itemId} r={r} typeName={typeName.get(r.type) ?? r.type} words={words} active={false} checked={checked.has(r.itemId)} selecting={selecting} dirty={dirtyId === r.itemId} phone tablet={false} onOpen={() => setSelected(r.itemId)} onToggle={() => toggle(r.itemId)} />
+              ))}
+              {loaded && !items.length && !error && noMatch}
+              {more}
             </div>
-          )}
-        </section>
+            {selecting && checked.size > 0 && bulkBar()}
+          </section>
+        )}
+        {selected && <section className="relative min-h-0 min-w-0 flex-1 overflow-y-auto" id="browse-inspector">{editor}</section>}
+        {dialogs}
+      </div>
+    );
+
+  // Desktop and iPad: the table fills the page; a picked card opens in a drawer on the right.
+  const cols = new Set<ColKey>(COLS.map(([k]) => k).filter((k) => !(tablet && TABLET_HIDDEN.has(k))));
+  const W: Partial<Record<ColKey, number>> = tablet ? { type: 92, next: 112, every: 74, recall: 70, missed: 66 } : { deck: 168, type: 104, next: 122, every: 78, recall: 72, missed: 70, edited: 100 };
+  const sortBy = (o: string) => {
+    if (order === o) setReverse((v) => !v);
+    else { setOrder(o); setReverse(false); }
+  };
+  const iconOf = (deck: string) => decks.find((d) => d.name === deck.split("::")[0])?.icon ?? null;
+  return (
+    <div ref={pageRef} className={cn(H, "relative flex min-w-0")}>
+      <section className={cn("flex min-h-0 min-w-0 flex-1 flex-col [&>*]:shrink-0", tablet ? "px-7 pt-6" : "px-11 pt-[30px]")}>
+        {header}{search}{chipRow(false)}{toolbar}
+        <div ref={listRef} className={cn("browse-tw -mx-2 mt-1.5 min-h-0 flex-1 shrink! overflow-auto pb-28")}>
+          <table className="w-full table-fixed border-separate border-spacing-0">
+            <colgroup>
+              <col style={{ width: 38 }} />
+              {COLS.filter(([k]) => cols.has(k)).map(([k]) => <col key={k} style={W[k] ? { width: W[k] } : undefined} />)}
+            </colgroup>
+            <thead>
+              <tr>
+                <th className="sticky top-0 z-[2] bg-background px-1.5 shadow-[inset_0_-1px_0_var(--border)]">
+                  {selecting && <Box on={allChecked} label="Select all" onClick={() => setChecked(allChecked ? new Set() : new Set(items.map((r) => r.itemId)))} />}
+                </th>
+                {COLS.filter(([k]) => cols.has(k)).map(([k, label, o, num]) => {
+                  const on = order === o;
+                  return (
+                    <th key={k} aria-sort={on ? (reverse ? "descending" : "ascending") : undefined} className={cn("sticky top-0 z-[2] bg-background p-0 shadow-[inset_0_-1px_0_var(--border)]", num ? "text-right" : "text-left")}>
+                      <button onClick={() => sortBy(o)} className={cn("inline-flex h-9 w-full items-center gap-1 px-2.5 text-xs font-[650] whitespace-nowrap hover:text-foreground", num && "justify-end", on ? "text-foreground" : "text-muted-foreground")} title={`Sort by ${label.toLowerCase()}`}>
+                        {label}{on && (reverse ? <ArrowUp className="size-3" strokeWidth={2.5} /> : <ArrowDown className="size-3" strokeWidth={2.5} />)}
+                      </button>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((r) => (
+                <TableRow
+                  key={r.itemId}
+                  r={r}
+                  typeName={typeName.get(r.type) ?? r.type}
+                  icon={iconOf(r.deck)}
+                  words={words}
+                  active={(selected ?? cursor) === r.itemId}
+                  checked={checked.has(r.itemId)}
+                  selecting={selecting}
+                  dirty={dirtyId === r.itemId}
+                  cols={cols}
+                  onOpen={() => { setCursor(r.itemId); setSelected(r.itemId); }}
+                  onToggle={() => toggle(r.itemId)}
+                />
+              ))}
+            </tbody>
+          </table>
+          {more}
+        </div>
+      </section>
+      {selected && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize the card panel"
+          aria-valuenow={Math.round(drawerW)}
+          tabIndex={0}
+          title="Drag to resize · double-click to reset"
+          onPointerDown={startResize}
+          onDoubleClick={() => setDrawerW(null)}
+          onKeyDown={(e) => { if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); setDrawerW(drawerW + (e.key === "ArrowLeft" ? 40 : -40)); } }}
+          className="browse-resize absolute inset-y-0 z-30 w-3 cursor-col-resize touch-none outline-none"
+          style={{ right: drawerW - 6 }}
+        />
+      )}
+      {selected && (
+        <aside ref={drawerRef} className="browse-drawer absolute inset-y-0 right-0 z-20 overflow-y-auto bg-background" style={{ width: drawerW }} id="browse-inspector" aria-label="Card">
+          {editor}
+          {/* Room to scroll the last field clear of the corner Minimi / Ask bubble. */}
+          <div aria-hidden className="h-24" />
+        </aside>
       )}
       {dialogs}
     </div>

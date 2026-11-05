@@ -19,7 +19,9 @@ import { download } from "@/components/type-editor/starter";
 import { api, ApiError, type CardType, type MarketEntry, type MarketFile, type MarketKind, type PublishResult } from "@/lib/api";
 import { EtudeImg } from "@/lib/local-url";
 import { MarketGallery } from "@/components/market-gallery";
-import { DetailLayout, Hook, niceDate, paragraphs } from "@/components/market-detail";
+import { DetailLayout, niceDate, paragraphs, type InfoCell } from "@/components/market-detail";
+import { Comments, socialCells, TileCounts, useEntryStats, Votes } from "@/components/market-social";
+import { useMarketStats, type EntryCounts } from "@/lib/market-social";
 import { applyTheme, currentTheme, setPreviewing, type Theme } from "@/lib/theme";
 import { navigate, useLocation } from "@/lib/router";
 import { cn } from "@/lib/utils";
@@ -84,6 +86,7 @@ export function MarketPage() {
   const tabs: Tab[] = isNativeApp() ? ["browse", "library"] : ["browse", "library", "selling"];
   const tab: Tab = tabs.includes(params.get("tab") as Tab) ? (params.get("tab") as Tab) : "browse";
   const paid = usePaidIndex();
+  const { stats, reload: reloadStats } = useMarketStats();
   const [data, setData] = useState<{ repo: string; url: string; selectedTheme: string; entries: MarketEntry[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -175,11 +178,14 @@ export function MarketPage() {
   }, [items]);
   const sorted = (list: Item[]) => [...list].sort((a, b) => featRank(a.key, !!a.e.installed, kindOf(a)) - featRank(b.key, !!b.e.installed, kindOf(b)));
   const shown = useMemo(() => sorted(items.filter((it) => (filter === "all" || kindOf(it) === filter) && matches(it.e, words(query)))), [items, filter, query]);
-  const hero = useMemo(() => {
+  // Featured: the paid decks on sale first, then the free picks in FEATURED order (installed or not), then the most
+  // liked of the rest, up to eight. Only entries with a cover, so every card has a picture.
+  const featured = useMemo(() => {
     const buyable = canShowPurchases() ? sorted(items.filter((it) => it.paid && !it.e.owned && it.e.cover)) : [];
-    const free = sorted(items.filter((it) => !it.paid && it.e.kind === "deck" && it.e.cover)).sort((a, b) => featRank(a.key, false, "deck") - featRank(b.key, false, "deck"));
-    return buyable[0] ?? free[0] ?? null;
-  }, [items]);
+    const picks = items.filter((it) => !it.paid && it.e.cover && FEATURED.includes(it.e.id)).sort((a, b) => FEATURED.indexOf(a.e.id) - FEATURED.indexOf(b.e.id));
+    const liked = items.filter((it) => !it.paid && it.e.cover && !FEATURED.includes(it.e.id) && (stats[it.key]?.likes ?? 0) > 0).sort((a, b) => (stats[b.key]?.likes ?? 0) - (stats[a.key]?.likes ?? 0));
+    return [...buyable, ...picks, ...liked].slice(0, 8);
+  }, [items, stats]);
 
   const setTab = (t: Tab) => navigate(t === "browse" ? "/market" : `/market?tab=${t}`, { replace: true });
   const setFilter = (f: Filter) => navigate(f === "all" ? "/market" : `/market?kind=${f}`, { replace: true });
@@ -229,11 +235,12 @@ export function MarketPage() {
         onKeep={() => void keep()}
         onBack={leaveDetail}
         onOpen={(e) => open({ paid: false, key: `${e.kind}/${e.id}`, e })}
-        onInstalled={() => void load(true)}
+        onInstalled={() => (void load(true), void reloadStats())}
+        signedIn={paid.signedIn}
       />
     );
   } else if (detail && openPaid) {
-    body = <PaidDetail key={openPaid.listing} entry={openPaid} signedIn={paid.signedIn} onBack={leaveDetail} onChanged={() => void paid.reload()} />;
+    body = <PaidDetail key={openPaid.listing} entry={openPaid} signedIn={paid.signedIn} onBack={leaveDetail} onChanged={() => (void paid.reload(), void reloadStats())} />;
   } else {
     body = (
       <>
@@ -311,23 +318,24 @@ export function MarketPage() {
                     {shown.length} {shown.length === 1 ? "result" : "results"}{query && <> for “{query}”</>}
                     {filter !== "all" && <Button variant="ghost" size="sm" className="text-foreground" onClick={() => setFilter("all")}>Show everything</Button>}
                   </div>
-                  <div className="mk-grid">{shown.map((it) => <AnyTile key={it.key} it={it} onOpen={() => open(it)} onTry={tryOn} />)}</div>
+                  <div className="mk-grid">{shown.map((it) => <AnyTile key={it.key} it={it} counts={stats[it.key]} onOpen={() => open(it)} onTry={tryOn} />)}</div>
                 </>
               )
             ) : (
               <>
-                {hero && <Hero it={hero} onOpen={() => open(hero)} onChanged={() => void load(true)} />}
-                <Shelf title="Decks" sub="Install one and it shows up in your Library." items={sorted(items.filter((it) => !it.paid && it.e.kind === "deck"))} onAll={() => setFilter("deck")} onOpen={open} onTry={tryOn} />
+                <Featured items={featured} stats={stats} onOpen={open} onChanged={() => (void load(true), void reloadStats())} />
+                <Shelf title="Decks" sub="Install one and it shows up in your Library." items={sorted(items.filter((it) => !it.paid && it.e.kind === "deck"))} stats={stats} onAll={() => setFilter("deck")} onOpen={open} onTry={tryOn} />
                 <Shelf
                   title={canShowPurchases() ? "Paid decks" : "Your decks"}
                   sub={canShowPurchases() ? "From creators, sold on etude.study. The creator sets the price." : "Bought with your Etude account"}
                   items={items.filter((it) => it.paid)}
+                  stats={stats}
                   onOpen={open}
                   onTry={tryOn}
                   data-paid-section
                 />
-                <Shelf title="Card types" sub="New kinds of cards. Try one here before you install it." items={sorted(items.filter((it) => !it.paid && it.e.kind === "type"))} onAll={() => setFilter("type")} onOpen={open} onTry={tryOn} />
-                <Shelf title="Themes" sub="Try one on. Nothing changes until you keep it." items={sorted(items.filter((it) => !it.paid && it.e.kind === "theme"))} onAll={() => setFilter("theme")} onOpen={open} onTry={tryOn} themes />
+                <Shelf title="Card types" sub="New kinds of cards. Try one here before you install it." items={sorted(items.filter((it) => !it.paid && it.e.kind === "type"))} stats={stats} onAll={() => setFilter("type")} onOpen={open} onTry={tryOn} />
+                <Shelf title="Themes" sub="Try one on. Nothing changes until you keep it." items={sorted(items.filter((it) => !it.paid && it.e.kind === "theme"))} stats={stats} onAll={() => setFilter("theme")} onOpen={open} onTry={tryOn} themes />
               </>
             )}
           </>
@@ -357,7 +365,44 @@ export function MarketPage() {
 
 // ------------------------------------------------------------------ discover
 
-function Hero({ it, onOpen, onChanged }: { it: Item; onOpen(): void; onChanged(): void }) {
+/** Featured: the big cards in one row that scrolls sideways, with dots under it and arrows on hover. */
+function Featured({ items, stats, onOpen, onChanged }: { items: Item[]; stats: Record<string, EntryCounts>; onOpen(it: Item): void; onChanged(): void }) {
+  const row = useRef<HTMLDivElement>(null);
+  const [at, setAt] = useState(0);
+  if (!items.length) return null;
+  const card = () => row.current?.firstElementChild as HTMLElement | null;
+  const step = () => {
+    const c = card();
+    return c ? c.offsetWidth + (parseFloat(getComputedStyle(row.current!).columnGap) || 0) : 1;
+  };
+  const go = (i: number) => row.current?.scrollTo({ left: Math.max(0, Math.min(items.length - 1, i)) * step(), behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+  return (
+    <section className={cn("mk-feat", items.length === 1 && "one")} aria-label="Featured" data-featured>
+      <div className="mk-shelf-head">
+        <div className="min-w-0 flex-1">
+          <h2 className="mk-serif">Featured</h2>
+          <p>Picked by the Etude team.</p>
+        </div>
+        {items.length > 1 && (
+          <span className="mk-arrows">
+            <Button variant="ghost" size="icon" aria-label="Previous featured" disabled={at === 0} onClick={() => go(at - 1)}><ChevronLeft className="size-[18px]" /></Button>
+            <Button variant="ghost" size="icon" aria-label="Next featured" disabled={at === items.length - 1} onClick={() => go(at + 1)}><ChevronRight className="size-[18px]" /></Button>
+          </span>
+        )}
+      </div>
+      <div className="mk-feat-row" ref={row} onScroll={() => setAt(Math.round((row.current?.scrollLeft ?? 0) / step()))} data-featured-row>
+        {items.map((it) => <Hero key={it.key} it={it} counts={stats[it.key]} onOpen={() => onOpen(it)} onChanged={onChanged} />)}
+      </div>
+      {items.length > 1 && (
+        <div className="mk-feat-dots" role="tablist" aria-label="Featured">
+          {items.map((it, i) => <button key={it.key} role="tab" aria-label={it.e.name} aria-current={i === at} aria-selected={i === at} onClick={() => go(i)} />)}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Hero({ it, counts, onOpen, onChanged }: { it: Item; counts?: EntryCounts; onOpen(): void; onChanged(): void }) {
   const [busy, setBusy] = useState(false);
   const e = it.e;
   const stop = (x: React.MouseEvent) => x.stopPropagation();
@@ -372,7 +417,7 @@ function Hero({ it, onOpen, onChanged }: { it: Item; onOpen(): void; onChanged()
     const f = it.e;
     cover = <EtudeImg src={api.marketCoverUrl(f.kind, f.id)} alt="" />;
     meta = metaLine(f);
-    eyebrow = f.installed ? "Featured" : "Start here";
+    eyebrow = `Featured · ${KIND_LABEL[f.kind].toLowerCase()}`;
     const get = async () => {
       setBusy(true);
       try {
@@ -397,7 +442,7 @@ function Hero({ it, onOpen, onChanged }: { it: Item; onOpen(): void; onChanged()
         <div className="mk-eyebrow">{eyebrow}</div>
         <h2 className="mk-serif">{e.name}</h2>
         <p>{pitch(e.description)}</p>
-        <div className="mk-meta mb-[18px]">{meta}<span aria-hidden="true">·</span><By author={e.author} /></div>
+        <div className="mk-meta mb-[18px]">{meta}<span aria-hidden="true">·</span><By author={e.author} /><TileCounts c={counts} /></div>
         <div className="mk-actions">
           {btn}
           <Button variant="ghost" className="h-10 text-muted-foreground" onClick={(x) => (x.stopPropagation(), onOpen())}>Details</Button>
@@ -407,7 +452,7 @@ function Hero({ it, onOpen, onChanged }: { it: Item; onOpen(): void; onChanged()
   );
 }
 
-function Shelf({ title, sub, items, onAll, onOpen, onTry, themes, ...rest }: { title: string; sub?: string; items: Item[]; onAll?(): void; onOpen(it: Item): void; onTry(e: MarketEntry): void; themes?: boolean; "data-paid-section"?: boolean }) {
+function Shelf({ title, sub, items, stats, onAll, onOpen, onTry, themes, ...rest }: { title: string; sub?: string; items: Item[]; stats: Record<string, EntryCounts>; onAll?(): void; onOpen(it: Item): void; onTry(e: MarketEntry): void; themes?: boolean; "data-paid-section"?: boolean }) {
   const row = useRef<HTMLDivElement>(null);
   if (!items.length) return null;
   const page = (d: 1 | -1) => row.current?.scrollBy({ left: d * row.current.clientWidth * 0.8, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
@@ -425,14 +470,14 @@ function Shelf({ title, sub, items, onAll, onOpen, onTry, themes, ...rest }: { t
         </span>
       </div>
       <div className="mk-row" ref={row}>
-        {items.map((it) => <AnyTile key={it.key} it={it} onOpen={() => onOpen(it)} onTry={onTry} />)}
+        {items.map((it) => <AnyTile key={it.key} it={it} counts={stats[it.key]} onOpen={() => onOpen(it)} onTry={onTry} />)}
       </div>
     </section>
   );
 }
 
-function AnyTile({ it, onOpen, onTry }: { it: Item; onOpen(): void; onTry(e: MarketEntry): void }) {
-  return it.paid ? <PaidTile entry={it.e} onOpen={onOpen} /> : <EntryTile entry={it.e} onOpen={onOpen} onTry={() => onTry(it.e)} />;
+function AnyTile({ it, counts, onOpen, onTry }: { it: Item; counts?: EntryCounts; onOpen(): void; onTry(e: MarketEntry): void }) {
+  return it.paid ? <PaidTile entry={it.e} counts={counts} onOpen={onOpen} /> : <EntryTile entry={it.e} counts={counts} onOpen={onOpen} onTry={() => onTry(it.e)} />;
 }
 
 function StateMark({ state }: { state: MarketEntry["installed"] }) {
@@ -460,7 +505,7 @@ function Cover({ entry }: { entry: MarketEntry }) {
   );
 }
 
-function EntryTile({ entry, onOpen, onTry }: { entry: MarketEntry; onOpen(): void; onTry(): void }) {
+function EntryTile({ entry, counts, onOpen, onTry }: { entry: MarketEntry; counts?: EntryCounts; onOpen(): void; onTry(): void }) {
   const isTheme = entry.kind === "theme";
   return (
     <div role="link" tabIndex={0} className="mk-tile" onClick={onOpen} onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && onOpen()} data-entry={`${entry.kind}/${entry.id}`}>
@@ -470,7 +515,9 @@ function EntryTile({ entry, onOpen, onTry }: { entry: MarketEntry; onOpen(): voi
         <p>{firstSentence(entry.description) || KIND_LABEL[entry.kind]}</p>
         <div className="mk-tile-meta">
           <span>{metaLine(entry)}</span>
-          {isTheme ? <ThemeSwatches theme={s_(entry).theme} className="ml-auto" /> : !official(entry.author) && <><span aria-hidden="true">·</span><span>{entry.author}</span></>}
+          {!isTheme && !official(entry.author) && <><span aria-hidden="true">·</span><span>{entry.author}</span></>}
+          <TileCounts c={counts} />
+          {isTheme && <ThemeSwatches theme={s_(entry).theme} className={counts?.likes || counts?.downloads ? undefined : "ml-auto"} />}
         </div>
       </div>
       {isTheme ? (
@@ -579,10 +626,12 @@ function Yours({ data, showBought, onOpen, onChanged, onThemes }: { data: { sele
 
 // ------------------------------------------------------------------ detail
 
-function EntryDetail({ entry, all, repo, inUse, trying, onTry, onKeep, onBack, onOpen, onInstalled }: { entry: MarketEntry; all: MarketEntry[]; repo: string; inUse: boolean; trying: boolean; onTry(): void; onKeep(): void; onBack(): void; onOpen(e: MarketEntry): void; onInstalled(): void }) {
+function EntryDetail({ entry, all, repo, inUse, trying, signedIn, onTry, onKeep, onBack, onOpen, onInstalled }: { entry: MarketEntry; all: MarketEntry[]; repo: string; inUse: boolean; trying: boolean; signedIn: boolean; onTry(): void; onKeep(): void; onBack(): void; onOpen(e: MarketEntry): void; onInstalled(): void }) {
   const [file, setFile] = useState<MarketFile | null>(null);
   const [busy, setBusy] = useState<null | "install" | "use">(null);
   const s = s_(entry);
+  const sKey = `${entry.kind}/${entry.id}`;
+  const [stats, setStats] = useEntryStats(sKey);
 
   useEffect(() => {
     if (entry.kind === "type") api.marketEntry(entry.kind, entry.id).then(setFile).catch((e) => toast.error("Couldn't load the card type", { description: (e as Error).message }));
@@ -655,24 +704,22 @@ function EntryDetail({ entry, all, repo, inUse, trying, onTry, onKeep, onBack, o
     );
   }
 
-  const facts: [string, React.ReactNode][] = [];
-  if (entry.kind === "deck") facts.push(["Card types", s.types.length]);
-  if (entry.kind === "type") facts.push(["Checks", (s.types as any[]).map((t) => GRADER_WORD[t.grader] ?? t.grader).join(", ")], ["Example cards", s.items || 1]);
-  if (entry.kind === "theme") facts.push(["Look", s.theme.scheme === "light" ? "Light" : "Dark"]);
-  facts.push(["Size", kb(entry.bytes)]);
-  if (entry.updated) facts.push(["Updated", niceDate(entry.updated)]);
-  facts.push(["Version", `v${entry.version}`]);
-
   const p = parts(entry.kind === "deck" ? s.decks : []);
-  const hook: [string, string][] = entry.kind === "deck" ? [[Number(s.items).toLocaleString("en-US"), s.items === 1 ? "card" : "cards"], ...(p.length > 1 ? [[String(p.length), "parts"] as [string, string]] : [])] : [];
   const types: { id: string; name: string }[] = entry.kind === "deck" ? s.types : [];
+  // The numbers row, App Store style: what people think first, then what you get, then the file facts.
+  const info: InfoCell[] = [...socialCells(stats)];
+  // Parts and card types have their own sections below, so the row only counts the cards.
+  if (entry.kind === "deck") info.push({ label: s.items === 1 ? "Card" : "Cards", value: Number(s.items).toLocaleString("en-US") });
+  if (entry.kind === "type") info.push({ label: "Checks", value: (s.types as any[]).map((t) => GRADER_WORD[t.grader] ?? t.grader).join(", ") });
+  if (entry.kind === "theme") info.push({ label: "Look", value: s.theme.scheme === "light" ? "Light" : "Dark" });
+  info.push({ label: "Size", value: kb(entry.bytes) });
+  if (entry.updated) info.push({ label: "Updated", value: niceDate(entry.updated) });
+  info.push({ label: "Version", value: `v${entry.version}` });
 
   return (
     <DetailLayout
       onBack={onBack}
-      gallery={<MarketGallery entry={entry} cover={entry.kind === "theme" ? <div className="mk-theme-big"><ThemeMiniature theme={s.theme} /></div> : <Cover entry={entry} />} />}
-      facts={facts}
-      box={
+      head={
         <>
           <div className="mk-eyebrow">{KIND_LABEL[entry.kind]}</div>
           <h1 className="mk-serif">{entry.name}</h1>
@@ -681,12 +728,18 @@ function EntryDetail({ entry, all, repo, inUse, trying, onTry, onKeep, onBack, o
             {entry.installed === "installed" && <span className="mk-pill"><Check className="size-3" strokeWidth={3} />Installed</span>}
             {entry.installed === "update" && <span className="mk-pill update"><RefreshCw className="size-3" />Update</span>}
           </div>
-          <div className="mk-actions">{actions}</div>
-          {entry.kind === "theme" && !entry.installed && <Button variant="link" className="mt-2 h-auto p-0 text-xs text-muted-foreground" disabled={!!busy} onClick={() => install(false)}>Install without changing my theme</Button>}
-          {entry.kind === "theme" && <p className="mk-fine">Try it on to see the whole app in it. Nothing changes until you keep it.</p>}
-          <Hook items={hook} />
         </>
       }
+      gallery={<MarketGallery entry={entry} cover={entry.kind === "theme" ? <div className="mk-theme-big"><ThemeMiniature theme={s.theme} /></div> : <Cover entry={entry} />} />}
+      actions={
+        <>
+          <div className="mk-actions">{actions}</div>
+          <Votes k={sKey} stats={stats} setStats={setStats} signedIn={signedIn} />
+          {entry.kind === "theme" && !entry.installed && <Button variant="link" className="h-auto basis-full justify-start p-0 text-xs text-muted-foreground" disabled={!!busy} onClick={() => install(false)}>Install without changing my theme</Button>}
+          {entry.kind === "theme" && <p className="mk-fine">Try it on to see the whole app in it. Nothing changes until you keep it.</p>}
+        </>
+      }
+      info={info}
     >
       <section id="market-about" className="mk-sec">
         <h3 className="mk-serif">About this {entry.kind === "type" ? "card type" : entry.kind}</h3>
@@ -715,6 +768,7 @@ function EntryDetail({ entry, all, repo, inUse, trying, onTry, onKeep, onBack, o
           <TypePreview file={file} />
         </section>
       )}
+      <Comments k={sKey} signedIn={signedIn} onCount={(d) => stats && setStats({ ...stats, comments: Math.max(0, stats.comments + d) })} />
       <div className="mk-source">
         <a href={`https://github.com/${repo}/blob/main/${entry.path}`} target="_blank" rel="noreferrer"><ExternalLink className="size-4" />See the files on GitHub</a>
         {entry.tags.length > 0 && <span>{entry.tags.slice(0, 6).map((t) => `#${t}`).join(" ")}</span>}

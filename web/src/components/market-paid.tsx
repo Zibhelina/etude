@@ -11,7 +11,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CoverGallery } from "@/components/market-gallery";
-import { DetailLayout, Hook, niceDate, paragraphs } from "@/components/market-detail";
+import { DetailLayout, niceDate, paragraphs, type InfoCell } from "@/components/market-detail";
+import { Comments, socialCells, TileCounts, useEntryStats, Votes } from "@/components/market-social";
+import type { EntryCounts } from "@/lib/market-social";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { account, bytes, money, openOutside, type Creator, type LibraryItem, type Listing, type PaidEntry, type Sales } from "@/lib/account";
 import { etudeFetch } from "@/lib/transport";
@@ -95,7 +97,7 @@ export function PriceMark({ entry }: { entry: PaidEntry }) {
   return <span className="mk-price paid" data-price>{money(entry.price, entry.currency)}</span>;
 }
 
-export function PaidTile({ entry, onOpen }: { entry: PaidEntry; onOpen(): void }) {
+export function PaidTile({ entry, counts, onOpen }: { entry: PaidEntry; counts?: EntryCounts; onOpen(): void }) {
   const items = entry.summary?.items ?? 0;
   return (
     <button onClick={onOpen} data-paid={entry.id} className="mk-tile">
@@ -106,7 +108,7 @@ export function PaidTile({ entry, onOpen }: { entry: PaidEntry; onOpen(): void }
           {entry.installed === "installed" ? <span className="mk-state"><Check className="size-3.5" strokeWidth={3} />Installed</span> : entry.installed === "update" ? <span className="mk-state update">Update</span> : <PriceMark entry={entry} />}
         </div>
         <p>{firstSentence(entry.description) || "Deck"}</p>
-        <div className="mk-tile-meta"><span>{plural(items, "card")}</span><span aria-hidden="true">·</span><span>{entry.author}</span></div>
+        <div className="mk-tile-meta"><span>{plural(items, "card")}</span><span aria-hidden="true">·</span><span>{entry.author}</span><TileCounts c={counts} /></div>
       </div>
     </button>
   );
@@ -147,6 +149,17 @@ export function PaidDetail({ entry, signedIn, onBack, onChanged }: { entry: Paid
   };
   const s = entry.summary ?? {};
   const parts: string[] = (s.decks ?? []).filter((d: string) => d.includes("::")).map((d: string) => d.split("::").pop()!);
+  const sKey = `paid/${entry.listing}`;
+  const [stats, setStats] = useEntryStats(sKey);
+  const n = s.items ?? 0;
+  const info: InfoCell[] = [
+    ...socialCells(stats),
+    { label: n === 1 ? "Card" : "Cards", value: n.toLocaleString("en-US") },
+    { label: "Updates", value: "Included" },
+    { label: "Size", value: bytes(entry.bytes) },
+    ...(entry.updated ? [{ label: "Updated", value: niceDate(entry.updated) }] : []),
+    { label: "Version", value: `v${entry.version}` },
+  ];
   const action = entry.owned ? (
     <>
       <Button className="mk-big gap-1.5" disabled={!!busy || entry.installed === "installed"} onClick={install}>
@@ -164,21 +177,25 @@ export function PaidDetail({ entry, signedIn, onBack, onChanged }: { entry: Paid
   return (
     <DetailLayout
       onBack={onBack}
-      gallery={<CoverGallery cover={<PaidCover entry={entry} />} />}
-      facts={[["Updates", "Included"], ["Size", bytes(entry.bytes)], ...(entry.updated ? [["Updated", niceDate(entry.updated)] as [string, string]] : []), ["Version", `v${entry.version}`]]}
-      box={
+      head={
         <>
           <div className="mk-eyebrow">Deck{canShowPurchases() ? " · paid" : ""}</div>
           <h1 className="mk-serif">{entry.name}</h1>
           <div className="mk-by">by {entry.author}{entry.owned && <span className="mk-pill"><BadgeCheck className="size-3" />Owned</span>}{entry.installed === "update" && <span className="mk-pill update">Update</span>}</div>
+        </>
+      }
+      gallery={<CoverGallery cover={<PaidCover entry={entry} />} />}
+      actions={
+        <>
           {canShowPurchases() && !entry.owned && (
             <div className="mk-pricebig"><b className="mk-serif">{money(entry.price, entry.currency)}</b><span>once · every future version included</span></div>
           )}
           {action && <div className="mk-actions">{action}</div>}
+          <Votes k={sKey} stats={stats} setStats={setStats} signedIn={signedIn} />
           {canShowPurchases() && !entry.owned && <p className="mk-fine">Prices in US dollars before tax. Sold to buyers in Canada and the United States. Buying gives you every future version.</p>}
-          <Hook items={[[(s.items ?? 0).toLocaleString("en-US"), (s.items ?? 0) === 1 ? "card" : "cards"], ...(parts.length > 1 ? [[String(parts.length), "parts"] as [string, string]] : [])]} />
         </>
       }
+      info={info}
     >
       <section id="paid-about" className="mk-sec">
         <h3 className="mk-serif">About this deck</h3>
@@ -199,6 +216,7 @@ export function PaidDetail({ entry, signedIn, onBack, onChanged }: { entry: Paid
           </ul>
         </section>
       )}
+      <Comments k={sKey} signedIn={signedIn} onCount={(d) => stats && setStats({ ...stats, comments: Math.max(0, stats.comments + d) })} />
       {entry.tags.length > 0 && <div className="mk-source"><span>{entry.tags.slice(0, 6).map((t) => `#${t}`).join(" ")}</span></div>}
     </DetailLayout>
   );

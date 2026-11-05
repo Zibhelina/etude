@@ -1,35 +1,29 @@
-// The Market's detail page layout, shared by free entries (pages/market.tsx) and paid decks (market-paid.tsx):
-// back link, gallery with facts beneath, the action box beside it, then the long text.
+// The Market's detail page layout, shared by free entries (pages/market.tsx) and paid decks (market-paid.tsx),
+// in the App Store's order: back link, the title, the previews side by side in one sideways row, the action with
+// the entry's numbers under it, then the long text across the full width of the page.
 import { ChevronLeft } from "lucide-react";
 
-export function DetailLayout({ onBack, gallery, facts, box, children }: { onBack(): void; gallery: React.ReactNode; facts: [string, React.ReactNode][]; box: React.ReactNode; children: React.ReactNode }) {
+/** One fact under the action: a value over its label, like the App Store's ratings / age / size row. */
+export type InfoCell = { label: string; value: React.ReactNode; key?: string };
+
+export function DetailLayout({ onBack, head, gallery, actions, info, children }: { onBack(): void; head: React.ReactNode; gallery: React.ReactNode; actions: React.ReactNode; info: InfoCell[]; children: React.ReactNode }) {
   return (
     <div className="mk-detail" data-market-detail>
       <button className="mk-back" onClick={onBack}><ChevronLeft className="size-[18px]" strokeWidth={2.2} />Market</button>
-      <div className="mk-detail-top">
-        <div className="min-w-0">
-          {gallery}
-          <dl className="mk-facts">
-            {facts.map(([k, v]) => (
-              <div key={k}><dt>{k}</dt><dd>{v}</dd></div>
-            ))}
-          </dl>
-        </div>
-        <div className="mk-box">{box}</div>
-      </div>
+      <header className="mk-head">{head}</header>
+      {gallery}
+      <div className="mk-act">{actions}</div>
+      {info.length > 0 && (
+        <dl className="mk-info" data-market-info>
+          {info.map((c) => (
+            <div key={c.key ?? c.label}>
+              <dd>{c.value}</dd>
+              <dt>{c.label}</dt>
+            </div>
+          ))}
+        </dl>
+      )}
       <div className="mk-body">{children}</div>
-    </div>
-  );
-}
-
-/** Two big numbers that say what you get. */
-export function Hook({ items }: { items: [string, string][] }) {
-  if (!items.length) return null;
-  return (
-    <div className="mk-hook">
-      {items.map(([n, w], i) => (
-        <div key={i}><b className="mk-serif">{n}</b><span>{w}</span></div>
-      ))}
     </div>
   );
 }

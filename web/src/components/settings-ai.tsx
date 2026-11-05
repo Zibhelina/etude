@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { chatGptSignInHere, saveApiKey, serverless } from "@/lib/native";
 import { cn } from "@/lib/utils";
-import { BigSwitch, Block, Field, NumberField, Section, TextField } from "@/components/settings-ui";
+import { BigSwitch, Block, Disclosure, Field, Group, NumberField, Section, TextField } from "@/components/settings-ui";
 import { ChatGptBlock } from "@/components/settings-chatgpt";
 import {
   isChatGpt,
@@ -51,185 +51,204 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
   const visionOpen = isOpenAiChat(ai.vision) ? ai.vision : null;
   const visionTarget = ai.vision ?? (fb?.vision ? fb : null);
 
+  // Endpoints stay folded unless something in them needs fixing or the setup matches no preset.
+  const endpointError = Object.keys(errors).some((k) => /^(decision|feedback|vision)\./.test(k) && k !== "feedback.model");
+  const presets = PRESETS.filter((p) => chatGptSignInHere() || p.id !== "chatgpt");
+
   return (
-    <Section
-      id="ai"
-      title="AI grading"
-      description={
-        <>
-          Open answers are graded in two steps. A small <em>decision model</em> reads the card, the reference and your answer and returns the verdict (correct, partial or
-          incorrect) in about a second for a fraction of a cent. A <em>language model</em> then writes a few lines of feedback. Drawings skip the decision model and go
-          to a <em>vision model</em>, which judges and explains in one call.
-        </>
-      }
-    >
-      <Block title="Quick setup" description="Fills the provider fields below. Feedback timing and language stay as they are.">
-        <div className={cn("grid gap-2 sm:grid-cols-2", chatGptSignInHere() ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
-          {PRESETS.filter((p) => chatGptSignInHere() || p.id !== "chatgpt").map((p) => (
-            <button
-              key={p.id}
-              onClick={() => defaults && onChange(presetAi(p.id, defaults, ai))}
-              disabled={!defaults}
-              className={cn(
-                "flex min-h-11 flex-col items-start gap-1 rounded-lg border px-3.5 py-3 text-left transition-colors hover:border-ring/60 hover:bg-accent/40 disabled:opacity-50",
-                preset === p.id && "border-highlight/50 bg-highlight/[0.06]",
-              )}
-            >
-              <span className="flex w-full items-center justify-between gap-2">
-                <span className={cn("text-sm font-medium", preset === p.id && "text-highlight")}>{p.label}</span>
-                {preset === p.id && <span className="text-[11px] text-highlight/80">current</span>}
-              </span>
-              <span className="text-xs leading-relaxed text-muted-foreground">{p.hint}</span>
-            </button>
-          ))}
-        </div>
-      </Block>
+    <Section id="ai" title="AI grading" bare>
+      <div className="flex flex-col gap-7">
+        <Group title="Who grades your answers">
+          <div role="radiogroup" aria-label="Who grades your answers" data-settings-row className="settings-block relative first:rounded-t-[14px] last:rounded-b-[14px]">
+            <span data-settings-title className="sr-only">Quick setup</span>
+            {presets.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                role="radio"
+                aria-checked={preset === p.id}
+                data-preset={p.id}
+                onClick={() => defaults && onChange(presetAi(p.id, defaults, ai))}
+                disabled={!defaults}
+                className="group relative flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-colors first:rounded-t-[14px] hover:bg-accent/50 disabled:opacity-50 sm:px-[18px] [&+&]:before:absolute [&+&]:before:inset-x-4 [&+&]:before:top-0 [&+&]:before:h-px [&+&]:before:bg-border sm:[&+&]:before:inset-x-[18px]"
+              >
+                <span className={cn("mt-0.5 grid size-[18px] shrink-0 place-items-center rounded-full ring-[1.5px] ring-border ring-inset", preset === p.id && "ring-foreground")}>
+                  {preset === p.id && <span className="size-2 rounded-full bg-foreground" />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={cn("block text-[14.5px] font-semibold", preset === p.id ? "text-foreground" : "text-foreground/90")}>{p.label}</span>
+                  <span className="mt-0.5 block text-[13px] leading-[1.45] text-muted-foreground">{p.hint}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          {fbGpt && !chatGptSignInHere() && (
+            <Block>
+              <p className="text-sm text-warning">Signing in with ChatGPT needs the desktop app. Pick OpenRouter or OpenAI above and paste a key below.</p>
+            </Block>
+          )}
+          {fbGpt && chatGptSignInHere() && (
+            <ChatGptBlock
+              provider={fbGpt}
+              error={errors["feedback.model"]}
+              onChange={(patch: Partial<ChatGptProvider>) => set({ feedback: { ...fbGpt, ...patch } })}
+            />
+          )}
+          <KeysBlock ai={ai} saved={saved} />
+        </Group>
 
-      {fbGpt && !chatGptSignInHere() && (
-        <p className="text-sm text-warning">Signing in with ChatGPT needs the desktop app. Pick OpenRouter or OpenAI above and paste a key below.</p>
-      )}
-      {fbGpt && chatGptSignInHere() && (
-        <ChatGptBlock
-          provider={fbGpt}
-          error={errors["feedback.model"]}
-          onChange={(patch: Partial<ChatGptProvider>) => set({ feedback: { ...fbGpt, ...patch } })}
-        />
-      )}
+        <Group title="Feedback">
+          <Block>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Write feedback automatically">
+                <Select value={ai.autoFeedback} onValueChange={(v) => set({ autoFeedback: v as AiSettings["autoFeedback"] })}>
+                  <SelectTrigger className="h-10 w-full md:h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ai-graded">After AI-graded answers</SelectItem>
+                    <SelectItem value="always">After every graded answer</SelectItem>
+                    <SelectItem value="never">Only when I ask</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <TextField
+                label="Feedback language"
+                value={ai.language}
+                error={errors.language}
+                hint="Plain words, e.g. English, Portuguese, or “the language the card is written in”."
+                onChange={(v) => set({ language: v })}
+              />
+            </div>
+          </Block>
+        </Group>
 
-      <Block
-        title="Decision model"
-        description={
-          decisionOn ? (
-            <>Returns the verdict as calibrated probabilities, through OpenRouter's <code className="font-mono">openrouter-decisions</code> endpoint. Text answers only.</>
-          ) : (
-            "Off. The feedback model judges the answer and writes feedback in one call."
-          )
-        }
-        aside={
-          <BigSwitch
-            checked={decisionOn}
-            aria-label="Use a decision model"
-            onCheckedChange={(on) =>
-              set({ decision: on ? { ...(defaults?.decision ?? { kind: "openrouter-decisions" }), ...(ai.decision?.kind === "openrouter-decisions" ? ai.decision : {}), kind: "openrouter-decisions" } : null })
+        <Group title="Ask Etude">
+          <AgentBlock ai={ai} onChange={(patch) => set({ agent: { model: ai.agent?.model ?? null, effort: ai.agent?.effort ?? "low", ...patch } })} />
+        </Group>
+
+        <Group title="Try it">
+          <TestBlock ai={ai} saved={saved} />
+        </Group>
+
+        <Disclosure id="ai-endpoints" title="Models and endpoints" open={endpointError} defaultOpen={!preset && !fbGpt}>
+          <Group
+            note={
+              <>
+                Open answers are graded in two steps. A small <em>decision model</em> reads the card, the reference and your answer and returns the verdict (correct, partial or
+                incorrect) in about a second for a fraction of a cent. A <em>language model</em> then writes a few lines of feedback. Drawings skip the decision model and go
+                to a <em>vision model</em>, which judges and explains in one call.
+              </>
             }
-          />
-        }
-      >
-        {decisionOn && ai.decision && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <TextField label="URL" mono className="sm:col-span-2" value={ai.decision.url ?? ""} error={errors["decision.url"]} onChange={(v) => set({ decision: { ...ai.decision!, url: v } })} />
-            <TextField label="Model" mono value={ai.decision.model ?? ""} error={errors["decision.model"]} onChange={(v) => set({ decision: { ...ai.decision!, model: v } })} placeholder="liquid/d1-ultra" />
-            <TextField
-              label="API key variable"
-              mono
-              value={ai.decision.apiKeyEnv ?? ""}
-              error={errors["decision.apiKeyEnv"]}
-              onChange={(v) => set({ decision: { ...ai.decision!, apiKeyEnv: v } })}
-              placeholder="OPENROUTER_API_KEY"
-            />
-            <NumberField label="Timeout" suffix="s" value={sec(ai.decision.timeoutMs ?? 8000)} error={errors["decision.timeoutMs"]} onChange={(v) => set({ decision: { ...ai.decision!, timeoutMs: ms(v) } })} />
-          </div>
-        )}
-      </Block>
+          >
+            <Block
+              title="Decision model"
+              description={
+                decisionOn ? (
+                  <>Returns the verdict as calibrated probabilities, through OpenRouter's <code className="font-mono">openrouter-decisions</code> endpoint. Text answers only.</>
+                ) : (
+                  "Off. The feedback model judges the answer and writes feedback in one call."
+                )
+              }
+              aside={
+                <BigSwitch
+                  checked={decisionOn}
+                  aria-label="Use a decision model"
+                  onCheckedChange={(on) =>
+                    set({ decision: on ? { ...(defaults?.decision ?? { kind: "openrouter-decisions" }), ...(ai.decision?.kind === "openrouter-decisions" ? ai.decision : {}), kind: "openrouter-decisions" } : null })
+                  }
+                />
+              }
+            >
+              {decisionOn && ai.decision && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <TextField label="URL" mono className="sm:col-span-2" value={ai.decision.url ?? ""} error={errors["decision.url"]} onChange={(v) => set({ decision: { ...ai.decision!, url: v } })} />
+                  <TextField label="Model" mono value={ai.decision.model ?? ""} error={errors["decision.model"]} onChange={(v) => set({ decision: { ...ai.decision!, model: v } })} placeholder="liquid/d1-ultra" />
+                  <TextField
+                    label="API key variable"
+                    mono
+                    value={ai.decision.apiKeyEnv ?? ""}
+                    error={errors["decision.apiKeyEnv"]}
+                    onChange={(v) => set({ decision: { ...ai.decision!, apiKeyEnv: v } })}
+                    placeholder="OPENROUTER_API_KEY"
+                  />
+                  <NumberField label="Timeout" suffix="s" value={sec(ai.decision.timeoutMs ?? 8000)} error={errors["decision.timeoutMs"]} onChange={(v) => set({ decision: { ...ai.decision!, timeoutMs: ms(v) } })} />
+                </div>
+              )}
+            </Block>
 
-      <Block
-        title="Feedback model"
-        description={fbGpt ? "Grading runs through your ChatGPT plan. The account and model are above." : "Any OpenAI-compatible chat completions endpoint."}
-      >
-        {fb ? (
-          fbGpt ? (
-            <div className="flex items-center justify-between gap-4">
-              <label htmlFor="fb-vision" className="min-w-0">
-                <span className="block text-sm">Accepts images</span>
-                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">On when the model can see, so drawings can be graded without a separate vision model.</span>
-              </label>
-              <BigSwitch id="fb-vision" checked={fbGpt.vision !== false} onCheckedChange={(v) => set({ feedback: { ...fbGpt, vision: v } })} />
-            </div>
-          ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <TextField label="URL" mono className="sm:col-span-2" value={fbOpen?.url ?? ""} error={errors["feedback.url"]} onChange={(v) => setFb({ url: v })} placeholder="https://openrouter.ai/api/v1/chat/completions" />
-            <TextField label="Model" mono value={fbOpen?.model ?? ""} error={errors["feedback.model"]} onChange={(v) => setFb({ model: v })} placeholder={preset === "local" ? "the name your server reports" : ""} />
-            <TextField
-              label="API key variable"
-              mono
-              value={fbOpen?.apiKeyEnv ?? ""}
-              error={errors["feedback.apiKeyEnv"]}
-              hint={!fbOpen?.apiKeyEnv ? "Empty: no Authorization header is sent." : undefined}
-              onChange={(v) => setFb({ apiKeyEnv: v })}
-              placeholder="none"
-            />
-            <NumberField label="Timeout" suffix="s" value={sec(fbOpen?.timeoutMs ?? 45000)} error={errors["feedback.timeoutMs"]} onChange={(v) => setFb({ timeoutMs: ms(v) })} />
-            <NumberField label="Temperature" step={0.1} value={fbOpen?.temperature ?? 0.3} error={errors["feedback.temperature"]} hint="0 to 2. Lower is steadier." onChange={(v) => setFb({ temperature: v })} />
-            <div className="flex items-center justify-between gap-4 border-t pt-4 sm:col-span-2">
-              <label htmlFor="fb-vision" className="min-w-0">
-                <span className="block text-sm">Accepts images</span>
-                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">On if this model can see, so drawings can be graded without a separate vision model.</span>
-              </label>
-              <BigSwitch id="fb-vision" checked={!!fbOpen?.vision} onCheckedChange={(v) => setFb({ vision: v })} />
-            </div>
-          </div>
-          )
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-            No feedback model. AI-graded cards can't be graded without one.
-            <Button size="sm" variant="outline" onClick={() => defaults?.feedback && set({ feedback: structuredClone(defaults.feedback) })}>Add the default</Button>
-          </div>
-        )}
-      </Block>
+            <Block
+              title="Feedback model"
+              description={fbGpt ? "Grading runs through your ChatGPT plan. The account and model are above." : "Any OpenAI-compatible chat completions endpoint."}
+            >
+              {fb ? (
+                fbGpt ? (
+                  <div className="flex items-center justify-between gap-4">
+                    <label htmlFor="fb-vision" className="min-w-0">
+                      <span className="block text-sm">Accepts images</span>
+                      <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">On when the model can see, so drawings can be graded without a separate vision model.</span>
+                    </label>
+                    <BigSwitch id="fb-vision" checked={fbGpt.vision !== false} onCheckedChange={(v) => set({ feedback: { ...fbGpt, vision: v } })} />
+                  </div>
+                ) : (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <TextField label="URL" mono className="sm:col-span-2" value={fbOpen?.url ?? ""} error={errors["feedback.url"]} onChange={(v) => setFb({ url: v })} placeholder="https://openrouter.ai/api/v1/chat/completions" />
+                  <TextField label="Model" mono value={fbOpen?.model ?? ""} error={errors["feedback.model"]} onChange={(v) => setFb({ model: v })} placeholder={preset === "local" ? "the name your server reports" : ""} />
+                  <TextField
+                    label="API key variable"
+                    mono
+                    value={fbOpen?.apiKeyEnv ?? ""}
+                    error={errors["feedback.apiKeyEnv"]}
+                    hint={!fbOpen?.apiKeyEnv ? "Empty: no Authorization header is sent." : undefined}
+                    onChange={(v) => setFb({ apiKeyEnv: v })}
+                    placeholder="none"
+                  />
+                  <NumberField label="Timeout" suffix="s" value={sec(fbOpen?.timeoutMs ?? 45000)} error={errors["feedback.timeoutMs"]} onChange={(v) => setFb({ timeoutMs: ms(v) })} />
+                  <NumberField label="Temperature" step={0.1} value={fbOpen?.temperature ?? 0.3} error={errors["feedback.temperature"]} hint="0 to 2. Lower is steadier." onChange={(v) => setFb({ temperature: v })} />
+                  <div className="flex items-center justify-between gap-4 border-t pt-4 sm:col-span-2">
+                    <label htmlFor="fb-vision" className="min-w-0">
+                      <span className="block text-sm">Accepts images</span>
+                      <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">On if this model can see, so drawings can be graded without a separate vision model.</span>
+                    </label>
+                    <BigSwitch id="fb-vision" checked={!!fbOpen?.vision} onCheckedChange={(v) => setFb({ vision: v })} />
+                  </div>
+                </div>
+                )
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+                  No feedback model. AI-graded cards can't be graded without one.
+                  <Button size="sm" variant="outline" onClick={() => defaults?.feedback && set({ feedback: structuredClone(defaults.feedback) })}>Add the default</Button>
+                </div>
+              )}
+            </Block>
 
-      <Block
-        title="Vision model"
-        description={
-          ai.vision
-            ? "Used for drawings and image answers instead of the feedback model."
-            : visionTarget
-              ? "Drawings go to the feedback model, which accepts images."
-              : "None. Drawing cards will fall back to self-rating until a model that accepts images is set."
-        }
-        aside={
-          <BigSwitch
-            checked={!!ai.vision}
-            aria-label="Use a separate vision model"
-            onCheckedChange={(on) => set({ vision: on ? { kind: "openai-chat", url: fbOpen?.url ?? "", model: "", apiKeyEnv: fbOpen?.apiKeyEnv, vision: true, temperature: 0.3, timeoutMs: 60000 } : null })}
-          />
-        }
-      >
-        {visionOpen && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <TextField label="URL" mono className="sm:col-span-2" value={visionOpen.url} error={errors["vision.url"]} onChange={(v) => set({ vision: { ...visionOpen, url: v } })} />
-            <TextField label="Model" mono value={visionOpen.model} error={errors["vision.model"]} onChange={(v) => set({ vision: { ...visionOpen, model: v } })} />
-            <TextField label="API key variable" mono value={visionOpen.apiKeyEnv ?? ""} error={errors["vision.apiKeyEnv"]} onChange={(v) => set({ vision: { ...visionOpen, apiKeyEnv: v } })} placeholder="none" />
-            <NumberField label="Timeout" suffix="s" value={sec(visionOpen.timeoutMs ?? 45000)} error={errors["vision.timeoutMs"]} onChange={(v) => set({ vision: { ...visionOpen, timeoutMs: ms(v) } })} />
-          </div>
-        )}
-      </Block>
-
-      <Block title="Feedback">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Write feedback automatically">
-            <Select value={ai.autoFeedback} onValueChange={(v) => set({ autoFeedback: v as AiSettings["autoFeedback"] })}>
-              <SelectTrigger className="h-10 w-full md:h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ai-graded">After AI-graded answers</SelectItem>
-                <SelectItem value="always">After every graded answer</SelectItem>
-                <SelectItem value="never">Only when I ask</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <TextField
-            label="Feedback language"
-            value={ai.language}
-            error={errors.language}
-            hint="Plain words, e.g. English, Portuguese, or “the language the card is written in”."
-            onChange={(v) => set({ language: v })}
-          />
-        </div>
-      </Block>
-
-      <AgentBlock ai={ai} onChange={(patch) => set({ agent: { model: ai.agent?.model ?? null, effort: ai.agent?.effort ?? "low", ...patch } })} />
-
-      <KeysBlock ai={ai} saved={saved} />
-      <TestBlock ai={ai} saved={saved} />
+            <Block
+              title="Vision model"
+              description={
+                ai.vision
+                  ? "Used for drawings and image answers instead of the feedback model."
+                  : visionTarget
+                    ? "Drawings go to the feedback model, which accepts images."
+                    : "None. Drawing cards will fall back to self-rating until a model that accepts images is set."
+              }
+              aside={
+                <BigSwitch
+                  checked={!!ai.vision}
+                  aria-label="Use a separate vision model"
+                  onCheckedChange={(on) => set({ vision: on ? { kind: "openai-chat", url: fbOpen?.url ?? "", model: "", apiKeyEnv: fbOpen?.apiKeyEnv, vision: true, temperature: 0.3, timeoutMs: 60000 } : null })}
+                />
+              }
+            >
+              {visionOpen && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <TextField label="URL" mono className="sm:col-span-2" value={visionOpen.url} error={errors["vision.url"]} onChange={(v) => set({ vision: { ...visionOpen, url: v } })} />
+                  <TextField label="Model" mono value={visionOpen.model} error={errors["vision.model"]} onChange={(v) => set({ vision: { ...visionOpen, model: v } })} />
+                  <TextField label="API key variable" mono value={visionOpen.apiKeyEnv ?? ""} error={errors["vision.apiKeyEnv"]} onChange={(v) => set({ vision: { ...visionOpen, apiKeyEnv: v } })} placeholder="none" />
+                  <NumberField label="Timeout" suffix="s" value={sec(visionOpen.timeoutMs ?? 45000)} error={errors["vision.timeoutMs"]} onChange={(v) => set({ vision: { ...visionOpen, timeoutMs: ms(v) } })} />
+                </div>
+              )}
+            </Block>
+          </Group>
+        </Disclosure>
+      </div>
     </Section>
   );
 }

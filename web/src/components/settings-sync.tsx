@@ -792,8 +792,8 @@ function PlanRows({ st }: { st: AccountStatus }) {
             — <span className="text-xs">· {storageNote(st, active)}</span>
           </span>
         ) : (
-          <div className="flex items-center gap-3">
-            <div className="h-1.5 w-full max-w-56 overflow-hidden rounded-full bg-muted" role="meter" aria-valuemin={0} aria-valuemax={quota} aria-valuenow={used} aria-label="Storage used">
+          <div className="flex flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-foreground/10 sm:min-w-24 sm:max-w-56 sm:flex-1" role="meter" aria-valuemin={0} aria-valuemax={quota} aria-valuenow={used} aria-label="Storage used">
               <div className="h-full rounded-full bg-highlight" style={{ width: `${Math.max(pct, used ? 1.5 : 0)}%` }} />
             </div>
             <span className="shrink-0 tabular-nums text-muted-foreground">{bytes(used)} of {bytes(quota)}</span>

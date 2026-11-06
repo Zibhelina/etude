@@ -1,6 +1,6 @@
 // The engine: one object that owns the database and every operation on it.
 // The HTTP server and the CLI are thin layers over this class.
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
@@ -68,6 +68,24 @@ import { collectFileNames, MAX_MEDIA_BYTES, mediaType } from "./media.ts";
 import { decodeAssets, hashBytes, type AssetInfo } from "./assets.ts";
 import { imagePixels, normalizeBoxes, OcclusionError } from "./occlusion.ts";
 import { DEFAULT_PRIVACY, type Privacy } from "./telemetry.ts";
+
+/**
+ * The collection is its owner's only: on a shared machine the default umask leaves files readable by everyone. The
+ * database is 0600 (SQLite gives its -wal and -shm the database's mode), and the Etude home (keys, agent files) and the
+ * media folder are 0700. Skipped on Windows, where these modes don't apply, and a no-op in the browser build.
+ */
+function keepPrivate(files: string[], dirs: string[]) {
+  if (process.platform === "win32") return;
+  for (const [list, mode] of [[files, 0o600], [dirs, 0o700]] as const) {
+    for (const f of list) {
+      try {
+        if (existsSync(f)) chmodSync(f, mode);
+      } catch {
+        // Someone else's file, or a file system without modes: leave it.
+      }
+    }
+  }
+}
 
 export class EtudeError extends Error {
   status: number;
@@ -374,6 +392,7 @@ export class Etude {
     const media = path === ":memory:" ? join(process.env.TMPDIR ?? "/tmp", `etude-media-${process.pid}`) : join(dirname(path), "media");
     const home = resolve(opts.home ?? process.env.ETUDE_HOME ?? join(homedir(), ".etude"));
     const e = new Etude(db, media, path, home);
+    if (path !== ":memory:") keepPrivate([path, `${path}-wal`, `${path}-shm`], [home, media]);
     e.syncBuiltinTypes(opts.builtinTypesDir ?? BUILTIN_TYPES_DIR);
     e.syncBuiltinSchedulers(opts.builtinSchedulersDir ?? BUILTIN_SCHEDULERS_DIR);
     // Rows saved by an older version (still running elsewhere, or restored) have blank titles and search text.

@@ -239,6 +239,13 @@ function createWindow() {
   };
   wc.on("will-navigate", keepInside);
   wc.on("will-redirect", keepInside);
+  // Card frames too: a card that navigates its own frame elsewhere could carry what it saw in the address. They stay
+  // on Etude's pages (the main frame is handled above).
+  wc.on("will-frame-navigate", (e) => {
+    if (e.isMainFrame || isOwnPage(e.url) || /^about:(blank|srcdoc)$/.test(e.url)) return;
+    e.preventDefault();
+    log(`stopped a card frame navigating away (${e.url.split(":")[0]}:)`);
+  });
   showPage("starting.html");
 }
 

@@ -1,14 +1,32 @@
 // Runs user-authored JavaScript (generators, prepare and grade scripts) in QuickJS,
 // with no host access, a memory cap and a time limit. Only JSON crosses the boundary.
-import { getQuickJS, shouldInterruptAfterDeadline, type QuickJSWASMModule } from "quickjs-emscripten";
+import { getQuickJS, newQuickJSWASMModule, shouldInterruptAfterDeadline, type QuickJSWASMModule } from "quickjs-emscripten";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 let quickjs: QuickJSWASMModule | null = null;
+/** A fresh module on its way, after the last one had to be dropped (see dropModule). */
+let replacing: Promise<QuickJSWASMModule> | null = null;
 
 export async function initSandbox() {
-  quickjs ??= await getQuickJS();
+  quickjs ??= await (replacing ?? getQuickJS());
+}
+
+/**
+ * A script that overflows the stack leaves QuickJS unable to free its runtime ("Aborted(Assertion failed:
+ * list_empty(&rt->gc_obj_list))"), and that runtime's memory stays in the module: a handful of them and every later
+ * script fails until the app restarts. So a module that aborted once is dropped (its memory goes with it) and a new one
+ * is made; scripts that run in the meantime get a ScriptError saying so.
+ */
+function dropModule() {
+  quickjs = null;
+  replacing ??= newQuickJSWASMModule().then((m) => {
+    quickjs = m;
+    replacing = null;
+    return m;
+  });
+  replacing.catch(() => (replacing = null));
 }
 
 export class ScriptError extends Error {
@@ -119,12 +137,16 @@ export interface RunOptions {
 
 /** Runs `body` as the body of `function (...params)` and returns its JSON-serializable result. */
 export function runScript<T = unknown>(body: string, opts: RunOptions): T {
+  if (!quickjs && replacing) throw new ScriptError("the script sandbox is restarting after a script overflowed its stack; try again", opts.where);
   if (!quickjs) throw new Error("sandbox not initialised; call initSandbox() first");
   const runtime = quickjs.newRuntime();
   runtime.setMemoryLimit(64 * 1024 * 1024);
-  runtime.setMaxStackSize(1024 * 1024);
+  // Small enough that QuickJS stops a runaway recursion itself (InternalError) before the host's own stack runs out,
+  // which would unwind through the module and leave it broken; still over a thousand levels of honest recursion.
+  runtime.setMaxStackSize(256 * 1024);
   runtime.setInterruptHandler(shouldInterruptAfterDeadline(Date.now() + (opts.timeoutMs ?? 500)));
   const ctx = runtime.newContext();
+  let broken = false;
   try {
     const bindings = opts.params
       .map((p) => (p === "rng" ? `__makeRng(${Number(opts.seed ?? 1) >>> 0})` : `__args[${JSON.stringify(p)}]`))
@@ -136,7 +158,14 @@ const __fn = function (${opts.params.join(", ")}) {
 ${body}
 };
 JSON.stringify(__fn(${bindings}) ?? null);`;
-    const result = ctx.evalCode(source, `${opts.where}.js`);
+    let result;
+    try {
+      result = ctx.evalCode(source, `${opts.where}.js`);
+    } catch (e) {
+      // The host's stack ran out inside the module (or something else went wrong in it): it can't be trusted after.
+      broken = true;
+      throw new ScriptError(e instanceof RangeError ? "stack overflow" : String((e as Error)?.message ?? e), opts.where);
+    }
     if (result.error) {
       const err = ctx.dump(result.error) as { message?: string; name?: string } | string;
       result.error.dispose();
@@ -147,8 +176,14 @@ JSON.stringify(__fn(${bindings}) ?? null);`;
     result.value.dispose();
     return (text === "undefined" ? null : JSON.parse(text)) as T;
   } finally {
-    ctx.dispose();
-    runtime.dispose();
+    // An abort here mustn't replace the script's own result or error: the module goes, the answer stands.
+    try {
+      ctx.dispose();
+      runtime.dispose();
+    } catch {
+      broken = true;
+    }
+    if (broken) dropModule();
   }
 }
 

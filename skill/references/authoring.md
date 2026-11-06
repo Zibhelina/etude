@@ -59,6 +59,8 @@ The format is in `docs/packs.md`. In short:
 
 Fields support markdown and `$...$` / `$$...$$` math. Always confirm field names with `etude type show <id> --fields-only`, because edited or custom types can differ.
 
+To move an imported Anki cloze note to `cloze`, convert its text with `etude anki cloze` rather than by hand: `{{c1::answer::hint}}` becomes `{{answer::hint}}`, and every hint stays, even one that repeats the answer (it's often the form to decline or conjugate).
+
 ## Generated items
 
 Add a `generator` field: the body of a JS function that gets a seeded `rng` and returns field overrides.

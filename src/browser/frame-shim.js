@@ -56,7 +56,8 @@
       const h = ours(v);
       if (!h) continue;
       el.removeAttribute(a);
-      blobFor(h).then((b) => (b ? el.setAttribute(a, b) : el.setAttribute("data-etude-" + a, v)));
+      // A miss is told as an error, so the card runtime can show that the file is on its way.
+      blobFor(h).then((b) => (b ? el.setAttribute(a, b) : (el.setAttribute("data-etude-" + a, v), el.dispatchEvent(new Event("error")))));
     }
   };
   const retry = () => {

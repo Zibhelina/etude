@@ -1,4 +1,4 @@
-import { autoSync, MEDIA_EVENT, STATUS_EVENT, syncStatus, type SyncSeen } from "@/lib/sync";
+import { autoSync, MEDIA_EVENT, setMediaPending, STATUS_EVENT, syncStatus, type SyncSeen } from "@/lib/sync";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -128,6 +128,7 @@ export function App() {
     if (mediaReceived.current !== null && m.received > mediaReceived.current) window.dispatchEvent(new Event(MEDIA_EVENT));
     mediaReceived.current = m.received;
     setMediaActive(m.active);
+    setMediaPending(m.active || !!m.error);
   }, []);
   useEffect(() => {
     if (!mediaActive) return;

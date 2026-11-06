@@ -427,21 +427,84 @@ export function boot(main, templateHtml, assets) {
       slot.outerHTML = expand(blocks[i] ?? "", data);
     }
   };
-  // Media can follow the collection when syncing, so a card may open before its files arrive. The app says
-  // when files come in, and the collection's images and sounds that failed to load ask again.
+  // Media can follow the collection when syncing, so a card may open before its files arrive. While files are on
+  // their way (the app says so), a collection image that isn't here yet shows a card saying so instead of a broken
+  // image, and the images and sounds that failed ask again when files arrive.
+  let mediaPending = false;
+  const AWAITING = "data-etude-awaiting";
+  const ownMedia = (u) => {
+    try {
+      const media = new URL("media/", document.baseURI), h = new URL(u, document.baseURI);
+      return h.origin === media.origin && h.pathname.startsWith(media.pathname);
+    } catch {
+      return false;
+    }
+  };
+  // The collection URL an image failed to load. The serverless build keeps it in data-etude-src (frame-shim.js).
+  const missedUrl = (img) => {
+    const url = img.getAttribute("data-etude-src") ?? img.getAttribute("src");
+    return url && !/^(data|blob):/.test(url) && ownMedia(url) ? url : null;
+  };
+  const onItsWay = (img) => {
+    const w = Number(img.getAttribute("width")) || (img.clientWidth > 48 ? img.clientWidth : 240);
+    const h = Number(img.getAttribute("height")) || (img.clientHeight > 48 ? img.clientHeight : Math.round(w * 0.625));
+    const ink = getComputedStyle(img.parentElement ?? document.body).color || "rgb(128, 128, 128)";
+    const small = Math.min(w, h), size = Math.max(10, Math.min(15, Math.round(small / 7))), icon = Math.max(12, Math.min(28, Math.round(small / 4)));
+    const title = "Image on its way", sub = "Still syncing";
+    const words = h >= icon + size * 3.4 && title.length * size * 0.56 <= w - 16;
+    const top = words ? (h - (icon + size * 3)) / 2 : (h - icon) / 2;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">` +
+      `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="8" fill="${ink}" fill-opacity=".06" stroke="${ink}" stroke-opacity=".3" stroke-dasharray="5 4"/>` +
+      `<g transform="translate(${(w - icon) / 2} ${top}) scale(${icon / 24})" fill="none" stroke="${ink}" stroke-opacity=".7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">` +
+      `<path d="M12 3v11M7.5 9.5 12 14l4.5-4.5M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></g>` +
+      (words
+        ? `<g font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle" fill="${ink}">` +
+          `<text x="${w / 2}" y="${top + icon + size * 1.6}" font-size="${size}" font-weight="600" fill-opacity=".85">${title}</text>` +
+          `<text x="${w / 2}" y="${top + icon + size * 2.9}" font-size="${Math.round(size * 0.85)}" fill-opacity=".55">${sub}</text></g>`
+        : "") +
+      `</svg>`;
+    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  };
+  const awaitImage = (img, url) => {
+    img.removeAttribute("data-etude-src");
+    img.setAttribute(AWAITING, url);
+    img.src = onItsWay(img);
+  };
+  addEventListener("error", (e) => {
+    const img = e.target;
+    if (!mediaPending || !(img instanceof HTMLImageElement) || img.hasAttribute(AWAITING)) return;
+    const url = missedUrl(img);
+    if (url) awaitImage(img, url);
+  }, true);
+  const again = (url) => {
+    const u = new URL(url, document.baseURI);
+    u.searchParams.set("etude-retry", String(Date.now()));
+    return u.href;
+  };
   const retryMedia = () => {
-    const media = new URL("media/", document.baseURI);
-    const ours = (u) => { try { const h = new URL(u, document.baseURI); return h.origin === media.origin && h.pathname.startsWith(media.pathname); } catch { return false; } };
+    for (const img of document.querySelectorAll(`img[${AWAITING}]`)) {
+      const url = img.getAttribute(AWAITING);
+      img.removeAttribute(AWAITING);
+      img.src = again(url);
+    }
     for (const img of document.querySelectorAll("img[src]")) {
-      if (!img.complete || img.naturalWidth > 0 || !ours(img.src)) continue;
-      const u = new URL(img.src);
-      u.searchParams.set("etude-retry", String(Date.now()));
-      img.src = u.href;
+      if (!img.complete || img.naturalWidth > 0 || !ownMedia(img.src)) continue;
+      img.src = again(img.src);
     }
     for (const el of document.querySelectorAll("audio, video")) {
       if (!el.error && el.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE) continue;
       const src = el.currentSrc || el.getAttribute("src") || el.querySelector("source[src]")?.getAttribute("src");
-      if (src && ours(src)) el.load();
+      if (src && ownMedia(src)) el.load();
+    }
+  };
+  const setMediaPending = (pending) => {
+    mediaPending = pending;
+    // Files stopped coming: each waiting image tries once more, and one still missing shows as missing.
+    if (!pending) return retryMedia();
+    for (const img of document.querySelectorAll("img")) {
+      if (img.hasAttribute(AWAITING)) continue;
+      const url = missedUrl(img);
+      if (url && (img.hasAttribute("data-etude-src") || (img.complete && img.naturalWidth === 0))) awaitImage(img, url);
     }
   };
   window.addEventListener("message", async (e) => {
@@ -449,6 +512,7 @@ export function boot(main, templateHtml, assets) {
     const msg = e.data;
     if (!msg || msg.etude !== 1) return;
     if (msg.type === "init") {
+      mediaPending = !!msg.mediaPending;
       applyTheme(msg.theme);
       document.body.dataset.mode = msg.mode ?? "answer";
       const split = splitResultBlocks(templateHtml);
@@ -499,6 +563,7 @@ export function boot(main, templateHtml, assets) {
     else if (msg.type === "screen") api?._screen(msg.height);
     else if (msg.type === "focus") focusCard(api?.root);
     else if (msg.type === "media") retryMedia();
+    else if (msg.type === "media-state") setMediaPending(!!msg.pending);
   });
   forwardKeys();
   send("loaded");

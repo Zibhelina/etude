@@ -827,6 +827,10 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [appleProducts, setAppleProducts] = useState<string[] | null>(null);
+  // Two-step sign-in: after the email code, the authenticator code (or a recovery code).
+  const [second, setSecond] = useState<string[] | null>(null);
+  const [useRecovery, setUseRecovery] = useState(false);
+  const [secondValue, setSecondValue] = useState("");
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
     setError(null);
@@ -887,13 +891,42 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
       </>
     );
 
+  if (stage === "code" && second) {
+    const hasApp = second.includes("authenticator");
+    const recovery = useRecovery || !hasApp;
+    return (
+      <>
+        <Title lead={recovery ? "Two-step sign-in is on for this account. Enter one of the recovery codes you saved; each one works once." : "Two-step sign-in is on for this account. Enter the code your authenticator app shows for Etude."}>One more step</Title>
+        <form className="mt-5" onSubmit={(e) => (e.preventDefault(), void run(async () => {
+          const v = secondValue.trim();
+          if (!v) throw new Error(recovery ? "Enter a recovery code." : "Enter the code from the app.");
+          try {
+            await postJson("/api/sync/second-factor", recovery ? { recoveryCode: v } : { code: v.replace(/\s+/g, "") });
+          } catch (err) {
+            if (/expired|too many/i.test((err as Error).message)) (setSecond(null), setSecondValue(""), onStage("email"));
+            throw err;
+          }
+          setSecond(null);
+          await afterSignIn();
+        }))}>
+          <Input key={recovery ? "recovery" : "code"} autoFocus inputMode={recovery ? "text" : "numeric"} autoComplete="one-time-code" spellCheck={false} value={secondValue} onChange={(e) => setSecondValue(e.target.value)} placeholder={recovery ? "xxxx-xxxx-xxxx" : "6-digit code"} aria-label={recovery ? "Recovery code" : "Code from the app"} className="h-12 rounded-xl bg-card font-mono text-[15px] tracking-widest" />
+          {error && <Problem>{error}</Problem>}
+          <Spacer />
+          <Primary busy={busy} disabled={!secondValue.trim()} onClick={() => {}}>Continue</Primary>
+        </form>
+        {hasApp && <Ghost onClick={() => (setUseRecovery(!useRecovery), setSecondValue(""), setError(null))}>{recovery ? "Use the authenticator app" : "Use a recovery code"}</Ghost>}
+      </>
+    );
+  }
+
   if (stage === "code")
     return (
       <>
         <Title lead={<>Sent to <span className="text-foreground">{email.trim()}</span>. It works for 15 minutes.</>}>Enter the code</Title>
         <form className="mt-5" onSubmit={(e) => (e.preventDefault(), void run(async () => {
           if (!code.trim()) throw new Error("Enter the code from the email.");
-          await postJson("/api/sync/verify", { code: code.trim() });
+          const r = await postJson<{ secondStep?: { methods: string[] } }>("/api/sync/verify", { code: code.trim() });
+          if (r?.secondStep) return void (setSecond(r.secondStep.methods), setCode(""));
           await afterSignIn();
         }))}>
           <Input autoFocus inputMode="numeric" autoComplete="one-time-code" spellCheck={false} value={code} onChange={(e) => setCode(e.target.value)} placeholder="6-digit code" aria-label="Sign-in code" className="h-12 rounded-xl bg-card font-mono text-[15px] tracking-widest" />

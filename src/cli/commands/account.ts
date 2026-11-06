@@ -45,7 +45,56 @@ command({
   run: (c) => (c.args.url === undefined ? { server: a(c).server() } : call(async () => a(c).setServer(c.args.url))),
 });
 command({ name: "account signin", summary: "Email a one-time 6-digit sign-in code (valid 15 minutes).", args: [{ name: "email", description: "Account email.", required: true }], writes: true, output: "{ ok, server, email }", run: (c) => call(() => a(c).signin(c.args.email)) });
-command({ name: "account verify", summary: "Redeem the 6-digit code from the sign-in email. When already signed in, it re-confirms this device.", description: "The code goes with the address from the last `account signin` (or --email). Spaces are fine (`482 913`). A long token from the email's link works too. A code allows 5 wrong tries, then ask for a new one.", args: [{ name: "code", description: "The 6-digit code from the email (or the link's token).", required: true }], flags: [{ name: "name", type: "string", description: "Name for this device." }, { name: "email", type: "string", description: "The address the code was sent to, if not the last `account signin`." }], writes: true, output: "{ reauth, email }", examples: ["etude account signin you@example.com", "etude account verify \"482 913\""], run: (c) => call(() => a(c).verify(c.args.code, c.flags.name, c.flags.email)) });
+command({ name: "account verify", summary: "Redeem the 6-digit code from the sign-in email. When already signed in, it re-confirms this device.", description: "The code goes with the address from the last `account signin` (or --email). Spaces are fine (`482 913`). A long token from the email's link works too. A code allows 5 wrong tries, then ask for a new one.", args: [{ name: "code", description: "The 6-digit code from the email (or the link's token).", required: true }], flags: [{ name: "name", type: "string", description: "Name for this device." }, { name: "email", type: "string", description: "The address the code was sent to, if not the last `account signin`." }], writes: true, output: "{ reauth, email, secondStep? } (secondStep: { methods }: two-step sign-in is on; finish with `account second-factor`)", examples: ["etude account signin you@example.com", "etude account verify \"482 913\""], run: (c) => call(() => a(c).verify(c.args.code, c.flags.name, c.flags.email)) });
+command({
+  name: "account second-factor",
+  summary: "Finish an email sign-in with two-step sign-in on: the code from the authenticator app, or a recovery code.",
+  description: "When `account verify` answers `secondStep`, run this within 10 minutes. The 6-digit code goes as the argument; a recovery code goes on stdin with --recovery (it works once, and stdin keeps it out of shell history). 5 wrong codes, then sign in by email again.",
+  args: [{ name: "code", description: "The 6-digit code the authenticator app shows for Etude." }],
+  flags: [{ name: "recovery", type: "boolean", description: "Read a recovery code from stdin instead." }],
+  writes: true,
+  examples: ["etude account verify \"482 913\"", "etude account second-factor 123456", "etude account second-factor --recovery < recovery-code"],
+  output: "{ reauth, email }",
+  run: (c) => {
+    if (c.flags.recovery) {
+      const recoveryCode = c.stdin().trim();
+      if (!recoveryCode) throw new CliError("provide the recovery code on stdin", "usage");
+      return call(() => a(c).secondStep({ recoveryCode }));
+    }
+    if (!c.args.code) throw new CliError("give the 6-digit code from the authenticator app, or --recovery with a recovery code on stdin", "usage");
+    return call(() => a(c).secondStep({ code: c.args.code }));
+  },
+});
+command({ name: "account two-factor", summary: "Two-step sign-in: whether it's on, the authenticator, and recovery codes left.", output: "{ enabled, since, authenticator, authenticatorAdded, recoveryCodesLeft, passkeys }", run: (c) => call(() => a(c).twoFactor()) });
+command({
+  name: "account authenticator",
+  summary: "Start adding an authenticator app: a new key, its otpauth:// link and a QR code. Confirm with `account authenticator-confirm`.",
+  description: "Needs a sign-in on this device within 10 minutes. Add the key (or the link, or the QR code saved with --qr) to the app, then confirm with the code it shows within 30 minutes. An authenticator already in use keeps working until the new one is confirmed.",
+  flags: [{ name: "qr", type: "string", description: "Also write the QR code to this SVG file.", placeholder: "FILE" }],
+  writes: true,
+  examples: ["etude account authenticator --qr etude-qr.svg", "etude account authenticator-confirm 123456", "etude account two-factor-on"],
+  output: "{ secret, uri, qrSvg, expiresIn } (with --qr: { secret, uri, expiresIn, written })",
+  run: (c) =>
+    call(async () => {
+      const r = await a(c).authenticatorStart();
+      if (!c.flags.qr) return r;
+      const path = resolve(c.flags.qr);
+      writeFileSync(path, r.qrSvg);
+      return { secret: r.secret, uri: r.uri, expiresIn: r.expiresIn, written: path };
+    }),
+});
+command({ name: "account authenticator-confirm", summary: "Confirm the authenticator being added with a code it shows. It replaces the one in use.", args: [{ name: "code", description: "The 6-digit code from the app.", required: true }], writes: true, output: "two-factor status", run: (c) => call(() => a(c).authenticatorConfirm(c.args.code)) });
+command({ name: "account authenticator-remove", summary: "Remove the authenticator app. Not while two-step sign-in is on (turn it off first).", writes: true, confirm: true, output: "two-factor status", run: (c) => call(() => a(c).removeAuthenticator()) });
+command({
+  name: "account two-factor-on",
+  summary: "Turn on two-step sign-in: email sign-ins then also ask for the authenticator code. Returns 10 recovery codes, once.",
+  description: "Needs a confirmed authenticator (`account authenticator`) and a sign-in on this device within 10 minutes. Save the recovery codes somewhere safe: each one signs in once if the authenticator is lost. Passkeys still sign in on their own. The account's address gets a notice.",
+  writes: true,
+  output: "{ enabled, …, recoveryCodes }",
+  run: (c) => call(() => a(c).setTwoFactor(true)),
+});
+command({ name: "account two-factor-off", summary: "Turn off two-step sign-in. Removes the authenticator and the recovery codes.", description: "Needs a sign-in on this device within 10 minutes. The account's address gets a notice.", writes: true, confirm: true, output: "{ enabled, …, recoveryCodes: null }", run: (c) => call(() => a(c).setTwoFactor(false)) });
+command({ name: "account recovery-codes", summary: "Make 10 new recovery codes, shown once. The old ones stop working.", description: "Needs two-step sign-in on and a sign-in on this device within 10 minutes.", writes: true, confirm: true, output: "{ enabled, …, recoveryCodes }", run: (c) => call(() => a(c).newRecoveryCodes()) });
 command({ name: "account signout", summary: "Sign this device out of the account. Local data stays.", writes: true, output: "{ signedIn }", run: (c) => call(() => a(c).signout()) });
 command({ name: "account name", summary: "The name people see beside your Market comments.", description: "Without a name, comments show \"Etude learner\". Up to 80 characters; an empty string clears it. The email is never shown.", args: [{ name: "name", description: "Display name.", required: true }], writes: true, output: "{ id, email, displayName, … }", examples: ["etude account name \"Ana\""], run: (c) => call(() => a(c).setDisplayName(c.args.name)) });
 command({ name: "account devices", summary: "Devices signed in to the account.", output: "{ devices: [{ id, name, via, created, lastSeen, current }] }", run: (c) => call(() => a(c).devices()) });

@@ -427,6 +427,23 @@ export function boot(main, templateHtml, assets) {
       slot.outerHTML = expand(blocks[i] ?? "", data);
     }
   };
+  // Media can follow the collection when syncing, so a card may open before its files arrive. The app says
+  // when files come in, and the collection's images and sounds that failed to load ask again.
+  const retryMedia = () => {
+    const media = new URL("media/", document.baseURI);
+    const ours = (u) => { try { const h = new URL(u, document.baseURI); return h.origin === media.origin && h.pathname.startsWith(media.pathname); } catch { return false; } };
+    for (const img of document.querySelectorAll("img[src]")) {
+      if (!img.complete || img.naturalWidth > 0 || !ours(img.src)) continue;
+      const u = new URL(img.src);
+      u.searchParams.set("etude-retry", String(Date.now()));
+      img.src = u.href;
+    }
+    for (const el of document.querySelectorAll("audio, video")) {
+      if (!el.error && el.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE) continue;
+      const src = el.currentSrc || el.getAttribute("src") || el.querySelector("source[src]")?.getAttribute("src");
+      if (src && ours(src)) el.load();
+    }
+  };
   window.addEventListener("message", async (e) => {
     if (e.source !== parent) return;
     const msg = e.data;
@@ -481,6 +498,7 @@ export function boot(main, templateHtml, assets) {
     else if (msg.type === "theme") applyTheme(msg.theme);
     else if (msg.type === "screen") api?._screen(msg.height);
     else if (msg.type === "focus") focusCard(api?.root);
+    else if (msg.type === "media") retryMedia();
   });
   forwardKeys();
   send("loaded");

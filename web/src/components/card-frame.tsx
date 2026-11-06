@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { api, type Grade } from "@/lib/api";
 import { pageScheme, THEME_EVENT, useScheme } from "@/lib/theme";
 import { etudeFetch, isLocal } from "@/lib/transport";
+import { MEDIA_EVENT } from "@/lib/sync";
 
 export interface CardResult {
   grade: Grade;
@@ -271,6 +272,12 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
     const onTheme = () => post({ type: "theme", theme: theme() });
     window.addEventListener(THEME_EVENT, onTheme);
     return () => window.removeEventListener(THEME_EVENT, onTheme);
+  }, [post]);
+  // Media files from another device arrived: the card asks again for the images and sounds it lacked.
+  useEffect(() => {
+    const onMedia = () => post({ type: "media" });
+    window.addEventListener(MEDIA_EVENT, onMedia);
+    return () => window.removeEventListener(MEDIA_EVENT, onMedia);
   }, [post]);
 
   return (

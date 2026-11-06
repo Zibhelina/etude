@@ -5,6 +5,7 @@
 import { useEffect, useState, type ComponentProps } from "react";
 import { toast } from "sonner";
 import { etudeFetch, isLocal } from "@/lib/transport";
+import { MEDIA_EVENT } from "@/lib/sync";
 
 const OWN = /^\/(api|media|type-assets)\//;
 
@@ -35,21 +36,35 @@ export function localBlobUrl(path: string): Promise<string> {
   return p;
 }
 
+/** Counts media files arriving from another device (MEDIA_EVENT), so a missing image can ask again. */
+export function useMediaArrivals(): number {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    const h = () => setN((k) => k + 1);
+    window.addEventListener(MEDIA_EVENT, h);
+    return () => window.removeEventListener(MEDIA_EVENT, h);
+  }, []);
+  return n;
+}
+
 /** `src` for an <img>, <video> or <audio>: the URL itself with a server, a blob: URL without one (undefined while it loads). */
 export function useEtudeSrc(url: string | null | undefined): string | undefined {
   const path = isLocal() ? ownPath(url) : null;
   const [src, setSrc] = useState<{ path: string; url: string } | null>(null);
+  // A file that wasn't here may arrive with the media sync: then it's asked for again.
+  const [missing, setMissing] = useState(false);
+  const arrivals = useMediaArrivals();
   useEffect(() => {
     if (!path) return;
     let live = true;
     localBlobUrl(path).then(
-      (u) => live && setSrc({ path, url: u }),
-      () => live && setSrc(null),
+      (u) => live && (setSrc({ path, url: u }), setMissing(false)),
+      () => live && (setSrc(null), setMissing(true)),
     );
     return () => {
       live = false;
     };
-  }, [path]);
+  }, [path, missing ? arrivals : 0]);
   if (!path) return url ?? undefined;
   return src?.path === path ? src.url : undefined;
 }
@@ -93,6 +108,9 @@ export function etudeDownload(e: React.MouseEvent<HTMLAnchorElement>) {
 }
 
 /** <img> that also loads the app's own URLs when there's no server. */
-export function EtudeImg({ src, ...rest }: ComponentProps<"img">) {
-  return <img {...rest} src={useEtudeSrc(src)} />;
+export function EtudeImg({ src, onError, ...rest }: ComponentProps<"img">) {
+  // With a server, an image that failed to load is drawn again once media files arrive.
+  const arrivals = useMediaArrivals();
+  const [failedAt, setFailedAt] = useState<number | null>(null);
+  return <img {...rest} key={failedAt === null ? "first" : arrivals} src={useEtudeSrc(src)} onError={(e) => (setFailedAt(arrivals), onError?.(e))} />;
 }

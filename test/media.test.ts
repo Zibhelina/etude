@@ -98,6 +98,10 @@ test("media uploads and local imports return usable URLs and retain API protecti
   assert.equal((await app.request("/api/media?name=x.png", { method: "POST", headers: { "content-type": "application/octet-stream", origin: "https://other.example", host: "localhost" }, body: PNG })).status, 403);
   assert.equal((await createApp(e, { token: "secret", webDist: null }).request("/api/media?name=x.png", { method: "POST", headers: { "content-type": "application/octet-stream" }, body: PNG })).status, 401);
   assert.equal((await app.request("/media/..%2F..%2Fetude.db")).status, 404);
+  // A file still on its way from another device: the miss isn't cached, even where files are cached for a year.
+  const missing = await app.request(`/media/files/${"0".repeat(64)}.png`);
+  assert.equal(missing.status, 404);assert.equal(missing.headers.get("cache-control"), "no-store");
+  assert.match((await app.request(info.url)).headers.get("cache-control") ?? "", /immutable/);
 });
 
 test("oversized media streams are canceled before writing a file", async (t) => {

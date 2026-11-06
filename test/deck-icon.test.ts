@@ -18,10 +18,14 @@ test("decks: an icon is art, one emoji or none, and survives a rename", async (t
   assert.equal(e.deck("Geography").icon, "art:world");
   assert.equal(e.deckTree().find((d) => d.name === "Geography")!.icon, "art:world");
   assert.equal(e.updateDeck("Geography::Asia", { icon: "emoji:🗾" }).icon, "emoji:🗾");
-  assert.equal(e.updateDeck("Geography::Asia", { icon: "none" }).icon, null);
+  assert.equal(e.updateDeck("Geography::Asia", { icon: "none" }).icon, "none");
+  assert.equal(e.updateDeck("Geography::Asia", { icon: "default" }).icon, null);
+  const img = "media:files/" + "a".repeat(64) + ".png";
+  assert.equal(e.updateDeck("Geography::Asia", { icon: img }).icon, img);
   for (const ok of ["emoji:🇧🇷", "emoji:👩🏽‍💻", "emoji:❤️"]) assert.equal(deckIcon(ok), ok);
-  for (const bad of ["world", "art:", "art:../x", "emoji:", "emoji:hi", "emoji:🌍 🌍x", "emoji:" + "🌍".repeat(13)]) assert.throws(() => deckIcon(bad), /deck icon/, bad);
+  for (const bad of ["world", "art:", "art:../x", "emoji:", "emoji:hi", "emoji:🌍 🌍x", "emoji:" + "🌍".repeat(13), "media:files/../x.png", "media:/etc/passwd", "media:files/" + "a".repeat(64) + ".mp3", "media:files/abc.png"]) assert.throws(() => deckIcon(bad), /deck icon/, bad);
   assert.equal(deckIcon(""), null);
+  assert.equal(deckIcon("none"), "none");
 });
 
 test("decks: the icon goes through the API", async (t) => {
@@ -86,4 +90,22 @@ test("decks: the archive summary folds subdecks in and predicts recall", async (
   assert.deepEqual(s[1].curve, []);
   e.setDeckArchived("Course", false, { subdecks: true });
   assert.deepEqual(e.archiveSummary().map((d) => d.name), ["Live::Old"]);
+});
+
+test("decks: an uploaded image works as the icon and counts as used media", async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "etude-icon-media-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const e = await Etude.open(join(dir, "etude.db"));
+  t.after(() => e.close());
+  e.ensureDeck("Mine");
+  const png = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a3a10000000049454e44ae426082", "hex");
+  const m = e.storeMedia("me.png", png);
+  assert.equal(e.updateDeck("Mine", { icon: `media:${m.file}` }).icon, `media:${m.file}`);
+  // Old enough for cleanup to consider it, and still kept because the deck uses it.
+  const { utimesSync } = await import("node:fs");
+  const old = new Date(Date.now() - 2 * 3600_000);
+  utimesSync(m.path, old, old);
+  assert.equal(e.unusedMedia().length, 0);
+  e.updateDeck("Mine", { icon: "default" });
+  assert.equal(e.unusedMedia().length, 1);
 });

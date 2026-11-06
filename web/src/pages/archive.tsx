@@ -10,6 +10,7 @@ import { usePhone } from "@/lib/phone";
 import { Page } from "@/components/page";
 import { leafOf, parentOf } from "@/components/move-deck";
 import { DeckIcon } from "@/components/deck-icon";
+import { hasPicture } from "@/lib/deck-icons";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
@@ -304,9 +305,9 @@ function Tile({ d, phone, open, selecting, checked, leaving, onOpen, onRestore, 
         onOpen();
       }}
     >
-      {(d.icon || !phone) && (
+      {(hasPicture(d.icon) || !phone) && (
         <div className="mb-2.5 flex min-h-9 items-start">
-          {d.icon && <DeckIcon icon={d.icon} size={phone ? 46 : 56} className="lib-art archive-art" />}
+          {hasPicture(d.icon) && <DeckIcon icon={d.icon} size={phone ? 46 : 56} className="lib-art archive-art" />}
           <span className="flex-1" />
           {selecting ? (
             <button

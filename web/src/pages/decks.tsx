@@ -13,8 +13,7 @@ import { usePhone } from "@/lib/phone";
 import { PhoneDecks } from "@/components/phone-decks";
 import { DeckContextMenu, type DeckMenuEntry, useDeckActions } from "@/components/deck-actions";
 import { Mark } from "@/components/phone-shell";
-import { ChangeIconDialog, DeckIcon } from "@/components/deck-icon";
-import { DeckRing } from "@/components/deck-ring";
+import { ChangeIconDialog, DeckBadge } from "@/components/deck-icon";
 import { DonePanel, SessionCard, StreakCelebration, useMilestone } from "@/components/library-session";
 import { ArchivePage } from "@/pages/archive";
 import { ArchiveLink, useArchiveCount } from "@/components/archive-link";
@@ -287,8 +286,8 @@ function DesktopDecks() {
     ro.observe(list);
     return () => ro.disconnect();
   }, [visible, collapsed, q]);
-  // Every top-level deck has a badge now (its icon, or the count rings), so subdecks always indent past it.
-  const anyIcon = top.length > 0;
+  // Top-level decks have a badge (their icon, or the count rings) unless set to None, so subdecks indent past it.
+  const anyIcon = top.some((d) => d.icon !== "none");
   // No deck has subdecks: no chevron column, so names start at the page margin.
   const anyKids = visible.some((d) => d.hasChildren);
 
@@ -381,7 +380,7 @@ function DesktopDecks() {
                         <ChevronRight className={cn("size-4 transition-transform duration-200", open && "rotate-90")} />
                       </button>
                     )}
-                    {!sub && (d.icon ? <DeckIcon icon={d.icon} size={46} className="lib-art" /> : <DeckRing d={d} size={46} />)}
+                    {!sub && <DeckBadge icon={d.icon} d={d} size={46} />}
                     <div className="min-w-0 flex-1">
                       <button
                         data-deck-name
@@ -447,7 +446,7 @@ function DesktopDecks() {
       )}
       <MoveDeckDialog deck={moving} decks={all} onOpenChange={(o) => !o && setMoving(null)} onMoved={(n) => after(n)} />
       <NewDeckDialog open={creating} onOpenChange={setCreating} onDone={reload} />
-      <ChangeIconDialog deck={iconFor?.name ?? null} icon={iconFor?.icon ?? null} open={!!iconFor} onOpenChange={(o) => !o && setIconFor(null)} onSaved={() => reload()} />
+      <ChangeIconDialog deck={iconFor?.name ?? null} icon={iconFor?.icon ?? null} counts={iconFor} open={!!iconFor} onOpenChange={(o) => !o && setIconFor(null)} onSaved={() => reload()} />
       {milestone.show && stats && <StreakCelebration stats={stats} onClose={milestone.close} />}
     </Page>
   );

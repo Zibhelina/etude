@@ -12,8 +12,7 @@ import { ActionSheet, PhoneIconButton, PhoneTitle, type SheetAction } from "@/co
 import { DeckCounts, NewDeckDialog, todayKicker, useImportPicker, useLibrary } from "@/pages/decks";
 import { DeckMenu, type DeckMenuEntry, useDeckActions } from "@/components/deck-actions";
 import { ArchiveLink, useArchiveCount } from "@/components/archive-link";
-import { ChangeIconDialog, DeckIcon } from "@/components/deck-icon";
-import { DeckRing } from "@/components/deck-ring";
+import { ChangeIconDialog, DeckBadge } from "@/components/deck-icon";
 import { DonePanel, SessionCard, StreakCelebration, useMilestone } from "@/components/library-session";
 
 const enc = encodeURIComponent;
@@ -208,7 +207,7 @@ export function DeckList({ decks, parent, label, aside, onChanged }: { decks: De
     if (from > drag.to && i < from && i >= drag.to) return h;
     return 0;
   };
-  const anyIcon = kids.some((d) => d.icon);
+  const anyIcon = kids.some((d) => d.icon && d.icon !== "none");
 
   return (
     <section className="mt-8">
@@ -259,7 +258,7 @@ export function DeckList({ decks, parent, label, aside, onChanged }: { decks: De
         groups={sheet ? actions(sheet) : []}
       />
       <MoveDeckDialog deck={moving} decks={decks} onOpenChange={(o) => !o && setMoving(null)} onMoved={() => onChanged()} />
-      <ChangeIconDialog deck={iconFor?.name ?? null} icon={iconFor?.icon ?? null} open={!!iconFor} onOpenChange={(o) => !o && setIconFor(null)} onSaved={() => onChanged()} />
+      <ChangeIconDialog deck={iconFor?.name ?? null} icon={iconFor?.icon ?? null} counts={iconFor} open={!!iconFor} onOpenChange={(o) => !o && setIconFor(null)} onSaved={() => onChanged()} />
       {deckActions.deleteDialog}
     </section>
   );
@@ -296,7 +295,7 @@ function DeckRow({ d, decks, onHold, menu, grip, first, iconGap, lifted, editing
   const w = work(d);
   const watch = d.mode === "watch";
   const soon = d.deadline && new Date(d.deadline) > new Date();
-  const icon = d.depth === 0 || crumb;
+  const icon = (d.depth === 0 || crumb) && d.icon !== "none";
   return (
     <div
       className={cn("relative flex min-h-[4.5rem] items-center gap-3.5 rounded-xl px-2 select-none [-webkit-touch-callout:none] active:bg-accent/60", lifted && "bg-card shadow-lg ring-1 ring-border", crumb && "mx-3")}
@@ -309,7 +308,7 @@ function DeckRow({ d, decks, onHold, menu, grip, first, iconGap, lifted, editing
         onClick={() => { if (!held() && !editing) navigate(`/deck?name=${enc(d.name)}`); }}
         aria-label={`${leafOf(d.name)}: ${summary(d)}`}
       >
-        {icon ? (d.icon ? <DeckIcon icon={d.icon} size={44} className="lib-art" /> : <DeckRing d={d} size={44} />) : null}
+        {icon ? <DeckBadge icon={d.icon} d={d} size={44} /> : null}
         <span className="min-w-0 flex-1">
           {crumb && parentOf(d.name) && <span className="block truncate text-[12.5px] text-muted-foreground">{parentOf(d.name).split("::").join(" › ")}</span>}
           <span className={cn("block truncate text-[16px] leading-snug", d.depth === 0 ? "font-semibold" : "font-medium")}>{leafOf(d.name)}</span>

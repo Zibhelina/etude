@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { Block, Breadcrumb, EmptyState, LinkRow, Page, Section } from "@/components/page";
 import { DeckCounts } from "@/pages/decks";
 import { ChangeIconDialog, DeckIcon } from "@/components/deck-icon";
+import { hasPicture } from "@/lib/deck-icons";
 import { childrenOf, clashes, leafOf, moveDeck, MoveDeckDialog, parentOf } from "@/components/move-deck";
 import { usePhone } from "@/lib/phone";
 import { DeckList } from "@/components/phone-decks";
@@ -443,7 +444,7 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards, onChanged, phon
         </div>
       ) : phone ? null : (
         <div className="group flex items-center gap-3">
-          {deck.icon && <DeckIcon icon={deck.icon} size={52} className="lib-art" />}
+          {hasPicture(deck.icon) && <DeckIcon icon={deck.icon} size={52} className="lib-art" />}
           <h1 className="lib-title min-w-0 py-0.5 text-[2rem] leading-tight font-semibold break-words">{leaf}</h1>
           <Button variant="ghost" size="icon" className="size-10 shrink-0 text-muted-foreground hover:text-foreground" onClick={() => setEditing(true)} aria-label="Rename deck">
             <Pencil className="size-4" />
@@ -453,7 +454,7 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards, onChanged, phon
           </Button>
         </div>
       )}
-      <ChangeIconDialog deck={deck.name} icon={deck.icon ?? null} open={iconOpen} onOpenChange={setIconOpen} onSaved={onChanged} />
+      <ChangeIconDialog deck={deck.name} icon={deck.icon ?? null} counts={node} open={iconOpen} onOpenChange={setIconOpen} onSaved={onChanged} />
 
       {phone && !editing && (
         <PhoneDeckHero deck={deck} node={node} work={work} subdecks={subdecks} onRename={() => setEditing(true)} onIcon={() => setIconOpen(true)} />
@@ -515,13 +516,13 @@ function PhoneDeckHero({ deck, node, work, onRename, onIcon }: { deck: DeckFull;
   return (
     <div>
       <div className="flex items-start justify-between gap-2">
-        {deck.icon ? <DeckIcon icon={deck.icon} size={64} className="lib-art" /> : <span />}
+        {hasPicture(deck.icon) ? <DeckIcon icon={deck.icon} size={64} className="lib-art" /> : <span />}
         <div className="-mt-1 -mr-2 flex">
           <button onClick={onIcon} aria-label="Change icon" className="flex size-10 items-center justify-center rounded-full text-muted-foreground active:bg-accent"><Smile className="size-[18px]" /></button>
           <button onClick={onRename} aria-label="Rename deck" className="flex size-10 items-center justify-center rounded-full text-muted-foreground active:bg-accent"><Pencil className="size-[18px]" /></button>
         </div>
       </div>
-      <h1 className={cn("lib-title text-[1.9rem] leading-[1.12] font-semibold break-words", deck.icon && "mt-3")}>{leafOf(deck.name)}</h1>
+      <h1 className={cn("lib-title text-[1.9rem] leading-[1.12] font-semibold break-words", hasPicture(deck.icon) && "mt-3")}>{leafOf(deck.name)}</h1>
       <div className="mt-2">
         {watch ? (
           <span className="text-[14.5px] text-muted-foreground">A tour of {node?.cards ?? 0} cards. Nothing is scheduled.</span>

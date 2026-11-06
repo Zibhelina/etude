@@ -182,14 +182,14 @@ command({
   name: "deck icon",
   summary: "Get or set the picture a deck shows in the Library.",
   description:
-    "`art:<id>` picks one of the built-in illustrations (the ids are listed in the app's Change icon picker, e.g. art:world, art:chess, art:piano), `emoji:<emoji>` uses one emoji, and `none` removes it.",
+    "`default` shows the count rings (new, learning, due), `none` shows no picture at all, `art:<id>` picks one of the built-in illustrations (the ids are listed in the app's Change icon picker, e.g. art:world, art:chess, art:piano), `emoji:<emoji>` uses one emoji, and `media:files/<file>` uses an image already in the collection's media (store one with `etude media add`).",
   args: [
     { name: "deck", description: "Deck name.", required: true },
-    { name: "icon", description: "art:<id>, emoji:<emoji> or none. Omit to print the current one." },
+    { name: "icon", description: "default, none, art:<id>, emoji:<emoji> or media:files/<file>. Omit to print the current one." },
   ],
   writes: true,
   dryRun: true,
-  examples: ['etude deck icon "Geography" art:world', 'etude deck icon "Japanese" "emoji:🗾"', 'etude deck icon "Geography" none'],
+  examples: ['etude deck icon "Geography" art:world', 'etude deck icon "Japanese" "emoji:🗾"', 'etude deck icon "Geography" none', 'etude deck icon "Geography" default'],
   output: "{ deck, icon, changed? }",
   run(ctx) {
     const e = ctx.e;

@@ -1,18 +1,65 @@
-.code-lang { text-transform: none; font-weight: 600; color: var(--foreground); }
-.code-hint { display: flex; gap: 0.25rem; align-items: center; }
-@media (max-width: 480px) { .code-hint { display: none; } }
+/* Etude 3 code: a one-line title with the rest of the prompt quiet under it, a flat borderless editor
+   with faint line numbers, and after running a title with the pass count, the first three failures,
+   and Your code / Reference in one place. */
+.code-box[hidden], .code-ref[hidden] { display: none !important; }
+#card { gap: 1.25rem; }
+.code-prompt { font-size: 0.97rem; line-height: 1.6; color: var(--muted-foreground); margin-top: 0.3rem; }
+.code-prompt > :first-child { font: 700 1.75rem/1.25 var(--font-sans); letter-spacing: -0.015em; color: var(--foreground); margin-bottom: 0.7rem; }
+.code-prompt code { font: 0.92em var(--font-mono); background: none; padding: 0; color: var(--foreground); }
+.code-prompt > :first-child code { font-size: 0.9em; }
+[data-mode="result"] .code-prompt > :first-child { font-size: 1.15rem; margin-bottom: 0.4rem; }
+[data-mode="result"] .code-prompt > :not(:first-child) { display: none; }
+
+/* Syntax colours from the round-06 palette, for light and dark themes. */
+:root {
+  --code-keyword: light-dark(#7a4fb0, #c19bf0);
+  --code-string: light-dark(#2f7d3b, #86d494);
+  --code-number: light-dark(#b06a12, #e8b06a);
+  --code-function: light-dark(#2f63b0, #8fb8f2);
+  --code-comment: light-dark(#9a9a95, #7c7c7c);
+}
+
+.code-box.e-editor { display: flex; flex-direction: column; border: 0; border-radius: 14px; background: var(--muted); box-shadow: none; }
+.code-box.e-editor:focus-within { border: 0; box-shadow: none; }
+.code-box.e-editor.is-readonly { border: 0; background: var(--muted); }
+.code-box .e-editor-head { order: 2; justify-content: flex-end; border: 0; background: none; padding: 0 14px 10px; margin-top: -6px; gap: 0.75rem; font-size: 0.72rem; }
+.code-lang { text-transform: none; font-weight: 600; color: var(--muted-foreground); opacity: 0.8; }
+.code-hint { display: flex; gap: 0.25rem; align-items: center; opacity: 0.7; }
+.code-box:not(:focus-within) .code-hint { display: none; }
+@media (max-width: 560px) { .code-hint { display: none !important; } }
 .code-host { min-height: 7rem; }
-.code-ref { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; background: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.85em 1em; overflow-x: auto; font: 0.86rem/1.6 var(--font-mono); }
-.code-tests { display: flex; flex-direction: column; gap: 0.35rem; }
+.code-box .cm-editor { font-size: 15px; }
+.code-box .cm-content { padding: 18px 0; line-height: 1.7; }
+.code-box .cm-scroller { line-height: 1.7; }
+.code-box .cm-line { padding: 0 20px 0 14px; }
+.code-box .cm-gutters { border-right: 0 !important; color: var(--muted-foreground) !important; opacity: 0.45; padding-left: 10px; }
+.code-box .cm-activeLine { background: transparent !important; }
+.code-box .cm-activeLineGutter { color: var(--foreground) !important; }
+.code-box .e-editor-loading { padding: 18px 20px; font: 15px/1.7 var(--font-mono); }
+
+/* Result */
+.e-reveal.code-res { border-top: 0; padding-top: 0; gap: 0; }
+.code-verdict { font: 700 1.75rem/1.25 var(--font-sans); letter-spacing: -0.015em; }
+.code-tests { display: grid; gap: 10px; margin-top: 1.1rem; }
 .code-tests:empty { display: none; }
-.code-test { display: grid; grid-template-columns: 1.1rem 1fr; gap: 0.5rem; align-items: baseline; font: 0.84rem/1.5 var(--font-mono); }
-.code-test .mark { font-family: var(--font-sans); font-weight: 700; }
-.code-test.pass .mark { color: var(--success); }
-.code-test.fail .mark { color: var(--danger); }
-.code-test .got { color: var(--muted-foreground); }
-.code-test .got b { color: var(--danger); font-weight: 500; }
-.code-test code { white-space: pre-wrap; word-break: break-word; }
-/* Etude 3 look: the question in the study serif, no rule above the answer. */
-#card > .prose:first-child, #card > .io-header:first-child { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.005em; }
-#card > .prose:first-child code { font-size: 0.8em; }
-.e-reveal { border-top: 0; padding-top: 0.25rem; }
+.code-test { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px 18px; align-items: baseline; font-size: 0.94rem; }
+.code-test .expr { font: 0.92rem var(--font-mono); color: var(--foreground); background: none; padding: 0; overflow-wrap: anywhere; }
+.code-test .want { color: var(--muted-foreground); font-size: 0.875rem; white-space: nowrap; }
+.code-test .got { color: var(--danger); font-size: 0.875rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.code-more { font-size: 0.875rem; color: var(--muted-foreground); }
+.code-expl { margin-top: 1rem; font-size: 0.97rem; line-height: 1.6; color: var(--muted-foreground); }
+.code-tabs { display: flex; gap: 4px; margin-top: 1.6rem; margin-bottom: 8px; }
+.code-tab { all: unset; cursor: pointer; font-size: 0.875rem; font-weight: 600; color: var(--muted-foreground); padding: 6px 12px; border-radius: 8px; }
+.code-tab:hover { color: var(--foreground); }
+.code-tab.on { color: var(--foreground); background: var(--card, var(--muted)); box-shadow: 0 0 0 1px var(--border); }
+.code-tab:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.code-tabs.single .code-tab { cursor: default; }
+.code-ref { white-space: pre; margin: 0; background: var(--muted); border: 0; border-radius: 14px; padding: 18px 20px; overflow-x: auto; font: 15px/1.7 var(--font-mono); scrollbar-width: none; }
+.code-ref code { background: none; padding: 0; font: inherit; }
+@media (max-width: 560px) {
+  .code-prompt > :first-child, .code-verdict { font-size: 1.4rem; }
+  .code-box .cm-editor, .code-ref { font-size: 13.5px; }
+  .code-test { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; font-size: 0.82rem; }
+  .code-test .want { grid-column: 1; }
+}
+.code-box.is-readonly .cm-matchingBracket, .code-box.is-readonly .cm-nonmatchingBracket { background: transparent !important; }

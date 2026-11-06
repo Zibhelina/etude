@@ -4,7 +4,7 @@
 //    desktop server uses and answers { status, headers, body }. A text/event-stream answer comes
 //    back in pieces ({ id, chunk }) and ends with { id, end }.
 import "./shims/globals.ts";
-import { existsSync, filesUnder, flush, mkdirSync, mountOpfs, readFileSync, rmSync, writeFileSync } from "./shims/vfs.ts";
+import { allReady, existsSync, filesUnder, flush, mkdirSync, mountOpfs, readFileSync, ready as readyFiles, rmSync, takeMissed, writeFileSync } from "./shims/vfs.ts";
 import { zipSync, type Zippable } from "fflate";
 import { Buffer } from "buffer";
 import { localFrame } from "./frame-local.ts";
@@ -100,7 +100,9 @@ async function restore(bytes: Uint8Array): Promise<{ media: number }> {
 
 async function boot() {
   const t0 = performance.now();
-  await mountOpfs(DATA); // media, answers, agent files: mirrored to OPFS
+  // Media, answers, agent files: mirrored to OPFS. The media folder opens without waiting for each file's
+  // size and time (a collection can have tens of thousands); see `http` for how requests deal with that.
+  await mountOpfs(DATA, { later: (p) => p.startsWith(`${DATA}/media/`) });
   loadEnv();
   const { Etude } = await import("../core/engine.ts");
   etude = await Etude.open(`${DATA}/etude.db`, { home: `${DATA}/home` });
@@ -164,7 +166,21 @@ async function installNativeHost() {
 
 
 async function http(id: number, r: { method: string; url: string; headers: Record<string, string>; body: ArrayBuffer | null }) {
-  const res = await app!.fetch(new Request(r.url, { method: r.method, headers: r.headers, body: r.body && r.method !== "GET" && r.method !== "HEAD" ? r.body : undefined }));
+  // Media files get their size and time after opening. A change waits for all of them, so it never runs twice. A
+  // read goes now: a media file it serves is readied first, and one that met a file not ready yet is asked again.
+  const read = r.method === "GET" || r.method === "HEAD";
+  const path = new URL(r.url).pathname;
+  if (!read) await allReady();
+  else if (path.startsWith("/media/")) await readyFiles([`${DATA}/media/${decodeURIComponent(path.slice("/media/".length))}`]);
+  let res: Response;
+  for (let attempt = 1; ; attempt++) {
+    takeMissed();
+    res = await app!.fetch(new Request(r.url, { method: r.method, headers: r.headers, body: r.body && !read ? r.body : undefined }));
+    const missed = takeMissed();
+    if (!read || !missed.length || res.status < 500 || attempt >= 3) break;
+    // The files it met, then (a read over many, like the cleanup report) all of them.
+    await (attempt === 1 ? readyFiles(missed) : allReady());
+  }
   const headers = Object.fromEntries(res.headers.entries());
   if ((headers["content-type"] ?? "").includes("text/event-stream") && res.body) {
     post({ id, ok: true, value: { status: res.status, headers, stream: true } });
@@ -180,7 +196,6 @@ async function http(id: number, r: { method: string; url: string; headers: Recor
   }
   let body = await res.arrayBuffer();
   // Card frames: make them self-contained (see frame-local.ts).
-  const path = new URL(r.url).pathname;
   if (res.ok && r.method === "GET" && path.startsWith("/frame/")) {
     body = new TextEncoder().encode(localFrame(new TextDecoder().decode(body))).buffer as ArrayBuffer;
     delete headers["content-length"];
@@ -227,11 +242,12 @@ async function handle(ev: MessageEvent) {
     else if (method === "_media") value = existsSync(`${etude.mediaDir}/${args[0]}`);
     else if (method === "_sql") value = etude.db.all(args[0] as string, ...(args.slice(1) as any[]));
     else if (method === "_backup") {
+      await allReady();
       const zip = backup();
       post({ id, ok: true, value: zip }, [zip.buffer as ArrayBuffer]);
       return;
     } else if (method === "_restore") value = await restore(new Uint8Array(args[0] as ArrayBuffer));
-    else if (typeof etude[method] === "function") value = await etude[method](...args);
+    else if (typeof etude[method] === "function") value = (await allReady(), await etude[method](...args));
     else throw new Error(`no such method: ${method}`);
     if (method !== "_flush") await flush();
     post({ id, ok: true, value });

@@ -12,6 +12,7 @@ import { agentRefusal } from "./agent-guard.ts";
 import { chatGptStatus, listChatGptModels } from "./chatgpt.ts";
 import { llmTurn, type LlmMessage, type ToolCall, type ToolSpec } from "./agent-llm.ts";
 import type { Etude } from "./engine.ts";
+import { personaPrompt } from "./minimi.ts";
 
 export const AGENT_MAX_TOOL_CALLS = 25;
 export const AGENT_MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
@@ -669,8 +670,9 @@ export class Agent {
     }
   }
 
-  private async systemPrompt(page?: string): Promise<string> {
+  private async systemPrompt(page?: string, model?: string): Promise<string> {
     const e = this.etude;
+    const s = e.settings();
     const types = e
       .listTypes()
       .map((t) => `- ${t.id}: ${t.name}${t.description ? `. ${t.description.replace(/\s+/g, " ").slice(0, 90)}` : ""}`)
@@ -681,7 +683,9 @@ export class Agent {
     const installed = new Set(themes.map((t) => t.id));
     const market = (await this.marketThemes()).filter((id) => !installed.has(id));
     // Stable text first, so providers can cache the prefix across turns.
-    return `You are the assistant inside Etude, a spaced-repetition practice app. You change the user's collection by running Etude CLI commands with etude_run, in-process, on the open collection.
+    return `${personaPrompt({ fun: s.fun, personality: s.minimi, model })}
+
+You work inside Etude, a spaced-repetition practice app. You change the user's collection by running Etude CLI commands with etude_run, in-process, on the open collection.
 
 How Etude works: an item is one piece of content (fields) of a card type; each item makes one or more cards, scheduled by FSRS (or another scheduler per deck). Card types define fields, a template and a grader. Decks form a tree written A::B::C. Themes color the app; the Market has more themes, decks and card types.
 
@@ -822,7 +826,7 @@ Today: ${new Date().toISOString().slice(0, 10)}${page ? `\nThe user is looking a
     let stopped = false;
     const t0 = Date.now();
     let calls = 0;
-    const system = await this.systemPrompt(input.page);
+    const system = await this.systemPrompt(input.page, provider.model);
     const effort: AgentEffort = this.etude.settings().ai.agent?.effort ?? "low";
     const changes: string[] = [];
     // Retitle from the whole conversation after the 2nd and 4th message, alongside the turn.

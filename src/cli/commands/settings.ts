@@ -34,7 +34,7 @@ command({
   name: "settings set",
   summary: "Change settings with dotted key=value pairs (JSON values when they parse).",
   description:
-    "Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.",
+    "Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words; empty keeps his usual one). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.",
   args: [{ name: "pairs", description: "key=value pairs.", required: true, variadic: true }],
   writes: true,
   dryRun: true,

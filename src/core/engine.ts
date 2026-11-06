@@ -69,6 +69,7 @@ import { decodeAssets, hashBytes, type AssetInfo } from "./assets.ts";
 import { imagePixels, normalizeBoxes, OcclusionError } from "./occlusion.ts";
 import { DEFAULT_PRIVACY, type Privacy } from "./telemetry.ts";
 import { muted } from "./sync/log.ts";
+import { MINIMI_MAX } from "./minimi.ts";
 
 /** The card columns a canonical replay computes; the rest of a card comes from its registers. */
 const REPLAY_FIELDS = ["state", "due", "stability", "difficulty", "elapsed_days", "scheduled_days", "reps", "lapses", "learning_steps", "last_review", "sched_state"];
@@ -153,6 +154,8 @@ export interface Settings {
   privacy: Privacy;
   /** Fun mode: Minimi, the mascot, sits in the corner and answers instead of the plain ε. */
   fun: boolean;
+  /** Minimi's personality, written by the user. Empty keeps his usual one (src/core/minimi.ts). Only used in Fun mode. */
+  minimi: string;
 }
 
 export const ONBOARDING_LEVELS = ["simple", "standard", "tinker"] as const;
@@ -161,7 +164,7 @@ export interface Onboarding {
   level: (typeof ONBOARDING_LEVELS)[number];
 }
 
-export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" }, privacy: DEFAULT_PRIVACY, fun: true };
+export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" }, privacy: DEFAULT_PRIVACY, fun: true, minimi: "" };
 
 /** Card preferences: short keys, and a few KB per type, since they ride along in the synced settings. */
 export const TYPE_PREF_KEY = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -656,6 +659,8 @@ export class Etude {
     if (typeof next.privacy.errorReports !== "boolean" || typeof next.privacy.usageStats !== "boolean") throw new EtudeError("privacy.errorReports and privacy.usageStats must be true or false");
     next.privacy = { errorReports: next.privacy.errorReports, usageStats: next.privacy.usageStats };
     if (typeof next.fun !== "boolean") throw new EtudeError("fun must be true or false");
+    if (typeof next.minimi !== "string") throw new EtudeError("minimi must be text");
+    if (next.minimi.length > MINIMI_MAX) throw new EtudeError(`minimi is too long (at most ${MINIMI_MAX} characters)`);
     if (typeof next.onboarding.done !== "boolean") throw new EtudeError("onboarding.done must be true or false");
     if (!ONBOARDING_LEVELS.includes(next.onboarding.level)) throw new EtudeError(`onboarding.level must be one of ${ONBOARDING_LEVELS.join(", ")}`);
     if (typeof next.market.url !== "string" || typeof next.market.repo !== "string") throw new EtudeError("market.url and market.repo must be text");

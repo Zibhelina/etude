@@ -1,11 +1,12 @@
 // The study screen's fixed shell (Etude 3), shared by Study and Watch: the header, the card on its stage,
 // the result layer (verdict, Minimi's feedback, the follow-up chat) and the bottom strip whose one main
 // button changes its verb. Styles are the `st-*` block in index.css.
-import { forwardRef, useEffect, useRef, useState, type ReactNode } from "react";
+import { forwardRef, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Plus, SendHorizontal } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { humanInterval, RATING_LABEL, type Rating, type StudyCard } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import type { CardFrameHandle, CardResult } from "@/components/card-frame";
 import face from "@/assets/minimi/face.webp";
 import sitHead from "@/assets/minimi/sit-head.webp";
 import sitLegL from "@/assets/minimi/sit-legL.webp";
@@ -74,9 +75,13 @@ export function IconButton({ label, onClick, disabled, children, className, ...r
   );
 }
 
-/** The card's place on the stage. Self-graded cards sit on paper with the deck behind them. */
-export const CardStage = forwardRef<HTMLDivElement, { paper: boolean; eyebrow?: ReactNode; aside?: ReactNode; enter?: boolean; style?: React.CSSProperties; className?: string; children: ReactNode }>(function CardStage(
-  { paper, eyebrow, aside, enter = true, style, className, children },
+/** Which side of a self-graded card faces you: the question, turning over, or the answer (settled). */
+export type FlipSide = "front" | "turning" | "back";
+
+/** The card's place on the stage. Self-graded cards sit on paper with the deck behind them; with a `back`
+ *  they're two-faced, and `flip` turns them over to it. */
+export const CardStage = forwardRef<HTMLDivElement, { paper: boolean; eyebrow?: ReactNode; aside?: ReactNode; enter?: boolean; style?: React.CSSProperties; className?: string; children: ReactNode; back?: ReactNode; flip?: FlipSide }>(function CardStage(
+  { paper, eyebrow, aside, enter = true, style, className, children, back, flip = "front" },
   ref,
 ) {
   const head = (eyebrow || aside) && (
@@ -97,9 +102,17 @@ export const CardStage = forwardRef<HTMLDivElement, { paper: boolean; eyebrow?: 
     <div ref={ref} style={style} className={cn("st-stack", enter && "st-in", className)}>
       <div className="st-sheet s1" />
       <div className="st-sheet s2" />
-      <div className="st-paper" data-paper>
-        {head}
-        <div className="st-frame">{children}</div>
+      <div className={cn("st-flip", flip !== "front" && "flipped", flip === "back" && "settled")} data-paper>
+        <div className="st-paper st-face" inert={flip === "back" || undefined}>
+          {head && <div className="st-head">{head}</div>}
+          <div className="st-frame">{children}</div>
+        </div>
+        {back && (
+          <div className="st-paper st-face st-backface" inert={flip !== "back" || undefined} aria-hidden={flip !== "back" || undefined}>
+            {head && <div className="st-head">{head}</div>}
+            <div className="st-frame">{back}</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -141,11 +154,12 @@ const VERDICT: Record<string, { label: string; cls: string; mark: string }> = {
 /** The grade's verdict when it's one the shell shows (correct, partial, incorrect), else null. */
 export const shownVerdict = (v: string | null | undefined) => (v && VERDICT[v] ? v : null);
 
-export function Verdict({ verdict, score, prefix }: { verdict?: string | null; score?: number | null; prefix?: string }) {
+/** `late`: the card's own pieces are still clearing (the morph reported some leaving), so it pops a beat later. */
+export function Verdict({ verdict, score, prefix, late }: { verdict?: string | null; score?: number | null; prefix?: string; late?: boolean }) {
   const v = verdict ? VERDICT[verdict] : null;
   if (!v) return null;
   return (
-    <span className={cn("st-verdict", v.cls)} role="status">
+    <span className={cn("st-verdict", v.cls, late && "late")} role="status">
       <span aria-hidden>{v.mark}</span>
       {prefix}
       {v.label}
@@ -302,6 +316,43 @@ export function Suggestion({ suggested, extra }: { suggested: Rating | null; ext
   );
 }
 
+/** Turns a two-faced card (CardStage with a `back`) over to its back: the result goes on the back face first,
+ *  then one continuous turn with the height easing to the back's. `sized` resolves once the back reported its
+ *  new height; `setSide` must render synchronously (flushSync). Resolves false if there was nothing to turn. */
+export async function turnOver(stage: HTMLElement | null | undefined, back: CardFrameHandle | null, res: CardResult, sized: () => Promise<void>, setSide: (side: FlipSide) => void, focus = true): Promise<boolean> {
+  const el = stage?.querySelector<HTMLElement>(".st-flip");
+  const fr = el?.firstElementChild as HTMLElement | null | undefined;
+  const bk = el?.querySelector<HTMLElement>(".st-backface");
+  if (!el || !fr || !bk || !back) return false;
+  const ready = sized();
+  back.showResult(res, { morph: false });
+  await ready;
+  await new Promise((ok) => requestAnimationFrame(ok));
+  // The card may still be settling in from the deck; the turn starts from where it is.
+  el.getAnimations().forEach((a) => a.cancel());
+  el.style.height = `${fr.offsetHeight}px`;
+  void el.offsetWidth;
+  setSide("turning");
+  el.style.height = `${Math.max(bk.offsetHeight, fr.offsetHeight * 0.6)}px`;
+  await new Promise((ok) => setTimeout(ok, FLIP_MS));
+  setSide("back");
+  el.style.height = "";
+  if (focus) back.focus();
+  return true;
+}
+export const FLIP_MS = 720;
+
+/** Sends a card off the stage after it's done: paper is tossed to the left with a turn, a bare card slides
+ *  away; both fade quickly (as in design round 06). `dir` -1 sends it to the right (going back in Watch). */
+export function flyOff(el: HTMLElement, paper: boolean, dir: 1 | -1 = 1): Animation {
+  const target = paper ? el.querySelector<HTMLElement>("[data-paper]") ?? el : el;
+  const to = paper ? `translate(${-118 * dir}%,-18px) rotate(${-8 * dir}deg)` : `translateX(${-40 * dir}%)`;
+  const move = target.animate([{ transform: "none" }, { transform: to }], { duration: 480, easing: "cubic-bezier(.45,0,.7,1)", fill: "forwards" });
+  target.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, delay: 60, easing: "ease-in", fill: "forwards" });
+  el.querySelectorAll<HTMLElement>(".st-sheet").forEach((s) => s.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, fill: "forwards" }));
+  return move;
+}
+
 /** The bottom strip: same background as the page, no divider; a short fade above it. */
 export const Slot = forwardRef<HTMLDivElement, { className?: string; children: ReactNode }>(function Slot({ className, children }, ref) {
   return (
@@ -310,6 +361,25 @@ export const Slot = forwardRef<HTMLDivElement, { className?: string; children: R
     </footer>
   );
 });
+
+/** Keeps the card from jumping when the column around it changes (the result appearing under it re-centres
+ *  the column): call the returned `mark()` right before such a state change, and after that render the card
+ *  glides from where it was. */
+export function useGlide(getEl: () => HTMLElement | null | undefined) {
+  const from = useRef<{ el: HTMLElement; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const f = from.current;
+    if (!f) return;
+    from.current = null;
+    if (!f.el.isConnected || reducedMotion()) return;
+    const dy = f.top - (f.el.getBoundingClientRect().top + window.scrollY);
+    if (Math.abs(dy) > 1) f.el.animate([{ translate: `0 ${dy}px` }, { translate: "0 0" }], { duration: 460, easing: "cubic-bezier(.2,.8,.2,1)" });
+  });
+  return () => {
+    const el = getEl();
+    if (el && !from.current) from.current = { el, top: el.getBoundingClientRect().top + window.scrollY };
+  };
+}
 
 /** Replays the strip's entrance whenever `k` changes (a new step: answer → result → next card). */
 export function useSwapIn(k: unknown) {

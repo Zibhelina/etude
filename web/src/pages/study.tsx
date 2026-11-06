@@ -1,5 +1,6 @@
 import { autoSync } from "@/lib/sync";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { ArrowLeftToLine, EyeOff, FastForward, Loader2, Maximize2, MessageSquareText, Minimize2, MoreHorizontal, Pause, Pencil, Plus, RotateCcw, Undo2, X as XIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -16,8 +17,8 @@ import { ActionSheet, Tally } from "@/components/phone-shell";
 import { SketchBar, SketchLayer, sketchTransform, useSketch } from "@/components/sketch-pad";
 import { track } from "@/lib/telemetry";
 import {
-  AskTab, CardStage, cardEyebrow, Composer, crumbPath, shownVerdict, Eyebrow, Feedback, IconButton, modKey, Ratings, reducedMotion, Slot, StudyTop, Suggestion, Thread, Track, useSwapIn, Verdict,
-  type ChatMsg,
+  AskTab, CardStage, cardEyebrow, flyOff, turnOver, useGlide, Composer, crumbPath, shownVerdict, Eyebrow, Feedback, IconButton, modKey, Ratings, reducedMotion, Slot, StudyTop, Suggestion, Thread, Track, useSwapIn, Verdict,
+  type ChatMsg, type FlipSide,
 } from "@/components/study-shell";
 
 type Phase = "loading" | "answer" | "grading" | "result" | "done";
@@ -30,6 +31,11 @@ const PHONE_FOCUS_STRIP = 56;
 
 // Once per session the page dips toward the follow-up chat, to show there's more below the feedback.
 let nudged = false;
+
+const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
+// After a rating: a beat for the ring on the chosen key, then the next card rises 230 ms into the fly-off.
+const RATE_BEAT_MS = 50;
+const NEXT_AFTER_MS = 230;
 
 const frameKeyOf = (c: StudyCard, retries: number) => `${c.cardId}:${c.seed}:${c.typeVersion}:${retries}`;
 const clip = (v: unknown, n: number) => {
@@ -70,13 +76,19 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const lastCard = useRef<number | undefined>(undefined);
   const busy = useRef(false);
   const sk = useSketch(card ? `${card.cardId}:${card.seed}` : null);
+  const currentKeyRef = useRef<string | null>(null);
 
   // Motion: the card on the stage, the one flying off after a rating, and a basic card's flip.
   const cardEls = useRef(new Map<string, HTMLDivElement>());
   const [leaving, setLeaving] = useState<Leaving | null>(null);
   const [exiting, setExiting] = useState(false);
-  const flip = useRef<{ half: Promise<unknown>; anim: Animation; el: HTMLElement } | null>(null);
+  // A self-graded card turns over to a second copy of itself showing the answer (its back face).
+  const backFrame = useRef<CardFrameHandle>(null);
+  const backSized = useRef<((h: number) => void) | null>(null);
+  const flipPending = useRef(false);
+  const [flip, setFlip] = useState<{ key: string; side: FlipSide } | null>(null);
   const [flipping, setFlipping] = useState(false);
+  const [lateVerdict, setLateVerdict] = useState(false);
 
   // The follow-up chat under AI feedback.
   const [chat, setChat] = useState<ChatMsg[]>([]);
@@ -101,6 +113,10 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     setSawChat(false);
     setAttached(null);
     setExiting(false);
+    setFlip(null);
+    setFlipping(false);
+    setLateVerdict(false);
+    flipPending.current = false;
     conv.current = null;
   };
 
@@ -137,10 +153,13 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       .catch((e) => toast.error((e as Error).message));
   }, [load, startCard]);
 
+  const holdCard = useGlide(() => (currentKeyRef.current ? cardEls.current.get(currentKeyRef.current) : null));
   const askFeedback = useCallback(async (id: number) => {
+    holdCard();
     setFeedback({ loading: true });
     try {
       const f = await api.feedback(id);
+      holdCard();
       setFeedback({ text: f.feedback });
     } catch (e) {
       setFeedback({ error: (e as Error).message });
@@ -154,6 +173,8 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     try {
       const r = await api.submit(card, answer, practice);
       if (r.retry) {
+        flipPending.current = false;
+        setFlipping(false);
         setRetry((previous) => ({ hint: r.retry!.hint, count: (previous?.count ?? 0) + 1 }));
         setReady(true);
         setPhase("answer");
@@ -162,30 +183,22 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       const res: CardResult = { grade: r.grade, key: r.key, answer };
       setResult(res);
       setAttemptId(r.attemptId);
-      const f = flip.current;
-      if (f) {
-        // Turn the card over: the answer goes on while it's edge-on, then the front comes back round.
-        await f.half;
-        frame.current?.showResult(res);
-        await new Promise((ok) => setTimeout(ok, 70));
-        const back = f.el.animate([{ transform: "perspective(1600px) rotateY(-90deg)" }, { transform: "perspective(1600px) rotateY(0deg)" }], { duration: 420, easing: "cubic-bezier(.2,.7,.3,1)" });
-        f.anim.cancel();
-        flip.current = null;
-        back.finished.then(() => setFlipping(false), () => setFlipping(false));
+      if (flipPending.current) {
+        flipPending.current = false;
+        await flipOverRef.current(res);
       } else {
-        frame.current?.showResult(res);
+        frame.current?.showResult(res, { morph: card.showVerdict !== false });
       }
+      holdCard();
       setPhase("result");
       if (r.grade.feedback && card.showVerdict !== false) setFeedback({ text: r.grade.feedback });
       else if (r.wantsFeedback && r.attemptId !== null) askFeedback(r.attemptId);
       if (r.grade.grader.error) toast.warning("Couldn't grade automatically", { description: r.grade.grader.error.slice(0, 200) });
     } catch (e) {
       toast.error((e as Error).message);
-      if (flip.current) {
-        flip.current.anim.cancel();
-        flip.current = null;
-        setFlipping(false);
-      }
+      flipPending.current = false;
+      setFlipping(false);
+      setFlip(null);
       setPhase("answer");
     } finally {
       busy.current = false;
@@ -195,34 +208,61 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const bare = focus && !!card && phase !== "done" && phase !== "loading";
   const paper = !!card && card.grader === "self" && !bare;
   const currentKey = card ? frameKeyOf(card, retry?.count ?? 0) : null;
+  currentKeyRef.current = currentKey;
+  // Self-graded cards get a back face to turn over to; with reduced motion the answer just goes on.
+  const twoFaced = paper && !reducedMotion();
+
+  /** Puts the result on the back face and turns the card over to it. */
+  const flipOver = async (res: CardResult) => {
+    const key = currentKey;
+    const sized = () => new Promise<void>((ok) => {
+      backSized.current = () => ok();
+      setTimeout(ok, 160);
+    });
+    const turned = await turnOver(key ? cardEls.current.get(key) : null, backFrame.current, res, sized, (side) => flushSync(() => setFlip(key ? { key, side } : null)));
+    backSized.current = null;
+    if (!turned) frame.current?.showResult(res);
+    setFlipping(false);
+  };
+
+  const flipOverRef = useRef(flipOver);
+  flipOverRef.current = flipOver;
 
   const reveal = useCallback(() => {
-    if (!card || phase !== "answer" || flip.current) return;
+    if (!card || phase !== "answer" || flipping || busy.current) return;
     // Cards say when an answer is complete enough to submit (e.g. not an empty box).
     if (!ready && card.grader !== "self") return;
-    const el = currentKey ? cardEls.current.get(currentKey)?.querySelector<HTMLElement>("[data-paper]") : null;
-    if (paper && el && !reducedMotion()) {
-      const anim = el.animate([{ transform: "perspective(1600px) rotateY(0deg)" }, { transform: "perspective(1600px) rotateY(90deg)" }], { duration: 300, easing: "cubic-bezier(.55,.05,.8,.4)", fill: "forwards" });
-      flip.current = { half: anim.finished.catch(() => {}), anim, el };
+    if (twoFaced && currentKey && cardEls.current.get(currentKey)?.querySelector(".st-backface")) {
+      flipPending.current = true;
       setFlipping(true);
+      // A card still loading doesn't answer collect(); don't stay stuck waiting to turn it over.
+      window.setTimeout(() => {
+        if (flipPending.current && !busy.current) {
+          flipPending.current = false;
+          setFlipping(false);
+        }
+      }, 1200);
     }
     frame.current?.collect();
-  }, [card, phase, ready, paper, currentKey]);
+  }, [card, phase, ready, twoFaced, currentKey, flipping]);
 
   const rate = useCallback(async (rating: Rating | 0) => {
     if (!card || phase !== "result" || busy.current) return;
     busy.current = true;
     // The card flies off to the left while the next one is fetched; the next rises off the deck.
     const el = currentKey ? cardEls.current.get(currentKey) : null;
-    if (el && currentKey && !reducedMotion() && !bare) {
+    const motion = !!el && !!currentKey && !reducedMotion() && !bare;
+    const rated = api.rate(card.cardId, rating, { attemptId: attemptId ?? undefined, durationMs: Date.now() - shownAt.current, practice });
+    rated.catch(() => {}); // handled below; this keeps a fast failure from being reported as unhandled during the beat
+    if (motion) await sleep(RATE_BEAT_MS);
+    if (motion && el && currentKey) {
       const r = el.getBoundingClientRect();
       setLeaving({ key: currentKey, card, rect: { left: r.left, top: r.top, width: r.width }, paper, done: false });
     }
     setExiting(true);
     try {
-      await api.rate(card.cardId, rating, { attemptId: attemptId ?? undefined, durationMs: Date.now() - shownAt.current, practice });
+      await Promise.all([rated, motion ? sleep(NEXT_AFTER_MS) : null]);
       lastCard.current = card.cardId;
-      await new Promise((ok) => setTimeout(ok, 120));
       await load(card.cardId);
     } catch (e) {
       toast.error((e as Error).message);
@@ -238,14 +278,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     if (!leaving || leaving.done) return;
     const el = cardEls.current.get(leaving.key);
     if (!el) return setLeaving(null);
-    const target = leaving.paper ? el.querySelector<HTMLElement>("[data-paper]") ?? el : el;
-    const anim = target.animate(
-      leaving.paper
-        ? [{ transform: "none", opacity: 1 }, { transform: "translate(-30%,-4px) rotate(-2deg)", opacity: 1, offset: 0.2 }, { transform: "translate(-118%,-18px) rotate(-8deg)", opacity: 0 }]
-        : [{ transform: "none", opacity: 1 }, { transform: "translateX(-40%)", opacity: 0 }],
-      { duration: 480, easing: "cubic-bezier(.45,0,.7,1)", fill: "forwards" },
-    );
-    el.querySelectorAll(".st-sheet").forEach((s) => (s as HTMLElement).animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, fill: "forwards" }));
+    const anim = flyOff(el, leaving.paper);
     const k = leaving.key;
     anim.finished.then(() => setLeaving((l) => (l && l.key === k ? { ...l, done: true } : l)), () => {});
   }, [leaving?.key, leaving?.done]);
@@ -569,6 +602,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const deckPath = crumbPath(card?.deck, scope.deck);
   const canAct = !!card && (phase === "answer" || phase === "result");
 
+  const src = (c: StudyCard) => `/frame/${encodeURIComponent(c.type)}?v=${encodeURIComponent(c.typeVersion)}`;
   const renderCard = (c: StudyCard, key: string, live: boolean, isPaper: boolean, style?: React.CSSProperties) => (
     <CardStage
       key={key}
@@ -577,14 +611,28 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       style={style}
       className={cn(!live && "st-leaving")}
       eyebrow={!bare && <Eyebrow items={cardEyebrow(c, { ahead: scope.ahead, practice })} />}
-      aside={live && !isPaper && phase === "result" && verdictShown ? <Verdict verdict={verdictShown} score={result?.grade.score} /> : undefined}
+      aside={live && !isPaper && phase === "result" && verdictShown ? <Verdict verdict={verdictShown} score={result?.grade.score} late={lateVerdict} /> : undefined}
+      flip={flip?.key === key ? flip.side : "front"}
+      back={isPaper && (twoFaced || flip?.key === key) ? (
+        <CardFrame
+          ref={live ? backFrame : undefined}
+          src={src(c)}
+          frameKey={`${key}:back`}
+          view={c.view}
+          autoFocus={false}
+          onKey={live ? onKey : undefined}
+          onSize={live ? (h) => backSized.current?.(h) : undefined}
+          onError={live ? (m) => toast.error("Card error", { description: m }) : undefined}
+        />
+      ) : undefined}
     >
       <CardFrame
         ref={live ? frame : undefined}
-        src={`/frame/${encodeURIComponent(c.type)}?v=${encodeURIComponent(c.typeVersion)}`}
+        src={src(c)}
         frameKey={key}
         view={c.view}
         onSubmit={live ? onSubmit : undefined}
+        onMorph={live ? setLateVerdict : undefined}
         onReady={live ? setReady : undefined}
         onKey={live ? onKey : undefined}
         onError={live ? (m) => toast.error("Card error", { description: m }) : undefined}
@@ -712,7 +760,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
         </button>
       )}
       {card && showBar && (phase === "answer" || phase === "grading" || phase === "result" || (phase === "loading" && exiting)) && (
-        <Slot ref={(el) => { slotRef.current = el; (slotSwap as React.MutableRefObject<HTMLDivElement | null>).current = el; }} className={cn((exiting || flipping) && "leaving")}>
+        <Slot ref={(el) => { slotRef.current = el; (slotSwap as React.MutableRefObject<HTMLDivElement | null>).current = el; }} className={cn(exiting && "leaving")}>
           {hasAsk && !sawChat && !chatting && <AskTab fun={fun} onClick={openChat} />}
           {phone && sk.on ? (
             <div className="st-row"><SketchBar sk={sk} /></div>
@@ -741,7 +789,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
                   </button>
                 </div>
               )}
-              <button className="st-pri" id="study-main" disabled={phase === "grading" || phase === "loading" || flipping || (!ready && card.grader !== "self")} onClick={reveal}>
+              <button className="st-pri" id="study-main" disabled={(phase === "grading" && !flipping) || phase === "loading" || (!ready && card.grader !== "self")} onClick={reveal}>
                 {phase === "grading" && !flipping ? <><Loader2 className="size-4 animate-spin" /> Checking…</> : card.grader === "self" ? <>Show answer <kbd>Space</kbd></> : <>Check <kbd>{modKey()} ↵</kbd></>}
               </button>
             </div>

@@ -108,7 +108,6 @@ test("the desktop window: isolated, sandboxed, no Node; links, navigation, permi
 
 test("Anki import: media names that would leave the media folder are skipped", async (t) => {
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-anki-names-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const files = unzipSync(new Uint8Array(readFileSync(join(ROOT, "test/fixtures/anki/media-gate.apkg"))));
   const map = JSON.parse(new TextDecoder().decode(files.media)) as Record<string, string>;
   const bytes = files[Object.keys(map)[0]];
@@ -116,7 +115,11 @@ test("Anki import: media names that would leave the media folder are skipped", a
   const apkg = join(dir, "names.apkg");
   writeFileSync(apkg, zipSync({ "collection.anki2": files["collection.anki2"], media: new TextEncoder().encode(JSON.stringify(evil)), "0": bytes, "1": bytes, "2": bytes, "3": bytes, "4": bytes }));
   const e = await Etude.open(join(dir, "etude.db"));
-  t.after(() => e.close());
+  // Closed before the folder goes: Windows won't delete an open database.
+  t.after(() => {
+    e.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
   const report = e.importAnki(apkg);
   const unsafe = report.skipped.filter((s: { what: string; reason: string }) => s.what === "media" && s.reason === "unsafe file name").map((s: { name: string }) => s.name).sort();
   assert.deepEqual(unsafe, ["..", "../../escaped.png", "..\\win.png", "sub/dir.png"]);

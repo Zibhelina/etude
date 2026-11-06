@@ -12,7 +12,7 @@ import { Block, Field, Section } from "@/components/settings-ui";
 import { relative } from "@/lib/api";
 import { etudeFetch } from "@/lib/transport";
 import { cn } from "@/lib/utils";
-import { ACCOUNT_EVENT } from "@/components/settings-account";
+import { ACCOUNT_EVENT, SecondStep } from "@/components/settings-account";
 import { account, AccountApiError, bytes, openOutside, type AccountStatus } from "@/lib/account";
 import { hasWebPortal, storageNote, storeSource } from "@/lib/billing-ui";
 import { canShowPurchases, desktopApp, isNativeApp, storeSafeMessage } from "@/lib/platform";
@@ -99,6 +99,8 @@ export function SyncSection() {
   const [useRecovery, setUseRecovery] = useState(false);
   const [recoveryInput, setRecoveryInput] = useState("");
   const [codeSent, setCodeSent] = useState(false);
+  // Two-step sign-in: the email code went through, the authenticator (or a recovery code) is next.
+  const [second, setSecond] = useState<string[] | null>(null);
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
   const [recoveryConfirmed, setRecoveryConfirmed] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -221,18 +223,21 @@ export function SyncSection() {
       setError("Enter the code from the email.");
       return;
     }
-    const s = await withBusy("verify", () => callSync<SyncStatus>("POST", "/api/sync/verify", { code: c }));
+    const s = await withBusy("verify", () => callSync<SyncStatus & { secondStep?: { methods: string[] } }>("POST", "/api/sync/verify", { code: c }));
     setCode("");
-    if (s) {
-      setStatus(s);
-      if (s.signedIn) {
-        setReauth(false);
-        setCodeSent(false);
-        setAcctLoaded(false);
-        await loadAccount();
-        window.dispatchEvent(new Event(ACCOUNT_EVENT));
-      }
-    }
+    if (s?.secondStep) return setSecond(s.secondStep.methods);
+    if (s) await signedIn(s);
+  };
+
+  const signedIn = async (s: SyncStatus) => {
+    setStatus(s);
+    if (!s.signedIn) return;
+    setReauth(false);
+    setCodeSent(false);
+    setSecond(null);
+    setAcctLoaded(false);
+    await loadAccount();
+    window.dispatchEvent(new Event(ACCOUNT_EVENT));
   };
 
   /** The first step in one go: connect to the server (or folder), then send the code. */
@@ -330,6 +335,7 @@ export function SyncSection() {
       setStatus(s);
       setReauth(false);
       setCodeSent(false);
+      setSecond(null);
       setCode("");
       setPassword("");
       setConfirm("");
@@ -485,7 +491,23 @@ export function SyncSection() {
             </form>
           )}
 
-          {stage === "code" && (
+          {stage === "code" && second && (
+            <div className="flex flex-col gap-4">
+              <StepTitle title="One more step" lead="Two-step sign-in is on for this account." />
+              <SecondStep
+                methods={second}
+                onSubmit={async (input) => void (await signedIn(await callSync<SyncStatus>("POST", "/api/sync/second-factor", input)))}
+                onRestart={() => {
+                  setSecond(null);
+                  setCodeSent(false);
+                  setCode("");
+                  setError(null);
+                }}
+              />
+            </div>
+          )}
+
+          {stage === "code" && !second && (
             <form
               className="flex flex-col gap-4"
               onSubmit={(e) => {

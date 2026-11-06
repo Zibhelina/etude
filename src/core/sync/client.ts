@@ -5,7 +5,7 @@ import { bootstrap, drain, install, localEvent, receive, rows, type Change } fro
 import { createVault, decryptBlob, decryptEvent, encryptBlob, encryptEvent, fromB64, sha256Hex, toB64, unwrapWithPassword, unwrapWithRecovery } from "./crypto.ts";
 import { CloudTransport, FolderTransport, type Transport } from "./transport.ts";
 import { project } from "./project.ts";
-import { accountFor, signInCode } from "../account.ts";
+import { accountFor, secondStepBody, secondStepFrom, signInCode, type PendingSecondStep } from "../account.ts";
 
 /** Most ciphertext characters sent in one push. */
 const PUSH_BATCH_BYTES=6*1024*1024;
@@ -35,7 +35,8 @@ async function pool<T>(items:T[],limit:number,fn:(item:T)=>Promise<void>) {
 const safeMediaPath=(file:string)=>!/[\x00-\x1f\x7f\\]/.test(file)&&!file.split("/").some(p=>p===""||p==="."||p==="..");
 
 type Config = { kind:"cloud"|"folder";server?:string;folder?:string;email?:string;enabled:boolean;hasKeys?:boolean;lastSync?:string };
-type Secrets = { token?:string;vk?:string };
+/** pendingSecond: an email sign-in waiting for its second step (two-step sign-in), kept beside the token, short-lived. */
+type Secrets = { token?:string;vk?:string;pendingSecond?:PendingSecondStep };
 const clients=new WeakMap<Etude,SyncClient>();
 export function syncFor(e:Etude) { let s=clients.get(e);if(!s) {s=new SyncClient(e);clients.set(e,s);}return s; }
 export class SyncClient {
@@ -97,10 +98,34 @@ export class SyncClient {
     const code=signInCode(input);
     if(code&&!c.email)throw new Error("ask for a code first: the code goes with the email address it was sent to");
     const previous=this.token();
-    const r:any=await new CloudTransport(c.server!,previous??"").json("/v1/auth/email/verify",{
-      ...(code?{email:c.email,code}:{token:input.trim()}),
-      deviceName:process.versions?.node?"Etude desktop":"Etude browser",
-    });
+    let r:any;
+    try {
+      r=await new CloudTransport(c.server!,previous??"").json("/v1/auth/email/verify",{
+        ...(code?{email:c.email,code}:{token:input.trim()}),
+        deviceName:process.versions?.node?"Etude desktop":"Etude browser",
+      });
+    } catch(e) {
+      // Two-step sign-in: the email step only got a ticket; secondStep() finishes with the authenticator or a recovery code.
+      const second=secondStepFrom(e);if(!second)throw e;
+      this.saveSecrets({...this.secrets(),pendingSecond:second});
+      return {...this.status(),secondStep:{methods:second.methods}};
+    }
+    return this.signedInWith(c,previous,r);
+  }
+  async secondStep(input:{code?:string;recoveryCode?:string}) {
+    const c=this.config();
+    if(c?.kind!=="cloud")throw new Error("choose a Sync server first");
+    const p=this.secrets().pendingSecond;
+    if(!p||p.expires<Date.now())throw new Error("sign in by email again: the sign-in waiting for its second step expired");
+    const previous=this.token();
+    let r:any;
+    try { r=await new CloudTransport(c.server!,previous??"").json("/v1/auth/second-factor",secondStepBody(p.ticket,input)); }
+    catch(e) { if(["ticket_expired","too_many_attempts"].includes((e as any).code))this.dropPendingSecond();throw e; }
+    this.dropPendingSecond();
+    return this.signedInWith(c,previous,r);
+  }
+  private dropPendingSecond() {const {pendingSecond:_,...rest}=this.secrets();this.saveSecrets(rest);}
+  private async signedInWith(c:Config,previous:string|null|undefined,r:any) {
     const token=r.reauth?previous:r.token;
     if(!r.reauth)this.saveSecrets({token});
     accountFor(this.e).adopt(c.server!,token,r.account);

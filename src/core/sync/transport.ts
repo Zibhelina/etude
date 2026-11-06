@@ -77,7 +77,7 @@ export class CloudTransport implements Transport {
     }
     if (!res.ok) {
       const body:any=await res.json().catch(()=>null);
-      throw new AccountError(body?.error?.message ?? `Sync server returned ${res.status}`,res.status,body?.error?.code??"error");
+      throw new AccountError(body?.error?.message ?? `Sync server returned ${res.status}`,res.status,body?.error?.code??"error",body?.error??{});
     }
     return res;
   }

@@ -346,6 +346,7 @@ These work on every command, before or after the command words.
   - [`sync setup`](#sync-setup) Connect this collection to a shared folder or Sync server.
   - [`sync signin`](#sync-signin) Email a one-time 6-digit sign-in code (valid 15 minutes).
   - [`sync verify`](#sync-verify) Redeem the 6-digit code from the sign-in email.
+  - [`sync second-factor`](#sync-second-factor) Finish a Sync sign-in with two-step sign-in on: the authenticator code, or a recovery code.
   - [`sync unlock`](#sync-unlock) Unlock the vault, or create one and return its recovery key once.
   - [`sync now`](#sync-now) Push pending encrypted changes and merge remote changes.
   - [`sync off`](#sync-off) Sign out and remove this device's saved Sync key; keep local content.
@@ -354,6 +355,14 @@ These work on every command, before or after the command words.
   - [`account server`](#account-server) Show or change the Etude server this install uses (default https://sync.etude.study, or $ETUDE_CLOUD_URL).
   - [`account signin`](#account-signin) Email a one-time 6-digit sign-in code (valid 15 minutes).
   - [`account verify`](#account-verify) Redeem the 6-digit code from the sign-in email. When already signed in, it re-confirms this device.
+  - [`account second-factor`](#account-second-factor) Finish an email sign-in with two-step sign-in on: the code from the authenticator app, or a recovery code.
+  - [`account two-factor`](#account-two-factor) Two-step sign-in: whether it's on, the authenticator, and recovery codes left.
+  - [`account authenticator`](#account-authenticator) Start adding an authenticator app: a new key, its otpauth:// link and a QR code. Confirm with `account authenticator-confirm`.
+  - [`account authenticator-confirm`](#account-authenticator-confirm) Confirm the authenticator being added with a code it shows. It replaces the one in use.
+  - [`account authenticator-remove`](#account-authenticator-remove) Remove the authenticator app. Not while two-step sign-in is on (turn it off first).
+  - [`account two-factor-on`](#account-two-factor-on) Turn on two-step sign-in: email sign-ins then also ask for the authenticator code. Returns 10 recovery codes, once.
+  - [`account two-factor-off`](#account-two-factor-off) Turn off two-step sign-in. Removes the authenticator and the recovery codes.
+  - [`account recovery-codes`](#account-recovery-codes) Make 10 new recovery codes, shown once. The old ones stop working.
   - [`account signout`](#account-signout) Sign this device out of the account. Local data stays.
   - [`account name`](#account-name) The name people see beside your Market comments.
   - [`account devices`](#account-devices) Devices signed in to the account.
@@ -3576,7 +3585,36 @@ etude sync verify <code>
 | --- | --- |
 | `code` | The 6-digit code from the email (or the link's token). |
 
+Output: Sync status, with secondStep: { methods } when two-step sign-in is on (finish with `sync second-factor`)
+
+### etude sync second-factor
+
+<a id="sync-second-factor"></a>
+
+Finish a Sync sign-in with two-step sign-in on: the authenticator code, or a recovery code.
+
+When `sync verify` answers `secondStep`, run this within 10 minutes. The 6-digit code goes as the argument; a recovery code goes on stdin with --recovery. 5 wrong codes, then sign in by email again.
+
+```
+etude sync second-factor [code] [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `code` (optional) | The 6-digit code the authenticator app shows for Etude. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--recovery` | boolean | Read a recovery code from stdin instead. |
+
 Output: Sync status
+
+```sh
+etude sync second-factor 123456
+etude sync second-factor --recovery < recovery-code
+```
 
 ### etude sync unlock
 
@@ -3715,12 +3753,174 @@ etude account verify <code> [flags]
 | `--name <VALUE>` | string | Name for this device. |
 | `--email <VALUE>` | string | The address the code was sent to, if not the last `account signin`. |
 
-Output: { reauth, email }
+Output: { reauth, email, secondStep? } (secondStep: { methods }: two-step sign-in is on; finish with `account second-factor`)
 
 ```sh
 etude account signin you@example.com
 etude account verify "482 913"
 ```
+
+### etude account second-factor
+
+<a id="account-second-factor"></a>
+
+Finish an email sign-in with two-step sign-in on: the code from the authenticator app, or a recovery code.
+
+When `account verify` answers `secondStep`, run this within 10 minutes. The 6-digit code goes as the argument; a recovery code goes on stdin with --recovery (it works once, and stdin keeps it out of shell history). 5 wrong codes, then sign in by email again.
+
+```
+etude account second-factor [code] [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `code` (optional) | The 6-digit code the authenticator app shows for Etude. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--recovery` | boolean | Read a recovery code from stdin instead. |
+
+Output: { reauth, email }
+
+```sh
+etude account verify "482 913"
+etude account second-factor 123456
+etude account second-factor --recovery < recovery-code
+```
+
+### etude account two-factor
+
+<a id="account-two-factor"></a>
+
+Two-step sign-in: whether it's on, the authenticator, and recovery codes left.
+
+```
+etude account two-factor
+```
+
+*read-only*
+
+Output: { enabled, since, authenticator, authenticatorAdded, recoveryCodesLeft, passkeys }
+
+### etude account authenticator
+
+<a id="account-authenticator"></a>
+
+Start adding an authenticator app: a new key, its otpauth:// link and a QR code. Confirm with `account authenticator-confirm`.
+
+Needs a sign-in on this device within 10 minutes. Add the key (or the link, or the QR code saved with --qr) to the app, then confirm with the code it shows within 30 minutes. An authenticator already in use keeps working until the new one is confirmed.
+
+```
+etude account authenticator [flags]
+```
+
+*writes*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--qr <FILE>` | string | Also write the QR code to this SVG file. |
+
+Output: { secret, uri, qrSvg, expiresIn } (with --qr: { secret, uri, expiresIn, written })
+
+```sh
+etude account authenticator --qr etude-qr.svg
+etude account authenticator-confirm 123456
+etude account two-factor-on
+```
+
+### etude account authenticator-confirm
+
+<a id="account-authenticator-confirm"></a>
+
+Confirm the authenticator being added with a code it shows. It replaces the one in use.
+
+```
+etude account authenticator-confirm <code>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `code` | The 6-digit code from the app. |
+
+Output: two-factor status
+
+### etude account authenticator-remove
+
+<a id="account-authenticator-remove"></a>
+
+Remove the authenticator app. Not while two-step sign-in is on (turn it off first).
+
+```
+etude account authenticator-remove [flags]
+```
+
+*writes · needs `--yes`*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: two-factor status
+
+### etude account two-factor-on
+
+<a id="account-two-factor-on"></a>
+
+Turn on two-step sign-in: email sign-ins then also ask for the authenticator code. Returns 10 recovery codes, once.
+
+Needs a confirmed authenticator (`account authenticator`) and a sign-in on this device within 10 minutes. Save the recovery codes somewhere safe: each one signs in once if the authenticator is lost. Passkeys still sign in on their own. The account's address gets a notice.
+
+```
+etude account two-factor-on
+```
+
+*writes*
+
+Output: { enabled, …, recoveryCodes }
+
+### etude account two-factor-off
+
+<a id="account-two-factor-off"></a>
+
+Turn off two-step sign-in. Removes the authenticator and the recovery codes.
+
+Needs a sign-in on this device within 10 minutes. The account's address gets a notice.
+
+```
+etude account two-factor-off [flags]
+```
+
+*writes · needs `--yes`*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { enabled, …, recoveryCodes: null }
+
+### etude account recovery-codes
+
+<a id="account-recovery-codes"></a>
+
+Make 10 new recovery codes, shown once. The old ones stop working.
+
+Needs two-step sign-in on and a sign-in on this device within 10 minutes.
+
+```
+etude account recovery-codes [flags]
+```
+
+*writes · needs `--yes`*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { enabled, …, recoveryCodes }
 
 ### etude account signout
 

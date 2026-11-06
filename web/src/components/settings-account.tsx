@@ -1,8 +1,8 @@
-// Settings → Account: the optional Etude account. Sign in by email code or passkey; then passkeys,
-// devices, email, data export and deletion. Selling lives in the Market.
+// Settings → Account: the optional Etude account. Sign in by email code (and the second step, with two-step sign-in
+// on) or passkey; then passkeys, two-step sign-in, devices, email, data export and deletion. Selling lives in the Market.
 import { useCallback, useEffect, useId, useState } from "react";
 import type { ReactNode } from "react";
-import { CircleAlert, Fingerprint, KeyRound, Laptop, Loader2, LogOut, Mail, Smartphone, Trash2 } from "lucide-react";
+import { Check, CircleAlert, Copy, Fingerprint, KeyRound, Laptop, Loader2, LogOut, Mail, ShieldCheck, Smartphone, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Block, Field, Section } from "@/components/settings-ui";
 import { download } from "@/components/type-editor/starter";
-import { account, AccountApiError, createPasskey, getPasskey, passkeysHere, type AccountStatus, type Device, type Passkey } from "@/lib/account";
+import { account, AccountApiError, createPasskey, getPasskey, passkeysHere, type AccountStatus, type Device, type Passkey, type SecondStepInput, type TwoFactor } from "@/lib/account";
 import { relative } from "@/lib/api";
 import { isNativeApp } from "@/lib/platform";
 import { NATIVE_COPY } from "@/lib/native-copy";
@@ -85,6 +85,7 @@ export function AccountSection() {
         <>
           <Profile st={st} onChanged={changed} guarded={guarded} />
           <Passkeys rpId={st.offering?.passkeys.rpId} guarded={guarded} />
+          <TwoStep email={st.me!.email} guarded={guarded} />
           <Devices guarded={guarded} onSelfRevoked={changed} />
           {st.offering?.market && <SellingLink />}
           <DataAndDeletion st={st} confirmFresh={(why, fn) => setReauth({ why, retry: fn })} onDeleted={changed} />
@@ -116,6 +117,8 @@ function SignIn({ st, onDone }: { st: AccountStatus; onDone(): Promise<void> }) 
   const [error, setError] = useState<string | null>(null);
   const [editServer, setEditServer] = useState(false);
   const [server, setServer] = useState(st.server);
+  // Two-step sign-in: the email code went through, the authenticator (or a recovery code) is next.
+  const [second, setSecond] = useState<string[] | null>(null);
   const run = async (name: string, fn: () => Promise<void>) => {
     setBusy(name);
     setError(null);
@@ -128,6 +131,20 @@ function SignIn({ st, onDone }: { st: AccountStatus; onDone(): Promise<void> }) 
     }
   };
   const passkeyOk = passkeysHere(st.offering?.passkeys.rpId);
+  if (second)
+    return (
+      <Block title="One more step" description="Two-step sign-in is on for this account.">
+        <SecondStep
+          methods={second}
+          onSubmit={async (input) => {
+            const r = await account.secondStep(input);
+            toast.success("Signed in", { description: r.email });
+            await onDone();
+          }}
+          onRestart={() => (setSecond(null), setSent(false), setCode(""), setError(null))}
+        />
+      </Block>
+    );
   return (
     <Block
       title={sent ? "Enter the code" : "Sign in or create an account"}
@@ -158,6 +175,7 @@ function SignIn({ st, onDone }: { st: AccountStatus; onDone(): Promise<void> }) 
         <form className="flex flex-col gap-4" onSubmit={(e) => (e.preventDefault(), void run("verify", async () => {
           const r = await account.verify(code, email.trim());
           setCode("");
+          if (r.secondStep) return setSecond(r.secondStep.methods);
           toast.success("Signed in", { description: r.email });
           await onDone();
         }))}>
@@ -442,6 +460,7 @@ function DataAndDeletion({ st, confirmFresh, onDeleted }: { st: AccountStatus; c
 /** "Confirm it's you": a fresh email code or passkey on this device, then the action runs again. */
 function ReauthDialog({ email, rpId, why, onClose, onConfirmed }: { email: string; rpId?: string; why: string; onClose(): void; onConfirmed(): Promise<void> }) {
   const [sent, setSent] = useState(false);
+  const [second, setSecond] = useState<string[] | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -463,6 +482,10 @@ function ReauthDialog({ email, rpId, why, onClose, onConfirmed }: { email: strin
           <DialogTitle>Confirm it's you</DialogTitle>
           <DialogDescription>To {why}, sign in again on this device. It counts for 10 minutes.</DialogDescription>
         </DialogHeader>
+        {second ? (
+          <SecondStep methods={second} onSubmit={async (input) => (await account.secondStep(input), await onConfirmed())} onRestart={() => (setSecond(null), setSent(false), setCode(""))} />
+        ) : (
+          <>
         {sent && <TextInput label={`Code sent to ${email}`} hint="It works for 15 minutes." value={code} onChange={setCode} mono autoComplete="one-time-code" inputMode="numeric" placeholder="6-digit code" />}
         {error && <Notice>{error}</Notice>}
         <DialogFooter className="gap-2">
@@ -478,13 +501,221 @@ function ReauthDialog({ email, rpId, why, onClose, onConfirmed }: { email: strin
           {!sent ? (
             <Button disabled={busy} onClick={() => void run(async () => (await account.signin(email), setSent(true)))}>Email me a code</Button>
           ) : (
-            <Button disabled={busy || !code.trim()} onClick={() => void run(async () => (await account.verify(code, email), await onConfirmed()))}>
+            <Button disabled={busy || !code.trim()} onClick={() => void run(async () => {
+              const r = await account.verify(code, email);
+              if (r.secondStep) return setSecond(r.secondStep.methods);
+              await onConfirmed();
+            })}>
               {busy && <Loader2 className="size-4 animate-spin" />} Confirm
             </Button>
           )}
         </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The second step of an email sign-in with two-step sign-in on: the code from the authenticator app, or one of the
+ * recovery codes. Used by Settings → Account, the "Confirm it's you" dialog and Settings → Sync.
+ */
+export function SecondStep({ methods, onSubmit, onRestart }: { methods: string[]; onSubmit(input: SecondStepInput): Promise<void>; onRestart(): void }) {
+  const hasApp = methods.includes("authenticator");
+  const [recovery, setRecovery] = useState(!hasApp);
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expired, setExpired] = useState(false);
+  const submit = async () => {
+    if (busy || !value.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onSubmit(recovery ? { recoveryCode: value.trim() } : { code: value.replace(/\s+/g, "") });
+    } catch (e) {
+      const code = e instanceof AccountApiError ? e.code : undefined;
+      if (code === "ticket_expired" || code === "too_many_attempts") setExpired(true);
+      setError(msg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="flex flex-col gap-4" data-second-step onSubmit={(e) => (e.preventDefault(), void submit())}>
+      <p className="text-sm text-muted-foreground">
+        {recovery ? "Enter one of the recovery codes you saved when you turned on two-step sign-in. Each one works once." : "Open your authenticator app and enter the code it shows for Etude."}
+      </p>
+      <TextInput
+        key={recovery ? "recovery" : "code"}
+        label={recovery ? "Recovery code" : "Code from the app"}
+        value={value}
+        onChange={setValue}
+        autoComplete="one-time-code"
+        inputMode={recovery ? "text" : "numeric"}
+        mono
+        placeholder={recovery ? "xxxx-xxxx-xxxx" : "6-digit code"}
+      />
+      {error && <Notice>{error}</Notice>}
+      <div className="flex flex-wrap items-center gap-2">
+        {expired ? (
+          <Button type="button" size="sm" className="h-10 md:h-8" onClick={onRestart}>Sign in again</Button>
+        ) : (
+          <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy || !value.trim()}>
+            {busy && <Loader2 className="size-4 animate-spin" />} Continue
+          </Button>
+        )}
+        {hasApp && !expired && (
+          <Button type="button" variant="ghost" size="sm" className="h-10 md:h-8" disabled={busy} onClick={() => (setRecovery(!recovery), setValue(""), setError(null))}>
+            {recovery ? "Use the authenticator app" : "Use a recovery code"}
+          </Button>
+        )}
+      </div>
+    </form>
+  );
+}
+
+/** Two-step sign-in: off, setting up an authenticator (QR code and key), the recovery codes once, or on. */
+function TwoStep({ email, guarded }: { email: string; guarded: Guarded }) {
+  const [tf, setTf] = useState<TwoFactor | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [setup, setSetup] = useState<{ secret: string; uri: string; qrSvg: string } | null>(null);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [codes, setCodes] = useState<string[] | null>(null);
+  const [confirmOff, setConfirmOff] = useState(false);
+  const load = useCallback(() => account.twoFactor().then(setTf).catch((e) => setError(msg(e))), []);
+  useEffect(() => void load(), [load]);
+
+  const start = () => guarded(tf?.enabled ? "replace the authenticator" : "turn on two-step sign-in", async () => (setCode(""), setSetup(await account.authenticatorStart())));
+  const confirm = async () => {
+    if (busy || !code.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await account.authenticatorConfirm(code);
+      if (tf?.enabled) {
+        toast.success("Authenticator replaced");
+        setSetup(null);
+        await load();
+        return;
+      }
+      await guarded("turn on two-step sign-in", async () => {
+        const r = await account.setTwoFactor(true);
+        setSetup(null);
+        setTf(r);
+        setCodes(r.recoveryCodes);
+      });
+    } catch (e) {
+      if (needsReauth(e)) await guarded("turn on two-step sign-in", confirm);
+      else setError(msg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const description = tf?.enabled
+    ? `Email sign-ins also ask for a code from your authenticator app${tf.since ? `, since ${date(tf.since)}` : ""}. ${tf.recoveryCodesLeft === 1 ? "1 recovery code" : `${tf.recoveryCodesLeft} recovery codes`} left.`
+    : "Signing in by email also asks for a code from an authenticator app (like Google Authenticator, 1Password or Authy), so someone who gets into your email still can't sign in. Passkeys sign in as before.";
+  return (
+    <Block
+      title={<span className="flex items-center gap-2">Two-step sign-in{tf?.enabled && <span className="inline-flex items-center gap-1 rounded-full bg-success/12 px-2 py-0.5 text-[11px] font-medium text-success"><ShieldCheck className="size-3" /> On</span>}</span>}
+      description={description}
+      aside={tf && !setup && !codes ? (
+        tf.enabled ? undefined : <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" data-two-factor-on onClick={() => void start()}><ShieldCheck className="size-4" /> Turn on</Button>
+      ) : undefined}
+    >
+      {error && <Notice>{error}</Notice>}
+      {!tf && !error && <Skeleton className="h-8 w-full" />}
+      {setup && (
+        <form className="flex flex-col gap-4" data-authenticator-setup onSubmit={(e) => (e.preventDefault(), void confirm())}>
+          <p className="text-sm">1. In your authenticator app, add an account and scan this code.</p>
+          <img className="size-44 rounded-lg border bg-white p-1" src={`data:image/svg+xml;base64,${btoa(setup.qrSvg)}`} alt="QR code for your authenticator app" />
+          <p className="text-sm text-muted-foreground">
+            Can't scan it? Enter this key in the app: <span className="select-all font-mono text-[13px] text-foreground/90 [overflow-wrap:anywhere]" data-authenticator-key>{setup.secret.replace(/(.{4})/g, "$1 ").trim()}</span>
+            {isNativeApp() && <> · <a className="underline underline-offset-2" href={setup.uri}>open it in an app on this phone</a></>}
+          </p>
+          <p className="text-sm">2. Enter the 6-digit code the app shows for Etude.</p>
+          <TextInput label="Code from the app" value={code} onChange={setCode} autoComplete="one-time-code" inputMode="numeric" mono placeholder="6-digit code" />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy || !code.trim()}>
+              {busy && <Loader2 className="size-4 animate-spin" />} {tf?.enabled ? "Replace" : "Turn on"}
+            </Button>
+            <Button type="button" variant="ghost" size="sm" className="h-10 md:h-8" disabled={busy} onClick={() => (setSetup(null), setError(null))}>Cancel</Button>
+          </div>
+        </form>
+      )}
+      {codes && <RecoveryCodes email={email} codes={codes} onDone={() => (setCodes(null), toast.success("Two-step sign-in is on"))} />}
+      {tf?.enabled && !setup && !codes && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" className="h-10 md:h-8" onClick={() => void guarded("make new recovery codes", async () => {
+            const r = await account.newRecoveryCodes();
+            setTf(r);
+            setCodes(r.recoveryCodes);
+          })}>New recovery codes</Button>
+          <Button variant="outline" size="sm" className="h-10 md:h-8" onClick={() => void start()}>Replace the authenticator</Button>
+          <Button variant="ghost" size="sm" className="h-10 text-muted-foreground md:h-8" data-two-factor-off onClick={() => setConfirmOff(true)}>Turn off</Button>
+        </div>
+      )}
+      <AlertDialog open={confirmOff} onOpenChange={setConfirmOff}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Turn off two-step sign-in?</AlertDialogTitle>
+            <AlertDialogDescription>Signing in by email works with the email code alone again. The authenticator and the recovery codes are removed.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it on</AlertDialogCancel>
+            <Button variant="destructive" onClick={() => {
+              setConfirmOff(false);
+              void guarded("turn off two-step sign-in", async () => {
+                setTf(await account.setTwoFactor(false));
+                toast.success("Two-step sign-in is off");
+              });
+            }}>Turn off</Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Block>
+  );
+}
+
+function saveText(name: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** The recovery codes, shown once: copy or download them, and say they're saved. */
+function RecoveryCodes({ email, codes, onDone }: { email: string; codes: string[]; onDone(): void }) {
+  const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const text = `Etude recovery codes for ${email}\nEach one signs in once, in place of the authenticator code.\n\n${codes.join("\n")}\n`;
+  return (
+    <div className="flex flex-col gap-4" data-recovery-codes>
+      <p className="text-sm">Save these recovery codes somewhere safe, away from your phone. If you lose the authenticator, each one signs in once. They're shown only now.</p>
+      <ul className="grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg border border-warning/40 bg-warning/5 p-3.5 font-mono text-[13px] sm:grid-cols-3">
+        {codes.map((c) => <li key={c} className="select-all">{c}</li>)}
+      </ul>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => navigator.clipboard.writeText(text).then(() => (setCopied(true), window.setTimeout(() => setCopied(false), 1500)), () => toast.error("Couldn't copy", { description: "The browser blocked clipboard access." }))}>
+          {copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />} {copied ? "Copied" : "Copy"}
+        </Button>
+        <Button type="button" variant="outline" size="sm" className="h-10 md:h-8" onClick={() => saveText("etude-recovery-codes.txt", text)}>Download</Button>
+      </div>
+      <label className="flex items-start gap-2.5 text-sm">
+        <input type="checkbox" className="mt-0.5 size-4 accent-[var(--highlight)]" checked={saved} onChange={(e) => setSaved(e.target.checked)} />
+        <span>I saved the recovery codes.</span>
+      </label>
+      <div>
+        <Button type="button" size="sm" className="h-10 md:h-8" disabled={!saved} onClick={onDone}>Done</Button>
+      </div>
+    </div>
   );
 }
 

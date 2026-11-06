@@ -11,6 +11,16 @@ const dirs = new Set<string>(["/"]);
 const mounts: { prefix: string; root: FileSystemDirectoryHandle }[] = [];
 const dirty = new Set<string>();
 const removed = new Set<string>();
+/** Modification times, as on disk: a file's when it is written, a folder's when an entry is added, removed or renamed in it. Anything older dates from when this page loaded. */
+const times = new Map<string, number>();
+const loaded = Date.now();
+let clock = 0;
+/** Strictly increasing, so two changes in the same millisecond still differ. */
+const now = () => (clock = Math.max(clock + 0.001, Date.now()));
+const changed = (...paths: string[]) => {
+  const t = now();
+  for (const p of paths) times.set(p, t);
+};
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let flushing: Promise<void> = Promise.resolve();
 
@@ -37,6 +47,7 @@ function ensureDir(p: string) {
   p = norm(p);
   while (!dirs.has(p)) {
     dirs.add(p);
+    changed(p, parent(p));
     p = parent(p);
   }
 }
@@ -157,7 +168,10 @@ export function writeFileSync(path: string, data: unknown, opts?: unknown) {
   const flag = typeof opts === "object" && opts ? (opts as { flag?: string }).flag : undefined;
   if (flag === "wx" && files.has(p)) throw err("EEXIST", "open", p);
   if (!dirs.has(parent(p))) throw err("ENOENT", "open", p);
+  const added = !files.has(p);
   files.set(p, bytes(data).slice());
+  if (added) changed(p, parent(p));
+  else changed(p);
   touch(p);
 }
 
@@ -168,17 +182,26 @@ export function renameSync(from: string, to: string) {
   if (!data) throw err("ENOENT", "rename", a);
   files.delete(a);
   files.set(b, data);
+  times.set(b, times.get(a) ?? loaded);
+  times.delete(a);
+  changed(parent(a), parent(b));
   touch(a, true);
   touch(b);
 }
 
 export function rmSync(path: string, opts: { recursive?: boolean; force?: boolean } = {}) {
   const p = norm(path);
-  if (files.delete(p)) return touch(p, true);
+  if (files.delete(p)) {
+    times.delete(p);
+    changed(parent(p));
+    return touch(p, true);
+  }
   if (dirs.has(p)) {
     if (!opts.recursive) throw err("EISDIR", "rm", p);
     for (const f of [...files.keys()]) if (f.startsWith(p + "/")) files.delete(f);
     for (const d of [...dirs]) if (d === p || d.startsWith(p + "/")) dirs.delete(d);
+    for (const t of [...times.keys()]) if (t === p || t.startsWith(p + "/")) times.delete(t);
+    changed(parent(p));
     return touch(p, true);
   }
   if (!opts.force) throw err("ENOENT", "rm", p);
@@ -189,7 +212,8 @@ export function statSync(path: string) {
   const p = norm(path);
   const f = files.get(p);
   if (!f && !dirs.has(p)) throw err("ENOENT", "stat", p);
-  return { isFile: () => !!f, isDirectory: () => !f, size: f ? f.length : 0, mtimeMs: Date.now(), mtime: new Date() };
+  const mtimeMs = times.get(p) ?? loaded;
+  return { isFile: () => !!f, isDirectory: () => !f, size: f ? f.length : 0, mtimeMs, mtime: new Date(mtimeMs) };
 }
 
 export function readdirSync(path: string, opts?: { withFileTypes?: boolean }) {
@@ -201,7 +225,7 @@ export function readdirSync(path: string, opts?: { withFileTypes?: boolean }) {
   for (const d of dirs) if (d.startsWith(pre) && d !== p && !d.slice(pre.length).includes("/")) names.set(d.slice(pre.length), true);
   const sorted = [...names.keys()].sort();
   if (!opts?.withFileTypes) return sorted;
-  return sorted.map((name) => ({ name, isDirectory: () => names.get(name)!, isFile: () => !names.get(name)! }));
+  return sorted.map((name) => ({ name, isDirectory: () => names.get(name)!, isFile: () => !names.get(name)!, isSymbolicLink: () => false }));
 }
 
 export function copyFileSync(from: string, to: string) {

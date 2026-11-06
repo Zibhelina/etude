@@ -104,6 +104,8 @@ export const BUILTIN_TYPES_DIR = join(ROOT, "types");
 export const BUILTIN_SCHEDULERS_DIR = join(ROOT, "schedulers");
 
 const now = () => new Date();
+/** How long a deck tree is reused while the collection doesn't change: its counts move as cards come due. */
+const DECK_TREE_MS = 30_000;
 const iso = (d = now()) => d.toISOString();
 const json = (v: unknown) => JSON.stringify(v ?? null);
 
@@ -419,6 +421,7 @@ export class Etude {
    * underneath (an undo restore, which may come from a snapshot taken before those columns existed).
    */
   invalidateCaches(scope?: { items: Iterable<string> }) {
+    this.deckTrees.clear();
     this.typeCache.clear();
     this.leftovers = null;
     this.schedulerCache.clear();
@@ -790,11 +793,10 @@ export class Etude {
     return { deleted: id, selected };
   }
 
-  /** Start of the current study day, in local time. */
-  dayStart(at = now()): Date {
-    const h = this.settings().dayStartHour;
+  /** Start of the current study day, in local time. `hour`: the day's start, for a caller that already read it. */
+  dayStart(at = now(), hour = this.settings().dayStartHour): Date {
     const d = new Date(at);
-    d.setHours(h, 0, 0, 0);
+    d.setHours(hour, 0, 0, 0);
     if (d > at) d.setDate(d.getDate() - 1);
     return d;
   }
@@ -3176,8 +3178,21 @@ export class Etude {
     return final.map((r) => r.name);
   }
 
+  /**
+   * Every page asks for the deck tree, and its counts build each deck's study queue. It's reused while nothing in
+   * the collection changed (here or through another connection) and for at most DECK_TREE_MS, as cards come due.
+   */
   deckTree(opts: { archived?: boolean } = {}) {
-    const decks = this.orderedDecks(!!opts.archived);
+    const archived = !!opts.archived, t = now().getTime(), hit = this.deckTrees.get(archived);
+    if (hit && t - hit.at >= 0 && t - hit.at < DECK_TREE_MS && hit.stamp === this.db.changeStamp()) return hit.tree;
+    const tree = this.buildDeckTree(archived);
+    this.deckTrees.set(archived, { tree, at: t, stamp: this.db.changeStamp() });
+    return tree;
+  }
+  private deckTrees = new Map<boolean, { tree: ReturnType<Etude["buildDeckTree"]>; at: number; stamp: string }>();
+
+  private buildDeckTree(archived: boolean) {
+    const decks = this.orderedDecks(archived);
     const t = now();
     const totals = new Map(
       this.db
@@ -3312,8 +3327,10 @@ export class Etude {
         if (c.stability >= 21) states.mature++;
       }
     }
+    // Read once: settings come from the database, and this runs for every review.
+    const dayHour = this.settings().dayStartHour;
     const dayKey = (ts: string | Date) => {
-      const ds = this.dayStart(new Date(ts));
+      const ds = this.dayStart(new Date(ts), dayHour);
       return `${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, "0")}-${String(ds.getDate()).padStart(2, "0")}`;
     };
     // Calendar days can be 23 or 25 hours long, so step by date, not by 24 h.

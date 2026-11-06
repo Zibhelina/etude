@@ -364,25 +364,31 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 .minimi.is-talk .minimi-look { opacity: 1; }
 .minimi.is-talk .minimi-tip { display: none; }
 
-/* ---------------------------------------------------------------- Minimi's mini chat (components/minimi-chat.tsx) */
-.mchat { background: var(--card); border-radius: 18px; box-shadow: 0 2px 4px rgb(0 0 0 / 0.06), 0 24px 60px rgb(0 0 0 / 0.14), inset 0 0 0 1px var(--border); animation: mchat-pop 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); transform-origin: bottom left; }
+/* ---------------------------------------------------------------- Minimi's mini chat (components/minimi-chat.tsx)
+   No panel: each message is its own balloon over the page, his on the left, yours on the right, no tails. */
+.mchat { --mchat-shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 6px 16px rgb(0 0 0 / 0.07); animation: mchat-pop 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); transform-origin: bottom left; }
 .mchat.is-flip { transform-origin: bottom right; }
-.dark .mchat { box-shadow: inset 0 0 0 1px var(--border), 0 24px 60px rgb(0 0 0 / 0.6); }
-/* The tail points at Minimi: on the left edge when he sits left of the card, on the right when he sits right. */
-.mchat::before { content: ""; position: absolute; top: var(--ty, 40px); width: 14px; height: 14px; background: inherit; transform: rotate(45deg); pointer-events: none; }
-.mchat.is-right::before { left: -7px; box-shadow: -1px 1px 0 0 var(--border); border-radius: 0 0 0 3px; }
-.mchat.is-flip::before { right: -7px; box-shadow: 1px -1px 0 0 var(--border); border-radius: 0 3px 0 0; }
-.mchat.no-tail::before { display: none; }
-.mchat > * { position: relative; }
-.mchat-me { background: var(--background); box-shadow: inset 0 0 0 1px var(--border); }
-.dark .mchat-me { background: color-mix(in oklab, var(--card), var(--foreground) 6%); }
-.mchat-me .agent-prose { font-size: 14.5px; line-height: 1.42; }
-.mchat-you { background: color-mix(in oklab, var(--primary) 16%, var(--card)); }
-.mchat-chip { font-size: 13px; font-weight: 550; padding: 6px 10px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--border); color: var(--foreground); transition: background-color 0.12s; }
-.mchat-chip:hover { background: var(--muted); }
-.mchat-pill { background: var(--background); box-shadow: inset 0 0 0 1px var(--border); }
-.dark .mchat-pill { background: color-mix(in oklab, var(--background), black 25%); }
-.mchat-pill:focus-within { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 28%, transparent); }
+.dark .mchat { --mchat-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 20px rgb(0 0 0 / 0.45); }
+/* The scroller keeps room for the balloons' shadows, and fades its top edge once you scroll. */
+.mchat-log { margin: -20px -22px -22px; padding: 20px 22px 22px; scrollbar-width: none; }
+.mchat-log::-webkit-scrollbar { display: none; }
+/* A frosted patch behind the chat, feathered at the edges, so the page under it stops competing. */
+.mchat-veil { position: absolute; inset: -66px -34px -30px; z-index: -1; pointer-events: none; border-radius: 40px; background: color-mix(in oklab, var(--background) 45%, transparent); mask-image: linear-gradient(to right, transparent, #000 30px, #000 calc(100% - 30px), transparent), linear-gradient(to bottom, transparent, #000 30px, #000 calc(100% - 30px), transparent); mask-composite: intersect; -webkit-mask-composite: source-in; }
+.mchat-log.is-scrolled { mask-image: linear-gradient(to bottom, transparent 16px, #000 46px); }
+.mchat-b { position: relative; background: var(--card); border-radius: 18px; filter: drop-shadow(0 0 0.6px color-mix(in oklab, var(--foreground) 22%, transparent)) drop-shadow(0 1px 2px rgb(0 0 0 / 0.05)) drop-shadow(0 6px 14px rgb(0 0 0 / 0.07)); }
+.dark .mchat-b { filter: drop-shadow(0 0 0.6px rgb(255 255 255 / 0.2)) drop-shadow(0 1px 2px rgb(0 0 0 / 0.3)) drop-shadow(0 8px 18px rgb(0 0 0 / 0.4)); }
+.mchat-b .agent-prose { font-size: 14.5px; line-height: 1.42; }
+.mchat-you { background: color-mix(in oklab, var(--primary) 14%, var(--card)); filter: drop-shadow(0 4px 10px rgb(0 0 0 / 0.06)); }
+.mchat-chip { font-size: 13px; font-weight: 550; padding: 6px 11px; border-radius: 999px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border), 0 3px 10px rgb(0 0 0 / 0.06); color: var(--foreground); transition: background-color 0.12s; }
+.mchat-chip:hover { background: var(--accent); }
+.mchat-pill { background: var(--card); box-shadow: inset 0 0 0 1px var(--border), var(--mchat-shadow); padding-left: 4px; }
+.mchat-pill:focus-within { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 28%, transparent), var(--mchat-shadow); }
+.mchat-round { background: var(--card); box-shadow: inset 0 0 0 1px var(--border), 0 4px 12px rgb(0 0 0 / 0.06); }
+.mchat-round:hover { background: var(--accent); }
+/* The round buttons show while you're over the chat or in it; always on touch. */
+.mchat-ctl { opacity: 0; transition: opacity 0.15s; }
+.mchat:hover .mchat-ctl, .mchat:focus-within .mchat-ctl { opacity: 1; }
+@media (pointer: coarse) { .mchat-ctl { opacity: 1; } }
 @keyframes mchat-pop { from { opacity: 0; transform: scale(0.92) translateY(8px); } }
 @media (prefers-reduced-motion: reduce) { .mchat { animation: none; } }
 

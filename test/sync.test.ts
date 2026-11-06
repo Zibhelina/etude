@@ -7,7 +7,7 @@ import { Etude } from "../src/core/engine.ts";
 import { syncFor } from "../src/core/sync/client.ts";
 import { compare, tick, rows, drain, receive, type Change } from "../src/core/sync/log.ts";
 import { project } from "../src/core/sync/project.ts";
-import { generateVaultKey, encryptBlob, decryptBlob, encryptEvent, decryptEvent } from "../src/core/sync/crypto.ts";
+import { generateVaultKey, encryptBlob, decryptBlob, encryptEvent, decryptEvent, fromB64, syncKeys } from "../src/core/sync/crypto.ts";
 
 const temp=()=>mkdtempSync(join((process.env.TMPDIR ?? tmpdir()),"sync-test-"));
 const password="a test Sync password";
@@ -61,6 +61,21 @@ test("ciphertext binds event ids and checks blob integrity",async()=>{
   assert.deepEqual(await decryptEvent(key,"a",ct),{text:"private"});await assert.rejects(decryptEvent(key,"b",ct));
   const blob=await encryptBlob(key,new TextEncoder().encode("picture"));assert.equal(new TextDecoder().decode(await decryptBlob(key,blob.ciphertext,blob.hash)),"picture");
   blob.ciphertext[14]^=1;await assert.rejects(decryptBlob(key,blob.ciphertext,blob.hash));
+});
+test("keys derived once read and write the same ciphertext as the vault key, including an older client's",async()=>{
+  const vk=Uint8Array.from({length:32},(_,i)=>i+1),keys=await syncKeys(vk);
+  // Made by the version before keys were derived once per sync.
+  const event="AeU+O3lGxlK87gD/aCSl3JW0hAdCzW5Hv48ryve5r2CVjm9VYl0H5G2Zi4Nm1omvZselraK0Y7GFzG48g3Wv8kE28azNGrD3jbZ4B3d4XhoMT+mYEF6r4tPvO958z3yOzYmpjZ44tj7TTVfZuxxtJlaj+hZBCQIS3hwkrgYmTjaSxEpXm9lKrxiHSYA=";
+  const blob=fromB64("AVxkAIHQvCtzXrg2IL4aXM6569lFYiZAdCvKsm16PaMG6MHciv0q");
+  const expected={v:1,table:"items",key:"fixed",stamp:[1800000000000,0,"dev"],fields:{"/fields/front":"older client"}};
+  for(const k of [vk,keys]) {
+    assert.deepEqual(await decryptEvent(k,"dev:1800000000000:0",event),expected);
+    assert.equal(new TextDecoder().decode(await decryptBlob(k,blob)),"older blob");
+    await assert.rejects(decryptEvent(k,"dev:1800000000000:1",event));
+  }
+  const fresh=await encryptEvent(keys,"x",{a:1});assert.deepEqual(await decryptEvent(vk,"x",fresh),{a:1});
+  assert.equal(fromB64(fresh).length,fromB64(await encryptEvent(vk,"x",{a:1})).length);
+  const b=await encryptBlob(keys,new TextEncoder().encode("new"));assert.equal(new TextDecoder().decode(await decryptBlob(vk,b.ciphertext,b.hash)),"new");
 });
 test("LWW fields, permanent entity tombstones, idempotence and no echo",async()=>{
   const dir=temp();const e=await Etude.open(join(dir,"a.db"),{home:join(dir,"home")});

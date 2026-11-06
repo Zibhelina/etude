@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync
 import { dirname, join, resolve, sep } from "node:path";
 import type { Etude } from "../engine.ts";
 import { bootstrap, drain, install, localEvent, receive, rows, type Change } from "./log.ts";
-import { createVault, decryptBlob, decryptEvent, encryptBlob, encryptEvent, fromB64, sha256Hex, toB64, unwrapWithPassword, unwrapWithRecovery } from "./crypto.ts";
+import { createVault, decryptBlob, decryptEvent, encryptBlob, encryptEvent, fromB64, sha256Hex, syncKeys, toB64, unwrapWithPassword, unwrapWithRecovery } from "./crypto.ts";
 import { CloudTransport, FolderTransport, type Transport } from "./transport.ts";
 import { projectChanges, projectionPending } from "./project.ts";
 import { accountFor, secondStepBody, secondStepFrom, signInCode, type PendingSecondStep } from "../account.ts";
@@ -152,7 +152,9 @@ export class SyncClient {
   now() {if(this.active)return this.active;this.busy=true;this.active=this.run().then(()=>(this.error=null,this.progress=null,{...this.status(),busy:false})).catch(e=>{this.error=e.message;throw e;}).finally(()=>{this.busy=false;this.active=null;this.progress=null;});return this.active;}
   async auto(o:{pendingOnly?:boolean}={}) {const st=this.status();if(!st.configured||!st.unlocked)return;if(o.pendingOnly&&!st.pending)return;try{await this.now();}catch(e){if(e instanceof TypeError || /fetch failed|network|offline|timeout/i.test((e as Error).message))this.error=null;}}
   private async run() {
-    const vk=this.secrets().vk;if(!vk)throw new Error("unlock Sync first");const key=fromB64(vk);const t=this.transport();const db=this.e.db;
+    const vk=this.secrets().vk;if(!vk)throw new Error("unlock Sync first");const t=this.transport();const db=this.e.db;
+    // Derived once: each event and blob of this run is encrypted or decrypted with these.
+    const key=await syncKeys(fromB64(vk));
     // Drain writes before the first await. Further local writes are drained again before projection.
     drain(db);
     let cursor=this.meta("cursor","");let more=true;

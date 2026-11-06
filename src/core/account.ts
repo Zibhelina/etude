@@ -10,10 +10,20 @@ export const DEFAULT_CLOUD = "https://sync.etude.study";
 
 export class AccountError extends EtudeError {
   code: string;
-  constructor(message: string, status = 400, code = "error") {
+  /** The server's error object, for fields like `ticket` and `attemptsLeft`. */
+  data: Record<string, any>;
+  constructor(message: string, status = 400, code = "error", data: Record<string, any> = {}) {
     super(message, status);
     this.code = code;
+    this.data = data;
   }
+}
+
+/** An email sign-in waiting for its second step (two-step sign-in): the server's ticket, short-lived. */
+export interface PendingSecondStep {
+  ticket: string;
+  methods: string[];
+  expires: number;
 }
 
 interface Saved {
@@ -23,6 +33,22 @@ interface Saved {
   accountId?: string;
   /** The address of the last emailed sign-in, so a 6-digit code can be redeemed with it. */
   pendingEmail?: string;
+  pendingSecond?: PendingSecondStep;
+}
+
+/** The ticket from a 401 `second_factor_required`, or null for any other error. */
+export function secondStepFrom(e: unknown): PendingSecondStep | null {
+  if (!(e instanceof AccountError) || e.code !== "second_factor_required" || typeof e.data.ticket !== "string") return null;
+  return { ticket: e.data.ticket, methods: Array.isArray(e.data.methods) ? e.data.methods : [], expires: Date.now() + (Number(e.data.expiresIn) || 600) * 1000 };
+}
+
+/** The body for /v1/auth/second-factor: a recovery code when one is given, else the authenticator code. */
+export function secondStepBody(ticket: string, input: { code?: string; recoveryCode?: string }) {
+  const recovery = input.recoveryCode?.trim();
+  if (recovery) return { ticket, recoveryCode: recovery };
+  const code = (input.code ?? "").replace(/\s+/g, "");
+  if (!/^\d{6}$/.test(code)) throw new AccountError("enter the 6-digit code from your authenticator app, or a recovery code", 400, "invalid_code");
+  return { ticket, code };
 }
 
 /** The sign-in email's 6-digit code (spaces allowed, as in `482 913`), or null for anything else (a link token). */
@@ -144,7 +170,7 @@ export class AccountClient {
       const message = code === "creator_setup_required" ? "Etude now sells through your own Stripe account. Set up selling again in Market → Sell." : (data?.error?.message ?? `the Etude server answered ${res.status}`);
       // A revoked or expired device: forget the token so the app shows "signed out" instead of failing forever.
       if (res.status === 401 && auth === true && ["unauthorized", "invalid_token", "token_expired", "signed_out"].includes(code)) this.forget();
-      throw new AccountError(message, res.status, code);
+      throw new AccountError(message, res.status, code, data?.error ?? {});
     }
     return res;
   }
@@ -200,7 +226,7 @@ export class AccountClient {
    * Redeems the 6-digit code from the email (with the address of the pending sign-in, or `email`), or the long
    * token from the link. Signed in already: it re-confirms this device (needed before deleting the account).
    */
-  async verify(input: string, deviceName?: string, email?: string) {
+  async verify(input: string, deviceName?: string, email?: string): Promise<{ reauth: boolean; email: string | null; secondStep?: { methods: string[] } }> {
     const raw = input?.trim();
     if (!raw) throw new AccountError("enter the code from the email", 400, "invalid_code");
     const code = signInCode(raw);
@@ -209,8 +235,38 @@ export class AccountClient {
     if (code && !address) throw new AccountError("ask for a code first: the code goes with the email address it was sent to", 400, "invalid_email");
     const signedIn = !!this.token();
     const body = code ? { email: address, code } : { token: raw };
-    const r = await this.json("POST", "/v1/auth/email/verify", { ...body, deviceName: deviceName || defaultDeviceName() }, signedIn);
-    const { pendingEmail: _, ...rest } = this.load();
+    let r: Json;
+    try {
+      r = await this.json("POST", "/v1/auth/email/verify", { ...body, deviceName: deviceName || defaultDeviceName() }, signedIn);
+    } catch (e) {
+      const second = secondStepFrom(e);
+      if (!second) throw e;
+      this.save({ ...this.load(), pendingSecond: second });
+      return { reauth: false, email: address || null, secondStep: { methods: second.methods } };
+    }
+    return this.signedIn(r);
+  }
+
+  /**
+   * The second step of an email sign-in with two-step sign-in on: a code from the authenticator app, or a recovery
+   * code. `verify` answers `secondStep` when it's needed.
+   */
+  async secondStep(input: { code?: string; recoveryCode?: string }) {
+    const pending = this.load().pendingSecond;
+    if (!pending || pending.expires < Date.now()) throw new AccountError("sign in by email again: the sign-in waiting for its second step expired", 401, "ticket_expired");
+    const r = await this.json("POST", "/v1/auth/second-factor", secondStepBody(pending.ticket, input), !!this.token()).catch((e) => {
+      // A ticket that's used up or expired is no use any more.
+      if (e instanceof AccountError && (e.code === "ticket_expired" || e.code === "too_many_attempts")) {
+        const { pendingSecond: _, ...rest } = this.load();
+        this.save(rest);
+      }
+      throw e;
+    });
+    return this.signedIn(r);
+  }
+
+  private signedIn(r: Json) {
+    const { pendingEmail: _, pendingSecond: __, ...rest } = this.load();
     if (r.reauth) {
       this.save(rest);
       return { reauth: true, email: r.account.email };
@@ -218,6 +274,16 @@ export class AccountClient {
     this.save({ ...rest, token: r.token, email: r.account.email, accountId: r.account.id });
     return { reauth: false, email: r.account.email };
   }
+
+  // ── two-step sign-in (an authenticator app and recovery codes on top of the email code) ──
+  twoFactor = () => this.json("GET", "/v1/me/two-factor");
+  /** A new authenticator secret, its otpauth:// link and a QR code (SVG). The one in use keeps working until this is confirmed. */
+  authenticatorStart = () => this.json("POST", "/v1/me/authenticator", {});
+  authenticatorConfirm = (code: string) => this.json("POST", "/v1/me/authenticator/confirm", { code: (code ?? "").replace(/\s+/g, "") });
+  removeAuthenticator = () => this.json("DELETE", "/v1/me/authenticator");
+  /** On returns 10 recovery codes, shown once; off removes the authenticator and the codes. */
+  setTwoFactor = (enabled: boolean) => this.json("PUT", "/v1/me/two-factor", { enabled });
+  newRecoveryCodes = () => this.json("POST", "/v1/me/recovery-codes", {});
 
   async signout() {
     if (this.token()) await this.json("POST", "/v1/auth/logout", {}).catch(() => {});

@@ -119,6 +119,11 @@ export interface ListingRevision {
 export interface Creator { country: string; displayName: string; stripeAccount: string | null; chargesEnabled: boolean; payoutsEnabled: boolean; detailsSubmitted: boolean; setupRequired?: boolean }
 export interface Sales { sales: { order: string; listing: string; amount: number; fee: number; earnings: number; currency: string; country: string; status: string; at: string }[]; totals: { count: number; gross: number; earnings: number } }
 
+type SignedIn = { reauth: boolean; email: string };
+export type SecondStepInput = { code?: string; recoveryCode?: string };
+/** Two-step sign-in on the account: an authenticator app, and one-time recovery codes. */
+export interface TwoFactor { enabled: boolean; since: string | null; authenticator: boolean; authenticatorAdded: string | null; recoveryCodesLeft: number; passkeys: number }
+
 export const account = {
   status: () => call<AccountStatus>("GET", "/api/account"),
   /** The name shown beside your Market comments. */
@@ -126,7 +131,15 @@ export const account = {
   setServer: (server: string) => call<{ server: string }>("PUT", "/api/account/server", { server }),
   signin: (email: string) => call<{ ok: boolean; email: string }>("POST", "/api/account/signin", { email }),
   /** `email` is the address the code was sent to (the server falls back to the last sign-in it started). */
-  verify: (code: string, email?: string) => call<{ reauth: boolean; email: string }>("POST", "/api/account/verify", { code, email }),
+  verify: (code: string, email?: string) => call<SignedIn & { secondStep?: { methods: string[] } }>("POST", "/api/account/verify", { code, email }),
+  /** The second step of an email sign-in with two-step sign-in on: the authenticator code, or a recovery code. */
+  secondStep: (input: SecondStepInput) => call<SignedIn>("POST", "/api/account/second-factor", input),
+  twoFactor: () => call<TwoFactor>("GET", "/api/account/two-factor"),
+  authenticatorStart: () => call<{ secret: string; uri: string; qrSvg: string; expiresIn: number }>("POST", "/api/account/authenticator"),
+  authenticatorConfirm: (code: string) => call<TwoFactor>("POST", "/api/account/authenticator/confirm", { code }),
+  /** On returns 10 recovery codes, shown once; off removes the authenticator and the codes. */
+  setTwoFactor: (enabled: boolean) => call<TwoFactor & { recoveryCodes: string[] | null }>("PUT", "/api/account/two-factor", { enabled }),
+  newRecoveryCodes: () => call<TwoFactor & { recoveryCodes: string[] }>("POST", "/api/account/recovery-codes"),
   signout: () => call<{ signedIn: false }>("POST", "/api/account/signout"),
   devices: () => call<{ devices: Device[] }>("GET", "/api/account/devices"),
   renameDevice: (id: string, name: string) => call<Device>("PATCH", `/api/account/devices/${encodeURIComponent(id)}`, { name }),

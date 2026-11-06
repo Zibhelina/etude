@@ -5,7 +5,9 @@ const marker = (i) => `ETUDEBLANK${i}X`;
 let html = etude.md(view.text.replace(/⟦(\d+)⟧/g, (_, i) => marker(i)));
 html = html.replace(/ETUDEBLANK(\d+)X/g, (_, i) => {
   const b = view.blanks[i];
-  return `<span class="blank"><input class="e-input mono" data-i="${i}" size="${Math.min(Math.max(b.size + 1, 3), 40)}" autocomplete="off" spellcheck="false" placeholder="${etude.escape(b.hint)}"><span class="fix only-result"></span></span>`;
+  // Wide enough for the answer or the hint, in the field's proportional font.
+  const size = Math.min(40, Math.max(3, Math.ceil(b.size * 0.75), b.hint ? Math.ceil(b.hint.length * 0.8) : 0));
+  return `<span class="blank"><input class="e-input mono" data-i="${i}" size="${size}" autocomplete="off" spellcheck="false" placeholder="${etude.escape(b.hint)}"><span class="fix only-result"></span></span>`;
 });
 const box = etude.$(".cloze");
 box.innerHTML = html;

@@ -1,7 +1,7 @@
 // Builds the Etude core for the browser: the same src/core, with node:* modules swapped for the
 // shims in ./shims, plus the web app wired to it (index.html). `npm run build:browser` writes
 // dist-browser/: the whole app as static files, and harness.html, a test page for the core alone.
-import { defineConfig } from "vite";
+import { build, defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
@@ -74,10 +74,22 @@ const appCsp = {
   },
 };
 
+// The editor kit (code and markdown editors) next to the app, at kit/kit.js: card frames here have no
+// server to import it from, so card-frame.tsx hands it to them (see frame-shim.js). One file, because
+// a frame imports it from a blob URL, where relative imports of other chunks can't resolve.
+const editorKit = {
+  name: "etude-editor-kit",
+  apply: "build" as const,
+  async writeBundle(options: { dir?: string }) {
+    process.env.ETUDE_KIT_SINGLE = "1";
+    await build({ configFile: here("../../web/vite.kit.config.ts"), logLevel: "warn", build: { outDir: `${options.dir}/kit` } });
+  },
+};
+
 export default defineConfig({
   root: here("."),
   base: webBase ? `${webBase}/` : "./",
-  plugins: [scanWebApp, react(), tailwindcss(), webEdition, appCsp],
+  plugins: [scanWebApp, react(), tailwindcss(), webEdition, appCsp, editorKit],
   publicDir: here("../../web/public"),
   resolve: {
     alias: [

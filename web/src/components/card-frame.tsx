@@ -7,6 +7,10 @@ import { pageScheme, THEME_EVENT, useScheme } from "@/lib/theme";
 import { etudeFetch, isLocal } from "@/lib/transport";
 import { MEDIA_EVENT, MEDIA_STATE_EVENT, mediaPending } from "@/lib/sync";
 
+// Where the serverless builds keep the editor kit, from this bundle file (assets/…). A variable, so
+// the bundler leaves it alone: the kit is built after the app.
+const KIT = "../kit/kit.js";
+
 export interface CardResult {
   grade: Grade;
   key: Record<string, unknown>;
@@ -239,6 +243,16 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
             const u = new URL(String(msg.url), location.href);
             path = u.pathname + u.search;
           } catch {}
+          // The editor kit is one of the app's own files, next to its assets/ (see build:browser).
+          if (isLocal() && path === "/runtime/kit/kit.js") {
+            fetch(new URL(KIT, import.meta.url))
+              .then(async (r) => {
+                const body = await r.arrayBuffer();
+                post({ type: "bytes", req, status: r.status, contentType: "text/javascript", body }, [body]);
+              })
+              .catch((e) => post({ type: "bytes", req, error: String(e?.message ?? e) }));
+            break;
+          }
           if (!isLocal() || !/^\/(media|type-assets)\//.test(path)) {
             post({ type: "bytes", req, error: "not allowed" });
             break;

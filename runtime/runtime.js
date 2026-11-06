@@ -10,7 +10,9 @@ const audio = cardAudio(window);
 
 // Editors and syntax highlighting live in a separate kit, loaded the first time a card needs them.
 let kitPromise = null;
-const kit = () => (kitPromise ??= import(new URL("./kit/kit.js", import.meta.url).href));
+// A frame with no server behind it (the web edition and the phone apps) gets it from the app instead:
+// the frame shim (src/browser/frame-shim.js) sets globalThis.__etudeKit.
+const kit = () => (kitPromise ??= globalThis.__etudeKit ? globalThis.__etudeKit() : import(new URL("./kit/kit.js", import.meta.url).href));
 
 const parent = window.parent;
 const send = (type, data = {}) => parent.postMessage({ etude: 1, type, ...data }, "*");

@@ -55,6 +55,8 @@ function stub() {
     if (path === "/v1/auth/logout") return tokens.delete(auth), send(200, { ok: true });
     // A creator from before direct charges: no usable Stripe account until they set up again.
     if (path === "/v1/creator" && req.method === "GET") return send(200, { country: "CA", displayName: "Old", stripeAccount: null, chargesEnabled: false, payoutsEnabled: false, detailsSubmitted: false, setupRequired: true });
+    // Selling needs two-step sign-in, which this account doesn't have.
+    if ((path === "/v1/creator" && req.method === "POST") || (path === "/v1/listings" && req.method === "POST")) return send(403, { error: { code: "two_factor_required", message: "Selling on the Etude Market needs two-step sign-in. Turn it on with an authenticator app, or add a passkey, in Settings → Account (or at https://cloud.example/account), then set up selling again.", settingsUrl: "https://cloud.example/account" } });
     if (path === "/v1/creator/onboarding-link" || path === "/v1/creator/dashboard-link") return send(409, { error: { code: "creator_setup_required", message: "Etude now sells through your own Stripe account. Set up selling again to create it (POST /v1/creator)." } });
     return send(404, { error: { code: "not_found", message: path } });
   });
@@ -246,6 +248,28 @@ test("account: Ask Etude may read the account but not buy, sell, sign in or dele
   const g = (name: string) => agentRefusal({ cmd: cmd(name), values: {}, named: {}, attachmentDir: (process.env.TMPDIR ?? tmpdir()) });
   for (const ok of ["account status", "account library", "account sales"]) assert.equal(g(ok), null, ok);
   for (const no of ["account delete", "account buy", "account install", "account signin", "account list-deck", "account approve", "account revoke", "account server"]) assert.match(g(no) ?? "", /can't change the Etude account/, no);
+});
+
+test("account: selling without two-step sign-in says where to turn it on in the app", async () => {
+  const dir = mkdtempSync(join((process.env.TMPDIR ?? tmpdir()), "account-"));
+  const s = stub();
+  const url = await s.start();
+  const e = await Etude.open(join(dir, "etude.db"), { home: join(dir, "home") });
+  try {
+    const a = accountFor(e);
+    a.setServer(url);
+    await a.signin("a@example.test");
+    await a.verify("good-code");
+    const refused = (err: AccountError) => err.status === 403 && err.code === "two_factor_required" && /two-step sign-in/.test(err.message) && /Settings → Account/.test(err.message) && !/https?:/.test(err.message);
+    await assert.rejects(a.becomeCreator("CA"), refused);
+    await assert.rejects(a.json("POST", "/v1/listings", { name: "Deck", price: 1000 }), refused);
+    // Still signed in: a refusal isn't a sign-out.
+    assert.equal((await a.status()).signedIn, true);
+  } finally {
+    e.close();
+    await s.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("account: a creator from before direct charges reads as setupRequired, and Stripe links say to set up again in plain words", async () => {

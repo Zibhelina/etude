@@ -25,6 +25,9 @@ import { useFunMode } from "@/lib/fun";
 import minimiShop from "@/assets/market/minimi-shop.webp";
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : "The request failed.");
+/** Selling needs two-step sign-in (or a passkey): the server answers `two_factor_required` until the account has one. */
+const needsTwoFactor = (e: unknown) => (e as { code?: unknown } | null)?.code === "two_factor_required";
+const openAccountSettings = () => navigate("/settings#account");
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 /** The Selling tab before a Stripe account is set up: what selling means, in three steps, then the setup itself. */
@@ -373,7 +376,7 @@ export function SellingView() {
       if (done) toast.success(done);
       await load();
     } catch (e) {
-      toast.error("That didn't work", { description: msg(e) });
+      toast.error(needsTwoFactor(e) ? "Turn on two-step sign-in to sell" : "That didn't work", { description: msg(e), ...(needsTwoFactor(e) ? { action: { label: "Open Settings", onClick: openAccountSettings } } : {}) });
     } finally {
       setBusy(null);
     }

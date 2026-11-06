@@ -131,7 +131,7 @@ export function emptyCard(now: Date) {
 /** Rebuilds a card's state from its review log, e.g. after changing a preset. `key` is the card's (`cardKey`). */
 export function replay(reviews: { ts: string; rating: number }[], created: Date, cfg: PresetConfig, key: string) {
   let card: KeyedCard = { ...toFsrs({ ...emptyCard(created), id: 0, item_id: "", face: "", suspended: 0, buried_until: null }), key };
-  const f = engine({ ...cfg, enableFuzz: false });
+  const f = engine(cfg);
   for (const r of [...reviews].sort((a, b) => a.ts.localeCompare(b.ts))) {
     card = { ...f.next(card, new Date(r.ts), r.rating as FsrsGrade).card, key };
   }

@@ -346,7 +346,9 @@ These work on every command, before or after the command words.
   - [`sync setup`](#sync-setup) Connect this collection to a shared folder or Sync server.
   - [`sync signin`](#sync-signin) Email a one-time 6-digit sign-in code (valid 15 minutes).
   - [`sync verify`](#sync-verify) Redeem the 6-digit code from the sign-in email.
-  - [`sync unlock`](#sync-unlock) Unlock the vault, or create one and return its recovery key once.
+  - [`sync unlock`](#sync-unlock) Unlock the vault, or create one (with a Sync password: returns its recovery key once).
+  - [`sync protect`](#sync-protect) Add a Sync password: the vault becomes end-to-end and the server forgets its key.
+  - [`sync unprotect`](#sync-unprotect) Remove the Sync password: the server keeps the vault key, so it's no longer end-to-end.
   - [`sync now`](#sync-now) Push pending encrypted changes and merge remote changes.
   - [`sync off`](#sync-off) Sign out and remove this device's saved Sync key; keep local content.
 - **account**: Etude account: sign-in, devices, Sync subscription, purchased decks and selling on the paid Market (`etude account` alone runs `status`)
@@ -3514,7 +3516,7 @@ etude sync status
 
 *read-only*
 
-Output: { configured, kind, signedIn, unlocked, hasKeys, lastSync, pending, busy, error, progress }
+Output: { configured, kind, signedIn, unlocked, hasKeys, mode, passwordOptional, lastSync, pending, busy, error, progress }
 
 ### etude sync setup
 
@@ -3582,9 +3584,9 @@ Output: Sync status
 
 <a id="sync-unlock"></a>
 
-Unlock the vault, or create one and return its recovery key once.
+Unlock the vault, or create one (with a Sync password: returns its recovery key once).
 
-Read the Sync password from stdin to keep it out of shell history. With --recovery, stdin carries the recovery key. The password is never saved. Cloud vaults need a sign-in within the last 10 minutes: if asked to sign in again, run `sync signin` and `sync verify`, then retry. An unlocked device keeps syncing without signing in again.
+With no stdin, a vault whose key the server keeps opens without a password, and a new vault on a server that can keep keys starts without one (`mode` "server": not end-to-end). Otherwise read the Sync password from stdin to keep it out of shell history; a new vault with a password is end-to-end and returns its recovery key once. With --recovery, stdin carries the recovery key. The password is never saved. Cloud vaults need a sign-in within the last 10 minutes: if asked to sign in again, run `sync signin` and `sync verify`, then retry. An unlocked device keeps syncing without signing in again.
 
 ```
 etude sync unlock [flags]
@@ -3599,8 +3601,53 @@ etude sync unlock [flags]
 Output: { status, recoveryKey? }
 
 ```sh
+etude sync unlock
 etude sync unlock < password-file
 etude sync unlock --recovery < recovery-file
+```
+
+### etude sync protect
+
+<a id="sync-protect"></a>
+
+Add a Sync password: the vault becomes end-to-end and the server forgets its key.
+
+For a vault whose key the server keeps. Reads the new Sync password (8 or more characters) from stdin, wraps the vault key with it and a new recovery key, and drops the server's copy in the same write. Returns the recovery key once: it's the only way in without the password. Needs a sign-in within the last 10 minutes.
+
+```
+etude sync protect
+```
+
+*writes*
+
+Output: { status, recoveryKey }
+
+```sh
+etude sync protect < password-file
+```
+
+### etude sync unprotect
+
+<a id="sync-unprotect"></a>
+
+Remove the Sync password: the server keeps the vault key, so it's no longer end-to-end.
+
+New devices then sync after signing in, with no password, and whoever runs the server can read the collection. The Sync password and recovery key stop working. Needs this device unlocked and a sign-in within the last 10 minutes.
+
+```
+etude sync unprotect [flags]
+```
+
+*writes · needs `--yes`*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { status }
+
+```sh
+etude sync unprotect --yes
 ```
 
 ### etude sync now

@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync
 import { dirname, join, resolve, sep } from "node:path";
 import type { Etude } from "../engine.ts";
 import { bootstrap, drain, install, localEvent, receive, rows, type Change } from "./log.ts";
-import { createVault, decryptBlob, decryptEvent, encryptBlob, encryptEvent, fromB64, sha256Hex, toB64, unwrapWithPassword, unwrapWithRecovery } from "./crypto.ts";
+import { createVault, decryptBlob, decryptEvent, encryptBlob, encryptEvent, fromB64, generateVaultKey, protectVault, sha256Hex, toB64, unwrapWithPassword, unwrapWithRecovery } from "./crypto.ts";
 import { CloudTransport, FolderTransport, type Transport } from "./transport.ts";
 import { project } from "./project.ts";
 import { accountFor, signInCode } from "../account.ts";
@@ -34,7 +34,9 @@ async function pool<T>(items:T[],limit:number,fn:(item:T)=>Promise<void>) {
 /** A media path is relative, stays inside the media folder and has no control characters or backslashes. Spaces and accents are fine. */
 const safeMediaPath=(file:string)=>!/[\x00-\x1f\x7f\\]/.test(file)&&!file.split("/").some(p=>p===""||p==="."||p==="..");
 
-type Config = { kind:"cloud"|"folder";server?:string;folder?:string;email?:string;enabled:boolean;hasKeys?:boolean;lastSync?:string };
+/** mode: "password" = end-to-end, only this person's devices open the vault key; "server" = the server keeps it (no password).
+ * keepsKeys: the server can keep vault keys, so Sync can start without a password. */
+type Config = { kind:"cloud"|"folder";server?:string;folder?:string;email?:string;enabled:boolean;hasKeys?:boolean;mode?:"password"|"server"|null;keepsKeys?:boolean;lastSync?:string };
 type Secrets = { token?:string;vk?:string };
 const clients=new WeakMap<Etude,SyncClient>();
 export function syncFor(e:Etude) { let s=clients.get(e);if(!s) {s=new SyncClient(e);clients.set(e,s);}return s; }
@@ -64,7 +66,7 @@ export class SyncClient {
   private rate() {const p=this.progress,first=this.samples[0];if(!p||!first)return 0;const ms=Date.now()-first[0];return ms>0?Math.round((p.done-first[1])*1000/ms):0;}
   /** Bytes the unsent events take on the wire: base64 of the encrypted body. */
   private unsentBytes() {return this.e.db.get("SELECT coalesce(sum(coalesce(length(ciphertext),(length(CAST(body AS BLOB))+29+2)/3*4)),0) n FROM sync_events WHERE sent=0")!.n as number;}
-  status() {const cfg=this.config();const sec=this.secrets();return {configured:!!cfg?.enabled,kind:cfg?.kind??null,server:cfg?.server,folder:cfg?.folder,email:cfg?.email ?? (this.shared()?accountFor(this.e).email():undefined),signedIn:!!this.token(),account:this.shared(),unlocked:!!sec.vk,hasKeys:cfg?.kind==="folder" ? existsSync(join(cfg.folder!,"keys.json")) : !!cfg?.hasKeys,lastSync:cfg?.lastSync??null,busy:this.busy,error:this.error,progress:this.progress&&this.busy?{...this.progress,rate:this.rate()}:null,received:this.received,pending:this.initialized()?this.e.db.get("SELECT (SELECT count(*) FROM sync_outbox)+(SELECT count(*) FROM sync_events WHERE sent=0) AS n")!.n:0};}
+  status() {const cfg=this.config();const sec=this.secrets();return {configured:!!cfg?.enabled,kind:cfg?.kind??null,server:cfg?.server,folder:cfg?.folder,email:cfg?.email ?? (this.shared()?accountFor(this.e).email():undefined),signedIn:!!this.token(),account:this.shared(),unlocked:!!sec.vk,hasKeys:cfg?.kind==="folder" ? existsSync(join(cfg.folder!,"keys.json")) : !!cfg?.hasKeys,mode:cfg?.kind==="folder" ? "password" : cfg?.mode ?? (cfg?.hasKeys ? "password" : null),passwordOptional:cfg?.kind==="cloud" && !!cfg.keepsKeys,lastSync:cfg?.lastSync??null,busy:this.busy,error:this.error,progress:this.progress&&this.busy?{...this.progress,rate:this.rate()}:null,received:this.received,pending:this.initialized()?this.e.db.get("SELECT (SELECT count(*) FROM sync_outbox)+(SELECT count(*) FROM sync_events WHERE sent=0) AS n")!.n:0};}
   setup(input:{server?:string;folder?:string}) {
     if(this.busy)throw new Error("wait for sync to finish");
     if (!!input.server === !!input.folder) throw new Error("choose a server or a folder");
@@ -83,8 +85,9 @@ export class SyncClient {
     const c=this.config();
     if(c?.kind!=="cloud"||!this.token())return this.status();
     try {
-      const v=await (await (this.transport() as CloudTransport).request("/v1/vault")).json() as {hasKeys:boolean};
-      this.set("config",{...this.config(),hasKeys:v.hasKeys});
+      const t=this.transport() as CloudTransport;
+      const v=await (await t.request("/v1/vault")).json() as {hasKeys:boolean;mode?:"password"|"server"|null};
+      this.set("config",{...this.config(),hasKeys:v.hasKeys,mode:v.mode ?? (v.hasKeys?"password":null),keepsKeys:await t.keepsKeys()});
       this.error=null;
     } catch(e) {this.error=(e as Error).message;}
     return this.status();
@@ -107,21 +110,56 @@ export class SyncClient {
     this.set("config",{...c,email:r.account.email});
     return this.probe();
   }
+  /**
+   * Opens the vault on this device, or makes it on the first one. A vault whose key the server keeps opens with no
+   * password. A new vault gets a password (end-to-end, with a recovery key shown once) when one is given; without one,
+   * the server keeps its key, where the server can.
+   */
   async unlock(input:{password?:string;recovery?:string}) {
     const transport=this.transport();const found=await transport.keys();
-    let vk:Uint8Array;let recoveryKey:string|undefined;
+    let vk:Uint8Array;let recoveryKey:string|undefined;let mode:"password"|"server";
     if(found) {
-      if(input.recovery && found.keys.recovery) vk=await unwrapWithRecovery(found.keys.recovery,input.recovery);
-      else if(input.password && found.keys.password) vk=await unwrapWithPassword(found.keys.password,input.password);
+      if(found.keys.server && transport instanceof CloudTransport) {vk=await transport.serverKey();mode="server";}
+      else if(input.recovery && found.keys.recovery) {vk=await unwrapWithRecovery(found.keys.recovery,input.recovery);mode="password";}
+      else if(input.password && found.keys.password) {vk=await unwrapWithPassword(found.keys.password,input.password);mode="password";}
       else throw new Error("enter the Sync password or recovery key");
+    } else if(input.password) {
+      if(input.password.length<8)throw new Error("use at least 8 characters for the Sync password");
+      const created=await createVault(input.password);await transport.putKeys(created.keys);vk=created.vk;recoveryKey=created.recoveryKey;mode="password";
     } else {
-      if(!input.password || input.password.length<8)throw new Error("use at least 8 characters for the Sync password");
-      const created=await createVault(input.password);await transport.putKeys(created.keys);vk=created.vk;recoveryKey=created.recoveryKey;
+      if(!(transport instanceof CloudTransport) || !(await transport.keepsKeys()))throw new Error("this server needs a Sync password: use at least 8 characters");
+      vk=generateVaultKey();await transport.putServerKey(vk);mode="server";
     }
     const fingerprint=await sha256Hex(vk);const old=this.meta<string|null>("vault",null);
     if(old && old!==fingerprint)throw new Error("this collection belongs to another vault; restore into a separate collection");
-    this.set("vault",fingerprint);this.saveSecrets({...this.secrets(),vk:toB64(vk)});this.set("config",{...this.config(),hasKeys:true});
+    this.set("vault",fingerprint);this.saveSecrets({...this.secrets(),vk:toB64(vk)});this.set("config",{...this.config(),hasKeys:true,mode});
     return {status:this.status(),...(recoveryKey?{recoveryKey}:{})};
+  }
+  /** The open vault, its transport and its keys as they are now, for changing how the key is kept. */
+  private async openVault() {
+    const c=this.config();if(c?.kind!=="cloud")throw new Error("only a Sync server vault can change how its key is kept");
+    const vk=this.secrets().vk;if(!vk)throw new Error("unlock Sync first");
+    const transport=this.transport() as CloudTransport;const found=await transport.keys();
+    if(!found)throw new Error("this vault has no keys yet; start Sync first");
+    return {vk:fromB64(vk),transport,found};
+  }
+  /** Adds a Sync password: the vault becomes end-to-end and the server drops its copy of the key, in one write. Show the recovery key once. */
+  async protect(password:string) {
+    if(!password || password.length<8)throw new Error("use at least 8 characters for the Sync password");
+    const {vk,transport,found}=await this.openVault();
+    const {keys,recoveryKey}=await protectVault(vk,password);
+    await transport.putKeys(keys,found.etag);
+    this.set("config",{...this.config(),mode:"password"});
+    return {status:this.status(),recoveryKey};
+  }
+  /** Removes the Sync password: the server keeps the key, so new devices sync after signing in. Not end-to-end any more. */
+  async unprotect() {
+    const {vk,transport,found}=await this.openVault();
+    if(found.keys.server) {this.set("config",{...this.config(),mode:"server"});return {status:this.status()};}
+    if(!(await transport.keepsKeys()))throw new Error("this server can't keep vault keys, so Sync here needs a password");
+    await transport.putServerKey(vk,found.etag);
+    this.set("config",{...this.config(),mode:"server"});
+    return {status:this.status()};
   }
   async off() {if(this.active)await this.active.catch(()=>{});const c=this.config();if(c?.kind==="cloud" && this.secrets().token && accountFor(this.e).token()!==this.secrets().token) { try { await (this.transport() as CloudTransport).json("/v1/auth/logout",{}); } catch { this.error="Signed out locally. This device could not be revoked on the server while offline."; } } if(c)this.set("config",{...c,enabled:false});if(this.initialized())rmSync(this.secretFile(),{force:true});return this.status();}
   now() {if(this.active)return this.active;this.busy=true;this.active=this.run().then(()=>(this.error=null,this.progress=null,{...this.status(),busy:false})).catch(e=>{this.error=e.message;throw e;}).finally(()=>{this.busy=false;this.active=null;this.progress=null;});return this.active;}

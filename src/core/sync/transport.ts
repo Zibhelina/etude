@@ -4,6 +4,9 @@ import type { VaultKeys } from "./crypto.ts";
 import { AccountError } from "../account.ts";
 
 export type WireEvent = {id:string;ciphertext:string};
+const toB64Url=(b:Uint8Array)=>btoa(String.fromCharCode(...b)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+const fromB64Url=(s:string)=>Uint8Array.from(atob(s.replace(/-/g,"+").replace(/_/g,"/")),(c)=>c.charCodeAt(0));
+
 export interface Transport {
   keys(): Promise<{keys:VaultKeys;etag:string}|null>;
   putKeys(keys:VaultKeys,etag?:string): Promise<void>;
@@ -87,6 +90,11 @@ export class CloudTransport implements Transport {
     catch(e) { if ((e as any).code === "no_keys") return null;throw e; }
   }
   async putKeys(keys:VaultKeys,etag?:string) { await this.request("/v1/vault/keys",{method:"PUT",headers:{"Content-Type":"application/json",...(etag?{"If-Match":etag}:{})},body:JSON.stringify(keys)}); }
+  /** Sync without a password: the server keeps the vault key and hands it to a device that signed in recently. */
+  async serverKey() { const r:any=await (await this.request("/v1/vault/server-key")).json();return fromB64Url(r.vk); }
+  async putServerKey(vk:Uint8Array,etag?:string) { await this.request("/v1/vault/server-key",{method:"PUT",headers:{"Content-Type":"application/json",...(etag?{"If-Match":etag}:{})},body:JSON.stringify({vk:toB64Url(vk)})}); }
+  /** Whether this server can keep vault keys (`/v1/server` → sync.withoutPassword). */
+  async keepsKeys() { try { const r:any=await (await fetch(this.server+"/v1/server",{signal:AbortSignal.timeout(15_000)})).json();return !!r?.sync?.withoutPassword; } catch { return false; } }
   async push(events:WireEvent[]) { if (events.length) await this.json("/v1/sync/events",{events}); }
   async pull(cursor:string) { const r:any=await (await this.request(`/v1/sync/events?after=${Number(cursor)||0}&limit=500`)).json();return {...r,cursor:String(r.cursor)}; }
   async putBlob(name:string,bytes:Uint8Array) { await this.request("/v1/blobs/"+name,{method:"PUT",body:new Uint8Array(bytes)}); }

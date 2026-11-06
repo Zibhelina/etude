@@ -203,6 +203,8 @@ export function SyncSection() {
         setReauth(name);
         setCodeSent(false);
         setEmail(status?.email ?? acct?.email ?? "");
+        // The sign-in step already says why.
+        if (name !== "unlock") return null;
       }
       setError(errorMessage(e));
       return null;

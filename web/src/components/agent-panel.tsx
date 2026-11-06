@@ -924,7 +924,7 @@ export function MessageView({ m, conv, last, groups, onUndo }: { m: Message; con
             ))}
           </div>
         )}
-        {c.text && <div className={cn("max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-normal whitespace-pre-wrap [overflow-wrap:anywhere]", bubble ? "mchat-you rounded-tr-[4px] text-[14.5px] leading-[1.42]" : "bg-[color-mix(in_oklab,var(--background),var(--foreground)_8%)]")}>{c.text}</div>}
+        {c.text && <div className={cn("max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-normal whitespace-pre-wrap [overflow-wrap:anywhere]", bubble ? "mchat-you rounded-[18px] px-[14px] py-[9px] text-[14.5px] leading-[1.42]" : "bg-[color-mix(in_oklab,var(--background),var(--foreground)_8%)]")}>{c.text}</div>}
       </div>
     );
   }
@@ -933,14 +933,15 @@ export function MessageView({ m, conv, last, groups, onUndo }: { m: Message; con
   const meta = (c.modelRef || c.model) && `${modelLabel(c.modelRef ?? null, groups ?? [], c.model)} · ${(c.ms / 1000).toFixed(1)} s`;
   const undo = c.changed && !m.undone && m.canUndo;
   return (
-    <div className="group/reply agent-rise flex flex-col gap-1.5" data-agent-reply>
+    <div className={cn("group/reply agent-rise flex flex-col", bubble ? "gap-2.5" : "gap-1.5")} data-agent-reply>
       <Items items={c.items} />
-      {c.error && <div className="rounded-[10px] border border-destructive/40 px-3 py-2 text-[13px] text-destructive">{c.error}</div>}
-      {c.stopped && <div className="text-[13px] text-muted-foreground">Stopped.</div>}
+      {c.error && <div className={cn("rounded-[10px] border border-destructive/40 px-3 py-2 text-[13px] text-destructive", bubble && "max-w-[88%] self-start bg-card")}>{c.error}</div>}
+      {c.stopped && <div className={cn("text-[13px] text-muted-foreground", bubble && "mchat-b self-start px-3 py-1.5")}>Stopped.</div>}
       {(undo || (c.changed && m.undone) || meta) && (
         <div
           className={cn(
             "-ml-1.5 flex min-h-6 min-w-0 flex-wrap items-center gap-x-1 text-xs text-muted-foreground transition-opacity",
+            bubble && "mchat-b ml-0 w-fit max-w-[88%] self-start px-1 py-0.5",
             // Hover-only on desktop, except the last reply's undo stays visible; always shown on touch.
             !last && "opacity-0 group-focus-within/reply:opacity-100 group-hover/reply:opacity-100 pointer-coarse:opacity-100",
           )}
@@ -965,15 +966,16 @@ export function MessageView({ m, conv, last, groups, onUndo }: { m: Message; con
 }
 
 export function LiveView({ live, onAnswer }: { live: Live; onAnswer(item: ToolItem, allow: boolean): void }) {
+  const bubble = useContext(BubbleContext);
   const waiting = live.items.some((i) => i.type === "tool" && i.status === "waiting");
   const running = live.items.some((i) => i.type === "tool" && i.status === "running" && !i.lookup);
   const lastIsText = live.items[live.items.length - 1]?.type === "text";
   return (
-    <div className="agent-rise flex flex-col gap-1.5">
+    <div className={cn("agent-rise flex flex-col", bubble ? "gap-2.5" : "gap-1.5")}>
       <Items items={live.items} onAnswer={onAnswer} live />
-      {live.error && <div className="rounded-[10px] border border-destructive/40 px-3 py-2 text-[13px] text-destructive">{live.error}</div>}
+      {live.error && <div className={cn("rounded-[10px] border border-destructive/40 px-3 py-2 text-[13px] text-destructive", bubble && "max-w-[88%] self-start bg-card")}>{live.error}</div>}
       {!waiting && !running && !lastIsText && (
-        <div className="flex h-7 items-center gap-2 text-[13px] text-muted-foreground">
+        <div data-mbub={bubble ? "" : undefined} className={cn("flex h-7 items-center gap-2 text-[13px] text-muted-foreground", bubble && "mchat-b h-9 self-start px-3.5")}>
           <Loader2 className="size-3.5 animate-spin" />
           {live.items.some((i) => i.type !== "text") ? "Working…" : "Thinking…"}
         </div>
@@ -1034,7 +1036,7 @@ function Items({ items, onAnswer, live = false }: { items: Item[]; onAnswer?(ite
       {blocks(items, live && !!onAnswer).map((b) =>
         b.kind === "text" ? (
           bubble ? (
-            <div key={b.key} className="mchat-me max-w-[88%] rounded-[14px] rounded-tl-[4px] px-[13px] py-[3px]">
+            <div key={b.key} data-mbub className="mchat-b max-w-[88%] self-start px-[14px] py-[3px]">
               <Markdown className="agent-prose text-[14.5px]">{b.text}</Markdown>
             </div>
           ) : (
@@ -1043,9 +1045,25 @@ function Items({ items, onAnswer, live = false }: { items: Item[]; onAnswer?(ite
             </Markdown>
           )
         ) : b.kind === "ui" ? (
-          <NavRow key={b.key} path={b.item.path!} />
+          bubble ? (
+            <div key={b.key} data-mbub className="mchat-b max-w-[88%] self-start px-3 py-1">
+              <NavRow path={b.item.path!} />
+            </div>
+          ) : (
+            <NavRow key={b.key} path={b.item.path!} />
+          )
         ) : b.kind === "confirm" ? (
-          <ConfirmCard key={b.key} item={b.item} onAnswer={onAnswer!} />
+          bubble ? (
+            <div key={b.key} data-mbub className="mchat-b self-stretch">
+              <ConfirmCard item={b.item} onAnswer={onAnswer!} />
+            </div>
+          ) : (
+            <ConfirmCard key={b.key} item={b.item} onAnswer={onAnswer!} />
+          )
+        ) : bubble ? (
+          <div key={b.key} data-mbub className="mchat-b max-w-[88%] self-start px-3 py-1">
+            <ToolGroup tools={b.tools} live={live} />
+          </div>
         ) : (
           <ToolGroup key={b.key} tools={b.tools} live={live} />
         ),

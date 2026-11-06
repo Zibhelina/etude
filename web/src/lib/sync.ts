@@ -5,7 +5,7 @@ export type SyncSeen = { received?: number; lastSync?: string | null; media?: { 
 
 /** Fired on window when media files from another device were written, so images and sounds that were missing ask again. */
 export const MEDIA_EVENT = "etude:media";
-/** Fired on window with a sync status read outside the app's own loop (Settings → Sync), so the app watches its media too. */
+/** Fired on window with each sync status the app gets (an automatic sync, Settings → Sync), so it can watch the media that follows. */
 export const STATUS_EVENT = "etude:sync-status";
 export const shareStatus = (st: SyncSeen) => window.dispatchEvent(new CustomEvent(STATUS_EVENT, { detail: st }));
 
@@ -16,7 +16,10 @@ export const shareStatus = (st: SyncSeen) => window.dispatchEvent(new CustomEven
 export async function autoSync(o: { pendingOnly?: boolean } = {}): Promise<SyncSeen | null> {
   try {
     const r = await etudeFetch("/api/sync/auto", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(o) });
-    return r.ok ? await r.json() : null;
+    if (!r.ok) return null;
+    const st: SyncSeen = await r.json();
+    shareStatus(st);
+    return st;
   } catch {
     return null;
   }

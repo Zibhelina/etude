@@ -137,6 +137,8 @@ export function App() {
   useEffect(() => {
     const h = (e: Event) => noteMedia((e as CustomEvent<SyncSeen>).detail);
     window.addEventListener(STATUS_EVENT, h);
+    // Once on opening too: the app may open on a study session, which doesn't sync, while media still comes in.
+    void syncStatus().then(noteMedia);
     return () => window.removeEventListener(STATUS_EVENT, h);
   }, [noteMedia]);
   useEffect(() => {
@@ -144,7 +146,6 @@ export function App() {
     let stop = false;
     const run = async (o?: { pendingOnly?: boolean }) => {
       const st = await autoSync(o);
-      noteMedia(st);
       if (stop || typeof st?.received !== "number") return;
       const before = received.current;
       received.current = st.received;
@@ -166,7 +167,7 @@ export function App() {
       window.removeEventListener("focus", wake);
       window.removeEventListener("online", wake);
     };
-  }, [studying, noteMedia]);
+  }, [studying]);
   const updateDot = useUpdateDot();
   // Bumped after the assistant changed something, so the page remounts and reloads its data.
   const [dataKey, setDataKey] = useState(0);

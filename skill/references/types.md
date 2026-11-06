@@ -27,5 +27,6 @@ The directory form: `type.json` (id, name, description, faces, fields, grader ki
 - Use `std.looseEqual`, `std.parseNumber` and `std.within` instead of writing your own normalization.
 - Scripts run in QuickJS with no I/O and time limits (500 ms prepare and generators, 1 s grading).
 - Card frames are sandboxed iframes. The card script talks to the app through the runtime API described in `docs/types.md`, not through network calls.
+- Play recordings and sound effects with `etude.play(url)`, not `new Audio()`: in Chromium, `<audio>` in card frames can freeze when Study swaps cards (see Sound in `docs/types.md`).
 - Editing a built-in makes it the user's own version (`edited: true`). `etude type reset <id> --yes` restores the shipped one. Custom types can be deleted only when no items use them.
 - Test with real items too: `etude type preview <id> --item <item-id>` and `etude type test-grade <id> --item <item-id> --answer ...`.

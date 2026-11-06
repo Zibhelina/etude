@@ -3,6 +3,10 @@
 import { marked } from "./vendor/marked.js";
 import katex from "./vendor/katex.js";
 import math from "./mathexpr.js";
+import { cardAudio } from "./audio.js";
+
+// Sound: etude.play(), and in Chromium every <audio> routed through Web Audio (see audio.js for why).
+const audio = cardAudio(window);
 
 // Editors and syntax highlighting live in a separate kit, loaded the first time a card needs them.
 let kitPromise = null;
@@ -109,6 +113,8 @@ function createApi(init, assets = { type: "", files: {} }) {
     async markdownEditor(el, opts = {}) {
       return (await kit()).createMarkdownEditor(el, { katex, ...opts });
     },
+    /** Plays a sound (a URL, e.g. from `etude.asset()`), stopping the one played before: `{ stop(), finished }`. */
+    play: (url) => audio.play(url),
     /** Tell the app how to read the current answer when the learner presses Submit. */
     getAnswer(fn) {
       getter = fn;
@@ -412,6 +418,7 @@ function splitResultBlocks(src) {
 
 export function boot(main, templateHtml, assets) {
   document.documentElement.lang ||= "en";
+  audio.install();
   let api = null;
   let blocks = [];
   const fillResultSlots = (data) => {

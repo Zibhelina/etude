@@ -25,7 +25,18 @@ export function accountRoutes(app: Hono, e: Etude) {
     const b = await body(c);
     return c.json(await a.verify(need(b.code, "code"), b.deviceName, typeof b.email === "string" ? b.email : undefined));
   });
+  app.post("/api/account/second-factor", async (c) => {
+    const b = await body(c);
+    return c.json(await a.secondStep({ code: typeof b.code === "string" ? b.code : undefined, recoveryCode: typeof b.recoveryCode === "string" ? b.recoveryCode : undefined }));
+  });
   app.post("/api/account/signout", async (c) => c.json(await a.signout()));
+
+  app.get("/api/account/two-factor", async (c) => c.json(await a.twoFactor()));
+  app.put("/api/account/two-factor", async (c) => c.json(await a.setTwoFactor((await body(c)).enabled === true)));
+  app.post("/api/account/authenticator", async (c) => c.json(await a.authenticatorStart()));
+  app.post("/api/account/authenticator/confirm", async (c) => c.json(await a.authenticatorConfirm(need((await body(c)).code, "code"))));
+  app.delete("/api/account/authenticator", async (c) => c.json(await a.removeAuthenticator()));
+  app.post("/api/account/recovery-codes", async (c) => c.json(await a.newRecoveryCodes()));
 
   app.get("/api/account/passkeys", async (c) => c.json(await a.passkeys()));
   app.delete("/api/account/passkeys/:id", async (c) => c.json(await a.removePasskey(c.req.param("id"))));

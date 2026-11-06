@@ -5,6 +5,7 @@ import { Check, ChevronDown, Copy, Download, Loader2, MoreHorizontal, Paintbrush
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -18,6 +19,7 @@ import { setFunMode, useFunMode } from "@/lib/fun";
 import { ThemeMiniature, ThemeSample, ThemeSwatches } from "@/components/settings-theme-preview";
 import { api } from "@/lib/api";
 import { applyTheme, currentTheme, setPreviewing, toHex, type Theme } from "@/lib/theme";
+import { MINIMI_MAX } from "../../../src/core/minimi.ts";
 import { BUILTIN_THEMES, MAX_THEME_CSS, THEME_GROUPS, exportTheme, freeThemeId, normalizeTheme, parseThemeFile, sanitizeCss } from "../../../src/core/themes.ts";
 import { cn } from "@/lib/utils";
 
@@ -204,6 +206,7 @@ export function AppearanceSection() {
       )}
 
       {!editing && <FunBlock />}
+      {!editing && <PersonalityBlock />}
 
       {themes && !editing && (
         <>
@@ -360,6 +363,64 @@ function FunBlock() {
         </div>
       }
     />
+  );
+}
+
+/** Minimi's personality: empty keeps his usual one (hidden); text here replaces it. Saved with the collection. */
+function PersonalityBlock() {
+  const on = useFunMode();
+  const [saved, setSaved] = useState<string | null>(null);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api.settings().then((s: { minimi?: string }) => {
+      setSaved(s.minimi ?? "");
+      setText(s.minimi ?? "");
+    }, () => setSaved(""));
+  }, []);
+  if (!on || saved === null) return null;
+  const dirty = text.trim() !== saved.trim();
+  const save = async (v: string) => {
+    setBusy(true);
+    try {
+      const r = await api.saveSettings({ minimi: v.trim() });
+      setSaved(r.minimi ?? v.trim());
+      setText(r.minimi ?? v.trim());
+      toast.success(v.trim() ? "Minimi has a new personality" : "Minimi is back to his usual self");
+    } catch (e) {
+      toast.error("Couldn't save", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Block
+      title="Minimi's personality"
+      description={saved.trim() ? "Minimi answers the way you wrote here." : "Leave it empty and Minimi stays his usual self. Write how he should be, and he'll follow it instead."}
+    >
+      <Textarea
+        id="minimi-personality"
+        value={text}
+        maxLength={MINIMI_MAX}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="e.g. A grumpy old wizard who calls me “apprentice”, answers in two lines and secretly cares a lot."
+        className="min-h-24 text-[14px] md:text-[14px]"
+        aria-label="Minimi's personality"
+      />
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[12px] text-muted-foreground tabular-nums">{text.length > MINIMI_MAX * 0.8 ? `${text.length} / ${MINIMI_MAX}` : ""}</span>
+        <div className="flex gap-2">
+          {saved.trim() && (
+            <Button variant="ghost" size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => save("")}>
+              <RotateCcw className="size-4" />Usual Minimi
+            </Button>
+          )}
+          <Button size="sm" className="h-10 gap-1.5 md:h-8" disabled={!dirty || busy} onClick={() => save(text)}>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Save
+          </Button>
+        </div>
+      </div>
+    </Block>
   );
 }
 

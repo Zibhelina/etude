@@ -66,6 +66,7 @@ const INDEX: { g: GroupId; label: string; words: string; fold?: string }[] = [
   { g: "ai", label: "Vision model", words: "vision drawings images endpoint advanced", fold: "ai-endpoints" },
   { g: "appearance", label: "Theme", words: "theme dark light mode system night snow paper midnight colour color" },
   { g: "appearance", label: "Fun mode", words: "fun minimi cat mascot" },
+  { g: "appearance", label: "Minimi's personality", words: "minimi personality character behaviour behavior tone voice mascot prompt" },
   { g: "appearance", label: "Custom themes", words: "custom theme css editor import market" },
   { g: "data", label: "Backup", words: "backup download restore copy database" },
   { g: "data", label: "Import packs", words: "import anki apkg colpkg pack" },

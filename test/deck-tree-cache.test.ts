@@ -35,3 +35,37 @@ test("the deck tree is reused while nothing changes, and rebuilt after a review,
   t.mock.timers.setTime(Date.now() + 2_000);
   assert.notEqual(e.deckTree(), kept);
 });
+
+// The deck tree reads every card once and builds each deck's queue from its share; the counts must be the ones
+// each deck's own queue gives.
+test("the deck tree's counts match each deck's own queue", async (t) => {
+  const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "deck-tree-counts-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const e = await Etude.open(join(dir, "etude.db"), { home: join(dir, "home") });
+  t.after(() => e.close());
+  // Subdecks, one whose name differs only in case (SQLite's LIKE matches it as a subdeck), a tour, an adaptive deck.
+  const decks = ["Lang", "Lang::Words", "Lang::Words::Hard", "LANG::Upper", "Langs::Other", "Tour", "Course", "Course::Unit 1"];
+  let n = 0;
+  for (const deck of decks) for (let i = 0; i < 6; i++) e.upsertItem({ id: `c${n++}`, deck, type: "basic", fields: { front: `${deck} ${i}`, back: "a" }, tags: [] });
+  e.updateDeck("Tour", { config: { mode: "watch" } });
+  e.updateDeck("Course", { config: { adaptivePace: true } });
+  e.updateDeck("Lang", { config: { newPerDay: 4, reviewsPerDay: 2 } });
+  e.updateDeck("Lang::Words", { config: { newPerFace: { front: 1 } } });
+  // Today's answers count against the limits; some cards are due again, buried or suspended.
+  const card = (id: string) => e.item(id).cards[0].id;
+  const reviewed = ["c0", "c1", "c6", "c7", "c9", "c10", "c18", "c42"];
+  for (const id of reviewed) e.rate(card(id), 4, { at: new Date(Date.now() - 3 * 86400_000) });
+  e.setDue(reviewed.map(card), new Date(Date.now() - 3600_000));
+  for (const id of ["c0", "c6"]) e.rate(card(id), 1);
+  e.setBuried([card("c2"), card("c8")]);
+  e.setSuspended([card("c3"), card("c19")], true);
+  const keys = ["new", "learning", "learningSoon", "review", "doneToday", "nextDue"] as const;
+  for (const d of [...e.deckTree(), ...e.deckTree({ archived: true })]) {
+    if (!d.cards) continue;
+    const own = e.counts({ deck: d.name });
+    for (const k of keys) assert.deepEqual(d[k], own[k], `${d.name}: ${k}`);
+  }
+  const tree = e.deckTree();
+  assert.ok(tree.some((d) => d.review > 0) && tree.some((d) => d.new > 0) && tree.some((d) => d.learningSoon > 0), "the fixture has reviews, new cards and relearning");
+  assert.equal(tree.find((d) => d.name === "Lang")!.review, 0, "Lang's two reviews a day are used up");
+});

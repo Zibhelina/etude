@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { api, type Grade } from "@/lib/api";
 import { pageScheme, THEME_EVENT, useScheme } from "@/lib/theme";
 import { etudeFetch, isLocal } from "@/lib/transport";
+import { MEDIA_EVENT, MEDIA_STATE_EVENT, mediaPending } from "@/lib/sync";
 
 export interface CardResult {
   grade: Grade;
@@ -186,7 +187,7 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
       const p = latest.current;
       switch (msg.type) {
         case "loaded":
-          prefsFor(typeOfSrc(p.src)).then((prefs) => post({ type: "init", view: p.view, mode: p.mode ?? "answer", answer: p.answer ?? null, result: p.result ?? null, theme: theme(), screen: { height: screenHeight() }, prefs, morphFrom: p.morphFrom ?? null }));
+          prefsFor(typeOfSrc(p.src)).then((prefs) => post({ type: "init", view: p.view, mode: p.mode ?? "answer", answer: p.answer ?? null, result: p.result ?? null, theme: theme(), screen: { height: screenHeight() }, prefs, morphFrom: p.morphFrom ?? null, mediaPending: mediaPending() }));
           break;
         case "set-pref": {
           // Previews of unsaved types (raw HTML) have nowhere to keep preferences.
@@ -271,6 +272,18 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
     const onTheme = () => post({ type: "theme", theme: theme() });
     window.addEventListener(THEME_EVENT, onTheme);
     return () => window.removeEventListener(THEME_EVENT, onTheme);
+  }, [post]);
+  // Media files from another device arrived: the card asks again for the images and sounds it lacked. While
+  // files are on their way, a missing image shows that instead of a broken one.
+  useEffect(() => {
+    const onMedia = () => post({ type: "media" });
+    const onState = () => post({ type: "media-state", pending: mediaPending() });
+    window.addEventListener(MEDIA_EVENT, onMedia);
+    window.addEventListener(MEDIA_STATE_EVENT, onState);
+    return () => {
+      window.removeEventListener(MEDIA_EVENT, onMedia);
+      window.removeEventListener(MEDIA_STATE_EVENT, onState);
+    };
   }, [post]);
 
   return (

@@ -50,23 +50,23 @@ test("preferences sync between devices, each key on its own", async () => {
     for (const s of ss) {
       s.setup({ folder: join(dir, "shared") });
       await s.unlock({ password });
-      await s.now();
+      await s.now({waitMedia:true});
     }
     // Each device changes a different key before they meet: both changes survive.
     es[0].setTypePref("basic", "hero", "2-ribbon-sage");
     es[1].setTypePref("basic", "sound", false);
-    for (let n = 0; n < 2; n++) for (const s of ss) await s.now();
+    for (let n = 0; n < 2; n++) for (const s of ss) await s.now({waitMedia:true});
     for (const e of es) assert.deepEqual(e.typePrefs("basic"), { hero: "2-ribbon-sage", sound: false });
     // A later change on one device wins on the other.
     es[1].setTypePref("basic", "hero", "5-dragon-lord");
-    for (let n = 0; n < 2; n++) for (const s of ss) await s.now();
+    for (let n = 0; n < 2; n++) for (const s of ss) await s.now({waitMedia:true});
     assert.equal(es[0].typePrefs("basic").hero, "5-dragon-lord");
     // Removing a key, or resetting the type, reaches the other device and doesn't come back.
     es[0].setTypePref("basic", "sound", null);
-    for (let n = 0; n < 2; n++) for (const s of ss) await s.now();
+    for (let n = 0; n < 2; n++) for (const s of ss) await s.now({waitMedia:true});
     for (const e of es) assert.deepEqual(e.typePrefs("basic"), { hero: "5-dragon-lord" });
     es[1].resetTypePrefs("basic");
-    for (let n = 0; n < 2; n++) for (const s of ss) await s.now();
+    for (let n = 0; n < 2; n++) for (const s of ss) await s.now({waitMedia:true});
     for (const e of es) assert.deepEqual(e.typePrefs("basic"), {});
   } finally {
     for (const e of es) e.close();

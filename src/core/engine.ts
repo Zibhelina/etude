@@ -405,7 +405,13 @@ export class Etude {
   }
 
   close() {
+    for (const fn of this.closing.splice(0)) fn();
     this.db.close();
+  }
+  private closing: (() => void)[] = [];
+  /** Runs `fn` when the collection closes, before the database does (background work that should stop). */
+  onClose(fn: () => void) {
+    this.closing.push(fn);
   }
 
   /**
@@ -948,7 +954,7 @@ export class Etude {
     const sc: ScriptCard = { state: parse(card.sched_state ?? null, null), reps: card.reps, due: card.due, lastReview: card.last_review, created: card.created ?? card.due };
     const ctx: ScriptCtx = { now: iso(t), day: this.dayStarts(t), doneToday, history: history.map((h) => ({ at: h.ts, rating: h.rating || null, score: h.score })) };
     try {
-      return runSchedule(def, sc, attempt, resolveOptions(def, cfg.schedulerOptions), ctx);
+      return runSchedule(def, sc, attempt, resolveOptions(def, cfg.schedulerOptions), ctx, sched.cardKey(card));
     } catch (e) {
       if (e instanceof SchedulerError || e instanceof ScriptError) throw new EtudeError(`scheduler "${def.id}": ${e.message}`);
       throw e;
@@ -1218,7 +1224,7 @@ export class Etude {
         };
         this.replayCards(
           this.db
-            .all(`SELECT c.id, c.item_id, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE i.type = ?`, clean.id)
+            .all(`SELECT c.*, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE i.type = ?`, clean.id)
             .filter((c) => follows(c.deck)),
         );
       }
@@ -2901,7 +2907,7 @@ export class Etude {
   }
 
   /**
-   * Canonical sync replay uses UTC study days, a stable review tie-break and no FSRS fuzz. Without a scope
+   * Canonical sync replay uses UTC study days, a stable review tie-break, and FSRS fuzz seeded by the card and review number. Without a scope
    * every card is replayed from its first review. A scope maps card ids to the earliest changed review
    * (time, sync id), or null for "from the first review": a card whose changes all come after the last
    * review it was replayed to continues from the state saved then (`sync_replay`).
@@ -2920,7 +2926,7 @@ export class Etude {
     for (const c of cards) {
       const ck = `${c.deck}\u0000${c.type}`;
       if (!configs.has(ck)) {
-        const cfg = { ...this.cardConfig(c.deck, c.type), enableFuzz: false };
+        const cfg = this.cardConfig(c.deck, c.type);
         configs.set(ck, { cfg, script: this.scriptFor(cfg) });
       }
       const { cfg, script } = configs.get(ck)!;
@@ -2950,8 +2956,10 @@ export class Etude {
             if (start > new Date(r.ts)) start.setUTCDate(start.getUTCDate()-1);
             const day = Array.from({length:DAY_HORIZON+1},(_,i) => new Date(start.getTime()+i*86400_000).toISOString());
             const past = history.slice(-50);
-            const out = runSchedule(script,{state:parse(row.sched_state,null),reps:row.reps,due:row.due,lastReview:row.last_review,created:c.created},{rating:script.ratings === false ? null : r.rating || null,score:r.score,verdict:g?.verdict ?? null,details:g?.details ?? null,ms:r.duration_ms,at:r.ts},resolveOptions(script,cfg.schedulerOptions),{now:r.ts,day,doneToday:past.filter(h=>h.at>=day[0]).length,history:past});
-            row = {...row,state:2,due:out.due,reps:row.reps+1,lapses:row.lapses+(r.rating===1?1:0),last_review:r.ts,sched_state:json(out.state)};
+            const out = runSchedule(script,{state:parse(row.sched_state,null),reps:row.reps,due:row.due,lastReview:row.last_review,created:c.created},{rating:script.ratings === false ? null : r.rating || null,score:r.score,verdict:g?.verdict ?? null,details:g?.details ?? null,ms:r.duration_ms,at:r.ts},resolveOptions(script,cfg.schedulerOptions),{now:r.ts,day,doneToday:past.filter(h=>h.at>=day[0]).length,history:past},sched.cardKey(c as CardRow));
+            // The day counts rate() keeps for a script's card.
+            const days = (a: string | null, b: string) => (a ? Math.max(0, (Date.parse(b) - Date.parse(a)) / 86400_000) : 0);
+            row = {...row,state:2,due:out.due,elapsed_days:days(row.last_review,r.ts),scheduled_days:days(r.ts,out.due),reps:row.reps+1,lapses:row.lapses+(r.rating===1?1:0),last_review:r.ts,sched_state:json(out.state)};
           } else row = {...row,...sched.schedule(row,r.rating || sched.suggestRating(r.score,cfg) || 3,new Date(r.ts),cfg).next};
           history.push({at:r.ts,rating:r.rating || null,score:r.score});
           if (history.length > 100) history = history.slice(-50);
@@ -2969,23 +2977,29 @@ export class Etude {
   /** Recomputes cards from their review history with the current settings, e.g. after changing retention. */
   reschedule(scope: StudyScope = {}) {
     const { where, params } = this.scopeWhere({ ...scope });
-    return this.replayCards(this.db.all(`SELECT c.id, c.item_id, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${where.replace("c.suspended = 0", "1")}`, ...params));
+    return this.replayCards(this.db.all(`SELECT c.*, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${where.replace("c.suspended = 0", "1")}`, ...params));
   }
 
   private replayCards(cards: Row[]) {
     let n = 0;
+    // In a synced collection, follow the sync replay: tied reviews in sync-id order, and history from a card's reset on.
+    const synced = !!this.db.get("SELECT 1 FROM sqlite_master WHERE name='sync_control'");
     this.db.tx(() => {
       for (const c of cards) {
+        const reset: string | null = synced ? (c.sync_reset ?? null) : null;
         const reviews = this.db.all<{ ts: string; rating: number; score: number | null; duration_ms: number | null; grade: string | null }>(
-          "SELECT r.ts, r.rating, r.score, r.duration_ms, a.grade FROM reviews r LEFT JOIN attempts a ON a.id = r.attempt_id WHERE r.card_id = ? AND r.practice = 0 ORDER BY r.ts",
+          `SELECT r.ts, r.rating, r.score, r.duration_ms, a.grade FROM reviews r LEFT JOIN attempts a ON a.id = r.attempt_id WHERE r.card_id = ? AND r.practice = 0 AND (? IS NULL OR r.ts > ?) ORDER BY r.ts${synced ? ", r.sync_id" : ""}`,
           c.id,
+          reset,
+          reset,
         );
         if (!reviews.length) continue;
+        const start = new Date(reset ?? c.created);
         const cfg = this.cardConfig(c.deck, c.type);
         const script = this.scriptFor(cfg);
         if (script) {
           // Same script, same history: run it again answer by answer.
-          let row: CardRow = { ...(sched.emptyCard(new Date(c.created)) as any), id: c.id, item_id: c.item_id, face: "", suspended: 0, buried_until: null, sched_state: null };
+          let row: CardRow = { ...(sched.emptyCard(start) as any), id: c.id, item_id: c.item_id, face: c.face, sync_id: c.sync_id, suspended: 0, buried_until: null, sched_state: null };
           // runScheduler reads earlier results from the table, so each step looks just before its own review.
           for (const r of reviews) {
             const g = parse<Grade | null>(r.grade, null);
@@ -3000,7 +3014,7 @@ export class Etude {
         } else {
           // A drill's unrated answers count as the rating their score suggests.
           const rated = reviews.map((r) => ({ ts: r.ts, rating: r.rating >= 1 ? r.rating : (sched.suggestRating(r.score, cfg) ?? 3) }));
-          const s = sched.replay(rated, new Date(c.created), cfg);
+          const s = sched.replay(rated, start, cfg, sched.cardKey(c as CardRow));
           this.db.run(
             "UPDATE cards SET state = ?, due = ?, stability = ?, difficulty = ?, elapsed_days = ?, scheduled_days = ?, reps = ?, lapses = ?, learning_steps = ?, last_review = ?, sched_state = NULL WHERE id = ?",
             s.state, s.due, s.stability, s.difficulty, s.elapsed_days, s.scheduled_days, s.reps, s.lapses, s.learning_steps, s.last_review, c.id,
@@ -3106,7 +3120,7 @@ export class Etude {
       out.applied = true;
       if (opts.reschedule) {
         out.rescheduled = this.replayCards(
-          this.db.all(`SELECT c.id, c.item_id, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE d.id IN (${marks})`, ...ids),
+          this.db.all(`SELECT c.*, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE d.id IN (${marks})`, ...ids),
         ).rescheduled;
       }
     }

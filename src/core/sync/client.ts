@@ -162,8 +162,10 @@ export class SyncClient {
       const page=await t.pull(cursor);this.moved(page.events.reduce((n,e)=>n+e.ciphertext.length,0));
       // A folder hands back every event each time: only new ones are decrypted, applied, and call for a rebuild.
       const fresh=page.events.filter(event=>!db.get("SELECT 1 FROM sync_events WHERE id=?",event.id));
-      for(const event of fresh)receive(db,event.id,await decryptEvent<Change>(key,event.id,event.ciphertext));this.received+=fresh.length;
-      cursor=page.cursor;more=page.more;this.set("cursor",cursor);
+      // Decrypting is the asynchronous part. The page then goes in with its cursor in one transaction.
+      const plain=await Promise.all(fresh.map(async event=>({id:event.id,event:await decryptEvent<Change>(key,event.id,event.ciphertext)})));
+      db.tx(()=>{for(const p of plain)receive(db,p.id,p.event);this.set("cursor",page.cursor);});
+      this.received+=fresh.length;cursor=page.cursor;more=page.more;
     }
     // Hash the media on disk first, so a file another device already uploaded is neither downloaded nor uploaded again.
     const files:[string,string][]=[];

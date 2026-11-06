@@ -15,7 +15,6 @@ const mode = (p: string) => statSync(p).mode & 0o777;
 
 test("the collection is its owner's only: database 0600 (its -wal too), the Etude home and media 0700", { skip: process.platform === "win32" }, async (t) => {
   const home = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-private-"));
-  t.after(() => rmSync(home, { recursive: true, force: true }));
   const e = await Etude.open(join(home, "etude.db"), { home });
   e.importPack({ etude: "pack/1", name: "P", decks: [{ name: "P" }], items: [{ id: "p1", type: "basic", deck: "P", fields: { front: "Q", back: "A" } }] });
   assert.equal(mode(join(home, "etude.db")), 0o600);
@@ -27,16 +26,22 @@ test("the collection is its owner's only: database 0600 (its -wal too), the Etud
   chmodSync(join(home, "etude.db"), 0o644);
   chmodSync(home, 0o755);
   const again = await Etude.open(join(home, "etude.db"), { home });
-  t.after(() => again.close());
+  t.after(() => {
+    again.close();
+    rmSync(home, { recursive: true, force: true });
+  });
   assert.equal(mode(join(home, "etude.db")), 0o600);
   assert.equal(mode(home), 0o700);
 });
 
 test("a card type's own script failing answers 422 with its message and isn't sent as an error report", async (t) => {
   const home = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-scripterr-"));
-  t.after(() => rmSync(home, { recursive: true, force: true }));
   const e = await Etude.open(join(home, "etude.db"), { home });
-  t.after(() => e.close());
+  // Closed before the folder goes: Windows won't delete an open database.
+  t.after(() => {
+    e.close();
+    rmSync(home, { recursive: true, force: true });
+  });
   e.importPack({
     etude: "pack/1",
     name: "Broken",

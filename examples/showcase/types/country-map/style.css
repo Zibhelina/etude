@@ -1,53 +1,80 @@
-.cm-head { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: -0.4rem; }
-.cm-eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted-foreground); }
-.cm-ask { font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; }
+/* Etude 3 card look, as in the Design Lab round 06: a grey tracked eyebrow. The verdict pill comes from the study screen. */
+.c3-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted-foreground); }
 
-.cm-stage { position: relative; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
-.cm-svg { display: block; width: 100%; height: 360px; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+/* Map colours: a soft sea, white land with a drop shadow (dark grey at night), blue for your pick,
+   green for the answer, red for a wrong pick. */
+:root {
+  --cm-sea: light-dark(#e3e9ec, #1a1c1d); --cm-seaedge: light-dark(#d6dde1, #262829); --cm-seavig: light-dark(rgba(70, 90, 100, 0.12), rgba(0, 0, 0, 0.45));
+  --cm-land: light-dark(#ffffff, #363636); --cm-landh: light-dark(#efefed, #3d3d3d); --cm-other: light-dark(#f4f6f7, #2c2e2f); --cm-border: light-dark(#c6c6c2, #181818);
+  --cm-grat: light-dark(rgba(60, 80, 90, 0.12), rgba(255, 255, 255, 0.05)); --cm-lsh: light-dark(rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.5));
+  --cm-pick: light-dark(#3d7fd1, #5b9be6); --cm-right: #3fae52; --cm-wrong: #d06048; --cm-edge: light-dark(#ffffff, #111111);
+  --cm-surface: light-dark(#ffffff, #222222); --cm-hover: light-dark(#efefed, #2a2a2a); --cm-line: light-dark(#e9e9e6, #333333); --cm-shadow: light-dark(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.45));
+}
+
+/* The question and, after checking, the facts on the right. */
+.cm-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px 20px; flex-wrap: wrap; }
+.cm-titles { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.cm-ask { font: 400 40px/1.18 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; margin-top: 8px; letter-spacing: -0.005em; }
+.cm-facts { display: flex; flex-wrap: wrap; gap: 6px 28px; font-size: 16px; animation: cm-fade 0.4s 0.6s backwards; }
+.cm-facts small { display: block; font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 2px; }
+@keyframes cm-fade { 0% { opacity: 0; transform: translateY(4px); } 100% { opacity: 1; transform: none; } }
+
+/* The sheet */
+.cm-stage { position: relative; border-radius: 18px; overflow: hidden; background: var(--cm-sea); box-shadow: inset 0 0 0 1px var(--cm-seaedge), inset 0 0 80px var(--cm-seavig); }
+.cm-svg { display: block; width: 100%; height: 420px; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
 .cm-svg.panning { cursor: grabbing; }
 .cm-svg.done { cursor: default; }
 .cm-svg:focus { outline: none; }
-.cm-sea { fill: color-mix(in oklab, var(--foreground) 3%, var(--card, var(--background))); }
+.cm-grat { fill: none; stroke: var(--cm-grat); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.cm-eq { fill: none; stroke: var(--cm-grat); stroke-width: 1.6px; stroke-dasharray: 6 6; vector-effect: non-scaling-stroke; }
+#cm-lsh feDropShadow { flood-color: var(--cm-lsh); flood-opacity: 1; }
 
-.cm-land path { fill: color-mix(in oklab, var(--foreground) 17%, var(--card, var(--background))); stroke: var(--card, var(--background)); stroke-width: 0.7px; vector-effect: non-scaling-stroke; stroke-linejoin: round; transition: fill 0.12s; }
-.cm-land path.other { fill: color-mix(in oklab, var(--foreground) 11%, var(--card, var(--background))); }
-:is([data-face="locate"], [data-face="capital-of"]) .cm-svg:not(.done) .cm-land path:not(.other):not(.picked):hover { fill: color-mix(in oklab, var(--foreground) 30%, var(--card, var(--background))); }
-.cm-land path.target { fill: var(--highlight); stroke: color-mix(in oklab, var(--highlight) 60%, var(--foreground)); stroke-width: 1px; }
-.cm-land path.picked { fill: var(--highlight); stroke: var(--foreground); stroke-width: 1.2px; }
-.cm-land path.right, .cm-land path.answer { fill: var(--success); stroke: color-mix(in oklab, var(--success) 50%, var(--foreground)); stroke-width: 1.2px; }
-.cm-land path.wrong { fill: var(--danger); stroke: color-mix(in oklab, var(--danger) 50%, var(--foreground)); stroke-width: 1.2px; }
+.cm-land path { fill: var(--cm-land); stroke: var(--cm-border); stroke-width: 0.8px; vector-effect: non-scaling-stroke; stroke-linejoin: round; transition: fill 0.12s; }
+.cm-land path.other { fill: var(--cm-other); }
+:is([data-face="locate"], [data-face="capital-of"]) .cm-svg:not(.done) .cm-land path:not(.other):not(.picked):hover { fill: var(--cm-landh); }
+.cm-land path.target, .cm-land path.picked { fill: var(--cm-pick); stroke: var(--cm-edge); stroke-width: 1.6px; }
+.cm-land path.right, .cm-land path.answer { fill: var(--cm-right); stroke: var(--cm-edge); stroke-width: 1.6px; }
+.cm-land path.wrong { fill: var(--cm-wrong); stroke: var(--cm-edge); stroke-width: 1.6px; }
 
-.cm-dots .dot { fill: color-mix(in oklab, var(--foreground) 32%, transparent); stroke: var(--card, var(--background)); stroke-width: 1px; vector-effect: non-scaling-stroke; }
-.cm-dots .dot.hot { fill: var(--highlight); stroke: var(--foreground); }
-.cm-dots .dot.right, .cm-dots .dot.answer { fill: var(--success); }
-.cm-dots .dot.wrong { fill: var(--danger); }
-.cm-marks .ring { fill: none; stroke: var(--highlight); stroke-width: 1.6px; vector-effect: non-scaling-stroke; stroke-dasharray: 3 3; }
-[data-mode="result"] .cm-marks .ring { stroke: var(--success); stroke-dasharray: none; stroke-width: 2px; }
-[data-mode="result"] .cm-marks .ring.wrong { stroke: var(--danger); }
-.cm-marks .lbl { font-family: var(--font-sans); font-weight: 600; fill: var(--foreground); paint-order: stroke; stroke: color-mix(in oklab, var(--card, var(--background)) 92%, transparent); stroke-width: 4px; vector-effect: non-scaling-stroke; stroke-linejoin: round; pointer-events: none; }
+.cm-dots .dot { fill: color-mix(in srgb, var(--foreground) 32%, transparent); stroke: var(--cm-edge); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.cm-dots .dot.hot { fill: var(--cm-pick); }
+.cm-dots .dot.right, .cm-dots .dot.answer { fill: var(--cm-right); }
+.cm-dots .dot.wrong { fill: var(--cm-wrong); }
+.cm-marks .ring { fill: none; stroke: var(--cm-pick); stroke-width: 1.6px; vector-effect: non-scaling-stroke; stroke-dasharray: 3 3; }
+[data-mode="result"] .cm-marks .ring { stroke: var(--cm-right); stroke-dasharray: none; stroke-width: 2px; }
+[data-mode="result"] .cm-marks .ring.wrong { stroke: var(--cm-wrong); }
+.cm-marks .lbl { font-family: var(--font-sans); font-weight: 600; fill: var(--foreground); paint-order: stroke; stroke: color-mix(in srgb, var(--cm-land) 92%, transparent); stroke-width: 4px; vector-effect: non-scaling-stroke; stroke-linejoin: round; pointer-events: none; }
 .cm-marks .lbl.wrong { font-weight: 500; }
-
-.cm-zoom { position: absolute; right: 0.5rem; top: 0.5rem; display: flex; flex-direction: column; gap: 0.3rem; }
-.cm-zoom button { width: 2.25rem; height: 2.25rem; border-radius: calc(var(--radius) - 2px); border: 1px solid var(--border); background: color-mix(in oklab, var(--card, var(--background)) 88%, transparent); color: var(--foreground); font: 600 1rem/1 var(--font-sans); cursor: pointer; display: grid; place-items: center; padding: 0; }
-.cm-zoom button:hover { background: var(--secondary); }
-.cm-zoom button:focus { outline: none; }
-.cm-zoom button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
-
-.cm-input { font-size: 1.1rem; }
-.cm-input.is-close { border-color: var(--warning); }
-.cm-status { margin: -0.5rem 0 0; font-size: 0.95rem; color: var(--muted-foreground); }
-.cm-hint { margin: -0.7rem 0 0; font-size: 0.8rem; color: var(--muted-foreground); }
-.cm-name { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.01em; }
-.cm-official { color: var(--muted-foreground); margin-top: -0.6rem; }
-.cm-facts { display: flex; flex-wrap: wrap; gap: 0.4rem 1.4rem; font-size: 0.95rem; }
-.cm-facts .e-label { margin-right: 0.35rem; }
-@media (max-width: 480px) { .cm-ask { font-size: 1.6rem; } .cm-zoom button { width: 2.75rem; height: 2.75rem; } }
-
-[data-face="capital-of"][data-mode="answer"] .cm-hint { display: none; }
-
-.cm-marks .cap { fill: var(--foreground); stroke: var(--card, var(--background)); stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.cm-marks .cap { fill: var(--foreground); stroke: var(--cm-land); stroke-width: 1.5px; vector-effect: non-scaling-stroke; pointer-events: none; }
 .cm-marks .cap-label { font-weight: 500; }
 
-/* Etude 3 look: a quiet grey eyebrow and the question in the study serif, as in the Design Lab. */
-.sc-eyebrow + .prose, .sc-eyebrow + .uc-prompt .uc-ask, .sc-eyebrow + .bt-ask, .sp-title, .wk-prompt, .cm-ask { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.005em; }
-.sc-eyebrow + .prose code, .wk-prompt code { font-size: 0.8em; }
+/* One zoom pill in the corner. */
+.cm-zoom { position: absolute; right: 14px; top: 14px; display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; background: var(--cm-surface); box-shadow: 0 2px 8px var(--cm-shadow); }
+.cm-zoom button { all: unset; cursor: pointer; width: 40px; height: 38px; color: var(--foreground); display: grid; place-items: center; font: 400 19px/1 var(--font-sans); }
+.cm-zoom button:hover { background: var(--cm-hover); }
+.cm-zoom button + button { box-shadow: 0 -1px 0 var(--cm-line); }
+.cm-zoom button:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.cm-zoom .cm-home { font-size: 17px; }
+
+/* Typed faces: an underline field, as on the typed cards. */
+.cm-input { font: 24px var(--font-sans); border: 0; border-bottom: 2px solid var(--cm-line); background: transparent; color: var(--foreground); width: min(70%, 520px); margin: 0 auto; padding: 8px; outline: none; border-radius: 0; }
+.cm-input:focus { border-bottom-color: var(--foreground); }
+.cm-input::placeholder { color: var(--muted-foreground); opacity: 0.6; }
+.cm-input:disabled { opacity: 1; }
+.cm-input.is-correct { border-bottom-color: var(--cm-right) !important; background: transparent !important; }
+.cm-input.is-close { border-bottom-color: var(--warning) !important; }
+.cm-input.is-wrong { border-bottom-color: var(--cm-wrong) !important; background: transparent !important; text-decoration: line-through; color: light-dark(#a1382a, #f0937e); }
+.cm-hint { margin: -6px 0 0; text-align: center; font-size: 15px; color: var(--muted-foreground); min-height: 20px; }
+.cm-hint:empty { visibility: hidden; }
+.cm-note { margin: -8px 0 0; text-align: center; font-size: 14px; color: var(--muted-foreground); }
+
+@media (max-width: 520px) {
+  .cm-ask { font-size: 30px; }
+  .cm-stage { border-radius: 16px; }
+  .cm-zoom { right: 10px; top: 10px; }
+  .cm-zoom button { width: 44px; height: 42px; }
+  .cm-facts { gap: 6px 22px; font-size: 15px; }
+  .cm-input { width: 90%; font-size: 21px; }
+  .cm-hint { font-size: 14px; }
+}
+@media (prefers-reduced-motion: reduce) { .cm-facts { animation: none; } }

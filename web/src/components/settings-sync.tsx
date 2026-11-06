@@ -12,8 +12,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Block, Field, Section } from "@/components/settings-ui";
 import { relative } from "@/lib/api";
 import { etudeFetch } from "@/lib/transport";
+import { shareStatus } from "@/lib/sync";
 import { cn } from "@/lib/utils";
-import { ACCOUNT_EVENT } from "@/components/settings-account";
+import { ACCOUNT_EVENT, SecondStep } from "@/components/settings-account";
 import { account, AccountApiError, bytes, openOutside, type AccountStatus } from "@/lib/account";
 import { hasWebPortal, storageNote, storeSource } from "@/lib/billing-ui";
 import { canShowPurchases, desktopApp, isNativeApp, storeSafeMessage } from "@/lib/platform";
@@ -41,9 +42,14 @@ export interface SyncStatus {
   lastSync: string | null;
   error: string | null;
   pending: number;
+  /** The collection's sync: decks, items, cards, history and card type assets. */
   busy: boolean;
-  /** While a sync runs. */
+  /** While the collection syncs. */
   progress: SyncProgress | null;
+  /** Events from other devices since the app started. */
+  received?: number;
+  /** Media files, which follow the collection in the background. `received` counts the files written from other devices. */
+  media?: { active: boolean; progress: SyncProgress | null; error: string | null; received: number };
 }
 
 /** download and upload count bytes; check counts media files. The total is null when it isn't known ahead. */
@@ -105,6 +111,8 @@ export function SyncSection() {
   const [useRecovery, setUseRecovery] = useState(false);
   const [recoveryInput, setRecoveryInput] = useState("");
   const [codeSent, setCodeSent] = useState(false);
+  // Two-step sign-in: the email code went through, the authenticator (or a recovery code) is next.
+  const [second, setSecond] = useState<string[] | null>(null);
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
   const [recoveryConfirmed, setRecoveryConfirmed] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -166,12 +174,18 @@ export function SyncSection() {
     setEmail(status.email ?? "");
   }, [status]);
 
-  // A running sync is reported by status; look again until it settles.
+  // The app watches media that comes in after a sync started here.
   useEffect(() => {
-    if (!status?.busy) return;
+    if (status) shareStatus(status);
+  }, [status]);
+
+  // A running sync, or media still coming in, is reported by status; look again until it settles.
+  const mediaActive = !!status?.media?.active;
+  useEffect(() => {
+    if (!status?.busy && !mediaActive) return;
     const t = window.setInterval(() => void load(true), 1000);
     return () => window.clearInterval(t);
-  }, [status?.busy, load]);
+  }, [status?.busy, mediaActive, load]);
 
   // Storage used changes with each sync.
   useEffect(() => {
@@ -235,20 +249,23 @@ export function SyncSection() {
       setError("Enter the code from the email.");
       return;
     }
-    const s = await withBusy("verify", () => callSync<SyncStatus>("POST", "/api/sync/verify", { code: c }));
+    const s = await withBusy("verify", () => callSync<SyncStatus & { secondStep?: { methods: string[] } }>("POST", "/api/sync/verify", { code: c }));
     setCode("");
-    if (s) {
-      setStatus(s);
-      if (s.signedIn) {
-        // Signed in again to change the password: back to where that was.
-        if (reauth === "unprotect") setConfirmUnprotect(true);
-        setReauth(false);
-        setCodeSent(false);
-        setAcctLoaded(false);
-        await loadAccount();
-        window.dispatchEvent(new Event(ACCOUNT_EVENT));
-      }
-    }
+    if (s?.secondStep) return setSecond(s.secondStep.methods);
+    if (s) await signedIn(s);
+  };
+
+  const signedIn = async (s: SyncStatus) => {
+    setStatus(s);
+    if (!s.signedIn) return;
+    // Signed in again to change the password: back to where that was.
+    if (reauth === "unprotect") setConfirmUnprotect(true);
+    setReauth(false);
+    setCodeSent(false);
+    setSecond(null);
+    setAcctLoaded(false);
+    await loadAccount();
+    window.dispatchEvent(new Event(ACCOUNT_EVENT));
   };
 
   /** The first step in one go: connect to the server (or folder), then send the code. */
@@ -388,6 +405,7 @@ export function SyncSection() {
       setStatus(s);
       setReauth(false);
       setCodeSent(false);
+      setSecond(null);
       setCode("");
       setPassword("");
       setConfirm("");
@@ -565,7 +583,23 @@ export function SyncSection() {
             </form>
           )}
 
-          {stage === "code" && (
+          {stage === "code" && second && (
+            <div className="flex flex-col gap-4">
+              <StepTitle title="One more step" lead="Two-step sign-in is on for this account." />
+              <SecondStep
+                methods={second}
+                onSubmit={async (input) => void (await signedIn(await callSync<SyncStatus>("POST", "/api/sync/second-factor", input)))}
+                onRestart={() => {
+                  setSecond(null);
+                  setCodeSent(false);
+                  setCode("");
+                  setError(null);
+                }}
+              />
+            </div>
+          )}
+
+          {stage === "code" && !second && (
             <form
               className="flex flex-col gap-4"
               onSubmit={(e) => {
@@ -793,6 +827,17 @@ export function SyncSection() {
             </div>
             {problem && !protecting && <Notice>{problem}</Notice>}
             {syncing && status.progress && <ProgressRow p={status.progress} />}
+            {!syncing && status.media?.active && (
+              <div className="flex flex-col gap-1.5" data-sync-media="active">
+                <span className="text-sm">Your collection is up to date. Media files are still coming in.</span>
+                {status.media.progress && <ProgressRow p={status.media.progress} label="Media sync progress" />}
+              </div>
+            )}
+            {!syncing && !status.media?.active && status.media?.error && (
+              <p className="text-sm text-muted-foreground" data-sync-media="error">
+                Some media files didn't sync ({storeSafeMessage(status.media.error)}). They'll be tried again on the next sync.
+              </p>
+            )}
             <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-sm">
               <dt className="text-muted-foreground">Last sync</dt>
               <dd>
@@ -1181,7 +1226,7 @@ function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(
 
 const STEP: Record<SyncProgress["step"], string> = { download: "Downloading", check: "Checking media", upload: "Uploading", apply: "Applying changes" };
 
-function ProgressRow({ p }: { p: SyncProgress }) {
+function ProgressRow({ p, label = "Sync progress" }: { p: SyncProgress; label?: string }) {
   const transfer = p.step === "download" || p.step === "upload";
   // The download total is the server's estimate, so it never claims 100% before the step ends.
   const pct = p.total ? Math.min(p.step === "download" ? 99 : 100, Math.floor((p.done / p.total) * 100)) : null;
@@ -1193,7 +1238,7 @@ function ProgressRow({ p }: { p: SyncProgress }) {
   const rate = transfer && p.rate > 0 ? `${p.step === "download" ? "↓" : "↑"} ${bytes(p.rate)}/s` : "";
   return (
     <div className="flex flex-col gap-1.5" data-sync-progress={p.step}>
-      <div className="h-1.5 w-full max-w-72 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Sync progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined}>
+      <div className="h-1.5 w-full max-w-72 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined}>
         <div className={cn("h-full rounded-full bg-highlight transition-[width] duration-700", pct === null && "w-1/3 animate-pulse")} style={pct === null ? undefined : { width: `${Math.max(pct, 1.5)}%` }} />
       </div>
       <span className="tabular-nums text-muted-foreground">{[STEP[p.step] + (pct === null ? "" : ` ${pct}%`), detail, rate].filter(Boolean).join(" · ")}</span>

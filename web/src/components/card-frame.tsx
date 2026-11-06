@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { api, type Grade } from "@/lib/api";
 import { pageScheme, THEME_EVENT, useScheme } from "@/lib/theme";
 import { etudeFetch, isLocal } from "@/lib/transport";
+import { MEDIA_EVENT, MEDIA_STATE_EVENT, mediaPending } from "@/lib/sync";
 
 export interface CardResult {
   grade: Grade;
@@ -17,8 +18,11 @@ export interface CardResult {
 export interface CardFrameHandle {
   /** Ask the card for its current answer; it replies through `onSubmit`. */
   collect(): void;
-  showResult(result: CardResult): void;
+  /** Show the graded result. The card animates from its answer to it unless `morph` is false. */
+  showResult(result: CardResult, opts?: { morph?: boolean }): void;
   focus(): void;
+  /** Where the card's pieces are now, to hand to another frame as `morphFrom` (null when there's nothing to animate). */
+  snapshot(): Promise<unknown[] | null>;
 }
 
 interface Props {
@@ -39,6 +43,14 @@ interface Props {
   fitScreen?: boolean;
   /** Pixels kept free under the card when fitting the screen (default 16), e.g. for a button. */
   fitMargin?: number;
+  /** Height to start at instead of `minHeight`, e.g. the frame this one replaces. */
+  initialHeight?: number;
+  /** A `snapshot()` of the frame this one replaces: the card animates from it once mounted. */
+  morphFrom?: unknown[] | null;
+  onMounted?(): void;
+  onSize?(height: number): void;
+  /** The card animated into its result; `leaving` when some pieces went away (new ones then wait a beat). */
+  onMorph?(leaving: boolean): void;
   onSubmit?(answer: unknown): void;
   onReady?(ready: boolean): void;
   onKey?(key: string): void;
@@ -90,7 +102,8 @@ function theme() {
 
 export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(props, ref) {
   const iframe = useRef<HTMLIFrameElement>(null);
-  const [height, setHeight] = useState(props.minHeight ?? 120);
+  const [height, setHeight] = useState(props.initialHeight ?? props.minHeight ?? 120);
+  const snaps = useRef(new Map<number, (leaves: unknown[] | null) => void>());
   const [loaded, setLoaded] = useState(false);
   const latest = useRef(props);
   latest.current = props;
@@ -151,11 +164,18 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
 
   useImperativeHandle(ref, () => ({
     collect: () => post({ type: "collect" }),
-    showResult: (result) => post({ type: "result", result }),
+    showResult: (result, opts) => post({ type: "result", result, morph: opts?.morph }),
     focus: () => {
       iframe.current?.focus();
       post({ type: "focus" });
     },
+    snapshot: () => new Promise((resolve) => {
+      const req = Math.random();
+      const done = (leaves: unknown[] | null) => { snaps.current.delete(req); resolve(leaves); };
+      snaps.current.set(req, done);
+      post({ type: "snapshot", req });
+      setTimeout(() => done(null), 200);
+    }),
   }), [post]);
 
   useEffect(() => {
@@ -167,7 +187,7 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
       const p = latest.current;
       switch (msg.type) {
         case "loaded":
-          prefsFor(typeOfSrc(p.src)).then((prefs) => post({ type: "init", view: p.view, mode: p.mode ?? "answer", answer: p.answer ?? null, result: p.result ?? null, theme: theme(), screen: { height: screenHeight() }, prefs }));
+          prefsFor(typeOfSrc(p.src)).then((prefs) => post({ type: "init", view: p.view, mode: p.mode ?? "answer", answer: p.answer ?? null, result: p.result ?? null, theme: theme(), screen: { height: screenHeight() }, prefs, morphFrom: p.morphFrom ?? null, mediaPending: mediaPending(), focus: p.autoFocus !== false }));
           break;
         case "set-pref": {
           // Previews of unsaved types (raw HTML) have nowhere to keep preferences.
@@ -180,13 +200,24 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
         }
         case "mounted":
           setLoaded(true);
+          p.onMounted?.();
           if ((p.mode ?? "answer") === "answer" && p.autoFocus !== false) {
             iframe.current?.focus();
             post({ type: "focus" });
           }
           break;
         case "size":
-          if (typeof msg.height === "number") setHeight(Math.max(p.minHeight ?? 60, Math.min(msg.height + 4, 6000)));
+          if (typeof msg.height === "number") {
+            const h = Math.max(p.minHeight ?? 60, Math.min(msg.height + 4, 6000));
+            setHeight(h);
+            p.onSize?.(h);
+          }
+          break;
+        case "morph":
+          p.onMorph?.(!!msg.leaving);
+          break;
+        case "snapshot":
+          snaps.current.get(msg.req)?.(Array.isArray(msg.leaves) ? msg.leaves : null);
           break;
         case "submit":
           p.onSubmit?.(msg.answer);
@@ -212,6 +243,13 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
             post({ type: "bytes", req, error: "not allowed" });
             break;
           }
+          // A card reads its own type's assets, not another type's (an unsaved preview has no type to hold it to).
+          const assetType = /^\/type-assets\/([^/?#]+)\//.exec(path)?.[1];
+          const own = typeOfSrc(p.src);
+          if (assetType && own && decodeURIComponent(assetType) !== own) {
+            post({ type: "bytes", req, error: "not allowed" });
+            break;
+          }
           etudeFetch(path)
             .then(async (r) => {
               const body = await r.arrayBuffer();
@@ -234,6 +272,18 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
     const onTheme = () => post({ type: "theme", theme: theme() });
     window.addEventListener(THEME_EVENT, onTheme);
     return () => window.removeEventListener(THEME_EVENT, onTheme);
+  }, [post]);
+  // Media files from another device arrived: the card asks again for the images and sounds it lacked. While
+  // files are on their way, a missing image shows that instead of a broken one.
+  useEffect(() => {
+    const onMedia = () => post({ type: "media" });
+    const onState = () => post({ type: "media-state", pending: mediaPending() });
+    window.addEventListener(MEDIA_EVENT, onMedia);
+    window.addEventListener(MEDIA_STATE_EVENT, onState);
+    return () => {
+      window.removeEventListener(MEDIA_EVENT, onMedia);
+      window.removeEventListener(MEDIA_STATE_EVENT, onState);
+    };
   }, [post]);
 
   return (

@@ -1,6 +1,27 @@
 // FSRS-6 scheduling with per-deck presets, exam deadlines and replayable history.
-import { fsrs, generatorParameters, type Card as FsrsCard, type Grade as FsrsGrade, type FSRS } from "ts-fsrs";
+import { fsrs, generatorParameters, StrategyMode, type AbstractScheduler, type Card as FsrsCard, type Grade as FsrsGrade, type FSRS } from "ts-fsrs";
 import { DEFAULT_PRESET, type CardRow, type PresetConfig, type Rating } from "./model.ts";
+
+/** A card's identity: its sync key, or the [item, face] pair a sync key is made from (the same text as SQLite's json_array). */
+export function cardKey(row: { item_id: string; face: string; sync_id?: string | null }): string {
+  return row.sync_id ?? JSON.stringify([row.item_id, row.face]);
+}
+
+/** A ts-fsrs card that carries its card's key to the fuzz seed. */
+type KeyedCard = FsrsCard & { key?: string };
+
+/**
+ * The fuzz seed: the card's key and the number of the review being scheduled. No review time and no
+ * floating point, so every device, the rating buttons and the review itself draw the same fuzz.
+ */
+export function fuzzSeed(key: string, review: number): string {
+  return `${key}:${review}`;
+}
+
+// ts-fsrs has already counted the review being scheduled in `reps` when it asks.
+function seedStrategy(this: AbstractScheduler): string {
+  return fuzzSeed((this.current as KeyedCard).key ?? "", this.current.reps);
+}
 
 export function engine(cfg: PresetConfig): FSRS {
   return fsrs(
@@ -13,11 +34,12 @@ export function engine(cfg: PresetConfig): FSRS {
       relearning_steps: cfg.relearningSteps as `${number}${"m" | "h" | "d"}`[],
       ...(cfg.weights?.length ? { w: cfg.weights } : {}),
     }),
-  );
+  ).useStrategy(StrategyMode.SEED, seedStrategy);
 }
 
-export function toFsrs(row: CardRow): FsrsCard {
+export function toFsrs(row: CardRow & { sync_id?: string | null }): KeyedCard {
   return {
+    key: cardKey(row),
     due: new Date(row.due),
     stability: row.stability,
     difficulty: row.difficulty,
@@ -106,12 +128,12 @@ export function emptyCard(now: Date) {
   };
 }
 
-/** Rebuilds a card's state from its review log, e.g. after changing a preset. */
-export function replay(reviews: { ts: string; rating: number }[], created: Date, cfg: PresetConfig) {
-  let card: FsrsCard = toFsrs({ ...emptyCard(created), id: 0, item_id: "", face: "", suspended: 0, buried_until: null });
-  const f = engine({ ...cfg, enableFuzz: false });
+/** Rebuilds a card's state from its review log, e.g. after changing a preset. `key` is the card's (`cardKey`). */
+export function replay(reviews: { ts: string; rating: number }[], created: Date, cfg: PresetConfig, key: string) {
+  let card: KeyedCard = { ...toFsrs({ ...emptyCard(created), id: 0, item_id: "", face: "", suspended: 0, buried_until: null }), key };
+  const f = engine(cfg);
   for (const r of [...reviews].sort((a, b) => a.ts.localeCompare(b.ts))) {
-    card = f.next(card, new Date(r.ts), r.rating as FsrsGrade).card;
+    card = { ...f.next(card, new Date(r.ts), r.rating as FsrsGrade).card, key };
   }
   const now = new Date();
   card.due = capToDeadline(card.due, now, cfg);

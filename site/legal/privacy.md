@@ -1,7 +1,7 @@
 ---
 title: Privacy Policy
 description: What the Etude app, the website and Etude's server collect, who processes it, how long it's kept and how to delete it.
-last-updated: 2026-11-04
+last-updated: 2026-11-05
 ---
 
 # Privacy Policy
@@ -17,6 +17,7 @@ The Etude app stores your collection (decks, cards, reviews, media, settings) on
 | When | The app contacts | What it sends |
 |---|---|---|
 | you open the Market or install a free deck | GitHub (raw.githubusercontent.com, api.github.com) | a normal web request for the catalogue and its files |
+| you install something from the Market, or open its likes and comments | our server (sync.etude.study) | which entry; a download is counted without an account and nothing about you is kept (your address is used only in memory, so you count once a day) |
 | the desktop app is open (at most every 10 minutes), and when you install an update | GitHub (api.github.com, github.com) | a normal web request to check for a newer version |
 | you turn on AI grading and answer an AI-graded card, ask for feedback, use Edit for me, or use Ask Etude | the AI provider you set up (see below) | the card, your answer (including drawings and images), your message, any file you attach, and the parts of your collection Ask Etude reads to do what you asked |
 | you sign in to ChatGPT for AI features, and every few minutes while you're signed in | OpenAI | OpenAI's own sign-in, then a request for the list of models your plan offers; the sign-in token stays on your device |
@@ -48,7 +49,10 @@ An account is optional. You need one only for Sync and the paid Market.
 | Data | Why | How long |
 |---|---|---|
 | Your email address | to sign you in (sign-in links) and send service email | while your account exists |
-| Display name (optional) | shown to buyers if you're a creator | while your account exists |
+| Display name (optional) | shown to buyers if you're a creator, and next to comments you post on the Market | while your account exists |
+| Market comments you post: the text, the deck, theme or card type it's on, and when | shown to everyone with your display name, so people can talk about what's on the Market | until you delete the comment or your account |
+| Likes and dislikes: which Market entries you voted on | to show each entry's totals (others see the totals, not your votes) | until you change them or delete your account |
+| Reports and blocks: comments you reported and why, people you blocked, and, if an admin stops you from commenting, that and the reason | to hide abuse until an admin looks at it, and to hide people you don't want to see | until you delete your account |
 | Devices: the name you give each one, how it signed in, when it was added, last used and last signed in | so you can see and revoke them | until you delete the account |
 | Passkey public keys | to verify passkey sign-ins (we never get the private key) | until you remove the passkey or delete the account |
 | Sign-in requests: your email address, IP address and time, with the link itself stored only as a hash | to make each link work once and limit abuse | deleted a day after the link expires (links last 15 minutes) |

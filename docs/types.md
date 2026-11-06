@@ -103,6 +103,7 @@ The body gets `data-mode="answer"` or `data-mode="result"`, so `.only-answer` an
 | `etude.root` | the `#card` element |
 | `etude.asset(name)` | absolute URL of one of the type's [assets](#assets), for `fetch()`, `<img src>` and the like; throws for an unknown name |
 | `etude.assets` | the names of the type's assets |
+| `etude.play(url)` | plays a sound and stops the one the card played before. Returns `{ stop(), finished }`; `finished` resolves `true` when it played to the end, `false` when it was stopped, replaced or couldn't play. Use it rather than `new Audio()`: see [Sound](#sound) |
 | `etude.md(s)`, `etude.mdInline(s)` | render markdown and math to HTML (fenced code blocks are highlighted automatically) |
 | `etude.tex(src, display?)` | render LaTeX to HTML |
 | `etude.math` | math answers: `parse`, `toLatex`, `evaluate`, `equivalent`, `check` (the same module as `std.math`, so a live preview and the grader agree) |
@@ -121,6 +122,7 @@ The body gets `data-mode="answer"` or `data-mode="result"`, so `.only-answer` an
 | `etude.onScreen(fn)` | called with `etude.screen` whenever it changes: focus mode turned on or off, the window resized |
 | `etude.prefs` | what this card type saved for itself with `setPref`, shared by all its cards (an object; `{}` until something is saved) |
 | `etude.setPref(key, value)` | saves one preference for the type: a short key (letters, digits, `_ . -`, up to 64) and a JSON value, `null` to remove it. At most 4 KB per type |
+| `etude.morph` | `true` by default: when the card goes from answer to result the app animates it (see below). Set it to `false` to have the result just appear |
 
 `grade.details` is whatever the grade script returned as `details`. Use it to mark parts, options or blanks.
 
@@ -131,10 +133,41 @@ A small `std.normalize(s)` is also in scope in card scripts. The full `std` (bel
 - Ctrl/Cmd+Enter always goes to the app (submit or reveal).
 - Escape goes to the app. Ctrl/Cmd+Z undoes the last rating in result mode or when focus is outside an answer field; inside an answer field it keeps its normal text-undo behavior. Undo also works after advancing to the next card. In answer mode a card can keep Ctrl/Cmd+Z for its own undo handler with `preventDefault()`.
 - In answer mode, Space, Enter, `u`, `=`, `-`, `!` and `@` go to the app only when the card's own handler didn't call `preventDefault()` and focus isn't in an input. In result mode, 1–4 and the same keys are forwarded the same way, for rating, undo, burying (`=` the note, `-` the card) and suspending (`!` the note, `@` the card), as in Anki.
-- On mount, focus goes to the first usable `[autofocus]` target, otherwise the first visible, enabled typing field (input, textarea or contenteditable editor). Buttons are a fallback for cards without a typing field.
+- On mount, focus goes to the first usable `[autofocus]` target, otherwise the first visible, enabled typing field (input, textarea or contenteditable editor). Buttons are a fallback for cards without a typing field. Previews (the card beside its fields in Browse, the type gallery) don't take the focus.
 - The frame resizes to the card's height automatically. Don't use fixed heights or internal scrolling for the whole card.
 - Card preferences (`etude.prefs`, `etude.setPref`) keep a few small settings across cards: a game's chosen character, whether its sound is on, a keyboard layout. They belong to the card type, not to one card or deck, live in the collection's settings and sync with it. The type editor's Info tab lists them under **Saved by its cards**, with Reset, and `etude type prefs` shows, sets or resets them. A card can't read or write another type's preferences, and they never touch grading or scheduling. Previews of an unsaved type start with none and keep nothing.
 - In focus mode (the ⤢ button on the study page, Esc to leave) the app hides its header and an idle bottom bar and tells the card how tall the screen is (`etude.screen`). A card that should fit on one screen, such as a game, can scale itself to that height.
+
+### Motion
+
+When a graded card turns into its result, the runtime animates the change from the card's DOM alone, so every type gets it: each piece that is still there (a text block, an image, an input, a formula) glides from where it was to where it is now, new pieces fade up one after another in reading order, and pieces that went away fade out where they were. It runs inside the card's frame in Study and Watch, and is skipped with reduced motion and for cards whose verdict the app doesn't show (games). To shape it:
+
+- `etude.morph = false` turns it off for the type (set it in the card script; a game with its own result screen usually wants this).
+- `data-morph="atom"` on an element moves it as one piece, scaled to its new size, instead of looking inside it.
+- `data-morph="unit"` moves an element as one piece without scaling it, for something that changes height between answer and result (a map sheet).
+- `data-morph="skip"` leaves an element and everything in it alone.
+
+Self-graded cards don't morph: the app turns the card over to a second copy of the type showing the result, so a self-graded type should draw its result from `etude.onResult(result)` (`result.answer` is what the learner submitted) rather than from what's in its fields.
+
+### Sound
+
+Play a card's sounds with `etude.play(url)`. The URL can be a recording in the item's fields (`/media/files/…`), one of the type's assets (`etude.asset("ding.mp3")`) or a `data:` URL. Each file is fetched and decoded once per card, so a replay answers at once, and a new sound stops the one before it.
+
+```js
+const say = () => etude.play(etude.view.audio);
+etude.$(".replay").addEventListener("click", say);
+if (etude.mode === "answer") say(); // not in "preview" (gallery thumbnails)
+```
+
+Why not `new Audio()`: Chromium has a bug in `<audio>` playback across frames, and the desktop app, Chrome, Edge and Android all run on Chromium. When the card frame whose `<audio>` played first is removed while another card's `<audio>` is playing, that sound freezes a moment in, and so does every `<audio>` after it until the learner leaves the deck. Study does exactly that after a rating: the next card's sound starts while the previous card is still flying off. Sound played through Web Audio isn't affected, so in Chromium `etude.play` decodes the file and plays it through Web Audio. Other engines don't have the bug and get an `<audio>` element (on an iPhone, Web Audio would also follow the silent switch). If Web Audio hasn't started within about 300 ms (in a browser, before the learner has touched the card) or the file can't be decoded, it plays the file with `<audio>` instead.
+
+Types that already use `new Audio()`, an `<audio>` in the template or the `autoplay` attribute keep working, and so do Anki imports (`[sound:]` becomes `<audio controls>`). In Chromium the runtime gives every `<audio>` `crossorigin="anonymous"` before it loads and, once it plays, routes it through the frame's Web Audio context. That has a few consequences:
+
+- A sound a card plays has to be served with CORS. Etude's `/media/` and `/type-assets/` routes are, and a card can't load media from anywhere else. If a load fails without CORS anyway, the runtime loads it again as a plain `<audio>`.
+- To send an `<audio>` through your own `AudioContext` (a visualizer, effects), call `createMediaElementSource` before its first `play()`. The runtime then leaves it alone; once it has routed an element, a second `createMediaElementSource` on it throws.
+- `<video>` isn't routed.
+
+`etude.play` keeps the decoded sound in memory, which suits words, sentences and effects. For a long recording the learner scrubs through, use `<audio controls>`.
 
 ### Editors and code
 

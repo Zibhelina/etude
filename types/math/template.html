@@ -1,13 +1,37 @@
 <div class="prose">{{md:prompt}}</div>
-<div class="mx">
-  <input class="e-input mono mx-input" id="answer" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="{{placeholder}}" autofocus>
-  <div class="mx-preview" aria-live="polite"><span class="mx-empty">Your answer renders here</span></div>
+<div class="mx only-answer">
+  <div class="mx-pad" hidden>
+    <canvas class="mx-cv"></canvas>
+    <div class="mx-tools" role="toolbar" aria-label="Scratchpad">
+      <button type="button" class="mx-t is-on" data-pt="pen" title="Pen" aria-label="Pen"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+      <button type="button" class="mx-t" data-pt="erase" title="Eraser" aria-label="Eraser"><svg viewBox="0 0 24 24"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L13 19"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg></button>
+      <button type="button" class="mx-t" data-pa="undo" title="Undo" aria-label="Undo"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button type="button" class="mx-t" data-pa="clear" title="Clear" aria-label="Clear"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg></button>
+    </div>
+    <div class="mx-ph">Work it out here with your mouse or pen</div>
+  </div>
+  <label class="mx-field">
+    <span class="mx-lab">Answer</span>
+    <input class="mx-input" id="answer" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="{{placeholder}}" autofocus>
+    <button type="button" class="mx-q" aria-expanded="false" title="How to type math" aria-label="How to type math">?</button>
+  </label>
+  <div class="mx-preview" aria-live="polite"></div>
   <div class="mx-note"></div>
+  <div class="mx-help e-muted" hidden>LaTeX or plain: <code>\frac{1}{2}</code> or <code>1/2</code>, <code>\sqrt{3}</code> or <code>sqrt(3)</code>, <code>x^2</code>, <code>\pi</code>, <code>\sin x</code>, lists <code>2, 3</code>.</div>
+  <div class="mx-row">
+    <button type="button" class="mx-link mx-scratch" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Scratchpad</button>
+    <button type="button" class="mx-link mx-stuck">I’m stuck, show me the solution</button>
+  </div>
 </div>
-<div class="mx-help e-muted only-answer">LaTeX or plain: <code>\frac{1}{2}</code> or <code>1/2</code>, <code>\sqrt{3}</code> or <code>sqrt(3)</code>, <code>x^2</code>, <code>\pi</code>, <code>\sin x</code>, lists <code>2, 3</code>.</div>
 <template data-on="result">
-  <div class="e-reveal">
-    <div><div class="e-section-title">Accepted</div><div class="mx-accepted"></div></div>
-    {{#explanation}}<div class="prose">{{md:explanation}}</div>{{/explanation}}
+  <div class="e-reveal mx-res">
+    <div class="mx-yours"></div>
+    <div class="mx-note mx-fb"></div>
+    <div class="mx-sol">
+      <div class="mx-title">Solution</div>
+      {{#explanation}}<div class="prose mx-steps">{{md:explanation}}</div>{{/explanation}}
+      <div class="mx-final"><span>Answer</span><span class="mx-accepted"></span></div>
+    </div>
+    <div class="mx-work" hidden><div class="mx-title">Your work</div><div class="mx-shot"></div></div>
   </div>
 </template>

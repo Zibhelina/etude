@@ -1,24 +1,84 @@
-.mx { display: flex; flex-direction: column; gap: 0.5rem; }
-.mx-input { font-size: 1rem; }
-.mx-preview {
-  min-height: 3.6rem; display: flex; align-items: center; justify-content: center;
-  padding: 0.6rem 1rem; border-radius: var(--radius);
-  background: color-mix(in oklab, var(--foreground) 4%, transparent);
-  font-size: 1.3rem; overflow-x: auto; overflow-y: hidden;
-  transition: background 0.15s, box-shadow 0.15s;
-}
-.mx-preview .katex-display { margin: 0; }
-.mx-empty { font-size: 0.9rem; color: var(--muted-foreground); }
-.mx-preview.is-unread { opacity: 0.55; }
-.mx-note { font-size: 0.82rem; color: var(--muted-foreground); min-height: 1.2em; margin-top: -0.15rem; text-align: center; }
-.mx-note.is-error { color: var(--warning); }
-.mx-help { font-size: 0.82rem; line-height: 1.7; }
-.mx-help code { font: 0.78rem var(--font-mono); background: var(--muted); padding: 0.05rem 0.3rem; border-radius: 0.3rem; }
-.mx-preview.is-correct { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--success) 60%, transparent); background: color-mix(in oklab, var(--success) 9%, transparent); }
-.mx-preview.is-wrong { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--danger) 60%, transparent); background: color-mix(in oklab, var(--danger) 9%, transparent); }
-.mx-preview.is-partial { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--warning) 60%, transparent); background: color-mix(in oklab, var(--warning) 9%, transparent); }
-.mx-accepted { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center; font-size: 1.15rem; }
-/* Etude 3 look: the question in the study serif, no rule above the answer. */
-#card > .prose:first-child, #card > .io-header:first-child { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.005em; }
+/* Etude 3 "work it out": a serif prompt with typeset math, an optional scratchpad, one Answer field
+   (the live reading stays quiet under it, syntax help behind "?"), and after checking what you wrote,
+   the solution in a soft panel, the answer boxed in green, and your scratch work. */
+#card { gap: 1.1rem; }
+#card > .prose:first-child { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.75rem; line-height: 1.3; letter-spacing: -0.005em; margin-top: 0.3rem; }
+#card > .prose:first-child .katex { font-size: 1.12em; }
 #card > .prose:first-child code { font-size: 0.8em; }
-.e-reveal { border-top: 0; padding-top: 0.25rem; }
+[data-mode="result"] #card > .prose:first-child { font-size: 1.375rem; }
+
+.mx { display: flex; flex-direction: column; gap: 0.5rem; }
+.mx-pad { position: relative; height: 340px; margin-bottom: 0.4rem; border-radius: 16px; background-color: var(--card, transparent); background-image: linear-gradient(color-mix(in oklab, var(--foreground) 7.5%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in oklab, var(--foreground) 7.5%, transparent) 1px, transparent 1px); background-size: 24px 24px; background-position: -1px -1px; box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgb(0 0 0 / 0.05); overflow: hidden; }
+.mx-pad[hidden] { display: none; }
+.mx-cv { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.mx-tools { position: absolute; top: 10px; right: 10px; display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--background); box-shadow: 0 1px 4px rgb(0 0 0 / 0.12); }
+.mx-t { all: unset; cursor: pointer; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; color: var(--muted-foreground); }
+.mx-t:hover { color: var(--foreground); }
+.mx-t.is-on { background: var(--accent); color: var(--foreground); }
+.mx svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.mx-ph { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; color: var(--muted-foreground); font-size: 0.94rem; pointer-events: none; opacity: 0.8; }
+
+.mx-field { display: flex; align-items: center; gap: 14px; padding: 6px 6px 6px 16px; border-radius: 14px; background: var(--muted); box-shadow: inset 0 0 0 1.5px transparent; transition: box-shadow 0.15s; cursor: text; }
+.mx-field:focus-within { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--ring) 45%, transparent); }
+.mx-lab, .mx-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); }
+.mx-input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--foreground); font: 400 1.25rem/1.3 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; padding: 8px 4px; outline: none; }
+.mx-input::placeholder { color: var(--muted-foreground); opacity: 0.7; }
+.mx-q { all: unset; cursor: pointer; flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font: 650 0.85rem var(--font-sans); color: var(--muted-foreground); }
+.mx-q:hover, .mx-q.is-on { color: var(--foreground); background: var(--accent); }
+.mx-preview { display: flex; align-items: baseline; gap: 10px; min-height: 1.6rem; padding: 0 16px; font-size: 1.1rem; color: var(--muted-foreground); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.mx-preview:empty { min-height: 0; }
+.mx-preview .katex { color: var(--foreground); }
+.mx-preview.is-unread .katex { opacity: 0.55; }
+.mx-reads { flex: none; font-size: 0.78rem; letter-spacing: 0.02em; }
+.mx-note { font-size: 0.82rem; color: var(--muted-foreground); padding: 0 16px; }
+.mx-note:empty { display: none; }
+.mx-note.is-error { color: var(--warning); }
+.mx-help { font-size: 0.82rem; line-height: 1.7; padding: 0 16px; }
+.mx-help[hidden] { display: none; }
+.mx-help code { font: 0.78rem var(--font-mono); background: var(--muted); padding: 0.05rem 0.3rem; border-radius: 0.3rem; }
+.mx-row { display: flex; justify-content: center; align-items: center; gap: 22px; margin-top: 0.35rem; flex-wrap: wrap; }
+.mx-link { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 0.875rem; color: var(--muted-foreground); padding: 2px 4px; border-radius: 6px; }
+.mx-link:hover, .mx-link[aria-pressed="true"] { color: var(--foreground); }
+.mx-link svg { width: 15px; height: 15px; }
+.mx-link:focus-visible, .mx-q:focus-visible, .mx-t:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+/* Answer side */
+.e-reveal.mx-res { border-top: 0; padding-top: 0; gap: 0; }
+.mx-yours { font-size: 0.94rem; color: var(--muted-foreground); }
+.mx-yours:empty { display: none; }
+.mx-yours b { font-weight: 400; }
+.mx-yours b .katex { font-size: 1.15em; }
+.mx-yours b.ok { color: var(--success); }
+.mx-yours b.part { color: var(--warning); }
+/* KaTeX is inline-block, which a line-through doesn't cross: draw the strike as a background line instead. */
+.mx-yours b.no { color: var(--danger); text-decoration: none; padding: 0 2px; background: linear-gradient(currentColor, currentColor) 0 58% / 100% 2px no-repeat; }
+.mx-yours b.ok .katex, .mx-yours b.no .katex, .mx-yours b.part .katex { color: inherit; }
+.mx-res .mx-note { padding: 0; margin-top: 0.3rem; }
+.mx-sol { margin-top: 1.1rem; padding: 16px 20px; border-radius: 16px; background: var(--muted); }
+.mx-title { margin-bottom: 8px; }
+.mx-steps { font-size: 1.03rem; line-height: 1.6; }
+.mx-steps .katex-display { margin: 0.5em 0; text-align: left; }
+.mx-steps .katex-display > .katex { text-align: left; }
+.mx-final { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 12px; margin-top: 14px; padding: 9px 16px; border-radius: 12px; background: color-mix(in oklab, var(--good, var(--success)) 18%, var(--card, transparent)); }
+.mx-final > span:first-child { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--success); }
+.mx-accepted { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.mx-accepted .katex { font-size: 1.45em; font-weight: 600; color: var(--foreground); }
+.mx-accepted i { font-style: normal; font-size: 0.85rem; color: var(--muted-foreground); }
+.mx-work { margin-top: 1.4rem; }
+.mx-work[hidden] { display: none; }
+.mx-shot { border-radius: 14px; background-color: var(--card, transparent); background-image: linear-gradient(color-mix(in oklab, var(--foreground) 7.5%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in oklab, var(--foreground) 7.5%, transparent) 1px, transparent 1px); background-size: 24px 24px; box-shadow: 0 0 0 1px var(--border); overflow: hidden; }
+.mx-shot img { display: block; width: 100%; max-height: 240px; object-fit: contain; object-position: left top; }
+
+/* A phone has the study screen's scratchpad already, so the card doesn't add a second one. */
+@media (max-width: 560px) {
+  #card > .prose:first-child { font-size: 1.4rem; }
+  [data-mode="result"] #card > .prose:first-child { font-size: 1.15rem; }
+  .mx-scratch, .mx-pad { display: none !important; }
+  .mx-sol { padding: 12px 14px; }
+  .mx-input { font-size: 1.15rem; }
+}
+/* Long questions (see card.js) */
+#card > .prose.q-mid:first-child { font-size: 1.4rem; }
+#card > .prose.q-long:first-child { font-size: 1.2rem; line-height: 1.5; }
+[data-mode="result"] #card > .prose.q-mid:first-child, [data-mode="result"] #card > .prose.q-long:first-child { font-size: 1.15rem; }
+@media (max-width: 560px) { #card > .prose.q-mid:first-child { font-size: 1.2rem; } #card > .prose.q-long:first-child { font-size: 1.05rem; } }

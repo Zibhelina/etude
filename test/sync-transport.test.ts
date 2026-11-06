@@ -23,6 +23,26 @@ test("folder sync: event files avoid colons (Windows can't name files with them)
   }
 });
 
+test("folder sync reads only the files it hasn't seen, and still finds one that arrives late", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "etude-folder-"));
+  try {
+    const writer = new FolderTransport(dir, "aaaa");
+    await writer.push([{ id: "aaaa:1:0", ciphertext: "one" }, { id: "aaaa:3:0", ciphertext: "three" }]);
+    const reader = new FolderTransport(dir, "cccc"), have = new Set<string>();
+    const pull = async () => { const ids = (await reader.pull("", (id) => have.has(id))).events.map((e) => e.id).sort(); for (const id of ids) have.add(id); return ids; };
+    assert.deepEqual(await pull(), ["aaaa:1:0", "aaaa:3:0"]);
+    assert.deepEqual(await pull(), []);
+    // A sync program delivers an older file after newer ones.
+    await writer.push([{ id: "aaaa:2:0", ciphertext: "two" }]);
+    assert.deepEqual(await pull(), ["aaaa:2:0"]);
+    // A file that can't be parsed but was seen before isn't read again.
+    writeFileSync(join(dir, "events", "aaaa", "aaaa~1~0.json"), "not json");
+    assert.deepEqual(await pull(), []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("the cloud transport waits out 429 Too Many Requests and retries", async () => {
   let hits = 0;
   const server = createServer((req, res) => {

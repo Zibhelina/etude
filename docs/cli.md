@@ -320,7 +320,7 @@ These work on every command, before or after the command words.
   - [`study feedback`](#study-feedback) AI feedback for an attempt (written once, then cached).
   - [`study rate`](#study-rate) Record a rating and reschedule the card. Pass --attempt to link the graded attempt.
   - [`study answer`](#study-answer) Submit and rate in one step: grades the answer, then applies the suggested rating (or the one you give).
-  - [`study undo`](#study-undo) Undo the most recent review (any card): the card returns exactly to its previous state, and the graded answer is discarded.
+  - [`study undo`](#study-undo) Undo the most recent review made on this device (any card): the card returns exactly to its previous state, and the graded answer is discarded.
   - [`study watch`](#study-watch) Watch mode: the cards of a scope in order, one per item, each with an example answer and its grade. Records nothing.
 - **stats**: Statistics: overview, forecast, recall per tag, adaptive skills (`etude stats` alone runs `overview`)
   - [`stats overview`](#stats-overview) Everything the Stats page shows for a scope: card states, retention, recall, daily activity, forecast, ratings, verdicts, streak, deadline.
@@ -346,6 +346,7 @@ These work on every command, before or after the command words.
   - [`sync setup`](#sync-setup) Connect this collection to a shared folder or Sync server.
   - [`sync signin`](#sync-signin) Email a one-time 6-digit sign-in code (valid 15 minutes).
   - [`sync verify`](#sync-verify) Redeem the 6-digit code from the sign-in email.
+  - [`sync second-factor`](#sync-second-factor) Finish a Sync sign-in with two-step sign-in on: the authenticator code, or a recovery code.
   - [`sync unlock`](#sync-unlock) Unlock the vault, or create one (with a Sync password: returns its recovery key once).
   - [`sync protect`](#sync-protect) Add a Sync password: the vault becomes end-to-end and the server forgets its key.
   - [`sync unprotect`](#sync-unprotect) Remove the Sync password: the server keeps the vault key, so it's no longer end-to-end.
@@ -356,6 +357,14 @@ These work on every command, before or after the command words.
   - [`account server`](#account-server) Show or change the Etude server this install uses (default https://sync.etude.study, or $ETUDE_CLOUD_URL).
   - [`account signin`](#account-signin) Email a one-time 6-digit sign-in code (valid 15 minutes).
   - [`account verify`](#account-verify) Redeem the 6-digit code from the sign-in email. When already signed in, it re-confirms this device.
+  - [`account second-factor`](#account-second-factor) Finish an email sign-in with two-step sign-in on: the code from the authenticator app, or a recovery code.
+  - [`account two-factor`](#account-two-factor) Two-step sign-in: whether it's on, the authenticator, and recovery codes left.
+  - [`account authenticator`](#account-authenticator) Start adding an authenticator app: a new key, its otpauth:// link and a QR code. Confirm with `account authenticator-confirm`.
+  - [`account authenticator-confirm`](#account-authenticator-confirm) Confirm the authenticator being added with a code it shows. It replaces the one in use.
+  - [`account authenticator-remove`](#account-authenticator-remove) Remove the authenticator app. Not while two-step sign-in is on (turn it off first).
+  - [`account two-factor-on`](#account-two-factor-on) Turn on two-step sign-in: email sign-ins then also ask for the authenticator code. Returns 10 recovery codes, once.
+  - [`account two-factor-off`](#account-two-factor-off) Turn off two-step sign-in. Removes the authenticator and the recovery codes.
+  - [`account recovery-codes`](#account-recovery-codes) Make 10 new recovery codes, shown once. The old ones stop working.
   - [`account signout`](#account-signout) Sign this device out of the account. Local data stays.
   - [`account name`](#account-name) The name people see beside your Market comments.
   - [`account devices`](#account-devices) Devices signed in to the account.
@@ -400,6 +409,7 @@ These work on every command, before or after the command words.
   - [`pack new`](#pack-new) Write a starter pack with one valid item of each built-in type, to edit.
 - **anki**: Anki: bring an .apkg or .colpkg collection in (types, decks, items, cards, media, history)
   - [`anki import`](#anki-import) Import an Anki package: card types, presets, decks, items, cards, media and review history.
+  - [`anki cloze`](#anki-cloze) Rewrite Anki cloze markers in the built-in cloze syntax: `{{c1::answer::hint}}` becomes `{{answer::hint}}`.
 - **media**: Media copied into the collection's own folder
   - [`media path`](#media-path) Show the collection's media folder.
   - [`media prune`](#media-prune) Delete media files nothing in the collection names any more.
@@ -3068,7 +3078,9 @@ etude study answer 50 --seed 1 --answer "" --rate good
 
 <a id="study-undo"></a>
 
-Undo the most recent review (any card): the card returns exactly to its previous state, and the graded answer is discarded.
+Undo the most recent review made on this device (any card): the card returns exactly to its previous state, and the graded answer is discarded.
+
+In a synced collection, reviews that came from your other devices are left alone, even when they arrived after this device's last one.
 
 ```
 etude study undo [flags]
@@ -3510,13 +3522,15 @@ Encrypted offline collection sync over a folder or etude-cloud.
 
 Show connection, lock and pending change status.
 
+`mode` is how the vault key is kept: "password" (end-to-end, a Sync password or recovery key opens it) or "server" (the server keeps it, no password; not end-to-end), null before the vault exists. `passwordOptional`: the Sync server can keep vault keys, so Sync can start without a password. `busy`, `error` and `progress` describe the collection's sync: events, card type assets and the rebuild of what changed. Media files follow it in the background and report under `media`: `active` while that runs, its own `progress` and `error`, and `received`, the files from other devices written since the process started. `progress` gives the step (download, check, upload, apply), bytes `done` (files for check), the `total` when known and the `rate` in bytes per second.
+
 ```
 etude sync status
 ```
 
 *read-only*
 
-Output: { configured, kind, signedIn, unlocked, hasKeys, mode, passwordOptional, lastSync, pending, busy, error, progress }
+Output: { configured, kind, signedIn, unlocked, hasKeys, mode, passwordOptional, lastSync, pending, received, busy, error, progress, media: { active, progress, error, received } }
 
 ### etude sync setup
 
@@ -3578,7 +3592,36 @@ etude sync verify <code>
 | --- | --- |
 | `code` | The 6-digit code from the email (or the link's token). |
 
+Output: Sync status, with secondStep: { methods } when two-step sign-in is on (finish with `sync second-factor`)
+
+### etude sync second-factor
+
+<a id="sync-second-factor"></a>
+
+Finish a Sync sign-in with two-step sign-in on: the authenticator code, or a recovery code.
+
+When `sync verify` answers `secondStep`, run this within 10 minutes. The 6-digit code goes as the argument; a recovery code goes on stdin with --recovery. 5 wrong codes, then sign in by email again.
+
+```
+etude sync second-factor [code] [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `code` (optional) | The 6-digit code the authenticator app shows for Etude. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--recovery` | boolean | Read a recovery code from stdin instead. |
+
 Output: Sync status
+
+```sh
+etude sync second-factor 123456
+etude sync second-factor --recovery < recovery-code
+```
 
 ### etude sync unlock
 
@@ -3656,7 +3699,7 @@ etude sync unprotect --yes
 
 Push pending encrypted changes and merge remote changes.
 
-On a Sync server, exits 7 (`sync_required`) when Sync isn't active on the account; nothing local changes.
+Syncs the collection, then the media files, and exits when both are done. A media failure exits with its error after the collection is already in step; the next sync tries the files again. On a Sync server, exits 7 (`sync_required`) when Sync isn't active on the account; nothing local changes.
 
 ```
 etude sync now
@@ -3762,12 +3805,174 @@ etude account verify <code> [flags]
 | `--name <VALUE>` | string | Name for this device. |
 | `--email <VALUE>` | string | The address the code was sent to, if not the last `account signin`. |
 
-Output: { reauth, email }
+Output: { reauth, email, secondStep? } (secondStep: { methods }: two-step sign-in is on; finish with `account second-factor`)
 
 ```sh
 etude account signin you@example.com
 etude account verify "482 913"
 ```
+
+### etude account second-factor
+
+<a id="account-second-factor"></a>
+
+Finish an email sign-in with two-step sign-in on: the code from the authenticator app, or a recovery code.
+
+When `account verify` answers `secondStep`, run this within 10 minutes. The 6-digit code goes as the argument; a recovery code goes on stdin with --recovery (it works once, and stdin keeps it out of shell history). 5 wrong codes, then sign in by email again.
+
+```
+etude account second-factor [code] [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `code` (optional) | The 6-digit code the authenticator app shows for Etude. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--recovery` | boolean | Read a recovery code from stdin instead. |
+
+Output: { reauth, email }
+
+```sh
+etude account verify "482 913"
+etude account second-factor 123456
+etude account second-factor --recovery < recovery-code
+```
+
+### etude account two-factor
+
+<a id="account-two-factor"></a>
+
+Two-step sign-in: whether it's on, the authenticator, and recovery codes left.
+
+```
+etude account two-factor
+```
+
+*read-only*
+
+Output: { enabled, since, authenticator, authenticatorAdded, recoveryCodesLeft, passkeys }
+
+### etude account authenticator
+
+<a id="account-authenticator"></a>
+
+Start adding an authenticator app: a new key, its otpauth:// link and a QR code. Confirm with `account authenticator-confirm`.
+
+Needs a sign-in on this device within 10 minutes. Add the key (or the link, or the QR code saved with --qr) to the app, then confirm with the code it shows within 30 minutes. An authenticator already in use keeps working until the new one is confirmed.
+
+```
+etude account authenticator [flags]
+```
+
+*writes*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--qr <FILE>` | string | Also write the QR code to this SVG file. |
+
+Output: { secret, uri, qrSvg, expiresIn } (with --qr: { secret, uri, expiresIn, written })
+
+```sh
+etude account authenticator --qr etude-qr.svg
+etude account authenticator-confirm 123456
+etude account two-factor-on
+```
+
+### etude account authenticator-confirm
+
+<a id="account-authenticator-confirm"></a>
+
+Confirm the authenticator being added with a code it shows. It replaces the one in use.
+
+```
+etude account authenticator-confirm <code>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `code` | The 6-digit code from the app. |
+
+Output: two-factor status
+
+### etude account authenticator-remove
+
+<a id="account-authenticator-remove"></a>
+
+Remove the authenticator app. Not while two-step sign-in is on (turn it off first).
+
+```
+etude account authenticator-remove [flags]
+```
+
+*writes · needs `--yes`*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: two-factor status
+
+### etude account two-factor-on
+
+<a id="account-two-factor-on"></a>
+
+Turn on two-step sign-in: email sign-ins then also ask for the authenticator code. Returns 10 recovery codes, once.
+
+Needs a confirmed authenticator (`account authenticator`) and a sign-in on this device within 10 minutes. Save the recovery codes somewhere safe: each one signs in once if the authenticator is lost. Passkeys still sign in on their own. The account's address gets a notice.
+
+```
+etude account two-factor-on
+```
+
+*writes*
+
+Output: { enabled, …, recoveryCodes }
+
+### etude account two-factor-off
+
+<a id="account-two-factor-off"></a>
+
+Turn off two-step sign-in. Removes the authenticator and the recovery codes.
+
+Needs a sign-in on this device within 10 minutes. The account's address gets a notice.
+
+```
+etude account two-factor-off [flags]
+```
+
+*writes · needs `--yes`*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { enabled, …, recoveryCodes: null }
+
+### etude account recovery-codes
+
+<a id="account-recovery-codes"></a>
+
+Make 10 new recovery codes, shown once. The old ones stop working.
+
+Needs two-step sign-in on and a sign-in on this device within 10 minutes.
+
+```
+etude account recovery-codes [flags]
+```
+
+*writes · needs `--yes`*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { enabled, …, recoveryCodes }
 
 ### etude account signout
 
@@ -4668,6 +4873,35 @@ Output: { format, dryRun, scheduling, types: { created, updated, unchanged }, pr
 etude anki import spanish.apkg --dry-run
 etude anki import spanish.apkg
 etude anki import backlog.colpkg --deck-prefix "Anki"
+```
+
+### etude anki cloze
+
+<a id="anki-cloze"></a>
+
+Rewrite Anki cloze markers in the built-in cloze syntax: `{{c1::answer::hint}}` becomes `{{answer::hint}}`.
+
+For moving an imported Anki cloze note to the built-in `cloze` type. Every hint is kept, including one that repeats the answer: such a hint is often the form to change (a word to decline or conjugate), and without it the blank can't be answered. All of a note's clozes (`c1`, `c2`, …) become blanks of the one card the built-in type makes; a marker nested in an answer becomes its text. Only the markers change: convert any HTML in the field yourself.
+
+```
+etude anki cloze <text> [flags]
+```
+
+*read-only · no database*
+
+| Argument | Description |
+| --- | --- |
+| `text` | Text with Anki cloze markers; `-` reads stdin. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--slash-alternatives` | boolean | Accept each word of an answer like `in/into`, or the whole: `{{in\|into\|in/into}}`. |
+
+Output: { text, blanks }
+
+```sh
+etude anki cloze 'The {{c1::nucleus}} holds the {{c2::DNA::molecule}}.'
+etude item show anki-1a2b | jq -r .fields.Text | etude anki cloze - --slash-alternatives
 ```
 
 ## media

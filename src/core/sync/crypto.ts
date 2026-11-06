@@ -65,15 +65,17 @@ async function aesKey(raw: Uint8Array, usages: ("encrypt" | "decrypt")[]) {
   return subtle.importKey("raw", buf(raw), { name: "AES-GCM" }, false, usages);
 }
 
-async function seal(key: Uint8Array, plaintext: Uint8Array, aad: string): Promise<{ nonce: Uint8Array; ct: Uint8Array }> {
+async function seal(key: Uint8Array | CryptoKey, plaintext: Uint8Array, aad: string): Promise<{ nonce: Uint8Array; ct: Uint8Array }> {
   const nonce = randomBytes(NONCE_BYTES);
-  const ct = new Uint8Array(await subtle.encrypt({ name: "AES-GCM", iv: buf(nonce), additionalData: buf(enc.encode(aad)) }, await aesKey(key, ["encrypt"]), buf(plaintext)));
+  const k = key instanceof Uint8Array ? await aesKey(key, ["encrypt"]) : key;
+  const ct = new Uint8Array(await subtle.encrypt({ name: "AES-GCM", iv: buf(nonce), additionalData: buf(enc.encode(aad)) }, k, buf(plaintext)));
   return { nonce, ct };
 }
 
-async function open(key: Uint8Array, nonce: Uint8Array, ct: Uint8Array, aad: string): Promise<Uint8Array> {
+async function open(key: Uint8Array | CryptoKey, nonce: Uint8Array, ct: Uint8Array, aad: string): Promise<Uint8Array> {
+  const k = key instanceof Uint8Array ? await aesKey(key, ["decrypt"]) : key;
   try {
-    return new Uint8Array(await subtle.decrypt({ name: "AES-GCM", iv: buf(nonce), additionalData: buf(enc.encode(aad)) }, await aesKey(key, ["decrypt"]), buf(ct)));
+    return new Uint8Array(await subtle.decrypt({ name: "AES-GCM", iv: buf(nonce), additionalData: buf(enc.encode(aad)) }, k, buf(ct)));
   } catch {
     throw new Error("decryption failed: wrong key, or the data was changed");
   }
@@ -197,6 +199,14 @@ export async function unwrapWithPrf(w: Wrap, prfOutput: Uint8Array, credentialId
 // Ciphertext layout: [1 byte version][12 bytes nonce][AES-256-GCM ciphertext + 16-byte tag].
 const subkey = (vk: Uint8Array, purpose: "events" | "blobs") => hkdf(vk, enc.encode("etude-sync"), `etude-${purpose}-v1`);
 const eventAad = (id: string) => `etude-event:v1:${id}`;
+
+/** A vault key's event and blob subkeys, derived and imported once, for a whole sync. The ciphertext is the same as with the vault key itself. */
+export type SyncKeys = { events: CryptoKey; blobs: CryptoKey };
+export async function syncKeys(vk: Uint8Array): Promise<SyncKeys> {
+  const key = async (purpose: "events" | "blobs") => aesKey(await subkey(vk, purpose), ["encrypt", "decrypt"]);
+  return { events: await key("events"), blobs: await key("blobs") };
+}
+const keyFor = async (vk: Uint8Array | SyncKeys, purpose: "events" | "blobs") => (vk instanceof Uint8Array ? subkey(vk, purpose) : vk[purpose]);
 const BLOB_AAD = "etude-blob:v1";
 
 function pack(nonce: Uint8Array, ct: Uint8Array) {
@@ -208,25 +218,25 @@ function unpack(b: Uint8Array) {
 }
 
 /** Encrypts one sync event. The id goes in the AAD, so the server can't move a ciphertext under another id. */
-export async function encryptEvent(vk: Uint8Array, id: string, event: unknown): Promise<string> {
-  const { nonce, ct } = await seal(await subkey(vk, "events"), enc.encode(JSON.stringify(event)), eventAad(id));
+export async function encryptEvent(vk: Uint8Array | SyncKeys, id: string, event: unknown): Promise<string> {
+  const { nonce, ct } = await seal(await keyFor(vk, "events"), enc.encode(JSON.stringify(event)), eventAad(id));
   return toB64(pack(nonce, ct));
 }
-export async function decryptEvent<T = unknown>(vk: Uint8Array, id: string, ciphertextB64: string): Promise<T> {
+export async function decryptEvent<T = unknown>(vk: Uint8Array | SyncKeys, id: string, ciphertextB64: string): Promise<T> {
   const { nonce, ct } = unpack(fromB64(ciphertextB64));
-  return JSON.parse(new TextDecoder().decode(await open(await subkey(vk, "events"), nonce, ct, eventAad(id))));
+  return JSON.parse(new TextDecoder().decode(await open(await keyFor(vk, "events"), nonce, ct, eventAad(id))));
 }
 
 /** Encrypts a media file or type asset; upload it under the SHA-256 of what this returns. */
-export async function encryptBlob(vk: Uint8Array, data: Uint8Array): Promise<{ hash: string; ciphertext: Uint8Array }> {
-  const { nonce, ct } = await seal(await subkey(vk, "blobs"), data, BLOB_AAD);
+export async function encryptBlob(vk: Uint8Array | SyncKeys, data: Uint8Array): Promise<{ hash: string; ciphertext: Uint8Array }> {
+  const { nonce, ct } = await seal(await keyFor(vk, "blobs"), data, BLOB_AAD);
   const ciphertext = pack(nonce, ct);
   return { hash: await sha256Hex(ciphertext), ciphertext };
 }
-export async function decryptBlob(vk: Uint8Array, ciphertext: Uint8Array, expectedHash?: string): Promise<Uint8Array> {
+export async function decryptBlob(vk: Uint8Array | SyncKeys, ciphertext: Uint8Array, expectedHash?: string): Promise<Uint8Array> {
   if (expectedHash && (await sha256Hex(ciphertext)) !== expectedHash) throw new Error("blob hash mismatch");
   const { nonce, ct } = unpack(ciphertext);
-  return open(await subkey(vk, "blobs"), nonce, ct, BLOB_AAD);
+  return open(await keyFor(vk, "blobs"), nonce, ct, BLOB_AAD);
 }
 
 // ── whole flows ────────────────────────────────────────────────

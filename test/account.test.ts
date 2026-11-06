@@ -204,6 +204,36 @@ test("account and sync: a 6-digit code (spaces allowed) goes as {email, code}, a
   }
 });
 
+test("account: status calls at once share one answer, and a change to the account starts a fresh one", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "account-status-"));
+  const s = stub();
+  const url = await s.start();
+  const e = await Etude.open(join(dir, "etude.db"), { home: join(dir, "home") });
+  try {
+    const a = accountFor(e);
+    a.setServer(url);
+    const out = await a.status();
+    assert.equal(out.signedIn, false);
+    await a.signin("a@example.test");
+    await a.verify("482913");
+    s.calls.length = 0;
+    const [one, two, three] = await Promise.all([a.status(), a.status(), a.status()]);
+    assert.equal(one, two);assert.equal(two, three);
+    assert.equal(one.me.email, "a@example.test");assert.deepEqual(one.billing, { active: false, reason: "none", billing: true });assert.equal(one.vault, null);
+    assert.deepEqual(s.calls.sort(), ["GET /v1/billing/sync", "GET /v1/me", "GET /v1/server"]);
+    // The account changed (a sign-in, a sign-out, a server) while an answer was on its way: the next caller gets a new one.
+    const before = a.status();
+    assert.equal(a.status(), before);
+    a.setServer(url);
+    const after = a.status();
+    assert.notEqual(after, before);
+    await Promise.all([before, after]);
+  } finally {
+    e.close();
+    await s.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 test("account: server URLs need https outside localhost", () => {
   assert.equal(checkServerUrl("https://sync.etude.study/"), "https://sync.etude.study");
   assert.equal(checkServerUrl("http://localhost:4870"), "http://localhost:4870");

@@ -100,6 +100,8 @@ export class AccountClient {
     }
   }
   private save(s: Saved) {
+    // A sign-in, a sign-out or a new server: an answer already on its way describes the account before it.
+    this.statusing = null;
     mkdirSync(this.e.home, { recursive: true, mode: 0o700 });
     const tmp = this.file + ".tmp";
     writeFileSync(tmp, JSON.stringify(s), { mode: 0o600 });
@@ -189,28 +191,34 @@ export class AccountClient {
 
   // ── status ────────────────────────────────────────────────────
   /** What the app shows in Settings → Account. Never throws for a server that is down; reports `offline` instead. */
-  async status() {
+  /** Several screens ask at once (Settings has four): they share one answer while it's on its way. */
+  status() {
+    if (!this.statusing) {
+      const p = this.readStatus().finally(() => {
+        if (this.statusing === p) this.statusing = null;
+      });
+      this.statusing = p;
+    }
+    return this.statusing;
+  }
+  private statusing: ReturnType<AccountClient["readStatus"]> | null = null;
+  /** Two round trips: the server's offering with the account, then billing with the vault. */
+  private async readStatus() {
     const server = this.server();
     const saved = this.load();
-    let offering: Json = null;
-    let offline: string | null = null;
-    try {
-      offering = await this.json("GET", "/v1/server", undefined, false);
-    } catch (e) {
-      offline = (e as Error).message;
-    }
+    const settle = <T>(p: Promise<T>) => p.then((value) => ({ value }), (error: unknown) => ({ error }));
+    const [offered, mine] = await Promise.all([settle(this.json("GET", "/v1/server", undefined, false)), saved.token ? settle(this.json("GET", "/v1/me")) : null]);
+    const offering: Json = "value" in offered ? offered.value : null;
+    const offline = "error" in offered ? (offered.error as Error).message : null;
     const base = { server, offering, offline, signedIn: !!saved.token, email: saved.email ?? null };
-    if (!saved.token || offline) return { ...base, me: null, billing: null, vault: null };
-    let me: Json;
-    try {
-      me = await this.json("GET", "/v1/me");
-    } catch (e) {
-      if (e instanceof AccountError && e.status === 401) return { ...base, signedIn: false, me: null, billing: null, vault: null };
-      throw e;
+    if (!saved.token || offline || !mine) return { ...base, me: null, billing: null, vault: null };
+    if ("error" in mine) {
+      if (mine.error instanceof AccountError && mine.error.status === 401) return { ...base, signedIn: false, me: null, billing: null, vault: null };
+      throw mine.error;
     }
+    const me: Json = mine.value;
     if (me.email && me.email !== saved.email) this.save({ ...this.load(), email: me.email, accountId: me.id });
-    const billing = await this.json("GET", "/v1/billing/sync").catch(() => null);
-    const vault = me.sync?.active ? await this.json("GET", "/v1/vault").catch(() => null) : null;
+    const [billing, vault] = await Promise.all([this.json("GET", "/v1/billing/sync").catch(() => null), me.sync?.active ? this.json("GET", "/v1/vault").catch(() => null) : null]);
     return { ...base, email: me.email, me, billing, vault };
   }
 

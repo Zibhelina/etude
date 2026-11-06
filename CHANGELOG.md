@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Pages open faster on a big collection.** The deck list, which every page shows, counts every deck from one read of the collection and is kept until something changes (or for half a minute, as cards come due); statistics read the day's start once instead of once per review; and the account part of Settings asks the Sync server in two steps instead of four, once for the whole page.
+- **The web edition opens in a moment, however much media you have.** It used to read every media file into memory as it opened (seconds, and as much memory as the files take); now it lists them and reads each one when it's needed. A page no longer waits while media files from a sync are written, and opening the app no longer makes Sync hash every media file again.
+- The web edition's Settings → Data → Clean up lists media in subfolders too.
+
 ## 3.0.2
 
 - **Card sounds keep playing from card to card.** Since 3.0.1, in Study a card's sound could stop a moment in and every later card stay silent until you left the deck, in the desktop app, Chrome and Edge (a Chromium bug). Card sound now plays through the card's own audio output, so it keeps going; card types can also play a sound with `etude.play(url)`.

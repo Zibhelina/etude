@@ -139,8 +139,11 @@ class WasmConnection implements SqlConnection {
   }
 
   /** Replaces the in-memory database with these bytes (an SQLite file image). */
+  /** See SqlConnection.reloads. */
+  reloads = 0;
   private load(bytes: Uint8Array) {
     const { capi, wasm } = this.s;
+    this.reloads++;
     this.forget();
     // Header bytes 18-19 say "WAL" (2) for a file node:sqlite wrote; SQLite can't open that from
     // memory, so mark the image as a rollback-journal database (1). The pages are the same.

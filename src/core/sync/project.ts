@@ -42,9 +42,12 @@ function applySettings(e: Etude, r: Row) {
   }
 }
 
+/** Dirty keys the projection handles: the tables, and cards whose schedule changed here. Media keys are the media step's. */
+const PROJECTED = [...TABLES, "replay"];
+
 function projected(e: Etude) {
   const db = e.db;
-  db.run(`DELETE FROM sync_dirty WHERE tbl IN (${TABLES.map(() => "?").join(",")})`, ...TABLES);
+  db.run(`DELETE FROM sync_dirty WHERE tbl IN (${PROJECTED.map(() => "?").join(",")})`, ...PROJECTED);
   db.run("INSERT INTO sync_meta VALUES('projection',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", JSON.stringify(fingerprint(db)));
   db.run("DELETE FROM sync_meta WHERE key='unprojected'");
 }
@@ -130,11 +133,25 @@ export function projectDirty(e: Etude) {
     // References are checked at commit, so parents and children can change in any order within it.
     db.run("PRAGMA defer_foreign_keys=ON");
     const dirty = new Map<string, Set<string>>(TABLES.map(t => [t, new Set<string>()]));
-    for (const r of db.all("SELECT tbl,key FROM sync_dirty")) dirty.get(r.tbl)?.add(r.key);
+    for (const r of db.all("SELECT DISTINCT tbl,key FROM sync_dirty")) dirty.get(r.tbl)?.add(r.key);
+    // Keys whose scheduling fields changed, here or elsewhere: the relational row can't tell, since a local edit is already in it.
+    const scheduling = new Map<string, Set<string>>();
+    for (const r of db.all("SELECT tbl,key FROM sync_dirty WHERE field!=''")) scheduling.set(r.tbl, (scheduling.get(r.tbl) ?? new Set()).add(r.key));
+    const moved = (table: string, key: string) => !!scheduling.get(table)?.has(key);
     const mark = (table: string, field: string, target: string) => { for (const k of referring(db, table, field, target)) dirty.get(table)!.add(k); };
     const sorted = (table: string) => [...dirty.get(table)!].sort();
     const max = (table: string) => db.get(`SELECT coalesce(max(id),0) n FROM ${table}`)!.n as number;
     const reindex = new Set<string>();
+    // Cards to replay, each from its earliest changed review (time, sync id), or from the start (null).
+    const replay = new Map<number, [string, string] | null>();
+    const touch = (card: number, at: [string, string] | null) => {
+      const cur = replay.get(card);
+      if (!replay.has(card) || (cur !== null && (at === null || at[0] < cur![0] || (at[0] === cur![0] && at[1] < cur![1])))) replay.set(card, at);
+    };
+    // Decks whose cards (subdecks' too) may have another configuration now.
+    const deckNames = new Set<string>(), schedulerTypes = new Set<string>(), presets: string[] = [];
+    let replayAll = false;
+    const schedulerOf = (def: string | undefined) => { const d = def ? JSON.parse(def) : null; return JSON.stringify([d?.scheduler ?? null, d?.schedulerOptions ?? null]); };
 
     const pk: Record<string, string> = { presets: "id", types: "id", schedulers: "id", type_folders: "path", type_placement: "type_id", tag_meta: "tag" };
     for (const t of ["presets","types","schedulers","type_folders","type_placement","tag_meta"]) for (const key of sorted(t)) {
@@ -144,16 +161,25 @@ export function projectDirty(e: Etude) {
       if (r) { if (t === "types" || t === "schedulers") r.id = key; upsert(t, jsonCols(r)); }
       else db.run(`DELETE FROM ${t} WHERE ${where}`, key);
       const now = db.get(`SELECT * FROM ${t} WHERE ${pk[t]}=?`, key);
-      if (t === "presets" && !!old !== !!now) mark("decks", "/preset_id", key);
+      if (t === "presets") {
+        if (!!old !== !!now) mark("decks", "/preset_id", key);
+        if (moved(t, key) || !!old !== !!now) {
+          for (const d of db.all("SELECT name FROM decks WHERE preset_id=?", key)) deckNames.add(d.name);
+          presets.push(key);
+        }
+      }
       if (t === "types") {
         if (!!old !== !!now) mark("items", "/type", key);
         if (old?.def !== now?.def) for (const i of db.all("SELECT id FROM items WHERE type=?", key)) reindex.add(i.id);
+        if (moved(t, key) || schedulerOf(old?.def) !== schedulerOf(now?.def)) schedulerTypes.add(key);
       }
+      if (t === "schedulers") replayAll = true;
     }
 
     // Decks: the rows first under placeholder names, then every name, since a duplicate's suffix depends on the others.
     let deckMax = max("decks");
     if (dirty.get("decks")!.size) {
+      const prior = new Map<string, Row | undefined>(sorted("decks").map(k => [k, db.get("SELECT name,config,preset_id FROM decks WHERE sync_id=?", k)]));
       for (const key of sorted("decks")) {
         const r = rowFor(db, "decks", key);
         const old = db.get("SELECT id FROM decks WHERE sync_id=?", key);
@@ -171,8 +197,17 @@ export function projectDirty(e: Etude) {
       const renamed = db.all("SELECT sync_id,name FROM decks").filter(d => want.has(d.sync_id) && want.get(d.sync_id) !== d.name);
       // Names are unique: clear the old ones before any deck takes another's.
       for (const d of renamed) db.run("UPDATE decks SET name=? WHERE sync_id=?", "\u0001" + d.sync_id, d.sync_id);
-      for (const d of renamed) db.run("UPDATE decks SET name=? WHERE sync_id=?", want.get(d.sync_id)!, d.sync_id);
+      for (const d of renamed) {
+        db.run("UPDATE decks SET name=? WHERE sync_id=?", want.get(d.sync_id)!, d.sync_id);
+        if (!d.name.startsWith("\u0001")) deckNames.add(d.name);
+        deckNames.add(want.get(d.sync_id)!);
+      }
+      for (const [key, o] of prior) {
+        const n = db.get("SELECT name,config,preset_id FROM decks WHERE sync_id=?", key);
+        if (moved("decks", key) || !o || !n || o.name !== n.name || o.config !== n.config || o.preset_id !== n.preset_id) for (const d of [o, n]) if (d) deckNames.add(d.name as string);
+      }
     }
+    for (const key of presets) for (const d of db.all("SELECT name FROM decks WHERE preset_id=?", key)) deckNames.add(d.name);
 
     for (const key of sorted("items")) {
       const r = rowFor(db, "items", key);
@@ -186,7 +221,8 @@ export function projectDirty(e: Etude) {
         for (const tag of tags) upsert("item_tags", { item_id: key, tag });
         reindex.add(key);
       } else if (old) db.run("DELETE FROM items WHERE id=?", key);
-      if (!!old !== live || (old && (old.created !== r!.created || old.type !== r!.type || old.deck_id !== deck!.id))) mark("cards", "/item_id", key);
+      if (!!old !== live) mark("cards", "/item_id", key);
+      else if (live && (moved("items", key) || old!.created !== r!.created || old!.type !== r!.type || old!.deck_id !== deck!.id)) for (const c of db.all("SELECT id FROM cards WHERE item_id=?", key)) touch(c.id, null);
     }
 
     let cardMax = max("cards");
@@ -194,8 +230,11 @@ export function projectDirty(e: Etude) {
       const r = rowFor(db, "cards", key);
       const old = db.get("SELECT id FROM cards WHERE sync_id=?", key);
       const item = r?.item_id != null ? db.get("SELECT created FROM items WHERE id=?", r.item_id) : undefined;
-      if (item) upsert("cards", { ...emptyCard(new Date(item.created)), ...r, id: old?.id ?? ++cardMax, sync_id: key, sched_state: null });
-      else if (old) db.run("DELETE FROM cards WHERE id=?", old.id);
+      if (item) {
+        const id = old?.id ?? ++cardMax;
+        upsert("cards", { ...emptyCard(new Date(item.created)), ...r, id, sync_id: key, sched_state: null });
+        touch(id, null);
+      } else if (old) db.run("DELETE FROM cards WHERE id=?", old.id);
       if (!!old !== !!item) { mark("reviews", "/card_id", key); mark("attempts", "/card_id", key); }
     }
 
@@ -212,7 +251,9 @@ export function projectDirty(e: Etude) {
         const r = rowFor(db, table, key);
         const card = r?.card_id != null ? db.get("SELECT id FROM cards WHERE sync_id=?", r.card_id)?.id : undefined;
         const old = db.get(`SELECT id FROM ${table} WHERE sync_id=?`, key);
-        return [key, { r, card, old, id: card ? old?.id ?? ++next : null }];
+        // A deleted row keeps its registers: they still say which card's history it was in.
+        const was = r ? undefined : db.get(`SELECT c.id FROM sync_registers g JOIN cards c ON c.sync_id=json_extract(g.value,'$') WHERE g.tbl=? AND g.key=? AND g.field='/card_id'`, table, key)?.id;
+        return [key, { r, card, old, was, id: card ? old?.id ?? ++next : null }];
       }));
     };
     const reviews = history("reviews"), attempts = history("attempts");
@@ -222,11 +263,22 @@ export function projectDirty(e: Etude) {
       else if (a.old) db.run("DELETE FROM attempts WHERE id=?", a.old.id);
     }
     for (const [key, v] of reviews) {
-      if (v.card) upsert("reviews", { ...v.r, id: v.id, sync_id: key, card_id: v.card, attempt_id: local("attempts", attempts, v.r!.attempt_id), state: 0, card_before: "{}", due_after: v.r!.ts });
-      else if (v.old) db.run("DELETE FROM reviews WHERE id=?", v.old.id);
+      if (v.card) {
+        upsert("reviews", { ...v.r, id: v.id, sync_id: key, card_id: v.card, attempt_id: local("attempts", attempts, v.r!.attempt_id), state: 0, card_before: "{}", due_after: v.r!.ts });
+        touch(v.card, [v.r!.ts, key]);
+      } else {
+        if (v.old) db.run("DELETE FROM reviews WHERE id=?", v.old.id);
+        // An undone review leaves its card's later history to be replayed without it.
+        if (v.was) touch(v.was, null);
+      }
     }
 
-    if (dirty.get("settings")!.has("settings")) { const r = rowFor(db, "settings", "settings"); if (r) applySettings(e, r); }
+    if (dirty.get("settings")!.has("settings")) {
+      const r = rowFor(db, "settings", "settings"), day = e.settings().dayStartHour;
+      if (r) applySettings(e, r);
+      // Script schedulers see study days, which start at this hour.
+      if (moved("settings", "settings") || e.settings().dayStartHour !== day) replayAll = true;
+    }
     for (const key of sorted("type_assets")) {
       const r = rowFor(db, "type_assets", key);
       if (r) {
@@ -237,7 +289,15 @@ export function projectDirty(e: Etude) {
     }
 
     e.invalidateCaches({ items: reindex });
-    e.replaySyncedCards();
+    if (replayAll) e.replaySyncedCards();
+    else {
+      const like = (name: string) => name.replace(/[\\%_]/g, "\\$&") + "::%";
+      for (const name of deckNames) for (const c of db.all("SELECT c.id FROM cards c JOIN items i ON i.id=c.item_id JOIN decks d ON d.id=i.deck_id WHERE d.name=? OR d.name LIKE ? ESCAPE '\\'", name, like(name))) touch(c.id, null);
+      for (const type of schedulerTypes) for (const c of db.all("SELECT c.id FROM cards c JOIN items i ON i.id=c.item_id WHERE i.type=?", type)) touch(c.id, null);
+      // Cards whose schedule this device changed itself: their reviews are already in the history to replay.
+      for (const r of db.all("SELECT c.id FROM sync_dirty s JOIN cards c ON c.sync_id=s.key WHERE s.tbl='replay'")) touch(r.id, ["\uffff", ""]);
+      e.replaySyncedCards(replay);
+    }
     projected(e);
   }));
 }
@@ -250,7 +310,7 @@ export function projectionPending(e: Etude): "full" | "changes" | null {
   const db = e.db;
   const built = db.get("SELECT value FROM sync_meta WHERE key='projection'")?.value;
   if (built !== JSON.stringify(fingerprint(db)) || db.get("SELECT 1 FROM sync_meta WHERE key='unprojected' AND value='true'")) return "full";
-  return db.get(`SELECT 1 FROM sync_dirty WHERE tbl IN (${TABLES.map(() => "?").join(",")}) LIMIT 1`, ...TABLES) ? "changes" : null;
+  return db.get(`SELECT 1 FROM sync_dirty WHERE tbl IN (${PROJECTED.map(() => "?").join(",")}) LIMIT 1`, ...PROJECTED) ? "changes" : null;
 }
 
 /** Brings the relational view up to date. A failed incremental pass rolls back and the whole view is rebuilt instead. */

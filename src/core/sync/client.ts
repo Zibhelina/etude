@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync
 import { dirname, join, resolve, sep } from "node:path";
 import type { Etude } from "../engine.ts";
 import { bootstrap, drain, install, localEvent, receive, rows, type Change } from "./log.ts";
-import { createVault, decryptBlob, decryptEvent, encryptBlob, encryptEvent, fromB64, sha256Hex, syncKeys, toB64, unwrapWithPassword, unwrapWithRecovery } from "./crypto.ts";
+import { createVault, decryptBlob, decryptEvent, encryptBlob, encryptEvent, fromB64, sha256Hex, syncKeys, toB64, unwrapWithPassword, unwrapWithRecovery, type SyncKeys } from "./crypto.ts";
 import { CloudTransport, FolderTransport, type Transport } from "./transport.ts";
 import { projectChanges, projectionPending } from "./project.ts";
 import { accountFor, secondStepBody, secondStepFrom, signInCode, type PendingSecondStep } from "../account.ts";
@@ -22,6 +22,11 @@ export type SyncProgress = {
   /** Bytes per second over the last few seconds. */
   rate:number;
 };
+
+/** A media folder whose files and subfolders didn't change is looked at again after this long anyway, for files rewritten in place. */
+const MEDIA_RESCAN_MS=10*60_000;
+/** Hashes whose bytes are kept in sync_blobs: type assets, which the projection reads. */
+const STORED="SELECT hash FROM sync_blobs WHERE bytes IS NOT NULL";
 
 /** Blob transfers run this many at a time: each is a round trip, and most media files are small. */
 const BLOB_CONCURRENCY=8;
@@ -169,62 +174,7 @@ export class SyncClient {
       db.tx(()=>{for(const p of plain)receive(db,p.id,p.event);this.set("cursor",page.cursor);});
       this.received+=fresh.length;cursor=page.cursor;more=page.more;
     }
-    // Hash the media on disk first, so a file another device already uploaded is neither downloaded nor uploaded again.
-    const files:[string,string][]=[];
-    const list=(dir:string,prefix="") => {if(!existsSync(dir))return;for(const name of readdirSync(dir)){const p=join(dir,name),relative=prefix+name;if(statSync(p).isDirectory())list(p,relative+"/");else if(safeMediaPath(relative))files.push([p,relative]);}};
-    list(this.e.mediaDir);
-    this.step("check",files.length);
-    const onDisk=new Map<string,string>(),local=new Map<string,string>();
-    // Hashes are kept with each file's size and modification time, so only new or changed files are read again.
-    db.sql.exec("CREATE TABLE IF NOT EXISTS sync_media_hashes (file TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime REAL NOT NULL, hash TEXT NOT NULL)");
-    const known=new Map(db.all<{file:string;size:number;mtime:number;hash:string}>("SELECT file,size,mtime,hash FROM sync_media_hashes").map(r=>[r.file,r]));
-    const fresh:[string,number,number,string][]=[];
-    for(const [p,relative] of files) {
-      const st=statSync(p),k=known.get(relative);
-      let hash=k&&k.size===st.size&&k.mtime===st.mtimeMs?k.hash:"";
-      if(!hash){hash=await sha256Hex(new Uint8Array(readFileSync(p)));fresh.push([relative,st.size,st.mtimeMs,hash]);}
-      onDisk.set(relative,hash);local.set(hash,p);this.moved(1);
-    }
-    db.tx(()=>{for(const f of fresh)db.run("INSERT INTO sync_media_hashes VALUES(?,?,?,?) ON CONFLICT(file) DO UPDATE SET size=excluded.size,mtime=excluded.mtime,hash=excluded.hash",...f);for(const file of known.keys())if(!onDisk.has(file))db.run("DELETE FROM sync_media_hashes WHERE file=?",file);});
-    this.step(down);
-    // Read the registers once: a collection can hold tens of thousands of media files.
-    const blobs=rows(db,"blob"),media=rows(db,"media");
-    const assets=db.all("SELECT hash,bytes FROM type_assets").filter(a=>!db.get("SELECT 1 FROM sync_blobs WHERE hash=?",a.hash)),assetHashes=new Set(assets.map(a=>a.hash));
-    // The version of each media file this device last had in step with the registers. A file that still matches it
-    // wasn't edited here, so a newer version from another device replaces it; one that doesn't is uploaded below.
-    db.sql.exec("CREATE TABLE IF NOT EXISTS sync_media_seen (file TEXT PRIMARY KEY, hash TEXT NOT NULL)");
-    const seen=new Map<string,string>(db.all("SELECT file,hash FROM sync_media_seen").map(r=>[r.file,r.hash]));
-    const edited=(file:string)=>onDisk.has(file)&&onDisk.get(file)!==media.get(file)?.hash&&onDisk.get(file)!==seen.get(file);
-    // Media files to fetch, by blob, written as soon as their blob arrives.
-    const root=resolve(this.e.mediaDir),wanted=new Map<string,string[]>();
-    for(const [file,r] of media) if(safeMediaPath(file)&&resolve(root,file).startsWith(root+sep)&&onDisk.get(file)!==r.hash&&!edited(file))wanted.set(r.hash,[...wanted.get(r.hash)??[],file]);
-    const write=(file:string,hash:string,bytes:Uint8Array)=>{const path=join(this.e.mediaDir,file);mkdirSync(dirname(path),{recursive:true});writeFileSync(path,bytes);onDisk.set(file,hash);};
-    const missing=[...blobs].filter(([hash])=>!assetHashes.has(hash)&&!db.get("SELECT 1 FROM sync_blobs WHERE hash=?",hash));
-    await pool(missing,BLOB_CONCURRENCY,async([hash,r])=>{
-      let bytes:Uint8Array;
-      if(local.has(hash))bytes=new Uint8Array(readFileSync(local.get(hash)!));
-      else {const ciphertext=await t.getBlob(r.name);this.moved(ciphertext.length);bytes=await decryptBlob(key,ciphertext,r.name);if(await sha256Hex(bytes)!==hash)throw new Error("plaintext blob hash mismatch");}
-      db.run("INSERT INTO sync_blobs VALUES(?,?,?)",hash,r.name,bytes);
-      for(const file of wanted.get(hash)??[])write(file,hash,bytes);
-    });
-    const changed=files.filter(([,relative])=>edited(relative));
-    const sizes=new Map<string,number>();
-    for(const a of assets) if(!blobs.has(a.hash))sizes.set(a.hash,a.bytes.length+BLOB_OVERHEAD);
-    for(const [p,relative] of changed) {const hash=onDisk.get(relative)!;if(!blobs.has(hash))sizes.set(hash,statSync(p).size+BLOB_OVERHEAD);}
-    const up=this.step("upload",[...sizes.values()].reduce((a,b)=>a+b,0)+this.unsentBytes());
-    const addBlob=async(bytes:Uint8Array) => {
-      const hash=await sha256Hex(bytes);let name=blobs.get(hash)?.name;
-      if(!name) {const b=await encryptBlob(key,bytes);await t.putBlob(b.hash,b.ciphertext);this.moved(b.ciphertext.length);name=b.hash;localEvent(db,"blob",hash,{"/name":name});blobs.set(hash,{name});}
-      db.run("INSERT INTO sync_blobs VALUES(?,?,?) ON CONFLICT(hash) DO UPDATE SET name=excluded.name,bytes=excluded.bytes",hash,name,bytes);
-      return hash;
-    };
-    // One upload per distinct file content, a few at a time.
-    const firstPath=new Map<string,string>();for(const [p,relative] of changed)if(!firstPath.has(onDisk.get(relative)!))firstPath.set(onDisk.get(relative)!,p);
-    await pool([...assets.map(a=>()=>new Uint8Array(a.bytes)),...[...firstPath.values()].map(p=>()=>new Uint8Array(readFileSync(p)))],BLOB_CONCURRENCY,async(read)=>void await addBlob(read()));
-    for(const [,relative] of changed)localEvent(db,"media",relative,{"/hash":onDisk.get(relative)});
-    drain(db);
-    for(const [file,r] of rows(db,"media")) {if(!safeMediaPath(file)||!resolve(root,file).startsWith(root+sep))continue;if(onDisk.get(file)===r.hash)continue;const b=db.get("SELECT bytes FROM sync_blobs WHERE hash=?",r.hash);if(!b)throw new Error("missing media blob");write(file,r.hash,b.bytes);}
-    db.tx(()=>{for(const [file,r] of rows(db,"media"))if(onDisk.get(file)===r.hash && seen.get(file)!==r.hash)db.run("INSERT INTO sync_media_seen VALUES(?,?) ON CONFLICT(file) DO UPDATE SET hash=excluded.hash",file,r.hash);});
+    const up=await this.media(t,key,down);
     // The media pass added events; count what is left exactly.
     up.total=up.done+this.unsentBytes();
     for(;;) {
@@ -244,5 +194,107 @@ export class SyncClient {
       drain(db);projectChanges(this.e);
     }
     this.set("config",{...this.config(),lastSync:new Date().toISOString()});return this.status();
+  }
+  /** When this process last looked at every media file. */
+  private scanned=0;
+  /**
+   * Brings media files and type assets in step with the registers, and starts the upload step. Skipped
+   * when no media event came in or is pending, no type asset waits for its bytes or its upload, and no
+   * media folder had a file added, removed or renamed. A folder's modification time doesn't change when
+   * a file in it is rewritten in place, so every file is also looked at on the first sync of a process
+   * and at least every few minutes.
+   */
+  private async media(t:Transport,key:SyncKeys,down:SyncProgress):Promise<SyncProgress> {
+    const db=this.e.db,dirs=this.meta<Record<string,number>>("media_dirs",{});
+    const mtime=(dir:string)=>{try{return statSync(join(this.e.mediaDir,dir)).mtimeMs;}catch{return -1;}};
+    const quiet=Date.now()-this.scanned<MEDIA_RESCAN_MS && Object.keys(dirs).length>0 && Object.entries(dirs).every(([dir,m])=>mtime(dir)===m)
+      && !db.get("SELECT 1 FROM sync_dirty WHERE tbl IN ('media','blob') LIMIT 1")
+      && !db.get(`SELECT 1 FROM type_assets WHERE hash NOT IN (${STORED}) LIMIT 1`)
+      && !db.get(`SELECT 1 FROM sync_registers WHERE tbl='type_assets' AND field='/hash' AND key NOT IN (SELECT key FROM sync_deleted WHERE tbl='type_assets') AND json_extract(value,'$') NOT IN (${STORED}) LIMIT 1`);
+    if(quiet)return this.step("upload",this.unsentBytes());
+    // Each folder's time is taken before it is read, so a file added meanwhile makes the next sync look again.
+    const files:[string,string][]=[],snapshot:Record<string,number>={"":mtime("")};
+    const list=(dir:string,prefix="") => {
+      if(!existsSync(dir))return;
+      snapshot[prefix]=mtime(prefix);
+      for(const d of readdirSync(dir,{withFileTypes:true})){const p=join(dir,d.name),relative=prefix+d.name;if(d.isSymbolicLink()?statSync(p).isDirectory():d.isDirectory())list(p,relative+"/");else if(safeMediaPath(relative))files.push([p,relative]);}
+    };
+    list(this.e.mediaDir);
+    // Hash the media on disk first, so a file another device already uploaded is neither downloaded nor uploaded again.
+    this.step("check",files.length);
+    const onDisk=new Map<string,string>(),local=new Map<string,string>();
+    // Hashes are kept with each file's size and modification time, so only new or changed files are read again.
+    db.sql.exec("CREATE TABLE IF NOT EXISTS sync_media_hashes (file TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime REAL NOT NULL, hash TEXT NOT NULL)");
+    const known=new Map(db.all<{file:string;size:number;mtime:number;hash:string}>("SELECT file,size,mtime,hash FROM sync_media_hashes").map(r=>[r.file,r]));
+    const fresh:[string,number,number,string][]=[],named=new Map<string,string>();
+    for(const [p,relative] of files) {
+      // Files Etude stores itself are named by their SHA-256; the name is checked below against the registers.
+      let hash=/^files\/([0-9a-f]{64})(\.[^/]*)?$/.exec(relative)?.[1]??"";
+      if(hash)named.set(relative,p);
+      else {
+        const st=statSync(p),k=known.get(relative);
+        hash=k&&k.size===st.size&&k.mtime===st.mtimeMs?k.hash:"";
+        if(!hash){hash=await sha256Hex(new Uint8Array(readFileSync(p)));fresh.push([relative,st.size,st.mtimeMs,hash]);}
+      }
+      onDisk.set(relative,hash);local.set(hash,p);this.moved(1);
+    }
+    db.tx(()=>{for(const f of fresh)db.run("INSERT INTO sync_media_hashes VALUES(?,?,?,?) ON CONFLICT(file) DO UPDATE SET size=excluded.size,mtime=excluded.mtime,hash=excluded.hash",...f);for(const file of known.keys())if(!onDisk.has(file)||file.startsWith("files/"))db.run("DELETE FROM sync_media_hashes WHERE file=?",file);});
+    // A file named by its hash is trusted until its bytes are used: then they are checked.
+    const readLocal=async(hash:string):Promise<Uint8Array|null>=>{const p=local.get(hash);if(!p)return null;const bytes=new Uint8Array(readFileSync(p));return await sha256Hex(bytes)===hash?bytes:null;};
+    this.step(down);
+    // Read the registers once: a collection can hold tens of thousands of media files.
+    const blobs=rows(db,"blob"),media=rows(db,"media");
+    // Type assets keep their bytes in sync_blobs for the projection. Media files are only on disk.
+    const assetHashes=new Set(db.all("SELECT json_extract(value,'$') hash FROM sync_registers WHERE tbl='type_assets' AND field='/hash' AND key NOT IN (SELECT key FROM sync_deleted WHERE tbl='type_assets')").map(r=>r.hash as string));
+    const unsent=db.all(`SELECT hash,max(length(bytes)) size FROM type_assets WHERE hash NOT IN (${STORED}) GROUP BY hash`);
+    // The version of each media file this device last had in step with the registers. A file that still matches it
+    // wasn't edited here, so a newer version from another device replaces it; one that doesn't is uploaded below.
+    db.sql.exec("CREATE TABLE IF NOT EXISTS sync_media_seen (file TEXT PRIMARY KEY, hash TEXT NOT NULL)");
+    const seen=new Map<string,string>(db.all("SELECT file,hash FROM sync_media_seen").map(r=>[r.file,r.hash]));
+    // A name that matches neither the registers nor the version last in step with them is read: the file is new, or its name is wrong.
+    for(const [relative,p] of named) {
+      const hash=onDisk.get(relative)!;if(hash===media.get(relative)?.hash||hash===seen.get(relative))continue;
+      const real=await sha256Hex(new Uint8Array(readFileSync(p)));
+      if(real!==hash){onDisk.set(relative,real);if(local.get(hash)===p)local.delete(hash);local.set(real,p);}
+    }
+    const edited=(file:string)=>onDisk.has(file)&&onDisk.get(file)!==media.get(file)?.hash&&onDisk.get(file)!==seen.get(file);
+    // Media files to fetch, by blob, written as soon as their blob arrives.
+    const root=resolve(this.e.mediaDir),wanted=new Map<string,string[]>();
+    for(const [file,r] of media) if(safeMediaPath(file)&&resolve(root,file).startsWith(root+sep)&&onDisk.get(file)!==r.hash&&!edited(file))wanted.set(r.hash,[...wanted.get(r.hash)??[],file]);
+    const write=(file:string,hash:string,bytes:Uint8Array)=>{const path=join(this.e.mediaDir,file);mkdirSync(dirname(path),{recursive:true});writeFileSync(path,bytes);onDisk.set(file,hash);};
+    // Blobs to fetch: the files to write, and type assets with no bytes here. One whose blob event hasn't arrived waits for a later sync.
+    const fetch=new Map<string,string>();let waiting=false;
+    for(const hash of [...wanted.keys(),...[...assetHashes].filter(h=>!db.get(`SELECT 1 FROM sync_blobs WHERE hash=? AND bytes IS NOT NULL`,h)&&!unsent.some(a=>a.hash===h))]) {const name=blobs.get(hash)?.name;if(name)fetch.set(hash,name);else waiting=true;}
+    await pool([...fetch],BLOB_CONCURRENCY,async([hash,name])=>{
+      let bytes:Uint8Array|null=await readLocal(hash);
+      if(!bytes) {const ciphertext=await t.getBlob(name);this.moved(ciphertext.length);bytes=await decryptBlob(key,ciphertext,name);if(await sha256Hex(bytes)!==hash)throw new Error("plaintext blob hash mismatch");}
+      if(assetHashes.has(hash))db.run("INSERT INTO sync_blobs VALUES(?,?,?) ON CONFLICT(hash) DO UPDATE SET name=excluded.name,bytes=excluded.bytes",hash,name,bytes);
+      for(const file of wanted.get(hash)??[])write(file,hash,bytes);
+    });
+    const changed=files.filter(([,relative])=>edited(relative));
+    const sizes=new Map<string,number>();
+    for(const a of unsent) if(!blobs.has(a.hash))sizes.set(a.hash,a.size+BLOB_OVERHEAD);
+    for(const [p,relative] of changed) {const hash=onDisk.get(relative)!;if(!blobs.has(hash))sizes.set(hash,statSync(p).size+BLOB_OVERHEAD);}
+    const up=this.step("upload",[...sizes.values()].reduce((a,b)=>a+b,0)+this.unsentBytes());
+    const addBlob=async(bytes:Uint8Array,asset:boolean) => {
+      const hash=await sha256Hex(bytes);let name=blobs.get(hash)?.name;
+      if(!name) {const b=await encryptBlob(key,bytes);await t.putBlob(b.hash,b.ciphertext);this.moved(b.ciphertext.length);name=b.hash;localEvent(db,"blob",hash,{"/name":name});blobs.set(hash,{name});}
+      if(asset)db.run("INSERT INTO sync_blobs VALUES(?,?,?) ON CONFLICT(hash) DO UPDATE SET name=excluded.name,bytes=excluded.bytes",hash,name,bytes);
+      return hash;
+    };
+    // One upload per distinct file content, a few at a time. A file's event carries the hash of the bytes sent.
+    const firstPath=new Map<string,string>();for(const [p,relative] of changed)if(!firstPath.has(onDisk.get(relative)!))firstPath.set(onDisk.get(relative)!,p);
+    const sent=new Map<string,string>();
+    await pool([...unsent.map(a=>async()=>void await addBlob(new Uint8Array(db.get("SELECT bytes FROM type_assets WHERE hash=? LIMIT 1",a.hash)!.bytes),true)),...[...firstPath].map(([hash,p])=>async()=>void sent.set(hash,await addBlob(new Uint8Array(readFileSync(p)),false)))],BLOB_CONCURRENCY,async(run)=>run());
+    for(const [,relative] of changed){const hash=sent.get(onDisk.get(relative)!)!;onDisk.set(relative,hash);localEvent(db,"media",relative,{"/hash":hash});}
+    drain(db);
+    db.tx(()=>{
+      for(const [file,r] of rows(db,"media"))if(onDisk.get(file)===r.hash && seen.get(file)!==r.hash)db.run("INSERT INTO sync_media_seen VALUES(?,?) ON CONFLICT(file) DO UPDATE SET hash=excluded.hash",file,r.hash);
+      // Everything that came in is on disk now, unless a blob's event is still on its way.
+      if(!waiting)db.run("DELETE FROM sync_dirty WHERE tbl IN ('media','blob')");
+      this.set("media_dirs",snapshot);
+    });
+    this.scanned=Date.now();
+    return up;
   }
 }

@@ -159,3 +159,40 @@ test("rescheduling here gives what the sync replay gives", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("rescheduling follows the sync replay for reviews made at the same moment and for reset cards", async () => {
+  const dir = temp();
+  const [a, b] = await devices(dir, 2);
+  try {
+    a.upsertItem({ id: "tied", deck: "Fuzz", type: "basic", fields: { front: "q", back: "a" } });
+    await syncFor(a).now();
+    await syncFor(b).now();
+    const id = (e: Etude) => e.db.get("SELECT id FROM cards WHERE item_id = 'tied'")!.id as number;
+    // Each device inserted its own review first; the sync replay orders the two by sync id on both.
+    const at = new Date(Date.now() - 90 * DAY);
+    a.rate(id(a), 4, { at });
+    b.rate(id(b), 1, { at });
+    for (const e of [a, b, a, b]) await syncFor(e).now();
+    a.rate(id(a), 3, { at: new Date(at.getTime() + 30 * DAY) });
+    for (const e of [a, b, a, b]) await syncFor(e).now();
+    for (const e of [a, b]) {
+      const canonical = schedules(e);
+      e.reschedule();
+      assert.deepEqual(schedules(e), canonical);
+    }
+    // After a reset, only the reviews that follow it count.
+    a.resetCards([id(a)]);
+    for (const days of [0, 2, 12]) a.rate(id(a), 3, { at: new Date(Date.now() + 60_000 + days * DAY) });
+    for (const e of [a, b]) await syncFor(e).now();
+    for (const e of [a, b]) {
+      const canonical = schedules(e);
+      e.reschedule();
+      assert.deepEqual(schedules(e), canonical);
+      assert.equal(canonical[0].reps, 3);
+    }
+  } finally {
+    a.close();
+    b.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

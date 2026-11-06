@@ -2974,18 +2974,24 @@ export class Etude {
 
   private replayCards(cards: Row[]) {
     let n = 0;
+    // In a synced collection, follow the sync replay: tied reviews in sync-id order, and history from a card's reset on.
+    const synced = !!this.db.get("SELECT 1 FROM sqlite_master WHERE name='sync_control'");
     this.db.tx(() => {
       for (const c of cards) {
+        const reset: string | null = synced ? (c.sync_reset ?? null) : null;
         const reviews = this.db.all<{ ts: string; rating: number; score: number | null; duration_ms: number | null; grade: string | null }>(
-          "SELECT r.ts, r.rating, r.score, r.duration_ms, a.grade FROM reviews r LEFT JOIN attempts a ON a.id = r.attempt_id WHERE r.card_id = ? AND r.practice = 0 ORDER BY r.ts",
+          `SELECT r.ts, r.rating, r.score, r.duration_ms, a.grade FROM reviews r LEFT JOIN attempts a ON a.id = r.attempt_id WHERE r.card_id = ? AND r.practice = 0 AND (? IS NULL OR r.ts > ?) ORDER BY r.ts${synced ? ", r.sync_id" : ""}`,
           c.id,
+          reset,
+          reset,
         );
         if (!reviews.length) continue;
+        const start = new Date(reset ?? c.created);
         const cfg = this.cardConfig(c.deck, c.type);
         const script = this.scriptFor(cfg);
         if (script) {
           // Same script, same history: run it again answer by answer.
-          let row: CardRow = { ...(sched.emptyCard(new Date(c.created)) as any), id: c.id, item_id: c.item_id, face: "", suspended: 0, buried_until: null, sched_state: null };
+          let row: CardRow = { ...(sched.emptyCard(start) as any), id: c.id, item_id: c.item_id, face: "", suspended: 0, buried_until: null, sched_state: null };
           // runScheduler reads earlier results from the table, so each step looks just before its own review.
           for (const r of reviews) {
             const g = parse<Grade | null>(r.grade, null);
@@ -3000,7 +3006,7 @@ export class Etude {
         } else {
           // A drill's unrated answers count as the rating their score suggests.
           const rated = reviews.map((r) => ({ ts: r.ts, rating: r.rating >= 1 ? r.rating : (sched.suggestRating(r.score, cfg) ?? 3) }));
-          const s = sched.replay(rated, new Date(c.created), cfg, sched.cardKey(c as CardRow));
+          const s = sched.replay(rated, start, cfg, sched.cardKey(c as CardRow));
           this.db.run(
             "UPDATE cards SET state = ?, due = ?, stability = ?, difficulty = ?, elapsed_days = ?, scheduled_days = ?, reps = ?, lapses = ?, learning_steps = ?, last_review = ?, sched_state = NULL WHERE id = ?",
             s.state, s.due, s.stability, s.difficulty, s.elapsed_days, s.scheduled_days, s.reps, s.lapses, s.learning_steps, s.last_review, c.id,

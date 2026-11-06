@@ -29,6 +29,19 @@
       return null;
     }
   };
+  // The editor kit (code and markdown editors, highlighting) for the card runtime, one file built
+  // with the app (dist-browser/kit/kit.js), imported from a blob URL.
+  let kit = null;
+  globalThis.__etudeKit = () =>
+    (kit ??= get(BASE + "runtime/kit/kit.js")
+      .then((m) => {
+        if (m.status !== 200) throw new Error("The editor kit isn't available (" + m.status + ")");
+        return import(URL.createObjectURL(new Blob([m.body], { type: "text/javascript" })));
+      })
+      .catch((e) => {
+        kit = null;
+        throw e;
+      }));
   const realFetch = globalThis.fetch.bind(globalThis);
   globalThis.fetch = async (input, init) => {
     const h = ours(typeof input === "string" || input instanceof URL ? String(input) : input.url);

@@ -10,6 +10,9 @@ export default defineConfig({
     emptyOutDir: true,
     copyPublicDir: false,
     chunkSizeWarningLimit: 1500,
+    // The serverless builds load it from a blob URL, where a chunk's relative imports can't resolve:
+    // ETUDE_KIT_SINGLE=1 puts every language in the one file.
+    rolldownOptions: process.env.ETUDE_KIT_SINGLE ? { output: { inlineDynamicImports: true } } : undefined,
     lib: { entry: fileURLToPath(new URL("./src/editor/kit.ts", import.meta.url)), formats: ["es"], fileName: () => "kit.js" },
   },
 });

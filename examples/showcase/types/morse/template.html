@@ -1,17 +1,13 @@
-<div class="mo-eyebrow">Tap it out in Morse</div>
-<div class="mo-letter">{{letter}}</div>
-{{#name}}<div class="mo-name">{{name}}</div>{{/name}}
-<div class="mo-tape mo-mine" aria-live="polite"></div>
-<div class="mo-pad only-answer">
-  <button type="button" class="mo-key" data-s="."><span class="mo-sym dot"></span><small>dot <kbd>.</kbd></small></button>
-  <button type="button" class="mo-key" data-s="-"><span class="mo-sym dash"></span><small>dash <kbd>-</kbd></small></button>
-  <button type="button" class="mo-key mo-del" data-s="del" aria-label="Delete">⌫</button>
+<div class="mo" tabindex="-1" autofocus>
+  <div class="c3-eyebrow only-answer">Tap it out</div>
+  <div class="mo-letter">{{letter}}</div>
+  {{#name}}<div class="mo-name">{{name}}</div>{{/name}}
+  <div class="mo-code mo-mine only-answer" aria-live="polite"></div>
+  <button type="button" class="mo-key only-answer" aria-label="Morse key: a short press is a dot, a hold is a dash"><span>tap · hold</span></button>
+  <div class="mo-hint only-answer"><span class="mo-hint-text"></span><button type="button" class="mo-del" aria-label="Delete the last symbol" title="Delete the last symbol (Backspace)">⌫</button></div>
+  <template data-on="result">
+    <div class="mo-code mo-correct big" aria-label="{{letter}} in Morse"></div>
+    <div class="mo-yours" hidden>You tapped <span class="mo-code mo-sent"></span></div>
+    {{#mnemonic}}<div class="prose mo-sub">{{md:mnemonic}}</div>{{/mnemonic}}
+  </template>
 </div>
-<template data-on="result">
-  <div class="e-reveal mo-result">
-    <div class="mo-lamp"></div>
-    <div class="e-section-title">{{letter}} in Morse</div>
-    <div class="mo-tape mo-correct"></div>
-    {{#mnemonic}}<div class="prose e-muted">{{md:mnemonic}}</div>{{/mnemonic}}
-  </div>
-</template>

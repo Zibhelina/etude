@@ -143,36 +143,40 @@ async function property(kind:"folder"|"cloud") {
       await sync(i);
     }
     for(let i=0;i<18;i++)put(es[0],"item-"+i);
-    es[0].updateDeck("Test",{config:{enableFuzz:false}});
+    // Fuzz stays on: a review made here is fuzzed, and the next sync must replace it with the canonical replay.
+    es[0].updateDeck("Test",{config:{}});
     es[0].ensureDeck("Drill");es[0].updateDeck("Drill",{config:{scheduler:"drill"}});put(es[0],"drill");es[0].moveItems(["drill"],"Drill");
     es[0].ensureDeck("Leitner");es[0].updateDeck("Leitner",{config:{scheduler:"leitner"}});put(es[0],"leitner");es[0].moveItems(["leitner"],"Leitner");
-    es[0].saveScheduler({id:"seeded-script",name:"Seeded script",schedule:"return {due: Date.now()+1000+Math.floor(Math.random()*1000),state:{n:card.reps+1}};"});
+    es[0].saveScheduler({id:"seeded-script",name:"Seeded script",schedule:"return {due: Date.now()+1000+Math.floor(Math.random()*1000)+ctx.history.length*60000,state:{n:card.reps+1,today:ctx.doneToday,last:ctx.history.at(-1)?.at??null}};"});
     es[0].ensureDeck("Script");es[0].updateDeck("Script",{config:{scheduler:"seeded-script"}});put(es[0],"script");es[0].moveItems(["script"],"Script");
     // Asset and media bytes take the encrypted blob path.
     const def=es[0].type("basic");es[0].saveType({...def,id:"sync-basic",name:"Sync basic",assets:{"sample.json":Buffer.from('{"mesh":"private"}').toString("base64")}});
     es[0].storeMedia("pixel.png",Buffer.from("test bytes"));
     es[0].upsertItem({id:"custom",deck:"Test",type:"sync-basic",fields:{front:"custom front",back:"custom back"}});
     es[0].upsertItem({id:"typed",deck:"Test",type:"typed",fields:{prompt:"question",answers:["answer"]}});
-    es[0].savePreset({id:"shared-preset",name:"Shared preset",config:{desiredRetention:0.9}});
+    es[0].savePreset({id:"shared-preset",name:"Shared preset",config:{desiredRetention:0.9}});es[0].updateDeck("Test",{presetId:"shared-preset"});
     for(let n=0;n<2;n++)for(let i=0;i<3;i++)await sync(i);
     let state=0x5eed1234;const rand=()=>{state^=state<<13;state^=state>>>17;state^=state<<5;return(state>>>0)/4294967296;};
     const deleted=new Set<string>();let reviews=0;const reviewKeys:string[]=[];
     for(let round=0;round<240;round++) {
       const device=Math.floor(rand()*3),e=es[device],index=Math.floor(rand()*18),key="item-"+index;
-      if(round%5===0){const c=e.db.get("SELECT id,sync_id FROM cards WHERE item_id=?",round%20===0?"drill":round%20===5?"leitner":round%20===10?"script":key) ?? e.db.get("SELECT id,sync_id FROM cards WHERE item_id='drill'")!;e.rate(c.id,3,{at:new Date(1800000000000+round*1000)});reviewKeys.push(c.sync_id);reviews++;}
+      if(round%5===0){const c=e.db.get("SELECT id,sync_id FROM cards WHERE item_id=?",round%20===0?"drill":round%20===5?"leitner":round%20===10?"script":round%40===15?"custom":"item-"+index%6) ?? e.db.get("SELECT id,sync_id FROM cards WHERE item_id='drill'")!;e.rate(c.id,3,{at:new Date(1800000000000+round*1000)});reviewKeys.push(c.sync_id);reviews++;}
       else if(round%13===0 && index>=12){if(e.db.get("SELECT 1 FROM items WHERE id=?",key)){e.deleteItems([key]);deleted.add(key);}}
       // Paths an incremental projection has to follow: decks created twice offline (a suffixed name), renamed or merged.
       else if(round%7===1){if(e.db.get("SELECT 1 FROM items WHERE id=?",key))e.moveItems([key],round%3?"Shared":"Shared::Inner");}
       else if(round%11===2){const d=e.db.get("SELECT name FROM decks WHERE name LIKE 'Shared%' ORDER BY name LIMIT 1");if(d)e.renameDeck(d.name,`Shared ${round%4}`);}
       // Configuration a card's schedule depends on: deck config, presets, a type's own scheduler, the day start.
-      else if(round%17===3)e.updateDeck("Test",{config:{enableFuzz:false,desiredRetention:0.8+(round%3)*0.05}});
-      else if(round%17===8){e.savePreset({id:"shared-preset",name:"Shared preset",config:{desiredRetention:0.85+(round%2)*0.1}});e.updateDeck("Test",{presetId:round%2?"shared-preset":null});}
+      else if(round%17===3)e.updateDeck("Test",{config:{learningSteps:round%2?["1m","10m"]:["2m"]}});
+      else if(round%43===10)e.reschedule();
+      else if(round%17===8)e.savePreset({id:"shared-preset",name:"Shared preset",config:{desiredRetention:0.8+(round%3)*0.07}});
+      else if(round%41===16)e.updateDeck("Test",{presetId:round%3?"shared-preset":null});
       else if(round%19===4){const def=e.type("sync-basic");e.saveType({...def,scheduler:round%2?"leitner":undefined});}
       else if(round%29===6)e.updateSettings({dayStartHour:round%24});
       // Card controls and history: suspension, reset, a due date, undo, graded attempts, tag notes.
       else if(round%23===5){const c=e.db.get("SELECT id FROM cards WHERE item_id=?",round%2?key:"custom");if(c)e.setSuspended([c.id],!!(round%3));}
       else if(round%23===12){const c=e.db.get("SELECT id FROM cards WHERE item_id=?",key);if(c)round%2?e.resetCards([c.id]):e.setDue([c.id],new Date(1900000000000+round*1000));}
-      else if(round%31===7){const u=e.undo();if(u){const k=e.db.get("SELECT sync_id FROM cards WHERE id=?",u.cardId)?.sync_id;const at=reviewKeys.lastIndexOf(k);if(at>=0)reviewKeys.splice(at,1);reviews--;}}
+      // Undo after a sync, so the undone review was already part of the canonical history.
+      else if(round%31===7){await sync(device);const u=e.undo();if(u){const k=e.db.get("SELECT sync_id FROM cards WHERE id=?",u.cardId)?.sync_id;const at=reviewKeys.lastIndexOf(k);if(at>=0)reviewKeys.splice(at,1);reviews--;}}
       else if(round%31===20){const c=e.db.get("SELECT id,sync_id FROM cards WHERE item_id='typed'")!;const a=await e.submit(c.id,1,round%2?"answer":"wrong");e.rate(c.id,round%2?3:1,{attemptId:a.attemptId,at:new Date(1800000000000+round*1000)});reviewKeys.push(c.sync_id);reviews++;}
       else if(round%37===9)e.setTagMeta(`tag-${device}`,{description:`round ${round}`});
       else if(e.db.get("SELECT 1 FROM items WHERE id=?",key)){
@@ -190,6 +194,26 @@ async function property(kind:"folder"|"cloud") {
 }
 test("seed 0x5eed1234: 3 offline devices converge through encrypted folder (240 rounds)",()=>property("folder"));
 test("seed 0x5eed1234: 3 offline devices converge through real etude-cloud HTTP (240 rounds)",{skip:!process.env.ETUDE_SYNC_TEST_SERVER},()=>property("cloud"));
+test("history that arrives out of order: an attempt before its review, a review before an earlier one",async()=>{
+  const dir=temp();const es=await Promise.all(["a","b","c"].map(n=>Etude.open(join(dir,`${n}.db`),{home:join(dir,"h"+n)})));const [a,b,c]=es;
+  try {
+    const { projectChanges } = await import("../src/core/sync/project.ts");
+    for(const e of es)syncFor(e).setup({folder:join(dir,"shared")});
+    const deliver=(from:Etude,to:Etude,filter:(e:Change)=>boolean=()=>true)=>{drain(from.db);for(const r of from.db.all("SELECT id,body FROM sync_events ORDER BY id")){const e=JSON.parse(r.body);if(filter(e))receive(to.db,r.id,e);}projectChanges(to);};
+    a.upsertItem({id:"typed",deck:"Test",type:"typed",fields:{prompt:"question",answers:["answer"]}});
+    deliver(a,b);deliver(a,c);
+    const answer=async(e:Etude,at:string)=>{const card=e.db.get("SELECT id FROM cards WHERE item_id='typed'")!.id;const x=await e.submit(card,1,"answer");e.rate(card,3,{attemptId:x.attemptId,at:new Date(at)});};
+    // Offline, a answers later than c does.
+    await answer(a,"2027-01-05T10:00:00.000Z");await answer(c,"2027-01-01T10:00:00.000Z");
+    // b gets a's attempt alone, then a's review, then c's earlier answer.
+    for(const step of [()=>deliver(a,b,e=>e.table==="attempts"),()=>deliver(a,b),()=>deliver(c,b)]) {
+      step();
+      assert.deepEqual(relational(b),await rebuilt(b,dir));
+    }
+    assert.equal(b.db.get("SELECT count(*) n FROM attempts WHERE review_id IS NOT NULL")!.n,2);
+    assert.equal(b.db.get("SELECT value FROM sync_meta WHERE key='fallback'"),undefined);
+  }finally{for(const e of es)e.close();rmSync(dir,{recursive:true,force:true});}
+});
 test("synced settings can't carry provider URLs or unsanitized theme CSS from another device",async()=>{
   const dir=temp();const e=await Etude.open(join(dir,"a.db"),{home:join(dir,"home")});
   try {

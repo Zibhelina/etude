@@ -14,6 +14,8 @@ const q = (s: string) => `'${s.replaceAll("'", "''")}'`;
 const id = (s: string) => `"${s}"`;
 /** Register fields that point at another entity. The partial index needs this exact term in each query that uses it. */
 const REF = "field IN ('/deck_id','/preset_id','/item_id','/card_id','/review_id','/attempt_id','/type')";
+/** Fields a card's schedule depends on, by table. A change to one is recorded with its key, so the projection replays the cards it reaches. */
+export const SCHEDULING: Record<string, string[]> = { decks: ["/name", "/preset_id", "/config"], presets: ["/config"], items: ["/deck_id", "/type", "/created"], types: ["/def/scheduler", "/def/schedulerOptions"], settings: ["/value/dayStartHour"] };
 const SETTINGS = new Set(["dayStartHour", "learnAheadMinutes", "theme", "themes", "typePrefs", "fun"]);
 export const safeSettings = (s: any) => Object.fromEntries(Object.entries(s ?? {}).filter(([k]) => SETTINGS.has(k)));
 
@@ -50,8 +52,9 @@ export function install(db: Db) {
     CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sync_blobs (hash TEXT PRIMARY KEY, name TEXT NOT NULL, bytes BLOB);
     CREATE INDEX IF NOT EXISTS sync_events_unsent ON sync_events(id) WHERE sent=0;
-    CREATE TABLE IF NOT EXISTS sync_dirty (tbl TEXT NOT NULL, key TEXT NOT NULL, PRIMARY KEY(tbl,key)) WITHOUT ROWID;
+    CREATE TABLE IF NOT EXISTS sync_dirty (tbl TEXT NOT NULL, key TEXT NOT NULL, field TEXT NOT NULL DEFAULT '', PRIMARY KEY(tbl,key,field)) WITHOUT ROWID;
     CREATE INDEX IF NOT EXISTS sync_registers_ref ON sync_registers(tbl,field,value) WHERE ${REF};
+    CREATE TABLE IF NOT EXISTS sync_replay (card TEXT PRIMARY KEY, ts TEXT, review TEXT, row TEXT NOT NULL);
     INSERT OR IGNORE INTO sync_control(id,device) VALUES(1,lower(hex(randomblob(16))));`);
   for (const table of UUID_TABLES) {
     if (!db.all(`PRAGMA table_info(${table})`).some(r => r.name === "sync_id")) db.sql.exec(`ALTER TABLE ${table} ADD COLUMN sync_id TEXT`);
@@ -59,6 +62,9 @@ export function install(db: Db) {
     db.sql.exec(`CREATE UNIQUE INDEX IF NOT EXISTS sync_${table}_uid ON ${table}(sync_id)`);
   }
   for (const col of ["sync_reset", "sync_due", "sync_due_at"]) if (!db.all("PRAGMA table_info(cards)").some(r=>r.name===col)) db.sql.exec(`ALTER TABLE cards ADD COLUMN ${col} TEXT`);
+  // A schedule changed here (a review with fuzz, a reschedule) is replayed canonically at the next sync.
+  db.sql.exec(`CREATE TRIGGER IF NOT EXISTS sync_cards_replay AFTER UPDATE OF state,due,stability,difficulty,elapsed_days,scheduled_days,reps,lapses,learning_steps,last_review,sched_state ON cards
+    WHEN (SELECT applying FROM sync_control WHERE id=1)=0 AND NEW.sync_id IS NOT NULL BEGIN INSERT OR IGNORE INTO sync_dirty VALUES('replay',NEW.sync_id,''); END;`);
   for (const table of TABLES) {
     for (const op of ["INSERT", "UPDATE", "DELETE"]) {
       const p = op === "DELETE" ? "OLD" : "NEW";
@@ -112,15 +118,20 @@ function normal(table: string, raw: Row) {
 export function apply(db: Db, event: Change) {
   if (event.v !== 1 || !TABLES.concat("media", "blob").includes(event.table) || !Array.isArray(event.stamp) || event.stamp.length !== 3) throw new Error("unsupported sync event");
   let changed = false;
+  const marks = new Set<string>(), watched = SCHEDULING[event.table];
   if (event.deleted) {
     const old = db.get("SELECT stamp FROM sync_deleted WHERE tbl=? AND key=?", event.table, event.key);
     if (!old || compare(event.stamp, JSON.parse(old.stamp)) > 0) { db.run("INSERT INTO sync_deleted VALUES(?,?,?) ON CONFLICT(tbl,key) DO UPDATE SET stamp=excluded.stamp", event.table, event.key, JSON.stringify(event.stamp)); changed = true; }
   }
   for (const [field, value] of Object.entries(event.fields)) {
     const old = db.get("SELECT stamp FROM sync_registers WHERE tbl=? AND key=? AND field=?", event.table, event.key, field);
-    if (!old || compare(event.stamp, JSON.parse(old.stamp)) > 0) { db.run("INSERT INTO sync_registers VALUES(?,?,?,?,?) ON CONFLICT(tbl,key,field) DO UPDATE SET value=excluded.value,stamp=excluded.stamp", event.table, event.key, field, JSON.stringify(value), JSON.stringify(event.stamp)); changed = true; }
+    if (!old || compare(event.stamp, JSON.parse(old.stamp)) > 0) {
+      db.run("INSERT INTO sync_registers VALUES(?,?,?,?,?) ON CONFLICT(tbl,key,field) DO UPDATE SET value=excluded.value,stamp=excluded.stamp", event.table, event.key, field, JSON.stringify(value), JSON.stringify(event.stamp));
+      changed = true;
+      for (const w of watched ?? []) if (field === w || field.startsWith(w + "/")) marks.add(w);
+    }
   }
-  if (changed) db.run("INSERT OR IGNORE INTO sync_dirty VALUES(?,?)", event.table, event.key);
+  if (changed) for (const field of ["", ...marks]) db.run("INSERT OR IGNORE INTO sync_dirty VALUES(?,?,?)", event.table, event.key, field);
 }
 export function localEvent(db: Db, table: string, key: string, fields: Record<string, unknown>, deleted = false, captured?: Stamp) {
   const c = db.get("SELECT * FROM sync_control WHERE id=1")!;

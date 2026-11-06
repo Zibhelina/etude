@@ -68,6 +68,10 @@ import { collectFileNames, MAX_MEDIA_BYTES, mediaType } from "./media.ts";
 import { decodeAssets, hashBytes, type AssetInfo } from "./assets.ts";
 import { imagePixels, normalizeBoxes, OcclusionError } from "./occlusion.ts";
 import { DEFAULT_PRIVACY, type Privacy } from "./telemetry.ts";
+import { muted } from "./sync/log.ts";
+
+/** The card columns a canonical replay computes; the rest of a card comes from its registers. */
+const REPLAY_FIELDS = ["state", "due", "stability", "difficulty", "elapsed_days", "scheduled_days", "reps", "lapses", "learning_steps", "last_review", "sched_state"];
 
 /**
  * The collection is its owner's only: on a shared machine the default umask leaves files readable by everyone. The
@@ -2896,21 +2900,53 @@ export class Etude {
     });
   }
 
-  /** Canonical sync replay uses UTC study days, a stable review tie-break and no FSRS fuzz. */
-  replaySyncedCards() {
-    for (const c of this.db.all("SELECT c.*,i.created,i.type,d.name AS deck FROM cards c JOIN items i ON i.id=c.item_id JOIN decks d ON d.id=i.deck_id")) {
-      const cfg = { ...this.cardConfig(c.deck, c.type), enableFuzz: false };
-      const script = this.scriptFor(cfg);
+  /**
+   * Canonical sync replay uses UTC study days, a stable review tie-break and no FSRS fuzz. Without a scope
+   * every card is replayed from its first review. A scope maps card ids to the earliest changed review
+   * (time, sync id), or null for "from the first review": a card whose changes all come after the last
+   * review it was replayed to continues from the state saved then (`sync_replay`).
+   */
+  replaySyncedCards(scope?: Map<number, [string, string] | null>) {
+    // The result is canonical already: it isn't marked for another replay.
+    muted(this.db, () => this.replay(scope));
+  }
+
+  private replay(scope?: Map<number, [string, string] | null>) {
+    const base = "SELECT c.*,i.created,i.type,d.name AS deck FROM cards c JOIN items i ON i.id=c.item_id JOIN decks d ON d.id=i.deck_id";
+    const cards = scope ? [...scope.keys()].flatMap((id) => this.db.all(`${base} WHERE c.id=?`, id)) : this.db.all(base);
+    if (!scope) this.db.run("DELETE FROM sync_replay");
+    const dayStartHour = this.settings().dayStartHour;
+    const configs = new Map<string, { cfg: PresetConfig; script: SchedulerDef | null }>();
+    for (const c of cards) {
+      const ck = `${c.deck}\u0000${c.type}`;
+      if (!configs.has(ck)) {
+        const cfg = { ...this.cardConfig(c.deck, c.type), enableFuzz: false };
+        configs.set(ck, { cfg, script: this.scriptFor(cfg) });
+      }
+      const { cfg, script } = configs.get(ck)!;
       let row: any = { ...c, ...sched.emptyCard(new Date(c.sync_reset ?? c.created)), sched_state: null };
-      const history: { at: string; rating: number | null; score: number | null }[] = [];
-      const reviews = this.db.all("SELECT r.*,a.grade FROM reviews r LEFT JOIN attempts a ON a.id=r.attempt_id WHERE r.card_id=? ORDER BY r.ts,r.sync_id",c.id);
+      let history: { at: string; rating: number | null; score: number | null }[] = [];
+      let last: [string, string] | null = null;
+      const saved = scope ? this.db.get("SELECT ts,review,row FROM sync_replay WHERE card=?", c.sync_id) : undefined;
+      const from = scope?.get(c.id);
+      const resume = !!saved && !!from && (saved.ts === null || from[0] > saved.ts || (from[0] === saved.ts && from[1] > saved.review));
+      if (resume) {
+        row = { ...row, ...JSON.parse(saved.row) };
+        if (saved.ts !== null) {
+          last = [saved.ts, saved.review];
+          if (script) history = this.db.all("SELECT ts,rating,score FROM reviews WHERE card_id=? AND practice=0 AND (? IS NULL OR ts>?) AND (ts,sync_id)<=(?,?) ORDER BY ts DESC,sync_id DESC LIMIT 50", c.id, c.sync_reset, c.sync_reset, saved.ts, saved.review).reverse().map((r) => ({ at: r.ts, rating: r.rating || null, score: r.score }));
+        }
+      }
+      const reviews = last
+        ? this.db.all("SELECT r.*,a.grade FROM reviews r LEFT JOIN attempts a ON a.id=r.attempt_id WHERE r.card_id=? AND (r.ts,r.sync_id)>(?,?) ORDER BY r.ts,r.sync_id", c.id, last[0], last[1])
+        : this.db.all("SELECT r.*,a.grade FROM reviews r LEFT JOIN attempts a ON a.id=r.attempt_id WHERE r.card_id=? ORDER BY r.ts,r.sync_id", c.id);
       for (const r of reviews) {
         const before = json(row);
         if (!r.practice && (!c.sync_reset || r.ts > c.sync_reset)) {
           if (script) {
             const g = parse<Grade | null>(r.grade,null);
             const start = new Date(r.ts);
-            start.setUTCHours(this.settings().dayStartHour,0,0,0);
+            start.setUTCHours(dayStartHour,0,0,0);
             if (start > new Date(r.ts)) start.setUTCDate(start.getUTCDate()-1);
             const day = Array.from({length:DAY_HORIZON+1},(_,i) => new Date(start.getTime()+i*86400_000).toISOString());
             const past = history.slice(-50);
@@ -2918,9 +2954,13 @@ export class Etude {
             row = {...row,state:2,due:out.due,reps:row.reps+1,lapses:row.lapses+(r.rating===1?1:0),last_review:r.ts,sched_state:json(out.state)};
           } else row = {...row,...sched.schedule(row,r.rating || sched.suggestRating(r.score,cfg) || 3,new Date(r.ts),cfg).next};
           history.push({at:r.ts,rating:r.rating || null,score:r.score});
+          if (history.length > 100) history = history.slice(-50);
         }
         this.db.run("UPDATE reviews SET state=?,card_before=?,due_after=? WHERE id=?",JSON.parse(before).state,before,row.due,r.id);
+        last = [r.ts, r.sync_id];
       }
+      const state = Object.fromEntries(REPLAY_FIELDS.map((k) => [k, row[k]]));
+      this.db.run("INSERT INTO sync_replay VALUES(?,?,?,?) ON CONFLICT(card) DO UPDATE SET ts=excluded.ts,review=excluded.review,row=excluded.row", c.sync_id, last?.[0] ?? null, last?.[1] ?? null, json(state));
       if (c.sync_due && (!row.last_review || c.sync_due_at >= row.last_review)) { row.due=c.sync_due;row.scheduled_days=row.last_review?Math.max(0,Math.round((Date.parse(c.sync_due)-Date.parse(row.last_review))/86400_000)):0; }
       this.db.run("UPDATE cards SET state=?,due=?,stability=?,difficulty=?,elapsed_days=?,scheduled_days=?,reps=?,lapses=?,learning_steps=?,last_review=?,sched_state=? WHERE id=?",row.state,row.due,row.stability,row.difficulty,row.elapsed_days,row.scheduled_days,row.reps,row.lapses,row.learning_steps,row.last_review,row.sched_state,c.id);
     }

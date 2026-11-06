@@ -1,10 +1,13 @@
 # Changelog
 
-## Unreleased
+## 3.0.3
 
 - **Pages open faster on a big collection.** The deck list, which every page shows, counts every deck from one read of the collection and is kept until something changes (or for half a minute, as cards come due); statistics read the day's start once instead of once per review; and the account part of Settings asks the Sync server in two steps instead of four, once for the whole page.
 - **The web edition opens in a moment, however much media you have.** It used to read every media file into memory as it opened (seconds, and as much memory as the files take); now it lists them and reads each one when it's needed. A page no longer waits while media files from a sync are written, and opening the app no longer makes Sync hash every media file again.
 - The web edition's Settings → Data → Clean up lists media in subfolders too.
+- **Undo takes your own last review.** After a sync, Undo (and Previous card in Study) could take back a rating that had just arrived from another device instead of the one you made here. It now takes the last review made on this device, and says there's nothing to undo when there isn't one.
+- **Editing a card in Browse keeps your place.** Typing in a field no longer scrolls the card panel back to the top or takes the cursor out of the field while the preview follows your edit.
+- **Anki cloze notes to Etude's cloze type:** `etude anki cloze` rewrites Anki's `{{c1::answer::hint}}` as Etude's `{{answer::hint}}` and keeps every hint, also one that repeats the answer (the base form a drill asks you to change). `--slash-alternatives` makes `in/into` accept either.
 
 ## 3.0.2
 

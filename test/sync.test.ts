@@ -309,8 +309,8 @@ async function property(kind:"folder"|"cloud") {
       // Card controls and history: suspension, reset, a due date, undo, graded attempts, tag notes.
       else if(round%23===5){const c=e.db.get("SELECT id FROM cards WHERE item_id=?",round%2?key:"custom");if(c)e.setSuspended([c.id],!!(round%3));}
       else if(round%23===12){const c=e.db.get("SELECT id FROM cards WHERE item_id=?",key);if(c)round%2?e.resetCards([c.id]):e.setDue([c.id],new Date(1900000000000+round*1000));}
-      // Undo after a sync, so the undone review was already part of the canonical history. Undo takes the newest review this
-      // device holds, so two devices that haven't seen each other's undo can both take the same one: it goes once.
+      // Undo after a sync, so the undone review was already part of the canonical history. Undo takes this device's own newest
+      // review, never one that came from another device.
       else if(round%31===7){await sync(device);const ids=()=>e.db.all("SELECT sync_id FROM reviews").map(r=>r.sync_id as string);const before=ids();e.undo();const after=new Set(ids());for(const k of before)if(!after.has(k))made.delete(k);}
       else if(round%31===20){const c=e.db.get("SELECT id,sync_id FROM cards WHERE item_id='typed'")!;const a=await e.submit(c.id,1,round%2?"answer":"wrong");rated(e,c.sync_id,e.rate(c.id,round%2?3:1,{attemptId:a.attemptId,at:new Date(1800000000000+round*1000)}).reviewId);}
       else if(round%37===9)e.setTagMeta(`tag-${device}`,{description:`round ${round}`});
@@ -331,6 +331,26 @@ async function property(kind:"folder"|"cloud") {
 }
 test(`seed 0x${SEED.toString(16)}: 3 offline devices converge through encrypted folder (240 rounds)`,()=>property("folder"));
 test(`seed 0x${SEED.toString(16)}: 3 offline devices converge through real etude-cloud HTTP (240 rounds)`,{skip:!process.env.ETUDE_SYNC_TEST_SERVER},()=>property("cloud"));
+test("undo takes this device's last review, not one that arrived from another device after it",async()=>{
+  const dir=temp();const [a,b]=await Promise.all(["a","b"].map(n=>Etude.open(join(dir,`${n}.db`),{home:join(dir,"h"+n)})));
+  try {
+    const [sa,sb]=[a,b].map(syncFor);
+    for(const s of [sa,sb]){s.setup({folder:join(dir,"shared")});await s.unlock({password});}
+    put(a,"x");put(a,"y");await sa.now({waitMedia:true});await sb.now({waitMedia:true});
+    const card=(e:Etude,item:string)=>e.db.get("SELECT id FROM cards WHERE item_id=?",item)!.id;
+    // A review not synced yet is this device's own.
+    a.rate(card(a,"x"),3);assert.equal(a.undo()?.itemId,"x");
+    a.rate(card(a,"x"),3);await sa.now({waitMedia:true});
+    // b answers later, and a receives that review after its own.
+    b.rate(card(b,"y"),3);await sb.now({waitMedia:true});await sa.now({waitMedia:true});
+    assert.equal(a.db.get("SELECT count(*) n FROM reviews")!.n,2);
+    assert.equal(a.undo()?.itemId,"x");
+    assert.equal(a.undo(),null,"b's review isn't a's to undo");
+    assert.equal(b.undo()?.itemId,"y");
+    for(let n=0;n<2;n++){await sa.now({waitMedia:true});await sb.now({waitMedia:true});}
+    for(const e of [a,b])assert.equal(e.db.get("SELECT count(*) n FROM reviews")!.n,0);
+  }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
+});
 test("history that arrives out of order: an attempt before its review, a review before an earlier one",async()=>{
   const dir=temp();const es=await Promise.all(["a","b","c"].map(n=>Etude.open(join(dir,`${n}.db`),{home:join(dir,"h"+n)})));const [a,b,c]=es;
   try {

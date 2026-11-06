@@ -2933,9 +2933,19 @@ export class Etude {
     });
   }
 
-  /** Undoes the most recent review: the card returns to exactly its previous state. */
+  /**
+   * Undoes the most recent review made on this device: the card returns to exactly its previous state. Reviews that came from
+   * another device through sync are left alone, even when they arrived after this device's own.
+   */
   undo(): { cardId: number; itemId: string } | null {
-    const r = this.db.get("SELECT * FROM reviews ORDER BY id DESC LIMIT 1");
+    // In a synced collection a review's `/card_id` register never changes, so its stamp names the device that made it. A review
+    // without registers hasn't been synced yet, so it was made here.
+    const synced = !!this.db.get("SELECT 1 FROM sqlite_master WHERE name='sync_control'");
+    const r = synced
+      ? this.db.get(
+          "SELECT r.* FROM reviews r WHERE NOT EXISTS (SELECT 1 FROM sync_registers g WHERE g.tbl='reviews' AND g.key=r.sync_id AND g.field='/card_id' AND json_extract(g.stamp,'$[2]')<>(SELECT device FROM sync_control WHERE id=1)) ORDER BY r.id DESC LIMIT 1",
+        )
+      : this.db.get("SELECT * FROM reviews ORDER BY id DESC LIMIT 1");
     if (!r) return null;
     return this.db.tx(() => {
       if (!r.practice) {

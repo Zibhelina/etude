@@ -18,7 +18,7 @@ Synced content: presets; deck names, descriptions, instructions, archive state, 
 
 Synced settings are dayStartHour, learnAheadMinutes, selected theme and custom themes. All AI configuration stays local, including provider URLs, model selection, language, env-key names and agent effort. Device-local content also includes ChatGPT credentials and host ids, API keys, update state, window/sidebar state, Market installation receipts, Ask Etude conversations, attachments and snapshots, server authentication options, Sync tokens, vault keys and cursors. The market catalog address remains local.
 
-Reviews and attempts have independent identities, so simultaneous offline answers both survive. Removing an item hides its orphan history from the relational view; the event log retains it. Explicit review undo records a retraction tombstone. Snapshot-based Ask Etude undo is refused in synced collections because a whole-database restore would overwrite sync identity and causality. Ask Etude can inspect status and request sync; credential-entry commands remain outside its tool access.
+Reviews and attempts have independent identities, so simultaneous offline answers both survive. Removing an item hides its orphan history from the relational view; the event log retains it. Explicit review undo records a retraction tombstone. It takes the device's own most recent review: one that arrived from another device is never undone there, so two devices can't retract the same review. Snapshot-based Ask Etude undo is refused in synced collections because a whole-database restore would overwrite sync identity and causality. Ask Etude can inspect status and request sync; credential-entry commands remain outside its tool access.
 
 ## Scheduling
 

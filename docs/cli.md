@@ -320,7 +320,7 @@ These work on every command, before or after the command words.
   - [`study feedback`](#study-feedback) AI feedback for an attempt (written once, then cached).
   - [`study rate`](#study-rate) Record a rating and reschedule the card. Pass --attempt to link the graded attempt.
   - [`study answer`](#study-answer) Submit and rate in one step: grades the answer, then applies the suggested rating (or the one you give).
-  - [`study undo`](#study-undo) Undo the most recent review (any card): the card returns exactly to its previous state, and the graded answer is discarded.
+  - [`study undo`](#study-undo) Undo the most recent review made on this device (any card): the card returns exactly to its previous state, and the graded answer is discarded.
   - [`study watch`](#study-watch) Watch mode: the cards of a scope in order, one per item, each with an example answer and its grade. Records nothing.
 - **stats**: Statistics: overview, forecast, recall per tag, adaptive skills (`etude stats` alone runs `overview`)
   - [`stats overview`](#stats-overview) Everything the Stats page shows for a scope: card states, retention, recall, daily activity, forecast, ratings, verdicts, streak, deadline.
@@ -3075,7 +3075,9 @@ etude study answer 50 --seed 1 --answer "" --rate good
 
 <a id="study-undo"></a>
 
-Undo the most recent review (any card): the card returns exactly to its previous state, and the graded answer is discarded.
+Undo the most recent review made on this device (any card): the card returns exactly to its previous state, and the graded answer is discarded.
+
+In a synced collection, reviews that came from your other devices are left alone, even when they arrived after this device's last one.
 
 ```
 etude study undo [flags]

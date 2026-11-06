@@ -39,6 +39,16 @@ async function pool<T>(items:T[],limit:number,fn:(item:T)=>Promise<void>) {
 /** A media path is relative, stays inside the media folder and has no control characters or backslashes. Spaces and accents are fine. */
 const safeMediaPath=(file:string)=>!/[\x00-\x1f\x7f\\]/.test(file)&&!file.split("/").some(p=>p===""||p==="."||p==="..");
 
+/** A downloaded file is written under this prefix beside its place and then renamed, so a write cut short never has the real name. */
+const PARTIAL=".etude-partial-";
+/** A partial file this old was left by a write that never finished. */
+const PARTIAL_STALE_MS=10*60_000;
+export function writeAtomic(path:string,bytes:Uint8Array,write:(path:string,bytes:Uint8Array)=>void=writeFileSync) {
+  const temp=join(dirname(path),PARTIAL+Math.random().toString(36).slice(2));
+  try {write(temp,bytes);renameSync(temp,path);}
+  catch(e) {rmSync(temp,{force:true});throw e;}
+}
+
 type Config = { kind:"cloud"|"folder";server?:string;folder?:string;email?:string;enabled:boolean;hasKeys?:boolean;lastSync?:string };
 /** pendingSecond: an email sign-in waiting for its second step (two-step sign-in), kept beside the token, short-lived. */
 type Secrets = { token?:string;vk?:string;pendingSecond?:PendingSecondStep };
@@ -222,7 +232,12 @@ export class SyncClient {
     const list=(dir:string,prefix="") => {
       if(!existsSync(dir))return;
       snapshot[prefix]=mtime(prefix);
-      for(const d of readdirSync(dir,{withFileTypes:true})){const p=join(dir,d.name),relative=prefix+d.name;if(d.isSymbolicLink()?statSync(p).isDirectory():d.isDirectory())list(p,relative+"/");else if(safeMediaPath(relative))files.push([p,relative]);}
+      for(const d of readdirSync(dir,{withFileTypes:true})){
+        const p=join(dir,d.name),relative=prefix+d.name;
+        // Never a media file: a download in progress, or one a closed app left behind.
+        if(d.name.startsWith(PARTIAL)){try{if(Date.now()-statSync(p).mtimeMs>PARTIAL_STALE_MS)rmSync(p,{force:true});}catch{}continue;}
+        if(d.isSymbolicLink()?statSync(p).isDirectory():d.isDirectory())list(p,relative+"/");else if(safeMediaPath(relative))files.push([p,relative]);
+      }
     };
     list(this.e.mediaDir);
     // Hash the media on disk first, so a file another device already uploaded is neither downloaded nor uploaded again.
@@ -266,7 +281,7 @@ export class SyncClient {
     // Media files to fetch, by blob, written as soon as their blob arrives.
     const root=resolve(this.e.mediaDir),wanted=new Map<string,string[]>();
     for(const [file,r] of media) if(safeMediaPath(file)&&resolve(root,file).startsWith(root+sep)&&onDisk.get(file)!==r.hash&&!edited(file))wanted.set(r.hash,[...wanted.get(r.hash)??[],file]);
-    const write=(file:string,hash:string,bytes:Uint8Array)=>{const path=join(this.e.mediaDir,file);mkdirSync(dirname(path),{recursive:true});writeFileSync(path,bytes);onDisk.set(file,hash);};
+    const write=(file:string,hash:string,bytes:Uint8Array)=>{const path=join(this.e.mediaDir,file);mkdirSync(dirname(path),{recursive:true});writeAtomic(path,bytes);onDisk.set(file,hash);};
     // Blobs to fetch: the files to write, and type assets with no bytes here. One whose blob event hasn't arrived waits for a later sync.
     const fetch=new Map<string,string>();let waiting=false;
     for(const hash of [...wanted.keys(),...[...assetHashes].filter(h=>!db.get(`SELECT 1 FROM sync_blobs WHERE hash=? AND bytes IS NOT NULL`,h)&&!unsent.some(a=>a.hash===h))]) {const name=blobs.get(hash)?.name;if(name)fetch.set(hash,name);else waiting=true;}

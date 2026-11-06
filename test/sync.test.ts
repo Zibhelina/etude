@@ -1,7 +1,7 @@
 import { tmpdir } from "node:os";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Etude } from "../src/core/engine.ts";
 import { syncFor, writeAtomic } from "../src/core/sync/client.ts";
@@ -220,6 +220,33 @@ test("media bytes kept by an earlier version are dropped; type asset bytes stay"
     e.close();e=await Etude.open(file,{home:join(dir,"home")});
     assert.deepEqual(e.db.all("SELECT hash FROM sync_blobs").map(r=>r.hash),[asset]);
   }finally{e.close();rmSync(dir,{recursive:true,force:true});}
+});
+test("a type asset whose blob event hasn't arrived: the projection goes on without it, keeps its key and takes it on a later sync",async()=>{
+  const dir=temp();for(const d of ["a","b"])mkdirSync(join(dir,d));
+  const a=await Etude.open(join(dir,"a","a.db"),{home:join(dir,"ha")}),b=await Etude.open(join(dir,"b","b.db"),{home:join(dir,"hb")});
+  try {
+    const folder=join(dir,"shared");for(const e of [a,b]){syncFor(e).setup({folder});await syncFor(e).unlock({password});}
+    put(a,"one");
+    a.saveType({...a.type("basic"),id:"with-asset",name:"With asset",assets:{"a.json":Buffer.from('{"x":1}').toString("base64")}});
+    await syncFor(a).now();
+    const hash=a.db.get("SELECT hash FROM type_assets WHERE type_id='with-asset'")!.hash;
+    // The asset's blob event is still on its way: take it out of the folder for now.
+    const key=await syncKeys(fromB64((syncFor(a) as any).secrets().vk)),events=join(folder,"events",readdirSync(join(folder,"events"))[0]);
+    let held="";
+    for(const f of readdirSync(events)){const ev=JSON.parse(readFileSync(join(events,f),"utf8"));const c=await decryptEvent<Change>(key,ev.id,ev.ciphertext);if(c.table==="blob"&&c.key===hash)held=f;}
+    assert.ok(held);renameSync(join(events,held),join(dir,held));
+    await syncFor(b).now();
+    assert.equal(syncFor(b).status().error,null);
+    assert.ok(b.db.get("SELECT 1 FROM items WHERE id='one'"),"the rest of the collection is there");
+    assert.ok(b.db.get("SELECT 1 FROM types WHERE id='with-asset'"));
+    assert.equal(b.db.get("SELECT count(*) n FROM type_assets")!.n,0);
+    assert.ok(b.db.get("SELECT 1 FROM sync_dirty WHERE tbl='type_assets'"),"the asset's key waits");
+    renameSync(join(dir,held),join(events,held));
+    await syncFor(b).now();
+    assert.equal(Buffer.from(b.db.get("SELECT bytes FROM type_assets WHERE type_id='with-asset' AND name='a.json'")!.bytes).toString(),'{"x":1}');
+    assert.equal(b.db.get("SELECT 1 FROM sync_dirty WHERE tbl='type_assets'"),undefined);
+    assert.deepEqual(relational(b),await rebuilt(b,dir));
+  }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
 });
 async function login(s:ReturnType<typeof syncFor>,server:string,outbox:string,email:string){
   s.setup({server});await s.signin(email);

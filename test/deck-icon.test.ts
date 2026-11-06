@@ -94,9 +94,12 @@ test("decks: the archive summary folds subdecks in and predicts recall", async (
 
 test("decks: an uploaded image works as the icon and counts as used media", async (t) => {
   const dir = mkdtempSync(join(tmpdir(), "etude-icon-media-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const e = await Etude.open(join(dir, "etude.db"));
-  t.after(() => e.close());
+  // One cleanup, closing before removing: Windows can't delete a database that is still open.
+  t.after(() => {
+    e.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
   e.ensureDeck("Mine");
   const png = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a3a10000000049454e44ae426082", "hex");
   const m = e.storeMedia("me.png", png);

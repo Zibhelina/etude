@@ -8,10 +8,10 @@ import { Etude } from "../src/core/engine.ts";
 // Every page asks for the deck tree; its counts build each deck's study queue, so it's kept while nothing changes.
 test("the deck tree is reused while nothing changes, and rebuilt after a review, another connection's write or 30 s", async (t) => {
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "deck-tree-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const file = join(dir, "etude.db");
   const e = await Etude.open(file, { home: join(dir, "home") });
-  t.after(() => e.close());
+  // Closed before the folder goes: Windows won't remove an open file.
+  t.after(() => (e.close(), rmSync(dir, { recursive: true, force: true })));
   for (let i = 0; i < 3; i++) e.upsertItem({ id: `q${i}`, deck: "Lang::Words", type: "basic", fields: { front: `q${i}`, back: "a" }, tags: [] });
   const words = (tree: ReturnType<Etude["deckTree"]>) => tree.find((d) => d.name === "Lang::Words")!;
   const first = e.deckTree();
@@ -40,9 +40,8 @@ test("the deck tree is reused while nothing changes, and rebuilt after a review,
 // each deck's own queue gives.
 test("the deck tree's counts match each deck's own queue", async (t) => {
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "deck-tree-counts-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const e = await Etude.open(join(dir, "etude.db"), { home: join(dir, "home") });
-  t.after(() => e.close());
+  t.after(() => (e.close(), rmSync(dir, { recursive: true, force: true })));
   // Subdecks, one whose name differs only in case (SQLite's LIKE matches it as a subdeck), a tour, an adaptive deck.
   const decks = ["Lang", "Lang::Words", "Lang::Words::Hard", "LANG::Upper", "Langs::Other", "Tour", "Course", "Course::Unit 1"];
   let n = 0;

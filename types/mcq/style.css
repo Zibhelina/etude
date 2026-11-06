@@ -1,15 +1,38 @@
-.hint:empty { display: none; }
-.hint { font-size: 0.85rem; margin-top: -0.6rem; }
-.e-option .body { flex: 1; display: flex; flex-direction: column; }
-.e-option:disabled { cursor: default; }
-.e-option.dim { opacity: 0.55; }
-/* Etude 3 look: the question in the study serif, no rule above the answer. */
-#card > .prose:first-child, #card > .io-header:first-child { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.005em; }
+/* Etude 3 choice: a centred serif question, then roomy options with a letter key.
+   Picked: green ring. After checking: the right one green, a wrong pick red, each with its why. */
+#card { align-items: center; text-align: center; gap: 0; }
+#card > .prose:first-child { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.875rem; line-height: 1.22; letter-spacing: -0.005em; max-width: 42rem; margin-top: 0.4rem; }
 #card > .prose:first-child code { font-size: 0.8em; }
-.e-reveal { border-top: 0; padding-top: 0.25rem; }
-.e-option { border-radius: 12px; border-width: 1.5px; padding: 0.85rem 1rem; font-size: 1.05rem; }
-.e-option .e-key { border-radius: 7px; width: 1.65rem; height: 1.65rem; border-width: 1.5px; font-weight: 650; }
-.e-option[aria-pressed="true"] { border-color: var(--highlight); background: transparent; box-shadow: 0 0 0 3px color-mix(in oklab, var(--highlight) 22%, transparent); }
-.e-option[aria-pressed="true"] .e-key { background: var(--highlight); border-color: var(--highlight); color: #fff; }
-.e-option.is-correct .e-key { background: var(--success); border-color: var(--success); color: #fff; }
-.e-option.is-wrong .e-key { background: var(--danger); border-color: var(--danger); color: #fff; }
+.hint { font-size: 0.85rem; margin-top: 0.6rem; }
+.hint:empty { display: none; }
+.options.e-stack { display: grid; gap: 10px; width: min(100%, 44rem); margin-top: 1.75rem; text-align: left; }
+.e-option { gap: 14px; align-items: flex-start; padding: 14px 16px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--card, transparent); font-size: 1.06rem; line-height: 1.45; transition: border-color 0.12s, background 0.12s, box-shadow 0.12s; }
+.e-option:hover { background: var(--card, transparent); border-color: var(--muted-foreground); }
+.e-option:disabled, .e-option:disabled:hover { cursor: default; border-color: var(--border); }
+.e-option .body { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.e-option .prose { font-size: 1.06rem; }
+.e-option .e-key { width: 26px; height: 26px; border-radius: 7px; border: 1.5px solid var(--border); font: 650 13px/1 var(--font-sans); color: var(--muted-foreground); margin-top: 0; text-transform: uppercase; }
+.e-option[aria-pressed="true"] { border-color: var(--primary); background: var(--card, transparent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 22%, transparent); }
+.e-option[aria-pressed="true"] .e-key { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+.e-option.is-correct { border-color: var(--good, var(--success)) !important; background: color-mix(in oklab, var(--good, var(--success)) 9%, var(--card, transparent)) !important; box-shadow: none; }
+.e-option.is-correct .e-key { background: var(--good, var(--success)); border-color: var(--good, var(--success)); color: #fff; }
+.e-option.is-wrong { border-color: var(--again, var(--danger)) !important; background: color-mix(in oklab, var(--again, var(--danger)) 9%, var(--card, transparent)) !important; box-shadow: none; }
+.e-option.is-wrong .e-key { background: var(--again, var(--danger)); border-color: var(--again, var(--danger)); color: #fff; }
+.e-option.is-missed { border-style: dashed !important; border-color: var(--good, var(--success)) !important; background: transparent !important; }
+.e-option.is-missed .e-key { border-color: var(--good, var(--success)); color: var(--good, var(--success)); }
+.e-option.dim { opacity: 1; }
+.e-option .e-why { display: block; font-size: 0.875rem; line-height: 1.5; color: var(--muted-foreground); margin-top: 4px; }
+.e-option .e-why:empty { display: none; }
+.e-option .e-why p { margin: 0; }
+[data-preview="1"] .e-option.is-wrong .e-key { background: transparent; border-color: var(--border); color: var(--muted-foreground); }
+.e-reveal { border-top: 0; padding-top: 0; margin-top: 1.5rem; width: min(100%, 44rem); }
+.e-reveal .prose { font-size: 1.03rem; line-height: 1.6; color: var(--muted-foreground); max-width: 52ch; margin: 0 auto; }
+@media (max-width: 560px) {
+  #card > .prose:first-child { font-size: 1.5rem; }
+  .options.e-stack { margin-top: 1.25rem; }
+  .e-option, .e-option .prose { font-size: 1rem; }
+}
+/* Long questions (see card.js) */
+#card > .prose.q-mid:first-child { font-size: 1.5rem; }
+#card > .prose.q-long:first-child { font-size: 1.2rem; line-height: 1.5; text-align: left; align-self: stretch; max-width: none; }
+@media (max-width: 560px) { #card > .prose.q-mid:first-child { font-size: 1.3rem; } #card > .prose.q-long:first-child { font-size: 1.1rem; } }

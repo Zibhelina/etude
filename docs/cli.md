@@ -407,6 +407,7 @@ These work on every command, before or after the command words.
   - [`pack new`](#pack-new) Write a starter pack with one valid item of each built-in type, to edit.
 - **anki**: Anki: bring an .apkg or .colpkg collection in (types, decks, items, cards, media, history)
   - [`anki import`](#anki-import) Import an Anki package: card types, presets, decks, items, cards, media and review history.
+  - [`anki cloze`](#anki-cloze) Rewrite Anki cloze markers in the built-in cloze syntax: `{{c1::answer::hint}}` becomes `{{answer::hint}}`.
 - **media**: Media copied into the collection's own folder
   - [`media path`](#media-path) Show the collection's media folder.
   - [`media prune`](#media-prune) Delete media files nothing in the collection names any more.
@@ -4823,6 +4824,35 @@ Output: { format, dryRun, scheduling, types: { created, updated, unchanged }, pr
 etude anki import spanish.apkg --dry-run
 etude anki import spanish.apkg
 etude anki import backlog.colpkg --deck-prefix "Anki"
+```
+
+### etude anki cloze
+
+<a id="anki-cloze"></a>
+
+Rewrite Anki cloze markers in the built-in cloze syntax: `{{c1::answer::hint}}` becomes `{{answer::hint}}`.
+
+For moving an imported Anki cloze note to the built-in `cloze` type. Every hint is kept, including one that repeats the answer: such a hint is often the form to change (a word to decline or conjugate), and without it the blank can't be answered. All of a note's clozes (`c1`, `c2`, …) become blanks of the one card the built-in type makes; a marker nested in an answer becomes its text. Only the markers change: convert any HTML in the field yourself.
+
+```
+etude anki cloze <text> [flags]
+```
+
+*read-only · no database*
+
+| Argument | Description |
+| --- | --- |
+| `text` | Text with Anki cloze markers; `-` reads stdin. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--slash-alternatives` | boolean | Accept each word of an answer like `in/into`, or the whole: `{{in\|into\|in/into}}`. |
+
+Output: { text, blanks }
+
+```sh
+etude anki cloze 'The {{c1::nucleus}} holds the {{c2::DNA::molecule}}.'
+etude item show anki-1a2b | jq -r .fields.Text | etude anki cloze - --slash-alternatives
 ```
 
 ## media

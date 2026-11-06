@@ -60,6 +60,17 @@ Image occlusion notes become items of the built-in [`occlusion` type](types.md#i
 - **Scheduling is one-way.** Etude reads Anki's history; it doesn't write it back. Re-importing doesn't overwrite progress made in Etude: a card with reviews here keeps its state and its reviews.
 - **Notetype-level extras.** Anki's per-notetype "options" (such as card appearance overrides for the browser) have no Etude equivalent; the CSS and templates are what carry over.
 
+## Moving cloze notes to the built-in cloze type
+
+Imported cloze notes keep Anki's look and are self-graded. To have the learner type the blanks instead, move a note to the built-in [`cloze` type](types.md) and convert its text with `etude anki cloze`:
+
+```sh
+etude anki cloze 'Two {{c1::sheep::sheep}} and three {{c2::geese::goose}} were grazing.'
+# {"text":"Two {{sheep::sheep}} and three {{geese::goose}} were grazing.","blanks":2}
+```
+
+`{{c1::answer::hint}}` becomes `{{answer::hint}}`, and every hint is kept, even one that repeats the answer: in a drill the hint is often the form to change, and without it the blank can't be answered. All of a note's clozes become blanks of the one card the built-in type makes. `--slash-alternatives` makes an answer like `in/into` accept each word or the whole (`{{in|into|in/into}}`). Only the markers change, so convert the field's HTML to markdown yourself.
+
 ## The report
 
 ```json

@@ -1,6 +1,6 @@
 // "Ask Etude": the assistant's launcher and side panel. The panel pushes the page on desktop and is a full-screen sheet on phones.
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, Ban, CalendarCheck, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsRight, CornerDownRight, Ellipsis, FileText, FileUp, FolderTree, ImageIcon, Loader2, Package, Palette, Pencil, Plus, RotateCcw, Settings2, Square, SquarePen, Trash2, X } from "lucide-react";
+import { ArrowUp, Ban, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsRight, CornerDownRight, Ellipsis, FileText, FileUp, FolderTree, ImageIcon, Loader2, Package, Palette, Pencil, Plus, RotateCcw, Settings2, Sparkles, Square, SquarePen, Target, Trash2, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -17,6 +17,8 @@ import { api, relative } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { isNativeApp } from "@/lib/platform";
 import { track } from "@/lib/telemetry";
+import { useFunMode } from "@/lib/fun";
+import minimiLook from "@/assets/minimi/look.webp";
 
 // In the iOS app a file input with no accept list offers "Take Video", which needs the microphone; the
 // app only takes images, PDFs, text and .apkg, so it asks for those and iOS offers photos, camera and files.
@@ -794,34 +796,92 @@ function TitleField({ title, onDone }: { title: string; onDone(t: string | null)
   );
 }
 
-const SUGGESTIONS: { icon: typeof FileUp; label: string; file?: boolean }[] = [
-  { icon: FileUp, label: "Make a deck from a file", file: true },
-  { icon: FolderTree, label: "Organize my decks" },
-  { icon: Palette, label: "Change the theme" },
-  { icon: CalendarCheck, label: "What should I review today?" },
-];
+type Chip = { icon: typeof FileUp; label: string; say?: string; file?: boolean; hot?: boolean };
 
-/** Bottom-anchored, just above the composer: the mark, a greeting, four suggestions. */
+/** What's due today across the study decks (top level, Watch decks left out), and the deck carrying most of it. */
+function useToday() {
+  const [t, setT] = useState<{ due: number; decks: number; top: string | null } | null>(null);
+  useEffect(() => {
+    let live = true;
+    api
+      .decks()
+      .then((all) => {
+        if (!live) return;
+        const open = all.filter((d) => !d.archived);
+        const names = new Set(open.map((d) => d.name));
+        const study = open.filter((d) => d.mode !== "watch" && !names.has(d.name.split("::").slice(0, -1).join("::")));
+        const work = (d: (typeof study)[number]) => d.new + d.learning + d.review;
+        const top = [...study].sort((a, b) => work(b) - work(a))[0];
+        setT({ due: study.reduce((a, d) => a + work(d), 0), decks: study.length, top: top && work(top) > 0 ? top.name : null });
+      })
+      .catch(() => live && setT({ due: 0, decks: 0, top: null }));
+    return () => {
+      live = false;
+    };
+  }, []);
+  return t;
+}
+
+/**
+ * Bottom-anchored, just above the composer. Fun mode: Minimi with a speech bubble about today; otherwise the
+ * mark, a question and the same line. Then chips: today's cards first (green), then the other jobs.
+ */
 function EmptyState({ onPick, onFile }: { onPick(t: string): void; onFile(): void }) {
+  const fun = useFunMode();
+  const t = useToday();
+  const due = t?.due ?? 0;
+  const n = due.toLocaleString();
+  const line = !t ? null : !t.decks ? (
+    <>No decks yet. Give me a file and I’ll make your first one.</>
+  ) : due ? (
+    <>
+      <b className="font-semibold">{n} card{due === 1 ? "" : "s"}</b> {due === 1 ? "is" : "are"} waiting{t.top ? <>, most from {t.top}</> : null}. What are we practicing?
+    </>
+  ) : (
+    <>All done for today. Want to make something new?</>
+  );
+  const chips: Chip[] = [
+    ...(due ? [{ icon: Zap, label: `Plan my ${n} due card${due === 1 ? "" : "s"}`, say: "Plan my review for today. What's due, and where should I start?", hot: true }] : []),
+    { icon: FileUp, label: "Make a deck from a file", file: true },
+    ...(t?.top ? [{ icon: Target, label: `Quiz me on ${t.top}`, say: `Quiz me on ${t.top}: pick a few cards I keep missing and ask me one at a time.` }] : []),
+    { icon: FolderTree, label: "Organize my decks" },
+    { icon: Palette, label: "Change the theme" },
+    { icon: Sparkles, label: "Make a card type", say: "Help me make a new card type." },
+  ];
   return (
-    <div className="agent-rise mt-auto flex flex-col pb-3" data-agent-empty>
-      <Logo className="-ml-1.5 size-12" />
-      <p className="mt-3.5 mb-3.5 text-[17px] leading-snug font-semibold tracking-tight">What are we practicing today?</p>
-      <ul className="-mx-2 flex flex-col">
-        {SUGGESTIONS.map(({ icon: Icon, label, file }) => (
-          <li key={label}>
-            <button
-              type="button"
-              data-suggestion
-              onClick={() => (file ? onFile() : onPick(label))}
-              className="flex h-[35px] w-full items-center gap-2.5 rounded-lg px-2 text-left text-sm text-muted-foreground transition-colors outline-ring hover:bg-accent/60 hover:text-foreground focus-visible:outline-2 pointer-coarse:h-11"
-            >
-              <Icon className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
-              {label}
-            </button>
-          </li>
+    <div className="agent-rise mt-auto flex flex-col items-start pb-3" data-agent-empty>
+      {fun ? (
+        <div className="flex items-end gap-3.5">
+          <img src={minimiLook} alt="" className="agent-breathe h-[106px] w-[72px] shrink-0 object-contain" />
+          <p className="relative mb-7 max-w-[270px] rounded-[18px] border bg-muted px-4 py-3 text-[15px] leading-snug text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.05)]" data-agent-bubble>
+            <span aria-hidden className="absolute bottom-4 -left-[6px] size-[11px] rotate-45 border-b border-l bg-muted" />
+            {line ?? "Hm?"}
+          </p>
+        </div>
+      ) : (
+        <>
+          <Logo className="-ml-1.5 size-12" />
+          <p className="mt-3.5 text-[19px] leading-snug font-semibold tracking-tight">What are we practicing today?</p>
+          {line && <p className="mt-1.5 text-[14px] leading-snug text-muted-foreground">{line}</p>}
+        </>
+      )}
+      <div className="mt-4 flex flex-wrap gap-2">
+        {chips.map(({ icon: Icon, label, say, file, hot }) => (
+          <button
+            key={label}
+            type="button"
+            data-suggestion
+            onClick={() => (file ? onFile() : onPick(say ?? label))}
+            className={cn(
+              "inline-flex h-[34px] max-w-full items-center gap-2 rounded-full border border-foreground/15 bg-background px-3.5 text-[13.5px] transition-colors outline-ring hover:border-foreground/25 hover:bg-accent/60 focus-visible:outline-2 pointer-coarse:h-10",
+              hot && "border-primary/45 bg-primary/10 font-medium text-[color-mix(in_oklab,var(--primary),black_30%)] hover:border-primary/60 hover:bg-primary/15 dark:text-primary",
+            )}
+          >
+            <Icon className={cn("size-[15px] shrink-0", hot ? "text-primary" : "text-muted-foreground")} strokeWidth={1.8} />
+            <span className="truncate">{label}</span>
+          </button>
         ))}
-      </ul>
+      </div>
     </div>
   );
 }

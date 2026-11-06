@@ -78,13 +78,10 @@ jobs:
           chmod 600 "$key"
           grep -q "PRIVATE KEY" "$key" || { echo "::error::APPLE_API_KEY is neither the .p8 text nor its base64"; exit 1; }
           echo "ASC_KEY_PATH=$key" >> "$GITHUB_ENV"
-      - name: Development certificates before the archive
-        id: certs
-        env:
-          ASC_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER }}
-        run: node scripts/ios-ci.mjs certs-before "$RUNNER_TEMP/certs-before.json"
-      - name: Archive
+      - name: Archive (unsigned)
+        # Unsigned on purpose: signing the archive made Xcode create a development certificate every
+        # run, and Apple e-mails the account holder each time one is created or revoked. The export
+        # below signs with the Apple-managed distribution certificate instead.
         env:
           ASC_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER }}
@@ -96,9 +93,8 @@ jobs:
             -project ios/App/App.xcodeproj -scheme App -configuration Release \
             -destination generic/platform=iOS \
             -archivePath "$RUNNER_TEMP/Etude.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD"
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
       - name: The archive is the intended app
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -112,9 +108,6 @@ jobs:
           [ "$(plist CFBundleShortVersionString)" = "$VERSION" ]
           [ "$(plist CFBundleVersion)" = "$BUILD" ]
           test -f "$app/public/index.html"
-          codesign --verify --strict "$app"
-          codesign -dvv "$app" 2>&1 | grep -E "^(Authority|TeamIdentifier)=" | head -2
-          codesign -dvv "$app" 2>&1 | grep -q "^TeamIdentifier=$APPLE_TEAM_ID$"
       - name: Sign for the App Store and upload
         env:
           ASC_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
@@ -143,13 +136,6 @@ jobs:
             -exportOptionsPlist "$options" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
-      - name: Revoke the development certificate this run made
-        if: always() && steps.certs.outcome == 'success'
-        continue-on-error: true
-        env:
-          ASC_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER }}
-        run: node scripts/ios-ci.mjs certs-prune "$RUNNER_TEMP/certs-before.json"
       - name: Apple processes the build
         env:
           ASC_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}

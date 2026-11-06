@@ -153,7 +153,7 @@ canvas.addEventListener("pointerdown", (e) => {
   if (e.pointerType === "pen") penSeen = true;
   // Once a stylus has drawn, a resting palm doesn't.
   if (e.pointerType === "touch" && penSeen) return;
-  canvas.setPointerCapture(e.pointerId);
+  try { canvas.setPointerCapture(e.pointerId); } catch {}
   lw = 0; lp = null; lt = e.timeStamp;
   const t = e.buttons === 32 ? "eraser" : tool;
   current = { tool: t, color, size, points: [t === "eraser" ? pos(e) : point(e)] };

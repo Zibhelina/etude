@@ -426,25 +426,45 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 .st-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted-foreground); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 20px; }
 .st-eyebrow b { color: var(--foreground); font-weight: 700; }
 .st-eyebrow .hl { color: var(--highlight); }
-.st-stack { position: relative; margin-bottom: 12px; }
+.st-stack { position: relative; margin-bottom: 12px; perspective: 1400px; }
 .st-sheet { position: absolute; inset: 0; border-radius: 12px; background: var(--secondary); box-shadow: 0 1px 2px var(--study-shadow); }
 .st-sheet.s1 { transform: rotate(-2.6deg) translate(-8px, 9px); background: var(--accent); }
 .st-sheet.s2 { transform: rotate(1.6deg) translate(7px, 4px); }
 .st-paper { position: relative; background: var(--card); border-radius: 12px; padding: 34px 50px 40px; box-shadow: 0 2px 3px var(--study-shadow), 0 20px 44px var(--study-shadow); min-height: 250px; display: flex; flex-direction: column; gap: 22px; }
+.st-frame { position: relative; }
 .st-frame iframe { transition: height 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
+/* Watch: the answer-mode frame stays on top while its answered copy loads under it, then hands over. */
+.st-handoff { position: absolute; left: 0; right: 0; top: 0; z-index: 1; pointer-events: none; }
+.st-handoff-under { opacity: 0.01; }
+/* A self-graded card is two-faced: one continuous 720 ms turn to the back, the height easing with it. Once
+   it has turned (.settled) the back takes the front's place in the flow, so it can keep growing. */
+.st-flip { position: relative; transform-style: preserve-3d; transition: transform 0.72s cubic-bezier(0.3, 0.7, 0.2, 1), height 0.72s cubic-bezier(0.3, 0.7, 0.2, 1); }
+.st-flip.flipped { transform: rotateY(180deg); }
+.st-face { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+/* Until the turn the back lies face up under the front at 1% opacity: turned away, or at opacity 0, its frame
+   counts as hidden and Chrome holds back its layout, so the size report the turn waits for came 300 ms late. */
+.st-flip > .st-backface { position: absolute; left: 0; right: 0; top: 0; opacity: 0.01; transform: translateZ(-2px); pointer-events: none; }
+.st-flip.flipped > .st-backface { opacity: 1; transform: rotateY(180deg); pointer-events: auto; }
+.st-flip:not(.settled) > .st-backface iframe { transition: none; }
+.st-flip.settled { transform: none; transition: none; }
+.st-flip.settled > .st-face:first-child { position: absolute; left: 0; right: 0; top: 0; visibility: hidden; }
+.st-flip.settled > .st-backface { position: relative; transform: none; opacity: 1; }
 
 @keyframes st-deckin { 0% { transform: translate(-8px, 9px) rotate(-2.6deg) scale(0.985); } 100% { transform: none; } }
 @keyframes st-cardin { 0% { transform: translateY(14px) scale(0.975); } 100% { transform: none; } }
 @keyframes st-pop { 0% { transform: scale(0.6); opacity: 0; } 100% { transform: none; opacity: 1; } }
 @keyframes st-rise { 0% { opacity: 0; transform: translateY(8px); } 100% { opacity: 1; transform: none; } }
 @keyframes st-slotin { 0% { opacity: 0; transform: translateY(6px); } 100% { opacity: 1; transform: none; } }
-.st-in .st-paper { animation: st-deckin 0.55s cubic-bezier(0.2, 0.75, 0.25, 1) backwards; }
+.st-in .st-flip { animation: st-deckin 0.55s cubic-bezier(0.2, 0.75, 0.25, 1) backwards; }
+.st-in .st-head { animation: st-contentin 0.38s 0.12s ease backwards; }
+@keyframes st-contentin { 0% { opacity: 0; } 100% { opacity: 1; } }
 .st-in.st-bare-card { animation: st-cardin 0.42s 0.02s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
 .st-leaving { position: fixed !important; z-index: 30; margin: 0 !important; pointer-events: none; }
 .st-rise { animation: st-rise 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
 .st-fade-out { opacity: 0 !important; transition: opacity 0.12s !important; }
 
-.st-verdict { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; font-size: 15px; padding: 7px 15px; border-radius: 999px; animation: st-pop 0.25s; white-space: nowrap; }
+.st-verdict { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; font-size: 15px; padding: 7px 15px; border-radius: 999px; animation: st-pop 0.25s 0.07s backwards; white-space: nowrap; }
+.st-verdict.late { animation-delay: 0.17s; }
 .st-verdict.ok { background: color-mix(in oklab, var(--good) 16%, transparent); color: var(--success); }
 .st-verdict.mid { background: color-mix(in oklab, var(--hard) 16%, transparent); color: var(--warning); }
 .st-verdict.no { background: color-mix(in oklab, var(--again) 15%, transparent); color: var(--danger); }
@@ -482,7 +502,7 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 .st-slot { position: fixed; inset-inline: 0; bottom: 0; z-index: 20; background: var(--background); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 96px; padding: 14px 24px max(20px, calc(env(safe-area-inset-bottom) + 10px)); }
 .st-slot::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 26px; background: linear-gradient(to bottom, transparent, var(--background)); pointer-events: none; }
 .st-slot > * { transition: opacity 0.2s ease; }
-.st-slot.leaving > * { opacity: 0; transition: opacity 0.12s; }
+.st-slot.leaving > * { opacity: 0; transition: opacity 0.12s; pointer-events: none; animation: none !important; }
 .st-slot.swapin > :not(.st-docktab) { animation: st-slotin 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .st-row { display: flex; align-items: center; justify-content: center; gap: 12px; width: min(760px, 100%); }
 .st-pri, .st-sec { display: inline-flex; align-items: center; justify-content: center; gap: 12px; white-space: nowrap; font-weight: 600; font-size: 16px; padding: 13px 30px; border-radius: 12px; border: 1.5px solid transparent; transition: transform 0.06s, box-shadow 0.06s, filter 0.15s; user-select: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -549,8 +569,8 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
   .st-pri kbd, .st-sec kbd, .st-rb kbd, .st-kbd { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .st-in .st-paper, .st-in.st-bare-card, .st-rise, .st-verdict, .st-slot.swapin > *, .st-docktab svg { animation: none !important; }
-  .st-frame iframe { transition: none; }
+  .st-in .st-flip, .st-in .st-head, .st-in.st-bare-card, .st-rise, .st-verdict, .st-slot.swapin > *, .st-docktab svg { animation: none !important; }
+  .st-frame iframe, .st-flip { transition: none; }
   .st-sit img { transform: none !important; }
 }
 /* ---------------------------------------------------------------- Library (decks, deck page, archive)

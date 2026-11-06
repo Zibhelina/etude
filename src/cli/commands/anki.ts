@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { command, group, CliError } from "../registry.ts";
+import { ankiClozeToBuiltin } from "../../core/anki/cloze.ts";
 
 group({ name: "anki", summary: "Anki: bring an .apkg or .colpkg collection in (types, decks, items, cards, media, history)" });
 
@@ -26,5 +27,21 @@ command({
       scheduling: !ctx.flags["no-scheduling"],
       deckPrefix: ctx.flags["deck-prefix"],
     });
+  },
+});
+
+command({
+  name: "anki cloze",
+  summary: "Rewrite Anki cloze markers in the built-in cloze syntax: `{{c1::answer::hint}}` becomes `{{answer::hint}}`.",
+  description:
+    "For moving an imported Anki cloze note to the built-in `cloze` type. Every hint is kept, including one that repeats the answer: such a hint is often the form to change (a word to decline or conjugate), and without it the blank can't be answered. All of a note's clozes (`c1`, `c2`, …) become blanks of the one card the built-in type makes; a marker nested in an answer becomes its text. Only the markers change: convert any HTML in the field yourself.",
+  args: [{ name: "text", description: "Text with Anki cloze markers; `-` reads stdin.", required: true }],
+  flags: [{ name: "slash-alternatives", type: "boolean", description: "Accept each word of an answer like `in/into`, or the whole: `{{in|into|in/into}}`." }],
+  noDb: true,
+  examples: ["etude anki cloze 'The {{c1::nucleus}} holds the {{c2::DNA::molecule}}.'", "etude item show anki-1a2b | jq -r .fields.Text | etude anki cloze - --slash-alternatives"],
+  output: "{ text, blanks }",
+  run(ctx) {
+    const text = ctx.args.text === "-" ? ctx.stdin() : String(ctx.args.text);
+    return ankiClozeToBuiltin(text, { slashAlternatives: !!ctx.flags["slash-alternatives"] });
   },
 });

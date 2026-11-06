@@ -31,8 +31,11 @@ const MEDIA_RESCAN_MS=10*60_000;
 /** Hashes whose bytes are kept in sync_blobs: type assets, which the projection reads. */
 const STORED="SELECT hash FROM sync_blobs WHERE bytes IS NOT NULL";
 
-/** Blob transfers run this many at a time: each is a round trip, and most media files are small. */
-const BLOB_CONCURRENCY=8;
+/**
+ * Blob transfers run this many at a time: most media files are small, so each costs about a round trip.
+ * etude-cloud takes 100 requests a second per device; at ~250 ms each, 16 stay under it.
+ */
+const BLOB_CONCURRENCY=16;
 /** Runs fn over items a few at a time. The first failure rejects, and the other runners stop after their current item. */
 async function pool<T>(items:T[],limit:number,fn:(item:T)=>Promise<void>) {
   let next=0,failed=false;

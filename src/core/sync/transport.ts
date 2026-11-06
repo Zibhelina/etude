@@ -99,7 +99,8 @@ export class CloudTransport implements Transport {
   }
   async putKeys(keys:VaultKeys,etag?:string) { await this.request("/v1/vault/keys",{method:"PUT",headers:{"Content-Type":"application/json",...(etag?{"If-Match":etag}:{})},body:JSON.stringify(keys)}); }
   async push(events:WireEvent[]) { if (events.length) await this.json("/v1/sync/events",{events}); }
-  async pull(cursor:string) { const r:any=await (await this.request(`/v1/sync/events?after=${Number(cursor)||0}&limit=500`)).json();return {...r,cursor:String(r.cursor)}; }
+  /** The server's largest page; it also stops a page at 8 MiB of ciphertext. */
+  async pull(cursor:string) { const r:any=await (await this.request(`/v1/sync/events?after=${Number(cursor)||0}&limit=1000`)).json();return {...r,cursor:String(r.cursor)}; }
   async putBlob(name:string,bytes:Uint8Array,signal?:AbortSignal) { await this.request("/v1/blobs/"+name,{method:"PUT",body:new Uint8Array(bytes),signal}); }
   async getBlob(name:string,signal?:AbortSignal) { return new Uint8Array(await (await this.request("/v1/blobs/"+name,{signal})).arrayBuffer()); }
   async usage() { try { const r:any=await (await this.request("/v1/vault")).json();return r.usedBytes||null; } catch { return null; } }

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Sync takes time in proportion to what changed, not to the size of the collection.** Only the cards, items and decks that changed are written, and only the cards whose history or settings changed are rescheduled. With 5,000 cards and 50,000 reviews, syncing a review made on another device takes about 0.1 s instead of 19 s, a sync with nothing new about 0.1 s instead of 1.6 s, and a new device's first sync about 14 s instead of 40 s. The first sync after updating rebuilds the collection once.
+- Sync: a review made on this device is rescheduled the way your other devices do it at the next sync, so a card's due date matches everywhere instead of keeping this device's random spread until something came in from another device.
+- Sync: media files are looked at only when something changed (and every ten minutes, for a file edited in place), files Etude stored aren't read to check them, and media are no longer copied into the collection database: the copy made by earlier versions is removed when you update. A sync folder's event files are read once each.
+
 ## 3.0.1
 
 - **Cards move like the Design Lab ones.** A self-rated card turns over to its back in one continuous turn, in Study and in Watch (the Showcase used to just swap). When you check an answer, the card glides into its result: what stays moves to its new place, what's new fades up in turn. Between cards the one you rated flies off and the next rises from the deck, in Watch too. Any card type gets this; games with their own result screen keep theirs, and a type can turn it off with `etude.morph = false`.

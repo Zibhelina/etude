@@ -51,8 +51,9 @@ export function ItemPreview({ item, type, fields, dirty, version, flipped, onFli
     return () => { on = false; };
   }, [item.id, seed, face, debounced, version, type.updated]);
 
-  // Cards focus their first field when they render. In Browse that would swallow the list's keys, so
-  // focus only stays in the card when you clicked into it.
+  // The card doesn't focus itself when it renders (autoFocus off: it renders again on every edit, and taking the
+  // focus would scroll the inspector up to it), but its own script still can. In Browse that would swallow the
+  // list's keys, so focus only stays in the card when you clicked into it.
   const box = useRef<HTMLDivElement>(null);
   const hover = useRef(false);
   const tabbed = useRef(0);

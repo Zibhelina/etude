@@ -1,7 +1,7 @@
 import { tmpdir } from "node:os";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { run } from "../src/cli/run.ts";
 test("sync CLI setup, stdin unlock, explicit JSON, now and off",async()=>{
@@ -12,8 +12,10 @@ test("sync CLI setup, stdin unlock, explicit JSON, now and off",async()=>{
     assert.equal((await cli(["sync","setup","--folder",join(dir,"shared"),"--json"])).kind,"folder");
     const created=await cli(["sync","unlock","--json"],"test-password-only\n");assert.ok(created.recoveryKey);assert.equal(created.status.unlocked,true);
     assert.equal((await cli(["sync","unlock","--json"],"test-password-only\n")).recoveryKey,undefined);
-    assert.equal((await cli(["sync","now","--json"])).busy,false);
-    assert.equal((await cli(["sync","status","--format","table","--json"])).pending,0);
+    // `sync now` exits once the media is done too: the file's events are sent.
+    mkdirSync(join(dir,"home","media"),{recursive:true});writeFileSync(join(dir,"home","media","clip.mp3"),"sound");
+    const now=await cli(["sync","now","--json"]);assert.equal(now.busy,false);assert.deepEqual(now.media,{active:false,progress:null,error:null,received:0});
+    const status=await cli(["sync","status","--format","table","--json"]);assert.equal(status.pending,0);assert.equal(status.media.active,false);
     assert.equal((await cli(["sync","off","--json"])).configured,false);
   } finally {rmSync(dir,{recursive:true,force:true});}
 });

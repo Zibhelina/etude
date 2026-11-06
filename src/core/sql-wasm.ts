@@ -335,7 +335,7 @@ export async function openWasm(path: string): Promise<SqlConnection> {
     bytes,
     persist: (b) => {
       const tmp = `${path}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
-      writeFileSync(tmp, b);
+      writeFileSync(tmp, b, { mode: 0o600 });
       renameSync(tmp, path);
       rmSync(path + "-wal", { force: true });
       rmSync(path + "-shm", { force: true });

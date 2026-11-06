@@ -91,7 +91,7 @@ export function MinimiChat({ onClose, onExpand, onChanged }: { onClose(): void; 
       }}
     >
       {/* backdrop-filter set inline: the CSS minifier keeps only the -webkit- copy, which Chrome ignores. */}
-      <div className="mchat-veil" aria-hidden style={{ backdropFilter: "blur(14px) saturate(0.8)" }} />
+      <div className="mchat-veil" aria-hidden style={{ backdropFilter: "blur(16px) saturate(0.8)" }} />
       <div className="mchat-ctl absolute -top-[52px] right-0 flex gap-2">
         {!empty && (
           <IconButton label="New chat" disabled={busy || !conv} onClick={() => openConv(null)}>

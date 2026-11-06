@@ -10,6 +10,7 @@ import type { AddressInfo } from "node:net";
 import { Etude } from "../src/core/engine.ts";
 import { syncFor } from "../src/core/sync/client.ts";
 import { run } from "../src/cli/run.ts";
+import { AGENT_DENY } from "../src/core/agent.ts";
 import "../src/cli/commands/index.ts";
 
 /** Just enough of etude-cloud's vault for two devices: sign-in, keys (with the server slot), server key, events, blobs. */
@@ -202,4 +203,8 @@ test("CLI: `sync unlock` with no stdin starts without a password; `sync unprotec
   const refused = await cli(["sync", "unprotect"]);
   assert.notEqual(refused.code, 0, "removing the password asks for --yes");
   assert.equal((await cli(["sync", "unprotect", "--yes"])).json.status.mode, "server");
+});
+
+test("the in-app assistant can't add or remove the Sync password", () => {
+  assert.ok(AGENT_DENY.includes("sync protect") && AGENT_DENY.includes("sync unprotect"));
 });

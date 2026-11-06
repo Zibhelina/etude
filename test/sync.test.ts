@@ -1,10 +1,10 @@
 import { tmpdir } from "node:os";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Etude } from "../src/core/engine.ts";
-import { syncFor } from "../src/core/sync/client.ts";
+import { syncFor, writeAtomic } from "../src/core/sync/client.ts";
 import { compare, tick, rows, drain, receive, type Change } from "../src/core/sync/log.ts";
 import { project } from "../src/core/sync/project.ts";
 import { generateVaultKey, encryptBlob, decryptBlob, encryptEvent, decryptEvent, fromB64, syncKeys } from "../src/core/sync/crypto.ts";
@@ -123,6 +123,28 @@ test("media names with spaces and accents sync; unsafe paths from another device
     await syncFor(b).now();await syncFor(a).now();
     assert.equal(readFileSync(join(b.mediaDir,"anki","Thüringen Wappen.png"),"utf8"),"new flag");
     assert.equal(readFileSync(join(a.mediaDir,"anki","Thüringen Wappen.png"),"utf8"),"new flag");
+  }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
+});
+test("a downloaded media file is whole or absent; a partial file left behind is never uploaded and goes once stale",async()=>{
+  const dir=temp();for(const d of ["a","b","w"])mkdirSync(join(dir,d));
+  const a=await Etude.open(join(dir,"a","a.db"),{home:join(dir,"ha")}),b=await Etude.open(join(dir,"b","b.db"),{home:join(dir,"hb")});
+  try {
+    // A write cut short (the app closed): the real name never holds half a file.
+    const target=join(dir,"w","clip.mp3");
+    assert.throws(()=>writeAtomic(target,new TextEncoder().encode("whole sound"),(p,bytes)=>{writeFileSync(p,bytes.subarray(0,5));throw new Error("closed");}),/closed/);
+    assert.deepEqual(readdirSync(join(dir,"w")),[]);
+    writeAtomic(target,new TextEncoder().encode("whole sound"));
+    assert.equal(readFileSync(target,"utf8"),"whole sound");assert.deepEqual(readdirSync(join(dir,"w")),["clip.mp3"]);
+    // One a closed app left in a media folder looks like nothing to sync, and goes once it's stale.
+    const folder=join(dir,"shared");for(const e of [a,b]){syncFor(e).setup({folder});await syncFor(e).unlock({password});}
+    mkdirSync(join(a.mediaDir,"anki"),{recursive:true});
+    const fresh=join(a.mediaDir,"anki",".etude-partial-new"),stale=join(a.mediaDir,".etude-partial-old");
+    writeFileSync(fresh,"half");writeFileSync(stale,"half");const old=new Date(Date.now()-3600_000);utimesSync(stale,old,old);
+    writeFileSync(join(a.mediaDir,"anki","real.mp3"),"sound");
+    await syncFor(a).now();await syncFor(b).now();
+    assert.deepEqual([...rows(a.db,"media").keys()],["anki/real.mp3"]);
+    assert.deepEqual(readdirSync(join(b.mediaDir,"anki")),["real.mp3"]);
+    assert.ok(existsSync(fresh),"a partial file being written isn't touched");assert.ok(!existsSync(stale));
   }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
 });
 test("sync reports its steps, and the upload total matches the bytes sent",async()=>{

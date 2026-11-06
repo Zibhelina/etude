@@ -183,8 +183,10 @@ export class SyncClient {
     for(;;) {
       const batch=db.all("SELECT * FROM sync_events WHERE sent=0 ORDER BY id LIMIT 200");if(!batch.length)break;
       // etude-cloud refuses push bodies over 8 MiB, so a batch also stops at ~6 MiB of ciphertext.
-      const events=[];const sent:any[]=[];let bytes=0;
-      for(const r of batch) {const ciphertext=r.ciphertext??await encryptEvent(key,r.id,JSON.parse(r.body));if(!r.ciphertext)db.run("UPDATE sync_events SET ciphertext=? WHERE id=?",ciphertext,r.id);if(events.length&&bytes+ciphertext.length>PUSH_BATCH_BYTES)break;events.push({id:r.id,ciphertext});sent.push(r);bytes+=ciphertext.length;}
+      const events=[];const sent:any[]=[];const made:[string,string][]=[];let bytes=0;
+      for(const r of batch) {const ciphertext=r.ciphertext??await encryptEvent(key,r.id,JSON.parse(r.body));if(!r.ciphertext)made.push([ciphertext,r.id]);if(events.length&&bytes+ciphertext.length>PUSH_BATCH_BYTES)break;events.push({id:r.id,ciphertext});sent.push(r);bytes+=ciphertext.length;}
+      // Kept before sending, so a retry sends the same ciphertext; one transaction for the batch.
+      db.tx(()=>{for(const [ciphertext,id] of made)db.run("UPDATE sync_events SET ciphertext=? WHERE id=?",ciphertext,id);});
       await t.push(events);this.moved(bytes);db.tx(()=>{for(const r of sent)db.run("UPDATE sync_events SET sent=1 WHERE id=?",r.id);});
     }
     // Only the rows whose registers changed, here or on another device, are rewritten; their keys were

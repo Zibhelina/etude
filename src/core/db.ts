@@ -226,7 +226,7 @@ export class Db {
    */
   changeStamp(): string {
     const r = this.get<{ d: number; t: number }>("SELECT (SELECT data_version FROM pragma_data_version) AS d, total_changes() AS t")!;
-    return `${r.d}:${r.t}`;
+    return `${r.d}:${r.t}:${this.sql.reloads ?? 0}`;
   }
 
   /** Runs `fn` in a transaction; nested calls join the outer one. */

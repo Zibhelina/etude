@@ -104,6 +104,12 @@ export const BUILTIN_TYPES_DIR = join(ROOT, "types");
 export const BUILTIN_SCHEDULERS_DIR = join(ROOT, "schedulers");
 
 const now = () => new Date();
+/** How long a deck tree is reused while the collection doesn't change: its counts move as cards come due. */
+const DECK_TREE_MS = 30_000;
+/** A card as the study queue reads it. */
+type QueueRow = CardRow & { ord: number; deck: string; type: string };
+/** The cards a deck scope can study and today's answers, read once for many decks (see `queueSource`). */
+type QueueSource = { at: Date; cards(deck: string): QueueRow[]; answers(deck: string): { id: number; face: string; state: number; deck: string }[] };
 const iso = (d = now()) => d.toISOString();
 const json = (v: unknown) => JSON.stringify(v ?? null);
 
@@ -419,6 +425,7 @@ export class Etude {
    * underneath (an undo restore, which may come from a snapshot taken before those columns existed).
    */
   invalidateCaches(scope?: { items: Iterable<string> }) {
+    this.deckTrees.clear();
     this.typeCache.clear();
     this.leftovers = null;
     this.schedulerCache.clear();
@@ -790,11 +797,10 @@ export class Etude {
     return { deleted: id, selected };
   }
 
-  /** Start of the current study day, in local time. */
-  dayStart(at = now()): Date {
-    const h = this.settings().dayStartHour;
+  /** Start of the current study day, in local time. `hour`: the day's start, for a caller that already read it. */
+  dayStart(at = now(), hour = this.settings().dayStartHour): Date {
     const d = new Date(at);
-    d.setHours(h, 0, 0, 0);
+    d.setHours(hour, 0, 0, 0);
     if (d > at) d.setDate(d.getDate() - 1);
     return d;
   }
@@ -2271,12 +2277,15 @@ export class Etude {
 
   // ----------------------------------------------------------------- study
 
-  private scopeWhere(scope: StudyScope): { where: string; params: any[]; cfg: PresetConfig } {
+  /** `deck`: the deck's name as stored, which a name in another case resolves to. */
+  private scopeWhere(scope: StudyScope): { where: string; params: any[]; cfg: PresetConfig; deck?: string } {
     const parts: string[] = ["i.archived = 0", "d.archived = 0", "c.suspended = 0"];
     const params: any[] = [];
     let cfg: PresetConfig;
+    let deck: string | undefined;
     if (scope.deck) {
       const d = this.deckRow(scope.deck);
+      deck = d.name;
       parts.push("(d.name = ? OR d.name LIKE ? ESCAPE '\\')");
       params.push(d.name, d.name.replace(/[\\%_]/g, "\\$&") + "::%");
       cfg = this.configFor(d.name);
@@ -2286,7 +2295,7 @@ export class Etude {
       parts.push(`(${c.where})`);
       params.push(...c.params);
     }
-    return { where: parts.join(" AND "), params, cfg };
+    return { where: parts.join(" AND "), params, cfg, deck };
   }
 
   /**
@@ -2330,16 +2339,23 @@ export class Etude {
   }
 
   /** The queue for a deck or search right now: learning, due reviews and today's new cards, in order. */
-  queue(scope: StudyScope) {
-    const t = now();
-    const { where, params, cfg: scopeCfg } = this.scopeWhere(scope);
+  /**
+   * `src`: the deck tree's one read of every card and of today's answers, for a deck scope. Without it the
+   * queue reads its own; the queue it builds is the same either way.
+   */
+  queue(scope: StudyScope, src?: QueueSource) {
+    if (src && (!scope.deck || scope.query || scope.placement || scope.ahead)) src = undefined;
+    const t = src?.at ?? now();
+    const { where, params, cfg: scopeCfg, deck } = this.scopeWhere(scope);
     let cfg = scopeCfg;
     const from = "FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
-    const rows = this.db.all(
-      `SELECT c.*, i.ord, i.type, d.name AS deck ${from} WHERE ${where} AND (c.buried_until IS NULL OR c.buried_until <= ?)`,
-      ...params,
-      iso(t),
-    ) as (CardRow & { ord: number; deck: string; type: string })[];
+    const rows = src
+      ? src.cards(deck!)
+      : (this.db.all(
+          `SELECT c.*, i.ord, i.type, d.name AS deck ${from} WHERE ${where} AND (c.buried_until IS NULL OR c.buried_until <= ?)`,
+          ...params,
+          iso(t),
+        ) as QueueRow[]);
     // Watch decks are tours, not study: their cards never enter the queue.
     const watching = new Map<string, boolean>();
     const watch = (deck: string) => {
@@ -2348,11 +2364,13 @@ export class Etude {
     };
     for (let i = rows.length - 1; i >= 0; i--) if (watch(rows[i].deck)) rows.splice(i, 1);
     const dayStart = iso(this.dayStart(t));
-    const done = this.db.get(
-      `SELECT SUM(r.state = 0) AS new, SUM(r.state = 2) AS rev FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.ts >= ? AND ${where}`,
-      dayStart,
-      ...params,
-    )!;
+    const done = src
+      ? src.answers(deck!).reduce((n, r) => ((n.new += +(r.state === 0)), (n.rev += +(r.state === 2)), n), { new: 0, rev: 0 })
+      : this.db.get(
+          `SELECT SUM(r.state = 0) AS new, SUM(r.state = 2) AS rev FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.ts >= ? AND ${where}`,
+          dayStart,
+          ...params,
+        )!;
     const doneNew = Number(done.new ?? 0), doneRev = Number(done.rev ?? 0);
     const nowIso = iso(t);
     const aheadIso = iso(new Date(t.getTime() + this.settings().learnAheadMinutes * 60_000));
@@ -2388,12 +2406,14 @@ export class Etude {
       reviews.sort((a, b) => hashString(day + a.id) - hashString(day + b.id));
     } else reviews.sort((a, b) => a.due.localeCompare(b.due));
     // Today's answers against the limits. An adaptive deck's limits are for all of it, whichever subdeck is open.
-    const limits = root ? this.scopeWhere({ deck: root }) : { where, params };
-    const answered = this.db.all<{ id: number; face: string; state: number }>(
-      `SELECT c.id, c.face, r.state FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.state IN (0, 2) AND r.ts >= ? AND ${limits.where}`,
-      dayStart,
-      ...limits.params,
-    );
+    const limits = root ? this.scopeWhere({ deck: root }) : { where, params, deck };
+    const answered = src
+      ? src.answers(limits.deck!).filter((r) => r.state === 0 || r.state === 2).map(({ id, face, state }) => ({ id, face, state }))
+      : this.db.all<{ id: number; face: string; state: number }>(
+          `SELECT c.id, c.face, r.state FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.state IN (0, 2) AND r.ts >= ? AND ${limits.where}`,
+          dayStart,
+          ...limits.params,
+        );
     reviews = reviews.slice(0, Math.max(0, cfg.reviewsPerDay - answered.filter((r) => r.state === 2).length));
 
     // A new card given a later due date (setDue) waits until then.
@@ -2432,8 +2452,36 @@ export class Etude {
     return { learning, reviews, news, doneNew, doneRev, cfg, nowIso, nextLater, ahead: false };
   }
 
-  counts(scope: StudyScope) {
-    const q = this.queue(scope);
+  /**
+   * Every card a deck scope can study, read once, with today's answers, for building many decks' queues: the same
+   * filter as `scopeWhere` for a deck (SQLite's LIKE ignores ASCII case, so a subdeck is matched the same way).
+   */
+  private queueSource(): QueueSource {
+    const at = now();
+    const base = "i.archived = 0 AND d.archived = 0 AND c.suspended = 0";
+    const from = "FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
+    const byDeck = <T extends { deck: string }>(list: T[]) => {
+      const m = new Map<string, T[]>();
+      for (const r of list) {
+        const l = m.get(r.deck);
+        if (l) l.push(r);
+        else m.set(r.deck, [r]);
+      }
+      return m;
+    };
+    const cards = byDeck(this.db.all(`SELECT c.*, i.ord, i.type, d.name AS deck ${from} WHERE ${base} AND (c.buried_until IS NULL OR c.buried_until <= ?)`, iso(at)) as QueueRow[]);
+    const answers = byDeck(this.db.all<{ id: number; face: string; state: number; deck: string }>(`SELECT c.id, c.face, r.state, d.name AS deck FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.ts >= ? AND ${base}`, iso(this.dayStart(at))));
+    const lower = (s: string) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
+    const names = [...new Set([...cards.keys(), ...answers.keys()])].map((n) => [n, lower(n)] as const);
+    const within = (deck: string) => {
+      const prefix = lower(deck) + "::";
+      return names.filter(([n, l]) => n === deck || l.startsWith(prefix)).map(([n]) => n);
+    };
+    return { at, cards: (deck) => within(deck).flatMap((n) => cards.get(n) ?? []), answers: (deck) => within(deck).flatMap((n) => answers.get(n) ?? []) };
+  }
+
+  counts(scope: StudyScope, src?: QueueSource) {
+    const q = this.queue(scope, src);
     return {
       new: q.news.length,
       learning: q.ahead ? q.learning.length : q.learning.filter((c) => c.due <= q.nowIso).length,
@@ -3176,9 +3224,24 @@ export class Etude {
     return final.map((r) => r.name);
   }
 
+  /**
+   * Every page asks for the deck tree, and its counts build each deck's study queue. It's reused while nothing in
+   * the collection changed (here or through another connection) and for at most DECK_TREE_MS, as cards come due.
+   */
   deckTree(opts: { archived?: boolean } = {}) {
-    const decks = this.orderedDecks(!!opts.archived);
+    const archived = !!opts.archived, t = now().getTime(), hit = this.deckTrees.get(archived);
+    if (hit && t - hit.at >= 0 && t - hit.at < DECK_TREE_MS && hit.stamp === this.db.changeStamp()) return hit.tree;
+    const tree = this.buildDeckTree(archived);
+    this.deckTrees.set(archived, { tree, at: t, stamp: this.db.changeStamp() });
+    return tree;
+  }
+  private deckTrees = new Map<boolean, { tree: ReturnType<Etude["buildDeckTree"]>; at: number; stamp: string }>();
+
+  private buildDeckTree(archived: boolean) {
+    const decks = this.orderedDecks(archived);
     const t = now();
+    // Read once on the first deck with cards: every deck's counts come from it.
+    let src: QueueSource | undefined;
     const totals = new Map(
       this.db
         .all("SELECT i.deck_id, COUNT(*) AS cards, SUM(c.state = 0) AS new, SUM(c.suspended) AS suspended FROM cards c JOIN items i ON i.id = c.item_id WHERE i.archived = 0 GROUP BY i.deck_id")
@@ -3192,7 +3255,7 @@ export class Etude {
         cards += Number(tt?.cards ?? 0);
         unseen += Number(tt?.new ?? 0);
       }
-      const counts = cards ? this.counts({ deck: d.name }) : { new: 0, learning: 0, learningSoon: 0, review: 0, doneToday: 0, nextDue: null };
+      const counts = cards ? this.counts({ deck: d.name }, (src ??= this.queueSource())) : { new: 0, learning: 0, learningSoon: 0, review: 0, doneToday: 0, nextDue: null };
       const cfg = this.configFor(d.name);
       return { ...this.deckFromRow(d), depth: deckParts(d.name).length - 1, cards, unseen, ...counts, deadline: cfg.deadline ?? null, mode: cfg.mode, at: iso(t) };
     });
@@ -3312,8 +3375,10 @@ export class Etude {
         if (c.stability >= 21) states.mature++;
       }
     }
+    // Read once: settings come from the database, and this runs for every review.
+    const dayHour = this.settings().dayStartHour;
     const dayKey = (ts: string | Date) => {
-      const ds = this.dayStart(new Date(ts));
+      const ds = this.dayStart(new Date(ts), dayHour);
       return `${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, "0")}-${String(ds.getDate()).padStart(2, "0")}`;
     };
     // Calendar days can be 23 or 25 hours long, so step by date, not by 24 h.

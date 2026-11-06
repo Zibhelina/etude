@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.1
+
+- **Cards move like the Design Lab ones.** A self-rated card turns over to its back in one continuous turn, in Study and in Watch (the Showcase used to just swap). When you check an answer, the card glides into its result: what stays moves to its new place, what's new fades up in turn. Between cards the one you rated flies off and the next rises from the deck, in Watch too. Any card type gets this; games with their own result screen keep theirs, and a type can turn it off with `etude.morph = false`.
+- **The built-in types have the Etude 3 look:** a big serif question on basic cards; typed and numeric answers with what you wrote struck through when it's wrong; choices lettered A, B, C; cloze blanks typed inside the sentence; math as a work-it-out card with one Answer field, help behind ?, a scratchpad on a computer or tablet and I'm stuck; code with a flat editor, the pass count and Your code / Reference tabs; drawing with a pen that follows pressure and your drawing beside the reference.
+- **Showcase:** the map is a rounded sheet with a faint grid and one zoom pill, and flies to the answer; Morse has one key you tap for a dot and hold for a dash; Work it out keeps its scratchpad behind a switch and shows the solution in two steps.
+
 ## 3.0.0
 
 - **Etude 3: every screen is new.** A white Snow theme by day and a neutral grey Night by dark (System follows the device and is the default for new installs), a green that only marks the main button, the εtude wordmark in ink, and a scrollbar that shows only while you scroll.

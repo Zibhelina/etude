@@ -8,7 +8,8 @@ export interface Transport {
   keys(): Promise<{keys:VaultKeys;etag:string}|null>;
   putKeys(keys:VaultKeys,etag?:string): Promise<void>;
   push(events:WireEvent[]): Promise<void>;
-  pull(cursor:string): Promise<{events:WireEvent[];cursor:string;more:boolean}>;
+  /** `seen` tells which event ids this device already has, for a transport that can skip them before reading them. */
+  pull(cursor:string,seen?:(id:string)=>boolean): Promise<{events:WireEvent[];cursor:string;more:boolean}>;
   putBlob(name:string,bytes:Uint8Array): Promise<void>;
   getBlob(name:string): Promise<Uint8Array>;
   /** Bytes stored on the server, when it says. */
@@ -43,10 +44,17 @@ export class FolderTransport implements Transport {
       renameSync(temp,file);
     }
   }
-  async pull(_cursor:string) {
+  /**
+   * Lists every device's event files and reads only those `seen` doesn't know. Files can arrive in any
+   * order (a sync program copies them as it likes), so each pull lists all names rather than resuming.
+   */
+  async pull(_cursor:string,seen:(id:string)=>boolean=()=>false) {
     const events:WireEvent[]=[];
     const root=join(this.folder,"events");
-    if (existsSync(root)) for (const dev of readdirSync(root)) if (VALID.test(dev)) for (const file of readdirSync(join(root,dev))) if (file.endsWith(".json") && VALID.test(file.slice(0,-5).replaceAll("~",":"))) events.push(JSON.parse(readFileSync(join(root,dev,file),"utf8")));
+    if (existsSync(root)) for (const dev of readdirSync(root)) if (VALID.test(dev)) for (const file of readdirSync(join(root,dev))) {
+      const id=file.slice(0,-5).replaceAll("~",":");
+      if (file.endsWith(".json") && VALID.test(id) && !seen(id)) events.push(JSON.parse(readFileSync(join(root,dev,file),"utf8")));
+    }
     return {events,cursor:"",more:false};
   }
   async putBlob(name:string,bytes:Uint8Array) {

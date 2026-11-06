@@ -165,9 +165,12 @@ export class SyncClient {
     let cursor=this.meta("cursor","");let more=true;
     // A device that has never pulled downloads about the whole vault.
     const down=this.step("download",cursor===""?await t.usage?.()??null:null);
+    // The ids this device has, loaded once and only if a transport asks: a folder lists every file name each time.
+    let have:Set<string>|null=null;
+    const seen=(id:string)=>(have??=new Set(db.all("SELECT id FROM sync_events").map(r=>r.id as string))).has(id);
     while(more) {
-      const page=await t.pull(cursor);this.moved(page.events.reduce((n,e)=>n+e.ciphertext.length,0));
-      // A folder hands back every event each time: only new ones are decrypted, applied, and call for a rebuild.
+      const page=await t.pull(cursor,seen);this.moved(page.events.reduce((n,e)=>n+e.ciphertext.length,0));
+      // Only new events are decrypted and applied: the cloud hands back this device's own too.
       const fresh=page.events.filter(event=>!db.get("SELECT 1 FROM sync_events WHERE id=?",event.id));
       // Decrypting is the asynchronous part. The page then goes in with its cursor in one transaction.
       const plain=await Promise.all(fresh.map(async event=>({id:event.id,event:await decryptEvent<Change>(key,event.id,event.ciphertext)})));

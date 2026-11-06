@@ -408,18 +408,18 @@ export class Etude {
    * Drops in-memory caches and rebuilds the stored item columns, after the database was changed
    * underneath (an undo restore, which may come from a snapshot taken before those columns existed).
    */
-  invalidateCaches() {
+  invalidateCaches(scope?: { items: Iterable<string> }) {
     this.typeCache.clear();
     this.leftovers = null;
     this.schedulerCache.clear();
-    this.reindexItems();
+    this.reindexItems(scope ? { ids: scope.items } : {});
   }
 
   /**
-   * Rewrites the stored title and search text of every item (or only `type`'s items, or only blank
-   * ones), for when what they derive from changed: a type's definition, or the derivation itself.
+   * Rewrites the stored title and search text of every item (or only `type`'s items, only blank ones,
+   * or only `ids`), for when what they derive from changed: a type's definition, or the derivation itself.
    */
-  private reindexItems(scope: { type?: CardTypeDef; blank?: boolean } = {}) {
+  private reindexItems(scope: { type?: CardTypeDef; blank?: boolean; ids?: Iterable<string> } = {}) {
     const only = scope.type;
     const defs = new Map<string, CardTypeDef | null>(only ? [[only.id, only]] : []);
     const defFor = (id: string) => {
@@ -432,9 +432,11 @@ export class Etude {
       }
       return defs.get(id)!;
     };
-    const rows = only
-      ? this.db.all("SELECT id, type, fields, title, search FROM items WHERE type = ?", only.id)
-      : this.db.all(`SELECT id, type, fields, title, search FROM items${scope.blank ? " WHERE title = '' AND search = ''" : ""}`);
+    const rows = scope.ids
+      ? [...scope.ids].flatMap((id) => this.db.all("SELECT id, type, fields, title, search FROM items WHERE id = ?", id))
+      : only
+        ? this.db.all("SELECT id, type, fields, title, search FROM items WHERE type = ?", only.id)
+        : this.db.all(`SELECT id, type, fields, title, search FROM items${scope.blank ? " WHERE title = '' AND search = ''" : ""}`);
     const changed: [string, string, string][] = [];
     for (const r of rows) {
       const fields = parse<Record<string, unknown>>(r.fields, {});
@@ -442,7 +444,7 @@ export class Etude {
       const search = itemSearchText(fields);
       if (title !== r.title || search !== r.search) changed.push([title, search, r.id]);
     }
-    const all = !only && !scope.blank;
+    const all = !only && !scope.blank && !scope.ids;
     // Most opens change nothing; skip the write lock then.
     if (!changed.length && !all) return;
     this.db.tx(() => {

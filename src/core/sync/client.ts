@@ -4,7 +4,7 @@ import type { Etude } from "../engine.ts";
 import { bootstrap, drain, install, localEvent, receive, rows, type Change } from "./log.ts";
 import { createVault, decryptBlob, decryptEvent, encryptBlob, encryptEvent, fromB64, sha256Hex, toB64, unwrapWithPassword, unwrapWithRecovery } from "./crypto.ts";
 import { CloudTransport, FolderTransport, type Transport } from "./transport.ts";
-import { project } from "./project.ts";
+import { projectChanges, projectionPending } from "./project.ts";
 import { accountFor, secondStepBody, secondStepFrom, signInCode, type PendingSecondStep } from "../account.ts";
 
 /** Most ciphertext characters sent in one push. */
@@ -162,7 +162,6 @@ export class SyncClient {
       const page=await t.pull(cursor);this.moved(page.events.reduce((n,e)=>n+e.ciphertext.length,0));
       // A folder hands back every event each time: only new ones are decrypted, applied, and call for a rebuild.
       const fresh=page.events.filter(event=>!db.get("SELECT 1 FROM sync_events WHERE id=?",event.id));
-      if(fresh.length)this.set("unprojected",true);
       for(const event of fresh)receive(db,event.id,await decryptEvent<Change>(key,event.id,event.ciphertext));this.received+=fresh.length;
       cursor=page.cursor;more=page.more;this.set("cursor",cursor);
     }
@@ -231,15 +230,15 @@ export class SyncClient {
       for(const r of batch) {const ciphertext=r.ciphertext??await encryptEvent(key,r.id,JSON.parse(r.body));if(!r.ciphertext)db.run("UPDATE sync_events SET ciphertext=? WHERE id=?",ciphertext,r.id);if(events.length&&bytes+ciphertext.length>PUSH_BATCH_BYTES)break;events.push({id:r.id,ciphertext});sent.push(r);bytes+=ciphertext.length;}
       await t.push(events);this.moved(bytes);db.tx(()=>{for(const r of sent)db.run("UPDATE sync_events SET sent=1 WHERE id=?",r.id);});
     }
-    // Rebuilding the rows from the registers rewrites the whole collection and holds the thread (tens
-    // of seconds on a big one), so it runs only when changes from another device arrived, now or in a
-    // run that stopped before rebuilding. Local changes are already in the rows.
-    if(this.meta("unprojected",false)) {
-      // Let a status request see this step before the rebuild holds the thread.
+    // Only the rows whose registers changed, here or on another device, are rewritten; their keys were
+    // recorded with the change, so a run that stopped before this step leaves them for the next.
+    drain(db);
+    if(projectionPending(this.e)) {
+      // Let a status request see this step before the projection holds the thread.
       this.step("apply");await new Promise(r=>setTimeout(r,0));
-      // No await while rebuilding. SQL triggers are muted only for this transaction.
-      drain(db);project(this.e);this.set("unprojected",false);
-    } else drain(db);
+      // No await while projecting. SQL triggers are muted only for this transaction.
+      drain(db);projectChanges(this.e);
+    }
     this.set("config",{...this.config(),lastSync:new Date().toISOString()});return this.status();
   }
 }

@@ -302,6 +302,11 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
   background: linear-gradient(to bottom, color-mix(in oklab, var(--background) 94%, transparent), transparent);
   pointer-events: none;
 }
+/* Settings → Accent color: the custom-color ring turns slowly. */
+.accent-wheel-spin { animation: accent-wheel-spin 9s linear infinite; }
+.group\/wheel:hover .accent-wheel-spin { animation-duration: 2.4s; }
+@keyframes accent-wheel-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .accent-wheel-spin { animation: none; } }
 @keyframes score-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes score-up { from { transform: translateY(100%); } to { transform: none; } }
 .score-scrim { background: rgb(0 0 0 / 0.62); animation: score-fade 180ms ease-out both; }

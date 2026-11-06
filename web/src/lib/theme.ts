@@ -2,23 +2,26 @@
 // for shadcn's dark: variants, the browser's color-scheme and theme-color, and a localStorage copy
 // that index.html applies before the first paint.
 import { useEffect, useState } from "react";
-import { BUILTIN_THEMES, DEFAULT_THEME, resolveTheme, themeCss, type Scheme, type Theme } from "../../../src/core/themes.ts";
+import { ACCENTS, BUILTIN_THEMES, DEFAULT_THEME, accentColor, resolveTheme, themeCss, withAccent, type Scheme, type Theme } from "../../../src/core/themes.ts";
 import { api } from "@/lib/api";
 import { appPath } from "@/lib/router";
 
-export { BUILTIN_THEMES, DEFAULT_THEME, resolveTheme, themeCss };
+export { ACCENTS, BUILTIN_THEMES, DEFAULT_THEME, accentColor, resolveTheme, themeCss };
 export type { Scheme, Theme };
 
 export const THEME_EVENT = "etude:theme";
 const CACHE_KEY = "etude.theme";
 
 let current: Theme = BUILTIN_THEMES[0];
+/** Settings → Appearance accent, painted over every theme (null: the theme's own). */
+let accent: string | null = null;
 const darkQuery = typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null;
 const prefersDark = () => !!darkQuery?.matches;
 /** While the theme editor is open, background syncs leave its live draft alone. */
 let previewing = false;
 
 export const currentTheme = () => current;
+export const currentAccent = () => accent;
 export const isEmbed = () => appPath() === "/embed";
 
 /** Any CSS color as #rrggbb (or #rrggbbaa when translucent), through a 1px canvas. */
@@ -52,9 +55,10 @@ function setMeta(name: string, content: string) {
   m.content = content;
 }
 
-/** Puts a theme on the page. `persist: false` is for live previews that may be thrown away. A theme that
- * follows the device (System) paints its light or dark half and repaints when the device switches. */
-export function applyTheme(t: Theme, opts: { persist?: boolean } = {}) {
+/** Puts a theme on the page. `persist: false` is for live previews that may be thrown away; `pure` shows the
+ * theme without the user's accent (the theme editor and Market try-on, where its own accent is the point). A
+ * theme that follows the device (System) paints its light or dark half and repaints when the device switches. */
+export function applyTheme(t: Theme, opts: { persist?: boolean; pure?: boolean } = {}) {
   if (isEmbed()) return;
   let style = document.getElementById("etude-theme") as HTMLStyleElement | null;
   if (!style) {
@@ -62,7 +66,8 @@ export function applyTheme(t: Theme, opts: { persist?: boolean } = {}) {
     style.id = "etude-theme";
     document.head.appendChild(style);
   }
-  const shown = resolveTheme(t, prefersDark());
+  const paint = (x: Theme) => (opts.pure ? x : withAccent(x, accent));
+  const shown = paint(resolveTheme(t, prefersDark()));
   const css = themeCss(shown);
   if (style.textContent !== css) style.textContent = css;
   const root = document.documentElement;
@@ -77,8 +82,8 @@ export function applyTheme(t: Theme, opts: { persist?: boolean } = {}) {
       // theme-boot.js paints this before the first frame; a System theme keeps both halves so it can pick.
       const half = (x: Theme) => ({ id: x.id, scheme: x.scheme, css: themeCss(x), bg: bgOf(x) });
       const cache = t.pair
-        ? { ...half(shown), pair: { light: half(resolveTheme(t, false)), dark: half(resolveTheme(t, true)) } }
-        : half(t);
+        ? { ...half(shown), pair: { light: half(paint(resolveTheme(t, false))), dark: half(paint(resolveTheme(t, true))) } }
+        : half(paint(t));
       localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
     } catch {
       // Private mode or full storage: the theme still applies, it just won't skip the flash next time.
@@ -92,6 +97,13 @@ darkQuery?.addEventListener("change", () => {
   if (current.pair && !previewing) applyTheme(current, { persist: false });
 });
 
+/** Changes the accent and repaints. `save: false` when the value came from the server. */
+export function setAccent(a: string | null, opts: { save?: boolean } = {}) {
+  accent = a;
+  if (!previewing) applyTheme(current);
+  if (opts.save !== false) return api.saveSettings({ accent: a });
+}
+
 export function setPreviewing(on: boolean) {
   previewing = on;
 }
@@ -99,6 +111,7 @@ export function setPreviewing(on: boolean) {
 /** The selected theme as the server has it, falling back to Midnight. */
 export async function loadTheme(): Promise<Theme> {
   const s = await api.settings();
+  if (s.accent === null || typeof s.accent === "string") accent = s.accent;
   const list: Theme[] = [...BUILTIN_THEMES, ...((s.themes as Theme[]) ?? [])];
   return list.find((t) => t.id === s.theme) ?? BUILTIN_THEMES[0];
 }
@@ -107,8 +120,9 @@ export async function loadTheme(): Promise<Theme> {
 export async function refreshTheme() {
   if (isEmbed() || previewing) return;
   try {
+    const before = accent;
     const t = await loadTheme();
-    if (themeCss(t) !== themeCss(current)) applyTheme(t);
+    if (themeCss(t) !== themeCss(current) || accent !== before) applyTheme(t);
   } catch {}
 }
 
@@ -119,8 +133,9 @@ export function startThemeSync() {
   let first = true;
   const sync = async () => {
     try {
+      const before = accent;
       const t = await loadTheme();
-      if (!previewing && (first || themeCss(t) !== themeCss(current))) applyTheme(t);
+      if (!previewing && (first || themeCss(t) !== themeCss(current) || accent !== before)) applyTheme(t);
       first = false;
     } catch {
       // Offline or a token problem: keep whatever is showing.
@@ -149,4 +164,15 @@ export function useScheme(): Scheme {
     return () => window.removeEventListener(THEME_EVENT, h);
   }, []);
   return scheme;
+}
+
+/** The accent setting, re-rendering when it changes (here or from another device). */
+export function useAccent(): string | null {
+  const [a, setA] = useState<string | null>(accent);
+  useEffect(() => {
+    const h = () => setA(accent);
+    window.addEventListener(THEME_EVENT, h);
+    return () => window.removeEventListener(THEME_EVENT, h);
+  }, []);
+  return a;
 }

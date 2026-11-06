@@ -60,7 +60,7 @@ import {
   type ChatGptModel,
   type ChatGptStatus,
 } from "./chatgpt.ts";
-import { BUILTIN_THEMES, DEFAULT_THEME, MAX_CUSTOM_THEMES, ThemeError, builtinTheme, normalizeTheme, type Theme } from "./themes.ts";
+import { ACCENTS, BUILTIN_THEMES, DEFAULT_THEME, isAccent, MAX_CUSTOM_THEMES, ThemeError, builtinTheme, normalizeTheme, type Theme } from "./themes.ts";
 import { openPackage } from "./anki/package.ts";
 import { readCollection } from "./anki/collection.ts";
 import { convertCollection, type PlannedCard } from "./anki/convert.ts";
@@ -156,6 +156,8 @@ export interface Settings {
   fun: boolean;
   /** Minimi's personality, written by the user. Empty keeps his usual one (src/core/minimi.ts). Only used in Fun mode. */
   minimi: string;
+  /** Settings → Appearance: the accent painted over any theme (a preset id from ACCENTS or #rrggbb); null keeps the theme's own. */
+  accent: string | null;
 }
 
 export const ONBOARDING_LEVELS = ["simple", "standard", "tinker"] as const;
@@ -164,7 +166,7 @@ export interface Onboarding {
   level: (typeof ONBOARDING_LEVELS)[number];
 }
 
-export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" }, privacy: DEFAULT_PRIVACY, fun: true, minimi: "" };
+export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" }, privacy: DEFAULT_PRIVACY, fun: true, minimi: "", accent: null };
 
 /** Card preferences: short keys, and a few KB per type, since they ride along in the synced settings. */
 export const TYPE_PREF_KEY = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -661,6 +663,8 @@ export class Etude {
     if (typeof next.fun !== "boolean") throw new EtudeError("fun must be true or false");
     if (typeof next.minimi !== "string") throw new EtudeError("minimi must be text");
     if (next.minimi.length > MINIMI_MAX) throw new EtudeError(`minimi is too long (at most ${MINIMI_MAX} characters)`);
+    if (typeof next.accent === "string") next.accent = next.accent.trim().toLowerCase() || null;
+    if (!isAccent(next.accent)) throw new EtudeError(`accent must be null (the theme's own), one of ${ACCENTS.map((a) => a.id).join(", ")}, or a #rrggbb color`);
     if (typeof next.onboarding.done !== "boolean") throw new EtudeError("onboarding.done must be true or false");
     if (!ONBOARDING_LEVELS.includes(next.onboarding.level)) throw new EtudeError(`onboarding.level must be one of ${ONBOARDING_LEVELS.join(", ")}`);
     if (typeof next.market.url !== "string" || typeof next.market.repo !== "string") throw new EtudeError("market.url and market.repo must be text");

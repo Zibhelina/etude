@@ -183,3 +183,33 @@ test("CLI: theme list, set, create, edit, export, import, delete", async () => {
   assert.equal((await cli(["theme", "delete", "midnight", "--yes"])).code, 5);
   assert.deepEqual((await cli(["theme", "list"])).json.filter((t: any) => !t.builtin).map((t: any) => t.id), ["sea", "sea-2"]);
 });
+
+test("accent: paints over any theme, validated, synced key, previews can skip it", async () => {
+  const { ACCENTS, accentColor, accentText, withAccent } = await import("../src/core/themes.ts");
+  const snow = BUILTIN_THEMES.find((t) => t.id === "snow")!;
+  const night = BUILTIN_THEMES.find((t) => t.id === "night")!;
+  assert.equal(withAccent(snow, null), snow);
+  const blue = ACCENTS.find((a) => a.id === "blue")!;
+  assert.equal(withAccent(snow, "blue").vars["--primary"], blue.light);
+  assert.equal(withAccent(night, "blue").vars["--highlight"], blue.dark);
+  assert.equal(withAccent(snow, "#AA00FF").vars["--primary"], "#aa00ff");
+  // Right and wrong keep their colors; cards keep their own target color.
+  for (const k of ["--good", "--again", "--success", "--card-highlight"]) assert.equal(withAccent(snow, "pink").vars[k], snow.vars[k]);
+  assert.equal(accentColor("nope", "light"), null);
+  assert.equal(accentText("#ffffff"), "#1b1b1a");
+  assert.equal(accentText("#2f6fd6"), "#ffffff");
+  assert.equal(accentText(accentColor("amber", "dark")!), "#1b1b1a");
+
+  const e = await Etude.open(":memory:");
+  {
+    assert.equal(e.settings().accent, null);
+    assert.equal(e.updateSettings({ accent: "violet" }).accent, "violet");
+    assert.equal(e.updateSettings({ accent: " #12AB34 " }).accent, "#12ab34");
+    assert.equal(e.updateSettings({ accent: null }).accent, null);
+    assert.throws(() => e.updateSettings({ accent: "chartreuse" }), /accent must be/);
+    assert.throws(() => e.updateSettings({ accent: "#fff" as any }), /accent must be/);
+    const { safeSettings } = await import("../src/core/sync/log.ts");
+    assert.equal(safeSettings({ accent: "blue", market: { url: "x" } }).accent, "blue");
+    assert.equal(safeSettings({ market: { url: "x" } }).market, undefined);
+  }
+});

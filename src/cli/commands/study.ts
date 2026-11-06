@@ -236,7 +236,8 @@ command({
 
 command({
   name: "study undo",
-  summary: "Undo the most recent review (any card): the card returns exactly to its previous state, and the graded answer is discarded.",
+  summary: "Undo the most recent review made on this device (any card): the card returns exactly to its previous state, and the graded answer is discarded.",
+  description: "In a synced collection, reviews that came from your other devices are left alone, even when they arrived after this device's last one.",
   writes: true,
   dryRun: true,
   output: "{ undone: { cardId, itemId } | null }",

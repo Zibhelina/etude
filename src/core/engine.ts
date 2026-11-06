@@ -2901,7 +2901,7 @@ export class Etude {
   }
 
   /**
-   * Canonical sync replay uses UTC study days, a stable review tie-break and no FSRS fuzz. Without a scope
+   * Canonical sync replay uses UTC study days, a stable review tie-break, and FSRS fuzz seeded by the card and review number. Without a scope
    * every card is replayed from its first review. A scope maps card ids to the earliest changed review
    * (time, sync id), or null for "from the first review": a card whose changes all come after the last
    * review it was replayed to continues from the state saved then (`sync_replay`).
@@ -2920,7 +2920,7 @@ export class Etude {
     for (const c of cards) {
       const ck = `${c.deck}\u0000${c.type}`;
       if (!configs.has(ck)) {
-        const cfg = { ...this.cardConfig(c.deck, c.type), enableFuzz: false };
+        const cfg = this.cardConfig(c.deck, c.type);
         configs.set(ck, { cfg, script: this.scriptFor(cfg) });
       }
       const { cfg, script } = configs.get(ck)!;

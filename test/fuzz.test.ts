@@ -4,11 +4,26 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Etude } from "../src/core/engine.ts";
+import { syncFor } from "../src/core/sync/client.ts";
 import * as sched from "../src/core/scheduler.ts";
 import { DEFAULT_PRESET, type CardRow } from "../src/core/model.ts";
 
 const temp = () => mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "fuzz-test-"));
 const DAY = 86400_000;
+const password = "a test Sync password";
+/** Every card's schedule, by stable identity. */
+const schedules = (e: Etude) => e.db.all("SELECT item_id, face, state, due, stability, difficulty, elapsed_days, scheduled_days, reps, lapses, learning_steps, last_review FROM cards ORDER BY item_id, face").map((r) => ({ ...r }));
+async function devices(dir: string, n: number) {
+  const es: Etude[] = [];
+  for (let i = 0; i < n; i++) {
+    const e = await Etude.open(join(dir, `d${i}`, "c.db"), { home: join(dir, `h${i}`) });
+    syncFor(e).setup({ folder: join(dir, "shared") });
+    await syncFor(e).unlock({ password });
+    await syncFor(e).now();
+    es.push(e);
+  }
+  return es;
+}
 const card = (over: Partial<CardRow & { sync_id: string }> = {}): CardRow & { sync_id?: string } => ({
   ...sched.emptyCard(new Date("2027-01-01T00:00:00Z")),
   id: 1,
@@ -59,6 +74,86 @@ test("the rating buttons show the interval that rating then gives", async () => 
       e.undo();
     }
     assert.ok(fuzzed > 20, "the comparison covered fuzzed intervals");
+  } finally {
+    e.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a fuzzed review keeps its date through sync, on the device that made it and on another", async () => {
+  const dir = temp();
+  const [a, b] = await devices(dir, 2);
+  try {
+    for (let i = 0; i < 16; i++) a.upsertItem({ id: `item-${i}`, deck: "Fuzz", type: "basic", fields: { front: `q ${i}`, back: "a" } });
+    await syncFor(a).now();
+    await syncFor(b).now();
+    const ids = a.db.all("SELECT id FROM cards ORDER BY id").map((r) => r.id as number);
+    const start = Date.now() - 200 * DAY;
+    for (let round = 0; round < 5; round++) {
+      ids.forEach((id, i) => a.rate(id, ([4, 3, 3, 2, 1] as const)[(i + round) % 5], { at: new Date(start + round * 40 * DAY + i * 60_000) }));
+      const rated = schedules(a);
+      await syncFor(a).now();
+      assert.deepEqual(schedules(a), rated, `round ${round}: the sync left this device's dates alone`);
+      await syncFor(b).now();
+      assert.deepEqual(schedules(b), rated, `round ${round}: the other device has the same dates`);
+    }
+    // The fuzz was really on: some intervals are off the unfuzzed ones.
+    const plain = a.db.all("SELECT r.ts, r.rating, c.item_id, c.face, c.sync_id FROM reviews r JOIN cards c ON c.id = r.card_id ORDER BY c.id, r.ts");
+    const off = ids.filter((id) => {
+      const c = a.db.get("SELECT * FROM cards WHERE id = ?", id) as CardRow & { created: string };
+      const history = plain.filter((r) => r.item_id === c.item_id && r.face === c.face);
+      return sched.replay(history as { ts: string; rating: number }[], new Date(history[0].ts), { ...DEFAULT_PRESET, enableFuzz: false }, sched.cardKey(c)).due !== c.due;
+    });
+    assert.ok(off.length > ids.length / 2, `${off.length} of ${ids.length} cards fuzzed`);
+  } finally {
+    a.close();
+    b.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fuzz spreads cards learned together, and the spread survives sync", async () => {
+  const dir = temp();
+  const [e] = await devices(dir, 1);
+  try {
+    const at = new Date(Date.now() - 60 * DAY);
+    for (const fuzz of [true, false]) {
+      const deck = fuzz ? "Spread" : "Together";
+      e.ensureDeck(deck);
+      e.updateDeck(deck, { config: { enableFuzz: fuzz } });
+      for (let i = 0; i < 50; i++) e.upsertItem({ id: `${deck}-${i}`, deck, type: "basic", fields: { front: `q ${i}`, back: "a" } });
+      const ids = e.db.all("SELECT c.id FROM cards c JOIN items i ON i.id = c.item_id WHERE i.deck_id = (SELECT id FROM decks WHERE name = ?)", deck).map((r) => r.id as number);
+      // Every card gets Good on the same days: learning, then intervals long enough to fuzz.
+      for (const day of [0, 1, 4, 20]) for (const id of ids) e.rate(id, 3, { at: new Date(at.getTime() + day * DAY) });
+    }
+    const dues = (deck: string) => new Set(e.db.all("SELECT c.due FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE d.name = ?", deck).map((r) => r.due));
+    const check = () => {
+      assert.ok(dues("Spread").size > 5, `with fuzz, ${dues("Spread").size} different dates`);
+      assert.equal(dues("Together").size, 1, "without fuzz, one date");
+    };
+    check();
+    await syncFor(e).now();
+    check();
+  } finally {
+    e.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("rescheduling here gives what the sync replay gives", async () => {
+  const dir = temp();
+  const [e] = await devices(dir, 1);
+  try {
+    for (let i = 0; i < 16; i++) e.upsertItem({ id: `item-${i}`, deck: "Fuzz", type: "basic", fields: { front: `q ${i}`, back: "a" } });
+    const ids = e.db.all("SELECT id FROM cards ORDER BY id").map((r) => r.id as number);
+    const start = Date.now() - 300 * DAY;
+    for (let round = 0; round < 6; round++) ids.forEach((id, i) => e.rate(id, ([3, 4, 1, 3, 2, 3] as const)[(i * 7 + round) % 6], { at: new Date(start + round * 45 * DAY + i * 3_600_000) }));
+    await syncFor(e).now();
+    const canonical = schedules(e);
+    assert.equal(e.reschedule().rescheduled, ids.length);
+    assert.deepEqual(schedules(e), canonical);
+    await syncFor(e).now();
+    assert.deepEqual(schedules(e), canonical);
   } finally {
     e.close();
     rmSync(dir, { recursive: true, force: true });

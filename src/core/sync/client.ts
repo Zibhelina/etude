@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import type { Etude } from "../engine.ts";
-import { bootstrap, drain, install, localEvent, receive, rows, type Change } from "./log.ts";
+import { bootstrap, drain, install, localEvent, receive, rowFor, rows, type Change } from "./log.ts";
 import { createVault, decryptBlob, decryptEvent, encryptBlob, encryptEvent, fromB64, sha256Hex, syncKeys, toB64, unwrapWithPassword, unwrapWithRecovery, type SyncKeys } from "./crypto.ts";
 import { CloudTransport, FolderTransport, type Transport } from "./transport.ts";
 import { projectChanges, projectionPending } from "./project.ts";
@@ -14,7 +14,10 @@ const PUSH_BATCH_BYTES=6*1024*1024;
 const BLOB_OVERHEAD=1+12+16;
 
 export type SyncProgress = {
-  /** download: events and media from other devices; check: hashing local media (done and total count files); upload: new media and events; apply: rebuilding the collection. */
+  /**
+   * The collection: download (events and type assets), upload (type assets and events), apply (writing the changes into the collection).
+   * The media, after it: check (hashing local files; done and total count files), download, upload (files, then their events).
+   */
   step:"download"|"check"|"upload"|"apply";
   done:number;
   /** Null when the size isn't known ahead. */
@@ -28,8 +31,11 @@ const MEDIA_RESCAN_MS=10*60_000;
 /** Hashes whose bytes are kept in sync_blobs: type assets, which the projection reads. */
 const STORED="SELECT hash FROM sync_blobs WHERE bytes IS NOT NULL";
 
-/** Blob transfers run this many at a time: each is a round trip, and most media files are small. */
-const BLOB_CONCURRENCY=8;
+/**
+ * Blob transfers run this many at a time: most media files are small, so each costs about a round trip.
+ * etude-cloud takes 100 requests a second per device; at ~250 ms each, 16 stay under it.
+ */
+const BLOB_CONCURRENCY=16;
 /** Runs fn over items a few at a time. The first failure rejects, and the other runners stop after their current item. */
 async function pool<T>(items:T[],limit:number,fn:(item:T)=>Promise<void>) {
   let next=0,failed=false;
@@ -39,6 +45,29 @@ async function pool<T>(items:T[],limit:number,fn:(item:T)=>Promise<void>) {
 /** A media path is relative, stays inside the media folder and has no control characters or backslashes. Spaces and accents are fine. */
 const safeMediaPath=(file:string)=>!/[\x00-\x1f\x7f\\]/.test(file)&&!file.split("/").some(p=>p===""||p==="."||p==="..");
 
+/** A downloaded file is written under this prefix beside its place and then renamed, so a write cut short never has the real name. */
+const PARTIAL=".etude-partial-";
+/** A partial file this old was left by a write that never finished. */
+const PARTIAL_STALE_MS=10*60_000;
+export function writeAtomic(path:string,bytes:Uint8Array,write:(path:string,bytes:Uint8Array)=>void=writeFileSync) {
+  const temp=join(dirname(path),PARTIAL+Math.random().toString(36).slice(2));
+  try {write(temp,bytes);renameSync(temp,path);}
+  catch(e) {rmSync(temp,{force:true});throw e;}
+}
+
+/** One phase's progress, with its rate over the last few seconds. */
+class Meter {
+  progress:SyncProgress|null=null;
+  private samples:[number,number][]=[];
+  step(step:SyncProgress["step"],total:number|null=null):SyncProgress {this.progress={step,done:0,total,rate:0};this.samples=[[Date.now(),0]];return this.progress;}
+  moved(n:number) {const p=this.progress;if(!p)return;p.done+=n;const now=Date.now();this.samples.push([now,p.done]);while(this.samples.length>2&&now-this.samples[1][0]>5000)this.samples.shift();}
+  view():SyncProgress|null {const p=this.progress,first=this.samples[0];if(!p||!first)return null;const ms=Date.now()-first[0];return {...p,rate:ms>0?Math.round((p.done-first[1])*1000/ms):0};}
+}
+/** Errors an automatic sync keeps quiet: the device is offline, or the server can't be reached. */
+const offline=(e:unknown)=>e instanceof TypeError || /fetch failed|network|offline|timeout/i.test((e as Error)?.message??"");
+/** Thrown inside the media task when it was asked to stop. */
+class Stopped extends Error { constructor() { super("media sync stopped"); } }
+
 type Config = { kind:"cloud"|"folder";server?:string;folder?:string;email?:string;enabled:boolean;hasKeys?:boolean;lastSync?:string };
 /** pendingSecond: an email sign-in waiting for its second step (two-step sign-in), kept beside the token, short-lived. */
 type Secrets = { token?:string;vk?:string;pendingSecond?:PendingSecondStep };
@@ -46,14 +75,25 @@ const clients=new WeakMap<Etude,SyncClient>();
 export function syncFor(e:Etude) { let s=clients.get(e);if(!s) {s=new SyncClient(e);clients.set(e,s);}return s; }
 export class SyncClient {
   readonly e:Etude;
+  /** The collection's sync: `busy`, `error` and `progress` in the status. */
   busy=false;
   error:string|null=null;
-  private progress:SyncProgress|null=null;
-  private samples:[number,number][]=[];
+  private meter=new Meter();
   private active:Promise<any>|null=null;
-  constructor(e:Etude) { this.e=e; }
+  constructor(e:Etude) { this.e=e;e.onClose(()=>this.stopMedia()); }
   /** Events pulled from other devices since this process started; the app reloads its page when it grows. */
   private received=0;
+  /** The media task, which runs in the background after the collection. One at a time. */
+  private mediaTask:Promise<void>|null=null;
+  private mediaMeter=new Meter();
+  private mediaError:string|null=null;
+  /** New media arrived while the task ran: it makes one more pass. */
+  private mediaAgain=false;
+  private mediaStop:AbortController|null=null;
+  /** Media files written from other devices since this process started; open cards ask again for what they lacked. */
+  private mediaReceived=0;
+  /** Pushes take turns: the collection and the media task each send events. */
+  private pushing:Promise<void>=Promise.resolve();
   private initialized() { return !!this.e.db.get("SELECT 1 FROM sqlite_master WHERE name='sync_control'"); }
   private meta<T>(key:string,fallback:T):T { const r=this.initialized()?this.e.db.get("SELECT value FROM sync_meta WHERE key=?",key):null;return r?JSON.parse(r.value):fallback; }
   private set(key:string,value:unknown) {this.e.db.run("INSERT INTO sync_meta VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",key,JSON.stringify(value));}
@@ -64,16 +104,17 @@ export class SyncClient {
   /** This device's token: Sync's own sign-in, or the Etude account's when it is signed in to the same server. */
   private token() {const c=this.config();return this.secrets().token ?? (c?.kind==="cloud" ? accountFor(this.e).tokenFor(c.server) : undefined);}
   private shared() {return !this.secrets().token && !!this.token();}
-  /** Starts a progress step, or resumes one that another step interrupted. */
-  private step(step:SyncProgress|SyncProgress["step"],total:number|null=null):SyncProgress {this.progress=typeof step==="string"?{step,done:0,total,rate:0}:step;this.samples=[[Date.now(),this.progress.done]];return this.progress;}
-  private moved(n:number) {const p=this.progress;if(!p)return;p.done+=n;const now=Date.now();this.samples.push([now,p.done]);while(this.samples.length>2&&now-this.samples[1][0]>5000)this.samples.shift();}
-  private rate() {const p=this.progress,first=this.samples[0];if(!p||!first)return 0;const ms=Date.now()-first[0];return ms>0?Math.round((p.done-first[1])*1000/ms):0;}
+  /** Starts a progress step of the collection, or of the media with `m`. */
+  private step(step:SyncProgress["step"],total:number|null=null,m=this.meter):SyncProgress {return m.step(step,total);}
+  private moved(n:number,m=this.meter) {m.moved(n);}
   /** Bytes the unsent events take on the wire: base64 of the encrypted body. */
   private unsentBytes() {return this.e.db.get("SELECT coalesce(sum(coalesce(length(ciphertext),(length(CAST(body AS BLOB))+29+2)/3*4)),0) n FROM sync_events WHERE sent=0")!.n as number;}
-  status() {const cfg=this.config();const sec=this.secrets();return {configured:!!cfg?.enabled,kind:cfg?.kind??null,server:cfg?.server,folder:cfg?.folder,email:cfg?.email ?? (this.shared()?accountFor(this.e).email():undefined),signedIn:!!this.token(),account:this.shared(),unlocked:!!sec.vk,hasKeys:cfg?.kind==="folder" ? existsSync(join(cfg.folder!,"keys.json")) : !!cfg?.hasKeys,lastSync:cfg?.lastSync??null,busy:this.busy,error:this.error,progress:this.progress&&this.busy?{...this.progress,rate:this.rate()}:null,received:this.received,pending:this.initialized()?this.e.db.get("SELECT (SELECT count(*) FROM sync_outbox)+(SELECT count(*) FROM sync_events WHERE sent=0) AS n")!.n:0};}
+  status() {const cfg=this.config();const sec=this.secrets();return {configured:!!cfg?.enabled,kind:cfg?.kind??null,server:cfg?.server,folder:cfg?.folder,email:cfg?.email ?? (this.shared()?accountFor(this.e).email():undefined),signedIn:!!this.token(),account:this.shared(),unlocked:!!sec.vk,hasKeys:cfg?.kind==="folder" ? existsSync(join(cfg.folder!,"keys.json")) : !!cfg?.hasKeys,lastSync:cfg?.lastSync??null,busy:this.busy,error:this.error,progress:this.busy?this.meter.view():null,received:this.received,
+    media:{active:!!this.mediaTask,progress:this.mediaTask?this.mediaMeter.view():null,error:this.mediaError,received:this.mediaReceived},pending:this.initialized()?this.e.db.get("SELECT (SELECT count(*) FROM sync_outbox)+(SELECT count(*) FROM sync_events WHERE sent=0) AS n")!.n:0};}
   setup(input:{server?:string;folder?:string}) {
     if(this.busy)throw new Error("wait for sync to finish");
     if (!!input.server === !!input.folder) throw new Error("choose a server or a folder");
+    void this.stopMedia();
     if(input.server) {const u=new URL(input.server);if(u.protocol!=="https:" && !(u.protocol==="http:" && ["localhost","127.0.0.1","[::1]"].includes(u.hostname)))throw new Error("Sync requires HTTPS outside localhost");if(u.username||u.password||u.search||u.hash)throw new Error("invalid server URL");}
     if(input.folder && !process.versions?.node)throw new Error("folder sync needs the desktop app");
     install(this.e.db);
@@ -138,6 +179,7 @@ export class SyncClient {
     return this.probe();
   }
   async unlock(input:{password?:string;recovery?:string}) {
+    await this.stopMedia();
     const transport=this.transport();const found=await transport.keys();
     let vk:Uint8Array;let recoveryKey:string|undefined;
     if(found) {
@@ -153,18 +195,47 @@ export class SyncClient {
     this.set("vault",fingerprint);this.saveSecrets({...this.secrets(),vk:toB64(vk)});this.set("config",{...this.config(),hasKeys:true});
     return {status:this.status(),...(recoveryKey?{recoveryKey}:{})};
   }
-  async off() {if(this.active)await this.active.catch(()=>{});const c=this.config();if(c?.kind==="cloud" && this.secrets().token && accountFor(this.e).token()!==this.secrets().token) { try { await (this.transport() as CloudTransport).json("/v1/auth/logout",{}); } catch { this.error="Signed out locally. This device could not be revoked on the server while offline."; } } if(c)this.set("config",{...c,enabled:false});if(this.initialized())rmSync(this.secretFile(),{force:true});return this.status();}
-  now() {if(this.active)return this.active;this.busy=true;this.active=this.run().then(()=>(this.error=null,this.progress=null,{...this.status(),busy:false})).catch(e=>{this.error=e.message;throw e;}).finally(()=>{this.busy=false;this.active=null;this.progress=null;});return this.active;}
-  async auto(o:{pendingOnly?:boolean}={}) {const st=this.status();if(!st.configured||!st.unlocked)return;if(o.pendingOnly&&!st.pending)return;try{await this.now();}catch(e){if(e instanceof TypeError || /fetch failed|network|offline|timeout/i.test((e as Error).message))this.error=null;}}
-  private async run() {
+  async off() {if(this.active)await this.active.catch(()=>{});await this.stopMedia();const c=this.config();if(c?.kind==="cloud" && this.secrets().token && accountFor(this.e).token()!==this.secrets().token) { try { await (this.transport() as CloudTransport).json("/v1/auth/logout",{}); } catch { this.error="Signed out locally. This device could not be revoked on the server while offline."; } } if(c)this.set("config",{...c,enabled:false});if(this.initialized())rmSync(this.secretFile(),{force:true});return this.status();}
+  /**
+   * Syncs the collection and resolves when it is in step; the media follows in the background. `waitMedia` also
+   * waits for the media (the CLI, a process that ends) and rejects with its error. `quiet`: an automatic sync,
+   * whose media keeps network errors quiet.
+   */
+  now(o:{waitMedia?:boolean;quiet?:boolean}={}):Promise<ReturnType<SyncClient["status"]>> {
+    if(o.waitMedia)return this.now({quiet:o.quiet}).then(async()=>{await this.mediaSettled();if(this.mediaError)throw new Error(this.mediaError);return this.status();});
+    if(this.active)return this.active;
+    this.busy=true;
+    this.active=this.run(!!o.quiet).then(()=>(this.error=null,this.meter.progress=null,{...this.status(),busy:false})).catch(e=>{this.error=e.message;throw e;}).finally(()=>{this.busy=false;this.active=null;this.meter.progress=null;});
+    return this.active;
+  }
+  async auto(o:{pendingOnly?:boolean}={}) {const st=this.status();if(!st.configured||!st.unlocked)return;if(o.pendingOnly&&!st.pending)return;try{await this.now({quiet:true});}catch(e){if(offline(e))this.error=null;}}
+  /** Resolves once no media task runs, extra passes included. */
+  async mediaSettled() {while(this.mediaTask)await this.mediaTask;}
+  /** Asks the media task to stop after what it is writing, and waits for it. Its work so far stays. */
+  private async stopMedia() {const task=this.mediaTask;if(!task)return;this.mediaStop?.abort();await task;}
+  /** Starts the media task, or asks the one running for another pass when new media came in. */
+  private startMedia(t:Transport,key:SyncKeys,news:boolean,quiet:boolean) {
+    if(this.mediaTask){if(news)this.mediaAgain=true;return;}
+    const stop=new AbortController();this.mediaStop=stop;this.mediaAgain=false;this.mediaError=null;
+    const passes=async()=>{let force=news;do{this.mediaAgain=false;await this.media(t,key,stop.signal,force);force=true;}while(this.mediaAgain&&!stop.signal.aborted);};
+    this.mediaTask=passes().then(()=>{this.mediaError=null;},e=>{
+      // The next sync looks at every file again.
+      this.scanned=0;
+      if(stop.signal.aborted)return;
+      this.mediaError=quiet&&offline(e)?null:(e as Error)?.message??String(e);
+    }).finally(()=>{this.mediaTask=null;this.mediaStop=null;this.mediaMeter.progress=null;});
+  }
+  private async run(quiet:boolean) {
     const vk=this.secrets().vk;if(!vk)throw new Error("unlock Sync first");const t=this.transport();const db=this.e.db;
     // Derived once: each event and blob of this run is encrypted or decrypted with these.
     const key=await syncKeys(fromB64(vk));
     // Drain writes before the first await. Further local writes are drained again before projection.
     drain(db);
     let cursor=this.meta("cursor","");let more=true;
+    // Whether media or blob events came in: a media task already running then makes another pass.
+    let news=false;
     // A device that has never pulled downloads about the whole vault.
-    const down=this.step("download",cursor===""?await t.usage?.()??null:null);
+    this.step("download",cursor===""?await t.usage?.()??null:null);
     // The ids this device has, loaded once and only if a transport asks: a folder lists every file name each time.
     let have:Set<string>|null=null;
     const seen=(id:string)=>(have??=new Set(db.all("SELECT id FROM sync_events").map(r=>r.id as string))).has(id);
@@ -176,19 +247,14 @@ export class SyncClient {
       const plain=await Promise.all(fresh.map(async event=>({id:event.id,event:await decryptEvent<Change>(key,event.id,event.ciphertext)})));
       db.tx(()=>{for(const p of plain)receive(db,p.id,p.event);this.set("cursor",page.cursor);});
       this.received+=fresh.length;cursor=page.cursor;more=page.more;
+      if(plain.some(p=>p.event.table==="media"||p.event.table==="blob"))news=true;
     }
-    const up=await this.media(t,key,down);
-    // The media pass added events; count what is left exactly.
-    up.total=up.done+this.unsentBytes();
-    for(;;) {
-      const batch=db.all("SELECT * FROM sync_events WHERE sent=0 ORDER BY id LIMIT 200");if(!batch.length)break;
-      // etude-cloud refuses push bodies over 8 MiB, so a batch also stops at ~6 MiB of ciphertext.
-      const events=[];const sent:any[]=[];const made:[string,string][]=[];let bytes=0;
-      for(const r of batch) {const ciphertext=r.ciphertext??await encryptEvent(key,r.id,JSON.parse(r.body));if(!r.ciphertext)made.push([ciphertext,r.id]);if(events.length&&bytes+ciphertext.length>PUSH_BATCH_BYTES)break;events.push({id:r.id,ciphertext});sent.push(r);bytes+=ciphertext.length;}
-      // Kept before sending, so a retry sends the same ciphertext; one transaction for the batch.
-      db.tx(()=>{for(const [ciphertext,id] of made)db.run("UPDATE sync_events SET ciphertext=? WHERE id=?",ciphertext,id);});
-      await t.push(events);this.moved(bytes);db.tx(()=>{for(const r of sent)db.run("UPDATE sync_events SET sent=1 WHERE id=?",r.id);});
-    }
+    // Type assets are part of the card types the projection writes, so their blobs move now. Media files come after.
+    await this.assets(t,key);
+    // Local changes go up before any media, so other devices don't wait for files.
+    drain(db);
+    this.step("upload",this.unsentBytes());
+    await this.push(t,key);
     // Only the rows whose registers changed, here or on another device, are rewritten; their keys were
     // recorded with the change, so a run that stopped before this step leaves them for the next.
     drain(db);
@@ -198,35 +264,88 @@ export class SyncClient {
       // No await while projecting. SQL triggers are muted only for this transaction.
       drain(db);projectChanges(this.e);
     }
-    this.set("config",{...this.config(),lastSync:new Date().toISOString()});return this.status();
+    this.set("config",{...this.config(),lastSync:new Date().toISOString()});
+    // The collection is in step. The media follows in the background.
+    this.startMedia(t,key,news,quiet);
+    return this.status();
+  }
+  /** Sends the events not sent yet, in batches, after any push already under way. */
+  private push(t:Transport,key:SyncKeys,m=this.meter) {
+    const turn=this.pushing.then(()=>this.pushNow(t,key,m));
+    this.pushing=turn.catch(()=>{});
+    return turn;
+  }
+  private async pushNow(t:Transport,key:SyncKeys,m:Meter) {
+    const db=this.e.db;
+    for(;;) {
+      const batch=db.all("SELECT * FROM sync_events WHERE sent=0 ORDER BY id LIMIT 200");if(!batch.length)break;
+      // etude-cloud refuses push bodies over 8 MiB, so a batch also stops at ~6 MiB of ciphertext.
+      const events=[];const sent:any[]=[];const made:[string,string][]=[];let bytes=0;
+      for(const r of batch) {const ciphertext=r.ciphertext??await encryptEvent(key,r.id,JSON.parse(r.body));if(!r.ciphertext)made.push([ciphertext,r.id]);if(events.length&&bytes+ciphertext.length>PUSH_BATCH_BYTES)break;events.push({id:r.id,ciphertext});sent.push(r);bytes+=ciphertext.length;}
+      // Kept before sending, so a retry sends the same ciphertext; one transaction for the batch.
+      db.tx(()=>{for(const [ciphertext,id] of made)db.run("UPDATE sync_events SET ciphertext=? WHERE id=?",ciphertext,id);});
+      await t.push(events);this.moved(bytes,m);db.tx(()=>{for(const r of sent)db.run("UPDATE sync_events SET sent=1 WHERE id=?",r.id);});
+    }
+  }
+  /**
+   * Type assets keep their bytes in sync_blobs, where the projection reads them. Downloads those this device
+   * lacks and uploads its own new ones, each with its blob event, before the events that name them are sent.
+   * One whose blob event hasn't arrived waits: the projection leaves it out until a later sync.
+   */
+  private async assets(t:Transport,key:SyncKeys) {
+    const db=this.e.db;
+    const wanted=db.all(`SELECT DISTINCT json_extract(value,'$') hash FROM sync_registers WHERE tbl='type_assets' AND field='/hash' AND key NOT IN (SELECT key FROM sync_deleted WHERE tbl='type_assets') AND json_extract(value,'$') NOT IN (${STORED})`).map(r=>r.hash as string);
+    const unsent=db.all(`SELECT DISTINCT hash FROM type_assets WHERE hash NOT IN (${STORED})`).map(r=>r.hash as string);
+    const jobs:(()=>Promise<void>)[]=[];
+    for(const hash of unsent) jobs.push(async()=>{
+      const bytes=new Uint8Array(db.get("SELECT bytes FROM type_assets WHERE hash=? LIMIT 1",hash)!.bytes);
+      let name=rowFor(db,"blob",hash)?.name as string|undefined;
+      if(!name) {const b=await encryptBlob(key,bytes);await t.putBlob(b.hash,b.ciphertext);this.moved(b.ciphertext.length);name=b.hash;localEvent(db,"blob",hash,{"/name":name});}
+      db.run("INSERT INTO sync_blobs VALUES(?,?,?) ON CONFLICT(hash) DO UPDATE SET name=excluded.name,bytes=excluded.bytes",hash,name,bytes);
+    });
+    for(const hash of wanted) {
+      const name=rowFor(db,"blob",hash)?.name as string|undefined;
+      if(!name||unsent.includes(hash))continue;
+      jobs.push(async()=>{
+        const ciphertext=await t.getBlob(name);this.moved(ciphertext.length);const bytes=await decryptBlob(key,ciphertext,name);
+        if(await sha256Hex(bytes)!==hash)throw new Error("plaintext blob hash mismatch");
+        db.run("INSERT INTO sync_blobs VALUES(?,?,?) ON CONFLICT(hash) DO UPDATE SET name=excluded.name,bytes=excluded.bytes",hash,name,bytes);
+      });
+    }
+    await pool(jobs,BLOB_CONCURRENCY,run=>run());
   }
   /** When this process last looked at every media file. */
   private scanned=0;
   /**
-   * Brings media files and type assets in step with the registers, and starts the upload step. Skipped
-   * when no media event came in or is pending, no type asset waits for its bytes or its upload, and no
-   * media folder had a file added, removed or renamed. A folder's modification time doesn't change when
-   * a file in it is rewritten in place, so every file is also looked at on the first sync of a process
-   * and at least every few minutes.
+   * Brings media files in step with the registers and sends their events: the media task, in the background
+   * after the collection. Skipped when no media event came in or is pending and no media folder had a file
+   * added, removed or renamed, unless `force`. A folder's modification time doesn't change when a file in it is
+   * rewritten in place, so every file is also looked at on the first sync of a process and at least every few
+   * minutes. Stops between files when `stop` is aborted; what it wrote or sent so far stays consistent.
    */
-  private async media(t:Transport,key:SyncKeys,down:SyncProgress):Promise<SyncProgress> {
-    const db=this.e.db,dirs=this.meta<Record<string,number>>("media_dirs",{});
+  private async media(t:Transport,key:SyncKeys,stop:AbortSignal,force:boolean) {
+    const db=this.e.db,m=this.mediaMeter,dirs=this.meta<Record<string,number>>("media_dirs",{});
+    const go=()=>{if(stop.aborted)throw new Stopped();};
     const mtime=(dir:string)=>{try{return statSync(join(this.e.mediaDir,dir)).mtimeMs;}catch{return -1;}};
-    const quiet=Date.now()-this.scanned<MEDIA_RESCAN_MS && Object.keys(dirs).length>0 && Object.entries(dirs).every(([dir,m])=>mtime(dir)===m)
-      && !db.get("SELECT 1 FROM sync_dirty WHERE tbl IN ('media','blob') LIMIT 1")
-      && !db.get(`SELECT 1 FROM type_assets WHERE hash NOT IN (${STORED}) LIMIT 1`)
-      && !db.get(`SELECT 1 FROM sync_registers WHERE tbl='type_assets' AND field='/hash' AND key NOT IN (SELECT key FROM sync_deleted WHERE tbl='type_assets') AND json_extract(value,'$') NOT IN (${STORED}) LIMIT 1`);
-    if(quiet)return this.step("upload",this.unsentBytes());
+    // The marks this pass answers for; one a later event adds stays for the next.
+    const marked=db.all("SELECT tbl,key,field FROM sync_dirty WHERE tbl IN ('media','blob')");
+    const quiet=!force && Date.now()-this.scanned<MEDIA_RESCAN_MS && Object.keys(dirs).length>0 && Object.entries(dirs).every(([dir,mt])=>mtime(dir)===mt) && !marked.length;
+    if(quiet)return;
     // Each folder's time is taken before it is read, so a file added meanwhile makes the next sync look again.
     const files:[string,string][]=[],snapshot:Record<string,number>={"":mtime("")};
     const list=(dir:string,prefix="") => {
       if(!existsSync(dir))return;
       snapshot[prefix]=mtime(prefix);
-      for(const d of readdirSync(dir,{withFileTypes:true})){const p=join(dir,d.name),relative=prefix+d.name;if(d.isSymbolicLink()?statSync(p).isDirectory():d.isDirectory())list(p,relative+"/");else if(safeMediaPath(relative))files.push([p,relative]);}
+      for(const d of readdirSync(dir,{withFileTypes:true})){
+        const p=join(dir,d.name),relative=prefix+d.name;
+        // Never a media file: a download in progress, or one a closed app left behind.
+        if(d.name.startsWith(PARTIAL)){try{if(Date.now()-statSync(p).mtimeMs>PARTIAL_STALE_MS)rmSync(p,{force:true});}catch{}continue;}
+        if(d.isSymbolicLink()?statSync(p).isDirectory():d.isDirectory())list(p,relative+"/");else if(safeMediaPath(relative))files.push([p,relative]);
+      }
     };
     list(this.e.mediaDir);
     // Hash the media on disk first, so a file another device already uploaded is neither downloaded nor uploaded again.
-    this.step("check",files.length);
+    this.step("check",files.length,m);
     const onDisk=new Map<string,string>(),local=new Map<string,string>();
     // Hashes are kept with each file's size and modification time, so only new or changed files are read again.
     db.sql.exec("CREATE TABLE IF NOT EXISTS sync_media_hashes (file TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime REAL NOT NULL, hash TEXT NOT NULL)");
@@ -239,19 +358,16 @@ export class SyncClient {
       else {
         const st=statSync(p),k=known.get(relative);
         hash=k&&k.size===st.size&&k.mtime===st.mtimeMs?k.hash:"";
-        if(!hash){hash=await sha256Hex(new Uint8Array(readFileSync(p)));fresh.push([relative,st.size,st.mtimeMs,hash]);}
+        if(!hash){go();hash=await sha256Hex(new Uint8Array(readFileSync(p)));fresh.push([relative,st.size,st.mtimeMs,hash]);}
       }
-      onDisk.set(relative,hash);local.set(hash,p);this.moved(1);
+      onDisk.set(relative,hash);local.set(hash,p);this.moved(1,m);
     }
     db.tx(()=>{for(const f of fresh)db.run("INSERT INTO sync_media_hashes VALUES(?,?,?,?) ON CONFLICT(file) DO UPDATE SET size=excluded.size,mtime=excluded.mtime,hash=excluded.hash",...f);for(const file of known.keys())if(!onDisk.has(file)||file.startsWith("files/"))db.run("DELETE FROM sync_media_hashes WHERE file=?",file);});
     // A file named by its hash is trusted until its bytes are used: then they are checked.
     const readLocal=async(hash:string):Promise<Uint8Array|null>=>{const p=local.get(hash);if(!p)return null;const bytes=new Uint8Array(readFileSync(p));return await sha256Hex(bytes)===hash?bytes:null;};
-    this.step(down);
+    go();this.step("download",null,m);
     // Read the registers once: a collection can hold tens of thousands of media files.
     const blobs=rows(db,"blob"),media=rows(db,"media");
-    // Type assets keep their bytes in sync_blobs for the projection. Media files are only on disk.
-    const assetHashes=new Set(db.all("SELECT json_extract(value,'$') hash FROM sync_registers WHERE tbl='type_assets' AND field='/hash' AND key NOT IN (SELECT key FROM sync_deleted WHERE tbl='type_assets')").map(r=>r.hash as string));
-    const unsent=db.all(`SELECT hash,max(length(bytes)) size FROM type_assets WHERE hash NOT IN (${STORED}) GROUP BY hash`);
     // The version of each media file this device last had in step with the registers. A file that still matches it
     // wasn't edited here, so a newer version from another device replaces it; one that doesn't is uploaded below.
     db.sql.exec("CREATE TABLE IF NOT EXISTS sync_media_seen (file TEXT PRIMARY KEY, hash TEXT NOT NULL)");
@@ -266,40 +382,48 @@ export class SyncClient {
     // Media files to fetch, by blob, written as soon as their blob arrives.
     const root=resolve(this.e.mediaDir),wanted=new Map<string,string[]>();
     for(const [file,r] of media) if(safeMediaPath(file)&&resolve(root,file).startsWith(root+sep)&&onDisk.get(file)!==r.hash&&!edited(file))wanted.set(r.hash,[...wanted.get(r.hash)??[],file]);
-    const write=(file:string,hash:string,bytes:Uint8Array)=>{const path=join(this.e.mediaDir,file);mkdirSync(dirname(path),{recursive:true});writeFileSync(path,bytes);onDisk.set(file,hash);};
-    // Blobs to fetch: the files to write, and type assets with no bytes here. One whose blob event hasn't arrived waits for a later sync.
+    const write=(file:string,hash:string,bytes:Uint8Array)=>{const path=join(this.e.mediaDir,file);mkdirSync(dirname(path),{recursive:true});writeAtomic(path,bytes);onDisk.set(file,hash);};
+    // A file whose blob event hasn't arrived waits for a later sync.
     const fetch=new Map<string,string>();let waiting=false;
-    for(const hash of [...wanted.keys(),...[...assetHashes].filter(h=>!db.get(`SELECT 1 FROM sync_blobs WHERE hash=? AND bytes IS NOT NULL`,h)&&!unsent.some(a=>a.hash===h))]) {const name=blobs.get(hash)?.name;if(name)fetch.set(hash,name);else waiting=true;}
+    for(const hash of wanted.keys()) {const name=blobs.get(hash)?.name;if(name)fetch.set(hash,name);else waiting=true;}
     await pool([...fetch],BLOB_CONCURRENCY,async([hash,name])=>{
+      go();
       let bytes:Uint8Array|null=await readLocal(hash);
-      if(!bytes) {const ciphertext=await t.getBlob(name);this.moved(ciphertext.length);bytes=await decryptBlob(key,ciphertext,name);if(await sha256Hex(bytes)!==hash)throw new Error("plaintext blob hash mismatch");}
-      if(assetHashes.has(hash))db.run("INSERT INTO sync_blobs VALUES(?,?,?) ON CONFLICT(hash) DO UPDATE SET name=excluded.name,bytes=excluded.bytes",hash,name,bytes);
-      for(const file of wanted.get(hash)??[])write(file,hash,bytes);
+      if(!bytes) {const ciphertext=await t.getBlob(name,stop);this.moved(ciphertext.length,m);bytes=await decryptBlob(key,ciphertext,name);if(await sha256Hex(bytes)!==hash)throw new Error("plaintext blob hash mismatch");}
+      go();
+      const files=wanted.get(hash)??[];
+      for(const file of files)write(file,hash,bytes);
+      this.mediaReceived+=files.length;
     });
+    go();
     const changed=files.filter(([,relative])=>edited(relative));
     const sizes=new Map<string,number>();
-    for(const a of unsent) if(!blobs.has(a.hash))sizes.set(a.hash,a.size+BLOB_OVERHEAD);
     for(const [p,relative] of changed) {const hash=onDisk.get(relative)!;if(!blobs.has(hash))sizes.set(hash,statSync(p).size+BLOB_OVERHEAD);}
-    const up=this.step("upload",[...sizes.values()].reduce((a,b)=>a+b,0)+this.unsentBytes());
-    const addBlob=async(bytes:Uint8Array,asset:boolean) => {
-      const hash=await sha256Hex(bytes);let name=blobs.get(hash)?.name;
-      if(!name) {const b=await encryptBlob(key,bytes);await t.putBlob(b.hash,b.ciphertext);this.moved(b.ciphertext.length);name=b.hash;localEvent(db,"blob",hash,{"/name":name});blobs.set(hash,{name});}
-      if(asset)db.run("INSERT INTO sync_blobs VALUES(?,?,?) ON CONFLICT(hash) DO UPDATE SET name=excluded.name,bytes=excluded.bytes",hash,name,bytes);
-      return hash;
-    };
+    const up=this.step("upload",[...sizes.values()].reduce((a,b)=>a+b,0),m);
     // One upload per distinct file content, a few at a time. A file's event carries the hash of the bytes sent.
     const firstPath=new Map<string,string>();for(const [p,relative] of changed)if(!firstPath.has(onDisk.get(relative)!))firstPath.set(onDisk.get(relative)!,p);
-    const sent=new Map<string,string>();
-    await pool([...unsent.map(a=>async()=>void await addBlob(new Uint8Array(db.get("SELECT bytes FROM type_assets WHERE hash=? LIMIT 1",a.hash)!.bytes),true)),...[...firstPath].map(([hash,p])=>async()=>void sent.set(hash,await addBlob(new Uint8Array(readFileSync(p)),false)))],BLOB_CONCURRENCY,async(run)=>run());
-    for(const [,relative] of changed){const hash=sent.get(onDisk.get(relative)!)!;onDisk.set(relative,hash);localEvent(db,"media",relative,{"/hash":hash});}
+    // This pass's own events are in step as they are made: their marks go with the ones it answers for.
+    const sent=new Map<string,string>(),mine:[string,string][]=[];
+    await pool([...firstPath],BLOB_CONCURRENCY,async([hash,p])=>{
+      go();
+      const bytes=new Uint8Array(readFileSync(p)),real=await sha256Hex(bytes);
+      // The blob goes up before the event that names it.
+      if(!blobs.has(real)) {const b=await encryptBlob(key,bytes);await t.putBlob(b.hash,b.ciphertext,stop);this.moved(b.ciphertext.length,m);localEvent(db,"blob",real,{"/name":b.hash});mine.push(["blob",real]);blobs.set(real,{name:b.hash});}
+      sent.set(hash,real);
+    });
+    go();
+    db.tx(()=>{for(const [,relative] of changed){const hash=sent.get(onDisk.get(relative)!)!;onDisk.set(relative,hash);localEvent(db,"media",relative,{"/hash":hash});mine.push(["media",relative]);}});
     drain(db);
     db.tx(()=>{
       for(const [file,r] of rows(db,"media"))if(onDisk.get(file)===r.hash && seen.get(file)!==r.hash)db.run("INSERT INTO sync_media_seen VALUES(?,?) ON CONFLICT(file) DO UPDATE SET hash=excluded.hash",file,r.hash);
       // Everything that came in is on disk now, unless a blob's event is still on its way.
-      if(!waiting)db.run("DELETE FROM sync_dirty WHERE tbl IN ('media','blob')");
+      if(!waiting)for(const r of marked)db.run("DELETE FROM sync_dirty WHERE tbl=? AND key=? AND field=?",r.tbl,r.key,r.field);
+      for(const [tbl,key] of mine)db.run("DELETE FROM sync_dirty WHERE tbl=? AND key=?",tbl,key);
       this.set("media_dirs",snapshot);
     });
     this.scanned=Date.now();
-    return up;
+    // The media and blob events made above.
+    up.total=up.done+this.unsentBytes();
+    await this.push(t,key,m);
   }
 }

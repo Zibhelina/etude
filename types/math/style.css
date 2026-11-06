@@ -50,7 +50,8 @@
 .mx-yours b .katex { font-size: 1.15em; }
 .mx-yours b.ok { color: var(--success); }
 .mx-yours b.part { color: var(--warning); }
-.mx-yours b.no { color: var(--danger); text-decoration: line-through; text-decoration-thickness: 2px; }
+/* KaTeX is inline-block, which a line-through doesn't cross: draw the strike as a background line instead. */
+.mx-yours b.no { color: var(--danger); text-decoration: none; padding: 0 2px; background: linear-gradient(currentColor, currentColor) 0 58% / 100% 2px no-repeat; }
 .mx-yours b.ok .katex, .mx-yours b.no .katex, .mx-yours b.part .katex { color: inherit; }
 .mx-res .mx-note { padding: 0; margin-top: 0.3rem; }
 .mx-sol { margin-top: 1.1rem; padding: 16px 20px; border-radius: 16px; background: var(--muted); }

@@ -103,6 +103,7 @@ The body gets `data-mode="answer"` or `data-mode="result"`, so `.only-answer` an
 | `etude.root` | the `#card` element |
 | `etude.asset(name)` | absolute URL of one of the type's [assets](#assets), for `fetch()`, `<img src>` and the like; throws for an unknown name |
 | `etude.assets` | the names of the type's assets |
+| `etude.play(url)` | plays a sound and stops the one the card played before. Returns `{ stop(), finished }`; `finished` resolves `true` when it played to the end, `false` when it was stopped, replaced or couldn't play. Use it rather than `new Audio()`: see [Sound](#sound) |
 | `etude.md(s)`, `etude.mdInline(s)` | render markdown and math to HTML (fenced code blocks are highlighted automatically) |
 | `etude.tex(src, display?)` | render LaTeX to HTML |
 | `etude.math` | math answers: `parse`, `toLatex`, `evaluate`, `equivalent`, `check` (the same module as `std.math`, so a live preview and the grader agree) |
@@ -147,6 +148,26 @@ When a graded card turns into its result, the runtime animates the change from t
 - `data-morph="skip"` leaves an element and everything in it alone.
 
 Self-graded cards don't morph: the app turns the card over to a second copy of the type showing the result, so a self-graded type should draw its result from `etude.onResult(result)` (`result.answer` is what the learner submitted) rather than from what's in its fields.
+
+### Sound
+
+Play a card's sounds with `etude.play(url)`. The URL can be a recording in the item's fields (`/media/files/…`), one of the type's assets (`etude.asset("ding.mp3")`) or a `data:` URL. Each file is fetched and decoded once per card, so a replay answers at once, and a new sound stops the one before it.
+
+```js
+const say = () => etude.play(etude.view.audio);
+etude.$(".replay").addEventListener("click", say);
+if (etude.mode === "answer") say(); // not in "preview" (gallery thumbnails)
+```
+
+Why not `new Audio()`: Chromium has a bug in `<audio>` playback across frames, and the desktop app, Chrome, Edge and Android all run on Chromium. When the card frame whose `<audio>` played first is removed while another card's `<audio>` is playing, that sound freezes a moment in, and so does every `<audio>` after it until the learner leaves the deck. Study does exactly that after a rating: the next card's sound starts while the previous card is still flying off. Sound played through Web Audio isn't affected, so in Chromium `etude.play` decodes the file and plays it through Web Audio. Other engines don't have the bug and get an `<audio>` element (on an iPhone, Web Audio would also follow the silent switch). If Web Audio hasn't started within about 300 ms (in a browser, before the learner has touched the card) or the file can't be decoded, it plays the file with `<audio>` instead.
+
+Types that already use `new Audio()`, an `<audio>` in the template or the `autoplay` attribute keep working, and so do Anki imports (`[sound:]` becomes `<audio controls>`). In Chromium the runtime gives every `<audio>` `crossorigin="anonymous"` before it loads and, once it plays, routes it through the frame's Web Audio context. That has a few consequences:
+
+- A sound a card plays has to be served with CORS. Etude's `/media/` and `/type-assets/` routes are, and a card can't load media from anywhere else. If a load fails without CORS anyway, the runtime loads it again as a plain `<audio>`.
+- To send an `<audio>` through your own `AudioContext` (a visualizer, effects), call `createMediaElementSource` before its first `play()`. The runtime then leaves it alone; once it has routed an element, a second `createMediaElementSource` on it throws.
+- `<video>` isn't routed.
+
+`etude.play` keeps the decoded sound in memory, which suits words, sentences and effects. For a long recording the learner scrubs through, use `<audio controls>`.
 
 ### Editors and code
 

@@ -7,7 +7,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Markdown } from "@/components/markdown";
-import { Logo } from "@/components/logo";
+import { EPSILON_PATH, Logo } from "@/components/logo";
+import { minimiFace } from "@/components/minimi";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { agentApi, DATA_EVENT, type AgentEvent, type AssistantContent, type Attachment, type Conversation, type Item, type Message, type ModelGroup, type ToolItem, type UserContent } from "@/lib/agent";
 import { appPath, navigate } from "@/lib/router";
@@ -181,8 +182,54 @@ function HeaderButton({ label, tip, onClick, disabled, children, ...rest }: { la
   );
 }
 
-/** Inside Minimi's mini chat, replies and your messages sit in bubbles. */
+const ROUND = "mchat-round flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors outline-ring hover:text-foreground focus-visible:outline-2 disabled:pointer-events-none disabled:opacity-40 data-[state=open]:bg-accent data-[state=open]:text-foreground [&_svg]:size-[17px]";
+
+/** Round 36 px header button, the same as the mini chat's. */
+function RoundButton({ label, tip, onClick, disabled, children }: { label: string; tip?: React.ReactNode; onClick?(): void; disabled?: boolean; children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" aria-label={label} disabled={disabled} onClick={onClick} className={ROUND}>
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{tip ?? label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Who's talking: Minimi's face in Fun mode, otherwise the ε on an ink disc. */
+function Avatar({ size = 34 }: { size?: number }) {
+  const fun = useFunMode();
+  return fun ? (
+    <img src={minimiFace} alt="" data-agent-avatar className="shrink-0 rounded-full bg-card object-cover shadow-[inset_0_0_0_1px_var(--border),0_2px_6px_rgb(0_0_0/0.06)]" style={{ width: size, height: size, objectPosition: "50% 20%" }} />
+  ) : (
+    <span data-agent-avatar className="grid shrink-0 place-items-center rounded-full bg-foreground" style={{ width: size, height: size }}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: size * 0.56, height: size * 0.56 }}>
+        <path d={EPSILON_PATH} className="fill-background" transform="translate(2.324 21.144) scale(0.04253 -0.04253)" />
+      </svg>
+    </span>
+  );
+}
+
+/** In Minimi's mini chat and the side panel, replies and your messages sit in balloons. */
 export const BubbleContext = createContext(false);
+/** In the side panel his replies carry his face at the bottom left; the mini chat sits beside Minimi himself. */
+const FaceContext = createContext(false);
+
+/** Minimi's balloons with his face beside the last one; undo and the model line go under, in the balloon column. */
+function Said({ children, below }: { children: React.ReactNode; below?: React.ReactNode }) {
+  if (!useContext(FaceContext)) return <>{children}{below}</>;
+  return (
+    <>
+      <div className="flex items-end gap-2" data-agent-said>
+        <Avatar />
+        <div className="flex min-w-0 flex-1 flex-col gap-2">{children}</div>
+      </div>
+      {below && <div className="pl-[42px]">{below}</div>}
+    </>
+  );
+}
 
 // ---------------------------------------------------------------- live turn
 
@@ -558,6 +605,14 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
   const vv = useVisualViewport(phone);
   const sendText = useReadableOn("--highlight");
   const [renaming, setRenaming] = useState(false);
+  const fun = useFunMode();
+  // Once the message wraps, the text takes the whole width and the buttons drop to a row under it.
+  const [tall, setTall] = useState(false);
+  useLayoutEffect(() => {
+    const el = input.current;
+    if (!text) return setTall(false);
+    if (el && !tall) setTall(el.scrollHeight > 44);
+  }, [text, tall]);
 
   return (
     <div
@@ -566,8 +621,8 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
       aria-label="Ask Etude"
       data-agent-panel
       className={cn(
-        "flex flex-col bg-background text-foreground",
-        phone ? "agent-sheet-in fixed inset-x-0 top-0 z-50 h-dvh pt-[env(safe-area-inset-top)]" : "agent-panel-in sticky top-0 h-dvh shrink-0 border-l",
+        "achat flex flex-col text-foreground",
+        phone ? "agent-sheet-in fixed inset-x-0 top-0 z-50 h-dvh pt-[env(safe-area-inset-top)]" : "agent-panel-in sticky top-0 h-dvh shrink-0",
         dragging && "outline-2 -outline-offset-2 outline-ring/60",
       )}
       style={phone ? (vv ? { height: vv.h, top: vv.top } : undefined) : { width }}
@@ -587,30 +642,26 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
       }}
     >
       {!phone && <div onPointerDown={startResize} className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize" aria-hidden />}
-      <header className="mt-2.5 flex h-11 shrink-0 items-center gap-0.5 pr-2.5 pl-4 max-sm:mt-0 max-sm:pl-2 pointer-coarse:h-12">
+      <header className="mt-2.5 flex h-12 shrink-0 items-center gap-2 px-3 max-sm:mt-1">
         {phone && (
-          <HeaderButton label="Close" tip="Close" onClick={onClose}>
+          <RoundButton label="Close" onClick={onClose}>
             <ChevronLeft />
-          </HeaderButton>
+          </RoundButton>
         )}
         {renaming && conv ? (
           <TitleField title={conv.title || ""} onDone={(t) => (setRenaming(false), t !== null && rename(t))} />
         ) : (
-          <HistoryMenu convs={convs} active={conv?.id ?? null} title={conv?.title || "New chat"} onPick={openConv} onDelete={removeConv} />
+          <HistoryMenu convs={convs} active={conv?.id ?? null} title={conv?.title || "New chat"} onPick={openConv} onDelete={removeConv} pill />
         )}
         <div className="flex-1" />
-        <HeaderButton label="New chat" disabled={busy || !conv} onClick={() => openConv(null)}>
+        <RoundButton label="New chat" disabled={busy || !conv} onClick={() => openConv(null)}>
           <SquarePen />
-        </HeaderButton>
+        </RoundButton>
         <DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
               <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="More"
-                  className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors outline-ring hover:bg-accent/70 hover:text-foreground focus-visible:outline-2 data-[state=open]:bg-accent/70 data-[state=open]:text-foreground pointer-coarse:size-9 [&_svg]:size-4"
-                >
+                <button type="button" aria-label="More" className={ROUND}>
                   <Ellipsis />
                 </button>
               </DropdownMenuTrigger>
@@ -634,18 +685,18 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
           </DropdownMenuContent>
         </DropdownMenu>
         {!phone && (
-          <HeaderButton label="Close" tip={<>Close <span className="opacity-60">Esc</span></>} onClick={onClose}>
+          <RoundButton label="Close" tip={<>Close <span className="opacity-60">Esc</span></>} onClick={onClose}>
             <ChevronsRight />
-          </HeaderButton>
+          </RoundButton>
         )}
       </header>
 
       <div className="relative min-h-0 flex-1">
-        <div aria-hidden data-agent-fade className={cn("pointer-events-none absolute inset-x-0 top-0 z-10 h-6 bg-gradient-to-b from-background to-transparent transition-opacity duration-200", scrolled ? "opacity-100" : "opacity-0")} />
+        <div aria-hidden data-agent-fade className={cn("pointer-events-none absolute inset-x-0 top-0 z-10 h-6 bg-gradient-to-b from-[var(--achat-bg)] to-transparent transition-opacity duration-200", scrolled ? "opacity-100" : "opacity-0")} />
         <div
           ref={scroller}
           data-agent-scroll
-          className="flex h-full flex-col overflow-y-auto px-4 pt-2 pb-4"
+          className="flex h-full flex-col overflow-y-auto px-4 pt-3 pb-4 max-sm:px-3"
           onScroll={(e) => {
             const el = e.currentTarget;
             stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
@@ -664,36 +715,55 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
           ) : empty ? (
             <EmptyState onPick={suggest} onFile={() => fileInput.current?.click()} />
           ) : (
-            <div className="flex flex-col gap-6">
-              {messages.map((m, i) => (
-                <MessageView key={m.id} m={m} conv={conv!.id} last={i === messages.length - 1 && !live} groups={models?.groups} onUndo={() => undo(m)} />
-              ))}
-              {live && (
-                <>
-                  {live.user && <MessageView m={live.user} conv={conv?.id ?? ""} />}
-                  <LiveView live={live} onAnswer={answer} />
-                </>
-              )}
-            </div>
+            <BubbleContext.Provider value>
+              <FaceContext.Provider value>
+                <div className="mt-auto flex flex-col gap-3" data-agent-log>
+                  {messages.map((m, i) => (
+                    <MessageView key={m.id} m={m} conv={conv!.id} last={i === messages.length - 1 && !live} groups={models?.groups} onUndo={() => undo(m)} />
+                  ))}
+                  {live && (
+                    <>
+                      {live.user && <MessageView m={live.user} conv={conv?.id ?? ""} />}
+                      <LiveView live={live} onAnswer={answer} />
+                    </>
+                  )}
+                </div>
+              </FaceContext.Provider>
+            </BubbleContext.Provider>
           )}
         </div>
       </div>
 
-      <div className="shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] max-sm:px-3 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="mx-auto w-full max-w-[640px] shrink-0 px-4 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))] max-sm:px-3.5 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        {atts.length > 0 && (
+          <div className="flex flex-wrap justify-end gap-1.5 pb-2">
+            {atts.map((a) => (
+              <AttachmentChip key={"key" in a ? a.key : a.id} a={a} conv={conv?.id} onRemove={"id" in a ? () => setAtts((x) => x.filter((y) => !("id" in y) || y.id !== a.id)) : undefined} />
+            ))}
+          </div>
+        )}
         <div
           data-agent-composer
-          className="rounded-[14px] border bg-[color-mix(in_oklab,var(--background),white_65%)] shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-colors focus-within:border-foreground/25 dark:bg-[color-mix(in_oklab,var(--background),var(--foreground)_4.5%)] dark:shadow-none"
+          className={cn("mchat-pill flex flex-wrap items-end gap-1 transition-[border-radius]", tall ? "rounded-[24px] p-2" : "rounded-[24px] p-1.5")}
           onClick={(e) => {
             if (e.target === e.currentTarget) input.current?.focus();
           }}
         >
-          {atts.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 px-2.5 pt-2.5">
-              {atts.map((a) => (
-                <AttachmentChip key={"key" in a ? a.key : a.id} a={a} conv={conv?.id} onRemove={"id" in a ? () => setAtts((x) => x.filter((y) => !("id" in y) || y.id !== a.id)) : undefined} />
-              ))}
-            </div>
-          )}
+          <input ref={fileInput} type="file" multiple hidden accept={NATIVE_ATTACH} onChange={(e) => (addFiles([...(e.target.files ?? [])]), (e.target.value = ""))} />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="Attach files"
+                disabled={!!notConfigured}
+                onClick={() => fileInput.current?.click()}
+                className="grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors outline-ring hover:bg-accent hover:text-foreground focus-visible:outline-2 disabled:opacity-40 pointer-coarse:size-9"
+              >
+                <Plus className="size-[18px]" strokeWidth={2.2} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Attach images, PDFs, text or .apkg</TooltipContent>
+          </Tooltip>
           <textarea
             ref={input}
             value={text}
@@ -713,48 +783,30 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
                 addFiles(files);
               }
             }}
-            placeholder="Ask Etude…"
+            placeholder={fun ? "Ask Minimi…" : "Ask Etude…"}
             aria-label="Message"
-            className="block max-h-52 min-h-11 w-full resize-none bg-transparent px-3 pt-3 pb-1.5 text-sm text-foreground leading-normal outline-none placeholder:text-muted-foreground [field-sizing:content] max-sm:text-base"
+            className={cn("block max-h-52 min-h-8 min-w-0 flex-1 resize-none bg-transparent py-1.5 text-[14.5px] leading-[20px] text-foreground outline-none placeholder:text-muted-foreground/80 [field-sizing:content] max-sm:text-base pointer-coarse:min-h-9 pointer-coarse:py-2", tall && "order-first basis-full px-2 pt-1")}
           />
-          <div className="flex items-center gap-1.5 px-3 pb-3">
-            <input ref={fileInput} type="file" multiple hidden accept={NATIVE_ATTACH} onChange={(e) => (addFiles([...(e.target.files ?? [])]), (e.target.value = ""))} />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Attach files"
-                  disabled={!!notConfigured}
-                  onClick={() => fileInput.current?.click()}
-                  className="flex size-7 items-center justify-center rounded-full border border-foreground/30 text-foreground/75 transition-colors outline-ring hover:bg-accent/70 hover:text-foreground focus-visible:outline-2 disabled:opacity-40 pointer-coarse:size-9"
-                >
-                  <Plus className="size-4" strokeWidth={2.25} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Attach images, PDFs, text or .apkg</TooltipContent>
-            </Tooltip>
-            <div className="flex-1" />
+          {tall && <div className="flex-1" />}
+          <div className="flex h-8 shrink-0 items-center pointer-coarse:h-9">
             <ModelPicker models={models} value={model} onPick={pickModel} />
-            {busy ? (
-              <button type="button" aria-label="Stop" onClick={stop} className="flex size-7 items-center justify-center rounded-full bg-foreground text-background transition-opacity outline-ring hover:opacity-85 focus-visible:outline-2 pointer-coarse:size-9">
-                <Square className="size-2.5 fill-current" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                aria-label="Send"
-                disabled={!canSend}
-                onClick={send}
-                style={canSend ? { color: sendText } : undefined}
-                className={cn(
-                  "flex size-7 items-center justify-center rounded-full transition-colors outline-ring focus-visible:outline-2 pointer-coarse:size-9",
-                  canSend ? "bg-highlight hover:opacity-90" : "border border-foreground/20 bg-transparent text-muted-foreground/70",
-                )}
-              >
-                <ArrowUp className="size-4" strokeWidth={2.25} />
-              </button>
-            )}
           </div>
+          {busy ? (
+            <button type="button" aria-label="Stop" onClick={stop} className="grid size-8 shrink-0 place-items-center rounded-full bg-foreground text-background transition-opacity outline-ring hover:opacity-85 focus-visible:outline-2 pointer-coarse:size-9">
+              <Square className="size-2.5 fill-current" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label="Send"
+              disabled={!canSend}
+              onClick={send}
+              style={canSend ? { color: sendText } : undefined}
+              className={cn("grid size-8 shrink-0 place-items-center rounded-full transition-all outline-ring focus-visible:outline-2 pointer-coarse:size-9", canSend ? "bg-highlight hover:opacity-90" : "pointer-events-none -ml-1 w-0 scale-75 opacity-0")}
+            >
+              <ArrowUp className="size-[18px]" strokeWidth={2.2} />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -853,8 +905,7 @@ function EmptyState({ onPick, onFile }: { onPick(t: string): void; onFile(): voi
       {fun ? (
         <div className="flex items-end gap-3.5">
           <img src={minimiLook} alt="" className="agent-breathe h-[106px] w-[72px] shrink-0 object-contain" />
-          <p className="relative mb-7 max-w-[270px] rounded-[18px] border bg-muted px-4 py-3 text-[15px] leading-snug text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.05)]" data-agent-bubble>
-            <span aria-hidden className="absolute bottom-4 -left-[6px] size-[11px] rotate-45 border-b border-l bg-muted" />
+          <p className="mchat-b mb-7 max-w-[270px] px-4 py-3 text-[15px] leading-snug text-foreground" data-agent-bubble>
             {line ?? "Hm?"}
           </p>
         </div>
@@ -873,7 +924,7 @@ function EmptyState({ onPick, onFile }: { onPick(t: string): void; onFile(): voi
             data-suggestion
             onClick={() => (file ? onFile() : onPick(say ?? label))}
             className={cn(
-              "inline-flex h-[34px] max-w-full items-center gap-2 rounded-full border border-foreground/15 bg-background px-3.5 text-[13.5px] transition-colors outline-ring hover:border-foreground/25 hover:bg-accent/60 focus-visible:outline-2 pointer-coarse:h-10",
+              "inline-flex h-[34px] max-w-full items-center gap-2 rounded-full border border-foreground/15 bg-card px-3.5 text-[13.5px] transition-colors outline-ring hover:border-foreground/25 hover:bg-accent/60 focus-visible:outline-2 pointer-coarse:h-10",
               hot && "border-primary/45 bg-primary/10 font-medium text-[color-mix(in_oklab,var(--primary),black_30%)] hover:border-primary/60 hover:bg-primary/15 dark:text-primary",
             )}
           >
@@ -930,14 +981,11 @@ export function MessageView({ m, conv, last, groups, onUndo }: { m: Message; con
   }
   const c = m.content as AssistantContent;
   const undoLabel = c.changes?.length ? `Undo: ${undoSummary(c.changes)}` : "Undo these changes";
-  const meta = (c.modelRef || c.model) && `${modelLabel(c.modelRef ?? null, groups ?? [], c.model)} · ${(c.ms / 1000).toFixed(1)} s`;
   const undo = c.changed && !m.undone && m.canUndo;
   return (
     <div className={cn("group/reply agent-rise flex flex-col", bubble ? "gap-2.5" : "gap-1.5")} data-agent-reply>
-      <Items items={c.items} />
-      {c.error && <div className={cn("rounded-[10px] border border-destructive/40 px-3 py-2 text-[13px] text-destructive", bubble && "max-w-[88%] self-start bg-card")}>{c.error}</div>}
-      {c.stopped && <div className={cn("text-[13px] text-muted-foreground", bubble && "mchat-b self-start px-3 py-1.5")}>Stopped.</div>}
-      {(undo || (c.changed && m.undone) || meta) && (
+      <Said
+        below={(undo || (c.changed && m.undone)) && (
         <div
           className={cn(
             "-ml-1.5 flex min-h-6 min-w-0 flex-wrap items-center gap-x-1 text-xs text-muted-foreground transition-opacity",
@@ -954,13 +1002,13 @@ export function MessageView({ m, conv, last, groups, onUndo }: { m: Message; con
           ) : c.changed && m.undone ? (
             <span className="px-1.5">Undone{c.changes?.length ? `: ${c.changes.join(", ")}` : ""}</span>
           ) : null}
-          {meta && (
-            <span className="px-1.5 whitespace-nowrap text-muted-foreground/80" data-agent-meta>
-              {meta}
-            </span>
-          )}
         </div>
       )}
+      >
+        <Items items={c.items} />
+        {c.error && <div className={cn("rounded-[10px] border border-destructive/40 px-3 py-2 text-[13px] text-destructive", bubble && "max-w-[88%] self-start bg-card")}>{c.error}</div>}
+        {c.stopped && <div className={cn("text-[13px] text-muted-foreground", bubble && "mchat-b self-start px-3 py-1.5")}>Stopped.</div>}
+      </Said>
     </div>
   );
 }
@@ -972,7 +1020,8 @@ export function LiveView({ live, onAnswer }: { live: Live; onAnswer(item: ToolIt
   const lastIsText = live.items[live.items.length - 1]?.type === "text";
   return (
     <div className={cn("agent-rise flex flex-col", bubble ? "gap-2.5" : "gap-1.5")}>
-      <Items items={live.items} onAnswer={onAnswer} live />
+      <Said>
+        <Items items={live.items} onAnswer={onAnswer} live />
       {live.error && <div className={cn("rounded-[10px] border border-destructive/40 px-3 py-2 text-[13px] text-destructive", bubble && "max-w-[88%] self-start bg-card")}>{live.error}</div>}
       {!waiting && !running && !lastIsText && (
         <div data-mbub={bubble ? "" : undefined} className={cn("flex h-7 items-center gap-2 text-[13px] text-muted-foreground", bubble && "mchat-b h-9 self-start px-3.5")}>
@@ -980,6 +1029,7 @@ export function LiveView({ live, onAnswer }: { live: Live; onAnswer(item: ToolIt
           {live.items.some((i) => i.type !== "text") ? "Working…" : "Thinking…"}
         </div>
       )}
+      </Said>
     </div>
   );
 }
@@ -1226,8 +1276,9 @@ function ConfirmCard({ item, onAnswer }: { item: ToolItem; onAnswer(item: ToolIt
   const label = item.label.replace(/^etude /, "").replace(/ --yes\b/, "");
   const summary = item.summary ?? `Runs etude ${label}.`;
   const affected = previewList(item.preview);
+  const bubble = useContext(BubbleContext);
   return (
-    <div className="agent-rise rounded-[14px] border border-foreground/20 bg-[color-mix(in_oklab,var(--background),var(--foreground)_3.5%)] p-3.5" role="alertdialog" aria-label="Confirm" aria-describedby={`cf-${item.id}`}>
+    <div className={cn("agent-rise p-3.5", !bubble && "rounded-[14px] border border-foreground/20 bg-[color-mix(in_oklab,var(--background),var(--foreground)_3.5%)]")} role="alertdialog" aria-label="Confirm" aria-describedby={`cf-${item.id}`}>
       <p id={`cf-${item.id}`} className="text-sm leading-snug text-pretty text-foreground">
         {emphasize(summary.replace(/(\d) /g, "$1\u00a0").replace(/, (\d)/g, ",\u00a0$1"), item.target)}
       </p>
@@ -1268,7 +1319,7 @@ function ConfirmCard({ item, onAnswer }: { item: ToolItem; onAnswer(item: ToolIt
 }
 
 /** The header title is the history: title + chevron opens the list of chats. */
-function HistoryMenu({ convs, active, title, onPick, onDelete }: { convs: Conversation[]; active: string | null; title: string; onPick(id: string): void; onDelete(id: string): void }) {
+function HistoryMenu({ convs, active, title, onPick, onDelete, pill = false }: { convs: Conversation[]; active: string | null; title: string; onPick(id: string): void; onDelete(id: string): void; pill?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -1277,8 +1328,12 @@ function HistoryMenu({ convs, active, title, onPick, onDelete }: { convs: Conver
           type="button"
           aria-label="History"
           data-agent-title
-          className="-ml-1.5 flex h-7 min-w-0 items-center gap-1 rounded-md px-1.5 text-sm font-medium transition-colors outline-ring hover:bg-accent/70 focus-visible:outline-2 data-[state=open]:bg-accent/70 pointer-coarse:h-9"
+          className={cn(
+            "flex min-w-0 items-center gap-1 text-sm font-medium transition-colors outline-ring focus-visible:outline-2",
+            pill ? "mchat-round h-9 max-w-[min(15rem,100%)] gap-1.5 rounded-full pr-3 pl-1 font-semibold data-[state=open]:bg-accent" : "-ml-1.5 h-7 rounded-md px-1.5 hover:bg-accent/70 data-[state=open]:bg-accent/70 pointer-coarse:h-9",
+          )}
         >
+          {pill && <Avatar size={28} />}
           <span className="truncate">{title}</span>
           <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
         </button>

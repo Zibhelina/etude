@@ -391,6 +391,9 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 .mchat-ctl { opacity: 0; transition: opacity 0.15s; }
 .mchat:hover .mchat-ctl, .mchat:focus-within .mchat-ctl { opacity: 1; }
 @media (pointer: coarse) { .mchat-ctl { opacity: 1; } }
+/* The side panel in the same balloons (agent-panel.tsx), on the page's own background with no divider, so it reads as one surface. */
+.achat { --achat-bg: var(--background); --mchat-shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 8px 22px rgb(0 0 0 / 0.08); background: var(--achat-bg); }
+.dark .achat { --mchat-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 22px rgb(0 0 0 / 0.45); }
 @keyframes mchat-pop { from { opacity: 0; transform: scale(0.92) translateY(8px); } }
 @media (prefers-reduced-motion: reduce) { .mchat { animation: none; } }
 

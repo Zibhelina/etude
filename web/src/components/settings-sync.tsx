@@ -1,5 +1,6 @@
-// Settings → Sync: one card that walks through email → plan (where Sync is bought) → password, then
-// shows what Sync is doing: last sync, plan, storage, and Sync now / Manage / Sign out.
+// Settings → Sync: one card that walks through email → plan (where Sync is bought) → start (a Sync password is
+// optional where the server can keep the vault key), then shows what Sync is doing: last sync, plan, storage,
+// encryption, and Sync now / Manage / Sign out.
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Check, CircleAlert, Copy, ExternalLink, Loader2, LogOut, RefreshCw } from "lucide-react";
@@ -34,6 +35,10 @@ export interface SyncStatus {
   email?: string;
   unlocked: boolean;
   hasKeys: boolean;
+  /** "password": end-to-end, opened with the Sync password. "server": the server keeps the vault key, so devices open it after signing in. */
+  mode: "password" | "server" | null;
+  /** The server can keep vault keys, so Sync can start without a password. */
+  passwordOptional: boolean;
   lastSync: string | null;
   error: string | null;
   pending: number;
@@ -94,7 +99,8 @@ export function SyncSection() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [reauth, setReauth] = useState(false);
+  // Set when the server asks for a fresh sign-in, with what it was for.
+  const [reauth, setReauth] = useState<false | "unlock" | "protect" | "unprotect">(false);
 
   const [server, setServer] = useState(DEFAULT_SERVER);
   const [folder, setFolder] = useState("");
@@ -111,6 +117,12 @@ export function SyncSection() {
   const [recoveryConfirmed, setRecoveryConfirmed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [confirmOff, setConfirmOff] = useState(false);
+  // A new vault: start without a password unless one is asked for (or the server can't keep keys).
+  const [withPassword, setWithPassword] = useState(false);
+  // Ready: the form that adds a Sync password, and the dialog that removes it.
+  const [protecting, setProtecting] = useState(false);
+  const [confirmUnprotect, setConfirmUnprotect] = useState(false);
+  const [recoveryFor, setRecoveryFor] = useState<"setup" | "protect">("setup");
   const [advanced, setAdvanced] = useState(false);
   const [acctLoaded, setAcctLoaded] = useState(false);
   const seeded = useRef(false);
@@ -201,10 +213,12 @@ export function SyncSection() {
     try {
       return await fn();
     } catch (e) {
-      if (name === "unlock" && e instanceof AccountApiError && e.code === "reauth_required") {
-        setReauth(true);
+      if ((name === "unlock" || name === "protect" || name === "unprotect") && e instanceof AccountApiError && e.code === "reauth_required") {
+        setReauth(name);
         setCodeSent(false);
         setEmail(status?.email ?? acct?.email ?? "");
+        // The sign-in step already says why.
+        if (name !== "unlock") return null;
       }
       setError(errorMessage(e));
       return null;
@@ -244,6 +258,8 @@ export function SyncSection() {
   const signedIn = async (s: SyncStatus) => {
     setStatus(s);
     if (!s.signedIn) return;
+    // Signed in again to change the password: back to where that was.
+    if (reauth === "unprotect") setConfirmUnprotect(true);
     setReauth(false);
     setCodeSent(false);
     setSecond(null);
@@ -282,10 +298,13 @@ export function SyncSection() {
     await signin();
   };
 
-  const unlock = async () => {
+  /** Opens the vault, or makes it. With noPassword, the server keeps (or already keeps) the vault key. */
+  const unlock = async (noPassword = false) => {
     if (busy) return;
     const body: Record<string, string> = {};
-    if (status?.hasKeys && useRecovery) {
+    if (noPassword) {
+      // Nothing to send.
+    } else if (status?.hasKeys && useRecovery) {
       const r = recoveryInput.trim();
       if (!r) {
         setError("Enter your recovery key.");
@@ -310,13 +329,52 @@ export function SyncSection() {
     if (r) {
       setStatus(r.status);
       setUseRecovery(false);
+      setWithPassword(false);
       if (r.recoveryKey) {
+        setRecoveryFor("setup");
         setRecoveryKey(r.recoveryKey);
         setRecoveryConfirmed(false);
         setCopied(false);
       }
       // "Start syncing" means it: run the first sync right away instead of waiting for the background one.
       void callSync<SyncStatus>("POST", "/api/sync/now", {}).then(setStatus, () => void load(true));
+    }
+  };
+
+  /** Adds a Sync password to a vault whose key the server keeps: it becomes end-to-end and gets a recovery key. */
+  const protect = async () => {
+    if (busy) return;
+    if (!password) {
+      setError("Choose a sync password.");
+      return;
+    }
+    if (password !== confirm) {
+      setError("The passwords don't match.");
+      return;
+    }
+    const r = await withBusy("protect", () => callSync<UnlockResponse>("POST", "/api/sync/protect", { password }));
+    // Kept on failure, so signing in again (or fixing a typo) doesn't mean typing it twice more.
+    if (!r) return;
+    setPassword("");
+    setConfirm("");
+    setProtecting(false);
+    setStatus(r.status);
+    if (r.recoveryKey) {
+      setRecoveryFor("protect");
+      setRecoveryKey(r.recoveryKey);
+      setRecoveryConfirmed(false);
+      setCopied(false);
+    }
+  };
+
+  /** Removes the Sync password: the server keeps the vault key again. */
+  const unprotect = async () => {
+    if (busy) return;
+    setConfirmUnprotect(false);
+    const r = await withBusy("unprotect", () => callSync<UnlockResponse>("POST", "/api/sync/unprotect", {}));
+    if (r) {
+      setStatus(r.status);
+      toast.success("Sync password removed", { description: "New devices sync after signing in." });
     }
   };
 
@@ -353,6 +411,8 @@ export function SyncSection() {
       setConfirm("");
       setRecoveryInput("");
       setUseRecovery(false);
+      setWithPassword(false);
+      setProtecting(false);
       setRecoveryKey(null);
       setRecoveryConfirmed(false);
       setCopied(false);
@@ -376,7 +436,7 @@ export function SyncSection() {
     setRecoveryKey(null);
     setRecoveryConfirmed(false);
     setCopied(false);
-    toast.success("Sync is set up");
+    toast.success(recoveryFor === "protect" ? "Sync password added" : "Sync is set up", recoveryFor === "protect" ? { description: "Sync is end-to-end now. New devices need the password." } : undefined);
   };
 
   const stage: Stage = !status
@@ -394,6 +454,12 @@ export function SyncSection() {
             : "ready";
 
   const newVault = !!status && !status.hasKeys;
+  // A vault whose key the server keeps opens after signing in, and a new one starts that way unless a password is asked for.
+  const serverVault = !!status && status.hasKeys && status.mode === "server";
+  const noPasswordStart = newVault && !!status?.passwordOptional && !withPassword;
+  const endToEnd = status?.mode === "password";
+  // While signing in again to add or remove the password, the setup steps don't apply.
+  const changing = reauth === "protect" || reauth === "unprotect";
   const syncing = !!status && (status.busy || busy === "now");
   // One notice: this form's own error first, then the last sync run's. None while a new run is going.
   // A run that failed for want of a plan says so until the next run; once the plan is active that's stale.
@@ -441,7 +507,7 @@ export function SyncSection() {
   }, [loadAccount]);
 
   return (
-    <Section id="sync" title="Sync" description="The same collection on every device, end-to-end encrypted: only your devices can read it.">
+    <Section id="sync" title="Sync" description={endToEnd ? "The same collection on every device, end-to-end encrypted: only your devices can read it." : status?.mode === "server" ? "The same collection on every device, encrypted before it leaves each one. Add a Sync password to make it end-to-end." : "The same collection on every device, encrypted before it leaves each one."}>
       {loading && !status && !loadError && (
         <Block>
           <div className="flex flex-col gap-3">
@@ -464,7 +530,7 @@ export function SyncSection() {
 
       {status && flow !== "ready" && flow !== "recovery" && (
         <Block>
-          <StepBar steps={steps} current={flow === "loading" ? "plan" : flow} />
+          {!changing && <StepBar steps={steps} current={flow === "loading" ? "plan" : flow} passwordLabel={serverVault || (newVault && status.passwordOptional) ? "Start" : "Password"} />}
 
           {flow === "email" && stage !== "code" && (
             <form
@@ -474,7 +540,7 @@ export function SyncSection() {
                 void start();
               }}
             >
-              <StepTitle title={reauth ? "Confirm it's you" : "Turn on Etude Sync"} lead={reauth ? "Sign in again before unlocking sync. Then enter your sync password or recovery key." : status.configured && status.kind === "cloud" && status.server && status.server !== DEFAULT_SERVER ? <>Codes are sent by <span className="font-mono text-[13px] text-foreground/85">{status.server}</span>.</> : "We'll email you a code. No account password to remember."} />
+              <StepTitle title={reauth ? "Confirm it's you" : "Turn on Etude Sync"} lead={changing ? `Sign in again to ${reauth === "protect" ? "add" : "remove"} the Sync password.` : reauth ? (serverVault ? "Sign in again to start syncing on this device." : "Sign in again before unlocking sync. Then enter your sync password or recovery key.") : status.configured && status.kind === "cloud" && status.server && status.server !== DEFAULT_SERVER ? <>Codes are sent by <span className="font-mono text-[13px] text-foreground/85">{status.server}</span>.</> : "We'll email you a code. No account password to remember."} />
               {(!status.configured ? !folder.trim() : status.kind === "cloud") && (
                 <TextInput label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" inputMode="email" placeholder="you@example.com" />
               )}
@@ -494,7 +560,21 @@ export function SyncSection() {
                   {(busy === "setup" || busy === "signin") && <Loader2 className="size-4 animate-spin" />}
                   {!status.configured && folder.trim() ? "Use this folder" : "Send code"}
                 </Button>
-                {status.configured && (
+                {changing ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-10 md:h-8"
+                    disabled={!!busy}
+                    onClick={() => {
+                      setReauth(false);
+                      setError(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                ) : status.configured && (
                   <Button type="button" variant="ghost" size="sm" className="h-10 md:h-8" disabled={!!busy} onClick={() => void signOut()}>
                     Change server
                   </Button>
@@ -567,7 +647,7 @@ export function SyncSection() {
             <div className="flex flex-col gap-4" data-sync-step="plan">
               <StepTitle
                 title={canShowPurchases() ? "Pick a plan" : "Etude Sync"}
-                lead={<>Signed in{status.email ? <> as <span className="text-foreground/90">{status.email}</span></> : null}. 1 GB of end-to-end encrypted storage.</>}
+                lead={<>Signed in{status.email ? <> as <span className="text-foreground/90">{status.email}</span></> : null}. 1 GB of encrypted storage.</>}
               />
               <PlanChooser st={acct} onActive={afterPlan} onRefresh={loadAccount} />
               <div>
@@ -583,18 +663,49 @@ export function SyncSection() {
               className="flex flex-col gap-4"
               onSubmit={(e) => {
                 e.preventDefault();
-                void unlock();
+                void unlock(noPasswordStart || serverVault);
               }}
             >
               <StepTitle
-                title={newVault ? "Create your sync password" : "Unlock sync"}
+                title={noPasswordStart || serverVault ? "Start syncing" : newVault ? "Create your sync password" : "Unlock sync"}
                 lead={
-                  newVault
-                    ? "It encrypts your collection before it leaves this device. You'll type it once on each new device; Etude never sees it."
-                    : <>Signed in{status.email ? <> as <span className="text-foreground/90">{status.email}</span></> : null}. Enter the sync password you chose on your first device.</>
+                  serverVault
+                    ? <>Signed in{status.email ? <> as <span className="text-foreground/90">{status.email}</span></> : null}. Your devices sync without a password, so this one doesn't need one either.</>
+                    : noPasswordStart
+                      ? "Your collection is encrypted on this device before it's sent. The server keeps the key, so your other devices only need to sign in."
+                      : newVault && status.passwordOptional
+                        ? "End-to-end: only your devices can read your collection, not the server. You'll type it once on each new device. If you lose both the password and the recovery key, the copy on the server can't be opened."
+                        : newVault
+                          ? "It encrypts your collection before it leaves this device. You'll type it once on each new device; Etude never sees it."
+                          : <>Signed in{status.email ? <> as <span className="text-foreground/90">{status.email}</span></> : null}. Enter the sync password you chose on your first device.</>
                 }
               />
-              {status.hasKeys && useRecovery ? (
+              {noPasswordStart || serverVault ? (
+                <>
+                  {problem && <Notice>{problem}</Notice>}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
+                      {busy === "unlock" && <Loader2 className="size-4 animate-spin" />}
+                      Start syncing
+                    </Button>
+                    {noPasswordStart && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-10 gap-1.5 md:h-8"
+                        disabled={!!busy}
+                        onClick={() => {
+                          setWithPassword(true);
+                          setError(null);
+                        }}
+                      >
+                        Use a Sync password instead
+                      </Button>
+                    )}
+                  </div>
+                </>
+              ) : status.hasKeys && useRecovery ? (
                 <>
                   <TextInput label="Recovery key" value={recoveryInput} onChange={setRecoveryInput} autoComplete="off" mono placeholder="Your recovery key" />
                   {problem && <Notice>{problem}</Notice>}
@@ -629,6 +740,23 @@ export function SyncSection() {
                       {busy === "unlock" && <Loader2 className="size-4 animate-spin" />}
                       {newVault ? "Start syncing" : "Unlock"}
                     </Button>
+                    {newVault && status.passwordOptional && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-10 gap-1.5 md:h-8"
+                        disabled={!!busy}
+                        onClick={() => {
+                          setWithPassword(false);
+                          setPassword("");
+                          setConfirm("");
+                          setError(null);
+                        }}
+                      >
+                        Sync without a password
+                      </Button>
+                    )}
                     {status.hasKeys && (
                       <Button
                         type="button"
@@ -697,7 +825,7 @@ export function SyncSection() {
               <span className={cn("size-2 shrink-0 rounded-full", syncing ? "animate-pulse bg-highlight" : problem || (cloud && billingOn && acct && !planActive) ? "bg-destructive" : "bg-success")} />
               <h3 className="text-[15px] font-semibold">{cloud && billingOn && acct && !planActive ? "Sync is off for this account" : stateLabel}</h3>
             </div>
-            {problem && <Notice>{problem}</Notice>}
+            {problem && !protecting && <Notice>{problem}</Notice>}
             {syncing && status.progress && <ProgressRow p={status.progress} />}
             {!syncing && status.media?.active && (
               <div className="flex flex-col gap-1.5" data-sync-media="active">
@@ -729,6 +857,31 @@ export function SyncSection() {
                   <dd className="[overflow-wrap:anywhere]">{status.email}</dd>
                 </>
               )}
+              {status.mode && (
+                <>
+                  <dt className="text-muted-foreground">Encryption</dt>
+                  <dd data-sync-mode={status.mode}>
+                    {endToEnd ? "End-to-end, with your Sync password" : "Encrypted, with the key kept by the server"}
+                    <span className="block text-xs text-muted-foreground">
+                      {endToEnd ? "Only your devices can read it." : "New devices only need to sign in. With a Sync password, only your devices could read it."}
+                    </span>
+                    {cloud && !protecting && (status.mode === "server" || status.passwordOptional) && (
+                      <button
+                        type="button"
+                        className="mt-1 text-xs underline underline-offset-2 hover:text-foreground disabled:opacity-60"
+                        disabled={!!busy || status.busy}
+                        onClick={() => {
+                          if (endToEnd) return setConfirmUnprotect(true);
+                          setProtecting(true);
+                          setError(null);
+                        }}
+                      >
+                        {endToEnd ? "Remove the Sync password" : "Add a Sync password"}
+                      </button>
+                    )}
+                  </dd>
+                </>
+              )}
               {(status.kind === "folder" || (status.server && status.server !== DEFAULT_SERVER)) && (
                 <>
                   <dt className="text-muted-foreground">{status.kind === "folder" ? "Folder" : "Server"}</dt>
@@ -739,6 +892,42 @@ export function SyncSection() {
               )}
             </dl>
             {cloud && billingOn && acct && !planActive && <PlanChooser st={acct} onActive={afterPlan} onRefresh={loadAccount} />}
+            {protecting && (
+              <form
+                className="flex flex-col gap-4 border-t pt-4"
+                data-sync-step="protect"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void protect();
+                }}
+              >
+                <StepTitle title="Add a Sync password" lead="End-to-end: your collection is encrypted with a key only your devices can open, and the server drops its copy. New devices will need the password, and you'll get a recovery key in case you forget it." />
+                <TextInput label="Sync password" type="password" value={password} onChange={setPassword} autoComplete="new-password" hint="At least 8 characters." />
+                <TextInput label="Confirm password" type="password" value={confirm} onChange={setConfirm} autoComplete="new-password" />
+                {error && <Notice>{storeSafeMessage(error)}</Notice>}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
+                    {busy === "protect" && <Loader2 className="size-4 animate-spin" />}
+                    Add password
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-10 md:h-8"
+                    disabled={!!busy}
+                    onClick={() => {
+                      setProtecting(false);
+                      setPassword("");
+                      setConfirm("");
+                      setError(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            )}
             <div className="flex flex-wrap items-center gap-2 border-t pt-4">
               <Button type="button" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy || status.busy || (cloud && billingOn && !!acct && !planActive)} onClick={() => void syncNow()}>
                 {syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
@@ -751,6 +940,21 @@ export function SyncSection() {
               </Button>
             </div>
           </Block>
+
+          <AlertDialog open={confirmUnprotect} onOpenChange={setConfirmUnprotect}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove the Sync password?</AlertDialogTitle>
+                <AlertDialogDescription>Sync stops being end-to-end: the server keeps the key to your collection, so whoever runs it could read it. New devices only need to sign in. Your recovery key stops working; adding a password again makes a new one.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Keep the password</AlertDialogCancel>
+                <AlertDialogAction variant="destructive" onClick={() => void unprotect()}>
+                  Remove it
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           <AlertDialog open={confirmOff} onOpenChange={setConfirmOff}>
             <AlertDialogContent>
@@ -775,7 +979,7 @@ export function SyncSection() {
 type Flow = "email" | "loading" | "plan" | "password" | "recovery" | "ready";
 const STEP_LABEL: Partial<Record<Flow, string>> = { email: "Email", plan: "Plan", password: "Password" };
 
-function StepBar({ steps, current }: { steps: Flow[]; current: Flow }) {
+function StepBar({ steps, current, passwordLabel }: { steps: Flow[]; current: Flow; passwordLabel: string }) {
   const at = Math.max(0, steps.indexOf(current));
   // One pill per step across the card: green where you are, a softer green for the steps behind you, a visible track ahead.
   return (
@@ -784,7 +988,7 @@ function StepBar({ steps, current }: { steps: Flow[]; current: Flow }) {
         <li key={s} className="flex min-w-0 flex-1 flex-col gap-2" aria-current={i === at ? "step" : undefined}>
           <span className={cn("h-1.5 rounded-full transition-colors duration-300", i === at ? "bg-highlight" : i < at ? "bg-highlight/40" : "bg-foreground/15")} />
           <span className={cn("truncate text-[12px] font-medium", i === at ? "text-foreground" : i < at ? "text-muted-foreground" : "text-muted-foreground/70")}>
-            {STEP_LABEL[s]}
+            {s === "password" ? passwordLabel : STEP_LABEL[s]}
           </span>
         </li>
       ))}

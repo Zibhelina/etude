@@ -145,7 +145,7 @@ export function Onboarding({ onFinish }: { onFinish(): void }) {
 
   const afterSync = (outcome: SyncOutcome) => {
     setSync(outcome);
-    // Came to sign in: the rest of Sync (sign-in code, password) is in Settings.
+    // Came to sign in: the rest of Sync (sign-in code, starting it) is in Settings.
     if (syncOnly && outcome !== "skipped" && outcome.next) return void finish(() => navigate("/settings#sync"));
     go("done");
   };
@@ -757,10 +757,10 @@ function SyncStep({ level, onDone }: { level: OnboardingLevel; onDone(o: SyncOut
         const s = await account.status().then((a) => a.server).catch(() => DEFAULT_SYNC_SERVER);
         body = { server: s || DEFAULT_SYNC_SERVER };
       }
-      // Only the destination is chosen here; signing in and the password are in Settings → Sync.
+      // Only the destination is chosen here; signing in and starting (with or without a password) are in Settings → Sync.
       const st = await postJson<{ kind: string | null; signedIn: boolean; unlocked: boolean }>("/api/sync/setup", body);
       if (st.kind === "cloud") return setCloud(st.signedIn ? "plan" : "email");
-      onDone({ choice, next: !st.unlocked ? "password next" : null });
+      onDone({ choice, next: !st.unlocked ? "finish in Settings" : null });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -843,11 +843,11 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
     }
   };
 
-  /** Signed in: subscribe if this server charges and the account has no Sync yet, otherwise go on to the password. */
+  /** Signed in: subscribe if this server charges and the account has no Sync yet, otherwise go on to starting Sync. */
   const afterSignIn = async () => {
     window.dispatchEvent(new Event(ACCOUNT_EVENT));
     const a = await account.status();
-    if (a.me?.sync.active || !a.offering?.billing) return onDone("password next");
+    if (a.me?.sync.active || !a.offering?.billing) return onDone("finish in Settings");
     // Native apps can't point at an outside purchase (App Store 3.1.1/3.1.3): just say Sync isn't on for this account.
     if (!canShowPurchases()) {
       // The store apps sell Sync through the App Store or Google Play; without the plugin they only say it isn't on.
@@ -868,7 +868,7 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
       if (a?.me?.sync.active) {
         window.clearInterval(t);
         window.dispatchEvent(new Event(ACCOUNT_EVENT));
-        onDone("password next");
+        onDone("finish in Settings");
       }
     }, 3000);
     return () => window.clearInterval(t);
@@ -942,9 +942,9 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
   if (stage === "plan" && !canShowPurchases() && appleProducts)
     return (
       <>
-        <Title lead="1 GB, end-to-end encrypted: only your devices can read it. Cancel anytime.">Pick a plan</Title>
+        <Title lead="1 GB of encrypted storage, end-to-end with a Sync password. Cancel anytime.">Pick a plan</Title>
         <div className="mt-5">
-          <AppStorePlans productIds={appleProducts} onActive={() => { window.dispatchEvent(new Event(ACCOUNT_EVENT)); onDone("password next"); }} />
+          <AppStorePlans productIds={appleProducts} onActive={() => { window.dispatchEvent(new Event(ACCOUNT_EVENT)); onDone("finish in Settings"); }} />
         </div>
         <Ghost onClick={() => onDone("not active")}>Not now</Ghost>
       </>
@@ -954,7 +954,7 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
   if (stage === "plan")
     return (
       <>
-        <Title lead="1 GB, end-to-end encrypted: only your devices can read it. Cancel anytime.">Pick a plan</Title>
+        <Title lead="1 GB of encrypted storage, end-to-end with a Sync password. Cancel anytime.">Pick a plan</Title>
         <Options role="radiogroup">
           <Option kind="radio" icon={CalendarDays} title="Yearly · US$40" hint="Works out to US$3.33 a month." selected={plan === "yearly"} onClick={() => setPlan("yearly")} />
           <Option kind="radio" icon={CalendarClock} title="Monthly · US$5" hint="Billed every month." selected={plan === "monthly"} onClick={() => setPlan("monthly")} />
@@ -979,7 +979,7 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
       <Spacer />
       <Primary onClick={() => void run(async () => {
         const a = await account.status();
-        if (a.me?.sync.active) onDone("password next");
+        if (a.me?.sync.active) onDone("finish in Settings");
         else throw new Error("Sync isn't active yet. If you paid, give it a few seconds.");
       })} busy={busy}>I've paid</Primary>
       {error && <Problem>{error}</Problem>}
@@ -1088,7 +1088,7 @@ function Row({ label, value, pill, onClick }: { label: string; value: string; pi
 
 const Spinner = ({ className }: { className?: string }) => <Loader2 className={cn(className, "animate-spin")} />;
 
-/** A cloud with a padlock, for the end-to-end encrypted Sync (lucide's stroke style; lucide has no such glyph). */
+/** A cloud with a padlock, for the encrypted Sync (lucide's stroke style; lucide has no such glyph). */
 function CloudLock({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">

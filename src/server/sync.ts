@@ -8,6 +8,8 @@ export function syncRoutes(app:Hono,e:Etude) {
   app.post("/api/sync/signin",async c=>c.json(await s.signin((await c.req.json()).email)));
   app.post("/api/sync/verify",async c=>c.json(await s.verify((await c.req.json()).code)));
   app.post("/api/sync/unlock",async c=>c.json(await s.unlock(await c.req.json())));
+  app.post("/api/sync/protect",async c=>c.json(await s.protect((await c.req.json()).password)));
+  app.post("/api/sync/unprotect",async c=>c.json(await s.unprotect()));
   app.post("/api/sync/auto",async c=>{const b=await c.req.json().catch(()=>({}));await s.auto({pendingOnly:!!b?.pendingOnly});return c.json(s.status());});
   app.post("/api/sync/now",async c=>c.json(await s.now()));
   app.post("/api/sync/off",async c=>c.json(await s.off()));

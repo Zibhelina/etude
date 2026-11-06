@@ -405,7 +405,7 @@ export function SettingsPage() {
 
   const intro: Record<GroupId, React.ReactNode> = {
     account: signedIn ? (
-      <>Signed in as <b>{email}</b>. Sync keeps the same collection on every device you sign in on, end-to-end encrypted.</>
+      <>Signed in as <b>{email}</b>. Sync keeps the same collection on every device you sign in on, encrypted.</>
     ) : (
       <>You're not signed in, and that's fine. Everything works without an account. You only need one for <b>Sync</b> and <b>paid decks</b>.</>
     ),

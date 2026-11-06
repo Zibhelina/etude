@@ -29,6 +29,9 @@ export interface VaultKeys {
   password?: Wrap;
   recovery?: Wrap;
   passkeys?: Record<string, Wrap>;
+  /** The server keeps the vault key (Sync without a password); a device only ever sees `true`, never the wrap. Sending
+   * `null` drops the server's copy in the same write. */
+  server?: true | null;
 }
 
 // ── encoding ───────────────────────────────────────────────────
@@ -232,6 +235,12 @@ export async function createVault(password: string, params: Argon2Params = DEFAU
   const vk = generateVaultKey();
   const recoveryKey = await generateRecoveryKey();
   return { vk, recoveryKey, keys: { v: 1, password: await wrapWithPassword(vk, password, params), recovery: await wrapWithRecovery(vk, recoveryKey), passkeys: {} } };
+}
+
+/** Adds a Sync password to a vault key that exists already (a vault without a password becoming end-to-end). */
+export async function protectVault(vk: Uint8Array, password: string, params: Argon2Params = DEFAULT_ARGON2): Promise<{ recoveryKey: string; keys: VaultKeys }> {
+  const recoveryKey = await generateRecoveryKey();
+  return { recoveryKey, keys: { v: 1, password: await wrapWithPassword(vk, password, params), recovery: await wrapWithRecovery(vk, recoveryKey), passkeys: {}, server: null } };
 }
 
 /** Changing the Sync password re-wraps the same vault key; nothing else is re-encrypted. */

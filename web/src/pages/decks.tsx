@@ -14,6 +14,7 @@ import { PhoneDecks } from "@/components/phone-decks";
 import { DeckContextMenu, type DeckMenuEntry, useDeckActions } from "@/components/deck-actions";
 import { Mark } from "@/components/phone-shell";
 import { ChangeIconDialog, DeckIcon } from "@/components/deck-icon";
+import { DeckRing } from "@/components/deck-ring";
 import { DonePanel, SessionCard, StreakCelebration, useMilestone } from "@/components/library-session";
 import { ArchivePage } from "@/pages/archive";
 import { ArchiveLink, useArchiveCount } from "@/components/archive-link";
@@ -286,7 +287,8 @@ function DesktopDecks() {
     ro.observe(list);
     return () => ro.disconnect();
   }, [visible, collapsed, q]);
-  const anyIcon = top.some((d) => d.icon);
+  // Every top-level deck has a badge now (its icon, or the count rings), so subdecks always indent past it.
+  const anyIcon = top.length > 0;
   // No deck has subdecks: no chevron column, so names start at the page margin.
   const anyKids = visible.some((d) => d.hasChildren);
 
@@ -379,7 +381,7 @@ function DesktopDecks() {
                         <ChevronRight className={cn("size-4 transition-transform duration-200", open && "rotate-90")} />
                       </button>
                     )}
-                    {!sub && d.icon && <DeckIcon icon={d.icon} size={46} className="lib-art" />}
+                    {!sub && (d.icon ? <DeckIcon icon={d.icon} size={46} className="lib-art" /> : <DeckRing d={d} size={46} />)}
                     <div className="min-w-0 flex-1">
                       <button
                         data-deck-name

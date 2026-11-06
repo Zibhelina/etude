@@ -289,10 +289,12 @@ async function property(kind:"folder"|"cloud") {
     es[0].savePreset({id:"shared-preset",name:"Shared preset",config:{desiredRetention:0.9}});es[0].updateDeck("Test",{presetId:"shared-preset"});
     for(let n=0;n<2;n++)for(let i=0;i<3;i++)await sync(i);
     let state=SEED;const rand=()=>{state^=state<<13;state^=state>>>17;state^=state<<5;return(state>>>0)/4294967296;};
-    const deleted=new Set<string>();let reviews=0;const reviewKeys:string[]=[];
+    // The reviews that should survive, by sync id, with their card's.
+    const deleted=new Set<string>();const made=new Map<string,string>();
+    const rated=(e:Etude,card:string,reviewId:number)=>made.set(e.db.get("SELECT sync_id FROM reviews WHERE id=?",reviewId)!.sync_id,card);
     for(let round=0;round<240;round++) {
       const device=Math.floor(rand()*3),e=es[device],index=Math.floor(rand()*18),key="item-"+index;
-      if(round%5===0){const c=e.db.get("SELECT id,sync_id FROM cards WHERE item_id=?",round%20===0?"drill":round%20===5?"leitner":round%20===10?"script":round%40===15?"custom":"item-"+index%6) ?? e.db.get("SELECT id,sync_id FROM cards WHERE item_id='drill'")!;e.rate(c.id,3,{at:new Date(1800000000000+round*1000)});reviewKeys.push(c.sync_id);reviews++;}
+      if(round%5===0){const c=e.db.get("SELECT id,sync_id FROM cards WHERE item_id=?",round%20===0?"drill":round%20===5?"leitner":round%20===10?"script":round%40===15?"custom":"item-"+index%6) ?? e.db.get("SELECT id,sync_id FROM cards WHERE item_id='drill'")!;rated(e,c.sync_id,e.rate(c.id,3,{at:new Date(1800000000000+round*1000)}).reviewId);}
       else if(round%13===0 && index>=12){if(e.db.get("SELECT 1 FROM items WHERE id=?",key)){e.deleteItems([key]);deleted.add(key);}}
       // Paths an incremental projection has to follow: decks created twice offline (a suffixed name), renamed or merged.
       else if(round%7===1){if(e.db.get("SELECT 1 FROM items WHERE id=?",key))e.moveItems([key],round%3?"Shared":"Shared::Inner");}
@@ -307,9 +309,10 @@ async function property(kind:"folder"|"cloud") {
       // Card controls and history: suspension, reset, a due date, undo, graded attempts, tag notes.
       else if(round%23===5){const c=e.db.get("SELECT id FROM cards WHERE item_id=?",round%2?key:"custom");if(c)e.setSuspended([c.id],!!(round%3));}
       else if(round%23===12){const c=e.db.get("SELECT id FROM cards WHERE item_id=?",key);if(c)round%2?e.resetCards([c.id]):e.setDue([c.id],new Date(1900000000000+round*1000));}
-      // Undo after a sync, so the undone review was already part of the canonical history.
-      else if(round%31===7){await sync(device);const u=e.undo();if(u){const k=e.db.get("SELECT sync_id FROM cards WHERE id=?",u.cardId)?.sync_id;const at=reviewKeys.lastIndexOf(k);if(at>=0)reviewKeys.splice(at,1);reviews--;}}
-      else if(round%31===20){const c=e.db.get("SELECT id,sync_id FROM cards WHERE item_id='typed'")!;const a=await e.submit(c.id,1,round%2?"answer":"wrong");e.rate(c.id,round%2?3:1,{attemptId:a.attemptId,at:new Date(1800000000000+round*1000)});reviewKeys.push(c.sync_id);reviews++;}
+      // Undo after a sync, so the undone review was already part of the canonical history. Undo takes the newest review this
+      // device holds, so two devices that haven't seen each other's undo can both take the same one: it goes once.
+      else if(round%31===7){await sync(device);const ids=()=>e.db.all("SELECT sync_id FROM reviews").map(r=>r.sync_id as string);const before=ids();e.undo();const after=new Set(ids());for(const k of before)if(!after.has(k))made.delete(k);}
+      else if(round%31===20){const c=e.db.get("SELECT id,sync_id FROM cards WHERE item_id='typed'")!;const a=await e.submit(c.id,1,round%2?"answer":"wrong");rated(e,c.sync_id,e.rate(c.id,round%2?3:1,{attemptId:a.attemptId,at:new Date(1800000000000+round*1000)}).reviewId);}
       else if(round%37===9)e.setTagMeta(`tag-${device}`,{description:`round ${round}`});
       else if(e.db.get("SELECT 1 FROM items WHERE id=?",key)){
         const item=e.item(key);const f={...item.fields};f[round%2?"front":"back"]=`round ${round} device ${device}`;
@@ -319,7 +322,7 @@ async function property(kind:"folder"|"cloud") {
     }
     for(let n=0;n<3;n++)for(let i=0;i<3;i++)await sync(i);
     const expected=canonical(es[0]);for(const e of es.slice(1))assert.deepEqual(canonical(e),expected);
-    for(const e of es){assert.equal(rows(e.db,"reviews").size,reviews);assert.equal(e.db.get("SELECT count(*) n FROM reviews")!.n,reviewKeys.filter(k=>e.db.get("SELECT 1 FROM cards WHERE sync_id=?",k)).length);for(const k of deleted)assert.equal(e.db.get("SELECT 1 FROM items WHERE id=?",k),undefined);assert.equal(e.db.get("SELECT count(*) n FROM sync_outbox")!.n,0);}
+    for(const e of es){assert.deepEqual([...rows(e.db,"reviews").keys()].sort(),[...made.keys()].sort());assert.equal(e.db.get("SELECT count(*) n FROM reviews")!.n,[...made.values()].filter(k=>e.db.get("SELECT 1 FROM cards WHERE sync_id=?",k)).length);for(const k of deleted)assert.equal(e.db.get("SELECT 1 FROM items WHERE id=?",k),undefined);assert.equal(e.db.get("SELECT count(*) n FROM sync_outbox")!.n,0);}
     assert.equal(es[1].typeAsset("sync-basic","sample.json")!.size,18);
     // Only the type asset keeps its bytes in the database; the media file is on disk.
     assert.equal(es[0].db.get("SELECT count(*) n FROM sync_blobs")!.n,1);

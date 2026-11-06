@@ -157,14 +157,16 @@ test("sync reports its steps, and the upload total matches the bytes sent",async
     for(let i=0;i<3;i++)writeFileSync(join(a.mediaDir,"anki",`clip ${i}.mp3`),"sound ".repeat(1000+i));
     const record=(e:Etude)=>{const s=syncFor(e) as any,seen:any[]=[],step=s.step.bind(s);s.step=(...args:any[])=>{const p=step(...args);if(!seen.includes(p))seen.push(p);return p;};return seen;};
     const sa=record(a);await syncFor(a).now();
-    // The first sync builds the relational view from the registers once.
-    assert.deepEqual(sa.map(p=>p.step),["download","check","upload","apply"]);
-    const up=sa.find(p=>p.step==="upload");assert.ok(up.done>3000);assert.equal(up.done,up.total);
+    // The collection first (the first sync builds the relational view once), then the media.
+    assert.deepEqual(sa.map(p=>p.step),["download","upload","apply","check","download","upload"]);
+    const uploads=sa.filter(p=>p.step==="upload");for(const up of uploads)assert.equal(up.done,up.total);
+    assert.ok(uploads[1].done>3000,"the media upload");
     assert.deepEqual(sa.find(p=>p.step==="check"),{step:"check",done:3,total:3,rate:0});
     assert.equal(syncFor(a).status().progress,null);
     const sb=record(b);await syncFor(b).now();
-    assert.ok(sb.find(p=>p.step==="download").done>up.done*0.9,"b downloads what a sent");
-    assert.equal(sb.find(p=>p.step==="upload").total,0);
+    const sum=(list:any[],step:string)=>list.filter(p=>p.step===step).reduce((n,p)=>n+p.done,0);
+    assert.ok(sum(sb,"download")>sum(sa,"upload")*0.9,"b downloads what a sent");
+    assert.equal(sum(sb,"upload"),0);
     // b received a's changes and rebuilt; a second sync with nothing new doesn't rebuild again.
     assert.ok(sb.some(p=>p.step==="apply"));
     const again=record(b);await syncFor(b).now();

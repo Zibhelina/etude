@@ -149,6 +149,56 @@ test("sync reports its steps, and the upload total matches the bytes sent",async
     assert.ok(!again.some(p=>p.step==="apply"));
   }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
 });
+test("media: a sync with nothing new skips the files; new files, remote changes and the periodic look don't",async()=>{
+  const dir=temp();for(const d of ["a","b"])mkdirSync(join(dir,d));
+  const a=await Etude.open(join(dir,"a","a.db"),{home:join(dir,"ha")}),b=await Etude.open(join(dir,"b","b.db"),{home:join(dir,"hb")});
+  try {
+    const folder=join(dir,"shared");for(const e of [a,b]){syncFor(e).setup({folder});await syncFor(e).unlock({password});}
+    const checked=async(e:Etude)=>{const s=syncFor(e) as any,step=s.step.bind(s);let seen=false;s.step=(...args:any[])=>{if(args[0]==="check")seen=true;return step(...args);};try{await s.now();}finally{s.step=step;}return seen;};
+    const stored=a.storeMedia("dot.png",Buffer.from("dot"));mkdirSync(join(a.mediaDir,"anki"),{recursive:true});writeFileSync(join(a.mediaDir,"anki","map.png"),"map");
+    assert.equal(await checked(a),true,"the first sync of a process looks at every file");
+    // A file Etude stored is named by its hash, so it isn't read to hash it.
+    assert.equal(a.db.get("SELECT count(*) n FROM sync_media_hashes WHERE file LIKE 'files/%'")!.n,0);
+    assert.equal(await checked(a),false,"nothing changed");
+    assert.equal(await checked(b),true);assert.equal(readFileSync(join(b.mediaDir,stored.file),"utf8"),"dot");
+    // b's own downloads changed its folders after it looked at them, so it looks once more and then rests.
+    await checked(b);assert.equal(await checked(b),false);
+    writeFileSync(join(a.mediaDir,"anki","new.png"),"new");
+    assert.equal(await checked(a),true,"a file was added");
+    assert.equal(await checked(b),true,"another device's media arrived");assert.equal(readFileSync(join(b.mediaDir,"anki","new.png"),"utf8"),"new");
+    await checked(b);
+    // Rewritten in place, a file doesn't change its folder: it's found at the next full look.
+    writeFileSync(join(b.mediaDir,"anki","map.png"),"map, edited");
+    assert.equal(await checked(b),false);
+    (syncFor(b) as any).scanned-=11*60_000;
+    assert.equal(await checked(b),true);await syncFor(a).now();
+    assert.equal(readFileSync(join(a.mediaDir,"anki","map.png"),"utf8"),"map, edited");
+    // A file whose name claims another hash is sent with the hash of its bytes.
+    const fake="0".repeat(64);writeFileSync(join(a.mediaDir,"files",fake+".png"),"not what the name says");
+    await syncFor(a).now();await syncFor(b).now();
+    const r=rows(a.db,"media").get(`files/${fake}.png`)!;
+    assert.notEqual(r.hash,fake);assert.equal(readFileSync(join(b.mediaDir,"files",fake+".png"),"utf8"),"not what the name says");
+    // Neither device takes the name's word for it on the next full look, so neither sends it again.
+    const events=(e:Etude)=>e.db.get("SELECT count(*) n FROM sync_events")!.n,before=[events(a),events(b)];
+    for(const e of [a,b])(syncFor(e) as any).scanned=0;
+    await syncFor(b).now();await syncFor(a).now();
+    assert.deepEqual([events(a),events(b)],before);
+    assert.equal(syncFor(b).status().error,null);
+  }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
+});
+test("media bytes kept by an earlier version are dropped; type asset bytes stay",async()=>{
+  const dir=temp();const file=join(dir,"a.db");let e=await Etude.open(file,{home:join(dir,"home")});
+  try {
+    syncFor(e).setup({folder:join(dir,"shared")});
+    const def=e.type("basic");e.saveType({...def,id:"with-asset",name:"With asset",assets:{"a.json":Buffer.from("{}").toString("base64")}});drain(e.db);
+    const asset=e.db.get("SELECT hash FROM type_assets WHERE type_id='with-asset'")!.hash;
+    e.db.run("INSERT INTO sync_blobs VALUES(?,?,?)",asset,"a".repeat(64),Buffer.from("{}"));
+    e.db.run("INSERT INTO sync_blobs VALUES(?,?,?)","b".repeat(64),"c".repeat(64),Buffer.from("media"));
+    e.db.run("DELETE FROM sync_meta WHERE key='media_bytes'");
+    e.close();e=await Etude.open(file,{home:join(dir,"home")});
+    assert.deepEqual(e.db.all("SELECT hash FROM sync_blobs").map(r=>r.hash),[asset]);
+  }finally{e.close();rmSync(dir,{recursive:true,force:true});}
+});
 async function login(s:ReturnType<typeof syncFor>,server:string,outbox:string,email:string){
   s.setup({server});await s.signin(email);
   const files=readdirSync(outbox).map(f=>({f,text:readFileSync(join(outbox,f),"utf8")}));
@@ -218,7 +268,9 @@ async function property(kind:"folder"|"cloud") {
     const expected=canonical(es[0]);for(const e of es.slice(1))assert.deepEqual(canonical(e),expected);
     for(const e of es){assert.equal(rows(e.db,"reviews").size,reviews);assert.equal(e.db.get("SELECT count(*) n FROM reviews")!.n,reviewKeys.filter(k=>e.db.get("SELECT 1 FROM cards WHERE sync_id=?",k)).length);for(const k of deleted)assert.equal(e.db.get("SELECT 1 FROM items WHERE id=?",k),undefined);assert.equal(e.db.get("SELECT count(*) n FROM sync_outbox")!.n,0);}
     assert.equal(es[1].typeAsset("sync-basic","sample.json")!.size,18);
-    assert.equal(es[0].db.get("SELECT count(*) n FROM sync_blobs")!.n,2);
+    // Only the type asset keeps its bytes in the database; the media file is on disk.
+    assert.equal(es[0].db.get("SELECT count(*) n FROM sync_blobs")!.n,1);
+    for(const e of es)assert.equal(readFileSync(join(e.mediaDir,es[0].storeMedia("pixel.png",Buffer.from("test bytes"),{dryRun:true}).file),"utf8"),"test bytes");
   } finally {for(const e of es)e.close();rmSync(dir,{recursive:true,force:true});}
 }
 test("seed 0x5eed1234: 3 offline devices converge through encrypted folder (240 rounds)",()=>property("folder"));

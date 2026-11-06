@@ -67,6 +67,11 @@ export function install(db: Db) {
   // A schedule changed here (a review with fuzz, a reschedule) is replayed canonically at the next sync.
   db.sql.exec(`CREATE TRIGGER IF NOT EXISTS sync_cards_replay AFTER UPDATE OF state,due,stability,difficulty,elapsed_days,scheduled_days,reps,lapses,learning_steps,last_review,sched_state ON cards
     WHEN (SELECT applying FROM sync_control WHERE id=1)=0 AND NEW.sync_id IS NOT NULL BEGIN INSERT OR IGNORE INTO sync_dirty VALUES('replay',NEW.sync_id,''); END;`);
+  // Media bytes used to be kept here too; they're on disk. Type assets keep theirs for the projection.
+  if (!db.get("SELECT 1 FROM sync_meta WHERE key='media_bytes'")) db.tx(() => {
+    db.run("DELETE FROM sync_blobs WHERE hash NOT IN (SELECT json_extract(value,'$') FROM sync_registers WHERE tbl='type_assets' AND field='/hash') AND hash NOT IN (SELECT hash FROM type_assets)");
+    db.run("INSERT INTO sync_meta VALUES('media_bytes','false')");
+  });
   // Before the card trigger listed its columns, every review fired it.
   if (!db.get("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='sync_cards_update' AND sql LIKE '%UPDATE OF%'")) db.sql.exec("DROP TRIGGER IF EXISTS sync_cards_update");
   for (const table of TABLES) {

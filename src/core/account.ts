@@ -169,7 +169,11 @@ export class AccountClient {
       const data: Json = await res.json().catch(() => null);
       const code = data?.error?.code ?? "error";
       // A creator from before direct charges asks for a Stripe link: the server's message names its API route.
-      const message = code === "creator_setup_required" ? "Etude now sells through your own Stripe account. Set up selling again in Market → Sell." : (data?.error?.message ?? `the Etude server answered ${res.status}`);
+      // Selling needs two-step sign-in: the server's message points to its own web page; the app has the setting itself.
+      const message =
+        code === "creator_setup_required" ? "Etude now sells through your own Stripe account. Set up selling again in Market → Sell."
+        : code === "two_factor_required" ? "Selling on the Etude Market needs two-step sign-in. Turn it on with an authenticator app, or add a passkey, in Settings → Account, then try again."
+        : (data?.error?.message ?? `the Etude server answered ${res.status}`);
       // A revoked or expired device: forget the token so the app shows "signed out" instead of failing forever.
       if (res.status === 401 && auth === true && ["unauthorized", "invalid_token", "token_expired", "signed_out"].includes(code)) this.forget();
       throw new AccountError(message, res.status, code, data?.error ?? {});

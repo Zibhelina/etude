@@ -1,87 +1,85 @@
 const input = etude.$("#answer");
-const preview = etude.$(".wk-preview");
 const note = etude.$(".wk-note");
 const pad = etude.$(".wk-pad");
+const ph = etude.$(".wk-ph");
 const toggle = etude.$(".wk-toggle");
 const canvas = etude.$(".wk-canvas");
 const ctx = canvas.getContext("2d");
 const { math } = etude;
-input.placeholder ||= "Final answer";
+input.placeholder ||= "your final answer";
+const touch = matchMedia("(pointer: coarse)").matches;
+ph.textContent = touch ? "Work it out here with your finger or pencil" : "Work it out here with your mouse or pen";
 
-// Strokes are kept in canvas-width units, so the work replays at any size.
+// Strokes are kept in canvas-width units, so the work replays at any size. A point is [x, y] or [x, y, pressure].
 const strokes = [];
-let tool = "pen", current = null;
-const ratio = 0.62;
+let tool = "pen", current = null, penSeen = false;
 // Work loaded from an answer replays at the width it was written at (never wider than the pad), and the
 // pad shrinks to fit it.
 let basis = 0, replay = false;
-const scale = () => (basis ? Math.min(W(), basis) : W());
-const css = () => getComputedStyle(document.documentElement);
 const W = () => canvas.clientWidth, H = () => canvas.clientHeight;
+const scale = () => (basis ? Math.min(W(), basis) : W());
 
 function fit() {
-  const w = canvas.clientWidth;
+  const w = pad.clientWidth;
   if (!w) return;
   const dpr = window.devicePixelRatio || 1;
-  // Phones get a taller pad: there is room vertically and fingers need it.
-  let h = Math.round(Math.min(Math.max(w * (w < 520 ? 0.95 : ratio), 220), 440));
-  if (replay && strokes.length) {
-    const maxY = Math.max(...strokes.flatMap((s) => s.pts.map((p) => p[1])));
-    h = Math.round(Math.max(maxY * Math.min(w, basis || w) + 28, 120));
-  }
-  canvas.style.height = h + "px";
-  canvas.width = Math.round(w * dpr);
-  canvas.height = Math.round(h * dpr);
+  if (replay) {
+    const ys = strokes.flatMap((s) => s.pts.map((p) => p[1]));
+    const h = Math.round(Math.min(Math.max((ys.length ? Math.max(...ys) : 0) * Math.min(w, basis || w) + 28, 120), 340));
+    canvas.style.height = h + "px";
+  } else canvas.style.height = "";
+  canvas.width = Math.round(W() * dpr);
+  canvas.height = Math.round(H() * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   paint();
 }
 
+// Ink width follows pen pressure (thin when light, thick when heavy); a mouse or finger draws a steady line.
+const width = (p) => 1.4 + (p ?? 0.5) * 2.6;
 function paint() {
   if (!canvas.width) return;
-  const w = W(), h = H(), c = css();
-  ctx.clearRect(0, 0, w, h);
-  // Faint graph paper.
-  ctx.strokeStyle = c.getPropertyValue("--border").trim() || "rgba(128,128,128,.2)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let x = 24; x < w; x += 24) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, h); }
-  for (let y = 24; y < h; y += 24) { ctx.moveTo(0, y + 0.5); ctx.lineTo(w, y + 0.5); }
-  ctx.stroke();
-  const ink = c.getPropertyValue("--foreground").trim() || "#111";
-  // Ink is drawn on its own pass so the eraser can't remove the grid: erased spans just aren't drawn.
-  const layer = document.createElement("canvas");
-  layer.width = canvas.width; layer.height = canvas.height;
-  const lc = layer.getContext("2d");
-  const dpr = window.devicePixelRatio || 1;
-  lc.setTransform(dpr, 0, 0, dpr, 0, 0);
-  for (const s of current ? [...strokes, current] : strokes) stroke(lc, s, ink, scale());
-  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(layer, 0, 0); ctx.restore();
+  ctx.clearRect(0, 0, W(), H());
+  const ink = getComputedStyle(document.documentElement).getPropertyValue("--foreground").trim() || "#111";
+  for (const s of current ? [...strokes, current] : strokes) stroke(s, ink, scale());
 }
-
-function stroke(c, s, ink, w) {
+function stroke(s, ink, w) {
   const p = s.pts;
   if (!p.length) return;
-  c.lineCap = "round"; c.lineJoin = "round";
-  c.globalCompositeOperation = s.erase ? "destination-out" : "source-over";
-  c.strokeStyle = ink;
-  c.lineWidth = s.erase ? 18 : Math.max(1.6, w * 0.0035);
-  c.beginPath();
-  c.moveTo(p[0][0] * w, p[0][1] * w);
-  if (p.length === 1) c.lineTo(p[0][0] * w + 0.01, p[0][1] * w);
-  for (let i = 1; i < p.length - 1; i++) {
-    const mx = ((p[i][0] + p[i + 1][0]) / 2) * w, my = ((p[i][1] + p[i + 1][1]) / 2) * w;
-    c.quadraticCurveTo(p[i][0] * w, p[i][1] * w, mx, my);
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.globalCompositeOperation = s.erase ? "destination-out" : "source-over";
+  ctx.strokeStyle = ink;
+  const X = (q) => q[0] * w, Y = (q) => q[1] * w;
+  if (p.length < 3) {
+    ctx.lineWidth = s.erase ? 24 : width(p[0][2]);
+    ctx.beginPath(); ctx.moveTo(X(p[0]), Y(p[0])); ctx.lineTo(X(p[p.length - 1]) + 0.01, Y(p[p.length - 1])); ctx.stroke();
+  } else {
+    // Midpoint-smoothed, one short curve per point so the width can change along the stroke.
+    let mx = X(p[0]), my = Y(p[0]);
+    for (let i = 1; i < p.length; i++) {
+      const last = i === p.length - 1;
+      const nx = last ? X(p[i]) : (X(p[i]) + X(p[i + 1])) / 2, ny = last ? Y(p[i]) : (Y(p[i]) + Y(p[i + 1])) / 2;
+      ctx.lineWidth = s.erase ? 24 : width(p[i][2]);
+      ctx.beginPath(); ctx.moveTo(mx, my); ctx.quadraticCurveTo(X(p[i]), Y(p[i]), nx, ny); ctx.stroke();
+      mx = nx; my = ny;
+    }
   }
-  if (p.length > 1) c.lineTo(p[p.length - 1][0] * w, p[p.length - 1][1] * w);
-  c.stroke();
-  c.globalCompositeOperation = "source-over";
+  ctx.globalCompositeOperation = "source-over";
 }
 
-const at = (e) => { const r = canvas.getBoundingClientRect(), k = scale() * (r.width / (W() || 1)) || 1; return [(e.clientX - r.left) / k, (e.clientY - r.top) / k]; };
+const at = (e) => {
+  const r = canvas.getBoundingClientRect(), k = scale() * (r.width / (W() || 1)) || 1;
+  const q = [(e.clientX - r.left) / k, (e.clientY - r.top) / k];
+  if (e.pointerType === "pen") q.push(Math.round((e.pressure || 0.5) * 100) / 100);
+  return q;
+};
 canvas.addEventListener("pointerdown", (e) => {
-  if (etude.mode !== "answer") return;
-  canvas.setPointerCapture(e.pointerId);
+  if (etude.mode !== "answer" || e.button > 0) return;
+  if (e.pointerType === "pen") penSeen = true;
+  // Palm rejection: once a pen has drawn, a resting hand doesn't.
+  if (e.pointerType === "touch" && penSeen) return;
+  try { canvas.setPointerCapture(e.pointerId); } catch {}
   current = { erase: tool === "eraser" || e.buttons === 32, pts: [at(e)] };
+  ph.textContent = "";
   paint();
 });
 canvas.addEventListener("pointermove", (e) => {
@@ -93,10 +91,11 @@ const finish = () => { if (!current) return; strokes.push(current); current = nu
 canvas.addEventListener("pointerup", finish);
 canvas.addEventListener("pointercancel", finish);
 
+const setTool = (t) => { tool = t; etude.$$("[data-tool]").forEach((x) => x.classList.toggle("is-on", x.dataset.tool === t)); };
 etude.$(".wk-tools").addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (!b) return;
-  if (b.dataset.tool) { tool = b.dataset.tool; etude.$$("[data-tool]").forEach((x) => x.classList.toggle("is-on", x === b)); }
+  if (b.dataset.tool) setTool(b.dataset.tool);
   if (b.dataset.act === "undo") strokes.pop();
   if (b.dataset.act === "clear") strokes.length = 0;
   paint();
@@ -109,50 +108,42 @@ const show = (on) => {
   if (on) requestAnimationFrame(fit);
 };
 toggle.addEventListener("click", () => show(pad.hidden));
-new ResizeObserver(fit).observe(canvas);
+new ResizeObserver(fit).observe(pad);
 
-// What renders is what gets graded: the parsed answer printed back as LaTeX.
+// The answer is checked like a Math answer; only a line it can't read says so.
 const render = () => {
   const src = input.value.trim();
-  preview.classList.remove("is-unread");
   note.classList.remove("is-error");
   note.textContent = "";
-  if (!src) {
-    preview.innerHTML = `<span class="wk-empty">Your answer renders here</span>`;
-    etude.setReady(false);
-    return;
-  }
-  try {
-    preview.innerHTML = etude.tex(math.toLatex(math.parse(src)), true);
-  } catch (e) {
-    preview.innerHTML = etude.tex(src, true);
-    preview.classList.add("is-unread");
+  etude.setReady(!!src);
+  if (!src) return;
+  try { math.parse(src); } catch (e) {
     note.classList.add("is-error");
     note.textContent = `Can't read this yet: ${e.message}`;
   }
-  etude.setReady(true);
 };
 input.addEventListener("input", render);
-input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); etude.submit(); } });
+input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); if (input.value.trim()) etude.submit(); } });
 window.addEventListener("keydown", (e) => {
   if (etude.mode !== "answer" || pad.hidden || e.target === input) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); strokes.pop(); paint(); }
-  else if (e.key === "e" || e.key === "p") etude.$(`[data-tool="${e.key === "e" ? "eraser" : "pen"}"]`).click();
+  else if (e.key === "e" || e.key === "p") setTool(e.key === "e" ? "eraser" : "pen");
 });
 
-// Rounded and capped so an attempt stays small.
+// Rounded and capped so an attempt stays small. Eraser strokes ride along so the replay matches what you saw.
 const packed = () => {
   let budget = 6000;
   const paths = [];
   for (const s of strokes) {
-    if (s.erase || budget <= 0) continue;
-    const pts = s.pts.slice(0, budget).map(([x, y]) => [Math.round(x * 1e4) / 1e4, Math.round(y * 1e4) / 1e4]);
+    if (budget <= 0) break;
+    const pts = s.pts.slice(0, budget).map(([x, y, p]) => (p == null ? [Math.round(x * 1e4) / 1e4, Math.round(y * 1e4) / 1e4] : [Math.round(x * 1e4) / 1e4, Math.round(y * 1e4) / 1e4, p]));
     budget -= pts.length;
-    paths.push(pts);
+    paths.push(s.erase ? { erase: true, pts } : pts);
   }
   return paths;
 };
 etude.getAnswer(() => ({ value: input.value, paths: packed(), w: Math.round(scale()) }));
+etude.$(".wk-stuck").addEventListener("click", () => etude.submit({ value: "", stuck: true, paths: packed(), w: Math.round(scale()) }));
 
 function load(answer) {
   if (answer == null) return;
@@ -160,9 +151,12 @@ function load(answer) {
   const paths = Array.isArray(answer?.paths) ? answer.paths : [];
   if (paths.length) {
     strokes.length = 0;
-    for (const p of paths) if (Array.isArray(p) && p.length) strokes.push({ pts: p });
+    for (const p of paths) {
+      if (Array.isArray(p) && p.length) strokes.push({ pts: p });
+      else if (p && Array.isArray(p.pts) && p.pts.length) strokes.push({ erase: !!p.erase, pts: p.pts });
+    }
     basis = Number(answer.w) > 0 ? Number(answer.w) : 0;
-    replay = true;
+    ph.textContent = "";
     show(true);
   }
   render();
@@ -174,12 +168,23 @@ etude.onResult(({ grade, key, answer }) => {
   input.disabled = true;
   canvas.classList.add("locked");
   if (answer != null && !strokes.length) load(answer);
-  // Without scratch work there is nothing to show above the answer.
-  if (!strokes.length) pad.hidden = true;
-  const s = grade?.score;
-  preview.classList.add(s == null ? "is-partial" : s >= 1 ? "is-correct" : s > 0 ? "is-partial" : "is-wrong");
-  if (grade?.feedback) { note.classList.remove("is-error"); note.textContent = grade.feedback; }
+  const s = grade?.score ?? 0;
+  const typed = (typeof answer === "string" ? answer : answer?.value ?? "").trim();
+  const yours = etude.$(".wk-yours");
+  if (typed) {
+    yours.className = `wk-yours ${s >= 1 ? "ok" : "no"}`;
+    yours.innerHTML = `You wrote <b>${etude.escape(typed)}</b>`;
+  }
   const shown = (a) => { try { return etude.tex(math.toLatex(math.parse(a))); } catch { return etude.tex(a); } };
   const box = etude.$(".wk-accepted");
   if (box) box.innerHTML = (key.answers ?? []).slice(0, 1).map((a) => `<span>${/\\[a-zA-Z{]/.test(a) ? etude.tex(a) : shown(a)}</span>`).join("");
+  // Your scratch work moves under the solution, sized to what you wrote.
+  const shot = etude.$(".wk-shot");
+  if (strokes.length && shot) {
+    replay = true;
+    shot.hidden = false;
+    shot.append(pad);
+    pad.hidden = false;
+    requestAnimationFrame(fit);
+  } else pad.hidden = true;
 });

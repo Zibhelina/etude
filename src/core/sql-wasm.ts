@@ -8,6 +8,9 @@
 import type { SqlConnection, SqlRunResult, SqlStatement, SqlValue } from "./sql.ts";
 
 type Sqlite3 = any;
+
+/** Compiled statements kept per connection. */
+const STATEMENT_CACHE = 200;
 let sqlite3: Promise<Sqlite3> | null = null;
 
 let loaded: Sqlite3 | null = null;
@@ -136,8 +139,12 @@ class WasmConnection implements SqlConnection {
   }
 
   /** Replaces the in-memory database with these bytes (an SQLite file image). */
+  /** See SqlConnection.reloads. */
+  reloads = 0;
   private load(bytes: Uint8Array) {
     const { capi, wasm } = this.s;
+    this.reloads++;
+    this.forget();
     // Header bytes 18-19 say "WAL" (2) for a file node:sqlite wrote; SQLite can't open that from
     // memory, so mark the image as a rollback-journal database (1). The pages are the same.
     if (bytes[18] === 2 || bytes[19] === 2) {
@@ -159,21 +166,50 @@ class WasmConnection implements SqlConnection {
     if (bytes) this.load(bytes);
   }
 
+  /** Compiled statements by SQL text, least recently used first, and the ones running now. */
+  private cache = new Map<string, any>();
+  private running = new Set<any>();
+
+  /** Finalizes the cached statements that aren't running. */
+  private forget() {
+    for (const stmt of this.cache.values()) if (!this.running.has(stmt)) stmt.finalize();
+    this.cache.clear();
+  }
+
+  /** Runs fn with a compiled statement, reset and unbound again afterwards so it can be reused. */
   withStatement<T>(sql: string, fn: (stmt: any) => T): T {
     this.refresh();
-    let stmt: any;
-    try {
-      stmt = this.db.prepare(sql);
-    } catch (e) {
-      throw sqlError(this.s, this.db, e);
+    let stmt = this.cache.get(sql);
+    // The same statement asked for again while it runs (from an SQL function) gets its own copy.
+    const own = !stmt || this.running.has(stmt);
+    if (own) {
+      try {
+        stmt = this.db.prepare(sql);
+      } catch (e) {
+        throw sqlError(this.s, this.db, e);
+      }
     }
+    const cached = own && !this.cache.has(sql);
+    if (cached || !own) {
+      this.cache.delete(sql);
+      this.cache.set(sql, stmt);
+      if (this.cache.size > STATEMENT_CACHE) {
+        const [oldest, old] = this.cache.entries().next().value!;
+        this.cache.delete(oldest);
+        if (!this.running.has(old)) old.finalize();
+      }
+    }
+    this.running.add(stmt);
     try {
       return fn(stmt);
     } catch (e) {
       if (e instanceof TypeError || e instanceof RangeError) throw e;
       throw sqlError(this.s, this.db, e);
     } finally {
-      stmt.finalize();
+      this.running.delete(stmt);
+      // After a failed step, reset reports the same error again; the original one is already on its way.
+      if (this.cache.get(sql) === stmt && this.db.pointer) stmt.resetNoThrow(true);
+      else if (this.db.pointer) stmt.finalize();
     }
   }
 
@@ -240,6 +276,7 @@ class WasmConnection implements SqlConnection {
   close(): void {
     if (!this.db.pointer) return;
     this.flush();
+    this.forget();
     this.db.close();
   }
 }
@@ -335,7 +372,7 @@ export async function openWasm(path: string): Promise<SqlConnection> {
     bytes,
     persist: (b) => {
       const tmp = `${path}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
-      writeFileSync(tmp, b);
+      writeFileSync(tmp, b, { mode: 0o600 });
       renameSync(tmp, path);
       rmSync(path + "-wal", { force: true });
       rmSync(path + "-shm", { force: true });

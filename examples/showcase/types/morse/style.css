@@ -1,34 +1,54 @@
-.mo-eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: -0.75rem; }
-.mo-letter { font: 600 5.5rem/1 var(--font-mono); text-align: center; margin: 0.5rem 0 0; }
-.mo-letter.is-prosign { width: fit-content; margin: 0.9rem auto 0; line-height: 0.8; border-top: 0.06em solid currentColor; padding-top: 0.02em; }
-.mo-name { text-align: center; color: var(--muted-foreground); font-size: 0.9rem; margin-top: -0.6rem; }
-.mo-tape { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.7rem; min-height: 2.6rem; }
-.mo-tape.long { gap: 0.5rem; }
-.mo-tape.long .mo-sym.dot { width: 0.95rem; height: 0.95rem; }
-.mo-tape.long .mo-sym.dash { width: 2.5rem; height: 0.95rem; }
-.mo-empty { color: var(--muted-foreground); font-size: 0.9rem; }
-.mo-sym { --c: var(--highlight); display: inline-block; height: 1.1rem; border-radius: 999px; background: var(--c);
-  box-shadow: 0 0 6px color-mix(in oklab, var(--c) 80%, transparent), 0 0 18px color-mix(in oklab, var(--c) 45%, transparent); transition: transform 0.12s, filter 0.12s; }
-.mo-sym.dot { width: 1.1rem; }
-.mo-sym.dash { width: 3.3rem; }
-.mo-sym.new { animation: mo-pop 0.28s cubic-bezier(.2, 1.6, .4, 1); }
-.mo-sym.is-ok { --c: var(--success); }
-.mo-sym.is-bad { --c: var(--danger); }
-.mo-sym.is-missed { --c: var(--muted-foreground); opacity: 0.5; box-shadow: none; }
-.mo-sym.lit { filter: brightness(1.6); transform: scale(1.18); }
-@keyframes mo-pop { from { transform: scale(0.2); filter: brightness(2.2); } }
-.mo-pad { display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.6rem; max-width: 26rem; width: 100%; margin: 0 auto; }
-.mo-key { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.55rem; height: 5.5rem; border-radius: var(--radius);
-  border: 1px solid var(--border); background: color-mix(in oklab, var(--foreground) 4%, transparent); color: var(--muted-foreground); cursor: pointer; transition: background 0.1s, transform 0.08s; }
-.mo-key:hover { background: color-mix(in oklab, var(--foreground) 9%, transparent); }
-.mo-key:active, .mo-key.down { transform: scale(0.96); background: color-mix(in oklab, var(--highlight) 18%, transparent); }
-.mo-key small { font-size: 0.75rem; }
-.mo-del { width: 4rem; font-size: 1.3rem; }
-.mo-result { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; text-align: center; }
-.mo-result .e-section-title { margin: 0.3rem 0 -0.2rem; }
-.mo-lamp { flex: none; width: 3rem; height: 3rem; border-radius: 50%; background: color-mix(in oklab, var(--foreground) 10%, transparent); transition: background 0.05s, box-shadow 0.05s; }
-.mo-lamp.on { background: #ffe9a8; box-shadow: 0 0 14px #ffd36a, 0 0 42px color-mix(in oklab, #ffb02e 70%, transparent); }
+/* Etude 3 card look, as in the Design Lab round 06: a grey tracked eyebrow. The verdict pill comes from the study screen. */
+.c3-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted-foreground); }
 
-/* Etude 3 look: a quiet grey eyebrow and the question in the study serif, as in the Design Lab. */
-.sc-eyebrow + .prose, .sc-eyebrow + .uc-prompt .uc-ask, .sc-eyebrow + .bt-ask, .sp-title, .wk-prompt, .cm-ask { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.005em; }
-.sc-eyebrow + .prose code, .wk-prompt code { font-size: 0.8em; }
+.mo:focus { outline: none; }
+.mo { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 8px 0 4px; --ink: var(--foreground); --no: light-dark(#a1382a, #f0937e); }
+[data-mode="result"] .mo { padding-top: 0; }
+.mo-letter { font: 600 120px/1 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; margin: 16px 0 10px; }
+.mo-letter.is-prosign { line-height: 0.8; border-top: 0.06em solid currentColor; padding-top: 0.04em; }
+.mo-name { color: var(--muted-foreground); font-size: 15px; margin: -4px 0 8px; }
+
+/* Dots and dashes: plain ink pills. */
+.mo-code { height: 44px; display: flex; gap: 12px; justify-content: center; align-items: center; }
+.mo-code i { display: block; flex: none; background: var(--ink); border-radius: 999px; }
+.mo-code .dot { width: 16px; height: 16px; }
+.mo-code .dash { width: 50px; height: 16px; }
+.mo-code .new { animation: mo-in 0.22s cubic-bezier(.2, .8, .2, 1); }
+.mo-code.long { gap: 9px; }
+.mo-code.long .dash { width: 40px; }
+.mo-code .ph { color: var(--muted-foreground); font-size: 16px; }
+.mo-code.big .dot { width: 22px; height: 22px; }
+.mo-code.big .dash { width: 68px; height: 22px; }
+.mo-code.big.long .dash { width: 52px; }
+@keyframes mo-in { 0% { transform: scale(0.4); opacity: 0; } 100% { transform: none; opacity: 1; } }
+
+/* The key: one round button you tap for a dot and hold for a dash. */
+.mo-key { all: unset; cursor: pointer; margin: 22px auto 12px; width: 150px; height: 150px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); font: 600 15px var(--font-sans); user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  background: light-dark(#f4f4f2, #222222); box-shadow: 0 6px 0 var(--border), 0 0 0 1px light-dark(var(--border), transparent), 0 14px 30px light-dark(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.45)); transition: transform 0.05s, box-shadow 0.05s; }
+.mo-key:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; }
+.mo-key.down { transform: translateY(5px); box-shadow: 0 1px 0 var(--border), 0 0 0 1px light-dark(var(--border), transparent), 0 8px 18px light-dark(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.45)); }
+.mo-hint { font-size: 15px; color: var(--muted-foreground); display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 30px; }
+.mo-del { all: unset; cursor: pointer; font-size: 17px; line-height: 1; padding: 6px 8px; border-radius: 8px; color: var(--muted-foreground); visibility: hidden; }
+.mo-del.on { visibility: visible; }
+.mo-del:hover { color: var(--ink); background: color-mix(in srgb, var(--foreground) 7%, transparent); }
+
+/* After checking: the right code blinks, yours (when wrong) sits under it in red. */
+.mo-correct { margin-top: 2px; }
+.mo-correct.blink i { animation: mo-bl 2.4s 1s infinite backwards; }
+.mo-correct.blink i:nth-child(2) { animation-delay: 1.25s; }
+.mo-correct.blink i:nth-child(3) { animation-delay: 1.5s; }
+.mo-correct.blink i:nth-child(4) { animation-delay: 1.75s; }
+.mo-correct.blink i:nth-child(5) { animation-delay: 2s; }
+.mo-correct.blink i:nth-child(n+6) { animation-delay: 2.25s; }
+@keyframes mo-bl { 0%, 100% { opacity: 1; } 10% { opacity: 0.25; } }
+.mo-yours { margin-top: 16px; font-size: 15px; color: var(--muted-foreground); display: flex; gap: 12px; justify-content: center; align-items: center; }
+.mo-yours[hidden] { display: none; }
+.mo-sent { height: auto; display: inline-flex; gap: 8px; }
+.mo-sent i { background: var(--no); }
+.mo-sent .dot { width: 12px; height: 12px; }
+.mo-sent .dash { width: 36px; height: 12px; }
+.mo-sub { font-size: 16px; color: var(--muted-foreground); margin-top: 16px; max-width: 52ch; }
+.mo-sub strong { color: var(--ink); }
+
+@media (max-width: 520px) { .mo-letter { font-size: 104px; } .mo-key { width: 140px; height: 140px; } }
+@media (prefers-reduced-motion: reduce) { .mo-correct.blink i, .mo-code .new { animation: none !important; } }

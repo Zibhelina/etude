@@ -1,40 +1,83 @@
-.wk-pad { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem; }
-.wk-pad[hidden] { display: none; }
-.wk-tools { display: flex; align-items: center; gap: 0.35rem; }
-.wk-tools .e-btn { height: 2.25rem; min-width: 2.25rem; padding: 0 0.75rem; font-size: 0.82rem; }
-.wk-tools .e-btn.is-on { background: var(--accent); border-color: var(--foreground); }
-.wk-tools .wk-icon { padding: 0; font-size: 1.05rem; }
-.wk-gap { flex: 1; }
-.wk-canvas {
-  width: 100%; display: block; touch-action: none; cursor: crosshair;
-  border: 1px solid var(--border); border-radius: var(--radius);
-  background: color-mix(in oklab, var(--foreground) 2.5%, transparent);
-}
-.wk-canvas.locked { cursor: default; }
-.wk-row { display: flex; gap: 0.5rem; align-items: stretch; }
-.wk-input { flex: 1; min-width: 0; font-size: 1rem; }
-.wk-toggle { flex: none; height: auto; white-space: nowrap; padding: 0 0.85rem; }
-.wk-toggle[aria-pressed="true"] { background: var(--accent); border-color: var(--foreground); }
-.wk-preview {
-  margin-top: 0.5rem; min-height: 3.4rem; display: flex; align-items: center; justify-content: center;
-  padding: 0.6rem 1rem; border-radius: var(--radius);
-  background: color-mix(in oklab, var(--foreground) 4%, transparent);
-  font-size: 1.3rem; overflow-x: auto; overflow-y: hidden;
-}
-.wk-empty { font-size: 0.9rem; color: var(--muted-foreground); }
-.wk-preview.is-unread { opacity: 0.55; }
-.wk-preview.is-correct { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--success) 60%, transparent); background: color-mix(in oklab, var(--success) 9%, transparent); }
-.wk-preview.is-wrong { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--danger) 60%, transparent); background: color-mix(in oklab, var(--danger) 9%, transparent); }
-.wk-preview.is-partial { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--warning) 60%, transparent); background: color-mix(in oklab, var(--warning) 9%, transparent); }
-.wk-note { font-size: 0.82rem; color: var(--muted-foreground); min-height: 1.2em; margin-top: 0.3rem; text-align: center; }
-.wk-note.is-error { color: var(--warning); }
-.wk-accepted { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center; font-size: 1.15rem; }
-.wk-solution .katex-display { margin: 0.4rem 0; overflow-x: auto; overflow-y: hidden; }
-[data-mode="result"] .wk-row { display: none; }
-@media (max-width: 520px) {
-  .wk-tools .e-btn { height: 2.6rem; min-width: 2.6rem; }
-}
+/* Etude 3 card look, as in the Design Lab round 06: a grey tracked eyebrow. The verdict pill comes from the study screen. */
+.c3-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted-foreground); }
 
-/* Etude 3 look: a quiet grey eyebrow and the question in the study serif, as in the Design Lab. */
-.sc-eyebrow + .prose, .sc-eyebrow + .uc-prompt .uc-ask, .sc-eyebrow + .bt-ask, .sp-title, .wk-prompt, .cm-ask { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.005em; }
-.sc-eyebrow + .prose code, .wk-prompt code { font-size: 0.8em; }
+.wk { --ink: var(--foreground); --fill: light-dark(#f4f4f2, #222222); --surf: light-dark(#ffffff, #222222); --shadow: light-dark(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.45));
+  --gridc: light-dark(rgba(0, 0, 0, 0.075), rgba(255, 255, 255, 0.05)); --ok: light-dark(#1e6b2b, #7ccf8a); --no: light-dark(#a1382a, #f0937e); --green: #3fae52;
+  display: flex; flex-direction: column; padding-top: 8px; }
+
+/* The problem: one line, the math a little bigger than the words. */
+.wk-prompt { margin: 10px 0 4px; font: 600 28px/1.3 var(--font-sans); letter-spacing: -0.015em; color: var(--ink); }
+.wk-prompt p { margin: 0; }
+.wk-prompt .katex { font-size: 1.25em; letter-spacing: 0; }
+.wk-prompt .katex-display { margin: 0.2em 0; text-align: left; }
+.wk-prompt .katex-display > .katex { text-align: left; }
+
+/* Scratchpad: hidden until you ask for it, graph paper, tools floating in the corner. */
+.wk-pad { position: relative; height: 340px; margin-top: 16px; border-radius: 16px; overflow: hidden; background-color: var(--surf);
+  background-image: linear-gradient(var(--gridc) 1px, transparent 1px), linear-gradient(90deg, var(--gridc) 1px, transparent 1px); background-size: 24px 24px; background-position: -1px -1px;
+  box-shadow: 0 1px 2px var(--shadow), 0 0 0 1px light-dark(var(--border), transparent); }
+.wk-pad[hidden] { display: none; }
+.wk-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+.wk-canvas.locked { cursor: default; }
+.wk-ph { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; color: var(--muted-foreground); font-size: 15px; pointer-events: none; opacity: 0.8; }
+.wk-ph:empty { display: none; }
+.wk-tools { position: absolute; top: 10px; right: 10px; display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--background); box-shadow: 0 1px 4px var(--shadow), 0 0 0 1px light-dark(transparent, var(--border)); }
+.wk-t { all: unset; cursor: pointer; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; color: var(--muted-foreground); }
+.wk-t:hover { color: var(--ink); }
+.wk-t.is-on { background: color-mix(in srgb, var(--foreground) 8%, transparent); color: var(--ink); }
+.wk-t:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+
+/* The answer: a filled field with its label inside, the scratchpad switch beside it. */
+.wk-row { display: flex; gap: 10px; align-items: stretch; margin-top: 14px; }
+.wk-ans { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; padding: 6px 6px 6px 16px; border-radius: 14px; background: var(--fill); cursor: text; }
+.wk-ans span { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); }
+.wk-input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); font: 20px "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; padding: 8px 4px; outline: none; }
+.wk-input::placeholder { color: var(--muted-foreground); opacity: 0.7; }
+.wk-toggle { all: unset; cursor: pointer; flex: none; display: inline-flex; align-items: center; gap: 8px; padding: 0 16px; border-radius: 12px; font: 600 15px var(--font-sans); white-space: nowrap; color: var(--ink);
+  background: var(--surf); border: 1.5px solid var(--border); box-shadow: 0 3px 0 var(--border); transition: transform 0.06s, box-shadow 0.06s; user-select: none; }
+.wk-toggle:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--border); }
+.wk-toggle[aria-pressed="true"] { background: color-mix(in srgb, var(--foreground) 8%, var(--surf)); }
+.wk-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.wk-note { font-size: 13px; color: var(--muted-foreground); min-height: 0; margin-top: 6px; text-align: left; }
+.wk-note:empty { display: none; }
+.wk-note.is-error { color: light-dark(#8a6d00, #e0c060); }
+.wk-stuck { all: unset; cursor: pointer; display: block; margin: 14px auto 0; font-size: 14px; color: var(--muted-foreground); }
+.wk-stuck:hover { color: var(--ink); }
+.wk-stuck:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 4px; }
+
+/* After checking */
+.wk-yours { margin-top: 16px; font-size: 15px; color: var(--muted-foreground); }
+.wk-yours:empty { display: none; }
+.wk-yours.ok b { color: var(--ok); }
+.wk-yours.no b { color: var(--no); text-decoration: line-through; }
+.wk-yours b { font-weight: 600; }
+.wk-yours .katex { font-size: 1.08em; }
+.wk-lab { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 8px; }
+.wk-sol { margin-top: 20px; padding: 18px 22px 20px; border-radius: 16px; background: var(--fill); color: var(--ink); }
+/* A solution written as "### Step" headings over display math reads as titled groups. */
+.wk-solution { font-size: 16px; }
+.wk-solution h3 { font: 600 13.5px var(--font-sans); color: var(--muted-foreground); margin: 0 0 6px; letter-spacing: 0; }
+.wk-solution h3:not(:first-child) { margin-top: 18px; }
+.wk-solution p { margin: 0.4em 0; }
+.wk-solution .katex-display { margin: 0 !important; text-align: left !important; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.wk-solution .katex-display::-webkit-scrollbar { display: none; }
+.wk-solution .katex-display > .katex { text-align: left !important; font-size: 1.15em; color: var(--ink); }
+.wk-solution .fbox, .wk-accepted .fbox { border-color: var(--green) !important; border-width: 2px !important; border-radius: 6px; background: color-mix(in srgb, var(--green) 16%, transparent); padding: 2px 8px !important; }
+.wk-accept { margin-top: 20px; }
+.wk-sol ~ .wk-accept { display: none; }
+.wk-accepted { font-size: 1.15rem; }
+.wk-expl { margin-top: 14px; color: var(--muted-foreground); font-size: 15.5px; }
+.wk-shot { margin-top: 22px; }
+.wk-shot[hidden] { display: none; }
+.wk-shot .wk-pad { margin-top: 0; height: auto; box-shadow: none; border-radius: 14px; }
+.wk-shot .wk-canvas { position: relative; }
+
+@media (max-width: 520px) {
+  .wk-prompt { font-size: 22px; }
+  .wk-pad { height: 400px; }
+  .wk-sol { padding: 14px 14px 16px; }
+  .wk-solution .katex-display > .katex { font-size: 1.04em; }
+  /* On a phone the switch is just the pen, so the answer field keeps its width. */
+  .wk-toggle { padding: 0; width: 48px; justify-content: center; }
+  .wk-toggle span { display: none; }
+}

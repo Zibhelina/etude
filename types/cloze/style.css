@@ -1,13 +1,25 @@
-.cloze { line-height: 2.1; }
-.blank { display: inline-flex; align-items: baseline; gap: 0.35rem; vertical-align: baseline; }
-.blank .e-input { width: auto; display: inline-block; padding: 0.15rem 0.45rem; font-size: 0.95rem; line-height: 1.4; }
-.blank .fix { font: 0.9rem var(--font-mono); color: var(--success); }
-.blank .fix:empty { display: none; }
-/* Etude 3 look: the question in the study serif, no rule above the answer. */
-#card > .prose:first-child, #card > .io-header:first-child { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.005em; }
+/* Etude 3 cloze: the sentence in the study serif with typed blanks inside it. After checking, each blank
+   turns into text: green when right, your word struck in red beside the answer when not. */
+#card > .prose.cloze:first-child { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-size: 2rem; line-height: 1.55; letter-spacing: -0.005em; margin-top: 0.4rem; }
 #card > .prose:first-child code { font-size: 0.8em; }
+#card > .prose.cloze.mid:first-child { font-size: 1.5rem; line-height: 1.6; }
+#card > .prose.cloze.long:first-child { font-size: 1.19rem; line-height: 1.7; }
+.blank { display: inline; white-space: nowrap; }
+.blank .e-input { width: auto; min-width: 2.5em; display: inline-block; font: 400 0.82em/1.35 var(--font-sans); color: var(--foreground); background: var(--accent); border: 0; border-bottom: 2px solid var(--muted-foreground); border-radius: 6px 6px 2px 2px; padding: 1px 6px; margin: 0 2px; text-align: center; vertical-align: 2px; box-shadow: none; }
+.blank .e-input:focus { border-bottom-color: var(--foreground); background: var(--card, var(--background)); box-shadow: none; }
+.blank .e-input::placeholder { color: var(--muted-foreground); opacity: 0.7; font-size: 0.8em; }
+[data-mode="result"] .blank .e-input { display: none; }
+.czr { font-weight: 600; padding: 0 3px; border-radius: 5px; animation: czr-in 0.3s ease both; }
+.czr.ok { color: var(--success); background: color-mix(in oklab, var(--good, var(--success)) 12%, transparent); }
+.czr.no { padding: 0; }
+.czr.no s { color: var(--again, var(--danger)); font-weight: 400; text-decoration-thickness: 2px; margin-right: 6px; }
+.czr.no b { font-weight: 600; padding: 0 3px; border-radius: 5px; background: var(--accent); color: var(--foreground); }
+[data-preview="1"] .czr.no b { background: transparent; }
+@keyframes czr-in { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .czr { animation: none; } }
 .e-reveal { border-top: 0; padding-top: 0.25rem; }
-.cloze { line-height: 1.95; }
-.blank .e-input { font-family: var(--font-sans); font-size: 0.8em; background: var(--muted); border: 0; border-bottom: 2px solid var(--muted-foreground); border-radius: 6px 6px 2px 2px; }
-.blank .e-input:focus { border-bottom-color: var(--foreground); box-shadow: none; }
-.blank .fix { font-family: var(--font-sans); font-size: 0.8em; }
+.e-reveal .prose { font-size: 0.97rem; line-height: 1.55; color: var(--muted-foreground); }
+@media (max-width: 560px) {
+  #card > .prose.cloze:first-child { font-size: 1.5rem; }
+  #card > .prose.cloze.mid:first-child, #card > .prose.cloze.long:first-child { font-size: 1.15rem; }
+}

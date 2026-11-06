@@ -1,6 +1,6 @@
 // The engine: one object that owns the database and every operation on it.
 // The HTTP server and the CLI are thin layers over this class.
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
@@ -68,6 +68,28 @@ import { collectFileNames, MAX_MEDIA_BYTES, mediaType } from "./media.ts";
 import { decodeAssets, hashBytes, type AssetInfo } from "./assets.ts";
 import { imagePixels, normalizeBoxes, OcclusionError } from "./occlusion.ts";
 import { DEFAULT_PRIVACY, type Privacy } from "./telemetry.ts";
+import { muted } from "./sync/log.ts";
+
+/** The card columns a canonical replay computes; the rest of a card comes from its registers. */
+const REPLAY_FIELDS = ["state", "due", "stability", "difficulty", "elapsed_days", "scheduled_days", "reps", "lapses", "learning_steps", "last_review", "sched_state"];
+
+/**
+ * The collection is its owner's only: on a shared machine the default umask leaves files readable by everyone. The
+ * database is 0600 (SQLite gives its -wal and -shm the database's mode), and the Etude home (keys, agent files) and the
+ * media folder are 0700. Skipped on Windows, where these modes don't apply, and a no-op in the browser build.
+ */
+function keepPrivate(files: string[], dirs: string[]) {
+  if (process.platform === "win32") return;
+  for (const [list, mode] of [[files, 0o600], [dirs, 0o700]] as const) {
+    for (const f of list) {
+      try {
+        if (existsSync(f)) chmodSync(f, mode);
+      } catch {
+        // Someone else's file, or a file system without modes: leave it.
+      }
+    }
+  }
+}
 
 export class EtudeError extends Error {
   status: number;
@@ -82,6 +104,12 @@ export const BUILTIN_TYPES_DIR = join(ROOT, "types");
 export const BUILTIN_SCHEDULERS_DIR = join(ROOT, "schedulers");
 
 const now = () => new Date();
+/** How long a deck tree is reused while the collection doesn't change: its counts move as cards come due. */
+const DECK_TREE_MS = 30_000;
+/** A card as the study queue reads it. */
+type QueueRow = CardRow & { ord: number; deck: string; type: string };
+/** The cards a deck scope can study and today's answers, read once for many decks (see `queueSource`). */
+type QueueSource = { at: Date; cards(deck: string): QueueRow[]; answers(deck: string): { id: number; face: string; state: number; deck: string }[] };
 const iso = (d = now()) => d.toISOString();
 const json = (v: unknown) => JSON.stringify(v ?? null);
 
@@ -374,6 +402,7 @@ export class Etude {
     const media = path === ":memory:" ? join(process.env.TMPDIR ?? "/tmp", `etude-media-${process.pid}`) : join(dirname(path), "media");
     const home = resolve(opts.home ?? process.env.ETUDE_HOME ?? join(homedir(), ".etude"));
     const e = new Etude(db, media, path, home);
+    if (path !== ":memory:") keepPrivate([path, `${path}-wal`, `${path}-shm`], [home, media]);
     e.syncBuiltinTypes(opts.builtinTypesDir ?? BUILTIN_TYPES_DIR);
     e.syncBuiltinSchedulers(opts.builtinSchedulersDir ?? BUILTIN_SCHEDULERS_DIR);
     // Rows saved by an older version (still running elsewhere, or restored) have blank titles and search text.
@@ -382,25 +411,32 @@ export class Etude {
   }
 
   close() {
+    for (const fn of this.closing.splice(0)) fn();
     this.db.close();
+  }
+  private closing: (() => void)[] = [];
+  /** Runs `fn` when the collection closes, before the database does (background work that should stop). */
+  onClose(fn: () => void) {
+    this.closing.push(fn);
   }
 
   /**
    * Drops in-memory caches and rebuilds the stored item columns, after the database was changed
    * underneath (an undo restore, which may come from a snapshot taken before those columns existed).
    */
-  invalidateCaches() {
+  invalidateCaches(scope?: { items: Iterable<string> }) {
+    this.deckTrees.clear();
     this.typeCache.clear();
     this.leftovers = null;
     this.schedulerCache.clear();
-    this.reindexItems();
+    this.reindexItems(scope ? { ids: scope.items } : {});
   }
 
   /**
-   * Rewrites the stored title and search text of every item (or only `type`'s items, or only blank
-   * ones), for when what they derive from changed: a type's definition, or the derivation itself.
+   * Rewrites the stored title and search text of every item (or only `type`'s items, only blank ones,
+   * or only `ids`), for when what they derive from changed: a type's definition, or the derivation itself.
    */
-  private reindexItems(scope: { type?: CardTypeDef; blank?: boolean } = {}) {
+  private reindexItems(scope: { type?: CardTypeDef; blank?: boolean; ids?: Iterable<string> } = {}) {
     const only = scope.type;
     const defs = new Map<string, CardTypeDef | null>(only ? [[only.id, only]] : []);
     const defFor = (id: string) => {
@@ -413,9 +449,11 @@ export class Etude {
       }
       return defs.get(id)!;
     };
-    const rows = only
-      ? this.db.all("SELECT id, type, fields, title, search FROM items WHERE type = ?", only.id)
-      : this.db.all(`SELECT id, type, fields, title, search FROM items${scope.blank ? " WHERE title = '' AND search = ''" : ""}`);
+    const rows = scope.ids
+      ? [...scope.ids].flatMap((id) => this.db.all("SELECT id, type, fields, title, search FROM items WHERE id = ?", id))
+      : only
+        ? this.db.all("SELECT id, type, fields, title, search FROM items WHERE type = ?", only.id)
+        : this.db.all(`SELECT id, type, fields, title, search FROM items${scope.blank ? " WHERE title = '' AND search = ''" : ""}`);
     const changed: [string, string, string][] = [];
     for (const r of rows) {
       const fields = parse<Record<string, unknown>>(r.fields, {});
@@ -423,7 +461,7 @@ export class Etude {
       const search = itemSearchText(fields);
       if (title !== r.title || search !== r.search) changed.push([title, search, r.id]);
     }
-    const all = !only && !scope.blank;
+    const all = !only && !scope.blank && !scope.ids;
     // Most opens change nothing; skip the write lock then.
     if (!changed.length && !all) return;
     this.db.tx(() => {
@@ -759,11 +797,10 @@ export class Etude {
     return { deleted: id, selected };
   }
 
-  /** Start of the current study day, in local time. */
-  dayStart(at = now()): Date {
-    const h = this.settings().dayStartHour;
+  /** Start of the current study day, in local time. `hour`: the day's start, for a caller that already read it. */
+  dayStart(at = now(), hour = this.settings().dayStartHour): Date {
     const d = new Date(at);
-    d.setHours(h, 0, 0, 0);
+    d.setHours(hour, 0, 0, 0);
     if (d > at) d.setDate(d.getDate() - 1);
     return d;
   }
@@ -923,7 +960,7 @@ export class Etude {
     const sc: ScriptCard = { state: parse(card.sched_state ?? null, null), reps: card.reps, due: card.due, lastReview: card.last_review, created: card.created ?? card.due };
     const ctx: ScriptCtx = { now: iso(t), day: this.dayStarts(t), doneToday, history: history.map((h) => ({ at: h.ts, rating: h.rating || null, score: h.score })) };
     try {
-      return runSchedule(def, sc, attempt, resolveOptions(def, cfg.schedulerOptions), ctx);
+      return runSchedule(def, sc, attempt, resolveOptions(def, cfg.schedulerOptions), ctx, sched.cardKey(card));
     } catch (e) {
       if (e instanceof SchedulerError || e instanceof ScriptError) throw new EtudeError(`scheduler "${def.id}": ${e.message}`);
       throw e;
@@ -1193,7 +1230,7 @@ export class Etude {
         };
         this.replayCards(
           this.db
-            .all(`SELECT c.id, c.item_id, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE i.type = ?`, clean.id)
+            .all(`SELECT c.*, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE i.type = ?`, clean.id)
             .filter((c) => follows(c.deck)),
         );
       }
@@ -2240,12 +2277,15 @@ export class Etude {
 
   // ----------------------------------------------------------------- study
 
-  private scopeWhere(scope: StudyScope): { where: string; params: any[]; cfg: PresetConfig } {
+  /** `deck`: the deck's name as stored, which a name in another case resolves to. */
+  private scopeWhere(scope: StudyScope): { where: string; params: any[]; cfg: PresetConfig; deck?: string } {
     const parts: string[] = ["i.archived = 0", "d.archived = 0", "c.suspended = 0"];
     const params: any[] = [];
     let cfg: PresetConfig;
+    let deck: string | undefined;
     if (scope.deck) {
       const d = this.deckRow(scope.deck);
+      deck = d.name;
       parts.push("(d.name = ? OR d.name LIKE ? ESCAPE '\\')");
       params.push(d.name, d.name.replace(/[\\%_]/g, "\\$&") + "::%");
       cfg = this.configFor(d.name);
@@ -2255,7 +2295,7 @@ export class Etude {
       parts.push(`(${c.where})`);
       params.push(...c.params);
     }
-    return { where: parts.join(" AND "), params, cfg };
+    return { where: parts.join(" AND "), params, cfg, deck };
   }
 
   /**
@@ -2299,16 +2339,23 @@ export class Etude {
   }
 
   /** The queue for a deck or search right now: learning, due reviews and today's new cards, in order. */
-  queue(scope: StudyScope) {
-    const t = now();
-    const { where, params, cfg: scopeCfg } = this.scopeWhere(scope);
+  /**
+   * `src`: the deck tree's one read of every card and of today's answers, for a deck scope. Without it the
+   * queue reads its own; the queue it builds is the same either way.
+   */
+  queue(scope: StudyScope, src?: QueueSource) {
+    if (src && (!scope.deck || scope.query || scope.placement || scope.ahead)) src = undefined;
+    const t = src?.at ?? now();
+    const { where, params, cfg: scopeCfg, deck } = this.scopeWhere(scope);
     let cfg = scopeCfg;
     const from = "FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
-    const rows = this.db.all(
-      `SELECT c.*, i.ord, i.type, d.name AS deck ${from} WHERE ${where} AND (c.buried_until IS NULL OR c.buried_until <= ?)`,
-      ...params,
-      iso(t),
-    ) as (CardRow & { ord: number; deck: string; type: string })[];
+    const rows = src
+      ? src.cards(deck!)
+      : (this.db.all(
+          `SELECT c.*, i.ord, i.type, d.name AS deck ${from} WHERE ${where} AND (c.buried_until IS NULL OR c.buried_until <= ?)`,
+          ...params,
+          iso(t),
+        ) as QueueRow[]);
     // Watch decks are tours, not study: their cards never enter the queue.
     const watching = new Map<string, boolean>();
     const watch = (deck: string) => {
@@ -2317,11 +2364,13 @@ export class Etude {
     };
     for (let i = rows.length - 1; i >= 0; i--) if (watch(rows[i].deck)) rows.splice(i, 1);
     const dayStart = iso(this.dayStart(t));
-    const done = this.db.get(
-      `SELECT SUM(r.state = 0) AS new, SUM(r.state = 2) AS rev FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.ts >= ? AND ${where}`,
-      dayStart,
-      ...params,
-    )!;
+    const done = src
+      ? src.answers(deck!).reduce((n, r) => ((n.new += +(r.state === 0)), (n.rev += +(r.state === 2)), n), { new: 0, rev: 0 })
+      : this.db.get(
+          `SELECT SUM(r.state = 0) AS new, SUM(r.state = 2) AS rev FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.ts >= ? AND ${where}`,
+          dayStart,
+          ...params,
+        )!;
     const doneNew = Number(done.new ?? 0), doneRev = Number(done.rev ?? 0);
     const nowIso = iso(t);
     const aheadIso = iso(new Date(t.getTime() + this.settings().learnAheadMinutes * 60_000));
@@ -2357,12 +2406,14 @@ export class Etude {
       reviews.sort((a, b) => hashString(day + a.id) - hashString(day + b.id));
     } else reviews.sort((a, b) => a.due.localeCompare(b.due));
     // Today's answers against the limits. An adaptive deck's limits are for all of it, whichever subdeck is open.
-    const limits = root ? this.scopeWhere({ deck: root }) : { where, params };
-    const answered = this.db.all<{ id: number; face: string; state: number }>(
-      `SELECT c.id, c.face, r.state FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.state IN (0, 2) AND r.ts >= ? AND ${limits.where}`,
-      dayStart,
-      ...limits.params,
-    );
+    const limits = root ? this.scopeWhere({ deck: root }) : { where, params, deck };
+    const answered = src
+      ? src.answers(limits.deck!).filter((r) => r.state === 0 || r.state === 2).map(({ id, face, state }) => ({ id, face, state }))
+      : this.db.all<{ id: number; face: string; state: number }>(
+          `SELECT c.id, c.face, r.state FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.state IN (0, 2) AND r.ts >= ? AND ${limits.where}`,
+          dayStart,
+          ...limits.params,
+        );
     reviews = reviews.slice(0, Math.max(0, cfg.reviewsPerDay - answered.filter((r) => r.state === 2).length));
 
     // A new card given a later due date (setDue) waits until then.
@@ -2401,8 +2452,36 @@ export class Etude {
     return { learning, reviews, news, doneNew, doneRev, cfg, nowIso, nextLater, ahead: false };
   }
 
-  counts(scope: StudyScope) {
-    const q = this.queue(scope);
+  /**
+   * Every card a deck scope can study, read once, with today's answers, for building many decks' queues: the same
+   * filter as `scopeWhere` for a deck (SQLite's LIKE ignores ASCII case, so a subdeck is matched the same way).
+   */
+  private queueSource(): QueueSource {
+    const at = now();
+    const base = "i.archived = 0 AND d.archived = 0 AND c.suspended = 0";
+    const from = "FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id";
+    const byDeck = <T extends { deck: string }>(list: T[]) => {
+      const m = new Map<string, T[]>();
+      for (const r of list) {
+        const l = m.get(r.deck);
+        if (l) l.push(r);
+        else m.set(r.deck, [r]);
+      }
+      return m;
+    };
+    const cards = byDeck(this.db.all(`SELECT c.*, i.ord, i.type, d.name AS deck ${from} WHERE ${base} AND (c.buried_until IS NULL OR c.buried_until <= ?)`, iso(at)) as QueueRow[]);
+    const answers = byDeck(this.db.all<{ id: number; face: string; state: number; deck: string }>(`SELECT c.id, c.face, r.state, d.name AS deck FROM reviews r JOIN cards c ON c.id = r.card_id JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE r.practice = 0 AND r.ts >= ? AND ${base}`, iso(this.dayStart(at))));
+    const lower = (s: string) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
+    const names = [...new Set([...cards.keys(), ...answers.keys()])].map((n) => [n, lower(n)] as const);
+    const within = (deck: string) => {
+      const prefix = lower(deck) + "::";
+      return names.filter(([n, l]) => n === deck || l.startsWith(prefix)).map(([n]) => n);
+    };
+    return { at, cards: (deck) => within(deck).flatMap((n) => cards.get(n) ?? []), answers: (deck) => within(deck).flatMap((n) => answers.get(n) ?? []) };
+  }
+
+  counts(scope: StudyScope, src?: QueueSource) {
+    const q = this.queue(scope, src);
     return {
       new: q.news.length,
       learning: q.ahead ? q.learning.length : q.learning.filter((c) => c.due <= q.nowIso).length,
@@ -2854,9 +2933,19 @@ export class Etude {
     });
   }
 
-  /** Undoes the most recent review: the card returns to exactly its previous state. */
+  /**
+   * Undoes the most recent review made on this device: the card returns to exactly its previous state. Reviews that came from
+   * another device through sync are left alone, even when they arrived after this device's own.
+   */
   undo(): { cardId: number; itemId: string } | null {
-    const r = this.db.get("SELECT * FROM reviews ORDER BY id DESC LIMIT 1");
+    // In a synced collection a review's `/card_id` register never changes, so its stamp names the device that made it. A review
+    // without registers hasn't been synced yet, so it was made here.
+    const synced = !!this.db.get("SELECT 1 FROM sqlite_master WHERE name='sync_control'");
+    const r = synced
+      ? this.db.get(
+          "SELECT r.* FROM reviews r WHERE NOT EXISTS (SELECT 1 FROM sync_registers g WHERE g.tbl='reviews' AND g.key=r.sync_id AND g.field='/card_id' AND json_extract(g.stamp,'$[2]')<>(SELECT device FROM sync_control WHERE id=1)) ORDER BY r.id DESC LIMIT 1",
+        )
+      : this.db.get("SELECT * FROM reviews ORDER BY id DESC LIMIT 1");
     if (!r) return null;
     return this.db.tx(() => {
       if (!r.practice) {
@@ -2875,31 +2964,69 @@ export class Etude {
     });
   }
 
-  /** Canonical sync replay uses UTC study days, a stable review tie-break and no FSRS fuzz. */
-  replaySyncedCards() {
-    for (const c of this.db.all("SELECT c.*,i.created,i.type,d.name AS deck FROM cards c JOIN items i ON i.id=c.item_id JOIN decks d ON d.id=i.deck_id")) {
-      const cfg = { ...this.cardConfig(c.deck, c.type), enableFuzz: false };
-      const script = this.scriptFor(cfg);
+  /**
+   * Canonical sync replay uses UTC study days, a stable review tie-break, and FSRS fuzz seeded by the card and review number. Without a scope
+   * every card is replayed from its first review. A scope maps card ids to the earliest changed review
+   * (time, sync id), or null for "from the first review": a card whose changes all come after the last
+   * review it was replayed to continues from the state saved then (`sync_replay`).
+   */
+  replaySyncedCards(scope?: Map<number, [string, string] | null>) {
+    // The result is canonical already: it isn't marked for another replay.
+    muted(this.db, () => this.replay(scope));
+  }
+
+  private replay(scope?: Map<number, [string, string] | null>) {
+    const base = "SELECT c.*,i.created,i.type,d.name AS deck FROM cards c JOIN items i ON i.id=c.item_id JOIN decks d ON d.id=i.deck_id";
+    const cards = scope ? [...scope.keys()].flatMap((id) => this.db.all(`${base} WHERE c.id=?`, id)) : this.db.all(base);
+    if (!scope) this.db.run("DELETE FROM sync_replay");
+    const dayStartHour = this.settings().dayStartHour;
+    const configs = new Map<string, { cfg: PresetConfig; script: SchedulerDef | null }>();
+    for (const c of cards) {
+      const ck = `${c.deck}\u0000${c.type}`;
+      if (!configs.has(ck)) {
+        const cfg = this.cardConfig(c.deck, c.type);
+        configs.set(ck, { cfg, script: this.scriptFor(cfg) });
+      }
+      const { cfg, script } = configs.get(ck)!;
       let row: any = { ...c, ...sched.emptyCard(new Date(c.sync_reset ?? c.created)), sched_state: null };
-      const history: { at: string; rating: number | null; score: number | null }[] = [];
-      const reviews = this.db.all("SELECT r.*,a.grade FROM reviews r LEFT JOIN attempts a ON a.id=r.attempt_id WHERE r.card_id=? ORDER BY r.ts,r.sync_id",c.id);
+      let history: { at: string; rating: number | null; score: number | null }[] = [];
+      let last: [string, string] | null = null;
+      const saved = scope ? this.db.get("SELECT ts,review,row FROM sync_replay WHERE card=?", c.sync_id) : undefined;
+      const from = scope?.get(c.id);
+      const resume = !!saved && !!from && (saved.ts === null || from[0] > saved.ts || (from[0] === saved.ts && from[1] > saved.review));
+      if (resume) {
+        row = { ...row, ...JSON.parse(saved.row) };
+        if (saved.ts !== null) {
+          last = [saved.ts, saved.review];
+          if (script) history = this.db.all("SELECT ts,rating,score FROM reviews WHERE card_id=? AND practice=0 AND (? IS NULL OR ts>?) AND (ts,sync_id)<=(?,?) ORDER BY ts DESC,sync_id DESC LIMIT 50", c.id, c.sync_reset, c.sync_reset, saved.ts, saved.review).reverse().map((r) => ({ at: r.ts, rating: r.rating || null, score: r.score }));
+        }
+      }
+      const reviews = last
+        ? this.db.all("SELECT r.*,a.grade FROM reviews r LEFT JOIN attempts a ON a.id=r.attempt_id WHERE r.card_id=? AND (r.ts,r.sync_id)>(?,?) ORDER BY r.ts,r.sync_id", c.id, last[0], last[1])
+        : this.db.all("SELECT r.*,a.grade FROM reviews r LEFT JOIN attempts a ON a.id=r.attempt_id WHERE r.card_id=? ORDER BY r.ts,r.sync_id", c.id);
       for (const r of reviews) {
         const before = json(row);
         if (!r.practice && (!c.sync_reset || r.ts > c.sync_reset)) {
           if (script) {
             const g = parse<Grade | null>(r.grade,null);
             const start = new Date(r.ts);
-            start.setUTCHours(this.settings().dayStartHour,0,0,0);
+            start.setUTCHours(dayStartHour,0,0,0);
             if (start > new Date(r.ts)) start.setUTCDate(start.getUTCDate()-1);
             const day = Array.from({length:DAY_HORIZON+1},(_,i) => new Date(start.getTime()+i*86400_000).toISOString());
             const past = history.slice(-50);
-            const out = runSchedule(script,{state:parse(row.sched_state,null),reps:row.reps,due:row.due,lastReview:row.last_review,created:c.created},{rating:script.ratings === false ? null : r.rating || null,score:r.score,verdict:g?.verdict ?? null,details:g?.details ?? null,ms:r.duration_ms,at:r.ts},resolveOptions(script,cfg.schedulerOptions),{now:r.ts,day,doneToday:past.filter(h=>h.at>=day[0]).length,history:past});
-            row = {...row,state:2,due:out.due,reps:row.reps+1,lapses:row.lapses+(r.rating===1?1:0),last_review:r.ts,sched_state:json(out.state)};
+            const out = runSchedule(script,{state:parse(row.sched_state,null),reps:row.reps,due:row.due,lastReview:row.last_review,created:c.created},{rating:script.ratings === false ? null : r.rating || null,score:r.score,verdict:g?.verdict ?? null,details:g?.details ?? null,ms:r.duration_ms,at:r.ts},resolveOptions(script,cfg.schedulerOptions),{now:r.ts,day,doneToday:past.filter(h=>h.at>=day[0]).length,history:past},sched.cardKey(c as CardRow));
+            // The day counts rate() keeps for a script's card.
+            const days = (a: string | null, b: string) => (a ? Math.max(0, (Date.parse(b) - Date.parse(a)) / 86400_000) : 0);
+            row = {...row,state:2,due:out.due,elapsed_days:days(row.last_review,r.ts),scheduled_days:days(r.ts,out.due),reps:row.reps+1,lapses:row.lapses+(r.rating===1?1:0),last_review:r.ts,sched_state:json(out.state)};
           } else row = {...row,...sched.schedule(row,r.rating || sched.suggestRating(r.score,cfg) || 3,new Date(r.ts),cfg).next};
           history.push({at:r.ts,rating:r.rating || null,score:r.score});
+          if (history.length > 100) history = history.slice(-50);
         }
         this.db.run("UPDATE reviews SET state=?,card_before=?,due_after=? WHERE id=?",JSON.parse(before).state,before,row.due,r.id);
+        last = [r.ts, r.sync_id];
       }
+      const state = Object.fromEntries(REPLAY_FIELDS.map((k) => [k, row[k]]));
+      this.db.run("INSERT INTO sync_replay VALUES(?,?,?,?) ON CONFLICT(card) DO UPDATE SET ts=excluded.ts,review=excluded.review,row=excluded.row", c.sync_id, last?.[0] ?? null, last?.[1] ?? null, json(state));
       if (c.sync_due && (!row.last_review || c.sync_due_at >= row.last_review)) { row.due=c.sync_due;row.scheduled_days=row.last_review?Math.max(0,Math.round((Date.parse(c.sync_due)-Date.parse(row.last_review))/86400_000)):0; }
       this.db.run("UPDATE cards SET state=?,due=?,stability=?,difficulty=?,elapsed_days=?,scheduled_days=?,reps=?,lapses=?,learning_steps=?,last_review=?,sched_state=? WHERE id=?",row.state,row.due,row.stability,row.difficulty,row.elapsed_days,row.scheduled_days,row.reps,row.lapses,row.learning_steps,row.last_review,row.sched_state,c.id);
     }
@@ -2908,23 +3035,29 @@ export class Etude {
   /** Recomputes cards from their review history with the current settings, e.g. after changing retention. */
   reschedule(scope: StudyScope = {}) {
     const { where, params } = this.scopeWhere({ ...scope });
-    return this.replayCards(this.db.all(`SELECT c.id, c.item_id, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${where.replace("c.suspended = 0", "1")}`, ...params));
+    return this.replayCards(this.db.all(`SELECT c.*, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${where.replace("c.suspended = 0", "1")}`, ...params));
   }
 
   private replayCards(cards: Row[]) {
     let n = 0;
+    // In a synced collection, follow the sync replay: tied reviews in sync-id order, and history from a card's reset on.
+    const synced = !!this.db.get("SELECT 1 FROM sqlite_master WHERE name='sync_control'");
     this.db.tx(() => {
       for (const c of cards) {
+        const reset: string | null = synced ? (c.sync_reset ?? null) : null;
         const reviews = this.db.all<{ ts: string; rating: number; score: number | null; duration_ms: number | null; grade: string | null }>(
-          "SELECT r.ts, r.rating, r.score, r.duration_ms, a.grade FROM reviews r LEFT JOIN attempts a ON a.id = r.attempt_id WHERE r.card_id = ? AND r.practice = 0 ORDER BY r.ts",
+          `SELECT r.ts, r.rating, r.score, r.duration_ms, a.grade FROM reviews r LEFT JOIN attempts a ON a.id = r.attempt_id WHERE r.card_id = ? AND r.practice = 0 AND (? IS NULL OR r.ts > ?) ORDER BY r.ts${synced ? ", r.sync_id" : ""}`,
           c.id,
+          reset,
+          reset,
         );
         if (!reviews.length) continue;
+        const start = new Date(reset ?? c.created);
         const cfg = this.cardConfig(c.deck, c.type);
         const script = this.scriptFor(cfg);
         if (script) {
           // Same script, same history: run it again answer by answer.
-          let row: CardRow = { ...(sched.emptyCard(new Date(c.created)) as any), id: c.id, item_id: c.item_id, face: "", suspended: 0, buried_until: null, sched_state: null };
+          let row: CardRow = { ...(sched.emptyCard(start) as any), id: c.id, item_id: c.item_id, face: c.face, sync_id: c.sync_id, suspended: 0, buried_until: null, sched_state: null };
           // runScheduler reads earlier results from the table, so each step looks just before its own review.
           for (const r of reviews) {
             const g = parse<Grade | null>(r.grade, null);
@@ -2939,7 +3072,7 @@ export class Etude {
         } else {
           // A drill's unrated answers count as the rating their score suggests.
           const rated = reviews.map((r) => ({ ts: r.ts, rating: r.rating >= 1 ? r.rating : (sched.suggestRating(r.score, cfg) ?? 3) }));
-          const s = sched.replay(rated, new Date(c.created), cfg);
+          const s = sched.replay(rated, start, cfg, sched.cardKey(c as CardRow));
           this.db.run(
             "UPDATE cards SET state = ?, due = ?, stability = ?, difficulty = ?, elapsed_days = ?, scheduled_days = ?, reps = ?, lapses = ?, learning_steps = ?, last_review = ?, sched_state = NULL WHERE id = ?",
             s.state, s.due, s.stability, s.difficulty, s.elapsed_days, s.scheduled_days, s.reps, s.lapses, s.learning_steps, s.last_review, c.id,
@@ -3045,7 +3178,7 @@ export class Etude {
       out.applied = true;
       if (opts.reschedule) {
         out.rescheduled = this.replayCards(
-          this.db.all(`SELECT c.id, c.item_id, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE d.id IN (${marks})`, ...ids),
+          this.db.all(`SELECT c.*, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE d.id IN (${marks})`, ...ids),
         ).rescheduled;
       }
     }
@@ -3101,9 +3234,24 @@ export class Etude {
     return final.map((r) => r.name);
   }
 
+  /**
+   * Every page asks for the deck tree, and its counts build each deck's study queue. It's reused while nothing in
+   * the collection changed (here or through another connection) and for at most DECK_TREE_MS, as cards come due.
+   */
   deckTree(opts: { archived?: boolean } = {}) {
-    const decks = this.orderedDecks(!!opts.archived);
+    const archived = !!opts.archived, t = now().getTime(), hit = this.deckTrees.get(archived);
+    if (hit && t - hit.at >= 0 && t - hit.at < DECK_TREE_MS && hit.stamp === this.db.changeStamp()) return hit.tree;
+    const tree = this.buildDeckTree(archived);
+    this.deckTrees.set(archived, { tree, at: t, stamp: this.db.changeStamp() });
+    return tree;
+  }
+  private deckTrees = new Map<boolean, { tree: ReturnType<Etude["buildDeckTree"]>; at: number; stamp: string }>();
+
+  private buildDeckTree(archived: boolean) {
+    const decks = this.orderedDecks(archived);
     const t = now();
+    // Read once on the first deck with cards: every deck's counts come from it.
+    let src: QueueSource | undefined;
     const totals = new Map(
       this.db
         .all("SELECT i.deck_id, COUNT(*) AS cards, SUM(c.state = 0) AS new, SUM(c.suspended) AS suspended FROM cards c JOIN items i ON i.id = c.item_id WHERE i.archived = 0 GROUP BY i.deck_id")
@@ -3117,7 +3265,7 @@ export class Etude {
         cards += Number(tt?.cards ?? 0);
         unseen += Number(tt?.new ?? 0);
       }
-      const counts = cards ? this.counts({ deck: d.name }) : { new: 0, learning: 0, learningSoon: 0, review: 0, doneToday: 0, nextDue: null };
+      const counts = cards ? this.counts({ deck: d.name }, (src ??= this.queueSource())) : { new: 0, learning: 0, learningSoon: 0, review: 0, doneToday: 0, nextDue: null };
       const cfg = this.configFor(d.name);
       return { ...this.deckFromRow(d), depth: deckParts(d.name).length - 1, cards, unseen, ...counts, deadline: cfg.deadline ?? null, mode: cfg.mode, at: iso(t) };
     });
@@ -3237,8 +3385,10 @@ export class Etude {
         if (c.stability >= 21) states.mature++;
       }
     }
+    // Read once: settings come from the database, and this runs for every review.
+    const dayHour = this.settings().dayStartHour;
     const dayKey = (ts: string | Date) => {
-      const ds = this.dayStart(new Date(ts));
+      const ds = this.dayStart(new Date(ts), dayHour);
       return `${ds.getFullYear()}-${String(ds.getMonth() + 1).padStart(2, "0")}-${String(ds.getDate()).padStart(2, "0")}`;
     };
     // Calendar days can be 23 or 25 hours long, so step by date, not by 24 h.

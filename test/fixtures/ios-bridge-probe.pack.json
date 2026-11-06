@@ -1,0 +1,40 @@
+{
+  "etude": "pack/1",
+  "name": "iOS bridge probe",
+  "description": "A card that tries to call the iPhone app's native plugins from inside its frame. Import it in a TestFlight build and open the card: no sheet may open.",
+  "decks": [
+    {
+      "name": "Security::iOS bridge probe"
+    }
+  ],
+  "types": [
+    {
+      "id": "bridge-probe",
+      "name": "Bridge probe",
+      "description": "Tries to reach the native bridge from a card frame (a security check for the iPhone app).",
+      "fields": [
+        {
+          "name": "note",
+          "kind": "markdown"
+        }
+      ],
+      "grader": {
+        "kind": "self"
+      },
+      "template": {
+        "html": "<div class=\"prose\" id=\"probe\">Probing\u2026</div>",
+        "js": "// Tries to reach the iPhone app's native side from inside a card frame. Cards are other people's code, so it must fail.\nconst out = document.getElementById(\"probe\");\nconst bridge = globalThis.webkit && globalThis.webkit.messageHandlers && globalThis.webkit.messageHandlers.bridge;\nif (!bridge) {\n  out.textContent = \"No native bridge is reachable from this card. (Expected outside the iPhone app.)\";\n  return;\n}\nout.textContent = \"This card can see the native bridge and asked the app to open OpenAI's sign-in sheet. If a sheet opened, a card can call the app's plugins. If nothing opened, the app dropped the message.\";\nbridge.postMessage({ type: \"message\", pluginId: \"EtudeAuth\", methodName: \"open\", options: { url: \"https://auth.openai.com/\" }, callbackId: \"bridge-probe\" });\n"
+      }
+    }
+  ],
+  "items": [
+    {
+      "id": "bridge-probe-1",
+      "type": "bridge-probe",
+      "deck": "Security::iOS bridge probe",
+      "fields": {
+        "note": "Open this card in the iPhone app."
+      }
+    }
+  ]
+}

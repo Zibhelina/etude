@@ -28,3 +28,28 @@ test("wasm driver: two connections to one file see each other's writes and don't
   assert.deepEqual(c.prepare("SELECT id FROM t ORDER BY id").all().map((r: any) => r.id), ["y"], "x stays deleted");
   c.close();
 });
+
+// Db and the wasm driver keep compiled statements. A statement must come back clean after an
+// error, keep the error's code, and work when SQL running inside it (an SQL function) asks for it again.
+for (const driver of ["node", "wasm"] as const) {
+  test(`${driver} driver: reused statements keep errors, bindings and nested use apart`, async () => {
+    const { Db } = await import("../src/core/db.ts");
+    const db = await Db.open(":memory:", driver);
+    try {
+      db.sql.exec("CREATE TABLE u (id TEXT PRIMARY KEY)");
+      db.run("INSERT INTO u VALUES (?)", "a");
+      assert.throws(() => db.run("INSERT INTO u VALUES (?)", "a"), (e: any) => e.code === "ERR_SQLITE_ERROR" && /UNIQUE/.test(e.message));
+      db.run("INSERT INTO u VALUES (?)", "b");
+      assert.deepEqual(db.all("SELECT id FROM u ORDER BY id").map((r) => r.id), ["a", "b"]);
+      assert.equal(db.get("SELECT count(*) n FROM u WHERE id = ?", "a")!.n, 1);
+      assert.equal(db.get("SELECT count(*) n FROM u WHERE id = ?", "zz")!.n, 0);
+      db.sql.function("depth", { deterministic: false }, (n: any) => (Number(n) > 0 ? db.get("SELECT depth(?) + 1 AS v", Number(n) - 1)!.v : 0));
+      assert.equal(db.get("SELECT depth(?) + 1 AS v", 3)!.v, 4);
+      // A schema change recompiles what was cached for the table.
+      db.sql.exec("ALTER TABLE u ADD COLUMN note TEXT DEFAULT 'x'");
+      assert.deepEqual({ ...db.get("SELECT * FROM u WHERE id = ?", "a")! }, { id: "a", note: "x" });
+    } finally {
+      db.close();
+    }
+  });
+}

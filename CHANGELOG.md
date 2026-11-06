@@ -1,5 +1,36 @@
 # Changelog
 
+## 3.0.3
+
+- **Pages open faster on a big collection.** The deck list, which every page shows, counts every deck from one read of the collection and is kept until something changes (or for half a minute, as cards come due); statistics read the day's start once instead of once per review; and the account part of Settings asks the Sync server in two steps instead of four, once for the whole page.
+- **The web edition opens in a moment, however much media you have.** It used to read every media file into memory as it opened (seconds, and as much memory as the files take); now it lists them and reads each one when it's needed. A page no longer waits while media files from a sync are written, and opening the app no longer makes Sync hash every media file again.
+- The web edition's Settings → Data → Clean up lists media in subfolders too.
+- **Undo takes your own last review.** After a sync, Undo (and Previous card in Study) could take back a rating that had just arrived from another device instead of the one you made here. It now takes the last review made on this device, and says there's nothing to undo when there isn't one.
+- **Editing a card in Browse keeps your place.** Typing in a field no longer scrolls the card panel back to the top or takes the cursor out of the field while the preview follows your edit.
+- **Anki cloze notes to Etude's cloze type:** `etude anki cloze` rewrites Anki's `{{c1::answer::hint}}` as Etude's `{{answer::hint}}` and keeps every hint, also one that repeats the answer (the base form a drill asks you to change). `--slash-alternatives` makes `in/into` accept either.
+
+## 3.0.2
+
+- **Card sounds keep playing from card to card.** Since 3.0.1, in Study a card's sound could stop a moment in and every later card stay silent until you left the deck, in the desktop app, Chrome and Edge (a Chromium bug). Card sound now plays through the card's own audio output, so it keeps going; card types can also play a sound with `etude.play(url)`.
+- **Sync takes time in proportion to what changed, not to the size of the collection.** Only the cards, items and decks that changed are written, and only the cards whose history or settings changed are rescheduled. With 5,000 cards and 50,000 reviews, syncing a review made on another device takes about 0.1 s instead of 19 s, a sync with nothing new about 0.1 s instead of 1.6 s, and a new device's first sync about 14 s instead of 40 s. The first sync after updating rebuilds the collection once.
+- **Fuzz works with Sync.** The deck's Fuzz option spreads the cards you learn together over a few days again, also when you sync; Sync used to turn it off, so those cards came back together and a date changed minutes after the session, when the sync ran. The spread now depends on the card and how many times it has been reviewed, not on the moment, so every device gives a card the same date and the rating buttons show the date the card then gets (they could differ by a day before). Dates move once, at the first sync after you update. Until all your devices are updated, one still on the older version can show different dates for the same cards; what syncs doesn't change, so they agree again once all are updated. A scheduler script's `Math.random()` now differs between cards too, and Reschedule in a synced collection starts a reset card from its reset.
+- **Sync shows your collection first.** Decks, cards and history from your other devices appear as soon as they arrive, and your own reviews go up right away; pictures and sounds follow in the background, with their own progress in Settings → Sync. Until a picture arrives, a card shows "Image on its way" in its place instead of a broken image, and swaps in the picture as soon as it's here, without reloading. A media file that fails no longer stops the sync: the collection is up to date and the file is tried again next time. `etude sync now` still waits for the media before it exits.
+- Sync: closing the app in the middle of a download no longer leaves half a file, which could have been sent to your other devices as an edit.
+- Sync: media files are looked at only when something changed (and every ten minutes, for a file edited in place), files Etude stored aren't read to check them, and media are no longer copied into the collection database: the copy made by earlier versions is removed when you update. A sync folder's event files are read once each.
+- **Two-step sign-in, ready in the app.** Once Etude's Sync server offers it, Settings → Account turns it on with an authenticator app, and signing in by email then also asks for a code from the app or a recovery code. Until then nothing changes.
+- **Security:**
+  - On a Mac or Linux computer shared with other users, your collection, its media and the assistant's files can be read only by you.
+  - A card type whose script called itself without end could stop every grading script until you restarted Etude; now only that script fails.
+  - A card's script errors no longer go out in error reports, a card in the web edition and the phone apps reads only its own type's files, and in the desktop app a card can't send its frame to another site.
+  - In the iPhone app, a card can no longer reach the app's own functions.
+  - The privacy policy now covers Market comments, likes and dislikes, reports and blocks.
+
+## 3.0.1
+
+- **Cards move like the Design Lab ones.** A self-rated card turns over to its back in one continuous turn, in Study and in Watch (the Showcase used to just swap). When you check an answer, the card glides into its result: what stays moves to its new place, what's new fades up in turn. Between cards the one you rated flies off and the next rises from the deck, in Watch too. Any card type gets this; games with their own result screen keep theirs, and a type can turn it off with `etude.morph = false`.
+- **The built-in types have the Etude 3 look:** a big serif question on basic cards; typed and numeric answers with what you wrote struck through when it's wrong; choices lettered A, B, C; cloze blanks typed inside the sentence; math as a work-it-out card with one Answer field, help behind ?, a scratchpad on a computer or tablet and I'm stuck; code with a flat editor, the pass count and Your code / Reference tabs; drawing with a pen that follows pressure and your drawing beside the reference.
+- **Showcase:** the map is a rounded sheet with a faint grid and one zoom pill, and flies to the answer; Morse has one key you tap for a dot and hold for a dash; Work it out keeps its scratchpad behind a switch and shows the solution in two steps.
+
 ## 3.0.0
 
 - **Etude 3: every screen is new.** A white Snow theme by day and a neutral grey Night by dark (System follows the device and is the default for new installs), a green that only marks the main button, the εtude wordmark in ink, and a scrollbar that shows only while you scroll.

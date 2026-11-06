@@ -104,7 +104,7 @@ ${html}</div>
 // The card runtime, exactly as the app serves it.
 const rt = join(out, "runtime");
 mkdirSync(join(rt, "vendor"), { recursive: true });
-for (const f of ["runtime.js", "card.css", "code.css", "mathexpr.js"]) cpSync(join(root, "runtime", f), join(rt, f));
+for (const f of ["runtime.js", "card.css", "code.css", "mathexpr.js", "audio.js"]) cpSync(join(root, "runtime", f), join(rt, f));
 const katexDist = join(dirname(require.resolve("katex/package.json")), "dist");
 cpSync(join(katexDist, "katex.mjs"), join(rt, "vendor/katex.js"));
 cpSync(join(katexDist, "katex.min.css"), join(rt, "vendor/katex.css"));

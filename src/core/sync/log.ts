@@ -10,8 +10,14 @@ export const compare = (a: Stamp, b: Stamp) => a[0] - b[0] || a[1] - b[1] || a[2
 export type Change = { v: 1; table: string; key: string; stamp: Stamp; fields: Record<string, unknown>; deleted?: boolean };
 export const TABLES = ["presets", "decks", "types", "schedulers", "type_folders", "type_placement", "items", "cards", "attempts", "reviews", "tag_meta", "settings", "type_assets"];
 const UUID_TABLES = ["decks", "cards", "attempts", "reviews"];
+/** The card columns that sync; the schedule is replayed from reviews instead. */
+const CARD_FIELDS = ["item_id", "face", "suspended", "buried_until", "sync_reset", "sync_due", "sync_due_at"];
 const q = (s: string) => `'${s.replaceAll("'", "''")}'`;
 const id = (s: string) => `"${s}"`;
+/** Register fields that point at another entity. The partial index needs this exact term in each query that uses it. */
+const REF = "field IN ('/deck_id','/preset_id','/item_id','/card_id','/review_id','/attempt_id','/type')";
+/** Fields a card's schedule depends on, by table. A change to one is recorded with its key, so the projection replays the cards it reaches. */
+export const SCHEDULING: Record<string, string[]> = { decks: ["/name", "/preset_id", "/config"], presets: ["/config"], items: ["/deck_id", "/type", "/created"], types: ["/def/scheduler", "/def/schedulerOptions"], settings: ["/value/dayStartHour"] };
 const SETTINGS = new Set(["dayStartHour", "learnAheadMinutes", "theme", "themes", "typePrefs", "fun"]);
 export const safeSettings = (s: any) => Object.fromEntries(Object.entries(s ?? {}).filter(([k]) => SETTINGS.has(k)));
 
@@ -48,6 +54,9 @@ export function install(db: Db) {
     CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sync_blobs (hash TEXT PRIMARY KEY, name TEXT NOT NULL, bytes BLOB);
     CREATE INDEX IF NOT EXISTS sync_events_unsent ON sync_events(id) WHERE sent=0;
+    CREATE TABLE IF NOT EXISTS sync_dirty (tbl TEXT NOT NULL, key TEXT NOT NULL, field TEXT NOT NULL DEFAULT '', PRIMARY KEY(tbl,key,field)) WITHOUT ROWID;
+    CREATE INDEX IF NOT EXISTS sync_registers_ref ON sync_registers(tbl,field,value) WHERE ${REF};
+    CREATE TABLE IF NOT EXISTS sync_replay (card TEXT PRIMARY KEY, ts TEXT, review TEXT, row TEXT NOT NULL);
     INSERT OR IGNORE INTO sync_control(id,device) VALUES(1,lower(hex(randomblob(16))));`);
   for (const table of UUID_TABLES) {
     if (!db.all(`PRAGMA table_info(${table})`).some(r => r.name === "sync_id")) db.sql.exec(`ALTER TABLE ${table} ADD COLUMN sync_id TEXT`);
@@ -55,6 +64,16 @@ export function install(db: Db) {
     db.sql.exec(`CREATE UNIQUE INDEX IF NOT EXISTS sync_${table}_uid ON ${table}(sync_id)`);
   }
   for (const col of ["sync_reset", "sync_due", "sync_due_at"]) if (!db.all("PRAGMA table_info(cards)").some(r=>r.name===col)) db.sql.exec(`ALTER TABLE cards ADD COLUMN ${col} TEXT`);
+  // A schedule changed here (a review with fuzz, a reschedule) is replayed canonically at the next sync.
+  db.sql.exec(`CREATE TRIGGER IF NOT EXISTS sync_cards_replay AFTER UPDATE OF state,due,stability,difficulty,elapsed_days,scheduled_days,reps,lapses,learning_steps,last_review,sched_state ON cards
+    WHEN (SELECT applying FROM sync_control WHERE id=1)=0 AND NEW.sync_id IS NOT NULL BEGIN INSERT OR IGNORE INTO sync_dirty VALUES('replay',NEW.sync_id,''); END;`);
+  // Media bytes used to be kept here too; they're on disk. Type assets keep theirs for the projection.
+  if (!db.get("SELECT 1 FROM sync_meta WHERE key='media_bytes'")) db.tx(() => {
+    db.run("DELETE FROM sync_blobs WHERE hash NOT IN (SELECT json_extract(value,'$') FROM sync_registers WHERE tbl='type_assets' AND field='/hash') AND hash NOT IN (SELECT hash FROM type_assets)");
+    db.run("INSERT INTO sync_meta VALUES('media_bytes','false')");
+  });
+  // Before the card trigger listed its columns, every review fired it.
+  if (!db.get("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='sync_cards_update' AND sql LIKE '%UPDATE OF%'")) db.sql.exec("DROP TRIGGER IF EXISTS sync_cards_update");
   for (const table of TABLES) {
     for (const op of ["INSERT", "UPDATE", "DELETE"]) {
       const p = op === "DELETE" ? "OLD" : "NEW";
@@ -66,7 +85,7 @@ export function install(db: Db) {
       const selectRow = uid && op === "INSERT" ? rowExpr(db, table, "s") : row;
       const selectKey = uid && op === "INSERT" ? "s.sync_id" : key;
       const from = uid && op === "INSERT" ? ` FROM ${table} s WHERE s.id=NEW.id` : "";
-      db.sql.exec(`CREATE TRIGGER IF NOT EXISTS sync_${table}_${op.toLowerCase()} AFTER ${op} ON ${table}
+      db.sql.exec(`CREATE TRIGGER IF NOT EXISTS sync_${table}_${op.toLowerCase()} AFTER ${op}${table === "cards" && op === "UPDATE" ? ` OF ${CARD_FIELDS.join(",")}` : ""} ON ${table}
         WHEN (SELECT applying FROM sync_control WHERE id=1)=0 AND ${op === "UPDATE" && ["types","schedulers"].includes(table) ? "(NEW.builtin=0 OR OLD.builtin=0)" : allowed(table, p)} ${uid && op === "UPDATE" ? "AND OLD.sync_id IS NOT NULL" : ""} ${op === "DELETE" && ["attempts","reviews"].includes(table) ? "AND EXISTS(SELECT 1 FROM cards WHERE id=OLD.card_id)" : ""}
         BEGIN ${assign} UPDATE sync_control SET counter=CASE WHEN wall>=CAST(unixepoch('subsec')*1000 AS INTEGER) THEN counter+1 ELSE 0 END,wall=MAX(wall,CAST(unixepoch('subsec')*1000 AS INTEGER)) WHERE id=1;
         INSERT INTO sync_outbox(tbl,key,old,value,wall,counter) SELECT ${q(table)},${selectKey},${op === "UPDATE" ? rowExpr(db, table, "OLD") : "NULL"},${op === "DELETE" ? "NULL" : selectRow},(SELECT wall FROM sync_control WHERE id=1),(SELECT counter FROM sync_control WHERE id=1)${from}; END;`);
@@ -100,20 +119,28 @@ function normal(table: string, raw: Row) {
     r.tags = Object.fromEntries((JSON.parse(r.tags) as string[]).map(t => [t, true]));
     delete r.title; delete r.search;
   }
-  if (table === "cards") for (const k of Object.keys(r)) if (!["item_id", "face", "suspended", "buried_until", "sync_reset", "sync_due", "sync_due_at"].includes(k)) delete r[k];
+  if (table === "cards") for (const k of Object.keys(r)) if (!CARD_FIELDS.includes(k)) delete r[k];
   if (table === "reviews") { delete r.card_before; delete r.due_after; delete r.state; }
   return flatten(r);
 }
+/** Merges an event into the registers. A key whose registers changed is marked for projection in the same transaction. */
 export function apply(db: Db, event: Change) {
   if (event.v !== 1 || !TABLES.concat("media", "blob").includes(event.table) || !Array.isArray(event.stamp) || event.stamp.length !== 3) throw new Error("unsupported sync event");
+  let changed = false;
+  const marks = new Set<string>(), watched = SCHEDULING[event.table];
   if (event.deleted) {
     const old = db.get("SELECT stamp FROM sync_deleted WHERE tbl=? AND key=?", event.table, event.key);
-    if (!old || compare(event.stamp, JSON.parse(old.stamp)) > 0) db.run("INSERT INTO sync_deleted VALUES(?,?,?) ON CONFLICT(tbl,key) DO UPDATE SET stamp=excluded.stamp", event.table, event.key, JSON.stringify(event.stamp));
+    if (!old || compare(event.stamp, JSON.parse(old.stamp)) > 0) { db.run("INSERT INTO sync_deleted VALUES(?,?,?) ON CONFLICT(tbl,key) DO UPDATE SET stamp=excluded.stamp", event.table, event.key, JSON.stringify(event.stamp)); changed = true; }
   }
   for (const [field, value] of Object.entries(event.fields)) {
     const old = db.get("SELECT stamp FROM sync_registers WHERE tbl=? AND key=? AND field=?", event.table, event.key, field);
-    if (!old || compare(event.stamp, JSON.parse(old.stamp)) > 0) db.run("INSERT INTO sync_registers VALUES(?,?,?,?,?) ON CONFLICT(tbl,key,field) DO UPDATE SET value=excluded.value,stamp=excluded.stamp", event.table, event.key, field, JSON.stringify(value), JSON.stringify(event.stamp));
+    if (!old || compare(event.stamp, JSON.parse(old.stamp)) > 0) {
+      db.run("INSERT INTO sync_registers VALUES(?,?,?,?,?) ON CONFLICT(tbl,key,field) DO UPDATE SET value=excluded.value,stamp=excluded.stamp", event.table, event.key, field, JSON.stringify(value), JSON.stringify(event.stamp));
+      changed = true;
+      for (const w of watched ?? []) if (field === w || field.startsWith(w + "/")) marks.add(w);
+    }
   }
+  if (changed) for (const field of ["", ...marks]) db.run("INSERT OR IGNORE INTO sync_dirty VALUES(?,?,?)", event.table, event.key, field);
 }
 export function localEvent(db: Db, table: string, key: string, fields: Record<string, unknown>, deleted = false, captured?: Stamp) {
   const c = db.get("SELECT * FROM sync_control WHERE id=1")!;
@@ -148,24 +175,43 @@ export function receive(db: Db, eventId: string, event: Change) {
   });
   return true;
 }
+const UNSAFE = ["__proto__", "constructor", "prototype"];
+/** Sets one register on a row being rebuilt. Fields come in length order, so parents come before their leaves. */
+function assign(row: Row, field: string, value: string) {
+  const parts = field.split("/").slice(1).map((s: string) => s.replaceAll("~1", "/").replaceAll("~0", "~"));
+  let obj = row;
+  for (const p of parts.slice(0,-1)) {
+    if (UNSAFE.includes(p)) throw new Error("invalid sync field");
+    if (!obj[p] || typeof obj[p] !== "object" || Array.isArray(obj[p])) obj[p] = {};
+    obj = obj[p];
+  }
+  const leaf = parts.at(-1)!;
+  if (UNSAFE.includes(leaf)) throw new Error("invalid sync field");
+  const v = JSON.parse(value);
+  if (v?.__etude_sync_deleted__ === true) delete obj[leaf];
+  else obj[leaf] = v;
+}
+/** Every live row of a table, rebuilt from its registers, in key order. */
 export function rows(db: Db, table: string): Map<string, Row> {
   const out = new Map<string, Row>();
   for (const r of db.all("SELECT key,field,value FROM sync_registers WHERE tbl=? ORDER BY key,length(field),field", table)) {
     const row = out.get(r.key) ?? {};
     out.set(r.key, row);
-    const parts = r.field.split("/").slice(1).map((s: string) => s.replaceAll("~1", "/").replaceAll("~0", "~"));
-    let obj = row;
-    for (const p of parts.slice(0,-1)) {
-      if (["__proto__", "constructor", "prototype"].includes(p)) throw new Error("invalid sync field");
-      if (!obj[p] || typeof obj[p] !== "object" || Array.isArray(obj[p])) obj[p] = {};
-      obj = obj[p];
-    }
-    const leaf = parts.at(-1)!;
-    if (["__proto__", "constructor", "prototype"].includes(leaf)) throw new Error("invalid sync field");
-    const value = JSON.parse(r.value);
-    if (value?.__etude_sync_deleted__ === true) delete obj[leaf];
-    else obj[leaf] = value;
+    assign(row, r.field, r.value);
   }
   for (const r of db.all("SELECT key FROM sync_deleted WHERE tbl=?", table)) out.delete(r.key);
   return out;
+}
+/** One row rebuilt from its registers, or null when it has none or was deleted. Builds the same object `rows` does. */
+export function rowFor(db: Db, table: string, key: string): Row | null {
+  if (db.get("SELECT 1 FROM sync_deleted WHERE tbl=? AND key=?", table, key)) return null;
+  const regs = db.all("SELECT field,value FROM sync_registers WHERE tbl=? AND key=? ORDER BY length(field),field", table, key);
+  if (!regs.length) return null;
+  const row: Row = {};
+  for (const r of regs) assign(row, r.field, r.value);
+  return row;
+}
+/** Keys of `table` whose register `field` points at `target`. */
+export function referring(db: Db, table: string, field: string, target: string): string[] {
+  return db.all(`SELECT key FROM sync_registers WHERE tbl=? AND field=? AND value=? AND ${REF}`, table, field, JSON.stringify(target)).map(r => r.key);
 }

@@ -9,6 +9,7 @@ import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { DEFAULT_SETTINGS, Etude, EtudeError, type StudyScope } from "../core/engine.ts";
+import { ScriptError } from "../core/sandbox.ts";
 import { chatProviderKeyEnv } from "../core/ai.ts";
 import { chatGptNativeHost, readChatGptHostId } from "../core/chatgpt.ts";
 import { DEFAULT_PRESET, type Rating } from "../core/model.ts";
@@ -177,6 +178,9 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     }
     if (err instanceof AgentError) return c.json({ error: err.message }, err.status as 400);
     if (err instanceof UpdateError) return c.json({ error: err.message, details: err.details }, err.status as 400);
+    // A card type's own script failing (prepare, a generator, a grader) is the deck's problem, not a bug in Etude, and
+    // its message carries the card's ids and text: answered, never sent as an error report.
+    if (err instanceof ScriptError) return c.json({ error: err.message }, 422);
     console.error(err);
     // A bug in the core (not a refusal): an anonymous error report, when they're on (src/core/telemetry.ts).
     try {
@@ -817,8 +821,10 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     if (!full.startsWith(resolve(etude.mediaDir) + sep)) return c.text("not found", 404);
     c.header("Content-Security-Policy", "default-src 'none'; sandbox");
     c.header("X-Content-Type-Options", "nosniff");
+    // A file that isn't here may still be on its way from another device: never keep the miss.
+    if (!existsSync(full) || !statSync(full).isFile()) return c.text("not found", 404, { "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" });
     // Card frames have an opaque origin, and @font-face needs CORS even for same-origin paths.
-    return sendFile(c, full, { cors: true, mime: mediaType(full)?.mime, cache: rel.startsWith("files/") ? "public, max-age=31536000, immutable" : undefined });
+    return sendFile(c, full, { cors: true, mime: mediaType(full)?.mime, cache: rel.startsWith(`files${sep}`) ? "public, max-age=31536000, immutable" : undefined });
   });
 
   // ----------------------------------------------------------- web app

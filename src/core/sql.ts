@@ -25,6 +25,8 @@ export interface SqlConnection {
   serialize?(): Uint8Array;
   /** WebAssembly only: attach an SQLite file image under `schema`. */
   attachImage?(schema: string, bytes: Uint8Array): void;
+  /** WebAssembly under Node only: how many times another writer's file was loaded in, which SQLite's own counters don't see. */
+  readonly reloads?: number;
 }
 
 export type SqlDriver = "node" | "wasm";

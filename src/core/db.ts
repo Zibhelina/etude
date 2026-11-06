@@ -1,8 +1,11 @@
-import { openSql, type SqlConnection, type SqlDriver, type SqlValue } from "./sql.ts";
+import { openSql, type SqlConnection, type SqlDriver, type SqlStatement, type SqlValue } from "./sql.ts";
 import { registerSearchFunctions } from "./query.ts";
 import { install as installSync } from "./sync/log.ts";
 
 const SCHEMA_VERSION = 1;
+
+/** Compiled statements kept per connection. */
+const STATEMENT_CACHE = 200;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (
@@ -187,15 +190,34 @@ export class Db {
   }
 
   all<T = Row>(query: string, ...params: SqlValue[]): T[] {
-    return this.sql.prepare(query).all(...params) as T[];
+    return this.use(query, (s) => s.all(...params) as T[]);
   }
 
   get<T = Row>(query: string, ...params: SqlValue[]): T | undefined {
-    return this.sql.prepare(query).get(...params) as T | undefined;
+    return this.use(query, (s) => s.get(...params) as T | undefined);
   }
 
   run(query: string, ...params: SqlValue[]) {
-    return this.sql.prepare(query).run(...params);
+    return this.use(query, (s) => s.run(...params));
+  }
+
+  /** Compiled statements by SQL text, least recently used first. Some SQL is built per call, so the map is capped. */
+  private statements = new Map<string, SqlStatement>();
+  private running = new Set<SqlStatement>();
+  private use<T>(query: string, fn: (s: SqlStatement) => T): T {
+    let s = this.statements.get(query);
+    if (s) this.statements.delete(query);
+    else s = this.sql.prepare(query);
+    this.statements.set(query, s);
+    if (this.statements.size > STATEMENT_CACHE) this.statements.delete(this.statements.keys().next().value!);
+    // The same statement asked for again while it runs (from an SQL function) gets its own copy.
+    if (this.running.has(s)) return fn(this.sql.prepare(query));
+    this.running.add(s);
+    try {
+      return fn(s);
+    } finally {
+      this.running.delete(s);
+    }
   }
 
   /**
@@ -204,7 +226,7 @@ export class Db {
    */
   changeStamp(): string {
     const r = this.get<{ d: number; t: number }>("SELECT (SELECT data_version FROM pragma_data_version) AS d, total_changes() AS t")!;
-    return `${r.d}:${r.t}`;
+    return `${r.d}:${r.t}:${this.sql.reloads ?? 0}`;
   }
 
   /** Runs `fn` in a transaction; nested calls join the outer one. */

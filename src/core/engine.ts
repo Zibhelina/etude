@@ -116,16 +116,21 @@ const json = (v: unknown) => JSON.stringify(v ?? null);
 export const normDeck = (name: string) => deckParts(name).join("::");
 export const normTag = (t: string) => t.trim().replace(/\s+/g, "-").split("::").filter(Boolean).join("::");
 
-/** A deck icon as stored: `art:<id>`, `emoji:<emoji>`, or null. Empty or "none" clears it. */
+/**
+ * A deck icon as stored: `art:<id>`, `emoji:<emoji>`, `media:files/<sha256>.<ext>` (an image in the collection's media),
+ * `none` (no badge at all), or null (the default: the count rings). Empty or "default" clears it to null.
+ */
 export function deckIcon(v: unknown): string | null {
   if (v === null || v === undefined) return null;
   const s = String(v).trim();
-  if (!s || s === "none") return null;
+  if (!s || s === "default") return null;
+  if (s === "none") return "none";
   if (/^art:[a-z0-9][a-z0-9-]{0,39}$/.test(s)) return s;
+  if (/^media:files\/[0-9a-f]{64}\.(?:png|jpg|gif|webp|avif|svg|bmp)$/.test(s)) return s;
   const m = /^emoji:(.+)$/su.exec(s);
   // One emoji, which can be several code points (flags, skin tones, joined sequences).
   if (m && [...m[1]].length <= 12 && /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(m[1]) && !/[\s\p{L}\p{N}]/u.test(m[1].replace(/[\u{1F1E6}-\u{1F1FF}]/gu, ""))) return `emoji:${m[1]}`;
-  throw new EtudeError(`deck icon must be art:<id>, emoji:<emoji> or none, got "${s.slice(0, 40)}"`);
+  throw new EtudeError(`deck icon must be default, none, art:<id>, emoji:<emoji> or media:files/<image>, got "${s.slice(0, 40)}"`);
 }
 
 export interface Settings {

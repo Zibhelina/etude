@@ -18,9 +18,9 @@ export const DECK_ART: { name: string; icons: { id: string; label: string }[] }[
 
 export const EMOJI_SUGGESTIONS = ["📚", "🧠", "🌍", "🗺️", "🇯🇵", "🇫🇷", "🇪🇸", "🇧🇷", "🧪", "⚗️", "🧬", "🔭", "⚛️", "🧮", "📐", "📈", "💻", "🐍", "🔐", "🎹", "🎸", "🎨", "🎬", "📷", "♟️", "🎲", "⚽", "🏋️", "🍳", "🌱", "🐾", "🦴", "🫀", "💊", "⚖️", "🏛️", "📜", "✈️", "🚗", "💰", "💡", "✍️", "🗣️", "🎧", "⭐", "🔥", "❤️", "🎓"];
 
-export type DeckIconValue = { kind: "art"; id: string; src: string } | { kind: "emoji"; emoji: string } | null;
+export type DeckIconValue = { kind: "art"; id: string; src: string } | { kind: "emoji"; emoji: string } | { kind: "media"; src: string } | null;
 
-/** Reads a stored icon (`art:<id>` or `emoji:<emoji>`); unknown art reads as none. */
+/** Reads a stored icon (`art:<id>`, `emoji:<emoji>` or `media:files/<image>`); unknown art, `none` and the default read as no picture. */
 export function parseDeckIcon(icon: string | null | undefined): DeckIconValue {
   if (!icon) return null;
   if (icon.startsWith("art:")) {
@@ -28,7 +28,13 @@ export function parseDeckIcon(icon: string | null | undefined): DeckIconValue {
     return src ? { kind: "art", id: icon.slice(4), src } : null;
   }
   if (icon.startsWith("emoji:")) return { kind: "emoji", emoji: icon.slice(6) };
+  if (/^media:files\/[0-9a-f]{64}\.[a-z]+$/.test(icon)) return { kind: "media", src: `/media/${icon.slice(6)}` };
   return null;
 }
+
+/** `none` turns the badge off: no picture and no count rings. */
+export const noBadge = (icon: string | null | undefined) => icon === "none";
+/** The deck shows a picture of its own (art, emoji or an image), not the count rings. */
+export const hasPicture = (icon: string | null | undefined) => !!parseDeckIcon(icon);
 
 export const artUrl = url;

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useFunMode } from "@/lib/fun";
 import { Mark } from "@/components/phone-shell";
 import { DeckIcon } from "@/components/deck-icon";
+import { hasPicture } from "@/lib/deck-icons";
 import { leafOf } from "@/components/move-deck";
 import cheer from "@/assets/library/minimi-cheer.webp";
 
@@ -78,7 +79,7 @@ export function SessionCard({ decks, stats, phone }: { decks: DeckNode[]; stats:
           {shown.map((d) => (
             <li key={d.id} className="col-span-4 grid grid-cols-subgrid">
               <button onClick={() => navigate(`/study?deck=${encodeURIComponent(d.name)}`)} className={cn(ROW, "group w-full rounded-lg text-left")}>
-                <span className="flex w-6 justify-center">{d.icon ? <DeckIcon icon={d.icon} size={24} /> : <span className="size-1.5 rounded-full bg-muted-foreground/40" />}</span>
+                <span className="flex w-6 justify-center">{hasPicture(d.icon) ? <DeckIcon icon={d.icon} size={24} /> : <span className="size-1.5 rounded-full bg-muted-foreground/40" />}</span>
                 <span className="truncate group-hover:underline">{leafOf(d.name)}</span>
                 <Bar d={d} max={max} />
                 <span className="text-right text-muted-foreground tabular">{work(d)}</span>

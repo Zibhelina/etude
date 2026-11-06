@@ -778,3 +778,16 @@ body.browse-resizing iframe { pointer-events: none; }
 .hs-arrow.gone { opacity: 0; pointer-events: none; }
 @media (hover: none), (pointer: coarse) { .hs-arrow { display: none; } }
 @media (prefers-reduced-motion: reduce) { .hs-arrow { transition: none; } }
+
+/* Change icon dialog: sliding tab pill, body that grows to its content, content sliding in from the tab's side. */
+.icon-tab-pill { transition: transform 320ms cubic-bezier(0.3, 0.8, 0.2, 1), width 320ms cubic-bezier(0.3, 0.8, 0.2, 1); }
+.icon-body { transition: height 300ms cubic-bezier(0.3, 0.8, 0.2, 1); }
+.icon-tab-in { animation: icon-tab-in 280ms cubic-bezier(0.3, 0.8, 0.2, 1) both; }
+.icon-slot { transition: width 280ms cubic-bezier(0.3, 0.8, 0.2, 1), margin 280ms cubic-bezier(0.3, 0.8, 0.2, 1); }
+.icon-pop { animation: icon-pop 300ms cubic-bezier(0.3, 1.5, 0.5, 1) both; }
+@keyframes icon-tab-in { from { opacity: 0; transform: translateX(var(--dx, 0)); } to { opacity: 1; transform: none; } }
+@keyframes icon-pop { from { opacity: 0; transform: scale(0.7); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .icon-tab-pill, .icon-body, .icon-slot { transition: none; }
+  .icon-tab-in, .icon-pop { animation: none; }
+}

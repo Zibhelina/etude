@@ -190,7 +190,10 @@ async function http(id: number, r: { method: string; url: string; headers: Recor
     body = new TextEncoder().encode(JSON.stringify(j)).buffer as ArrayBuffer;
     delete headers["content-length"];
   }
-  await flush();
+  // A change is on disk before it's answered. A read only starts the writes: media files coming in from the sync
+  // would otherwise hold every page until all of them were written.
+  if (r.method === "GET" || r.method === "HEAD") flush().catch(() => {}); // a write that fails shows at the next change
+  else await flush();
   post({ id, ok: true, value: { status: res.status, headers, body } }, [body]);
 }
 

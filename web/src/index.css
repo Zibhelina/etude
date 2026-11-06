@@ -213,8 +213,10 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
 .agent-panel-in { animation: agent-panel-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .agent-sheet-in { animation: agent-sheet-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .agent-rise { animation: agent-rise 200ms ease-out both; }
+@keyframes agent-breathe { 50% { transform: scaleY(1.025) translateY(-1px); } }
+.agent-breathe { transform-origin: 50% 100%; animation: agent-breathe 3.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .agent-panel-in, .agent-sheet-in, .agent-rise { animation: none; }
+  .agent-panel-in, .agent-sheet-in, .agent-rise, .agent-breathe { animation: none; }
 }
 .agent-prose { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .agent-prose p { margin: 0.45em 0; }

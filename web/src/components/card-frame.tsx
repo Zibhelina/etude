@@ -212,6 +212,13 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
             post({ type: "bytes", req, error: "not allowed" });
             break;
           }
+          // A card reads its own type's assets, not another type's (an unsaved preview has no type to hold it to).
+          const assetType = /^\/type-assets\/([^/?#]+)\//.exec(path)?.[1];
+          const own = typeOfSrc(p.src);
+          if (assetType && own && decodeURIComponent(assetType) !== own) {
+            post({ type: "bytes", req, error: "not allowed" });
+            break;
+          }
           etudeFetch(path)
             .then(async (r) => {
               const body = await r.arrayBuffer();

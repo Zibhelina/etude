@@ -114,6 +114,8 @@ export interface SearchLookup {
   fieldNames?(key: string): string[];
   /** Ids of the cards `is:leftover` finds. */
   leftoverCards?(): number[];
+  /** Start of the next study day: `is:due` takes a review card due before it, as the study queue does. Without it, `now`. */
+  tomorrow?: Date;
 }
 
 export function compile(query: string, now = new Date(), lookup: SearchLookup = {}): Compiled {
@@ -156,7 +158,8 @@ export function compile(query: string, now = new Date(), lookup: SearchLookup = 
           case "learn": return "c.state IN (1, 3)";
           case "review": return "c.state = 2";
           case "relearning": return "c.state = 3";
-          case "due": params.push(iso); return "(c.state != 0 AND c.due <= ?)";
+          // As the queue: a review card on its study day, a learning card at its time.
+          case "due": params.push((lookup.tomorrow ?? now).toISOString(), iso); return "((c.state = 2 AND c.due < ?) OR (c.state IN (1, 3) AND c.due <= ?))";
           case "suspended": return "c.suspended = 1";
           case "buried": params.push(iso); return "(c.buried_until IS NOT NULL AND c.buried_until > ?)";
           case "archived": mentionsArchived = true; return "i.archived = 1";

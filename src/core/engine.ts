@@ -109,7 +109,7 @@ const DECK_TREE_MS = 30_000;
 /** A card as the study queue reads it. */
 type QueueRow = CardRow & { ord: number; deck: string; type: string };
 /** The cards a deck scope can study and today's answers, read once for many decks (see `queueSource`). */
-type QueueSource = { at: Date; cards(deck: string): QueueRow[]; answers(deck: string): { id: number; face: string; state: number; deck: string }[] };
+type QueueSource = { at: Date; cards(deck: string): QueueRow[]; answers(deck: string): { id: number; face: string; state: number; deck: string }[]; byDay: Map<string, boolean> };
 const iso = (d = now()) => d.toISOString();
 const json = (v: unknown) => JSON.stringify(v ?? null);
 
@@ -803,6 +803,27 @@ export class Etude {
     d.setHours(hour, 0, 0, 0);
     if (d > at) d.setDate(d.getDate() - 1);
     return d;
+  }
+
+  /** Start of the study day after the one `at` is in: a review card due before it is due today. */
+  nextDayStart(at = now(), hour = this.settings().dayStartHour): Date {
+    const d = this.dayStart(at, hour);
+    d.setDate(d.getDate() + 1);
+    return d;
+  }
+
+  /**
+   * Whether a deck's cards of a type are due by study day once in review, like Anki's: FSRS and rated
+   * scripts (Leitner) are; a drill (a script without ratings) keeps the exact time its script returned.
+   * `cache` keeps the answer per deck and type for a caller that asks for many cards.
+   */
+  private dueByDay(deck: string, type: string, cache?: Map<string, boolean>): boolean {
+    const key = `${deck}\0${type}`;
+    const hit = cache?.get(key);
+    if (hit !== undefined) return hit;
+    const v = this.scriptFor(this.cardConfig(deck, type))?.ratings !== false;
+    cache?.set(key, v);
+    return v;
   }
 
   // -------------------------------------------------------------- schedulers
@@ -2034,7 +2055,8 @@ export class Etude {
       return [...names];
     };
     try {
-      return compile(query, new Date(), { fieldNames, leftoverCards: () => this.leftoverCards().map((c) => c.cardId) });
+      const at = new Date();
+      return compile(query, at, { fieldNames, leftoverCards: () => this.leftoverCards().map((c) => c.cardId), tomorrow: this.nextDayStart(at) });
     } catch (e) {
       if (e instanceof QueryError) throw new EtudeError(`search: ${e.message}`);
       throw e;
@@ -2363,7 +2385,11 @@ export class Etude {
       return watching.get(deck)!;
     };
     for (let i = rows.length - 1; i >= 0; i--) if (watch(rows[i].deck)) rows.splice(i, 1);
-    const dayStart = iso(this.dayStart(t));
+    // Review cards are due by study day, like Anki's: one due at any time today (or earlier) is in today's queue
+    // from the start of the day. Learning cards keep their exact time (minutes), and new cards their set date.
+    const hour = this.settings().dayStartHour;
+    const dayStart = iso(this.dayStart(t, hour));
+    const tomorrowIso = iso(this.nextDayStart(t, hour));
     const done = src
       ? src.answers(deck!).reduce((n, r) => ((n.new += +(r.state === 0)), (n.rev += +(r.state === 2)), n), { new: 0, rev: 0 })
       : this.db.get(
@@ -2390,7 +2416,9 @@ export class Etude {
       return { learning, reviews, news, doneNew, doneRev, cfg, nowIso, nextLater: null as string | null, ahead: true };
     }
     const learning = rows.filter((c) => (c.state === 1 || c.state === 3) && c.due <= aheadIso).sort((a, b) => a.due.localeCompare(b.due));
-    let reviews = rows.filter((c) => c.state === 2 && c.due <= nowIso);
+    const byDay = src?.byDay ?? new Map<string, boolean>();
+    const reviewDue = (c: QueueRow) => (this.dueByDay(c.deck, c.type, byDay) ? c.due < tomorrowIso : c.due <= nowIso);
+    let reviews = rows.filter((c) => c.state === 2 && reviewDue(c));
     if (cfg.reviewOrder === "retrievability") {
       // Cards on a script scheduler have no predicted recall; they sort after the weakest FSRS cards, by due.
       const cfgs = new Map<string, PresetConfig>();
@@ -2446,9 +2474,11 @@ export class Etude {
     // Quick checks mix in so both piles run out together: a short session still gets new cards.
     if (quick.length) news = interleave(quick, news, answered.filter((r) => r.state === 0).length - firsts.length, firsts.length);
 
+    // A review card due on a later day comes up when that day starts.
     const nextLater = rows
-      .filter((c) => (c.state !== 0 && c.due > aheadIso) || (c.state === 0 && c.due > nowIso))
-      .reduce<string | null>((m, c) => (!m || c.due < m ? c.due : m), null);
+      .filter((c) => (c.state === 2 ? !reviewDue(c) : c.state !== 0 ? c.due > aheadIso : c.due > nowIso))
+      .map((c) => (c.state === 2 && this.dueByDay(c.deck, c.type, byDay) ? iso(this.dayStart(new Date(c.due), hour)) : c.due))
+      .reduce<string | null>((m, due) => (!m || due < m ? due : m), null);
     return { learning, reviews, news, doneNew, doneRev, cfg, nowIso, nextLater, ahead: false };
   }
 
@@ -2477,7 +2507,7 @@ export class Etude {
       const prefix = lower(deck) + "::";
       return names.filter(([n, l]) => n === deck || l.startsWith(prefix)).map(([n]) => n);
     };
-    return { at, cards: (deck) => within(deck).flatMap((n) => cards.get(n) ?? []), answers: (deck) => within(deck).flatMap((n) => answers.get(n) ?? []) };
+    return { at, cards: (deck) => within(deck).flatMap((n) => cards.get(n) ?? []), answers: (deck) => within(deck).flatMap((n) => answers.get(n) ?? []), byDay: new Map() };
   }
 
   counts(scope: StudyScope, src?: QueueSource) {
@@ -3295,6 +3325,8 @@ export class Etude {
       return engines.get(cfg)!;
     };
     const DAY = 86400_000;
+    const tomorrow = this.nextDayStart(t);
+    const byDay = new Map<string, boolean>();
     return roots.map((r) => {
       const like = r.name.replace(/[\\%_]/g, "\\$&") + "::%";
       const cards = this.db.all<CardRow & { deck: string; type: string }>(
@@ -3308,7 +3340,8 @@ export class Etude {
         if (c.state === 0 || !c.last_review) continue;
         const at = new Date(c.last_review).getTime();
         last = Math.max(last, at);
-        if (new Date(c.due) <= t && !c.suspended) due++;
+        // Due today by the queue's rule: a review card on its day, a learning card at its time.
+        if ((c.state === 2 && this.dueByDay(c.deck, c.type, byDay) ? new Date(c.due) < tomorrow : new Date(c.due) <= t) && !c.suspended) due++;
         const cfg = cfgOf(c.deck, c.type);
         if (this.scriptFor(cfg)) continue;
         studied.push({ at, f: sched.toFsrs(c), e: engOf(cfg) });
@@ -3451,18 +3484,18 @@ export class Etude {
       if (v && v in verdicts) verdicts[v as keyof typeof verdicts]++;
     }
 
-    // Forecast: overdue cards land on today. A drill is always ready by design, so it stays out:
+    // Forecast: cards land on their study day, overdue ones (due on an earlier day) on today, as the queue
+    // counts them. A drill is always ready by design, so it stays out:
     // it's counted as `ready` in its scheduler's summary instead.
     const forecast: { day: string; due: number }[] = [];
     const dueRows = everything.filter((c) => c.state !== 0 && kindOf(c.deck, c.type).kind !== "drill");
     const bounds = Array.from({ length: 31 }, (_, i) => dayAt(i).getTime());
     const buckets = new Array(30).fill(0);
     let overdue = 0;
-    const nowMs = t.getTime();
     const dueByDeck = new Map<string, number>();
     for (const r of dueRows) {
       const ms = new Date(r.due).getTime();
-      if (ms <= nowMs) overdue++;
+      if (ms < bounds[0]) overdue++;
       if (ms < bounds[1]) {
         buckets[0]++;
         dueByDeck.set(r.deck, (dueByDeck.get(r.deck) ?? 0) + 1);
@@ -3665,7 +3698,7 @@ export class Etude {
       decks: string[];
       cards: number;
       new: number;
-      /** Rated: due before tomorrow starts (overdue included). Drill: ready right now. */
+      /** Rated: due before tomorrow starts (overdue included). Drill: ready today, by the same rule as the queue. */
       due: number;
       answers: number;
       rated: number;
@@ -3693,7 +3726,8 @@ export class Etude {
       e.deckSet.add(c.deck);
       const due = new Date(c.due).getTime();
       if (c.state === 0) e.new++;
-      else if (kind === "drill" ? due <= nowMs : due < tomorrowMs) e.due++;
+      // The queue's rule: a review-state card is due on its study day, a learning one at its time.
+      else if (c.state === 2 && kind !== "drill" ? due < tomorrowMs : due <= nowMs) e.due++;
       if (def?.stats && c.state !== 0) {
         const v = pick(parse(c.sched_state ?? null, null), def.stats.groupBy);
         const key = v == null || typeof v === "object" ? "" : String(v);

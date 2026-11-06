@@ -484,6 +484,65 @@ export function resolveTheme(t: Theme, prefersDark: boolean): Theme {
   return builtinTheme(prefersDark ? t.pair.dark : t.pair.light) ?? t;
 }
 
+/**
+ * Accent colors: Settings → Appearance paints the app's accent (primary buttons, the selected tab, links,
+ * charts' first series) on top of whatever theme is in use. `null` keeps the theme's own. A preset has a
+ * light and a dark shade so it reads on both; a custom one is any #rrggbb, used as is.
+ * Status colors (Again/Hard/Good/Easy, correct/wrong) never change: green keeps meaning "right".
+ */
+export const ACCENTS: { id: string; name: string; light: string; dark: string }[] = [
+  { id: "green", name: "Green", light: "#2f9a41", dark: "#3fae52" },
+  { id: "teal", name: "Teal", light: "#13897f", dark: "#2fb3a6" },
+  { id: "blue", name: "Blue", light: "#2f6fd6", dark: "#5b93f0" },
+  { id: "violet", name: "Violet", light: "#7a4fd6", dark: "#9b7bf0" },
+  { id: "pink", name: "Pink", light: "#d4357a", dark: "#ec6aa0" },
+  { id: "red", name: "Red", light: "#c9372c", dark: "#e5604f" },
+  { id: "orange", name: "Orange", light: "#d06a18", dark: "#ec8a3c" },
+  { id: "amber", name: "Amber", light: "#c99a0e", dark: "#e2b53a" },
+  { id: "graphite", name: "Graphite", light: "#3a3a38", dark: "#d9d9d6" },
+];
+export const ACCENT_HEX = /^#[0-9a-f]{6}$/i;
+
+/** Whether `a` is a valid accent setting: null, a preset id or a #rrggbb color. */
+export const isAccent = (a: unknown): a is string | null => a === null || (typeof a === "string" && (ACCENT_HEX.test(a) || ACCENTS.some((x) => x.id === a)));
+
+/** The #rrggbb an accent setting paints in this scheme, or null for the theme's own. */
+export function accentColor(accent: string | null | undefined, scheme: Scheme): string | null {
+  if (!accent) return null;
+  const preset = ACCENTS.find((x) => x.id === accent);
+  if (preset) return scheme === "dark" ? preset.dark : preset.light;
+  return ACCENT_HEX.test(accent) ? accent.toLowerCase() : null;
+}
+
+/** WCAG relative luminance of a #rrggbb. */
+function luminance(hex: string): number {
+  const ch = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+}
+
+/** Text on an accent fill: white, or near-black when the accent is light (amber, a pale custom color). */
+export const accentText = (hex: string) => (1.05 / (luminance(hex) + 0.05) >= 2.6 ? "#ffffff" : "#1b1b1a");
+
+/** The theme with the accent painted over it. The same theme back when the accent is the theme's own. */
+export function withAccent(t: Theme, accent: string | null | undefined): Theme {
+  const c = accentColor(accent, t.scheme);
+  if (!c) return t;
+  const fg = accentText(c);
+  return {
+    ...t,
+    vars: {
+      ...t.vars,
+      "--primary": c,
+      "--primary-foreground": fg,
+      "--primary-edge": `color-mix(in oklab, ${c} 72%, black)`,
+      "--highlight": c,
+      "--chart-1": c,
+      "--sidebar-primary": c,
+      "--sidebar-primary-foreground": fg,
+    },
+  };
+}
+
 export class ThemeError extends Error {}
 
 const VAR_NAME = /^--[a-z][a-z0-9-]{0,63}$/;

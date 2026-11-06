@@ -65,6 +65,7 @@ const INDEX: { g: GroupId; label: string; words: string; fold?: string }[] = [
   { g: "ai", label: "Feedback model", words: "feedback model url timeout temperature endpoint advanced", fold: "ai-endpoints" },
   { g: "ai", label: "Vision model", words: "vision drawings images endpoint advanced", fold: "ai-endpoints" },
   { g: "appearance", label: "Theme", words: "theme dark light mode system night snow paper midnight colour color" },
+  { g: "appearance", label: "Accent color", words: "accent color colour highlight primary button tint brand" },
   { g: "appearance", label: "Fun mode", words: "fun minimi cat mascot" },
   { g: "appearance", label: "Minimi's personality", words: "minimi personality character behaviour behavior tone voice mascot prompt" },
   { g: "appearance", label: "Custom themes", words: "custom theme css editor import market" },

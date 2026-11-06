@@ -13,14 +13,15 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { CodeEditor } from "@/components/code-editor";
+import { AccentWheel } from "@/components/accent-wheel";
 import { BigSwitch, Block, Section } from "@/components/settings-ui";
 import { minimiFace } from "@/components/minimi";
 import { setFunMode, useFunMode } from "@/lib/fun";
 import { ThemeMiniature, ThemeSample, ThemeSwatches } from "@/components/settings-theme-preview";
 import { api } from "@/lib/api";
-import { applyTheme, currentTheme, setPreviewing, toHex, type Theme } from "@/lib/theme";
+import { ACCENTS, accentColor, applyTheme, currentTheme, resolveTheme, setAccent, setPreviewing, toHex, useAccent, useScheme, type Theme } from "@/lib/theme";
 import { MINIMI_MAX } from "../../../src/core/minimi.ts";
-import { BUILTIN_THEMES, MAX_THEME_CSS, THEME_GROUPS, exportTheme, freeThemeId, normalizeTheme, parseThemeFile, sanitizeCss } from "../../../src/core/themes.ts";
+import { BUILTIN_THEMES, MAX_THEME_CSS, accentText, THEME_GROUPS, exportTheme, freeThemeId, normalizeTheme, parseThemeFile, sanitizeCss } from "../../../src/core/themes.ts";
 import { cn } from "@/lib/utils";
 
 type ListedTheme = Theme & { builtin: boolean };
@@ -226,6 +227,8 @@ export function AppearanceSection() {
             </div>
           </Block>
 
+          <AccentBlock theme={themes.find((t) => t.id === selected) ?? themes[0]} />
+
           <Block
             title="Custom themes"
             description={
@@ -338,6 +341,82 @@ function ThemeTile({ theme, selected, onUse, onCustomize, onDuplicate, onExport,
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
+  );
+}
+
+/** Accent color: one tap repaints buttons, the selected tab, links and charts over any theme. Synced. */
+function AccentBlock({ theme }: { theme: Theme }) {
+  const accent = useAccent();
+  const scheme = useScheme();
+  const own = resolveTheme(theme, scheme === "dark").vars["--highlight"];
+  const custom = accent && !ACCENTS.some((a) => a.id === accent) ? accent : null;
+  const timer = useRef<number | undefined>(undefined);
+  const pick = (v: string | null, opts: { debounce?: boolean } = {}) => {
+    const before = accent;
+    const save = () =>
+      setAccent(v)?.catch((e: Error) => {
+        setAccent(before, { save: false });
+        toast.error("Couldn't save the accent", { description: e.message });
+      });
+    window.clearTimeout(timer.current);
+    if (opts.debounce) {
+      // Dragging in the color picker repaints live; it's saved once the hand stops.
+      setAccent(v, { save: false });
+      timer.current = window.setTimeout(save, 400);
+    } else save();
+  };
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  return (
+    <Block
+      title="Accent color"
+      description="Buttons, links, selections and charts, on any theme. Right and wrong keep their own colors."
+      aside={
+        <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" disabled={accent === null} onClick={() => pick(null)} title={`Back to ${theme.name}'s own color`}>
+          <RotateCcw className="size-4" />Reset
+        </Button>
+      }
+    >
+      <div role="radiogroup" aria-label="Accent color" className="flex flex-wrap items-center gap-2.5">
+        <button
+          type="button"
+          role="radio"
+          aria-checked={accent === null}
+          onClick={() => pick(null)}
+          title={`The color ${theme.name} comes with`}
+          className={cn(
+            "flex h-9 items-center gap-2 rounded-full pr-3.5 pl-1.5 text-[13px] font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
+            accent === null ? "text-foreground ring-2 ring-foreground ring-offset-2 ring-offset-card" : "text-foreground ring-1 ring-foreground/15 hover:bg-accent",
+          )}
+        >
+          <span className="size-6 rounded-full ring-1 ring-black/10" style={{ background: own }} aria-hidden="true" />
+          Theme's own
+        </button>
+        {ACCENTS.map((a) => (
+          <Swatch key={a.id} label={a.name} color={accentColor(a.id, scheme)!} selected={accent === a.id} onSelect={() => pick(a.id)} />
+        ))}
+        <AccentWheel value={custom} fallback={accentColor(accent && !custom ? accent : "blue", scheme)!} onChange={(h) => pick(h, { debounce: true })} onCommit={(h) => pick(h)} />
+      </div>
+    </Block>
+  );
+}
+
+function Swatch({ label, color, selected, onSelect }: { label: string; color: string; selected: boolean; onSelect(): void }) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      aria-label={label}
+      title={label}
+      onClick={onSelect}
+      className={cn(
+        "flex size-9 items-center justify-center rounded-full outline-none transition-transform hover:scale-105 focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        selected ? "ring-2 ring-foreground ring-offset-2 ring-offset-card" : "ring-1 ring-foreground/15",
+      )}
+      style={{ background: color }}
+    >
+      {selected && <Check className="size-4" style={{ color: accentText(toHex(color)?.slice(0, 7) ?? "#000000") }} strokeWidth={3} />}
+    </button>
   );
 }
 
@@ -514,7 +593,7 @@ function ThemeEditor({ editing, takenIds, restore, onCancel, onSaved }: {
       const spec = THEME_GROUPS.flatMap((g) => g.vars).find((x) => x.name === k);
       valid[k] = !spec || validValue(spec.kind, v) ? v : (editing.draft.vars[k] ?? v);
     }
-    applyTheme({ ...draft, id: draft.id || "draft", vars: valid, css: sanitized.css }, { persist: false });
+    applyTheme({ ...draft, id: draft.id || "draft", vars: valid, css: sanitized.css }, { persist: false, pure: true });
   }, [draft, sanitized.css, editing.draft.vars]);
 
   useEffect(() => {

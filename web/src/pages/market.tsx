@@ -131,7 +131,7 @@ export function MarketPage() {
   const tryOn = (e: MarketEntry) => {
     if (!before.current) before.current = currentTheme();
     setPreviewing(true);
-    applyTheme(s_(e).theme as Theme, { persist: false });
+    applyTheme(s_(e).theme as Theme, { persist: false, pure: true });
     setTrying(e);
   };
   useEffect(() => () => {

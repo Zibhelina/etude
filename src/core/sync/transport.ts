@@ -10,8 +10,9 @@ export interface Transport {
   push(events:WireEvent[]): Promise<void>;
   /** `seen` tells which event ids this device already has, for a transport that can skip them before reading them. */
   pull(cursor:string,seen?:(id:string)=>boolean): Promise<{events:WireEvent[];cursor:string;more:boolean}>;
-  putBlob(name:string,bytes:Uint8Array): Promise<void>;
-  getBlob(name:string): Promise<Uint8Array>;
+  /** `signal` stops a transfer that is no longer wanted. */
+  putBlob(name:string,bytes:Uint8Array,signal?:AbortSignal): Promise<void>;
+  getBlob(name:string,signal?:AbortSignal): Promise<Uint8Array>;
   /** Bytes stored on the server, when it says. */
   usage?(): Promise<number|null>;
 }
@@ -76,7 +77,9 @@ export class CloudTransport implements Transport {
     if (this.token) headers.set("Authorization",`Bearer ${this.token}`);
     let res:Response;
     for (let attempt=1;;attempt++) {
-      res=await fetch(this.server+path,{...opts,headers,signal:AbortSignal.timeout(60_000)});
+      opts.signal?.throwIfAborted();
+      const timeout=AbortSignal.timeout(60_000);
+      res=await fetch(this.server+path,{...opts,headers,signal:opts.signal&&AbortSignal.any?AbortSignal.any([opts.signal,timeout]):timeout});
       if (res.status!==429 || attempt>=RATE_LIMIT_ATTEMPTS) break;
       // The server limits requests per client address; wait as long as it says, with jitter so parallel transfers spread out.
       await res.body?.cancel();
@@ -97,7 +100,7 @@ export class CloudTransport implements Transport {
   async putKeys(keys:VaultKeys,etag?:string) { await this.request("/v1/vault/keys",{method:"PUT",headers:{"Content-Type":"application/json",...(etag?{"If-Match":etag}:{})},body:JSON.stringify(keys)}); }
   async push(events:WireEvent[]) { if (events.length) await this.json("/v1/sync/events",{events}); }
   async pull(cursor:string) { const r:any=await (await this.request(`/v1/sync/events?after=${Number(cursor)||0}&limit=500`)).json();return {...r,cursor:String(r.cursor)}; }
-  async putBlob(name:string,bytes:Uint8Array) { await this.request("/v1/blobs/"+name,{method:"PUT",body:new Uint8Array(bytes)}); }
-  async getBlob(name:string) { return new Uint8Array(await (await this.request("/v1/blobs/"+name)).arrayBuffer()); }
+  async putBlob(name:string,bytes:Uint8Array,signal?:AbortSignal) { await this.request("/v1/blobs/"+name,{method:"PUT",body:new Uint8Array(bytes),signal}); }
+  async getBlob(name:string,signal?:AbortSignal) { return new Uint8Array(await (await this.request("/v1/blobs/"+name,{signal})).arrayBuffer()); }
   async usage() { try { const r:any=await (await this.request("/v1/vault")).json();return r.usedBytes||null; } catch { return null; } }
 }

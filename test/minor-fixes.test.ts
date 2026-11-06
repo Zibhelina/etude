@@ -18,7 +18,8 @@ test("the collection is its owner's only: database 0600 (its -wal too), the Etud
   const e = await Etude.open(join(home, "etude.db"), { home });
   e.importPack({ etude: "pack/1", name: "P", decks: [{ name: "P" }], items: [{ id: "p1", type: "basic", deck: "P", fields: { front: "Q", back: "A" } }] });
   assert.equal(mode(join(home, "etude.db")), 0o600);
-  assert.equal(mode(join(home, "etude.db-wal")), 0o600, "SQLite gives the WAL the database's mode");
+  // The WebAssembly driver keeps no WAL file: it writes the whole database back (0600 too).
+  if (process.env.ETUDE_SQL !== "wasm") assert.equal(mode(join(home, "etude.db-wal")), 0o600, "SQLite gives the WAL the database's mode");
   assert.equal(mode(home), 0o700);
   // An older install with open modes is tightened the next time it opens.
   e.close();

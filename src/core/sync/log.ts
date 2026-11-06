@@ -10,6 +10,8 @@ export const compare = (a: Stamp, b: Stamp) => a[0] - b[0] || a[1] - b[1] || a[2
 export type Change = { v: 1; table: string; key: string; stamp: Stamp; fields: Record<string, unknown>; deleted?: boolean };
 export const TABLES = ["presets", "decks", "types", "schedulers", "type_folders", "type_placement", "items", "cards", "attempts", "reviews", "tag_meta", "settings", "type_assets"];
 const UUID_TABLES = ["decks", "cards", "attempts", "reviews"];
+/** The card columns that sync; the schedule is replayed from reviews instead. */
+const CARD_FIELDS = ["item_id", "face", "suspended", "buried_until", "sync_reset", "sync_due", "sync_due_at"];
 const q = (s: string) => `'${s.replaceAll("'", "''")}'`;
 const id = (s: string) => `"${s}"`;
 /** Register fields that point at another entity. The partial index needs this exact term in each query that uses it. */
@@ -65,6 +67,8 @@ export function install(db: Db) {
   // A schedule changed here (a review with fuzz, a reschedule) is replayed canonically at the next sync.
   db.sql.exec(`CREATE TRIGGER IF NOT EXISTS sync_cards_replay AFTER UPDATE OF state,due,stability,difficulty,elapsed_days,scheduled_days,reps,lapses,learning_steps,last_review,sched_state ON cards
     WHEN (SELECT applying FROM sync_control WHERE id=1)=0 AND NEW.sync_id IS NOT NULL BEGIN INSERT OR IGNORE INTO sync_dirty VALUES('replay',NEW.sync_id,''); END;`);
+  // Before the card trigger listed its columns, every review fired it.
+  if (!db.get("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='sync_cards_update' AND sql LIKE '%UPDATE OF%'")) db.sql.exec("DROP TRIGGER IF EXISTS sync_cards_update");
   for (const table of TABLES) {
     for (const op of ["INSERT", "UPDATE", "DELETE"]) {
       const p = op === "DELETE" ? "OLD" : "NEW";
@@ -76,7 +80,7 @@ export function install(db: Db) {
       const selectRow = uid && op === "INSERT" ? rowExpr(db, table, "s") : row;
       const selectKey = uid && op === "INSERT" ? "s.sync_id" : key;
       const from = uid && op === "INSERT" ? ` FROM ${table} s WHERE s.id=NEW.id` : "";
-      db.sql.exec(`CREATE TRIGGER IF NOT EXISTS sync_${table}_${op.toLowerCase()} AFTER ${op} ON ${table}
+      db.sql.exec(`CREATE TRIGGER IF NOT EXISTS sync_${table}_${op.toLowerCase()} AFTER ${op}${table === "cards" && op === "UPDATE" ? ` OF ${CARD_FIELDS.join(",")}` : ""} ON ${table}
         WHEN (SELECT applying FROM sync_control WHERE id=1)=0 AND ${op === "UPDATE" && ["types","schedulers"].includes(table) ? "(NEW.builtin=0 OR OLD.builtin=0)" : allowed(table, p)} ${uid && op === "UPDATE" ? "AND OLD.sync_id IS NOT NULL" : ""} ${op === "DELETE" && ["attempts","reviews"].includes(table) ? "AND EXISTS(SELECT 1 FROM cards WHERE id=OLD.card_id)" : ""}
         BEGIN ${assign} UPDATE sync_control SET counter=CASE WHEN wall>=CAST(unixepoch('subsec')*1000 AS INTEGER) THEN counter+1 ELSE 0 END,wall=MAX(wall,CAST(unixepoch('subsec')*1000 AS INTEGER)) WHERE id=1;
         INSERT INTO sync_outbox(tbl,key,old,value,wall,counter) SELECT ${q(table)},${selectKey},${op === "UPDATE" ? rowExpr(db, table, "OLD") : "NULL"},${op === "DELETE" ? "NULL" : selectRow},(SELECT wall FROM sync_control WHERE id=1),(SELECT counter FROM sync_control WHERE id=1)${from}; END;`);
@@ -110,7 +114,7 @@ function normal(table: string, raw: Row) {
     r.tags = Object.fromEntries((JSON.parse(r.tags) as string[]).map(t => [t, true]));
     delete r.title; delete r.search;
   }
-  if (table === "cards") for (const k of Object.keys(r)) if (!["item_id", "face", "suspended", "buried_until", "sync_reset", "sync_due", "sync_due_at"].includes(k)) delete r[k];
+  if (table === "cards") for (const k of Object.keys(r)) if (!CARD_FIELDS.includes(k)) delete r[k];
   if (table === "reviews") { delete r.card_before; delete r.due_after; delete r.state; }
   return flatten(r);
 }

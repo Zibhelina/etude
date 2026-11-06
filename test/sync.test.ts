@@ -77,6 +77,20 @@ test("keys derived once read and write the same ciphertext as the vault key, inc
   assert.equal(fromB64(fresh).length,fromB64(await encryptEvent(vk,"x",{a:1})).length);
   const b=await encryptBlob(keys,new TextEncoder().encode("new"));assert.equal(new TextDecoder().decode(await decryptBlob(vk,b.ciphertext,b.hash)),"new");
 });
+test("a review leaves the card out of the outbox; a suspension doesn't; the old card trigger is replaced",async()=>{
+  const dir=temp();const file=join(dir,"a.db");let e=await Etude.open(file,{home:join(dir,"home")});
+  try {
+    syncFor(e).setup({folder:join(dir,"shared")});put(e,"one");drain(e.db);
+    const card=e.db.get("SELECT id FROM cards WHERE item_id='one'")!.id,queued=()=>e.db.get("SELECT count(*) n FROM sync_outbox WHERE tbl='cards'")!.n;
+    e.rate(card,3);assert.equal(queued(),0);
+    e.setSuspended([card],true);assert.equal(queued(),1);
+    // A collection set up by an earlier version has a trigger that fires on any card update.
+    e.db.sql.exec("DROP TRIGGER sync_cards_update;CREATE TRIGGER sync_cards_update AFTER UPDATE ON cards BEGIN SELECT 1; END;");
+    e.close();e=await Etude.open(file,{home:join(dir,"home")});
+    assert.match(e.db.get("SELECT sql FROM sqlite_master WHERE name='sync_cards_update'")!.sql,/AFTER UPDATE OF item_id/);
+    drain(e.db);e.rate(card,3);assert.equal(queued(),0);
+  }finally{e.close();rmSync(dir,{recursive:true,force:true});}
+});
 test("LWW fields, permanent entity tombstones, idempotence and no echo",async()=>{
   const dir=temp();const e=await Etude.open(join(dir,"a.db"),{home:join(dir,"home")});
   try {

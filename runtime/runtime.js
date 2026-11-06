@@ -554,8 +554,8 @@ export function boot(main, templateHtml, assets) {
       // animate from where that frame's pieces were.
       if (Array.isArray(msg.morphFrom) && api.morph !== false) morph(msg.morphFrom, api.root);
       send("mounted");
-      // A preview (a gallery thumbnail) never takes the focus: it would scroll the page to itself.
-      if (msg.mode !== "result" && msg.mode !== "preview") focusCard(api.root);
+      // A preview (a gallery thumbnail, the inspector's card) never takes the focus: it would scroll the page to itself.
+      if (msg.mode !== "result" && msg.mode !== "preview" && msg.focus !== false) focusCard(api.root);
     } else if (msg.type === "collect") api?._collect();
     else if (msg.type === "result") api?._result(msg.result, { morph: msg.morph });
     else if (msg.type === "snapshot") send("snapshot", { req: msg.req, leaves: api && api.morph !== false && !motionReduced() ? serializeLeaves(morphLeaves(api.root)) : null });

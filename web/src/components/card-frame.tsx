@@ -187,7 +187,7 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
       const p = latest.current;
       switch (msg.type) {
         case "loaded":
-          prefsFor(typeOfSrc(p.src)).then((prefs) => post({ type: "init", view: p.view, mode: p.mode ?? "answer", answer: p.answer ?? null, result: p.result ?? null, theme: theme(), screen: { height: screenHeight() }, prefs, morphFrom: p.morphFrom ?? null, mediaPending: mediaPending() }));
+          prefsFor(typeOfSrc(p.src)).then((prefs) => post({ type: "init", view: p.view, mode: p.mode ?? "answer", answer: p.answer ?? null, result: p.result ?? null, theme: theme(), screen: { height: screenHeight() }, prefs, morphFrom: p.morphFrom ?? null, mediaPending: mediaPending(), focus: p.autoFocus !== false }));
           break;
         case "set-pref": {
           // Previews of unsaved types (raw HTML) have nowhere to keep preferences.

@@ -1218,7 +1218,7 @@ export class Etude {
         };
         this.replayCards(
           this.db
-            .all(`SELECT c.id, c.item_id, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE i.type = ?`, clean.id)
+            .all(`SELECT c.*, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE i.type = ?`, clean.id)
             .filter((c) => follows(c.deck)),
         );
       }
@@ -2969,7 +2969,7 @@ export class Etude {
   /** Recomputes cards from their review history with the current settings, e.g. after changing retention. */
   reschedule(scope: StudyScope = {}) {
     const { where, params } = this.scopeWhere({ ...scope });
-    return this.replayCards(this.db.all(`SELECT c.id, c.item_id, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${where.replace("c.suspended = 0", "1")}`, ...params));
+    return this.replayCards(this.db.all(`SELECT c.*, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${where.replace("c.suspended = 0", "1")}`, ...params));
   }
 
   private replayCards(cards: Row[]) {
@@ -3000,7 +3000,7 @@ export class Etude {
         } else {
           // A drill's unrated answers count as the rating their score suggests.
           const rated = reviews.map((r) => ({ ts: r.ts, rating: r.rating >= 1 ? r.rating : (sched.suggestRating(r.score, cfg) ?? 3) }));
-          const s = sched.replay(rated, new Date(c.created), cfg);
+          const s = sched.replay(rated, new Date(c.created), cfg, sched.cardKey(c as CardRow));
           this.db.run(
             "UPDATE cards SET state = ?, due = ?, stability = ?, difficulty = ?, elapsed_days = ?, scheduled_days = ?, reps = ?, lapses = ?, learning_steps = ?, last_review = ?, sched_state = NULL WHERE id = ?",
             s.state, s.due, s.stability, s.difficulty, s.elapsed_days, s.scheduled_days, s.reps, s.lapses, s.learning_steps, s.last_review, c.id,
@@ -3106,7 +3106,7 @@ export class Etude {
       out.applied = true;
       if (opts.reschedule) {
         out.rescheduled = this.replayCards(
-          this.db.all(`SELECT c.id, c.item_id, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE d.id IN (${marks})`, ...ids),
+          this.db.all(`SELECT c.*, d.name AS deck, i.type, i.created FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE d.id IN (${marks})`, ...ids),
         ).rescheduled;
       }
     }

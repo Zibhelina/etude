@@ -821,6 +821,8 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     if (!full.startsWith(resolve(etude.mediaDir) + sep)) return c.text("not found", 404);
     c.header("Content-Security-Policy", "default-src 'none'; sandbox");
     c.header("X-Content-Type-Options", "nosniff");
+    // A file that isn't here may still be on its way from another device: never keep the miss.
+    if (!existsSync(full) || !statSync(full).isFile()) return c.text("not found", 404, { "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" });
     // Card frames have an opaque origin, and @font-face needs CORS even for same-origin paths.
     return sendFile(c, full, { cors: true, mime: mediaType(full)?.mime, cache: rel.startsWith("files/") ? "public, max-age=31536000, immutable" : undefined });
   });

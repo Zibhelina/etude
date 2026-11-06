@@ -1,5 +1,5 @@
-import { autoSync } from "@/lib/sync";
-import { useEffect, useRef, useState } from "react";
+import { autoSync, MEDIA_EVENT, STATUS_EVENT, syncStatus, type SyncSeen } from "@/lib/sync";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useLocation } from "@/lib/router";
@@ -118,11 +118,33 @@ export function App() {
   const received = useRef<number | null>(null);
   const pathRef = useRef(path);
   pathRef.current = path;
+  // Media files follow the collection in the background. While they come in, the status is read every few
+  // seconds, also during a study session, and open cards and pages hear when files arrive.
+  const mediaReceived = useRef<number | null>(null);
+  const [mediaActive, setMediaActive] = useState(false);
+  const noteMedia = useCallback((st: SyncSeen | null) => {
+    const m = st?.media;
+    if (!m) return;
+    if (mediaReceived.current !== null && m.received > mediaReceived.current) window.dispatchEvent(new Event(MEDIA_EVENT));
+    mediaReceived.current = m.received;
+    setMediaActive(m.active);
+  }, []);
+  useEffect(() => {
+    if (!mediaActive) return;
+    const t = setInterval(() => void syncStatus().then(noteMedia), 2000);
+    return () => clearInterval(t);
+  }, [mediaActive, noteMedia]);
+  useEffect(() => {
+    const h = (e: Event) => noteMedia((e as CustomEvent<SyncSeen>).detail);
+    window.addEventListener(STATUS_EVENT, h);
+    return () => window.removeEventListener(STATUS_EVENT, h);
+  }, [noteMedia]);
   useEffect(() => {
     if (studying) return;
     let stop = false;
     const run = async (o?: { pendingOnly?: boolean }) => {
       const st = await autoSync(o);
+      noteMedia(st);
       if (stop || typeof st?.received !== "number") return;
       const before = received.current;
       received.current = st.received;
@@ -144,7 +166,7 @@ export function App() {
       window.removeEventListener("focus", wake);
       window.removeEventListener("online", wake);
     };
-  }, [studying]);
+  }, [studying, noteMedia]);
   const updateDot = useUpdateDot();
   // Bumped after the assistant changed something, so the page remounts and reloads its data.
   const [dataKey, setDataKey] = useState(0);

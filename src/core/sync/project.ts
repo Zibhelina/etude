@@ -3,8 +3,8 @@ import type { Db, Row } from "../db.ts";
 import { muted, referring, rowFor, rows, safeSettings, TABLES } from "./log.ts";
 import { emptyCard } from "../scheduler.ts";
 
-/** Bump when the projection or the canonical replay changes what it writes, so every device rebuilds once. */
-const VERSION = 1;
+/** Bump when the projection or the canonical replay changes what it writes, so every device rebuilds once. 2: FSRS replay keeps the deck's fuzz. */
+export const VERSION = 2;
 
 /** What the relational view was last built against: this code and the shipped types and schedulers. */
 function fingerprint(db: Db) {

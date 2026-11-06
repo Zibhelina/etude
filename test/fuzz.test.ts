@@ -196,3 +196,34 @@ test("rescheduling follows the sync replay for reviews made at the same moment a
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("the first sync after the replay changed rebuilds every card once", async () => {
+  const { VERSION } = await import("../src/core/sync/project.ts");
+  const { muted } = await import("../src/core/sync/log.ts");
+  const dir = temp();
+  const [e] = await devices(dir, 1);
+  try {
+    for (let i = 0; i < 8; i++) e.upsertItem({ id: `item-${i}`, deck: "Fuzz", type: "basic", fields: { front: `q ${i}`, back: "a" } });
+    const ids = e.db.all("SELECT id FROM cards ORDER BY id").map((r) => r.id as number);
+    const start = Date.now() - 120 * DAY;
+    for (const day of [0, 3, 20, 60]) ids.forEach((id) => e.rate(id, 3, { at: new Date(start + day * DAY) }));
+    await syncFor(e).now();
+    const fuzzed = schedules(e);
+    // What projection version 1 left: unfuzzed schedules, saved as canonical.
+    e.db.tx(() => muted(e.db, () => {
+      for (const c of e.db.all("SELECT c.*, i.created FROM cards c JOIN items i ON i.id = c.item_id")) {
+        const history = e.db.all("SELECT ts, rating FROM reviews WHERE card_id = ? ORDER BY ts", c.id) as { ts: string; rating: number }[];
+        const s = { ...sched.replay(history, new Date(c.created), { ...DEFAULT_PRESET, enableFuzz: false }, sched.cardKey(c as CardRow)), sched_state: null };
+        e.db.run("UPDATE cards SET state=?, due=?, stability=?, difficulty=?, elapsed_days=?, scheduled_days=?, reps=?, lapses=?, learning_steps=?, last_review=? WHERE id=?", s.state, s.due, s.stability, s.difficulty, s.elapsed_days, s.scheduled_days, s.reps, s.lapses, s.learning_steps, s.last_review, c.id);
+        e.db.run("UPDATE sync_replay SET row = ? WHERE card = ?", JSON.stringify(s), c.sync_id);
+      }
+      e.db.run("UPDATE sync_meta SET value = replace(value, ?, '\"[1,') WHERE key = 'projection'", `"[${VERSION},`);
+    }));
+    assert.notDeepEqual(schedules(e), fuzzed);
+    await syncFor(e).now();
+    assert.deepEqual(schedules(e), fuzzed);
+  } finally {
+    e.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

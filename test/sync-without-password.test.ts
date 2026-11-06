@@ -100,18 +100,26 @@ async function device(dir: string, name: string, url: string) {
   return { e, s };
 }
 
+/** One cleanup per test: close every collection, stop the server, then remove the folder (Windows can't delete open files). */
+function cleanup(t: { after(fn: () => Promise<void>): void }, dir: string, c: { stop(): Promise<void> }) {
+  const open: Etude[] = [];
+  t.after(async () => {
+    for (const e of open) e.close();
+    await c.stop();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  return (e: Etude) => (open.push(e), e);
+}
+
 const pack = (deck: string) => ({ etude: "pack/1", name: deck, decks: [{ name: deck }], items: [{ id: `${deck}-1`, type: "basic", deck, fields: { front: "Q", back: "A" } }] });
 
 test("no password: the first device starts Sync with none; a second one gets the key after signing in and the collection with it", async (t) => {
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "sync-nopw-"));
   const c = cloud({ keepsKeys: true });
   const url = await c.start();
+  const track = cleanup(t, dir, c);
   const laptop = await device(dir, "laptop", url);
-  t.after(async () => {
-    laptop.e.close();
-    await c.stop();
-    rmSync(dir, { recursive: true, force: true });
-  });
+  track(laptop.e);
   assert.equal(laptop.s.status().passwordOptional, true);
   const first = await laptop.s.unlock({});
   assert.equal(first.recoveryKey, undefined, "no recovery key to keep");
@@ -121,7 +129,7 @@ test("no password: the first device starts Sync with none; a second one gets the
   await laptop.s.now();
 
   const phone = await device(dir, "phone", url);
-  t.after(() => phone.e.close());
+  track(phone.e);
   assert.equal((await phone.s.unlock({})).status.unlocked, true, "no password asked");
   await phone.s.now();
   assert.ok(phone.e.db.get("SELECT 1 FROM decks WHERE name = 'Physics'"), "the collection arrived");
@@ -131,12 +139,9 @@ test("adding a password makes the vault end-to-end; a new device then needs it; 
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "sync-protect-"));
   const c = cloud({ keepsKeys: true });
   const url = await c.start();
+  const track = cleanup(t, dir, c);
   const laptop = await device(dir, "laptop", url);
-  t.after(async () => {
-    laptop.e.close();
-    await c.stop();
-    rmSync(dir, { recursive: true, force: true });
-  });
+  track(laptop.e);
   await laptop.s.unlock({});
   await assert.rejects(laptop.s.protect("short"), /at least 8 characters/);
   const protectedVault = await laptop.s.protect("correct horse battery");
@@ -146,7 +151,7 @@ test("adding a password makes the vault end-to-end; a new device then needs it; 
   assert.ok(c.keys?.password && c.keys?.recovery && !c.keys?.server);
 
   const tablet = await device(dir, "tablet", url);
-  t.after(() => tablet.e.close());
+  track(tablet.e);
   await assert.rejects(tablet.s.unlock({}), /Sync password or recovery key/);
   assert.equal((await tablet.s.unlock({ password: "correct horse battery" })).status.unlocked, true);
 
@@ -159,12 +164,9 @@ test("on a server that can't keep keys, a new vault still needs a password", asy
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "sync-needspw-"));
   const c = cloud({ keepsKeys: false });
   const url = await c.start();
+  const track = cleanup(t, dir, c);
   const laptop = await device(dir, "laptop", url);
-  t.after(async () => {
-    laptop.e.close();
-    await c.stop();
-    rmSync(dir, { recursive: true, force: true });
-  });
+  track(laptop.e);
   assert.equal(laptop.s.status().passwordOptional, false);
   await assert.rejects(laptop.s.unlock({}), /needs a Sync password/);
   const made = await laptop.s.unlock({ password: "correct horse battery" });

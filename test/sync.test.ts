@@ -205,6 +205,8 @@ async function login(s:ReturnType<typeof syncFor>,server:string,outbox:string,em
   const mail=files.map(x=>JSON.parse(x.text)).filter(x=>x.to.toLowerCase()===email.toLowerCase()).at(-1)!;
   await s.verify(mail.meta.token);
 }
+/** The property test's random stream. ETUDE_SYNC_SEED (decimal or 0x hex) runs another one; xorshift needs a non-zero seed. */
+const SEED=(Number(process.env.ETUDE_SYNC_SEED ?? 0x5eed1234)>>>0)||1;
 async function property(kind:"folder"|"cloud") {
   const dir=temp();const es:Etude[]=[];
   try {
@@ -235,7 +237,7 @@ async function property(kind:"folder"|"cloud") {
     es[0].upsertItem({id:"typed",deck:"Test",type:"typed",fields:{prompt:"question",answers:["answer"]}});
     es[0].savePreset({id:"shared-preset",name:"Shared preset",config:{desiredRetention:0.9}});es[0].updateDeck("Test",{presetId:"shared-preset"});
     for(let n=0;n<2;n++)for(let i=0;i<3;i++)await sync(i);
-    let state=0x5eed1234;const rand=()=>{state^=state<<13;state^=state>>>17;state^=state<<5;return(state>>>0)/4294967296;};
+    let state=SEED;const rand=()=>{state^=state<<13;state^=state>>>17;state^=state<<5;return(state>>>0)/4294967296;};
     const deleted=new Set<string>();let reviews=0;const reviewKeys:string[]=[];
     for(let round=0;round<240;round++) {
       const device=Math.floor(rand()*3),e=es[device],index=Math.floor(rand()*18),key="item-"+index;
@@ -273,8 +275,8 @@ async function property(kind:"folder"|"cloud") {
     for(const e of es)assert.equal(readFileSync(join(e.mediaDir,es[0].storeMedia("pixel.png",Buffer.from("test bytes"),{dryRun:true}).file),"utf8"),"test bytes");
   } finally {for(const e of es)e.close();rmSync(dir,{recursive:true,force:true});}
 }
-test("seed 0x5eed1234: 3 offline devices converge through encrypted folder (240 rounds)",()=>property("folder"));
-test("seed 0x5eed1234: 3 offline devices converge through real etude-cloud HTTP (240 rounds)",{skip:!process.env.ETUDE_SYNC_TEST_SERVER},()=>property("cloud"));
+test(`seed 0x${SEED.toString(16)}: 3 offline devices converge through encrypted folder (240 rounds)`,()=>property("folder"));
+test(`seed 0x${SEED.toString(16)}: 3 offline devices converge through real etude-cloud HTTP (240 rounds)`,{skip:!process.env.ETUDE_SYNC_TEST_SERVER},()=>property("cloud"));
 test("history that arrives out of order: an attempt before its review, a review before an earlier one",async()=>{
   const dir=temp();const es=await Promise.all(["a","b","c"].map(n=>Etude.open(join(dir,`${n}.db`),{home:join(dir,"h"+n)})));const [a,b,c]=es;
   try {

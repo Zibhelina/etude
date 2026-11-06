@@ -25,6 +25,16 @@ Sources: developer.apple.com/documentation/security/complying-with-encryption-ex
 
 Apple requires a declared reason for: file timestamp APIs, system boot time, disk space, active keyboards, and UserDefaults. The app's own code is JavaScript in WKWebView and calls none of them natively. Capacitor 8 and its App, Keyboard, StatusBar and SplashScreen plugins were searched for those APIs (`UserDefaults`, `systemUptime`, `mach_absolute_time`, file creation/modification dates, `volumeAvailableCapacity`, `activeInputModes`, `stat`) and contain none; Capacitor's own `PrivacyInfo.xcprivacy` declares an empty list too. If a plugin is added later, check its manifest and merge any reasons it declares.
 
+## From GitHub Actions: every push to main goes to TestFlight
+
+`.github/workflows/ios.yml` builds the app on a GitHub Mac runner, signs it and uploads it to App Store Connect on every push to `main`, and when run by hand (Actions → iOS app to TestFlight → Run workflow). Pull requests never run it, since they get no secrets. The internal TestFlight group has access to all builds, so its testers get each one once Apple has processed it (the last step waits for that, up to 25 minutes). Nobody's Mac or Apple ID is involved.
+
+How it signs: Xcode's automatic signing with the team's App Store Connect API key (`xcodebuild -allowProvisioningUpdates -authenticationKeyPath …`). The archive is signed with a development certificate Xcode makes through the key, which the run revokes afterwards so the team's few development slots don't fill up (`scripts/ios-ci.mjs`); the upload is re-signed with Apple's cloud-managed distribution certificate. No certificate, profile or Team ID change is committed.
+
+It uses the same three secrets as the desktop workflow (`docs/signing.md`): `APPLE_API_KEY` (the `.p8` text, or its base64), `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`. The key must be allowed to use cloud-managed distribution signing: an **Admin** team key, or one whose role has "Access to Cloud Managed Distribution Certificate". With a Developer key the export fails with "Cloud signing permission error"; then make an Admin team key in App Store Connect → Users and Access → Integrations and replace `APPLE_API_KEY` and `APPLE_API_KEY_ID` (the issuer stays). The desktop workflow notarizes with the same key.
+
+Build numbers: the version's own number, then the run number and attempt (`3.0.3` → `30003.57.1`), so every upload is new to App Store Connect and sorts after the hand-made `30003`, `30003.1`, … The marketing version still comes from `package.json`; the workflow fails if the Xcode project doesn't match it (`node scripts/native-version.mjs --check`).
+
 ## On the Mac: Xcode, signing, Archive, upload
 
 Prerequisites: a paid Apple Developer Program membership (US$99/year) on your Apple Account, Xcode current (16 or later), and the repo on the Mac.

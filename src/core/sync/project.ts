@@ -3,8 +3,8 @@ import type { Db, Row } from "../db.ts";
 import { muted, referring, rowFor, rows, safeSettings, TABLES } from "./log.ts";
 import { emptyCard } from "../scheduler.ts";
 
-/** Bump when the projection or the canonical replay changes what it writes, so every device rebuilds once. */
-const VERSION = 1;
+/** Bump when the projection or the canonical replay changes what it writes, so every device rebuilds once. 2: FSRS replay keeps the deck's fuzz. 3: a script's random draws depend on the card. */
+export const VERSION = 3;
 
 /** What the relational view was last built against: this code and the shipped types and schedulers. */
 function fingerprint(db: Db) {
@@ -45,9 +45,14 @@ function applySettings(e: Etude, r: Row) {
 /** Dirty keys the projection handles: the tables, and cards whose schedule changed here. Media keys are the media step's. */
 const PROJECTED = [...TABLES, "replay"];
 
-function projected(e: Etude) {
+/** A type asset's synced bytes. A missing one hasn't been downloaded, or its blob event hasn't arrived. */
+const syncedBytes = (db: Db, hash: string): Uint8Array | undefined => db.get("SELECT bytes FROM sync_blobs WHERE hash=? AND bytes IS NOT NULL", hash)?.bytes;
+
+/** `waiting`: type asset keys whose bytes aren't here yet. They stay marked, for the sync that brings them. */
+function projected(e: Etude, waiting: string[] = []) {
   const db = e.db;
   db.run(`DELETE FROM sync_dirty WHERE tbl IN (${PROJECTED.map(() => "?").join(",")})`, ...PROJECTED);
+  for (const key of waiting) db.run("INSERT OR IGNORE INTO sync_dirty VALUES('type_assets',?,'')", key);
   db.run("INSERT INTO sync_meta VALUES('projection',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", JSON.stringify(fingerprint(db)));
   db.run("DELETE FROM sync_meta WHERE key='unprojected'");
 }
@@ -67,6 +72,8 @@ export function project(e: Etude) {
   db.sql.exec("PRAGMA foreign_keys=OFF");
   try {
     db.tx(() => muted(db, () => {
+      // This device's own asset bytes, which wait for their upload before they are in sync_blobs.
+      const own = new Map<string, Uint8Array>(db.all("SELECT hash,bytes FROM type_assets").map(r => [r.hash, r.bytes]));
       // Keep shipped definitions and device settings; all collection content comes from the log.
       for (const t of ["reviews","attempts","cards","item_tags","items","decks","presets","type_assets","type_folders","type_placement","tag_meta"]) db.run(`DELETE FROM ${t}`);
       for (const t of ["types","schedulers"]) db.run(`DELETE FROM ${t} WHERE builtin=0`);
@@ -107,16 +114,17 @@ export function project(e: Etude) {
         insert("reviews",{...r,id:ids.get("reviews")!.get(k),sync_id:k,card_id:ids.get("cards")!.get(r.card_id),attempt_id:liveAttempts.has(r.attempt_id) ? ids.get("attempts")!.get(r.attempt_id) : null,state:0,card_before:"{}",due_after:r.ts});
       }
       for (const [key,r] of data.get("settings")!) if (key === "settings") applySettings(e, r);
-      for (const r of data.get("type_assets")!.values()) {
-        const bytes = db.get("SELECT bytes FROM sync_blobs WHERE hash=?",r.hash)?.bytes;
-        if (!bytes) throw new Error(`missing local asset ${r.hash}`);
-        insert("type_assets",{...r,bytes});
+      const waiting: string[] = [];
+      for (const [key,r] of data.get("type_assets")!) {
+        const bytes = syncedBytes(db, r.hash) ?? own.get(r.hash);
+        if (bytes) insert("type_assets",{...r,bytes});
+        else waiting.push(key);
       }
       e.invalidateCaches();
       e.replaySyncedCards();
       const violations = db.all("PRAGMA foreign_key_check");
       if (violations.length) throw new Error("sync merge has broken references");
-      projected(e);
+      projected(e, waiting);
     }));
   } finally { db.sql.exec("PRAGMA foreign_keys=ON"); }
 }
@@ -279,12 +287,14 @@ export function projectDirty(e: Etude) {
       // Script schedulers see study days, which start at this hour.
       if (moved("settings", "settings") || e.settings().dayStartHour !== day) replayAll = true;
     }
+    const waiting: string[] = [];
     for (const key of sorted("type_assets")) {
       const r = rowFor(db, "type_assets", key);
       if (r) {
-        const bytes = db.get("SELECT bytes FROM sync_blobs WHERE hash=?", r.hash)?.bytes;
-        if (!bytes) throw new Error(`missing local asset ${r.hash}`);
-        upsert("type_assets", { ...r, bytes });
+        // This device's own copy until its upload puts the bytes in sync_blobs; neither: the row waits as it is.
+        const bytes = syncedBytes(db, r.hash) ?? db.get("SELECT bytes FROM type_assets WHERE hash=? LIMIT 1", r.hash)?.bytes;
+        if (bytes) upsert("type_assets", { ...r, bytes });
+        else waiting.push(key);
       } else { const [type, name] = JSON.parse(key); db.run("DELETE FROM type_assets WHERE type_id=? AND name=?", type, name); }
     }
 
@@ -298,7 +308,7 @@ export function projectDirty(e: Etude) {
       for (const r of db.all("SELECT c.id FROM sync_dirty s JOIN cards c ON c.sync_id=s.key WHERE s.tbl='replay'")) touch(r.id, ["\uffff", ""]);
       e.replaySyncedCards(replay);
     }
-    projected(e);
+    projected(e, waiting);
   }));
 }
 

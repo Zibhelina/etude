@@ -3517,13 +3517,15 @@ Encrypted offline collection sync over a folder or etude-cloud.
 
 Show connection, lock and pending change status.
 
+`busy`, `error` and `progress` describe the collection's sync: events, card type assets and the rebuild of what changed. Media files follow it in the background and report under `media`: `active` while that runs, its own `progress` and `error`, and `received`, the files from other devices written since the process started. `progress` gives the step (download, check, upload, apply), bytes `done` (files for check), the `total` when known and the `rate` in bytes per second.
+
 ```
 etude sync status
 ```
 
 *read-only*
 
-Output: { configured, kind, signedIn, unlocked, hasKeys, lastSync, pending, busy, error, progress }
+Output: { configured, kind, signedIn, unlocked, hasKeys, lastSync, pending, received, busy, error, progress, media: { active, progress, error, received } }
 
 ### etude sync setup
 
@@ -3647,7 +3649,7 @@ etude sync unlock --recovery < recovery-file
 
 Push pending encrypted changes and merge remote changes.
 
-On a Sync server, exits 7 (`sync_required`) when Sync isn't active on the account; nothing local changes.
+Syncs the collection, then the media files, and exits when both are done. A media failure exits with its error after the collection is already in step; the next sync tries the files again. On a Sync server, exits 7 (`sync_required`) when Sync isn't active on the account; nothing local changes.
 
 ```
 etude sync now

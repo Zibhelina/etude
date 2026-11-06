@@ -130,13 +130,24 @@ export interface ScriptCtx {
 
 export class SchedulerError extends Error {}
 
-/** Runs a scheduler script. Returns the next due date (ISO) and the state to keep. */
-export function runSchedule(def: SchedulerDef, card: ScriptCard, attempt: ScriptAttempt, options: Record<string, unknown>, ctx: ScriptCtx): { due: string; state: unknown } {
+/** FNV-1a over the UTF-16 code units: the same 32 bits in every JavaScript engine. */
+function hash32(text: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+  return h >>> 0;
+}
+
+/**
+ * Runs a scheduler script. Returns the next due date (ISO) and the state to keep. The script's
+ * Math.random is seeded by the card's key (`cardKey`) and the number of this review, so cards
+ * answered alike draw differently and every device draws the same; without a key, by the number alone.
+ */
+export function runSchedule(def: SchedulerDef, card: ScriptCard, attempt: ScriptAttempt, options: Record<string, unknown>, ctx: ScriptCtx, key?: string): { due: string; state: unknown } {
   const out = runScript<{ due?: unknown; state?: unknown }>(def.schedule, {
     params: SCHEDULE_PARAMS,
     args: { card, attempt, options, ctx },
     clock: ctx.now,
-    seed: card.reps + 1,
+    seed: key === undefined ? card.reps + 1 : hash32(`${key}:${card.reps + 1}`),
     where: `${def.id}/schedule`,
     timeoutMs: 500,
   });

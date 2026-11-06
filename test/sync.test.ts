@@ -1,10 +1,10 @@
 import { tmpdir } from "node:os";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Etude } from "../src/core/engine.ts";
-import { syncFor } from "../src/core/sync/client.ts";
+import { syncFor, writeAtomic } from "../src/core/sync/client.ts";
 import { compare, tick, rows, drain, receive, type Change } from "../src/core/sync/log.ts";
 import { project } from "../src/core/sync/project.ts";
 import { generateVaultKey, encryptBlob, decryptBlob, encryptEvent, decryptEvent, fromB64, syncKeys } from "../src/core/sync/crypto.ts";
@@ -111,18 +111,40 @@ test("media names with spaces and accents sync; unsafe paths from another device
   try {
     const folder=join(dir,"shared");for(const e of [a,b]){syncFor(e).setup({folder});await syncFor(e).unlock({password});}
     mkdirSync(join(a.mediaDir,"anki"),{recursive:true});writeFileSync(join(a.mediaDir,"anki","Thüringen Wappen.png"),"flag");
-    await syncFor(a).now();
+    await syncFor(a).now({waitMedia:true});
     // A compromised device (it holds the vault key) names a file outside the media folder.
     receive(b.db,"evil-1",{v:1,table:"media",key:"../escaped.png",stamp:[Date.now(),0,"zz"],fields:{"/hash":"0".repeat(64)}});
-    await syncFor(b).now();
+    await syncFor(b).now({waitMedia:true});
     assert.equal(readFileSync(join(b.mediaDir,"anki","Thüringen Wappen.png"),"utf8"),"flag");
     assert.equal(existsSync(join(b.mediaDir,"..","escaped.png")),false);
     assert.equal(syncFor(b).status().error,null);
     // A file changed on this device is uploaded, not overwritten by the copy it had before.
     writeFileSync(join(b.mediaDir,"anki","Thüringen Wappen.png"),"new flag");
-    await syncFor(b).now();await syncFor(a).now();
+    await syncFor(b).now({waitMedia:true});await syncFor(a).now({waitMedia:true});
     assert.equal(readFileSync(join(b.mediaDir,"anki","Thüringen Wappen.png"),"utf8"),"new flag");
     assert.equal(readFileSync(join(a.mediaDir,"anki","Thüringen Wappen.png"),"utf8"),"new flag");
+  }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
+});
+test("a downloaded media file is whole or absent; a partial file left behind is never uploaded and goes once stale",async()=>{
+  const dir=temp();for(const d of ["a","b","w"])mkdirSync(join(dir,d));
+  const a=await Etude.open(join(dir,"a","a.db"),{home:join(dir,"ha")}),b=await Etude.open(join(dir,"b","b.db"),{home:join(dir,"hb")});
+  try {
+    // A write cut short (the app closed): the real name never holds half a file.
+    const target=join(dir,"w","clip.mp3");
+    assert.throws(()=>writeAtomic(target,new TextEncoder().encode("whole sound"),(p,bytes)=>{writeFileSync(p,bytes.subarray(0,5));throw new Error("closed");}),/closed/);
+    assert.deepEqual(readdirSync(join(dir,"w")),[]);
+    writeAtomic(target,new TextEncoder().encode("whole sound"));
+    assert.equal(readFileSync(target,"utf8"),"whole sound");assert.deepEqual(readdirSync(join(dir,"w")),["clip.mp3"]);
+    // One a closed app left in a media folder looks like nothing to sync, and goes once it's stale.
+    const folder=join(dir,"shared");for(const e of [a,b]){syncFor(e).setup({folder});await syncFor(e).unlock({password});}
+    mkdirSync(join(a.mediaDir,"anki"),{recursive:true});
+    const fresh=join(a.mediaDir,"anki",".etude-partial-new"),stale=join(a.mediaDir,".etude-partial-old");
+    writeFileSync(fresh,"half");writeFileSync(stale,"half");const old=new Date(Date.now()-3600_000);utimesSync(stale,old,old);
+    writeFileSync(join(a.mediaDir,"anki","real.mp3"),"sound");
+    await syncFor(a).now({waitMedia:true});await syncFor(b).now({waitMedia:true});
+    assert.deepEqual([...rows(a.db,"media").keys()],["anki/real.mp3"]);
+    assert.deepEqual(readdirSync(join(b.mediaDir,"anki")),["real.mp3"]);
+    assert.ok(existsSync(fresh),"a partial file being written isn't touched");assert.ok(!existsSync(stale));
   }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
 });
 test("sync reports its steps, and the upload total matches the bytes sent",async()=>{
@@ -134,18 +156,20 @@ test("sync reports its steps, and the upload total matches the bytes sent",async
     put(a,"one");mkdirSync(join(a.mediaDir,"anki"),{recursive:true});
     for(let i=0;i<3;i++)writeFileSync(join(a.mediaDir,"anki",`clip ${i}.mp3`),"sound ".repeat(1000+i));
     const record=(e:Etude)=>{const s=syncFor(e) as any,seen:any[]=[],step=s.step.bind(s);s.step=(...args:any[])=>{const p=step(...args);if(!seen.includes(p))seen.push(p);return p;};return seen;};
-    const sa=record(a);await syncFor(a).now();
-    // The first sync builds the relational view from the registers once.
-    assert.deepEqual(sa.map(p=>p.step),["download","check","upload","apply"]);
-    const up=sa.find(p=>p.step==="upload");assert.ok(up.done>3000);assert.equal(up.done,up.total);
+    const sa=record(a);await syncFor(a).now({waitMedia:true});
+    // The collection first (the first sync builds the relational view once), then the media.
+    assert.deepEqual(sa.map(p=>p.step),["download","upload","apply","check","download","upload"]);
+    const uploads=sa.filter(p=>p.step==="upload");for(const up of uploads)assert.equal(up.done,up.total);
+    assert.ok(uploads[1].done>3000,"the media upload");
     assert.deepEqual(sa.find(p=>p.step==="check"),{step:"check",done:3,total:3,rate:0});
     assert.equal(syncFor(a).status().progress,null);
-    const sb=record(b);await syncFor(b).now();
-    assert.ok(sb.find(p=>p.step==="download").done>up.done*0.9,"b downloads what a sent");
-    assert.equal(sb.find(p=>p.step==="upload").total,0);
+    const sb=record(b);await syncFor(b).now({waitMedia:true});
+    const sum=(list:any[],step:string)=>list.filter(p=>p.step===step).reduce((n,p)=>n+p.done,0);
+    assert.ok(sum(sb,"download")>sum(sa,"upload")*0.9,"b downloads what a sent");
+    assert.equal(sum(sb,"upload"),0);
     // b received a's changes and rebuilt; a second sync with nothing new doesn't rebuild again.
     assert.ok(sb.some(p=>p.step==="apply"));
-    const again=record(b);await syncFor(b).now();
+    const again=record(b);await syncFor(b).now({waitMedia:true});
     assert.ok(!again.some(p=>p.step==="apply"));
   }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
 });
@@ -154,7 +178,7 @@ test("media: a sync with nothing new skips the files; new files, remote changes 
   const a=await Etude.open(join(dir,"a","a.db"),{home:join(dir,"ha")}),b=await Etude.open(join(dir,"b","b.db"),{home:join(dir,"hb")});
   try {
     const folder=join(dir,"shared");for(const e of [a,b]){syncFor(e).setup({folder});await syncFor(e).unlock({password});}
-    const checked=async(e:Etude)=>{const s=syncFor(e) as any,step=s.step.bind(s);let seen=false;s.step=(...args:any[])=>{if(args[0]==="check")seen=true;return step(...args);};try{await s.now();}finally{s.step=step;}return seen;};
+    const checked=async(e:Etude)=>{const s=syncFor(e) as any,step=s.step.bind(s);let seen=false;s.step=(...args:any[])=>{if(args[0]==="check")seen=true;return step(...args);};try{await s.now({waitMedia:true});}finally{s.step=step;}return seen;};
     const stored=a.storeMedia("dot.png",Buffer.from("dot"));mkdirSync(join(a.mediaDir,"anki"),{recursive:true});writeFileSync(join(a.mediaDir,"anki","map.png"),"map");
     assert.equal(await checked(a),true,"the first sync of a process looks at every file");
     // A file Etude stored is named by its hash, so it isn't read to hash it.
@@ -171,17 +195,17 @@ test("media: a sync with nothing new skips the files; new files, remote changes 
     writeFileSync(join(b.mediaDir,"anki","map.png"),"map, edited");
     assert.equal(await checked(b),false);
     (syncFor(b) as any).scanned-=11*60_000;
-    assert.equal(await checked(b),true);await syncFor(a).now();
+    assert.equal(await checked(b),true);await syncFor(a).now({waitMedia:true});
     assert.equal(readFileSync(join(a.mediaDir,"anki","map.png"),"utf8"),"map, edited");
     // A file whose name claims another hash is sent with the hash of its bytes.
     const fake="0".repeat(64);writeFileSync(join(a.mediaDir,"files",fake+".png"),"not what the name says");
-    await syncFor(a).now();await syncFor(b).now();
+    await syncFor(a).now({waitMedia:true});await syncFor(b).now({waitMedia:true});
     const r=rows(a.db,"media").get(`files/${fake}.png`)!;
     assert.notEqual(r.hash,fake);assert.equal(readFileSync(join(b.mediaDir,"files",fake+".png"),"utf8"),"not what the name says");
     // Neither device takes the name's word for it on the next full look, so neither sends it again.
     const events=(e:Etude)=>e.db.get("SELECT count(*) n FROM sync_events")!.n,before=[events(a),events(b)];
     for(const e of [a,b])(syncFor(e) as any).scanned=0;
-    await syncFor(b).now();await syncFor(a).now();
+    await syncFor(b).now({waitMedia:true});await syncFor(a).now({waitMedia:true});
     assert.deepEqual([events(a),events(b)],before);
     assert.equal(syncFor(b).status().error,null);
   }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
@@ -199,12 +223,41 @@ test("media bytes kept by an earlier version are dropped; type asset bytes stay"
     assert.deepEqual(e.db.all("SELECT hash FROM sync_blobs").map(r=>r.hash),[asset]);
   }finally{e.close();rmSync(dir,{recursive:true,force:true});}
 });
+test("a type asset whose blob event hasn't arrived: the projection goes on without it, keeps its key and takes it on a later sync",async()=>{
+  const dir=temp();for(const d of ["a","b"])mkdirSync(join(dir,d));
+  const a=await Etude.open(join(dir,"a","a.db"),{home:join(dir,"ha")}),b=await Etude.open(join(dir,"b","b.db"),{home:join(dir,"hb")});
+  try {
+    const folder=join(dir,"shared");for(const e of [a,b]){syncFor(e).setup({folder});await syncFor(e).unlock({password});}
+    put(a,"one");
+    a.saveType({...a.type("basic"),id:"with-asset",name:"With asset",assets:{"a.json":Buffer.from('{"x":1}').toString("base64")}});
+    await syncFor(a).now({waitMedia:true});
+    const hash=a.db.get("SELECT hash FROM type_assets WHERE type_id='with-asset'")!.hash;
+    // The asset's blob event is still on its way: take it out of the folder for now.
+    const key=await syncKeys(fromB64((syncFor(a) as any).secrets().vk)),events=join(folder,"events",readdirSync(join(folder,"events"))[0]);
+    let held="";
+    for(const f of readdirSync(events)){const ev=JSON.parse(readFileSync(join(events,f),"utf8"));const c=await decryptEvent<Change>(key,ev.id,ev.ciphertext);if(c.table==="blob"&&c.key===hash)held=f;}
+    assert.ok(held);renameSync(join(events,held),join(dir,held));
+    await syncFor(b).now({waitMedia:true});
+    assert.equal(syncFor(b).status().error,null);
+    assert.ok(b.db.get("SELECT 1 FROM items WHERE id='one'"),"the rest of the collection is there");
+    assert.ok(b.db.get("SELECT 1 FROM types WHERE id='with-asset'"));
+    assert.equal(b.db.get("SELECT count(*) n FROM type_assets")!.n,0);
+    assert.ok(b.db.get("SELECT 1 FROM sync_dirty WHERE tbl='type_assets'"),"the asset's key waits");
+    renameSync(join(dir,held),join(events,held));
+    await syncFor(b).now({waitMedia:true});
+    assert.equal(Buffer.from(b.db.get("SELECT bytes FROM type_assets WHERE type_id='with-asset' AND name='a.json'")!.bytes).toString(),'{"x":1}');
+    assert.equal(b.db.get("SELECT 1 FROM sync_dirty WHERE tbl='type_assets'"),undefined);
+    assert.deepEqual(relational(b),await rebuilt(b,dir));
+  }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
+});
 async function login(s:ReturnType<typeof syncFor>,server:string,outbox:string,email:string){
   s.setup({server});await s.signin(email);
   const files=readdirSync(outbox).map(f=>({f,text:readFileSync(join(outbox,f),"utf8")}));
   const mail=files.map(x=>JSON.parse(x.text)).filter(x=>x.to.toLowerCase()===email.toLowerCase()).at(-1)!;
   await s.verify(mail.meta.token);
 }
+/** The property test's random stream. ETUDE_SYNC_SEED (decimal or 0x hex) runs another one; xorshift needs a non-zero seed. */
+const SEED=(Number(process.env.ETUDE_SYNC_SEED ?? 0x5eed1234)>>>0)||1;
 async function property(kind:"folder"|"cloud") {
   const dir=temp();const es:Etude[]=[];
   try {
@@ -212,7 +265,7 @@ async function property(kind:"folder"|"cloud") {
     const ss=es.map(syncFor);const folder=join(dir,"shared");
     // After every sync, the incremental projection must equal a full rebuild of the same registers.
     const sync=async(i:number)=>{
-      await ss[i].now();
+      await ss[i].now({waitMedia:true});
       assert.equal(es[i].db.get("SELECT value FROM sync_meta WHERE key='fallback'")?.value,undefined);
       assert.deepEqual(relational(es[i]),await rebuilt(es[i],dir),`device ${i} after an incremental projection`);
     };
@@ -235,7 +288,7 @@ async function property(kind:"folder"|"cloud") {
     es[0].upsertItem({id:"typed",deck:"Test",type:"typed",fields:{prompt:"question",answers:["answer"]}});
     es[0].savePreset({id:"shared-preset",name:"Shared preset",config:{desiredRetention:0.9}});es[0].updateDeck("Test",{presetId:"shared-preset"});
     for(let n=0;n<2;n++)for(let i=0;i<3;i++)await sync(i);
-    let state=0x5eed1234;const rand=()=>{state^=state<<13;state^=state>>>17;state^=state<<5;return(state>>>0)/4294967296;};
+    let state=SEED;const rand=()=>{state^=state<<13;state^=state>>>17;state^=state<<5;return(state>>>0)/4294967296;};
     const deleted=new Set<string>();let reviews=0;const reviewKeys:string[]=[];
     for(let round=0;round<240;round++) {
       const device=Math.floor(rand()*3),e=es[device],index=Math.floor(rand()*18),key="item-"+index;
@@ -273,8 +326,8 @@ async function property(kind:"folder"|"cloud") {
     for(const e of es)assert.equal(readFileSync(join(e.mediaDir,es[0].storeMedia("pixel.png",Buffer.from("test bytes"),{dryRun:true}).file),"utf8"),"test bytes");
   } finally {for(const e of es)e.close();rmSync(dir,{recursive:true,force:true});}
 }
-test("seed 0x5eed1234: 3 offline devices converge through encrypted folder (240 rounds)",()=>property("folder"));
-test("seed 0x5eed1234: 3 offline devices converge through real etude-cloud HTTP (240 rounds)",{skip:!process.env.ETUDE_SYNC_TEST_SERVER},()=>property("cloud"));
+test(`seed 0x${SEED.toString(16)}: 3 offline devices converge through encrypted folder (240 rounds)`,()=>property("folder"));
+test(`seed 0x${SEED.toString(16)}: 3 offline devices converge through real etude-cloud HTTP (240 rounds)`,{skip:!process.env.ETUDE_SYNC_TEST_SERVER},()=>property("cloud"));
 test("history that arrives out of order: an attempt before its review, a review before an earlier one",async()=>{
   const dir=temp();const es=await Promise.all(["a","b","c"].map(n=>Etude.open(join(dir,`${n}.db`),{home:join(dir,"h"+n)})));const [a,b,c]=es;
   try {

@@ -360,6 +360,8 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
   .minimi:hover .minimi-btn, .minimi.is-land .minimi-btn { animation: none; }
 }
 /* While his mini chat is open he looks up at you, and the hover tip stays out of the way. */
+/* and he sits above the chat's frosted veil, so its blur never smudges him. */
+.minimi.is-talk { z-index: 41; }
 .minimi.is-talk .minimi-fr { opacity: 0; }
 .minimi.is-talk .minimi-look { opacity: 1; }
 .minimi.is-talk .minimi-tip { display: none; }

@@ -405,7 +405,13 @@ export class Etude {
   }
 
   close() {
+    for (const fn of this.closing.splice(0)) fn();
     this.db.close();
+  }
+  private closing: (() => void)[] = [];
+  /** Runs `fn` when the collection closes, before the database does (background work that should stop). */
+  onClose(fn: () => void) {
+    this.closing.push(fn);
   }
 
   /**

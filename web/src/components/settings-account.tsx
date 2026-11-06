@@ -585,7 +585,9 @@ function TwoStep({ email, guarded }: { email: string; guarded: Guarded }) {
   const [busy, setBusy] = useState(false);
   const [codes, setCodes] = useState<string[] | null>(null);
   const [confirmOff, setConfirmOff] = useState(false);
-  const load = useCallback(() => account.twoFactor().then(setTf).catch((e) => setError(msg(e))), []);
+  // A Sync server without two-step sign-in yet answers 404: then there's nothing to show.
+  const [unavailable, setUnavailable] = useState(false);
+  const load = useCallback(() => account.twoFactor().then(setTf).catch((e) => (e instanceof AccountApiError && e.status === 404 ? setUnavailable(true) : setError(msg(e)))), []);
   useEffect(() => void load(), [load]);
 
   const start = () => guarded(tf?.enabled ? "replace the authenticator" : "turn on two-step sign-in", async () => (setCode(""), setSetup(await account.authenticatorStart())));
@@ -615,6 +617,7 @@ function TwoStep({ email, guarded }: { email: string; guarded: Guarded }) {
     }
   };
 
+  if (unavailable) return null;
   const description = tf?.enabled
     ? `Email sign-ins also ask for a code from your authenticator app${tf.since ? `, since ${date(tf.since)}` : ""}. ${tf.recoveryCodesLeft === 1 ? "1 recovery code" : `${tf.recoveryCodesLeft} recovery codes`} left.`
     : "Signing in by email also asks for a code from an authenticator app (like Google Authenticator, 1Password or Authy), so someone who gets into your email still can't sign in. Passkeys sign in as before.";

@@ -121,6 +121,7 @@ The body gets `data-mode="answer"` or `data-mode="result"`, so `.only-answer` an
 | `etude.onScreen(fn)` | called with `etude.screen` whenever it changes: focus mode turned on or off, the window resized |
 | `etude.prefs` | what this card type saved for itself with `setPref`, shared by all its cards (an object; `{}` until something is saved) |
 | `etude.setPref(key, value)` | saves one preference for the type: a short key (letters, digits, `_ . -`, up to 64) and a JSON value, `null` to remove it. At most 4 KB per type |
+| `etude.morph` | `true` by default: when the card goes from answer to result the app animates it (see below). Set it to `false` to have the result just appear |
 
 `grade.details` is whatever the grade script returned as `details`. Use it to mark parts, options or blanks.
 
@@ -135,6 +136,17 @@ A small `std.normalize(s)` is also in scope in card scripts. The full `std` (bel
 - The frame resizes to the card's height automatically. Don't use fixed heights or internal scrolling for the whole card.
 - Card preferences (`etude.prefs`, `etude.setPref`) keep a few small settings across cards: a game's chosen character, whether its sound is on, a keyboard layout. They belong to the card type, not to one card or deck, live in the collection's settings and sync with it. The type editor's Info tab lists them under **Saved by its cards**, with Reset, and `etude type prefs` shows, sets or resets them. A card can't read or write another type's preferences, and they never touch grading or scheduling. Previews of an unsaved type start with none and keep nothing.
 - In focus mode (the ⤢ button on the study page, Esc to leave) the app hides its header and an idle bottom bar and tells the card how tall the screen is (`etude.screen`). A card that should fit on one screen, such as a game, can scale itself to that height.
+
+### Motion
+
+When a graded card turns into its result, the runtime animates the change from the card's DOM alone, so every type gets it: each piece that is still there (a text block, an image, an input, a formula) glides from where it was to where it is now, new pieces fade up one after another in reading order, and pieces that went away fade out where they were. It runs inside the card's frame in Study and Watch, and is skipped with reduced motion and for cards whose verdict the app doesn't show (games). To shape it:
+
+- `etude.morph = false` turns it off for the type (set it in the card script; a game with its own result screen usually wants this).
+- `data-morph="atom"` on an element moves it as one piece, scaled to its new size, instead of looking inside it.
+- `data-morph="unit"` moves an element as one piece without scaling it, for something that changes height between answer and result (a map sheet).
+- `data-morph="skip"` leaves an element and everything in it alone.
+
+Self-graded cards don't morph: the app turns the card over to a second copy of the type showing the result, so a self-graded type should draw its result from `etude.onResult(result)` (`result.answer` is what the learner submitted) rather than from what's in its fields.
 
 ### Editors and code
 

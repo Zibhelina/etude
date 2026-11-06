@@ -287,6 +287,8 @@ function DesktopDecks() {
     return () => ro.disconnect();
   }, [visible, collapsed, q]);
   const anyIcon = top.some((d) => d.icon);
+  // No deck has subdecks: no chevron column, so names start at the page margin.
+  const anyKids = visible.some((d) => d.hasChildren);
 
   const menuFor = (d: DeckNode): DeckMenuEntry[] => [
     { icon: <Pencil />, label: "Rename", onSelect: () => navigate(`/deck?name=${enc(d.name)}&rename=1`) },
@@ -301,7 +303,7 @@ function DesktopDecks() {
   ];
 
   return (
-    <Page className="max-w-[52rem]">
+    <Page className="flex max-w-[52rem] flex-col md:-mb-[5.5rem] md:min-h-[calc(100dvh-2.5rem)]">
       <LibraryHeader onImport={reload} onNew={() => setCreating(true)} query={query} setQuery={setQuery} hasDecks={!!decks?.length} />
 
       {decks && decks.length === 0 && (
@@ -315,7 +317,7 @@ function DesktopDecks() {
 
       {visible.length > 0 && (
         <section className="mt-10" aria-label="Decks">
-          <div className="mb-2 flex items-baseline justify-between px-1">
+          <div className="mb-2 flex items-baseline justify-between">
             <span className="score-kicker font-semibold">Decks</span>
             <span className="text-[13px] text-muted-foreground tabular">{plural(top.length, "deck")} · {plural(totalCards, "card")}</span>
           </div>
@@ -342,23 +344,24 @@ function DesktopDecks() {
                     ref={(el) => { if (el) rows.current.set(d.name, el); else rows.current.delete(d.name); }}
                     data-deck={d.name}
                     className={cn(
-                      "lib-row group relative flex cursor-pointer items-center gap-3 rounded-xl py-2 pr-2.5 select-none",
+                      "lib-row group relative -mx-2.5 flex cursor-pointer items-center gap-3 rounded-xl py-2 pr-2.5 select-none",
                       sub ? "min-h-[3.4rem]" : "min-h-[4.25rem]",
                       !drag && "transition-colors",
                       lifted && "opacity-35",
                       target && !targetBlocked && "bg-primary/10 ring-[1.5px] ring-primary ring-inset",
                       targetBlocked && "bg-destructive/10 ring-1 ring-destructive/50 ring-inset",
                     )}
-                    style={{ paddingLeft: 2 + d.displayDepth * (anyIcon ? ROW_INDENT : 14) }}
+                    style={{ paddingLeft: 10 + d.displayDepth * (anyIcon ? ROW_INDENT : 14) }}
                     onClick={(e) => { if (!(e.target as HTMLElement).closest("button,[role=menuitem]")) navigate(`/deck?name=${enc(d.name)}`); }}
                   >
                     <button
                       data-grip
                       className={cn(
-                        "lib-grip -mr-2 flex h-10 w-[22px] shrink-0 touch-none items-center justify-center rounded-md hover:!text-foreground",
+                        "lib-grip absolute top-1/2 flex h-10 w-[22px] -translate-y-1/2 touch-none items-center justify-center rounded-md hover:!text-foreground",
                         drag?.name === d.name ? "cursor-grabbing text-foreground" : "cursor-grab text-muted-foreground/60",
                         (visible.length < 2 || (drag && drag.name !== d.name)) && "invisible",
                       )}
+                      style={{ left: d.displayDepth * (anyIcon ? ROW_INDENT : 14) - 16 }}
                       onPointerDown={(e) => startDrag(d.name, e)}
                       onKeyDown={(e) => keyMove(d.name, e)}
                       aria-label={`Move ${name}: drag it onto a deck or between rows. Arrow keys reorder, Alt+arrows change level.`}
@@ -366,7 +369,7 @@ function DesktopDecks() {
                     >
                       <GripVertical className="size-4" />
                     </button>
-                    {(
+                    {anyKids && (
                       <button
                         className={cn("-mr-0.5 flex h-[30px] w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground", !d.hasChildren && "invisible")}
                         onClick={() => toggle(d.name)}
@@ -407,16 +410,16 @@ function DesktopDecks() {
               <div
                 aria-hidden
                 className={cn("pointer-events-none absolute right-3 z-20 h-0.5 -translate-y-1/2 rounded-full", blocked(drag.name, drag.drop) ? "bg-destructive" : "bg-primary")}
-                style={{ top: drag.drop.y - listTop(), left: 2 + drag.drop.depth * (anyIcon ? ROW_INDENT : 14) + 24 }}
+                style={{ top: drag.drop.y - listTop(), left: drag.drop.depth * (anyIcon ? ROW_INDENT : 14) + (anyKids ? 24 : 0) }}
               >
                 <span className={cn("absolute -top-[3px] -left-1.5 size-2 rounded-full border-2 bg-background", blocked(drag.name, drag.drop) ? "border-destructive" : "border-primary")} />
               </div>
             )}
           </div>
           {q && visible.length === 0 && <p className="px-1 py-8 text-center text-sm text-muted-foreground">No deck matches “{query}”.</p>}
-          <ArchiveLink count={archived} className="mt-6" />
         </section>
       )}
+      {decks && decks.length > 0 && !q && <ArchiveLink count={archived} className="mt-auto pt-10" />}
       {q && decks && visible.length === 0 && <p className="mt-10 text-center text-sm text-muted-foreground">No deck matches “{query}”.</p>}
       {deckActions.deleteDialog}
       {drag && (

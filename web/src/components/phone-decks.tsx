@@ -43,7 +43,7 @@ export function PhoneDecks() {
   const found = q ? all.filter((d) => leafOf(d.name).toLowerCase().includes(q)) : [];
 
   return (
-    <div className="pb-4">
+    <div className="flex min-h-[calc(100dvh-var(--tabbar-h,0px)-2.5rem)] flex-col pb-4">
       <PhoneTitle
         kicker={todayKicker()}
         title="Library"
@@ -94,7 +94,7 @@ export function PhoneDecks() {
         top.length > 0 && <DeckList decks={all} parent="" label="Decks" aside={`${top.length} · ${plural(cards, "card")}`} onChanged={reload} />
       )}
       {!q && decks && decks.length > 0 && (
-        <div className="mx-5 mt-5"><ArchiveLink count={archivedCount} /></div>
+        <div className="mx-5 mt-auto pt-8"><ArchiveLink count={archivedCount} /></div>
       )}
 
       <ActionSheet

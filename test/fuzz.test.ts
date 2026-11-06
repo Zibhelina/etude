@@ -227,3 +227,32 @@ test("the first sync after the replay changed rebuilds every card once", async (
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a scheduler script's random draws differ between cards and stay put through sync", async () => {
+  const { runSchedule } = await import("../src/core/schedulers.ts");
+  await (await import("../src/core/sandbox.ts")).initSandbox();
+  const def = { id: "spread", name: "Spread", schedule: "return { due: Date.now() + Math.floor(Math.random() * 30) * 86400000, state: { r: Math.random() } };" } as any;
+  const run = (key?: string) => runSchedule(def, { state: null, reps: 2, due: "2027-01-01T00:00:00.000Z", lastReview: null, created: "2027-01-01T00:00:00.000Z" }, { rating: 3, score: null, verdict: null, details: null, ms: null, at: "2027-01-05T00:00:00.000Z" }, {}, { now: "2027-01-05T00:00:00.000Z", day: [], doneToday: 0, history: [] }, key);
+  assert.deepEqual(run('["a","main"]'), run('["a","main"]'), "the same card and review draw the same");
+  assert.notDeepEqual(run('["a","main"]'), run('["b","main"]'), "another card draws differently");
+  const dir = temp();
+  const [a, b] = await devices(dir, 2);
+  try {
+    a.saveScheduler({ id: "spread", name: "Spread", schedule: def.schedule });
+    a.ensureDeck("Scripted");
+    a.updateDeck("Scripted", { config: { scheduler: "spread" } });
+    for (let i = 0; i < 20; i++) a.upsertItem({ id: `s-${i}`, deck: "Scripted", type: "basic", fields: { front: `q ${i}`, back: "a" } });
+    const at = new Date(Date.now() - 10 * DAY);
+    for (const c of a.db.all("SELECT id FROM cards")) a.rate(c.id as number, 3, { at });
+    const rated = schedules(a);
+    assert.ok(new Set(rated.map((r) => r.due)).size > 10, "cards answered together come back on different days");
+    await syncFor(a).now();
+    await syncFor(b).now();
+    assert.deepEqual(schedules(a), rated);
+    assert.deepEqual(schedules(b), rated);
+  } finally {
+    a.close();
+    b.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

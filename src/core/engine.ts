@@ -948,7 +948,7 @@ export class Etude {
     const sc: ScriptCard = { state: parse(card.sched_state ?? null, null), reps: card.reps, due: card.due, lastReview: card.last_review, created: card.created ?? card.due };
     const ctx: ScriptCtx = { now: iso(t), day: this.dayStarts(t), doneToday, history: history.map((h) => ({ at: h.ts, rating: h.rating || null, score: h.score })) };
     try {
-      return runSchedule(def, sc, attempt, resolveOptions(def, cfg.schedulerOptions), ctx);
+      return runSchedule(def, sc, attempt, resolveOptions(def, cfg.schedulerOptions), ctx, sched.cardKey(card));
     } catch (e) {
       if (e instanceof SchedulerError || e instanceof ScriptError) throw new EtudeError(`scheduler "${def.id}": ${e.message}`);
       throw e;
@@ -2950,8 +2950,10 @@ export class Etude {
             if (start > new Date(r.ts)) start.setUTCDate(start.getUTCDate()-1);
             const day = Array.from({length:DAY_HORIZON+1},(_,i) => new Date(start.getTime()+i*86400_000).toISOString());
             const past = history.slice(-50);
-            const out = runSchedule(script,{state:parse(row.sched_state,null),reps:row.reps,due:row.due,lastReview:row.last_review,created:c.created},{rating:script.ratings === false ? null : r.rating || null,score:r.score,verdict:g?.verdict ?? null,details:g?.details ?? null,ms:r.duration_ms,at:r.ts},resolveOptions(script,cfg.schedulerOptions),{now:r.ts,day,doneToday:past.filter(h=>h.at>=day[0]).length,history:past});
-            row = {...row,state:2,due:out.due,reps:row.reps+1,lapses:row.lapses+(r.rating===1?1:0),last_review:r.ts,sched_state:json(out.state)};
+            const out = runSchedule(script,{state:parse(row.sched_state,null),reps:row.reps,due:row.due,lastReview:row.last_review,created:c.created},{rating:script.ratings === false ? null : r.rating || null,score:r.score,verdict:g?.verdict ?? null,details:g?.details ?? null,ms:r.duration_ms,at:r.ts},resolveOptions(script,cfg.schedulerOptions),{now:r.ts,day,doneToday:past.filter(h=>h.at>=day[0]).length,history:past},sched.cardKey(c as CardRow));
+            // The day counts rate() keeps for a script's card.
+            const days = (a: string | null, b: string) => (a ? Math.max(0, (Date.parse(b) - Date.parse(a)) / 86400_000) : 0);
+            row = {...row,state:2,due:out.due,elapsed_days:days(row.last_review,r.ts),scheduled_days:days(r.ts,out.due),reps:row.reps+1,lapses:row.lapses+(r.rating===1?1:0),last_review:r.ts,sched_state:json(out.state)};
           } else row = {...row,...sched.schedule(row,r.rating || sched.suggestRating(r.score,cfg) || 3,new Date(r.ts),cfg).next};
           history.push({at:r.ts,rating:r.rating || null,score:r.score});
           if (history.length > 100) history = history.slice(-50);
@@ -2991,7 +2993,7 @@ export class Etude {
         const script = this.scriptFor(cfg);
         if (script) {
           // Same script, same history: run it again answer by answer.
-          let row: CardRow = { ...(sched.emptyCard(start) as any), id: c.id, item_id: c.item_id, face: "", suspended: 0, buried_until: null, sched_state: null };
+          let row: CardRow = { ...(sched.emptyCard(start) as any), id: c.id, item_id: c.item_id, face: c.face, sync_id: c.sync_id, suspended: 0, buried_until: null, sched_state: null };
           // runScheduler reads earlier results from the table, so each step looks just before its own review.
           for (const r of reviews) {
             const g = parse<Grade | null>(r.grade, null);

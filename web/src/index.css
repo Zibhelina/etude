@@ -373,7 +373,7 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 .mchat-log { margin: -20px -22px -22px; padding: 20px 22px 22px; scrollbar-width: none; }
 .mchat-log::-webkit-scrollbar { display: none; }
 /* A frosted patch behind the chat, feathered at the edges, so the page under it stops competing. */
-.mchat-veil { position: absolute; inset: -66px -34px -30px; z-index: -1; pointer-events: none; border-radius: 40px; background: color-mix(in oklab, var(--background) 45%, transparent); mask-image: linear-gradient(to right, transparent, #000 30px, #000 calc(100% - 30px), transparent), linear-gradient(to bottom, transparent, #000 30px, #000 calc(100% - 30px), transparent); mask-composite: intersect; -webkit-mask-composite: source-in; }
+.mchat-veil { position: absolute; inset: -124px -84px -56px; z-index: -1; pointer-events: none; border-radius: 40px; background: color-mix(in oklab, var(--background) 45%, transparent); mask-image: linear-gradient(to right, transparent, #000 72px, #000 calc(100% - 72px), transparent), linear-gradient(to bottom, transparent, #000 64px, #000 calc(100% - 56px), transparent); mask-composite: intersect; -webkit-mask-composite: source-in; }
 .mchat-log.is-scrolled { mask-image: linear-gradient(to bottom, transparent 16px, #000 46px); }
 .mchat-b { position: relative; background: var(--card); border-radius: 18px; filter: drop-shadow(0 0 0.6px color-mix(in oklab, var(--foreground) 22%, transparent)) drop-shadow(0 1px 2px rgb(0 0 0 / 0.05)) drop-shadow(0 6px 14px rgb(0 0 0 / 0.07)); }
 .dark .mchat-b { filter: drop-shadow(0 0 0.6px rgb(255 255 255 / 0.2)) drop-shadow(0 1px 2px rgb(0 0 0 / 0.3)) drop-shadow(0 8px 18px rgb(0 0 0 / 0.4)); }

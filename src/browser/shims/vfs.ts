@@ -1,12 +1,57 @@
 /**
- * A synchronous in-memory file system with node:fs's shape, for the core in a browser.
- * Files under a mounted prefix are mirrored to OPFS (the browser's private disk): loaded once at
- * boot, written back shortly after they change. Everything else (the app's own files, temp dirs)
- * lives only in memory.
+ * A synchronous file system with node:fs's shape, for the core in a browser.
+ * Files under a mounted prefix are mirrored to OPFS (the browser's private disk). Opening lists them
+ * without reading them: a file is read from disk when it's asked for (FileReaderSync, so reads stay
+ * synchronous in the worker), and a file written here stays in memory and goes back to disk shortly after.
+ * Everything else (the app's own files, temp dirs) lives only in memory.
  */
 import { Buffer } from "buffer";
 
+/** Workers only (the core runs in one): a Blob's bytes, synchronously. */
+declare const FileReaderSync: { new (): { readAsArrayBuffer(blob: Blob): ArrayBuffer } };
+
+/** Files in memory: written here, or not mounted. */
 const files = new Map<string, Uint8Array>();
+/** Files on disk that weren't read into memory: their size and time, and how to read them. */
+type OnDisk = { size: number; mtime: number; read(): Uint8Array };
+const onDisk = new Map<string, OnDisk>();
+/**
+ * Files on disk whose size and time are still on their way: opening a folder mounted with `later` doesn't wait
+ * for them (tens of thousands of media files take seconds). Reading one before it's ready throws ENOTREADY and
+ * notes the path, so the caller can `ready` it and ask again.
+ */
+const pending = new Map<string, { h: FileSystemFileHandle; file: (h: FileSystemFileHandle) => Promise<OnDisk> }>();
+const missed = new Set<string>();
+const isFile = (p: string) => files.has(p) || onDisk.has(p) || pending.has(p);
+function notReady(p: string) {
+  missed.add(p);
+  return err("ENOTREADY", "open", p);
+}
+/** A file's bytes, from memory or read from disk now (not kept: a collection's media can be most of a gigabyte). */
+const contents = (p: string): Uint8Array | undefined => {
+  if (pending.has(p)) throw notReady(p);
+  return files.get(p) ?? onDisk.get(p)?.read();
+};
+
+/** Paths a read wanted before they were ready, since the last call. */
+export function takeMissed(): string[] {
+  const out = [...missed];
+  missed.clear();
+  return out;
+}
+/** Makes these files ready now (each one's size and time), ahead of the rest. */
+export async function ready(paths: Iterable<string>) {
+  await Promise.all([...paths].map(norm).map(async (p) => {
+    const w = pending.get(p);
+    if (!w) return;
+    const entry = await w.file(w.h);
+    // Written or removed meanwhile: that wins.
+    if (pending.get(p) === w) (pending.delete(p), onDisk.set(p, entry));
+  }));
+}
+let everything: Promise<void> = Promise.resolve();
+/** Resolves once every file is ready. */
+export const allReady = () => everything;
 const dirs = new Set<string>(["/"]);
 const mounts: { prefix: string; root: FileSystemDirectoryHandle }[] = [];
 const dirty = new Set<string>();
@@ -66,7 +111,7 @@ function touch(p: string, gone = false) {
 /** Every file under `prefix`, with its path relative to it (for backups). */
 export function filesUnder(prefix: string): [string, Uint8Array][] {
   const root = norm(prefix) + "/";
-  return [...files].filter(([p]) => p.startsWith(root)).map(([p, data]) => [p.slice(root.length), data]);
+  return [...new Set([...files.keys(), ...onDisk.keys(), ...pending.keys()])].filter((p) => p.startsWith(root)).sort().map((p) => [p.slice(root.length), contents(p)!]);
 }
 
 /** Puts a file in memory without marking it for OPFS (the app's bundled files). */
@@ -76,22 +121,49 @@ export function preload(path: string, data: string | Uint8Array) {
   files.set(p, typeof data === "string" ? new TextEncoder().encode(data) : data);
 }
 
-async function walk(dir: FileSystemDirectoryHandle, at: string) {
+/** A file on disk, read synchronously when asked for. `getFile()` doesn't read the bytes, only its size and time. */
+async function onDiskFile(h: FileSystemFileHandle): Promise<OnDisk> {
+  const file = await h.getFile();
+  return { size: file.size, mtime: file.lastModified, read: () => new Uint8Array(new FileReaderSync().readAsArrayBuffer(file)) };
+}
+
+async function walk(dir: FileSystemDirectoryHandle, at: string, found: [string, FileSystemFileHandle][]) {
   ensureDir(at);
   for await (const [name, h] of (dir as any).entries() as AsyncIterable<[string, FileSystemHandle]>) {
     const p = at + "/" + name;
-    if (h.kind === "directory") await walk(h as FileSystemDirectoryHandle, p);
-    else if (!name.endsWith(".crswap")) files.set(p, new Uint8Array(await (await (h as FileSystemFileHandle).getFile()).arrayBuffer()));
+    if (h.kind === "directory") await walk(h as FileSystemDirectoryHandle, p, found);
+    else if (!name.endsWith(".crswap")) found.push([p, h as FileSystemFileHandle]);
   }
 }
 
-/** Mirrors `prefix` to the OPFS directory of the same name, loading what is already there. */
-export async function mountOpfs(prefix: string) {
+/**
+ * Mirrors `prefix` to the OPFS directory of the same name (or `root`), listing what is already there. `file`
+ * makes the entry for a file found on disk (tests stand in for OPFS and FileReaderSync).
+ */
+export async function mountOpfs(prefix: string, opts: { root?: FileSystemDirectoryHandle; file?: (h: FileSystemFileHandle) => Promise<OnDisk>; later?: (path: string) => boolean } = {}) {
   prefix = norm(prefix);
-  let root = await navigator.storage.getDirectory();
-  for (const part of prefix.split("/").filter(Boolean)) root = await root.getDirectoryHandle(part, { create: true });
+  const file = opts.file ?? onDiskFile;
+  let root = opts.root;
+  if (!root) {
+    root = await navigator.storage.getDirectory();
+    for (const part of prefix.split("/").filter(Boolean)) root = await root.getDirectoryHandle(part, { create: true });
+  }
   mounts.push({ prefix, root });
-  await walk(root, prefix);
+  const found: [string, FileSystemFileHandle][] = [];
+  await walk(root, prefix, found);
+  // Sizes and times take one round trip per file, a few dozen at a time. Files under `later` get theirs after opening.
+  const now: [string, FileSystemFileHandle][] = [];
+  for (const [p, h] of found) if (opts.later?.(p)) pending.set(p, { h, file });
+  else now.push([p, h]);
+  for (let i = 0; i < now.length; i += 64) {
+    const batch = now.slice(i, i + 64);
+    const entries = await Promise.all(batch.map(([, h]) => file(h)));
+    batch.forEach(([p], k) => onDisk.set(p, entries[k]));
+  }
+  const rest = [...pending.keys()];
+  everything = everything.then(async () => {
+    for (let i = 0; i < rest.length; i += 64) await ready(rest.slice(i, i + 64));
+  });
 }
 
 async function handleFor(p: string, create: boolean): Promise<[FileSystemDirectoryHandle, string] | null> {
@@ -140,13 +212,13 @@ const bytes = (data: unknown): Uint8Array =>
 
 export function existsSync(path: string) {
   const p = norm(path);
-  return files.has(p) || dirs.has(p);
+  return isFile(p) || dirs.has(p);
 }
 
 /** There are no symlinks here, so the real path is the normalized one. */
 export function realpathSync(path: string) {
   const p = norm(path);
-  if (!files.has(p) && !dirs.has(p)) throw err("ENOENT", "realpath", p);
+  if (!isFile(p) && !dirs.has(p)) throw err("ENOENT", "realpath", p);
   return p;
 }
 
@@ -156,7 +228,7 @@ export function mkdirSync(path: string, _opts?: unknown) {
 
 export function readFileSync(path: string | number, opts?: unknown): any {
   const p = typeof path === "number" ? fds.get(path)!.path : norm(path);
-  const data = files.get(p);
+  const data = contents(p);
   if (!data) throw err(dirs.has(p) ? "EISDIR" : "ENOENT", "open", p);
   const enc = typeof opts === "string" ? opts : (opts as { encoding?: string } | undefined)?.encoding;
   const buf = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
@@ -165,11 +237,13 @@ export function readFileSync(path: string | number, opts?: unknown): any {
 
 export function writeFileSync(path: string, data: unknown, opts?: unknown) {
   const p = norm(path);
+  pending.delete(p);
   const flag = typeof opts === "object" && opts ? (opts as { flag?: string }).flag : undefined;
-  if (flag === "wx" && files.has(p)) throw err("EEXIST", "open", p);
+  if (flag === "wx" && isFile(p)) throw err("EEXIST", "open", p);
   if (!dirs.has(parent(p))) throw err("ENOENT", "open", p);
-  const added = !files.has(p);
+  const added = !isFile(p);
   files.set(p, bytes(data).slice());
+  onDisk.delete(p);
   if (added) changed(p, parent(p));
   else changed(p);
   touch(p);
@@ -178,10 +252,13 @@ export function writeFileSync(path: string, data: unknown, opts?: unknown) {
 export function renameSync(from: string, to: string) {
   const a = norm(from);
   const b = norm(to);
-  const data = files.get(a);
+  const data = contents(a);
   if (!data) throw err("ENOENT", "rename", a);
   files.delete(a);
+  onDisk.delete(a);
   files.set(b, data);
+  onDisk.delete(b);
+  pending.delete(b);
   times.set(b, times.get(a) ?? loaded);
   times.delete(a);
   changed(parent(a), parent(b));
@@ -191,7 +268,7 @@ export function renameSync(from: string, to: string) {
 
 export function rmSync(path: string, opts: { recursive?: boolean; force?: boolean } = {}) {
   const p = norm(path);
-  if (files.delete(p)) {
+  if (files.delete(p) || onDisk.delete(p) || pending.delete(p)) {
     times.delete(p);
     changed(parent(p));
     return touch(p, true);
@@ -199,6 +276,8 @@ export function rmSync(path: string, opts: { recursive?: boolean; force?: boolea
   if (dirs.has(p)) {
     if (!opts.recursive) throw err("EISDIR", "rm", p);
     for (const f of [...files.keys()]) if (f.startsWith(p + "/")) files.delete(f);
+    for (const f of [...onDisk.keys()]) if (f.startsWith(p + "/")) onDisk.delete(f);
+    for (const f of [...pending.keys()]) if (f.startsWith(p + "/")) pending.delete(f);
     for (const d of [...dirs]) if (d === p || d.startsWith(p + "/")) dirs.delete(d);
     for (const t of [...times.keys()]) if (t === p || t.startsWith(p + "/")) times.delete(t);
     changed(parent(p));
@@ -210,22 +289,37 @@ export const unlinkSync = (p: string) => rmSync(p);
 
 export function statSync(path: string) {
   const p = norm(path);
-  const f = files.get(p);
-  if (!f && !dirs.has(p)) throw err("ENOENT", "stat", p);
-  const mtimeMs = times.get(p) ?? loaded;
-  return { isFile: () => !!f, isDirectory: () => !f, size: f ? f.length : 0, mtimeMs, mtime: new Date(mtimeMs) };
+  if (pending.has(p)) throw notReady(p);
+  const f = files.get(p), d = onDisk.get(p);
+  if (!f && !d && !dirs.has(p)) throw err("ENOENT", "stat", p);
+  // A file on disk keeps its own time across page loads, so its hash stays known to sync.
+  const mtimeMs = times.get(p) ?? d?.mtime ?? loaded;
+  const file = !!(f || d);
+  return { isFile: () => file, isDirectory: () => !file, size: f ? f.length : d ? d.size : 0, mtimeMs, mtime: new Date(mtimeMs) };
 }
 
-export function readdirSync(path: string, opts?: { withFileTypes?: boolean }) {
+/** `recursive` lists subfolders too, with paths relative to `path` (and each entry's `parentPath`, as Node gives). */
+export function readdirSync(path: string, opts?: { withFileTypes?: boolean; recursive?: boolean }) {
   const p = norm(path);
   if (!dirs.has(p)) throw err("ENOENT", "scandir", p);
   const pre = p === "/" ? "/" : p + "/";
   const names = new Map<string, boolean>();
-  for (const f of files.keys()) if (f.startsWith(pre) && !f.slice(pre.length).includes("/")) names.set(f.slice(pre.length), false);
-  for (const d of dirs) if (d.startsWith(pre) && d !== p && !d.slice(pre.length).includes("/")) names.set(d.slice(pre.length), true);
+  const take = (f: string, dir: boolean) => {
+    if (!f.startsWith(pre) || f === p) return;
+    const rel = f.slice(pre.length);
+    if (opts?.recursive || !rel.includes("/")) names.set(rel, dir);
+  };
+  for (const f of files.keys()) take(f, false);
+  for (const f of onDisk.keys()) take(f, false);
+  for (const f of pending.keys()) take(f, false);
+  for (const d of dirs) take(d, true);
   const sorted = [...names.keys()].sort();
   if (!opts?.withFileTypes) return sorted;
-  return sorted.map((name) => ({ name, isDirectory: () => names.get(name)!, isFile: () => !names.get(name)!, isSymbolicLink: () => false }));
+  return sorted.map((rel) => {
+    const cut = rel.lastIndexOf("/");
+    const name = rel.slice(cut + 1), parentPath = cut < 0 ? p : `${pre}${rel.slice(0, cut)}`;
+    return { name, parentPath, path: parentPath, isDirectory: () => names.get(rel)!, isFile: () => !names.get(rel)!, isSymbolicLink: () => false };
+  });
 }
 
 export function copyFileSync(from: string, to: string) {

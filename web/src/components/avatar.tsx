@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useEtudeSrc } from "@/lib/local-url";
 import { usePhone } from "@/lib/phone";
-import { AVATAR_BGS, AVATAR_EMOJI, AVATAR_EMOJI_BG, CHARACTERS, OPEN_AVATAR_EVENT, openAvatarDialog, avatarLabel, characterSrc, sameAvatar, saveAvatar, useAvatar, type Avatar } from "@/lib/avatar";
+import { AVATAR_BGS, AVATAR_EMOJI, AVATAR_EMOJI_BG, CHARACTERS, OPEN_AVATAR_EVENT, openAvatarDialog, characterSrc, sameAvatar, saveAvatar, useAvatar, type Avatar } from "@/lib/avatar";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -104,7 +104,7 @@ export function CharacterGrid({ pick, onPick, cols }: { pick: AvatarPick; onPick
       {CHARACTERS.map((c) => {
         const on = pick?.kind === "char" && pick.id === c.id;
         return (
-          <button key={c.id} role="radio" aria-checked={on} aria-label={c.name} title={c.name} data-char={c.id} onClick={() => onPick(c.id)} className={cn("av-tile aspect-square", on && "is-on")}>
+          <button key={c.id} role="radio" aria-checked={on} aria-label={c.alt} data-char={c.id} onClick={() => onPick(c.id)} className={cn("av-tile aspect-square", on && "is-on")}>
             <img src={c.src} alt="" draggable={false} loading="lazy" className="size-full rounded-full object-cover" />
             <Tick />
           </button>
@@ -241,7 +241,7 @@ export function PhotoPanel({ draft, onDraft, saved, onRemove }: { draft: PhotoDr
           onDragOver={(e) => (e.preventDefault(), setOver(true))}
           onDragLeave={() => setOver(false)}
           onDrop={(e) => (e.preventDefault(), setOver(false), void load(e.dataTransfer.files?.[0]))}
-          className={cn("flex min-h-[200px] w-full flex-col items-center justify-center gap-2 rounded-[18px] border-[1.5px] border-dashed border-foreground/20 px-5 py-7 text-center transition-colors hover:border-primary hover:bg-primary/[0.07]", over && "border-primary bg-primary/[0.07]")}
+          className={cn("flex min-h-[200px] w-full flex-col items-center justify-center gap-2 rounded-[18px] sm:min-h-[318px] border-[1.5px] border-dashed border-foreground/20 px-5 py-7 text-center transition-colors hover:border-primary hover:bg-primary/[0.07]", over && "border-primary bg-primary/[0.07]")}
         >
           <Upload className="size-7 text-muted-foreground" strokeWidth={1.6} />
           <b className="text-[15px] font-semibold">{saved?.kind === "photo" ? "Choose another picture" : "Drop a picture here"}</b>
@@ -351,7 +351,7 @@ export function PictureBlock({ name }: { name?: string | null }) {
       </button>
       <div className="min-w-0 flex-1 basis-[10rem]">
         <div data-settings-title className="text-[14.5px] font-semibold text-foreground">Your picture</div>
-        <div className="mt-[3px] text-[13px] leading-[1.45] text-pretty text-muted-foreground">{avatarLabel(a)} · next to your name in the sidebar and here.</div>
+        <div className="mt-[3px] text-[13px] leading-[1.45] text-pretty text-muted-foreground">Shows next to your name in the sidebar.</div>
       </div>
       <Button variant="outline" size="sm" className="h-10 max-sm:ml-20 md:h-8" onClick={openAvatarDialog} data-avatar-change>Change picture</Button>
     </div>
@@ -428,16 +428,16 @@ export function AvatarDialog({ open, onOpenChange, initial }: { open: boolean; o
   const letter = initial ?? (localStorage.getItem("etude.shell.name") ?? "").trim().charAt(0).toUpperCase();
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
-      <DialogContent data-avatar-dialog className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] sm:max-h-[min(46rem,calc(100dvh-3rem))] sm:max-w-[600px] sm:rounded-[22px] sm:p-0">
+      <DialogContent data-avatar-dialog className="flex h-[min(88dvh,44rem)] max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] sm:h-[min(37rem,calc(100dvh-3rem))] sm:max-h-none sm:max-w-[600px] sm:rounded-[22px] sm:p-0">
         <div aria-hidden className="mx-auto mt-2 h-[5px] w-[38px] rounded-full bg-border sm:hidden" />
         <div className="flex items-center gap-[18px] px-5 pt-3.5 pb-3 pr-12 sm:px-6 sm:pt-[22px] sm:pb-4 sm:pr-14">
-          <span key={popKey} className="av-pop flex" data-avatar-preview>
+          <span key={popKey} className="av-fade flex" data-avatar-preview>
             <AvatarPic value={pick} size={big} initial={letter} draft={draft} />
           </span>
           <div className="min-w-0 flex-1">
             <DialogTitle className="text-[19px] font-semibold tracking-[-0.01em]">Your picture</DialogTitle>
             <DialogDescription className="mt-1 text-[13.5px]">
-              <b className="font-semibold text-foreground" data-avatar-name>{pick?.kind === "draft" ? "Your photo" : avatarLabel(pick)}</b> · next to your name and Market comments
+              <span data-avatar-name>Shows next to your name in the sidebar.</span>
             </DialogDescription>
           </div>
         </div>

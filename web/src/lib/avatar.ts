@@ -12,17 +12,16 @@ const url = (id: string) => files[`../assets/avatars/${id}.webp`];
 
 /** The 18 painted characters, in the pickers' order, with their art. */
 export const CHARACTERS = AVATAR_CHARACTERS.map((c) => ({ ...c, src: url(c.id) }));
-export const characterName = (id: string) => AVATAR_CHARACTERS.find((c) => c.id === id)?.name ?? id;
 export const characterSrc = (id: string) => url(id);
 
 export const AVATAR_EMOJI = "🦊 🐸 🐱 🐻 🐼 🐨 🦉 🐧 🐢 🐙 🦄 🐝 🌵 🌻 🍄 🌙 ⭐ 🔥 🌊 ⚡ 🍕 🍩 ☕ 🧋 📚 ✏️ 🎹 🎸 ♟️ 🎯 🧠 🔬 🧪 🌍 🚀 🎨 🧩 👾 🤖 👻".split(" ");
 /** Emoji backgrounds: the characters' own poster blue first, then the rest of the poster palette. */
 export const AVATAR_BGS = ["#3d5fb8", "#24726e", "#6e3f78", "#d8a43a", "#b84a3c", "#3f6b3a", "#e19aa8", "#24304f", "#d97a3a", "#ece3d3"];
 
-/** What a picture is called next to it: the character's name, or the kind. */
+/** What a picture is called next to it: the kind. */
 export function avatarLabel(a: Avatar | null | undefined): string {
   if (!a) return "Your initial";
-  if (a.kind === "char") return characterName(a.id);
+  if (a.kind === "char") return "A character";
   if (a.kind === "emoji") return "Emoji";
   return "Your photo";
 }

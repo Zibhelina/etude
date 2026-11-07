@@ -4,25 +4,26 @@
 export class AvatarError extends Error {}
 
 /** The painted characters the app ships, in the order the pickers show them. */
-export const AVATAR_CHARACTERS: { id: string; name: string }[] = [
-  { id: "wizard", name: "Wiz" },
-  { id: "seal", name: "Selkie" },
-  { id: "bear", name: "Bramble" },
-  { id: "bunny", name: "Folio" },
-  { id: "owl", name: "Dean" },
-  { id: "frog", name: "Lily" },
-  { id: "ash", name: "Ash" },
-  { id: "crown", name: "Your Majesty" },
-  { id: "fox", name: "Rook" },
-  { id: "juniper", name: "Juniper" },
-  { id: "theo", name: "Theo" },
-  { id: "rosa", name: "Rosa" },
-  { id: "kenji", name: "Kenji" },
-  { id: "walter", name: "Walter" },
-  { id: "amira", name: "Amira" },
-  { id: "sam", name: "Sam" },
-  { id: "ines", name: "Inês" },
-  { id: "omar", name: "Omar" },
+/** The 18 characters. They have no names (the name is yours); `alt` describes the art for screen readers. */
+export const AVATAR_CHARACTERS: { id: string; alt: string }[] = [
+  { id: "wizard", alt: "Wizard cat" },
+  { id: "seal", alt: "Seal in a scarf" },
+  { id: "bear", alt: "Bear in a beanie" },
+  { id: "bunny", alt: "Bunny with a book" },
+  { id: "owl", alt: "Owl in a graduation cap" },
+  { id: "frog", alt: "Frog with a flower" },
+  { id: "ash", alt: "Tabby cat in a sweater" },
+  { id: "crown", alt: "Black cat with a crown" },
+  { id: "fox", alt: "Fox in a hood" },
+  { id: "juniper", alt: "Girl with glasses" },
+  { id: "theo", alt: "Boy with headphones" },
+  { id: "rosa", alt: "Woman in a beret" },
+  { id: "kenji", alt: "Boy in a wizard hat" },
+  { id: "walter", alt: "Man with a beard" },
+  { id: "amira", alt: "Woman in a hijab" },
+  { id: "sam", alt: "Woman in a sweater" },
+  { id: "ines", alt: "Girl with braids" },
+  { id: "omar", alt: "Man in a scarf" },
 ];
 
 /** The background an emoji gets when none is given. */

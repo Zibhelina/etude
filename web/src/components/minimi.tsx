@@ -1,7 +1,8 @@
 // Minimi, Etude's mascot, in the corner (Fun mode, desktop and iPad). He sits reading; on hover he looks up
 // with "Ask me"; a click opens Ask Etude. He can be dragged anywhere in the window: he lifts and tilts while
 // carried, squashes a little when dropped, and stays where he was put (per device size). Dropping him near
-// his corner sends him home. While his mini chat is open he looks up at you.
+// his corner sends him home. While his mini chat is open he looks up at you. Right-click → Hide puts him away
+// on this device; right-clicking an empty spot of the page brings him back there (App.tsx, lib/minimi-hidden).
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import read from "@/assets/minimi/read.webp";
 import down from "@/assets/minimi/down.webp";
@@ -9,6 +10,9 @@ import look from "@/assets/minimi/look.webp";
 import { cn } from "@/lib/utils";
 
 import { useMinimiFaces } from "@/components/minimi-faces";
+import { PointMenu } from "@/components/point-menu";
+import { setMinimiHidden } from "@/lib/minimi-hidden";
+import { toast } from "sonner";
 
 const W = 84;
 const H = 124;
@@ -31,13 +35,55 @@ const savePos = (p: Pos) => {
   } catch {}
 };
 
+/** Saves his spot so the pointer sits on his middle, inside the window. The next mount reads it. */
+export function placeMinimiAt(px: number, py: number) {
+  const [vw, vh] = view();
+  const s = vw >= 1024 ? 1 : 0.78; // iPad draws him smaller, from his bottom-right corner
+  const w = Math.max(1, vw - W), h = Math.max(1, vh - H);
+  // On iPad he's scaled around his bottom-right corner, so his drawn middle sits right of and below the box's.
+  const cx = W - (W * s) / 2, cy = H - (H * s) / 2;
+  const x = Math.min(w, Math.max(0, px - cx)), y = Math.min(h, Math.max(0, py - cy));
+  savePos({ fx: x / w, fy: y / h });
+  appear = true;
+}
+// Set when he's just been called back, so he pops in instead of simply being there.
+let appear = false;
+
 export function MinimiCorner({ onOpen, shortcut, rightOffset = "0px", talking = false }: { onOpen(): void; shortcut: string; rightOffset?: string; talking?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [page, setPage] = useState(false);
   const [drag, setDrag] = useState<null | { near: boolean }>(null);
   const [land, setLand] = useState(false);
+  const [pop, setPop] = useState(() => appear);
+  const [leaving, setLeaving] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const faces = useMinimiFaces();
+  useEffect(() => {
+    appear = false;
+    if (!pop) return;
+    const t = setTimeout(() => setPop(false), 420);
+    return () => clearTimeout(t);
+  }, []);
+  const lastPointer = useRef("mouse");
+  const hide = () => {
+    setLeaving(true);
+    setTimeout(() => {
+      setMinimiHidden(true);
+      toast("Minimi went to take a nap", {
+        description: "Right-click an empty spot to call him back.",
+        action: { label: "Undo", onClick: () => setMinimiHidden(false) },
+      });
+    }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 200);
+  };
+  const onContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // A long press on a touch screen opens his faces, not this menu.
+    const type = (e.nativeEvent as PointerEvent).pointerType || lastPointer.current;
+    if (type === "touch" || type === "pen") return;
+    setMenu({ x: e.clientX, y: e.clientY });
+  };
 
   // Free space for his top-left corner, inside the window.
   const room = () => [Math.max(1, view()[0] - W), Math.max(1, view()[1] - H)] as const;
@@ -66,6 +112,7 @@ export function MinimiCorner({ onOpen, shortcut, rightOffset = "0px", talking = 
   }, []);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    lastPointer.current = e.pointerType;
     if (e.button > 0) return;
     // Hold-for-faces is a touch gesture (phone, iPad); with a mouse a press is a click or a drag.
     if (e.pointerType !== "mouse") faces.onPointerDown(e);
@@ -120,8 +167,8 @@ export function MinimiCorner({ onOpen, shortcut, rightOffset = "0px", talking = 
       ref={ref}
       data-minimi
       onPointerDown={onPointerDown}
-      onContextMenu={faces.onContextMenu}
-      className={cn("minimi group fixed z-30 touch-none select-none", drag ? "cursor-grabbing" : "cursor-grab", drag && "is-drag", drag?.near && "is-near", land && "is-land", talking && "is-talk")}
+      onContextMenu={onContextMenu}
+      className={cn("minimi group fixed z-30 touch-none select-none", drag ? "cursor-grabbing" : "cursor-grab", drag && "is-drag", drag?.near && "is-near", land && "is-land", talking && "is-talk", pop && "is-pop", leaving && "is-leave", menu && "is-menu")}
       style={pos ? { left: pos.x, top: pos.y, width: W, height: H } : { right: `calc(${MARGIN}px + ${rightOffset})`, bottom: MARGIN, width: W, height: H }}
     >
       <div role="tooltip" className={cn("minimi-tip pointer-events-none absolute right-0 rounded-xl bg-card px-3 py-2 text-[13.5px] leading-snug whitespace-nowrap text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.08),0_8px_22px_rgb(0_0_0/0.10)] ring-1 ring-border", tipBelow ? "top-[calc(100%+6px)]" : "bottom-[128px] rounded-br-sm")}>
@@ -136,6 +183,7 @@ export function MinimiCorner({ onOpen, shortcut, rightOffset = "0px", talking = 
         <img src={look} alt="" draggable={false} className="minimi-fr minimi-look" />
       </button>
       {faces.node}
+      {menu && <PointMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)} items={[{ label: "Hide Minimi", onSelect: hide }]} />}
     </div>
   );
 }

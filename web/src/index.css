@@ -400,6 +400,22 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 .minimi.is-talk .minimi-fr { opacity: 0; }
 .minimi.is-talk .minimi-look { opacity: 1; }
 .minimi.is-talk .minimi-tip { display: none; }
+/* Right-click → Hide: he shrinks away. Called back with Show Minimi: he pops in where you clicked.
+   The scaling sits on the button, so the iPad's smaller Minimi (a transform on .minimi) keeps its size. */
+.minimi.is-menu .minimi-tip { display: none; }
+.minimi.is-menu .minimi-fr { opacity: 0; }
+.minimi.is-menu .minimi-look { opacity: 1; }
+.minimi.is-leave { opacity: 0; pointer-events: none; transition: opacity 0.2s ease-in; }
+.minimi.is-leave .minimi-btn { transform: translateY(14px) scale(0.55); transition: transform 0.2s ease-in; animation: none; }
+.minimi.is-pop .minimi-btn { animation: minimi-pop 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.25); transform-origin: 50% 90%; }
+.minimi.is-pop::after { animation: minimi-pop-shadow 0.42s ease-out; }
+.minimi.is-pop .minimi-tip { display: none; }
+@keyframes minimi-pop { 0% { opacity: 0; transform: translateY(10px) scale(0.35); } 55% { opacity: 1; transform: translateY(-4px) scale(1.07, 0.95); } 100% { transform: none; } }
+@keyframes minimi-pop-shadow { 0% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .minimi.is-pop .minimi-btn, .minimi.is-pop::after { animation: none; }
+  .minimi.is-leave, .minimi.is-leave .minimi-btn { transition: none; }
+}
 
 /* ---------------------------------------------------------------- Minimi's mini chat (components/minimi-chat.tsx)
    No panel: each message is its own balloon over the page, his on the left, yours on the right, no tails. */

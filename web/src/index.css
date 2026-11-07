@@ -307,11 +307,10 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
 .shell-sb .sb-rail-only { opacity: 0; transition: opacity 120ms ease; }
 .shell-sb[data-collapsed] .sb-rail-only { opacity: 1; transition: opacity 200ms ease 160ms; }
 .shell-sb .sb-profile { height: 56px; transition: height var(--sb-dur) var(--sb-ease); }
-.shell-sb[data-collapsed] .sb-profile { height: 80px; }
+.shell-sb[data-collapsed] .sb-profile { height: 56px; }
 .shell-sb .sb-avatar { transform: translateY(8px); transition: transform var(--sb-dur) var(--sb-ease); }
-.shell-sb[data-collapsed] .sb-avatar { transform: translateY(8px); }
-.shell-sb .sb-gear { transform: translate(170px, 10px); transition: transform var(--sb-dur) var(--sb-ease), color 150ms; }
-.shell-sb[data-collapsed] .sb-gear { transform: translate(8px, 44px); }
+.shell-sb .sb-gear { transform: translate(170px, 10px); opacity: 1; transition: opacity 200ms ease 110ms, color 150ms; }
+.shell-sb[data-collapsed] .sb-gear { opacity: 0; transition: opacity 110ms ease; }
 @media (prefers-reduced-motion: reduce) {
   .shell-sb, .shell-sb * { transition: none !important; }
 }

@@ -232,8 +232,8 @@ function ProfileRow({ collapsed, settingsOn }: { collapsed: boolean; settingsOn:
   const label = d.line ? `${d.who} · ${d.line}` : d.who;
   // The whole row is one button to Settings: picture, name with Sync's state, and the gear light up together on
   // hover (the gear turns a little). Being on Settings doesn't keep it lit; only the mouse does. One box for both
-  // shapes: open, picture · name · gear on one row; rail, the picture with the gear under it. The picture keeps its
-  // x, the gear glides between the two spots and the name fades, all on the sidebar's timing (index.css .sb-profile).
+  // shapes: open, picture · name · gear on one row; rail, only the picture. The picture keeps its place and the name
+  // and gear fade, all on the sidebar's timing (index.css .sb-profile).
   return (
     <div data-shell-profile className="sb-profile relative shrink-0">
       <Tip show={collapsed} label={`Settings · ${label}`}>

@@ -9,7 +9,7 @@ import { SidebarUpdate } from "@/components/update-bar";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
 import { ArchiveIcon, BrowseIcon, LibraryIcon, MarketIcon, SettingsIcon, StatsIcon, TypesIcon } from "@/components/nav-icons";
 import { account } from "@/lib/account";
-import { openAvatarDialog, useMyName } from "@/lib/avatar";
+import { useMyName } from "@/lib/avatar";
 import { MyAvatar } from "@/components/avatar";
 import { etudeFetch } from "@/lib/transport";
 import { navigate } from "@/lib/router";
@@ -229,51 +229,37 @@ function ProfileRow({ collapsed, settingsOn }: { collapsed: boolean; settingsOn:
   const { sync, name } = useWho();
   const mine = useMyName();
   const d = describe(sync, mine || name);
-  // Your picture opens the picture dialog; the name beside it goes to Sync.
-  const avatar = (
-    <button onClick={openAvatarDialog} aria-label="Change your picture" data-shell-avatar className="relative shrink-0 rounded-full outline-ring transition-transform duration-150 hover:scale-105 focus-visible:outline-2 motion-reduce:transition-none">
-      <MyAvatar size={32} initial={d.initial} />
-      {d.tone === "warn" && <span aria-hidden className="sb-rail-only absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full bg-warning ring-2 ring-sidebar" />}
-    </button>
-  );
-  const gear = (
-    <Tip show={collapsed} label="Settings">
-      <button
-        onClick={() => navigate("/settings")}
-        aria-label="Settings"
-        aria-current={settingsOn ? "page" : undefined}
-        className={cn(
-          "flex size-10 shrink-0 items-center justify-center rounded-[10px] text-muted-foreground transition-colors outline-ring hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2",
-          settingsOn && "bg-sidebar-accent text-foreground",
-        )}
-      >
-        <SettingsIcon className="size-[18px]" />
-      </button>
-    </Tip>
-  );
   const label = d.line ? `${d.who} · ${d.line}` : d.who;
-  // One box for both shapes: open, avatar · name · gear on one row; rail, the avatar with the gear under it. The
-  // avatar keeps its x, the gear glides between the two spots and the name fades, all on the sidebar's timing.
+  // The whole row is one button to Settings: picture, name with Sync's state, and the gear light up together on
+  // hover (the gear turns a little). Being on Settings doesn't keep it lit; only the mouse does. One box for both
+  // shapes: open, picture · name · gear on one row; rail, the picture with the gear under it. The picture keeps its
+  // x, the gear glides between the two spots and the name fades, all on the sidebar's timing (index.css .sb-profile).
   return (
     <div data-shell-profile className="sb-profile relative shrink-0">
-      <div className="sb-avatar absolute top-0 left-2.5">
-        <Tip show={collapsed} label={label}>
-          {avatar}
-        </Tip>
-      </div>
-      <button
-        {...(collapsed ? { "aria-hidden": true, tabIndex: -1 } : {})}
-        onClick={() => navigate("/settings#sync")}
-        title={[d.email, d.when].filter(Boolean).join(" · ") || undefined}
-        aria-label={label}
-        className="sb-fade sb-slide absolute top-2.5 left-[46px] flex h-10 w-[122px] min-w-0 items-center rounded-[10px] py-1 pr-1 pl-1.5 text-left outline-ring focus-visible:outline-2"
-      >
-        <span className="min-w-0 flex-1 whitespace-nowrap">
-          <b className="block truncate text-[14px] font-semibold text-foreground">{d.who}</b>
-          <small className={cn("flex items-center gap-1.5 truncate text-[12px]", d.tone === "warn" ? "text-warning" : "text-muted-foreground")}>{d.line || " "}</small>
-        </span>
-      </button>
-      <div className="sb-gear absolute top-0 left-0">{gear}</div>
+      <Tip show={collapsed} label={`Settings · ${label}`}>
+        <button
+          onClick={() => navigate("/settings")}
+          aria-label={`Settings · ${label}`}
+          aria-current={settingsOn ? "page" : undefined}
+          title={collapsed ? undefined : [d.email, d.when].filter(Boolean).join(" · ") || undefined}
+          data-shell-profile-button
+          className="group/prof absolute inset-0 rounded-[12px] text-left transition-colors duration-150 outline-ring hover:bg-sidebar-accent focus-visible:outline-2 motion-reduce:transition-none"
+        >
+          <span className="sb-avatar absolute top-0 left-1.5 flex">
+            <MyAvatar size={40} initial={d.initial} />
+            {d.tone === "warn" && <span aria-hidden className="sb-rail-only absolute -right-0.5 -bottom-0.5 size-3 rounded-full bg-warning ring-2 ring-sidebar" />}
+          </span>
+          <span aria-hidden={collapsed || undefined} className="sb-fade sb-slide absolute top-2 left-14 flex h-10 w-[110px] min-w-0 items-center whitespace-nowrap">
+            <span className="min-w-0 flex-1">
+              <b className="block truncate text-[14px] font-semibold text-foreground">{d.who}</b>
+              <small className={cn("block truncate text-[12px]", d.tone === "warn" ? "text-warning" : "text-muted-foreground")}>{d.line || "\u00a0"}</small>
+            </span>
+          </span>
+          <span aria-hidden className="sb-gear absolute top-0 left-0 flex size-9 items-center justify-center text-muted-foreground transition-colors duration-150 group-hover/prof:text-foreground">
+            <SettingsIcon className="size-[18px] transition-transform duration-[350ms] ease-[cubic-bezier(.3,.7,.2,1)] group-hover/prof:rotate-45 motion-reduce:transition-none" />
+          </span>
+        </button>
+      </Tip>
     </div>
   );
 }

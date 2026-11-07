@@ -306,12 +306,12 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
 .shell-sb[data-collapsed] .sb-slide { transform: translateX(-6px); }
 .shell-sb .sb-rail-only { opacity: 0; transition: opacity 120ms ease; }
 .shell-sb[data-collapsed] .sb-rail-only { opacity: 1; transition: opacity 200ms ease 160ms; }
-.shell-sb .sb-profile { height: 50px; transition: height var(--sb-dur) var(--sb-ease); }
-.shell-sb[data-collapsed] .sb-profile { height: 78px; }
-.shell-sb .sb-avatar { transform: translateY(14px); transition: transform var(--sb-dur) var(--sb-ease); }
-.shell-sb[data-collapsed] .sb-avatar { transform: none; }
-.shell-sb .sb-gear { transform: translate(172px, 10px); transition: transform var(--sb-dur) var(--sb-ease); }
-.shell-sb[data-collapsed] .sb-gear { transform: translate(6px, 38px); }
+.shell-sb .sb-profile { height: 56px; transition: height var(--sb-dur) var(--sb-ease); }
+.shell-sb[data-collapsed] .sb-profile { height: 80px; }
+.shell-sb .sb-avatar { transform: translateY(8px); transition: transform var(--sb-dur) var(--sb-ease); }
+.shell-sb[data-collapsed] .sb-avatar { transform: translateY(8px); }
+.shell-sb .sb-gear { transform: translate(170px, 10px); transition: transform var(--sb-dur) var(--sb-ease), color 150ms; }
+.shell-sb[data-collapsed] .sb-gear { transform: translate(8px, 44px); }
 @media (prefers-reduced-motion: reduce) {
   .shell-sb, .shell-sb * { transition: none !important; }
 }

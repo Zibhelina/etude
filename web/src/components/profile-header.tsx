@@ -1,5 +1,5 @@
-// The top of Settings → Account & Sync: your banner, your picture over its bottom edge, your name (edit it in
-// place) and how this collection syncs. The picture opens the picture dialog; Change banner opens "Your banner".
+// The top of Settings: your banner across the whole page, your picture over its bottom edge, your name (edit it
+// in place) and how this collection syncs; the settings start under it. The picture opens the picture dialog; Change banner opens "Your banner".
 // Nothing here remounts the page: banners cross-fade in place, dialogs fade over it.
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Camera, Check, Image as ImageIcon, Pencil, X } from "lucide-react";
@@ -188,7 +188,8 @@ function goToSignIn() {
   form.querySelector<HTMLInputElement>("input")?.focus({ preventScroll: true });
 }
 
-export function ProfileHeader({ acct }: { acct: AccountStatus | null }) {
+/** `inner` lines the picture and name up with the page below (its max width and side padding). */
+export function ProfileHeader({ acct, inner }: { acct: AccountStatus | null; inner?: string }) {
   const avatar = useAvatar();
   const banner = useBanner();
   const savedName = useMyName();
@@ -253,90 +254,91 @@ export function ProfileHeader({ acct }: { acct: AccountStatus | null }) {
   const [bannerOpen, setBannerOpen] = useState(false);
 
   return (
-    <div data-profile-header data-settings-row className="@container/ph settings-card relative mt-5 mb-7 overflow-hidden rounded-[18px] border bg-card max-md:-mx-5 max-md:rounded-none max-md:border-x-0 max-md:border-t-0">
+    <div data-profile-header data-settings-row className="@container/ph relative">
       <span data-settings-title className="sr-only">Your picture</span>
-      <div className="relative h-[104px] max-md:h-[92px]" data-profile-cover>
+      <div className="relative h-[clamp(140px,14vw,184px)] max-md:h-[calc(140px+env(safe-area-inset-top))]" data-profile-cover>
         <BannerFade value={banner} avatar={avatar} />
-        <button type="button" onClick={() => setBannerOpen(true)} aria-label="Change banner" data-banner-pill className="absolute top-2.5 right-2.5 inline-flex h-8 items-center gap-1.5 rounded-full bg-black/40 px-3 text-[12.5px] font-semibold text-white backdrop-blur-md transition-colors hover:bg-black/55 @min-[34rem]/ph:hidden">
-          <ImageIcon className="size-3.5" /> Banner
-        </button>
+        <div className={cn("pointer-events-none absolute inset-x-0 bottom-3.5 z-[2] mx-auto flex w-full justify-end @max-[34rem]/ph:top-[calc(0.75rem+env(safe-area-inset-top))] @max-[34rem]/ph:bottom-auto", inner)}>
+          <button type="button" onClick={() => setBannerOpen(true)} aria-label="Change banner" data-banner-pill className="pointer-events-auto inline-flex h-8 items-center gap-1.5 rounded-full bg-black/40 px-3 text-[12.5px] font-semibold text-white backdrop-blur-md transition-colors hover:bg-black/55">
+            <ImageIcon className="size-3.5" /> <span className="@max-[34rem]/ph:hidden">Change banner</span><span className="@min-[34rem]/ph:hidden">Banner</span>
+          </button>
+        </div>
       </div>
-      <div className="relative -mt-10 flex items-end gap-x-[18px] gap-y-3 px-5 pb-[18px] @max-[34rem]/ph:flex-wrap" data-profile-row>
-        <button type="button" onClick={openAvatarDialog} aria-label="Change picture" data-profile-picture className="group/pic relative order-1 shrink-0 rounded-full outline-ring focus-visible:outline-3 focus-visible:outline-offset-3">
-          <span ref={pic} className="block rounded-full shadow-[0_0_0_5px_var(--card)] transition-[filter] duration-150 group-hover/pic:brightness-95">
-            <AvatarPic value={avatar} size={phone ? 80 : 88} initial={letter || undefined} className={avatar ? undefined : "shadow-[inset_0_0_0_1px_var(--border)]"} />
-          </span>
-          <span aria-hidden className="absolute right-[2%] bottom-[2%] grid size-[26px] place-items-center rounded-full bg-card text-foreground shadow-[0_0_0_3px_var(--card),inset_0_0_0_1px_var(--border),0_2px_6px_rgb(0_0_0/0.14)] dark:bg-muted transition-transform duration-150 group-hover/pic:scale-110 motion-reduce:transition-none" data-profile-camera>
-            <Camera className="size-[14px]" strokeWidth={2} />
-          </span>
-        </button>
-        <div className="order-2 mt-12 min-w-0 flex-1 pb-0.5 @max-[34rem]/ph:order-3 @max-[34rem]/ph:mt-0 @max-[34rem]/ph:basis-full" data-profile-who>
-          <div className="score-serif score-display mb-2.5 min-w-0 text-[26px] leading-[1.15] text-foreground">
-            {editing ? (
-              <span className="ph-edit relative inline-flex max-w-full items-center gap-1.5 py-0.5" data-profile-name-edit>
-                <span className="relative inline-grid min-w-0 max-w-full">
-                  <span aria-hidden className="invisible col-start-1 row-start-1 overflow-hidden whitespace-pre pr-1">{name || fallback || "Add your name"}</span>
-                  <input
-                    ref={input}
-                    autoFocus
-                    onFocus={(e) => e.currentTarget.select()}
-                    value={name}
-                    maxLength={40}
-                    onChange={(e) => setName(e.target.value)}
-                    onBlur={() => void commit()}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") (e.preventDefault(), input.current?.blur());
-                      else if (e.key === "Escape") (e.preventDefault(), e.stopPropagation(), (cancelled.current = true), input.current?.blur());
-                    }}
-                    placeholder={fallback || "Add your name"}
-                    aria-label="Your name"
-                    data-profile-name-input
-                    className="col-start-1 row-start-1 w-full min-w-[4ch] border-0 bg-transparent p-0 font-[inherit] text-[length:inherit] leading-[inherit] tracking-[inherit] text-foreground caret-primary outline-none selection:bg-primary/25 placeholder:font-sans placeholder:text-[20px] placeholder:leading-[1.5] placeholder:font-medium placeholder:tracking-[-0.01em] placeholder:text-muted-foreground/60"
-                  />
-                  <span aria-hidden className="ph-line pointer-events-none absolute inset-x-0 -bottom-[5px] h-[2px] origin-left rounded-full bg-primary" />
+      <div className={cn("mx-auto w-full", inner)}>
+        <div className="relative -mt-[60px] flex items-end gap-x-5 gap-y-3 @max-[34rem]/ph:-mt-[48px] @max-[34rem]/ph:flex-wrap" data-profile-row>
+          <button type="button" onClick={openAvatarDialog} aria-label="Change picture" data-profile-picture className="group/pic relative order-1 shrink-0 rounded-full outline-ring focus-visible:outline-3 focus-visible:outline-offset-3">
+            <span ref={pic} className="block rounded-full shadow-[0_0_0_5px_var(--background)] transition-[filter] duration-150 group-hover/pic:brightness-95">
+              <AvatarPic value={avatar} size={phone ? 96 : 120} initial={letter || undefined} className={avatar ? undefined : "shadow-[inset_0_0_0_1px_var(--border)]"} />
+            </span>
+            <span aria-hidden className="absolute right-[3%] bottom-[3%] grid size-[30px] place-items-center rounded-full bg-card text-foreground shadow-[0_0_0_3px_var(--background),inset_0_0_0_1px_var(--border),0_2px_6px_rgb(0_0_0/0.14)] dark:bg-muted transition-transform duration-150 group-hover/pic:scale-110 motion-reduce:transition-none" data-profile-camera>
+              <Camera className="size-[15px]" strokeWidth={2} />
+            </span>
+          </button>
+          <div className="order-2 mt-[68px] min-w-0 flex-1 pb-1 @max-[34rem]/ph:order-3 @max-[34rem]/ph:mt-0 @max-[34rem]/ph:basis-full" data-profile-who>
+            <div className="score-serif score-display mb-2 min-w-0 text-[30px] leading-[1.12] text-foreground @max-[34rem]/ph:text-[27px]">
+              {editing ? (
+                <span className="ph-edit relative inline-flex max-w-full items-center gap-1.5 py-0.5" data-profile-name-edit>
+                  <span className="relative inline-grid min-w-0 max-w-full">
+                    <span aria-hidden className="invisible col-start-1 row-start-1 overflow-hidden whitespace-pre pr-1">{name || fallback || "Add your name"}</span>
+                    <input
+                      ref={input}
+                      autoFocus
+                      onFocus={(e) => e.currentTarget.select()}
+                      value={name}
+                      maxLength={40}
+                      onChange={(e) => setName(e.target.value)}
+                      onBlur={() => void commit()}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.preventDefault(), input.current?.blur());
+                        else if (e.key === "Escape") (e.preventDefault(), e.stopPropagation(), (cancelled.current = true), input.current?.blur());
+                      }}
+                      placeholder={fallback || "Add your name"}
+                      aria-label="Your name"
+                      data-profile-name-input
+                      className="col-start-1 row-start-1 w-full min-w-[4ch] border-0 bg-transparent p-0 font-[inherit] text-[length:inherit] leading-[inherit] tracking-[inherit] text-foreground caret-primary outline-none selection:bg-primary/25 placeholder:font-sans placeholder:text-[20px] placeholder:leading-[1.5] placeholder:font-medium placeholder:tracking-[-0.01em] placeholder:text-muted-foreground/60"
+                    />
+                    <span aria-hidden className="ph-line pointer-events-none absolute inset-x-0 -bottom-[5px] h-[2px] origin-left rounded-full bg-primary" />
+                  </span>
+                  <span className="ph-acts ml-1 inline-flex shrink-0 items-center gap-1">
+                    <button type="button" aria-label="Save name" data-profile-name-save onMouseDown={(e) => e.preventDefault()} onClick={() => input.current?.blur()} className="grid size-7 place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_1px_0_var(--primary-edge,rgb(0_0_0/0.18))] transition-transform hover:scale-105 active:scale-95">
+                      <Check className="size-4" strokeWidth={2.6} />
+                    </button>
+                    <button type="button" aria-label="Cancel" data-profile-name-cancel onMouseDown={(e) => e.preventDefault()} onClick={() => ((cancelled.current = true), input.current?.blur())} className="grid size-7 place-items-center rounded-full bg-muted text-muted-foreground shadow-[inset_0_0_0_1px_var(--border)] transition-[color,transform] hover:scale-105 hover:text-foreground active:scale-95">
+                      <X className="size-4" strokeWidth={2.4} />
+                    </button>
+                  </span>
                 </span>
-                <span className="ph-acts ml-1 inline-flex shrink-0 items-center gap-1">
-                  <button type="button" aria-label="Save name" data-profile-name-save onMouseDown={(e) => e.preventDefault()} onClick={() => input.current?.blur()} className="grid size-7 place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_1px_0_var(--primary-edge,rgb(0_0_0/0.18))] transition-transform hover:scale-105 active:scale-95">
-                    <Check className="size-4" strokeWidth={2.6} />
-                  </button>
-                  <button type="button" aria-label="Cancel" data-profile-name-cancel onMouseDown={(e) => e.preventDefault()} onClick={() => ((cancelled.current = true), input.current?.blur())} className="grid size-7 place-items-center rounded-full bg-muted text-muted-foreground shadow-[inset_0_0_0_1px_var(--border)] transition-[color,transform] hover:scale-105 hover:text-foreground active:scale-95">
-                    <X className="size-4" strokeWidth={2.4} />
-                  </button>
-                </span>
-              </span>
-            ) : (
-              <button type="button" onClick={startEdit} data-profile-name aria-label={`Your name: ${shown || "not set"}. Edit`} className="group/nm -mx-1.5 inline-flex max-w-[calc(100%+0.75rem)] items-center gap-2 rounded-lg px-1.5 py-0.5 text-left outline-ring transition-colors hover:bg-muted focus-visible:outline-2">
-                <span className={cn("truncate", !shown && "font-sans text-[20px] leading-[1.5] font-medium tracking-[-0.01em] text-muted-foreground")}>{shown || "Add your name"}</span>
-                <Pencil className="size-[15px] shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/nm:opacity-100 group-focus-visible/nm:opacity-100 [@media(pointer:coarse)]:opacity-70" />
-              </button>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[14px] text-muted-foreground @max-[22rem]/ph:flex-col @max-[22rem]/ph:items-start" data-profile-sub>
-            {signedIn ? (
-              <>
-                {lastSync && (
-                  <>
-                    <span className="inline-flex items-center gap-[7px]" data-profile-synced>
-                      <span aria-hidden className="size-2 rounded-full bg-success" />
-                      {syncedAgo(lastSync, now)}
-                    </span>
-                    <span aria-hidden data-dot className="text-muted-foreground/50 @max-[22rem]/ph:hidden">·</span>
-                  </>
-                )}
-                <span className="min-w-0 [overflow-wrap:anywhere]" data-profile-email>{email}</span>
-              </>
-            ) : (
-              <>
-                <span>Only on this device</span>
-                <span aria-hidden data-dot className="text-muted-foreground/50 @max-[22rem]/ph:hidden">·</span>
-                <button type="button" onClick={goToSignIn} className="font-semibold text-primary underline-offset-2 hover:underline" data-profile-signin>Sign in to sync</button>
-              </>
-            )}
+              ) : (
+                <button type="button" onClick={startEdit} data-profile-name aria-label={`Your name: ${shown || "not set"}. Edit`} className="group/nm -mx-1.5 inline-flex max-w-[calc(100%+0.75rem)] items-center gap-2 rounded-lg px-1.5 py-0.5 text-left outline-ring transition-colors hover:bg-muted focus-visible:outline-2">
+                  <span className={cn("truncate", !shown && "font-sans text-[20px] leading-[1.5] font-medium tracking-[-0.01em] text-muted-foreground")}>{shown || "Add your name"}</span>
+                  <Pencil className="size-[15px] shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/nm:opacity-100 group-focus-visible/nm:opacity-100 [@media(pointer:coarse)]:opacity-70" />
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[14px] text-muted-foreground @max-[22rem]/ph:flex-col @max-[22rem]/ph:items-start" data-profile-sub>
+              {signedIn ? (
+                <>
+                  {lastSync && (
+                    <>
+                      <span className="inline-flex items-center gap-[7px]" data-profile-synced>
+                        <span aria-hidden className="size-2 rounded-full bg-success" />
+                        {syncedAgo(lastSync, now)}
+                      </span>
+                      <span aria-hidden data-dot className="text-muted-foreground/50 @max-[22rem]/ph:hidden">·</span>
+                    </>
+                  )}
+                  <span className="min-w-0 [overflow-wrap:anywhere]" data-profile-email>{email}</span>
+                </>
+              ) : (
+                <>
+                  <span>Only on this device</span>
+                  <span aria-hidden data-dot className="text-muted-foreground/50 @max-[22rem]/ph:hidden">·</span>
+                  <button type="button" onClick={goToSignIn} className="font-semibold text-primary underline-offset-2 hover:underline" data-profile-signin>Sign in to sync</button>
+                </>
+              )}
+            </div>
           </div>
         </div>
-        <Button variant="outline" size="sm" className="order-3 mb-2.5 h-9 shrink-0 gap-1.5 @max-[34rem]/ph:hidden" onClick={() => setBannerOpen(true)} data-banner-change>
-          <ImageIcon className="size-4 text-muted-foreground" /> Change banner
-        </Button>
       </div>
       <span data-settings-title className="sr-only">Banner</span>
       <BannerDialog open={bannerOpen} onOpenChange={setBannerOpen} avatar={avatar} saved={banner} letter={letter} />

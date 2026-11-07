@@ -284,6 +284,20 @@ These work on every command, before or after the command words.
   - [`tag instructions`](#tag-instructions) Get or set a tag's AI grading instructions (apply to every item with the tag or a tag below it).
   - [`tag description`](#tag-description) Get or set a tag's description.
   - [`tag items`](#tag-items) Items with a tag (or a tag below it).
+- **note**: Notes (beta): pages you write in, in a tree of their own (`etude note` alone runs `list`)
+  - [`note list`](#note-list) Every page, in tree order (parents before their pages).
+  - [`note show`](#note-show) A page (its title, plain text and document tree) or a canvas (its title, text and Excalidraw scene).
+  - [`note new`](#note-new) Make a page, or with --folder a folder that only holds pages.
+  - [`note edit`](#note-edit) Change a page's title, icon, body or look (cover, width, font, text size), or turn it into a folder and back.
+  - [`note move`](#note-move) Put a page inside another page, or at the top level with --top.
+  - [`note archive`](#note-archive) Archive a page and the pages inside it. Nothing is deleted.
+  - [`note unarchive`](#note-unarchive) Bring an archived page back, with the pages inside it.
+  - [`note delete`](#note-delete) Delete a page for good, with every page inside it.
+  - [`note search`](#note-search) Pages whose title or text has every word, title matches first.
+  - [`note import`](#note-import) Import markdown files or a whole folder (an Obsidian vault) as pages, and .excalidraw drawings as canvases.
+  - [`note export`](#note-export) A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file.
+  - [`note graph`](#note-graph) Every page as a point and every [[link]] between pages as a line (what the graph view draws).
+  - [`note backlinks`](#note-backlinks) The pages that link to a page.
 - **type**: Card types: fields, template (HTML/CSS/JS), prepare script and grader (`etude type` alone runs `list`)
   - [`type list`](#type-list) Card types with their grader, item count and whether they are shipped, edited or custom.
   - [`type decks`](#type-decks) Where a type is used: each deck holding its items (archived ones left out), with item and card counts, most cards first.
@@ -2188,6 +2202,333 @@ etude tag items <tag> [flags]
 | `--ids` | boolean | Print only item ids. |
 
 Output: same as `item list`
+
+## note
+
+Notes (beta): pages you write in, in a tree of their own.
+
+### etude note list
+
+<a id="note-list"></a>
+
+Every page, in tree order (parents before their pages).
+
+```
+etude note list [flags]
+```
+
+*read-only*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--archived` | boolean | The archived pages instead. |
+
+Output: array of { id, kind, parentId, title, icon, look, position, archived, created, updated, children, empty }
+
+### etude note show
+
+<a id="note-show"></a>
+
+A page (its title, plain text and document tree) or a canvas (its title, text and Excalidraw scene).
+
+```
+etude note show <note> [flags]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `note` | Page id, or its exact title. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--text` | boolean | Print only the plain text. |
+
+Output: { id, kind, parentId, title, icon, look, …, text, doc, scene } (or the text with --text)
+
+### etude note new
+
+<a id="note-new"></a>
+
+Make a page, or with --folder a folder that only holds pages.
+
+```
+etude note new <title> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `title` | Its title. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--parent <VALUE>` | string | Put it inside this page or folder (id or exact title). |
+| `--folder` | boolean | Make a folder: it holds pages and has no body of its own. |
+| `--icon <VALUE>` | string | One emoji. |
+| `--canvas` | boolean | Make a canvas (a whiteboard you draw on) instead of a page. |
+| `--scene <JSON>` | string | A canvas's drawing as Excalidraw JSON ({ elements, appState, files }, or a whole .excalidraw file). `-` reads stdin. |
+| `--scene-file <PATH>` | string | Read the canvas's drawing from a .excalidraw file. |
+| `--text <VALUE>` | string | Body as plain text: one paragraph per line, `# ` headings, `- ` bullets, `- [ ] ` tasks. `-` reads stdin. |
+| `--text-file <PATH>` | string | Read the plain-text body from a file. |
+| `--doc <VALUE>` | string | Body as a document tree (ProseMirror JSON, as `note show` prints it). `-` reads stdin. |
+| `--doc-file <PATH>` | string | Read the document tree from a file. |
+| `--cover <VALUE>` | string | Cover across the top: a preset (sky, teal, plum, mustard, brick, moss, rose, night, dawn, sea, paper, ink), image:files/<sha>.<ext>[:y], or none. |
+| `--width <VALUE>` | string | Page width: normal, wide or full. |
+| `--font <VALUE>` | string | Page font: sans, serif or mono. |
+| `--size <VALUE>` | string | Text size: small, normal or large. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: the new page, as `note show` prints it
+
+```sh
+etude note new "CMPT 307" --icon 📘
+etude note new "Fall 2026" --folder
+etude note new "Week 1" --parent "CMPT 307" --text "# Greedy\n- exchange argument"
+```
+
+### etude note edit
+
+<a id="note-edit"></a>
+
+Change a page's title, icon, body or look (cover, width, font, text size), or turn it into a folder and back.
+
+```
+etude note edit <note> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `note` | Page id, or its exact title. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--title <VALUE>` | string | New title. |
+| `--kind <VALUE>` | string | page or folder. Only an empty page can become a folder. |
+| `--icon <VALUE>` | string | One emoji; empty to remove. |
+| `--scene <JSON>` | string | A canvas's new drawing as Excalidraw JSON. `-` reads stdin. |
+| `--scene-file <PATH>` | string | Read a canvas's new drawing from a .excalidraw file. |
+| `--text <VALUE>` | string | Body as plain text: one paragraph per line, `# ` headings, `- ` bullets, `- [ ] ` tasks. `-` reads stdin. |
+| `--text-file <PATH>` | string | Read the plain-text body from a file. |
+| `--doc <VALUE>` | string | Body as a document tree (ProseMirror JSON, as `note show` prints it). `-` reads stdin. |
+| `--doc-file <PATH>` | string | Read the document tree from a file. |
+| `--cover <VALUE>` | string | Cover across the top: a preset (sky, teal, plum, mustard, brick, moss, rose, night, dawn, sea, paper, ink), image:files/<sha>.<ext>[:y], or none. |
+| `--width <VALUE>` | string | Page width: normal, wide or full. |
+| `--font <VALUE>` | string | Page font: sans, serif or mono. |
+| `--size <VALUE>` | string | Text size: small, normal or large. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: the page after the change
+
+```sh
+etude note edit "Week 1" --title "Week 1 · Greedy"
+etude note edit "Week 1" --text-file week1.txt
+etude note edit "Week 1" --cover dawn --font serif --width wide
+```
+
+### etude note move
+
+<a id="note-move"></a>
+
+Put a page inside another page, or at the top level with --top.
+
+```
+etude note move <note> [parent] [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `note` | Page to move (id or exact title). |
+| `parent` (optional) | New parent page. Leave out with --top. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--top` | boolean | Make it a top-level page. |
+| `--index <N>` | number | Place among its new siblings, 0 first. Default: last. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: the moved page
+
+### etude note archive
+
+<a id="note-archive"></a>
+
+Archive a page and the pages inside it. Nothing is deleted.
+
+```
+etude note archive <note> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `note` | Page id, or its exact title. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { ids, archived }
+
+### etude note unarchive
+
+<a id="note-unarchive"></a>
+
+Bring an archived page back, with the pages inside it.
+
+```
+etude note unarchive <note> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `note` | Page id, or its exact title. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { ids, archived }
+
+### etude note delete
+
+<a id="note-delete"></a>
+
+Delete a page for good, with every page inside it.
+
+```
+etude note delete <note> [flags]
+```
+
+*writes · `--dry-run` · needs `--yes`*
+
+| Argument | Description |
+| --- | --- |
+| `note` | Page id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { ids }
+
+### etude note search
+
+<a id="note-search"></a>
+
+Pages whose title or text has every word, title matches first.
+
+```
+etude note search <query...> [flags]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `query...` | Words to look for. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--limit <N>` | number | At most this many. Default `20`. |
+
+Output: array of { id, title, …, snippet }
+
+### etude note import
+
+<a id="note-import"></a>
+
+Import markdown files or a whole folder (an Obsidian vault) as pages, and .excalidraw drawings as canvases.
+
+Each markdown file becomes a page and each folder a page holding its files, so a vault keeps its shape. [[Links]] (with |alias and #heading), relative .md links and ![[image]] embeds are understood; images found in the folder are stored in the collection's media. A folder note (Folder/Folder.md) becomes the folder's own page. Hidden folders (.obsidian, .trash) are skipped. A .excalidraw file given on its own becomes a canvas, with its pictures stored in the media.
+
+```
+etude note import <paths...> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `paths...` | Markdown files or folders. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--parent <VALUE>` | string | Put the imported pages inside this page (id or exact title). |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { pages, folders, links, unresolved, root, ids, media, canvases }
+
+```sh
+etude note import ~/vault
+etude note import week1.md week2.md --parent "CMPT 307"
+etude note import board.excalidraw
+```
+
+### etude note export
+
+<a id="note-export"></a>
+
+A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file.
+
+```
+etude note export <note> [flags]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `note` | Page id, or its exact title. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--format <md\|html>` | string | md or html (a canvas is always .excalidraw). Default `"md"`. |
+| `-o, --output <PATH>` | string | Write to this file instead of stdout. |
+
+Output: the page's text (or { file } with -o)
+
+### etude note graph
+
+<a id="note-graph"></a>
+
+Every page as a point and every [[link]] between pages as a line (what the graph view draws).
+
+```
+etude note graph
+```
+
+*read-only*
+
+Output: { nodes: [{ id, kind, title, icon, parentId, links, created, tags }], links: [{ from, to, kind: link|parent }] }
+
+### etude note backlinks
+
+<a id="note-backlinks"></a>
+
+The pages that link to a page.
+
+```
+etude note backlinks <note>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `note` | Page id, or its exact title. |
+
+Output: array of { id, title, …, snippet }
 
 ## type
 

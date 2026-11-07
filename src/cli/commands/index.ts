@@ -5,6 +5,7 @@ import "./item.ts";
 import "./occlusion.ts";
 import "./card.ts";
 import "./tag.ts";
+import "./note.ts";
 import "./type.ts";
 import "./scheduler.ts";
 import "./study.ts";

@@ -1,6 +1,7 @@
 // The engine: one object that owns the database and every operation on it.
 // The HTTP server and the CLI are thin layers over this class.
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { Notes } from "./notes.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
@@ -398,6 +399,11 @@ export class Etude {
   private typeCache = new Map<string, CardTypeDef>();
   private leftovers: { key: string; cards: LeftoverCard[] } | null = null;
   private readonly adaptive: Adaptive;
+  private notesStore: Notes | null = null;
+  /** Notes (beta): pages in a tree of their own. */
+  get notes(): Notes {
+    return (this.notesStore ??= new Notes(this.db));
+  }
 
   private constructor(db: Db, mediaDir: string, path: string, home: string) {
     this.db = db;
@@ -488,6 +494,13 @@ export class Etude {
       for (const [title, search, id] of changed) this.db.run("UPDATE items SET title = ?, search = ? WHERE id = ?", title, search, id);
       if (all) this.db.run("INSERT INTO meta (key, value) VALUES ('item_index', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", ITEM_INDEX_VERSION);
     });
+  }
+
+  /** A media file's bytes ("files/<sha>.<ext>"), or null when it isn't here or the path leaves the media folder. */
+  readMediaFile(file: string): Uint8Array | null {
+    const full = resolve(this.mediaDir, file);
+    if (!full.startsWith(resolve(this.mediaDir) + sep) || !existsSync(full)) return null;
+    return readFileSync(full);
   }
 
   /** Copies media into the collection. Identical content shares one file. */

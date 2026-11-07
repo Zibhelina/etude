@@ -915,3 +915,17 @@ body.browse-resizing iframe { pointer-events: none; }
 @keyframes lib-ring-in { from { stroke-dashoffset: var(--lib-ring-c, 140); } }
 .lib-ring-arc { animation: lib-ring-in 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 @media (prefers-reduced-motion: reduce) { .lib-ring-arc { animation: none; } }
+
+/* Profile header and "Your banner": a new banner fades in over the old one; saving pops the picture; tiles ring when picked. */
+.bn-in { animation: bn-in 240ms ease both; }
+@keyframes bn-in { from { opacity: 0; } }
+.ph-pop { animation: ph-pop 420ms cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes ph-pop { 0% { transform: scale(0.86); } 100% { transform: scale(1); } }
+.bn-tile { outline: none; transition: transform 120ms; }
+.bn-tile::after { content: ""; position: absolute; inset: -4px; border-radius: 13px; box-shadow: 0 0 0 2.5px var(--primary); opacity: 0; transition: opacity 150ms; pointer-events: none; }
+.bn-tile.is-on::after { opacity: 1; }
+.bn-tile:focus-visible::after { opacity: 1; box-shadow: 0 0 0 2.5px var(--ring); }
+.bn-tile.is-on:focus-visible::after { box-shadow: 0 0 0 2.5px var(--primary); }
+.bn-tile:hover > span { filter: brightness(1.06); }
+.bn-tile:active { transform: scale(0.97); }
+@media (prefers-reduced-motion: reduce) { .bn-in, .ph-pop { animation: none; } .bn-tile, .bn-tile::after { transition: none; } }

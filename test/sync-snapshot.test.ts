@@ -313,7 +313,7 @@ test("a sync cut off in the middle of the snapshot goes on from the next part", 
   assert.deepEqual(canonical(b.e), canonical(a.e));
 });
 
-test("a newer snapshot replaces the old one; one that loses a race takes its parts away; an older server is left alone", async (t) => {
+test("a newer snapshot replaces the old one; one that loses a race takes its parts away; an older server is left alone and asked again a day later", async (t) => {
   const { c, device } = setup(t);
   const a = await device("a");
   fill(a.e, 20);
@@ -347,4 +347,20 @@ test("a newer snapshot replaces the old one; one that loses a race takes its par
   const n = await device("n");
   await n.sync();
   assert.deepEqual(canonical(n.e), canonical(a.e));
+  // A day later the server has snapshots: the desktop asks again and makes one, though the log barely grew.
+  c.snapshots = true;
+  const since = c.pointer!.seq;
+  a.e.db.run("UPDATE sync_meta SET value=? WHERE key='snapshot_checked'", JSON.stringify(Date.now() - 25 * 3600_000));
+  await withEnv({ ETUDE_SYNC_SNAPSHOT_EVERY: "5" }, a.twice);
+  assert.ok(c.pointer!.seq > since, "a new snapshot");
+  // An older app left only the event count behind (no check time): the next sync asks the server.
+  for (let i = 0; i < 6; i++) a.e.upsertItem({ id: `later-${i}`, deck: "Test", type: "basic", fields: { front: "f", back: "b" } });
+  await withEnv({ ETUDE_SYNC_SNAPSHOT_EVERY: "5" }, a.twice);
+  const latest = c.pointer!.seq;
+  a.e.db.run("DELETE FROM sync_meta WHERE key='snapshot_checked'");
+  a.e.db.run("UPDATE sync_meta SET value=? WHERE key='snapshot'", JSON.stringify({ seq: c.events.length }));
+  c.log.length = 0;
+  await withEnv({ ETUDE_SYNC_SNAPSHOT_EVERY: "5" }, a.sync);
+  assert.ok(c.log.includes("GET /v1/vault/snapshot"));
+  assert.equal(JSON.parse(a.e.db.get("SELECT value FROM sync_meta WHERE key='snapshot'")!.value).seq, latest, "corrected from the server");
 });

@@ -113,13 +113,16 @@
 .ns-details { color: var(--foreground); }
 
 /* canvases and PDFs draw themselves */
-.ns-canvas { position: absolute; inset: 40px 12px 12px; }
+.ns-canvas { position: absolute; inset: 66px 12px 12px; }
 .ns-canvas .note-canvas-svg { position: absolute; inset: 0; width: auto; height: auto; padding: 0; }
 .ns-canvas .note-canvas-empty { position: absolute; inset: 0; display: grid; place-items: center; }
 /* The whole drawing, fitted into the card (the SVG keeps its aspect ratio). */
 .ns-canvas .note-canvas-svg svg { display: block; width: 100%; height: 100%; max-width: none; max-height: none; }
 .ns-canvas .note-canvas-empty { font-size: 12.5px; color: var(--muted-foreground); }
-.ns-pdf { position: absolute; inset: 42px 16px 0; overflow: hidden; }
+.ns-pdf { position: absolute; inset: 68px 14px 0; overflow: hidden; }
 .ns-pdf canvas { background: #fff; border-radius: 4px 4px 0 0; box-shadow: 0 0 0 1px var(--border), 0 4px 14px rgb(0 0 0 / 0.12); }
 .ns-pdf canvas { display: block; width: 100% !important; height: auto !important; }
 .ns-kindttl { position: absolute; top: 8px; left: 8px; right: 44px; z-index: 2; display: flex; width: max-content; max-width: calc(100% - 52px); align-items: center; gap: 6px; height: 26px; padding: 0 9px; border-radius: 8px; background: color-mix(in oklab, var(--card) 90%, transparent); border: 1px solid var(--border); font-size: 12.5px; font-weight: 600; color: var(--foreground); }
+
+/* Canvas, PDF and file cards share the page header (icon + title), on one line. */
+.ns-ttl.ns-one { -webkit-line-clamp: 1; }

@@ -24,6 +24,8 @@ import { MorePage } from "@/pages/more";
 import { usePhone } from "@/lib/phone";
 import { Onboarding, ONBOARDING_EVENT } from "@/components/onboarding";
 import { api } from "@/lib/api";
+import { loadAvatar } from "@/lib/avatar";
+import { AvatarDialogHost } from "@/components/avatar";
 
 /** First-run setup: shown when the collection has no decks and setup wasn't finished or skipped, or on request. */
 function useOnboarding(skip: boolean) {
@@ -173,6 +175,8 @@ export function App() {
   // Bumped after the assistant changed something, so the page remounts and reloads its data.
   const [dataKey, setDataKey] = useState(0);
   const [onboarding, setOnboarding] = useOnboarding(path === "/embed");
+  // Your picture: read once, and again when a sync brought changes (another device may have picked a new one).
+  useEffect(() => void loadAvatar(), [dataKey]);
   if (path === "/embed") {
     const deck = params.get("deck") ?? undefined;
     const q = params.get("q") ?? undefined;
@@ -256,6 +260,7 @@ export function App() {
           }}
         />
       )}
+      {path !== "/embed" && <AvatarDialogHost />}
       <Toaster position={phone ? "bottom-center" : "top-center"} mobileOffset={phone ? { bottom: studying ? 104 : 92, left: 12, right: 12 } : undefined} />
     </TooltipProvider>
   );

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Block, Field, Section } from "@/components/settings-ui";
+import { PictureBlock } from "@/components/avatar";
 import { download } from "@/components/type-editor/starter";
 import { account, AccountApiError, createPasskey, getPasskey, passkeysHere, type AccountStatus, type Device, type Passkey, type SecondStepInput, type TwoFactor } from "@/lib/account";
 import { relative } from "@/lib/api";
@@ -66,6 +67,7 @@ export function AccountSection() {
       title="Account"
       description="Optional. An Etude account is only needed for Sync and decks from the paid Market. Everything else works without one."
     >
+      <PictureBlock name={st?.me?.displayName} />
       {!st && !loadError && (
         <Block>
           <Skeleton className="h-4 w-48" />

@@ -9,6 +9,8 @@ import { SidebarUpdate } from "@/components/update-bar";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
 import { ArchiveIcon, BrowseIcon, LibraryIcon, MarketIcon, SettingsIcon, StatsIcon, TypesIcon } from "@/components/nav-icons";
 import { account } from "@/lib/account";
+import { openAvatarDialog } from "@/lib/avatar";
+import { MyAvatar } from "@/components/avatar";
 import { etudeFetch } from "@/lib/transport";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
@@ -225,11 +227,12 @@ function describe(sync: SyncState | null, name: string | null) {
 function ProfileRow({ collapsed, settingsOn }: { collapsed: boolean; settingsOn: boolean }) {
   const { sync, name } = useWho();
   const d = describe(sync, name);
+  // Your picture opens the picture dialog; the name beside it goes to Sync.
   const avatar = (
-    <span className="relative grid size-8 shrink-0 place-items-center rounded-full bg-sidebar-accent text-[14px] font-bold text-foreground">
-      {d.initial || <PersonGlyph />}
+    <button onClick={openAvatarDialog} aria-label="Change your picture" data-shell-avatar className="relative shrink-0 rounded-full outline-ring transition-transform duration-150 hover:scale-105 focus-visible:outline-2 motion-reduce:transition-none">
+      <MyAvatar size={32} initial={d.initial} />
       {d.tone === "warn" && collapsed && <span aria-hidden className="absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full bg-warning ring-2 ring-sidebar" />}
-    </span>
+    </button>
   );
   const gear = (
     <Tip show={collapsed} label="Settings">
@@ -251,17 +254,15 @@ function ProfileRow({ collapsed, settingsOn }: { collapsed: boolean; settingsOn:
     return (
       <div data-shell-profile className="flex flex-col items-center gap-1.5">
         <Tip show label={label}>
-          <button onClick={() => navigate("/settings#sync")} aria-label={label} className="rounded-full outline-ring focus-visible:outline-2">
-            {avatar}
-          </button>
+          {avatar}
         </Tip>
         {gear}
       </div>
     );
   return (
     <div data-shell-profile className="flex items-center gap-1 pt-2.5 pl-1.5">
-      <button onClick={() => navigate("/settings#sync")} title={[d.email, d.when].filter(Boolean).join(" · ") || undefined} aria-label={label} className="-m-1 flex min-w-0 flex-1 items-center gap-2.5 rounded-[10px] p-1 text-left outline-ring focus-visible:outline-2">
-        {avatar}
+      {avatar}
+      <button onClick={() => navigate("/settings#sync")} title={[d.email, d.when].filter(Boolean).join(" · ") || undefined} aria-label={label} className="flex min-w-0 flex-1 items-center rounded-[10px] py-1 pr-1 pl-1.5 text-left outline-ring focus-visible:outline-2">
         <span className="min-w-0 flex-1 whitespace-nowrap">
           <b className="block truncate text-[14px] font-semibold text-foreground">{d.who}</b>
           <small className={cn("flex items-center gap-1.5 truncate text-[12px]", d.tone === "warn" ? "text-warning" : "text-muted-foreground")}>{d.line || " "}</small>
@@ -269,14 +270,5 @@ function ProfileRow({ collapsed, settingsOn }: { collapsed: boolean; settingsOn:
       </button>
       {gear}
     </div>
-  );
-}
-
-function PersonGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-4 text-muted-foreground" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
-      <circle cx="12" cy="8.5" r="3.5" />
-      <path d="M5 20a7 7 0 0 1 14 0" />
-    </svg>
   );
 }

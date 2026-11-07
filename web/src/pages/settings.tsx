@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { BookOpen, ChevronLeft, ChevronRight, Clock, Database, Globe, Info, Keyboard, Loader2, MessageSquareCheck, Palette, RotateCcw, Save, Search, Shield, UserRound, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { MyAvatar } from "@/components/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { UpdateSettingsRow } from "@/components/update-bar";
@@ -48,6 +49,7 @@ const ANCHOR_GROUP: Record<string, GroupId> = { sync: "account", account: "accou
 /** What search knows: [section, row title as shown, extra words]. A row inside a fold names the fold. */
 const INDEX: { g: GroupId; label: string; words: string; fold?: string }[] = [
   { g: "account", label: "Sync", words: "sync now synced encrypted devices storage plan subscription billing server folder" },
+  { g: "account", label: "Your picture", words: "picture avatar photo profile emoji character face initial" },
   { g: "account", label: "Sign in or create an account", words: "account email login sign in code" },
   { g: "account", label: "Passkeys", words: "passkey fingerprint face touch id login" },
   { g: "account", label: "Devices", words: "device iphone mac sign out" },
@@ -659,7 +661,7 @@ export function SettingsPage() {
             ) : (
               <nav aria-label="Sections" className="flex flex-col gap-[18px]">
                 <PhoneList>
-                  <PhoneRow onClick={() => open("account")} icon={signedIn ? <span className="grid size-8 place-items-center rounded-full bg-muted text-sm font-bold text-foreground ring-1 ring-border ring-inset">{(acct?.me?.displayName || email || "?").slice(0, 1).toUpperCase()}</span> : undefined} Icon={signedIn ? undefined : UserRound} title={signedIn ? acct?.me?.displayName || email || "Account" : "Account & Sync"} sub={signedIn ? `${email ?? ""}${acct?.me?.sync.active ? " · Sync on" : ""}` : "Not signed in"} />
+                  <PhoneRow onClick={() => open("account")} icon={<MyAvatar size={32} initial={signedIn ? (acct?.me?.displayName || email || "").slice(0, 1).toUpperCase() : undefined} className="ring-1 ring-border ring-inset" />} title={signedIn ? acct?.me?.displayName || email || "Account" : "Account & Sync"} sub={signedIn ? `${email ?? ""}${acct?.me?.sync.active ? " · Sync on" : ""}` : "Not signed in"} />
                 </PhoneList>
                 <PhoneList>
                   {GROUPS.filter((g) => g.id !== "account").map((g) => (

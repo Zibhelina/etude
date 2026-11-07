@@ -834,12 +834,9 @@ body.browse-resizing iframe { pointer-events: none; }
 /* Rows that scroll sideways (lib/hscroll.tsx): round arrows over the edges on mouse devices, a fade on the side
    that has more, mouse drag. Touch keeps its own swipe and gets only the fade. */
 .hs-wrap { position: relative; min-width: 0; }
-/* The fade only where there are no arrows (touch): with a mouse it would dim cards that are fully on screen. */
-@media (hover: none), (pointer: coarse) {
-  [data-hs] { --hs-fl: 0px; --hs-fr: 0px; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--hs-fl), #000 calc(100% - var(--hs-fr)), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 var(--hs-fl), #000 calc(100% - var(--hs-fr)), transparent 100%); }
-  [data-hs][data-more-left] { --hs-fl: 18px; }
-  [data-hs][data-more-right] { --hs-fr: 32px; }
-}
+/* A fade on the side that has more, so the card cut by the edge reads as "keeps going" instead of sliced. */
+[data-hs] { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--hs-fl), #000 calc(100% - var(--hs-fr)), transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 var(--hs-fl), #000 calc(100% - var(--hs-fr)), transparent 100%); }
+/* --hs-fl / --hs-fr are set by lib/hscroll.tsx to the width of the card the edge cuts (0 when none is cut). */
 [data-hs]:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 12px; }
 @media (hover: hover) and (pointer: fine) { [data-hs][data-more-left], [data-hs][data-more-right] { cursor: grab; } }
 [data-hs][data-dragging] { cursor: grabbing; scroll-snap-type: none !important; scroll-behavior: auto; user-select: none; }

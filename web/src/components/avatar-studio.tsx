@@ -161,7 +161,7 @@ export function AvatarStep({ onNext, title }: { onNext(): void; title?: React.Re
           <button
             key={c.id}
             type="button"
-            aria-label={c.name}
+            aria-label={c.alt}
             aria-current={ad === 0 || undefined}
             tabIndex={ad === 0 ? 0 : -1}
             data-car={i}
@@ -184,7 +184,6 @@ export function AvatarStep({ onNext, title }: { onNext(): void; title?: React.Re
           </button>
         ))}
       </div>
-      <div key={car} className="av-name-in min-h-5 text-[17px] leading-none font-semibold" data-avatar-carname>{cur.name}</div>
       <div className="flex items-center gap-3">
         <button type="button" aria-label="Previous" onClick={() => move(car - 1)} disabled={spinning} className="grid size-[42px] place-items-center rounded-full border bg-background transition-colors hover:bg-accent disabled:opacity-50"><ChevronLeft className="size-[18px]" /></button>
         <span className="min-w-[52px] text-[13px] text-muted-foreground tabular-nums" data-avatar-count>{car + 1} / {N}</span>
@@ -192,7 +191,7 @@ export function AvatarStep({ onNext, title }: { onNext(): void; title?: React.Re
       </div>
       <div className="flex flex-wrap justify-center gap-2">
         <Button className="h-10 gap-1.5 px-4" disabled={spinning} onClick={() => setPick({ kind: "char", id: cur.id })} data-avatar-use>
-          {mine ? <><Check className="size-4" strokeWidth={2.6} /> This is me</> : <>Use {cur.name}</>}
+          {mine ? <><Check className="size-4" strokeWidth={2.6} /> This is me</> : <>Use this one</>}
         </Button>
         <Button variant="outline" className="h-10 gap-1.5 px-4" disabled={spinning} onClick={surprise} data-avatar-surprise><Dices className="size-4" /> Surprise me</Button>
       </div>
@@ -234,7 +233,7 @@ function PickSheet({ kind, pick, busy, onClose, onUse }: { kind: null | "emoji" 
       <DialogContent data-avatar-pick-sheet={kind ?? undefined} className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px] sm:rounded-[22px] sm:p-0">
         <div aria-hidden className="mx-auto mt-2 h-[5px] w-[38px] rounded-full bg-border sm:hidden" />
         <div className="flex items-center gap-4 px-5 pt-3.5 pb-3 pr-12 sm:px-6 sm:pt-[22px]">
-          <span key={JSON.stringify(value) + (draft?.src ?? "")} className="av-pop flex"><AvatarPic value={value} size={64} draft={draft} /></span>
+          <span key={JSON.stringify(value) + (draft?.src ?? "")} className="av-fade flex"><AvatarPic value={value} size={64} draft={draft} /></span>
           <div className="min-w-0 flex-1 text-left">
             <DialogTitle className="text-[19px] font-semibold">{kind === "photo" ? "Your photo" : "Emoji"}</DialogTitle>
             <DialogDescription className="mt-1 text-[13.5px]">{kind === "photo" ? "Cropped to a circle." : "On a colour of your choice."}</DialogDescription>

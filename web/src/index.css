@@ -836,6 +836,8 @@ body.browse-resizing iframe { pointer-events: none; }
 .av-crop-mask::after { content: ""; position: absolute; inset: 30px; border-radius: 9999px; box-shadow: 0 0 0 2px rgb(255 255 255 / 0.9), 0 0 0 3.5px rgb(0 0 0 / 0.25); }
 .av-pop { animation: av-pop 350ms cubic-bezier(0.3, 1.5, 0.4, 1); }
 @keyframes av-pop { from { transform: scale(0.85); } to { transform: none; } }
+.av-fade { animation: av-fade 220ms ease-out; }
+@keyframes av-fade { from { opacity: 0.35; } }
 /* Who's studying? The carousel's tiles stay mounted and slide and scale between places. */
 .av-car { -webkit-mask: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); mask: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); touch-action: pan-y; }
 .av-car-it { position: absolute; left: 50%; top: 50%; border-radius: 9999px; touch-action: pan-y; transition: transform 500ms cubic-bezier(0.22, 0.9, 0.24, 1), width 500ms cubic-bezier(0.22, 0.9, 0.24, 1), height 500ms cubic-bezier(0.22, 0.9, 0.24, 1), opacity 400ms, filter 400ms; }
@@ -847,6 +849,6 @@ body.browse-resizing iframe { pointer-events: none; }
 @keyframes av-name-in { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) {
   .av-tile, .av-tick, .av-swatch, .av-car-it { transition: none; }
-  .av-pop, .av-land, .av-name-in { animation: none; }
+  .av-pop, .av-fade, .av-land, .av-name-in { animation: none; }
 }
 .av-car-it .is-on { outline: 3px solid var(--primary); outline-offset: 4px; }

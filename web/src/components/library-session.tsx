@@ -45,7 +45,7 @@ export function SessionCard({ decks, stats, phone }: { decks: DeckNode[]; stats:
   return phone ? <SessionRingsCard decks={decks} stats={stats} /> : <SessionBars decks={decks} stats={stats} />;
 }
 
-/** Phone: three rings (new, learning, due) beside what's left, Continue, and today's pace. */
+/** Phone: what you've done today first (count, share and a bar), then what's left as three rings with its mix, and Continue. */
 function SessionRingsCard({ decks, stats }: { decks: DeckNode[]; stats: Stats | null }) {
   const names = new Set(decks.map((d) => d.name));
   const top = decks.filter((d) => !names.has(d.name.split("::").slice(0, -1).join("::")));
@@ -53,36 +53,43 @@ function SessionRingsCard({ decks, stats }: { decks: DeckNode[]; stats: Stats | 
   const t = study.reduce((a, d) => ({ n: a.n + d.new, l: a.l + d.learning, r: a.r + d.review, done: a.done + d.doneToday }), { n: 0, l: 0, r: 0, done: 0 });
   const due = t.n + t.l + t.r;
   const done = stats?.today.reviews ?? t.done;
-  const big = due >= 1000;
+  const total = done + due;
+  const pct = total ? Math.round((done / total) * 100) : 0;
   return (
     <section aria-label="Today's session" className="lib-panel rounded-2xl p-6 sm:p-8">
-      <div className="score-kicker font-semibold">Today’s session</div>
-      <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-[22px] sm:gap-7">
-        <SessionRings n={t.n} l={t.l} r={t.r} size={148} />
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-baseline gap-x-2">
-            <span className={cn("lib-title leading-[0.9] font-semibold tabular", big ? "text-[3.1rem]" : "text-[4rem] sm:text-[4.25rem]")}>{due.toLocaleString()}</span>
-            <span className="text-[16px] text-muted-foreground">left</span>
+      <div className="mx-auto w-full max-w-[24rem]">
+        <div className="score-kicker font-semibold">Today’s session</div>
+        <div className="mt-3 flex items-baseline justify-between gap-3">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <span className="lib-title text-[2.9rem] leading-[0.9] font-semibold tabular">{done.toLocaleString()}</span>
+            <span className="truncate text-[16px] text-muted-foreground">of {total.toLocaleString()} done</span>
           </div>
-          <div className="mt-3 flex flex-col gap-1.5 text-[15px] font-semibold tabular">
-            {t.n > 0 && <span className="inline-flex items-center gap-2 text-new"><Mark kind="new" />{t.n.toLocaleString()} <span className="font-medium text-muted-foreground">new</span></span>}
-            {t.l > 0 && <span className="inline-flex items-center gap-2 text-learn"><Mark kind="learn" />{t.l.toLocaleString()} <span className="font-medium text-muted-foreground">learning</span></span>}
-            {t.r > 0 && <span className="inline-flex items-center gap-2 text-review"><Mark kind="due" />{t.r.toLocaleString()} <span className="font-medium text-muted-foreground">due</span></span>}
+          <span className="shrink-0 text-[14px] text-muted-foreground tabular">{pct}%</span>
+        </div>
+        <div className="mt-3.5 h-2 overflow-hidden rounded-full bg-foreground/15" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done} aria-label="Done today">
+          <span className="lib-bar-fill block h-full rounded-full bg-primary" style={{ width: `${done > 0 ? Math.max(pct, 1.5) : 0}%` }} />
+        </div>
+        <div className="mt-5 flex items-center gap-4">
+          <SessionRings n={t.n} l={t.l} r={t.r} className="size-[4.75rem]" />
+          <div className="min-w-0 flex-1">
+            <div className="text-[16px] font-semibold"><span className="tabular">{due.toLocaleString()}</span> left <span className="font-medium text-muted-foreground">· {minutes(due * perCard(stats))}</span></div>
+            <div className="mt-1.5 grid w-max grid-cols-[auto_auto_auto] items-center gap-x-1.5 gap-y-[3px] text-[13.5px] font-semibold tabular">
+              {([["new", t.n, "text-new", "new"], ["learn", t.l, "text-learn", "learning"], ["due", t.r, "text-review", "due"]] as const).filter(([, v]) => v > 0).map(([k, v, c, label]) => (
+                <span key={k} className={cn("contents", c)}><Mark kind={k} /><span className="text-right">{v.toLocaleString()}</span><span className="font-medium text-muted-foreground">{label}</span></span>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
-      <div className="mt-6">
-        <PrimaryButton className="w-full" onClick={() => navigate("/study")} aria-label={done > 0 ? "Continue today's session" : "Start today's session"}>
+        <PrimaryButton className="mt-5 w-full" onClick={() => navigate("/study")} aria-label={done > 0 ? "Continue today's session" : "Start today's session"}>
           <Play className="size-4 fill-current" />{done > 0 ? "Continue" : "Start"}
         </PrimaryButton>
-        <p className="mt-3 text-[13.5px] text-muted-foreground">{done > 0 ? `${done.toLocaleString()} done today · ` : ""}{minutes(due * perCard(stats))} left</p>
       </div>
     </section>
   );
 }
 
 /** Today's work as three rings, the Library's deck-ring language at full size: each ring is that kind's share of what's left. */
-function SessionRings({ n, l, r, size }: { n: number; l: number; r: number; size: number }) {
+function SessionRings({ n, l, r, className }: { n: number; l: number; r: number; className?: string }) {
   const total = Math.max(1, n + l + r);
   const rings = [
     { v: n, color: "var(--new)", rad: 21 },
@@ -90,7 +97,7 @@ function SessionRings({ n, l, r, size }: { n: number; l: number; r: number; size
     { v: r, color: "var(--review)", rad: 12.2 },
   ];
   return (
-    <svg viewBox="0 0 46 46" width={size} height={size} className="shrink-0" aria-hidden>
+    <svg viewBox="0 0 46 46" className={cn("aspect-square h-auto shrink-0", className)} aria-hidden>
       {rings.map(({ v, color, rad }) => {
         const circ = 2 * Math.PI * rad;
         return (

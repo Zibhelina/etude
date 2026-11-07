@@ -1718,3 +1718,35 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
   .note-topbar, .note-page.has-tabs:has(.note-cover) .note-topbar { background: var(--sidebar); backdrop-filter: none; -webkit-backdrop-filter: none; }
   .note-page:not(.has-tabs):has(.note-cover) .note-topbar { background: transparent; }
 }
+/* Notes split view: up to four panes, each with its own tabs. One pane scrolls with the window as before;
+   with more, the panes fill the screen and each scrolls on its own. */
+.notes-split { flex: 1; min-width: 0; }
+.notes-split.is-multi { position: sticky; top: 0; height: 100dvh; overflow: hidden; }
+.notes-split.is-multi .note-pane-box { position: absolute; overflow: auto; overscroll-behavior: contain; }
+.notes-split.is-multi .note-pane { min-height: 100%; }
+.notes-split.is-multi .note-canvas-page { height: 100%; }
+.notes-split.is-multi .note-sheet { padding: 32px 28px 30vh; }
+.notes-split.is-multi .note-topbar { padding: 0 12px 0 16px; }
+/* In a pane that isn't the one you're in, its open tab reads quieter. */
+.notes-split.is-multi .note-pane:not(.is-focus) .note-tab.is-on { background: color-mix(in oklab, var(--sidebar-accent) 55%, transparent); font-weight: 550; }
+.note-split-bar { position: absolute; z-index: 8; touch-action: none; }
+.note-split-bar.is-row { width: 9px; margin-left: -4px; cursor: col-resize; }
+.note-split-bar.is-col { height: 9px; margin-top: -4px; cursor: row-resize; }
+/* The line between panes is the bar itself, drawn over everything so it stays visible across covers. */
+.note-split-bar::before { content: ""; position: absolute; background: var(--border); }
+.note-split-bar.is-row::before { top: 0; bottom: 0; left: 4px; width: 1px; }
+.note-split-bar.is-col::before { left: 0; right: 0; top: 4px; height: 1px; }
+.note-split-bar::after { content: ""; position: absolute; background: transparent; transition: background-color 150ms; }
+.note-split-bar.is-row::after { top: 0; bottom: 0; left: 3px; width: 3px; }
+.note-split-bar.is-col::after { left: 0; right: 0; top: 3px; height: 3px; }
+.note-split-bar:hover::after, .note-split-bar[data-on]::after { background: color-mix(in oklab, var(--foreground) 22%, transparent); }
+body.note-split-resizing, body.note-split-resizing * { user-select: none !important; }
+body.note-split-resizing.is-row * { cursor: col-resize !important; }
+body.note-split-resizing.is-col * { cursor: row-resize !important; }
+/* Dragging a tab: a ghost under the pointer, the half of the pane it would take, or a line among the tabs. */
+.note-tab.is-dragging { opacity: 0.4; }
+body.note-tab-dragging, body.note-tab-dragging * { cursor: grabbing !important; user-select: none !important; }
+.note-drop-zone { position: fixed; z-index: 60; pointer-events: none; border-radius: 10px; background: color-mix(in oklab, var(--primary) 16%, transparent); box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--primary) 55%, transparent); transition: left 130ms cubic-bezier(.32,.72,0,1), top 130ms cubic-bezier(.32,.72,0,1), width 130ms cubic-bezier(.32,.72,0,1), height 130ms cubic-bezier(.32,.72,0,1); }
+.note-drop-tabline { position: fixed; z-index: 60; width: 2px; pointer-events: none; border-radius: 2px; background: var(--primary); }
+.note-tab-ghost { position: fixed; left: 0; top: 0; z-index: 61; pointer-events: none; max-width: 200px; padding: 6px 11px; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--foreground); background: var(--card, var(--background)); border: 1px solid var(--border); border-radius: 9px; box-shadow: 0 6px 20px rgb(0 0 0 / 0.18); }
+@media (prefers-reduced-motion: reduce) { .note-drop-zone { transition: none; } }

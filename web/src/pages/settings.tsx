@@ -95,6 +95,8 @@ function searchHits(q: string) {
   const w = q.toLowerCase().trim().split(/\s+/).filter(Boolean);
   if (!w.length) return [];
   return INDEX.filter((e) => desktopApp() || (e.label !== "The etude command" && e.label !== "Logs"))
+    // Notes isn't on phones yet, nor its file editor's keys.
+    .filter((e) => !isPhone() || (e.label !== "Vim keys" && e.label !== "Notes files"))
     .filter((e) => {
       const t = `${e.label} ${e.words} ${groupLabel(e.g)}`.toLowerCase();
       return w.every((v) => t.includes(v));

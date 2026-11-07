@@ -286,12 +286,23 @@ function PdfPeek({ id }: { id: string }) {
 
 /** The top of the note, small and read-only: icon, title, then its first blocks (or a file's first lines). */
 function Peek({ n, p }: { n: NoteSummary; p: NotePreview | undefined }) {
-  if (n.kind === "canvas") return <CanvasPeek id={n.id} />;
-  if (n.kind === "pdf") return <PdfPeek id={n.id} />;
+  const head = (one?: boolean) => (
+    <>
+      <span className="ns-pic"><KindIcon n={n} size={30} /></span>
+      <div className={cn("ns-ttl", one && "ns-one")}>{display(n)}</div>
+    </>
+  );
+  if (n.kind === "canvas" || n.kind === "pdf")
+    return (
+      <>
+        <div className="ns-top">{head(true)}</div>
+        {n.kind === "canvas" ? <CanvasPeek id={n.id} /> : <PdfPeek id={n.id} />}
+      </>
+    );
   if (n.kind === "file")
     return (
       <div className="ns-top">
-        <div className="ns-ttl ns-mono">{display(n)}</div>
+        {head(true)}
         {p?.head != null && <CodePeek code={p.head.split("\n").slice(0, 8).join("\n") || " "} lang={fileLanguage(n.title)?.name ?? ""} />}
       </div>
     );
@@ -444,13 +455,6 @@ export function NoteStart({ bar, list, phone, onOpen, onCreate, onPin, actions }
         </button>
         <div className="ns-pv">
           <Peek n={n} p={previews.get(n.id)} />
-          {/* A drawing or a document has no title of its own on the card, so it gets a small one. */}
-          {(n.kind === "canvas" || n.kind === "pdf") && (
-            <div className="ns-kindttl">
-              <KindIcon n={n} size={14} />
-              <span className="truncate">{display(n)}</span>
-            </div>
-          )}
         </div>
         <div className="ns-foot">{when ? `${when} · ${where}` : where}</div>
       </div>

@@ -462,8 +462,8 @@ function LibraryHeader({ onImport, onNew, hasDecks }: { onImport(): void; onNew(
             <Search className="size-[18px]" />
           </button>
         )}
-        <button onClick={pick} className="lib-quiet inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold"><Upload className="size-4" />Import</button>
-        <button onClick={onNew} className="lib-quiet inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold"><Plus className="size-4" />New deck</button>
+        <button onClick={pick} className="lib-raised inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold"><Upload className="size-4" />Import</button>
+        <button onClick={onNew} className="lib-raised inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold"><Plus className="size-4" />New deck</button>
       </div>
     </header>
   );

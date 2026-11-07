@@ -184,7 +184,7 @@ export function AppearanceSection() {
         <Block>
           <p className="text-sm text-destructive">Couldn't load themes: {loadError}</p>
           <div>
-            <Button variant="outline" size="sm" className="h-10 md:h-8" onClick={load}>Try again</Button>
+            <Button variant="outline" size="sm" className="phone:h-10 h-8" onClick={load}>Try again</Button>
           </div>
         </Block>
       )}
@@ -217,7 +217,7 @@ export function AppearanceSection() {
             title="Theme"
             description="Click one to use it."
             aside={
-              <Button size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => startEdit(themes.find((t) => t.id === selected) ?? themes[0], true)}>
+              <Button size="sm" className="phone:h-10 gap-1.5 h-8" onClick={() => startEdit(themes.find((t) => t.id === selected) ?? themes[0], true)}>
                 <Plus className="size-4" />New theme
               </Button>
             }
@@ -237,7 +237,7 @@ export function AppearanceSection() {
               <>Start from any theme and change its colors, corners and fonts, or add CSS. Saved themes can be exported as JSON and imported on another collection.</>
             }
             aside={
-              <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={importFiles}>
+              <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={importFiles}>
                 <Upload className="size-4" />Import
               </Button>
             }
@@ -373,7 +373,7 @@ function AccentBlock({ theme }: { theme: Theme }) {
       title="Accent color"
       description="Buttons, links, selections and charts, on any theme. Right and wrong keep their own colors."
       aside={
-        <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" disabled={accent === null} onClick={() => pick(null)} title={`Back to ${theme.name}'s own color`}>
+        <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={accent === null} onClick={() => pick(null)} title={`Back to ${theme.name}'s own color`}>
           <RotateCcw className="size-4" />Reset
         </Button>
       }
@@ -443,7 +443,7 @@ function FunBlock() {
       aside={
         <div className="flex items-center gap-3">
           {on && hidden && (
-            <Button variant="outline" size="sm" onClick={() => setMinimiHidden(false)} className="max-md:hidden">
+            <Button variant="outline" size="sm" onClick={() => setMinimiHidden(false)} className="phone:hidden">
               Show Minimi
             </Button>
           )}
@@ -505,11 +505,11 @@ function PersonalityBlock() {
         <span className="text-[12px] text-muted-foreground tabular-nums">{text.length > MINIMI_MAX * 0.8 ? `${text.length} / ${MINIMI_MAX}` : ""}</span>
         <div className="flex gap-2">
           {saved.trim() && (
-            <Button variant="ghost" size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={() => save("")}>
+            <Button variant="ghost" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={busy} onClick={() => save("")}>
               <RotateCcw className="size-4" />Usual Minimi
             </Button>
           )}
-          <Button size="sm" className="h-10 gap-1.5 md:h-8" disabled={!dirty || busy} onClick={() => save(text)}>
+          <Button size="sm" className="phone:h-10 gap-1.5 h-8" disabled={!dirty || busy} onClick={() => save(text)}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Save
           </Button>
         </div>
@@ -538,8 +538,8 @@ function RenameDialog({ theme, onClose, onRename }: { theme: ListedTheme | null;
         </DialogHeader>
         <Input autoFocus value={name} maxLength={60} className="h-10" onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
         <DialogFooter>
-          <Button variant="ghost" className="h-10 md:h-9" onClick={onClose}>Cancel</Button>
-          <Button className="h-10 md:h-9" disabled={!ok} onClick={submit}>Rename</Button>
+          <Button variant="ghost" className="phone:h-10 h-9" onClick={onClose}>Cancel</Button>
+          <Button className="phone:h-10 h-9" disabled={!ok} onClick={submit}>Rename</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -664,13 +664,13 @@ function ThemeEditor({ editing, takenIds, restore, onCancel, onSaved }: {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <label htmlFor="theme-name" className="text-xs font-medium text-muted-foreground">{isNew ? "New theme" : "Editing"}</label>
-            <Input id="theme-name" value={draft.name} maxLength={60} aria-invalid={!nameOk} className="h-10 text-base font-medium md:h-9" onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+            <Input id="theme-name" value={draft.name} maxLength={60} aria-invalid={!nameOk} className="phone:h-10 text-base font-medium h-9" onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
           </div>
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-muted-foreground">Color scheme</span>
             <ToggleGroup type="single" variant="outline" value={draft.scheme} onValueChange={(v) => v && setDraft({ ...draft, scheme: v as Theme["scheme"] })}>
-              <ToggleGroupItem value="dark" className="h-10 px-4 md:h-9">Dark</ToggleGroupItem>
-              <ToggleGroupItem value="light" className="h-10 px-4 md:h-9">Light</ToggleGroupItem>
+              <ToggleGroupItem value="dark" className="phone:h-10 px-4 h-9">Dark</ToggleGroupItem>
+              <ToggleGroupItem value="light" className="phone:h-10 px-4 h-9">Light</ToggleGroupItem>
             </ToggleGroup>
           </div>
         </div>
@@ -773,7 +773,7 @@ function ThemeEditor({ editing, takenIds, restore, onCancel, onSaved }: {
         </div>
       </Block>
 
-      <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center gap-2 rounded-b-xl border-t bg-background/95 px-4 py-3 backdrop-blur sm:px-5 md:bottom-0">
+      <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 rounded-b-xl border-t bg-background/95 px-4 py-3 backdrop-blur phone:bottom-[calc(4rem+env(safe-area-inset-bottom))] sm:px-5">
         <span className="min-w-0 flex-1 truncate text-sm">
           {!nameOk ? <span className="text-destructive">Give it a name</span>
             : bad.length ? <span className="text-destructive">Fix {bad.length === 1 ? bad[0] : `${bad.length} values`}</span>
@@ -781,10 +781,10 @@ function ThemeEditor({ editing, takenIds, restore, onCancel, onSaved }: {
             : dirty ? <span className="text-muted-foreground">{isNew ? "Not saved yet" : "Unsaved changes"}</span>
             : <span className="text-muted-foreground">No changes</span>}
         </span>
-        <Button variant="ghost" size="sm" className="h-10 gap-1.5 md:h-8" onClick={onCancel}>
+        <Button variant="ghost" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={onCancel}>
           <RotateCcw className="size-4" />Cancel
         </Button>
-        <Button size="sm" className="h-10 gap-1.5 md:h-8" onClick={save} disabled={!canSave || (!dirty && !isNew)}>
+        <Button size="sm" className="phone:h-10 gap-1.5 h-8" onClick={save} disabled={!canSave || (!dirty && !isNew)}>
           {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}{isNew ? "Save and use" : "Save"} <kbd className="hidden text-[10px] opacity-60 sm:inline">Ctrl S</kbd>
         </Button>
       </div>

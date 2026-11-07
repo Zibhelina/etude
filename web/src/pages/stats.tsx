@@ -13,7 +13,7 @@ import { api, type DeckNode, type LearnerSummary, type PracticeCard, type StatsS
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { useFunMode } from "@/lib/fun";
-import { usePhone } from "@/lib/phone";
+import { useNarrow } from "@/lib/device";
 import { track } from "@/lib/telemetry";
 import { useMinimiFace } from "@/lib/minimi-face";
 
@@ -52,7 +52,7 @@ export function StatsPage({ deck }: { deck?: string }) {
 
   const empty = stats ? stats.schedulers.reduce((a, x) => a + x.cards, 0) === 0 : false;
   return (
-    <div className="@container mx-auto w-full max-w-5xl px-8 pt-[30px] max-md:px-3 max-md:pt-[calc(1rem+env(safe-area-inset-top))] max-lg:px-8 max-md:pb-4">
+    <div className="@container mx-auto w-full max-w-5xl px-8 pt-[30px] max-md:px-3 phone:pt-[calc(1rem+env(safe-area-inset-top))] max-lg:px-8 max-md:pb-4">
       <Header deck={deck} decks={decks} hideScope={empty && !deck} />
       {error && !stats && <div className="stats-card px-6 py-12 text-center text-muted-foreground">{error}</div>}
       {!stats && !error && <Loading />}
@@ -307,7 +307,7 @@ function EmptyState() {
 }
 
 function FsrsBody({ stats: s, d, deck }: { stats: Stats; d: D; deck?: string }) {
-  const phone = usePhone();
+  const phone = useNarrow();
   const others = s.schedulers.filter((x) => x.kind !== "fsrs");
   const studied = s.cards.total - s.cards.new;
   const early = studied > 0 && d.activeDays < 4;
@@ -501,7 +501,7 @@ function WeekRow({ stats: s, d }: { stats: Stats; d: D }) {
 // ------------------------------------------------------------------ forecast
 
 function ForecastSection({ stats: s, deck }: { stats: Stats; d?: D; deck?: string }) {
-  const phone = usePhone();
+  const phone = useNarrow();
   const [range, setRange] = useState<14 | 30>(14);
   const f = s.forecast;
   const n = range === 14 ? (phone ? 8 : 14) : 30;
@@ -979,7 +979,7 @@ function PracticePanel({ card, q }: { card: PracticeCard; q?: string }) {
 }
 
 function DrillBody({ stats: s, d, deck }: { stats: Stats; d: D; deck: string }) {
-  const phone = usePhone();
+  const phone = useNarrow();
   const runs = s.days.reduce((a, x) => a + (x.runs ?? 0) + x.reviews, 0);
   const first = s.days.find((x) => d.act(x) > 0)?.day;
   return (
@@ -1017,7 +1017,7 @@ function DrillBody({ stats: s, d, deck }: { stats: Stats; d: D; deck: string }) 
 // ------------------------------------------------------------------ rated script schedulers (Leitner)
 
 function RatedBody({ stats: s, d, deck, summary }: { stats: Stats; d: D; deck: string; summary: StatsScheduler }) {
-  const phone = usePhone();
+  const phone = useNarrow();
   const due = s.forecast[0]?.due ?? 0;
   const g = summary.groups;
   const groupTotal = g ? g.bins.reduce((a, b) => a + b.cards, 0) + g.other : 0;

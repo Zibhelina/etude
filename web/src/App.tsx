@@ -306,9 +306,9 @@ export function App() {
           } : undefined}
           style={{ "--agent-offset": agent.open ? `${agent.width}px` : "0px", } as React.CSSProperties}
         >
-          <Sidebar path={path} collapsed={collapsed} onToggle={toggleSidebar} />
+          {!phone && <Sidebar path={path} collapsed={collapsed} onToggle={toggleSidebar} />}
           {/* Room under the last row for the corner Minimi or ε, and on a phone for the tab island and its fade. */}
-          <main key={dataKey} className="min-w-0 flex-1 max-md:overflow-x-clip pb-[calc(var(--tabbar-h)+2.5rem)] md:pb-32">
+          <main key={dataKey} className="min-w-0 flex-1 pb-32 phone:overflow-x-clip phone:pb-[calc(var(--tabbar-h)+2.5rem)]">
             <ScreenSwap path={path} page={page} />
           </main>
           {agent.open ? (
@@ -347,7 +347,7 @@ export function App() {
           ) : (
             <AgentLauncher onOpen={() => agent.setOpen(true)} />
           )}
-          <PhoneTabBar path={path} updateDot={updateDot} fun={fun} onAsk={() => agent.setOpen(true)} />
+          {phone && <PhoneTabBar path={path} updateDot={updateDot} fun={fun} onAsk={() => agent.setOpen(true)} />}
         </div>
       )}
       {onboarding && (

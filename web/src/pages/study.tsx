@@ -672,7 +672,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
               <Undo2 className="size-5" strokeWidth={1.8} />
             </IconButton>
             {card && !phone && (
-              <IconButton label="Edit card" className="max-md:hidden" disabled={!canAct} onClick={() => navigate(`/browse?item=${encodeURIComponent(card.itemId)}`)}>
+              <IconButton label="Edit card" className="phone:hidden" disabled={!canAct} onClick={() => navigate(`/browse?item=${encodeURIComponent(card.itemId)}`)}>
                 <Pencil className="size-5" strokeWidth={1.8} />
               </IconButton>
             )}

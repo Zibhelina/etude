@@ -83,7 +83,7 @@ export function DataSection({ dbPath, mediaDir }: { dbPath: string; mediaDir: st
         description="Add or update decks, types and items from pack files. Items are matched by id, so importing an edited pack again updates it and keeps review history."
         stackAside
         aside={
-          <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={pick} disabled={busy}>
+          <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={pick} disabled={busy}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}Choose files
           </Button>
         }
@@ -119,7 +119,7 @@ export function DataSection({ dbPath, mediaDir }: { dbPath: string; mediaDir: st
         description={`One pack with every item, plus the decks, presets, custom card types and tag notes they use. Review history and scheduling are not in packs; ${serverless() ? "a backup keeps them" : "back up the database file to keep them"}.`}
         stackAside
         aside={
-          <Button asChild variant="outline" size="sm" className="h-10 gap-1.5 md:h-8">
+          <Button asChild variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8">
             <a href={api.exportUrl({})} download={`etude-${stamp}.pack.json`} onClick={etudeDownload}>
               <Download className="size-4" />Export pack
             </a>
@@ -183,10 +183,10 @@ function BrowserBackup() {
       stackAside
       aside={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={download} disabled={!!busy}>
+          <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={download} disabled={!!busy}>
             {busy === "backup" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}Download backup
           </Button>
-          <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={pickBackup} disabled={!!busy}>
+          <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={pickBackup} disabled={!!busy}>
             {busy === "restore" ? <Loader2 className="size-4 animate-spin" /> : <ArchiveRestore className="size-4" />}Restore
           </Button>
         </div>

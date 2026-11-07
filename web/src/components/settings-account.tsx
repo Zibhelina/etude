@@ -76,7 +76,7 @@ export function AccountSection() {
         <Block>
           <Notice>Couldn't read the account: {loadError}</Notice>
           <div>
-            <Button variant="outline" size="sm" className="h-10 md:h-8" onClick={() => void load()}>Try again</Button>
+            <Button variant="outline" size="sm" className="phone:h-10 h-8" onClick={() => void load()}>Try again</Button>
           </div>
         </Block>
       )}
@@ -156,11 +156,11 @@ function SignIn({ st, onDone }: { st: AccountStatus; onDone(): Promise<void> }) 
           <TextInput label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" placeholder="you@example.com" />
           {error && <Notice>{error}</Notice>}
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy || !email.trim()}>
+            <Button type="submit" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={!!busy || !email.trim()}>
               {busy === "send" ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />} Email me a code
             </Button>
             {passkeyOk && (
-              <Button type="button" variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy} onClick={() => void run("passkey", async () => {
+              <Button type="button" variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={!!busy} onClick={() => void run("passkey", async () => {
                 const o = await account.passkeyLoginOptions();
                 await account.passkeyLoginVerify({ challengeId: o.challengeId, response: await getPasskey(o.options) });
                 toast.success("Signed in");
@@ -182,11 +182,11 @@ function SignIn({ st, onDone }: { st: AccountStatus; onDone(): Promise<void> }) 
           <TextInput label="Code" value={code} onChange={setCode} autoComplete="one-time-code" inputMode="numeric" mono placeholder="6-digit code" />
           {error && <Notice>{error}</Notice>}
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy || !code.trim()}>
+            <Button type="submit" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={!!busy || !code.trim()}>
               {busy === "verify" && <Loader2 className="size-4 animate-spin" />} Sign in
             </Button>
-            <Button type="button" variant="ghost" size="sm" className="h-10 md:h-8" disabled={!!busy} onClick={() => void run("send", async () => void (await account.signin(email)))}>Send again</Button>
-            <Button type="button" variant="ghost" size="sm" className="h-10 md:h-8" disabled={!!busy} onClick={() => (setSent(false), setCode(""), setError(null))}>Use another email</Button>
+            <Button type="button" variant="ghost" size="sm" className="phone:h-10 h-8" disabled={!!busy} onClick={() => void run("send", async () => void (await account.signin(email)))}>Send again</Button>
+            <Button type="button" variant="ghost" size="sm" className="phone:h-10 h-8" disabled={!!busy} onClick={() => (setSent(false), setCode(""), setError(null))}>Use another email</Button>
           </div>
         </form>
       )}
@@ -204,7 +204,7 @@ function SignIn({ st, onDone }: { st: AccountStatus; onDone(): Promise<void> }) 
             await onDone();
           }))}>
             <TextInput label="Etude server" value={server} onChange={setServer} mono placeholder="https://sync.etude.study" hint="Leave empty for sync.etude.study. Self-hosted servers have Sync without the paid Market." />
-            <Button type="submit" size="sm" variant="outline" className="h-10 md:h-9" disabled={!!busy}>Save</Button>
+            <Button type="submit" size="sm" variant="outline" className="phone:h-10 h-9" disabled={!!busy}>Save</Button>
           </form>
         )}
       </div>
@@ -230,7 +230,7 @@ function Profile({ st, onChanged, guarded }: { st: AccountStatus; onChanged(): P
       title={<span className="flex items-center gap-2"><span className="[overflow-wrap:anywhere]" data-account-email>{me.email}</span>{me.admin && <span className="rounded-full bg-highlight/15 px-2 py-0.5 text-[11px] font-medium text-highlight">Reviewer</span>}</span>}
       description={<>Account since {date(me.created)} · <span className="font-mono text-[12px]">{st.server.replace(/^https?:\/\//, "")}</span></>}
       aside={
-        <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={async () => {
+        <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={busy} onClick={async () => {
           setBusy(true);
           await account.signout().catch(() => {});
           toast.success("Signed out on this device");
@@ -252,7 +252,7 @@ function Profile({ st, onChanged, guarded }: { st: AccountStatus; onChanged(): P
       )}
       {!changing && !pending && (
         <div>
-          <Button variant="ghost" size="sm" className="-ml-2 h-10 gap-1.5 text-muted-foreground md:h-8" onClick={() => setChanging(true)}>
+          <Button variant="ghost" size="sm" className="-ml-2 phone:h-10 gap-1.5 text-muted-foreground h-8" onClick={() => setChanging(true)}>
             <Mail className="size-4" /> Change email
           </Button>
         </div>
@@ -266,8 +266,8 @@ function Profile({ st, onChanged, guarded }: { st: AccountStatus; onChanged(): P
               toast.success("Check the new inbox", { description: "A confirmation link went to the new address." });
             }))}>
               <TextInput label="New email" type="email" value={newEmail} onChange={setNewEmail} autoComplete="email" />
-              <Button type="submit" size="sm" className="h-10 md:h-9" disabled={!newEmail.trim()}>Send link</Button>
-              <Button type="button" variant="ghost" size="sm" className="h-10 md:h-9" onClick={() => setChanging(false)}>Cancel</Button>
+              <Button type="submit" size="sm" className="phone:h-10 h-9" disabled={!newEmail.trim()}>Send link</Button>
+              <Button type="button" variant="ghost" size="sm" className="phone:h-10 h-9" onClick={() => setChanging(false)}>Cancel</Button>
             </form>
           ) : (
             <form className="flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={(e) => (e.preventDefault(), void guarded("change your email", async () => {
@@ -279,8 +279,8 @@ function Profile({ st, onChanged, guarded }: { st: AccountStatus; onChanged(): P
               await onChanged();
             }))}>
               <TextInput label={`Code sent to ${pending.email}`} value={code} onChange={setCode} mono />
-              <Button type="submit" size="sm" className="h-10 md:h-9" disabled={!code.trim()}>Confirm</Button>
-              <Button type="button" variant="ghost" size="sm" className="h-10 md:h-9" onClick={() => setChanging(false)}>Later</Button>
+              <Button type="submit" size="sm" className="phone:h-10 h-9" disabled={!code.trim()}>Confirm</Button>
+              <Button type="button" variant="ghost" size="sm" className="phone:h-10 h-9" onClick={() => setChanging(false)}>Later</Button>
             </form>
           )}
         </div>
@@ -321,7 +321,7 @@ function Passkeys({ rpId, guarded }: { rpId?: string; guarded: Guarded }) {
       title="Passkeys"
       description={here ? "Sign in with your fingerprint, face or device PIN instead of an email code." : isNativeApp() ? NATIVE_COPY.passkeysElsewhere : `Passkeys for this account belong to ${rpId ?? "the server"}, so they can be added from the Etude app or etude.study.`}
       aside={here ? (
-        <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => void guarded("add a passkey", async () => {
+        <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={() => void guarded("add a passkey", async () => {
           const o = await account.passkeyRegisterOptions();
           await account.passkeyRegisterVerify({ challengeId: o.challengeId, response: await createPasskey(o.options), name: navigator.platform || "Passkey" });
           toast.success("Passkey added");
@@ -343,7 +343,7 @@ function Passkeys({ rpId, guarded }: { rpId?: string; guarded: Guarded }) {
                 <div className="truncate">{p.name}</div>
                 <div className="text-xs text-muted-foreground">Added {date(p.created)}{p.lastUsed ? ` · used ${relative(p.lastUsed)}` : ""}{p.backedUp ? " · synced" : ""}</div>
               </div>
-              <Button variant="ghost" size="sm" className="h-10 text-muted-foreground md:h-8" onClick={() => void guarded("remove a passkey", async () => (await account.removePasskey(p.id), await load()))}>Remove</Button>
+              <Button variant="ghost" size="sm" className="phone:h-10 text-muted-foreground h-8" onClick={() => void guarded("remove a passkey", async () => (await account.removePasskey(p.id), await load()))}>Remove</Button>
             </li>
           ))}
         </ul>
@@ -369,7 +369,7 @@ function Devices({ guarded, onSelfRevoked }: { guarded: Guarded; onSelfRevoked()
                   <div className="truncate">{d.name}{d.current && <span className="ml-2 text-xs text-highlight">This device</span>}</div>
                   <div className="text-xs text-muted-foreground">Signed in {date(d.created)} with {d.via === "passkey" ? "a passkey" : "an email code"} · active {relative(d.lastSeen)}</div>
                 </div>
-                <Button variant="ghost" size="sm" className="h-10 text-muted-foreground md:h-8" onClick={() => void guarded("sign out another device", async () => {
+                <Button variant="ghost" size="sm" className="phone:h-10 text-muted-foreground h-8" onClick={() => void guarded("sign out another device", async () => {
                   await account.revokeDevice(d.id);
                   toast.success(d.current ? "Signed out on this device" : `Signed out ${d.name}`);
                   if (d.current) await onSelfRevoked();
@@ -391,7 +391,7 @@ function SellingLink() {
     <Block
       title="Selling decks"
       description={isNativeApp() ? NATIVE_COPY.selling : "List a deck from your collection on the paid Market. You keep 80% of each sale."}
-      aside={isNativeApp() ? undefined : <Button variant="outline" size="sm" className="h-10 md:h-8" onClick={() => navigate("/market?tab=selling")}>Open Selling</Button>}
+      aside={isNativeApp() ? undefined : <Button variant="outline" size="sm" className="phone:h-10 h-8" onClick={() => navigate("/market?tab=selling")}>Open Selling</Button>}
     />
   );
 }
@@ -406,7 +406,7 @@ function DataAndDeletion({ st, confirmFresh, onDeleted }: { st: AccountStatus; c
   return (
     <Block title="Your data" description="Download what the server holds about you, or delete the account. Your collection on this device is not affected either way.">
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" size="sm" className="h-10 md:h-8" disabled={busy} onClick={async () => {
+        <Button variant="outline" size="sm" className="phone:h-10 h-8" disabled={busy} onClick={async () => {
           setBusy(true);
           try {
             download(`etude-account-${new Date().toISOString().slice(0, 10)}.json`, await account.exportData());
@@ -416,7 +416,7 @@ function DataAndDeletion({ st, confirmFresh, onDeleted }: { st: AccountStatus; c
             setBusy(false);
           }
         }}>Export my data</Button>
-        <Button variant="ghost" size="sm" className="h-10 gap-1.5 text-destructive hover:text-destructive md:h-8" onClick={() => (setTyped(""), setOpen(true))}>
+        <Button variant="ghost" size="sm" className="phone:h-10 gap-1.5 text-destructive hover:text-destructive h-8" onClick={() => (setTyped(""), setOpen(true))}>
           <Trash2 className="size-4" /> Delete account
         </Button>
       </div>
@@ -560,14 +560,14 @@ export function SecondStep({ methods, onSubmit, onRestart }: { methods: string[]
       {error && <Notice>{error}</Notice>}
       <div className="flex flex-wrap items-center gap-2">
         {expired ? (
-          <Button type="button" size="sm" className="h-10 md:h-8" onClick={onRestart}>Sign in again</Button>
+          <Button type="button" size="sm" className="phone:h-10 h-8" onClick={onRestart}>Sign in again</Button>
         ) : (
-          <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy || !value.trim()}>
+          <Button type="submit" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={busy || !value.trim()}>
             {busy && <Loader2 className="size-4 animate-spin" />} Continue
           </Button>
         )}
         {hasApp && !expired && (
-          <Button type="button" variant="ghost" size="sm" className="h-10 md:h-8" disabled={busy} onClick={() => (setRecovery(!recovery), setValue(""), setError(null))}>
+          <Button type="button" variant="ghost" size="sm" className="phone:h-10 h-8" disabled={busy} onClick={() => (setRecovery(!recovery), setValue(""), setError(null))}>
             {recovery ? "Use the authenticator app" : "Use a recovery code"}
           </Button>
         )}
@@ -626,7 +626,7 @@ function TwoStep({ email, guarded }: { email: string; guarded: Guarded }) {
       title={<span className="flex items-center gap-2">Two-step sign-in{tf?.enabled && <span className="inline-flex items-center gap-1 rounded-full bg-success/12 px-2 py-0.5 text-[11px] font-medium text-success"><ShieldCheck className="size-3" /> On</span>}</span>}
       description={description}
       aside={tf && !setup && !codes ? (
-        tf.enabled ? undefined : <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" data-two-factor-on onClick={() => void start()}><ShieldCheck className="size-4" /> Turn on</Button>
+        tf.enabled ? undefined : <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" data-two-factor-on onClick={() => void start()}><ShieldCheck className="size-4" /> Turn on</Button>
       ) : undefined}
     >
       {error && <Notice>{error}</Notice>}
@@ -642,23 +642,23 @@ function TwoStep({ email, guarded }: { email: string; guarded: Guarded }) {
           <p className="text-sm">2. Enter the 6-digit code the app shows for Etude.</p>
           <TextInput label="Code from the app" value={code} onChange={setCode} autoComplete="one-time-code" inputMode="numeric" mono placeholder="6-digit code" />
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy || !code.trim()}>
+            <Button type="submit" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={busy || !code.trim()}>
               {busy && <Loader2 className="size-4 animate-spin" />} {tf?.enabled ? "Replace" : "Turn on"}
             </Button>
-            <Button type="button" variant="ghost" size="sm" className="h-10 md:h-8" disabled={busy} onClick={() => (setSetup(null), setError(null))}>Cancel</Button>
+            <Button type="button" variant="ghost" size="sm" className="phone:h-10 h-8" disabled={busy} onClick={() => (setSetup(null), setError(null))}>Cancel</Button>
           </div>
         </form>
       )}
       {codes && <RecoveryCodes email={email} codes={codes} onDone={() => (setCodes(null), toast.success("Two-step sign-in is on"))} />}
       {tf?.enabled && !setup && !codes && (
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" className="h-10 md:h-8" onClick={() => void guarded("make new recovery codes", async () => {
+          <Button variant="outline" size="sm" className="phone:h-10 h-8" onClick={() => void guarded("make new recovery codes", async () => {
             const r = await account.newRecoveryCodes();
             setTf(r);
             setCodes(r.recoveryCodes);
           })}>New recovery codes</Button>
-          <Button variant="outline" size="sm" className="h-10 md:h-8" onClick={() => void start()}>Replace the authenticator</Button>
-          <Button variant="ghost" size="sm" className="h-10 text-muted-foreground md:h-8" data-two-factor-off onClick={() => setConfirmOff(true)}>Turn off</Button>
+          <Button variant="outline" size="sm" className="phone:h-10 h-8" onClick={() => void start()}>Replace the authenticator</Button>
+          <Button variant="ghost" size="sm" className="phone:h-10 text-muted-foreground h-8" data-two-factor-off onClick={() => setConfirmOff(true)}>Turn off</Button>
         </div>
       )}
       <AlertDialog open={confirmOff} onOpenChange={setConfirmOff}>
@@ -706,17 +706,17 @@ function RecoveryCodes({ email, codes, onDone }: { email: string; codes: string[
         {codes.map((c) => <li key={c} className="select-all">{c}</li>)}
       </ul>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => navigator.clipboard.writeText(text).then(() => (setCopied(true), window.setTimeout(() => setCopied(false), 1500)), () => toast.error("Couldn't copy", { description: "The browser blocked clipboard access." }))}>
+        <Button type="button" variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={() => navigator.clipboard.writeText(text).then(() => (setCopied(true), window.setTimeout(() => setCopied(false), 1500)), () => toast.error("Couldn't copy", { description: "The browser blocked clipboard access." }))}>
           {copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />} {copied ? "Copied" : "Copy"}
         </Button>
-        <Button type="button" variant="outline" size="sm" className="h-10 md:h-8" onClick={() => saveText("etude-recovery-codes.txt", text)}>Download</Button>
+        <Button type="button" variant="outline" size="sm" className="phone:h-10 h-8" onClick={() => saveText("etude-recovery-codes.txt", text)}>Download</Button>
       </div>
       <label className="flex items-start gap-2.5 text-sm">
         <input type="checkbox" className="mt-0.5 size-4 accent-[var(--highlight)]" checked={saved} onChange={(e) => setSaved(e.target.checked)} />
         <span>I saved the recovery codes.</span>
       </label>
       <div>
-        <Button type="button" size="sm" className="h-10 md:h-8" disabled={!saved} onClick={onDone}>Done</Button>
+        <Button type="button" size="sm" className="phone:h-10 h-8" disabled={!saved} onClick={onDone}>Done</Button>
       </div>
     </div>
   );
@@ -745,7 +745,7 @@ export function TextInput({ label, hint, value, onChange, type = "text", placeho
   const id = useId();
   return (
     <Field label={label} hint={hint} htmlFor={id} className="min-w-0 flex-1">
-      <Input id={id} type={type} value={value} placeholder={placeholder} autoComplete={autoComplete} inputMode={inputMode} autoCapitalize="none" spellCheck={false} className={cn("h-10 md:h-9", mono && "font-mono text-[13px] md:text-[13px]")} onChange={(e) => onChange(e.target.value)} />
+      <Input id={id} type={type} value={value} placeholder={placeholder} autoComplete={autoComplete} inputMode={inputMode} autoCapitalize="none" spellCheck={false} className={cn("phone:h-10 h-9", mono && "font-mono text-[13px] md:text-[13px]")} onChange={(e) => onChange(e.target.value)} />
     </Field>
   );
 }

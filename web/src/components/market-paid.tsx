@@ -400,9 +400,9 @@ export function SellingView() {
             <Stat label="Your earnings" value={money(state.sales?.totals.earnings ?? 0)} sub={state.sales?.totals.gross ? `of ${money(state.sales.totals.gross)} gross, before Stripe's fees` : "after Etude's 20%, before Stripe's fees"} />
           </div>
           <div className="flex flex-wrap gap-2">
-            {!c.setupRequired && !c.chargesEnabled && <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => void act("onb", async () => openOutside((await account.onboarding()).url))}><ExternalLink className="size-4" />Finish Stripe setup</Button>}
-            {!c.setupRequired && c.detailsSubmitted && <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => void act("dash", async () => openOutside((await account.dashboard()).url))} data-stripe-dashboard><ExternalLink className="size-4" />Open Stripe dashboard</Button>}
-            {!c.setupRequired && <Button size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => setCreating(true)} data-new-listing><Upload className="size-4" />List a deck</Button>}
+            {!c.setupRequired && !c.chargesEnabled && <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={() => void act("onb", async () => openOutside((await account.onboarding()).url))}><ExternalLink className="size-4" />Finish Stripe setup</Button>}
+            {!c.setupRequired && c.detailsSubmitted && <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={() => void act("dash", async () => openOutside((await account.dashboard()).url))} data-stripe-dashboard><ExternalLink className="size-4" />Open Stripe dashboard</Button>}
+            {!c.setupRequired && <Button size="sm" className="phone:h-10 gap-1.5 h-8" onClick={() => setCreating(true)} data-new-listing><Upload className="size-4" />List a deck</Button>}
           </div>
           {!c.setupRequired && c.detailsSubmitted && <p className="-mt-3 text-xs text-muted-foreground">Sign in to the Stripe Dashboard with the Stripe login you made during setup. Refunds, disputes and payouts are managed there.</p>}
           {state.listings.length === 0 ? (
@@ -426,10 +426,10 @@ export function SellingView() {
                     {l.revision && <ChangesNote l={l} busy={!!busy} onEdit={() => setEditing(l)} onWithdraw={() => void act("withdraw" + l.id, () => account.withdrawChanges(l.id), "Changes withdrawn")} />}
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
-                    {(l.status === "draft" || l.status === "rejected" || l.status === "hidden") && <Button size="sm" className="h-10 md:h-8" disabled={!!busy} onClick={() => void act("submit" + l.id, () => account.submit(l.id), "Sent for review")} data-submit={l.slug}>Submit for review</Button>}
-                    {(l.status === "live" || l.status === "review") && <Button variant="outline" size="sm" className="h-10 md:h-8" disabled={!!busy} onClick={() => setVersioning(l)} data-new-version={l.slug}>Upload new version</Button>}
-                    <Button variant="outline" size="sm" className="h-10 md:h-8" disabled={!!busy} onClick={() => setEditing(l)} data-edit-listing={l.slug}>Edit page</Button>
-                    {l.status !== "hidden" && <Button variant="ghost" size="sm" className="h-10 text-muted-foreground md:h-8" disabled={!!busy} onClick={() => void act("hide" + l.id, () => account.hide(l.id), "Taken off sale")}>Hide</Button>}
+                    {(l.status === "draft" || l.status === "rejected" || l.status === "hidden") && <Button size="sm" className="phone:h-10 h-8" disabled={!!busy} onClick={() => void act("submit" + l.id, () => account.submit(l.id), "Sent for review")} data-submit={l.slug}>Submit for review</Button>}
+                    {(l.status === "live" || l.status === "review") && <Button variant="outline" size="sm" className="phone:h-10 h-8" disabled={!!busy} onClick={() => setVersioning(l)} data-new-version={l.slug}>Upload new version</Button>}
+                    <Button variant="outline" size="sm" className="phone:h-10 h-8" disabled={!!busy} onClick={() => setEditing(l)} data-edit-listing={l.slug}>Edit page</Button>
+                    {l.status !== "hidden" && <Button variant="ghost" size="sm" className="phone:h-10 text-muted-foreground h-8" disabled={!!busy} onClick={() => void act("hide" + l.id, () => account.hide(l.id), "Taken off sale")}>Hide</Button>}
                   </div>
                 </li>
               ))}
@@ -509,8 +509,8 @@ function ChangesNote({ l, busy, onEdit, onWithdraw }: { l: Listing; busy: boolea
           <div className="text-foreground/80">New {what}{detail}. Buyers still see the approved page until the Etude team approves this.</div>
         </div>
         <div className="flex shrink-0 gap-1.5">
-          <Button variant="outline" size="sm" className="h-9 md:h-7" disabled={busy} onClick={onEdit}>Edit</Button>
-          <Button variant="ghost" size="sm" className="h-9 text-muted-foreground md:h-7" disabled={busy} onClick={onWithdraw}>Withdraw</Button>
+          <Button variant="outline" size="sm" className="h-7 phone:h-9" disabled={busy} onClick={onEdit}>Edit</Button>
+          <Button variant="ghost" size="sm" className="h-7 phone:h-9 text-muted-foreground" disabled={busy} onClick={onWithdraw}>Withdraw</Button>
         </div>
       </div>
     );
@@ -521,7 +521,7 @@ function ChangesNote({ l, busy, onEdit, onWithdraw }: { l: Listing; busy: boolea
         <div className="text-foreground/80">Reviewer: {r.reviewNotes}</div>
         <div className="text-muted-foreground">Buyers see the approved page, as before.</div>
       </div>
-      <Button variant="outline" size="sm" className="h-9 shrink-0 md:h-7" disabled={busy} onClick={onEdit}>Edit again</Button>
+      <Button variant="outline" size="sm" className="h-7 phone:h-9 shrink-0" disabled={busy} onClick={onEdit}>Edit again</Button>
     </div>
   );
 }
@@ -603,7 +603,7 @@ function EditListingDialog({ listing, onClose, onDone }: { listing: Listing; onC
             <div className="pb-2.5 text-xs text-muted-foreground">{Number.isFinite(cents) && cents >= 500 ? <>You keep {money(cents - Math.round(cents * 0.2))} per sale, less Stripe's fee</> : "At least US$5"}</div>
           </div>
           <div className="flex items-center gap-3">
-            <Button type="button" variant="outline" size="sm" className="h-10 md:h-8" onClick={pick}>New cover</Button>
+            <Button type="button" variant="outline" size="sm" className="phone:h-10 h-8" onClick={pick}>New cover</Button>
             <span className="truncate text-xs text-muted-foreground">{cover ? cover.name : "16:10 image, webp, png or jpg"}</span>
           </div>
           {error && <div className="rounded-lg border border-destructive/40 px-3 py-2 text-sm text-destructive">{error}</div>}
@@ -691,7 +691,7 @@ function NewListingDialog({ onClose, onCreated }: { onClose(): void; onCreated()
             <div className="pb-2.5 text-xs text-muted-foreground">{ok ? <>You keep {money(cents - Math.round(cents * 0.2))} per sale, less Stripe's fee</> : "At least US$5"}</div>
           </div>
           <div className="flex items-center gap-3">
-            <Button type="button" variant="outline" size="sm" className="h-10 md:h-8" onClick={pick}>{cover ? "Change cover" : "Add a cover"}</Button>
+            <Button type="button" variant="outline" size="sm" className="phone:h-10 h-8" onClick={pick}>{cover ? "Change cover" : "Add a cover"}</Button>
             <span className="truncate text-xs text-muted-foreground">{cover ? cover.name : "16:10 image, webp, png or jpg"}</span>
           </div>
           {error && <div className="rounded-lg border border-destructive/40 px-3 py-2 text-sm text-destructive">{error}</div>}
@@ -776,7 +776,7 @@ function ReviewQueue({ server }: { server: string }) {
     <section className="rounded-xl border p-4" data-review>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold">Review queue <span className="text-sm font-normal text-muted-foreground">{queue?.length ?? 0}</span></h3>
-        <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => open("")}><ExternalLink className="size-4" />Open review screen</Button>
+        <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={() => open("")}><ExternalLink className="size-4" />Open review screen</Button>
       </div>
       <p className="mt-1 text-xs text-muted-foreground">New decks, new versions and page changes all wait here. The review screen shows the before and after, the automatic flags and the card-type code that changed.</p>
       {!queue ? <Skeleton className="mt-3 h-16" /> : queue.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Nothing waiting.</p> : (
@@ -785,7 +785,7 @@ function ReviewQueue({ server }: { server: string }) {
             <li key={l.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-3 text-sm" data-review-item={l.slug}>
               <span className="font-medium">{l.name}</span>
               <span className="min-w-0 flex-1 text-xs text-muted-foreground">{what(l)}</span>
-              <Button size="sm" className="h-9 md:h-7" onClick={() => open(`/${encodeURIComponent(l.id)}`)}>Review</Button>
+              <Button size="sm" className="h-7 phone:h-9" onClick={() => open(`/${encodeURIComponent(l.id)}`)}>Review</Button>
             </li>
           ))}
         </ul>

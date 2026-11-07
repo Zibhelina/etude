@@ -102,7 +102,7 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Write feedback automatically">
                 <Select value={ai.autoFeedback} onValueChange={(v) => set({ autoFeedback: v as AiSettings["autoFeedback"] })}>
-                  <SelectTrigger className="h-10 w-full md:h-9"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="phone:h-10 w-full h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ai-graded">After AI-graded answers</SelectItem>
                     <SelectItem value="always">After every graded answer</SelectItem>
@@ -273,7 +273,7 @@ function AgentBlock({ ai, onChange }: { ai: AiSettings; onChange(patch: { model?
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Default model">
           <Select value={value || "__feedback"} onValueChange={(v) => onChange({ model: v === "__feedback" ? null : v })}>
-            <SelectTrigger className="h-10 w-full md:h-9"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="phone:h-10 w-full h-9"><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-80">
               <SelectItem value="__feedback">Same as the feedback model</SelectItem>
               {value && !known && <SelectItem value={value}>{value}</SelectItem>}
@@ -289,7 +289,7 @@ function AgentBlock({ ai, onChange }: { ai: AiSettings; onChange(patch: { model?
         </Field>
         <Field label="Reasoning effort">
           <Select value={ai.agent?.effort ?? "low"} onValueChange={(v) => onChange({ effort: v })}>
-            <SelectTrigger className="h-10 w-full md:h-9"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="phone:h-10 w-full h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
               {EFFORTS.map((e) => (
                 <SelectItem key={e.value} value={e.value}>
@@ -363,15 +363,15 @@ function LocalKeysBlock({ vars, saved, description }: { vars: { name: string; us
                 autoComplete="off"
                 spellCheck={false}
                 placeholder={status[v.name] ? "Paste a new key to replace it" : "Paste the key"}
-                className="h-10 font-mono text-[13px] md:h-9"
+                className="phone:h-10 font-mono text-[13px] h-9"
                 value={values[v.name] ?? ""}
                 onChange={(e) => setValues((x) => ({ ...x, [v.name]: e.target.value }))}
               />
-              <Button size="sm" className="h-10 md:h-9" disabled={busy === v.name || !(values[v.name] ?? "").trim()} onClick={() => save(v.name, values[v.name] ?? "")}>
+              <Button size="sm" className="phone:h-10 h-9" disabled={busy === v.name || !(values[v.name] ?? "").trim()} onClick={() => save(v.name, values[v.name] ?? "")}>
                 Save
               </Button>
               {status[v.name] && (
-                <Button size="sm" variant="outline" className="h-10 md:h-9" disabled={busy === v.name} onClick={() => save(v.name, "")}>
+                <Button size="sm" variant="outline" className="phone:h-10 h-9" disabled={busy === v.name} onClick={() => save(v.name, "")}>
                   Remove
                 </Button>
               )}
@@ -411,7 +411,7 @@ function TestBlock({ ai, saved }: { ai: AiSettings; saved: SettingsResponse }) {
       description={<>Grades the answer “hypertext transfer protocol” to “What does HTTP stand for?” with the saved settings{unsaved ? ". Save first to test your edits" : ""}.</>}
       stackAside
       aside={
-        <Button size="sm" variant="outline" className="h-10 gap-1.5 md:h-8" onClick={run} disabled={running || unsaved}>
+        <Button size="sm" variant="outline" className="phone:h-10 gap-1.5 h-8" onClick={run} disabled={running || unsaved}>
           {running ? <Loader2 className="size-4 animate-spin" /> : <FlaskConical className="size-4" />}
           {running ? "Testing…" : "Run test"}
         </Button>

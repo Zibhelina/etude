@@ -65,7 +65,7 @@ export function Disclosure({ id, title, open: forced, defaultOpen, children }: {
         type="button"
         aria-expanded={shown}
         onClick={() => setOpen(!shown)}
-        className="-ml-1 inline-flex h-10 items-center gap-1.5 rounded-md px-1 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground md:h-8"
+        className="-ml-1 inline-flex phone:h-10 items-center gap-1.5 rounded-md px-1 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground h-8"
       >
         <ChevronRight className={cn("size-4 transition-transform duration-200", shown && "rotate-90")} />
         {title}
@@ -133,7 +133,7 @@ export function TextField({ label, hint, error, value, onChange, placeholder, mo
         spellCheck={false}
         autoComplete="off"
         aria-invalid={!!error}
-        className={cn("h-10 md:h-9", mono && "font-mono text-[13px] md:text-[13px]")}
+        className={cn("phone:h-10 h-9", mono && "font-mono text-[13px] md:text-[13px]")}
         onChange={(e) => onChange(e.target.value)}
       />
     </Field>
@@ -171,7 +171,7 @@ export function NumberField({ label, hint, error, value, onChange, suffix, step,
           min={min}
           max={max}
           aria-invalid={!!error}
-          className={cn("tabular h-10 md:h-9", suffix && "pr-14")}
+          className={cn("tabular phone:h-10 h-9", suffix && "pr-14")}
           onChange={(e) => {
             setText(e.target.value);
             const t = e.target.value.trim();

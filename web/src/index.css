@@ -108,10 +108,8 @@
 }
 
 /* Layout, not theme: the height of the phone tab bar, home indicator included. Sticky bars sit on top of it; pages end above it. */
-:root { --tabbar-h: calc(4.625rem + env(safe-area-inset-bottom)); }
-@media (min-width: 768px) {
-  :root { --tabbar-h: 0px; }
-}
+:root { --tabbar-h: 0px; }
+[data-device="phone"] { --tabbar-h: calc(4.625rem + env(safe-area-inset-bottom)); }
 
 /* The wordmark's "tude": Bricolage Grotesque 700, subset to the logo's letters (OFL, assets/fonts/OFL-BricolageGrotesque.txt). */
 @font-face {
@@ -368,9 +366,7 @@ html.embed-note body > #root > div { padding: 14px 16px 18px; }
 html.embed-note body > #root > div > div:first-child > span:first-child { display: none; }
 
 /* iOS zooms into any focused field under 16px; keep phone inputs at 16px. */
-@media (max-width: 640px) {
-  input, textarea, select, .cm-content { font-size: 16px !important; }
-}
+[data-device="phone"] :is(input, textarea, select, .cm-content) { font-size: 16px !important; }
 
 /* Live markdown fields sit where textareas used to: same box, theme font. */
 .live-md .cm-content { font-size: 0.875rem; }
@@ -924,7 +920,7 @@ body.browse-resizing iframe { pointer-events: none; }
 @keyframes deck-finder-in { from { opacity: 0; transform: translateY(-8px) scale(0.97); } to { opacity: 1; transform: none; } }
 @keyframes deck-finder-out { to { opacity: 0; transform: translateY(-4px) scale(0.98); } }
 @keyframes deck-finder-row { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
-@media (max-width: 767px) { .deck-finder { padding-top: max(env(safe-area-inset-top), 12px); } }
+[data-device="phone"] .deck-finder { padding-top: max(env(safe-area-inset-top), 12px); }
 @media (prefers-reduced-motion: reduce) { .deck-finder-veil, .deck-finder-box, .deck-finder-row { animation: none !important; } }
 .deck-finder-mark { font-weight: 650; color: var(--primary); }
 /* ---------- first-run setup ("E · Open", onboarding.tsx / onboarding-ui.tsx) */
@@ -1221,15 +1217,19 @@ body.sb-dragging, body.sb-dragging * { cursor: col-resize !important; user-selec
 .note-card-foot .note-card-plain { height: 32px; font-size: 13px; }
 .note-cards.note-card.is-on { outline: none; border-color: color-mix(in oklab, var(--highlight) 60%, transparent); }
 .note-cardmark { background: color-mix(in oklab, var(--highlight) 16%, transparent); border-bottom: 2px solid color-mix(in oklab, var(--highlight) 70%, transparent); border-radius: 3px 3px 0 0; padding: 0 1px; }
-@media (max-width: 767px) {
-  .notes-shell { display: block; min-height: auto; }
-  .notes-tree { position: static; height: auto; width: auto; border-right: 0; padding: calc(1rem + env(safe-area-inset-top)) 10px 0; }
-  .note-row { min-height: 44px; font-size: 16px; }
-  .note-row-acts { display: flex; }
-  .note-topbar { padding: 0 14px; }
-  .note-sheet { padding: 20px 18px 40vh; }
+[data-device="phone"] {
+  & .notes-shell { display: block; min-height: auto; }
+  & .notes-tree { position: static; height: auto; width: auto; border-right: 0; padding: calc(1rem + env(safe-area-inset-top)) 10px 0; }
+  & .note-row { min-height: 44px; font-size: 16px; }
+  & .note-row-acts { display: flex; }
+  & .note-topbar { padding: 0 14px; }
+  & .note-sheet { padding: 20px 18px 40vh; }
   /* above 16px, so iOS doesn't zoom; beats the inputs-at-16px rule that shrank the title */
-  .note-sheet textarea.note-title { font-size: 2rem !important; }
+  & .note-sheet textarea.note-title { font-size: 2rem !important; }
+}
+/* A narrow desktop window keeps the desktop Notes; the page only gives up some of its side padding. */
+@media (max-width: 767px) {
+  [data-device="desktop"] .note-sheet { padding-left: 22px; padding-right: 22px; }
 }
 @media (prefers-reduced-motion: reduce) { .note-slash { animation: none; } }
 /* Notes: looks (M5). Colours are named and drawn from these, so a page reads in light and dark. */
@@ -1345,16 +1345,19 @@ body.sb-dragging, body.sb-dragging * { cursor: col-resize !important; user-selec
 .note-prose .note-col { min-width: 0; padding: 2px 0; border-radius: 6px; transition: box-shadow 150ms; }
 .note-prose .note-col > :first-child { margin-top: 0; }
 .note-prose .note-cols:focus-within .note-col { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 9%, transparent); padding: 2px 8px; margin: 0 -8px; }
+/* Columns stack when there's no room for them, on any device. */
 @media (max-width: 767px) {
   .note-prose .note-cols { grid-auto-flow: row; gap: 10px; }
+}
+[data-device="phone"] {
   /* the cover is the top of the page: it runs under the status bar and the floating top bar */
-  .note-topbar { height: calc(48px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); gap: 8px; }
-  .note-cover { height: calc(160px + env(safe-area-inset-top)); margin-top: calc(-48px - env(safe-area-inset-top)); }
-  .note-topbar > nav, .note-page:has(.note-cover) .note-topbar > nav { display: none; }
-  .note-page:has(.note-cover) .note-topbar > * { height: 32px; display: inline-flex; align-items: center; }
-  .note-sheet.is-full { padding-left: 18px; padding-right: 18px; }
-  .note-handle { display: none; }
-  .note-addons { opacity: 1; }
+  & .note-topbar { height: calc(48px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); gap: 8px; }
+  & .note-cover { height: calc(160px + env(safe-area-inset-top)); margin-top: calc(-48px - env(safe-area-inset-top)); }
+  & .note-topbar > nav, & .note-page:has(.note-cover) .note-topbar > nav { display: none; }
+  & .note-page:has(.note-cover) .note-topbar > * { height: 32px; display: inline-flex; align-items: center; }
+  & .note-sheet.is-full { padding-left: 18px; padding-right: 18px; }
+  & .note-handle { display: none; }
+  & .note-addons { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) { .note-handle, .note-sheet, .note-fmt-pop, .note-bm { transition: none; animation: none; } }
 /* Notes: resizable blocks */
@@ -1514,7 +1517,7 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 .note-canvas { margin-top: 1.1em; }
 /* Phone: the board ends above the tab bar, so Excalidraw's bottom bar (menu, undo) stays reachable. */
 /* (2.75rem: the "‹ Notes" back button above it.) */
-@media (max-width: 767px) { .note-canvas-page { height: calc(100dvh - var(--tabbar-h, 0px) - 2.75rem - 0.75rem); } }
+[data-device="phone"] .note-canvas-page { height: calc(100dvh - var(--tabbar-h, 0px) - 2.75rem - 0.75rem); }
 .ng-range { -webkit-appearance: none; appearance: none; height: 18px; background: transparent; cursor: pointer; }
 .ng-range::-webkit-slider-runnable-track { height: 4px; border-radius: 99px; background: linear-gradient(to right, var(--primary) var(--ng-fill, 0%), color-mix(in oklab, var(--foreground) 14%, transparent) var(--ng-fill, 0%)); }
 .ng-range::-moz-range-track { height: 4px; border-radius: 99px; background: color-mix(in oklab, var(--foreground) 14%, transparent); }
@@ -1700,11 +1703,11 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 .note-file-editor .cm-search input[name=replace] { margin-left: 10px; }
 .note-file-editor .cm-search button[name=close] { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border-radius: 7px; color: var(--muted-foreground); background: none; border: none; font-size: 18px; line-height: 1; cursor: pointer; }
 .note-file-editor .cm-search button[name=close]:hover { background: var(--accent); color: var(--foreground); }
-@media (max-width: 767px) {
+[data-device="phone"] {
   /* The file's name is the file: phones keep it in the top bar (pages hide their path there). */
-  .note-file-page .note-topbar > nav { display: flex; }
-  .note-file-page .note-file-name { max-width: none; }
-  .note-file-status { padding: 0 14px; gap: 12px; padding-bottom: env(safe-area-inset-bottom); height: calc(28px + env(safe-area-inset-bottom)); }
+  & .note-file-page .note-topbar > nav { display: flex; }
+  & .note-file-page .note-file-name { max-width: none; }
+  & .note-file-status { padding: 0 14px; gap: 12px; padding-bottom: env(safe-area-inset-bottom); height: calc(28px + env(safe-area-inset-bottom)); }
 }
 .note-newfile-input { height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--foreground); font-family: var(--font-mono); font-size: 14px; outline: none; }
 .note-newfile-input:focus { border-color: color-mix(in oklab, var(--primary) 65%, var(--border)); box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 18%, transparent); }
@@ -1718,9 +1721,9 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 .note-row.is-sel + .note-row.is-sel { border-top-left-radius: 0; border-top-right-radius: 0; margin-top: 0; }
 /* The top bar with the tabs takes the left sidebar's colour, so the two read as one frame around the page (desktop).
    Over a cover with a single tab it stays see-through, as before. */
-@media (min-width: 768px) {
-  .note-topbar, .note-page.has-tabs:has(.note-cover) .note-topbar { background: var(--sidebar); backdrop-filter: none; -webkit-backdrop-filter: none; }
-  .note-page:not(.has-tabs):has(.note-cover) .note-topbar { background: transparent; }
+[data-device="desktop"] {
+  & .note-topbar, & .note-page.has-tabs:has(.note-cover) .note-topbar { background: var(--sidebar); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  & .note-page:not(.has-tabs):has(.note-cover) .note-topbar { background: transparent; }
 }
 /* Notes split view: up to four panes, each with its own tabs. One pane scrolls with the window as before;
    with more, the panes fill the screen and each scrolls on its own. */

@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Dices, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AVATAR_EMOJI_BG, CHARACTERS, avatarNow, saveAvatar, saveProfile, useMyName, type Avatar } from "@/lib/avatar";
-import { usePhone } from "@/lib/phone";
+import { useNarrow } from "@/lib/device";
 import { cn } from "@/lib/utils";
 import { AvatarPic, EmojiPanel, PhotoPanel, finishPick, type AvatarPick, type PhotoDraft } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ const reduced = () => typeof matchMedia !== "undefined" && matchMedia("(prefers-
 const NAME_MAX = 40;
 
 export function AvatarStep({ onNext }: { onNext(): void }) {
-  const phone = usePhone();
+  const phone = useNarrow();
   const start = avatarNow();
   const savedName = useMyName();
   const [name, setName] = useState(savedName);
@@ -239,7 +239,7 @@ function PickSheet({ kind, pick, busy, onClose, onUse, onRemove }: { kind: null 
   return (
     <Dialog open={!!kind} onOpenChange={(o) => !o && !busy && onClose()}>
       <DialogContent data-avatar-pick-sheet={kind ?? undefined} className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px] sm:rounded-[22px] sm:p-0">
-        <div aria-hidden className="mx-auto mt-2 h-[5px] w-[38px] rounded-full bg-border sm:hidden" />
+        <div aria-hidden className="mx-auto mt-2 h-[5px] w-[38px] rounded-full bg-border desktop:hidden" />
         <div className="flex items-center gap-4 px-5 pt-3.5 pb-3 pr-12 sm:px-6 sm:pt-[22px]">
           <span key={JSON.stringify(value) + (draft?.src ?? "")} className="av-fade flex"><AvatarPic value={value} size={64} draft={draft} /></span>
           <div className="min-w-0 flex-1 text-left">

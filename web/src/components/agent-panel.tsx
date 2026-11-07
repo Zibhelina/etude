@@ -17,6 +17,7 @@ import { refreshTheme } from "@/lib/theme";
 import { api, relative } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { isNativeApp } from "@/lib/platform";
+import { useNarrow, usePhone } from "@/lib/device";
 import { track } from "@/lib/telemetry";
 import { useFunMode } from "@/lib/fun";
 import minimiLook from "@/assets/minimi/look.webp";
@@ -29,18 +30,6 @@ const OPEN_KEY = "etude.agent.open";
 const WIDTH_KEY = "etude.agent.width";
 const CONV_KEY = "etude.agent.conversation";
 export const AGENT_SHORTCUT = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘J" : "Ctrl+J";
-
-const usePhone = () => {
-  const q = "(max-width: 640px)";
-  const [phone, setPhone] = useState(() => window.matchMedia(q).matches);
-  useEffect(() => {
-    const m = window.matchMedia(q);
-    const h = () => setPhone(m.matches);
-    m.addEventListener("change", h);
-    return () => m.removeEventListener("change", h);
-  }, []);
-  return phone;
-};
 
 // Other screens can hand Ask Etude a request (e.g. "make a card type that..."): it opens a new conversation and sends it.
 const ASK_EVENT = "etude:ask";
@@ -101,7 +90,7 @@ export function useAgentPanel(preferMini: () => boolean = () => false) {
 /** Fun mode off: the ε in a round bubble, bottom-right. Hovering or focusing it slides out "Ask Etude ⌘J". */
 export function AgentLauncher({ onOpen }: { onOpen(): void }) {
   return (
-    <div className="fixed right-3 bottom-[calc(var(--tabbar-h)+0.5rem)] z-30 md:right-5 md:bottom-5">
+    <div className="fixed right-5 bottom-5 z-30 phone:right-3 phone:bottom-[calc(var(--tabbar-h)+0.5rem)]">
       <button
         onClick={onOpen}
         aria-label={`Ask Etude · ${AGENT_SHORTCUT}`}
@@ -643,7 +632,7 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
       }}
     >
       {!phone && <div onPointerDown={startResize} className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize" aria-hidden />}
-      <header className="mt-2.5 flex h-12 shrink-0 items-center gap-2 px-3 max-sm:mt-1">
+      <header className="mt-2.5 flex h-12 shrink-0 items-center gap-2 px-3 phone:mt-1">
         {phone && (
           <RoundButton label="Close" onClick={onClose}>
             <ChevronLeft />
@@ -697,7 +686,7 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
         <div
           ref={scroller}
           data-agent-scroll
-          className="flex h-full flex-col overflow-y-auto px-4 pt-3 pb-4 max-sm:px-3"
+          className="flex h-full flex-col overflow-y-auto px-4 pt-3 pb-4 phone:px-3"
           onScroll={(e) => {
             const el = e.currentTarget;
             stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
@@ -735,7 +724,7 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-[640px] shrink-0 px-4 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))] max-sm:px-3.5 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="mx-auto w-full max-w-[640px] shrink-0 px-4 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))] phone:px-3.5 phone:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {atts.length > 0 && (
           <div className="flex flex-wrap justify-end gap-1.5 pb-2">
             {atts.map((a) => (
@@ -786,7 +775,7 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
             }}
             placeholder={fun ? "Ask Minimi…" : "Ask Etude…"}
             aria-label="Message"
-            className={cn("block max-h-52 min-h-8 min-w-0 flex-1 resize-none bg-transparent py-1.5 text-[14.5px] leading-[20px] text-foreground outline-none placeholder:text-muted-foreground/80 [field-sizing:content] max-sm:text-base pointer-coarse:min-h-9 pointer-coarse:py-2", tall && "order-first basis-full px-2 pt-1")}
+            className={cn("block max-h-52 min-h-8 min-w-0 flex-1 resize-none bg-transparent py-1.5 text-[14.5px] leading-[20px] text-foreground outline-none placeholder:text-muted-foreground/80 [field-sizing:content] phone:text-base pointer-coarse:min-h-9 pointer-coarse:py-2", tall && "order-first basis-full px-2 pt-1")}
           />
           {tall && <div className="flex-1" />}
           <div className="flex h-8 shrink-0 items-center pointer-coarse:h-9">

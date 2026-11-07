@@ -53,7 +53,7 @@ export function CleanupSection() {
   const target = confirm && "cards" in confirm ? confirm.cards : null;
   const checking = !asked ? <p className="text-sm text-muted-foreground">Not checked yet.</p> : !report && !error && <span className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Checking…</span>;
   const deleteButton = (label: string, n: number | undefined, onClick: () => void) => (
-    <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!n || busy} onClick={onClick}>
+    <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={!n || busy} onClick={onClick}>
       {busy ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}{label}
     </Button>
   );
@@ -66,7 +66,7 @@ export function CleanupSection() {
         stackAside
         aside={
           !asked ? (
-            <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={load}>
+            <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={load}>
               <Search className="size-4" />
               Check now
             </Button>

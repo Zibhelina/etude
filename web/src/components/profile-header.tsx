@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { openAvatarDialog, saveName, useAvatar, useMyName, type Avatar } from "@/lib/avatar";
 import { BANNER_PRESETS, readBannerImage, sameBanner, saveBanner, uploadBannerImage, useBanner, type Banner } from "@/lib/banner";
 import { useEtudeSrc } from "@/lib/local-url";
-import { usePhone } from "@/lib/phone";
+import { useNarrow } from "@/lib/device";
 import { STATUS_EVENT, syncStatus, type SyncSeen } from "@/lib/sync";
 import type { AccountStatus } from "@/lib/account";
 import { cn } from "@/lib/utils";
@@ -193,7 +193,7 @@ export function ProfileHeader({ acct, inner }: { acct: AccountStatus | null; inn
   const avatar = useAvatar();
   const banner = useBanner();
   const savedName = useMyName();
-  const phone = usePhone();
+  const phone = useNarrow();
   const signedIn = !!acct?.signedIn && !!acct.me;
   const email = acct?.me?.email ?? null;
   const fallback = (acct?.me?.displayName?.trim() || (typeof localStorage !== "undefined" ? localStorage.getItem("etude.shell.name") : "") || email || "").trim();
@@ -256,7 +256,7 @@ export function ProfileHeader({ acct, inner }: { acct: AccountStatus | null; inn
   return (
     <div data-profile-header data-settings-row className="@container/ph relative">
       <span data-settings-title className="sr-only">Your picture</span>
-      <div className="group/cover relative h-[clamp(140px,14vw,184px)] max-md:h-[calc(140px+env(safe-area-inset-top))]" data-profile-cover>
+      <div className="group/cover relative h-[clamp(140px,14vw,184px)] phone:h-[calc(140px+env(safe-area-inset-top))]" data-profile-cover>
         <BannerFade value={banner} avatar={avatar} />
         <div className={cn("pointer-events-none absolute inset-x-0 bottom-3.5 z-[2] mx-auto flex w-full justify-end @max-[34rem]/ph:top-[calc(0.75rem+env(safe-area-inset-top))] @max-[34rem]/ph:bottom-auto", inner)}>
           <button type="button" onClick={() => setBannerOpen(true)} aria-label="Change banner" data-banner-pill className="pointer-events-auto inline-flex h-8 translate-y-1 items-center gap-1.5 rounded-full bg-black/40 px-3 text-[12.5px] font-semibold text-white opacity-0 backdrop-blur-md transition-[opacity,translate,background-color] duration-200 hover:bg-black/55 focus-visible:translate-y-0 focus-visible:opacity-100 group-hover/cover:translate-y-0 group-hover/cover:opacity-100 motion-reduce:translate-y-0 motion-reduce:transition-none [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100">
@@ -357,7 +357,7 @@ function Tile({ on, onClick, label, children, wide, dashed, data }: { on: boolea
 }
 
 export function BannerDialog({ open, onOpenChange, avatar, saved, letter }: { open: boolean; onOpenChange(o: boolean): void; avatar: Avatar | null; saved: Banner | null; letter: string }) {
-  const phone = usePhone();
+  const phone = useNarrow();
   const [draft, setDraftState] = useState<Draft>(saved);
   // The last image you had here (saved or uploaded), so its tile can bring it back after trying a colour.
   const [image, setImage] = useState<Extract<Draft, { kind: "image" }> | null>(saved?.kind === "image" ? saved : null);
@@ -413,7 +413,7 @@ export function BannerDialog({ open, onOpenChange, avatar, saved, letter }: { op
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
       <DialogContent data-banner-dialog className="flex max-h-[86dvh] sm:max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] sm:max-w-[600px] sm:rounded-[22px] sm:p-0 sm:data-[state=closed]:slide-out-to-bottom-3 sm:data-[state=open]:slide-in-from-bottom-3">
-        <div aria-hidden className="mx-auto mt-2 h-[5px] w-[38px] shrink-0 rounded-full bg-border sm:hidden" />
+        <div aria-hidden className="mx-auto mt-2 h-[5px] w-[38px] shrink-0 rounded-full bg-border desktop:hidden" />
         <div className="shrink-0 px-5 pt-[3px] pb-3 pr-12 sm:px-[22px] sm:pt-[14px] sm:pr-14">
           <DialogTitle className="score-serif text-[22px] leading-tight font-semibold">Your banner</DialogTitle>
           <DialogDescription className="sr-only">The cover behind your picture at the top of Account & Sync.</DialogDescription>

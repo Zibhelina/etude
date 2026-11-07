@@ -301,7 +301,7 @@ function DesktopDecks() {
   ];
 
   return (
-    <Page className="flex max-w-[52rem] flex-col md:-mb-[5.5rem] md:min-h-[calc(100dvh-2.5rem)]">
+    <Page className="flex max-w-[52rem] flex-col -mb-[5.5rem] min-h-[calc(100dvh-2.5rem)]">
       <LibraryHeader onImport={reload} onNew={() => setCreating(true)} hasDecks={!!decks?.length} />
 
       {decks && decks.length === 0 && (

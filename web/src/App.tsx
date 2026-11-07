@@ -26,6 +26,7 @@ import { Onboarding, ONBOARDING_EVENT } from "@/components/onboarding";
 import { api } from "@/lib/api";
 import { loadAvatar } from "@/lib/avatar";
 import { AvatarDialogHost } from "@/components/avatar";
+import { DeckFinder } from "@/components/deck-finder";
 
 /** First-run setup: shown when the collection has no decks and setup wasn't finished or skipped, or on request. */
 function useOnboarding(skip: boolean) {
@@ -261,6 +262,8 @@ export function App() {
         />
       )}
       {path !== "/embed" && <AvatarDialogHost />}
+      {/* Ctrl/⌘K: find a deck. Browse and a deck's page keep the key for their own card search. */}
+      <DeckFinder enabled={!studying && path !== "/embed" && path !== "/browse" && path !== "/deck" && !onboarding} />
       <Toaster position={phone ? "bottom-center" : "top-center"} mobileOffset={phone ? { bottom: studying ? 104 : 92, left: 12, right: 12 } : undefined} />
     </TooltipProvider>
   );

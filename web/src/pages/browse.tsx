@@ -13,6 +13,7 @@ import { api, relative, type DeckNode, type SearchRow, type TypeSummary } from "
 import { DeckIcon } from "@/components/deck-icon";
 import { appPath, withBase } from "@/lib/router";
 import { useLongPress, usePhone } from "@/lib/phone";
+import { PhoneBrowseNav } from "@/components/phone-shell";
 import { cn } from "@/lib/utils";
 import { track } from "@/lib/telemetry";
 
@@ -619,6 +620,7 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
       <div className={cn(H, "flex min-w-0")}>
         {!selected && (
           <section className="block min-h-0 w-full min-w-0 overflow-y-auto px-5 pt-[calc(0.5rem+env(safe-area-inset-top))] [&>*]:shrink-0">
+            <PhoneBrowseNav current="cards" />
             {header}{search}{chipRow(false)}{toolbar}
             <div ref={listRef} className="pb-[150px]" data-rows-fade>
               {items.map((r) => (

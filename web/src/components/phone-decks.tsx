@@ -12,7 +12,6 @@ import { ActionSheet, PhoneIconButton, PhoneTitle, type SheetAction } from "@/co
 import { DeckCounts, NewDeckDialog, todayKicker, useImportPicker, useLibrary } from "@/pages/decks";
 import { DeckMenu, type DeckMenuEntry, useDeckActions } from "@/components/deck-actions";
 import { ArchiveLink, useArchiveCount } from "@/components/archive-link";
-import { openDeckFinder } from "@/components/deck-finder";
 import { ChangeIconDialog, DeckBadge } from "@/components/deck-icon";
 import { DonePanel, SessionCard, StreakCelebration, useMilestone } from "@/components/library-session";
 
@@ -48,7 +47,7 @@ export function PhoneDecks() {
         className="lib-phone-title pb-4"
         actions={
           <>
-            {all.length > 0 && <PhoneIconButton label="Find a deck" onClick={openDeckFinder}><Search /></PhoneIconButton>}
+            {all.length > 0 && <PhoneIconButton label="Browse your cards" onClick={() => navigate("/browse")}><Search /></PhoneIconButton>}
             <PhoneIconButton label="New deck or import" onClick={() => setAdding(true)}><Plus /></PhoneIconButton>
           </>
         }

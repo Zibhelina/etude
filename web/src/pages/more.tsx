@@ -11,9 +11,10 @@ import { ImportButton } from "@/pages/decks";
 
 export function MorePage() {
   const phone = usePhone();
-  // On a wide screen everything here is in the sidebar already.
+  // The phone's last tab is You now (Settings with your profile on top), Card types sit in Browse and the
+  // Market has its own tab, so an old link to /more lands on Settings everywhere.
   useEffect(() => {
-    if (!phone) navigate("/settings", { replace: true });
+    navigate("/settings", { replace: true });
   }, [phone]);
   const { st, behind } = useUpdater();
   const rows = [

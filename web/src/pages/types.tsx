@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Copy, Download, FolderInput, FolderOpen, FolderPlus, MoreHorizontal, Plus, Search, Upload, X } from "lucide-react";
+import { ChevronRight, Copy, Download, FolderInput, FolderOpen, FolderPlus, MoreHorizontal, Plus, Search, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -18,6 +18,7 @@ import { useFunMode } from "@/lib/fun";
 import { navigate, useLocation } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { useHScroll } from "@/lib/hscroll";
+import { PhoneBrowseNav } from "@/components/phone-shell";
 
 /** `/types` is the gallery, `/types/<id>` a type's page, `/types/<id>?edit=1` its editor. */
 export function TypesPage({ id }: { id: string | null }) {
@@ -234,10 +235,8 @@ function TypeLibrary() {
   const newType = (start?: Start) => setCreating({ start });
 
   return (
-    <div className="types-page mx-auto w-full max-w-[62rem] px-4 pt-5 pb-14 max-md:pt-[calc(1rem+env(safe-area-inset-top))] sm:px-8 sm:pt-12">
-      <button className="-ml-1.5 mb-2 flex min-h-9 items-center gap-1 rounded-md px-1.5 text-[15px] text-muted-foreground transition-colors hover:text-foreground md:hidden" onClick={() => navigate("/more")}>
-        <ChevronLeft className="size-4" />More
-      </button>
+    <div className="types-page mx-auto w-full max-w-[62rem] px-4 pt-5 pb-14 max-md:pt-[calc(0.5rem+env(safe-area-inset-top))] sm:px-8 sm:pt-12">
+      <PhoneBrowseNav current="types" />
       <header>
         <h1 className="score-serif score-display text-[2.25rem] leading-[1.1] sm:text-[2.5rem]">Card types</h1>
         <p className="mt-2 max-w-[38rem] text-[15.5px] leading-snug text-pretty text-muted-foreground max-sm:hidden">What a card shows, what you do on it, and how it's checked. Open one to see how it's made.</p>

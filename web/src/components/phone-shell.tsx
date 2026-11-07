@@ -2,23 +2,25 @@
 // the big serif page title that folds into a slim bar on scroll, and the bottom action sheet.
 // Nothing here renders at md (768 px) and up.
 import { useEffect, useRef, useState } from "react";
-import { BrowseIcon, LibraryIcon, MoreIcon, StatsIcon } from "@/components/nav-icons";
+import { LibraryIcon, MarketIcon, StatsIcon } from "@/components/nav-icons";
+import { MyAvatar } from "@/components/avatar";
 import { Logo } from "@/components/logo";
 import { useMinimiFaces } from "@/components/minimi-faces";
 import { useMinimiFace } from "@/lib/minimi-face";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 
+// Browse and Card types open from the Library's magnifier, so they light the Library tab. "You" is your picture alone.
 const TABS = [
-  { to: "/", label: "Library", icon: LibraryIcon, match: (p: string) => p === "/" || p === "/deck" || p === "/archive" },
-  { to: "/browse", label: "Browse", icon: BrowseIcon, match: (p: string) => p === "/browse" },
+  { to: "/", label: "Library", icon: LibraryIcon, match: (p: string) => p === "/" || p === "/deck" || p === "/archive" || p === "/browse" || p.startsWith("/types") },
   { to: "/stats", label: "Stats", icon: StatsIcon, match: (p: string) => p === "/stats" },
-  { to: "/more", label: "More", icon: MoreIcon, match: (p: string) => p === "/more" || p.startsWith("/types") || p === "/market" || p === "/settings" },
+  { to: "/market", label: "Market", icon: MarketIcon, match: (p: string) => p === "/market" },
+  { to: "/settings", label: "You", icon: null, match: (p: string) => p === "/settings" || p === "/more" },
 ];
 
 /**
- * The tab island: a floating pill with the four tabs (icon over a short label, the current one lifted onto
- * its own chip) and the Ask circle beside it, Minimi's face in Fun mode. The page fades out to the background
+ * The tab island: a floating pill with the tabs (icon over a short label, the current one lifted onto
+ * its own chip; You is just your picture, ringed when you're on it) and the Ask circle beside it, Minimi's face in Fun mode. The page fades out to the background
  * just above the island and stays solid behind it, so nothing scrolling underneath shows through the gaps.
  */
 export function PhoneTabBar({ path, updateDot, fun, onAsk }: { path: string; updateDot: boolean; fun?: boolean; onAsk(): void }) {
@@ -30,6 +32,22 @@ export function PhoneTabBar({ path, updateDot, fun, onAsk }: { path: string; upd
         <div className="score-capsule flex min-w-0 flex-1 items-center rounded-full border p-[5px]">
           {TABS.map((t) => {
             const on = t.match(path);
+            if (!t.icon)
+              return (
+                <button
+                  key={t.to}
+                  onClick={() => navigate(t.to)}
+                  aria-current={on ? "page" : undefined}
+                  aria-label="You and settings"
+                  data-tab-you
+                  className="score-tab relative flex h-[52px] min-w-0 flex-1 items-center justify-center rounded-full active:scale-95 motion-reduce:transition-none"
+                >
+                  <span className={cn("relative block rounded-full transition-shadow duration-200", on ? "shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--foreground)]" : "shadow-[0_0_0_1.5px_color-mix(in_oklab,var(--foreground)_14%,transparent)]")}>
+                    <MyAvatar size={40} />
+                    {updateDot && <span data-update-dot aria-label="Update available" className="absolute top-0 right-0 size-2.5 rounded-full bg-highlight ring-2 ring-card" />}
+                  </span>
+                </button>
+              );
             return (
               <button
                 key={t.to}
@@ -43,7 +61,6 @@ export function PhoneTabBar({ path, updateDot, fun, onAsk }: { path: string; upd
               >
                 <span className="relative">
                   <t.icon className="size-[22px]" />
-                  {t.to === "/more" && updateDot && <span data-update-dot aria-label="Update available" className="absolute -top-0.5 -right-1 size-2 rounded-full bg-highlight ring-2 ring-card" />}
                 </span>
                 <span className="max-w-full truncate leading-tight">{t.label}</span>
               </button>
@@ -216,5 +233,34 @@ export function Mark({ kind, className }: { kind: "new" | "learn" | "due"; class
       {kind === "learn" && (<><circle cx="5" cy="5" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.8" /><path d="M5 1.4 A3.6 3.6 0 0 1 5 8.6 Z" fill="currentColor" /></>)}
       {kind === "due" && <circle cx="5" cy="5" r="4.4" fill="currentColor" />}
     </svg>
+  );
+}
+
+/**
+ * Phone only: the top of Browse and Card types, which open from the Library's magnifier. A way back to the Library,
+ * then Cards | Card types to switch between the two.
+ */
+export function PhoneBrowseNav({ current }: { current: "cards" | "types" }) {
+  const tabs = [["cards", "Cards", "/browse"], ["types", "Card types", "/types"]] as const;
+  return (
+    <div className="md:hidden" data-browse-nav>
+      <button onClick={() => navigate("/")} className="-ml-2 flex h-10 items-center gap-0.5 rounded-full pr-2 text-[15px] font-semibold text-muted-foreground active:text-foreground">
+        <ChevronLeftIcon />
+        Library
+      </button>
+      <div role="tablist" aria-label="Browse" className="mt-2 mb-4 flex rounded-xl bg-secondary p-[3px]">
+        {tabs.map(([k, label, to]) => (
+          <button
+            key={k}
+            role="tab"
+            aria-selected={current === k}
+            onClick={() => current !== k && navigate(to, { replace: true })}
+            className={cn("h-9 flex-1 rounded-[9px] text-[14px] font-semibold transition-colors", current === k ? "bg-card text-foreground shadow-[0_1px_3px_rgb(0_0_0/0.12)]" : "text-muted-foreground")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

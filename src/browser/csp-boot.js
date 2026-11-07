@@ -22,7 +22,8 @@
     "media-src 'self' data: blob: https:",
     "font-src 'self' data:",
     "connect-src 'self' data: blob: https:",
-    "frame-src 'self' blob:",
+    // Notes can embed YouTube (privacy-enhanced) and Vimeo players, as on the desktop.
+    "frame-src 'self' blob: https://www.youtube-nocookie.com https://player.vimeo.com",
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",

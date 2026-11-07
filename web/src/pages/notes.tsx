@@ -24,6 +24,7 @@ import { isTextFile } from "../../../src/core/text-files.ts";
 import { useScheme } from "@/lib/theme";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { registerNotesActions, setNotesPagesOpen, useNotesSlot } from "@/lib/sidebar-slot";
@@ -919,6 +920,56 @@ function FileView({ note, all, onTitle, onContent, saveState, onPick, onSave, on
   );
 }
 
+/** New file: asks for the name with its extension first, since the extension is what decides the language. */
+function NewFileDialog({ open, onClose, onCreate }: { open: boolean; onClose(): void; onCreate(name: string): void }) {
+  const [name, setName] = useState("");
+  useEffect(() => void (open && setName("")), [open]);
+  const clean = name.trim();
+  const bad = /[\\/:*?"<>|]/.test(clean);
+  const lang = clean ? (/\.m$/i.test(clean) ? "MATLAB" : fileLanguage(clean)?.name ?? null) : null;
+  const ok = !!clean && !bad;
+  const submit = () => ok && onCreate(clean);
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="note-newfile sm:max-w-[26rem]" onOpenAutoFocus={(e) => (e.preventDefault(), (e.currentTarget as HTMLElement).querySelector("input")?.focus())}>
+        <DialogTitle className="text-[17px]">New file</DialogTitle>
+        <DialogDescription className="text-[13px]">Type the name with its extension, like main.py or report.tex. The extension picks the language.</DialogDescription>
+        <form
+          className="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="main.py"
+            aria-label="File name"
+            spellCheck={false}
+            autoComplete="off"
+            maxLength={200}
+            className="note-newfile-input"
+          />
+          <div className={cn("flex min-h-[18px] items-center gap-1.5 text-[12.5px]", bad ? "text-[var(--danger)]" : "text-muted-foreground")} aria-live="polite">
+            {bad ? (
+              "A name can't have / \\ : * ? \" < > |"
+            ) : clean ? (
+              <>
+                <FileCode2 className="size-3.5" /> {lang ?? "Plain text"}
+              </>
+            ) : null}
+          </div>
+          <div className="mt-2 flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="lib-raised inline-flex h-9 items-center rounded-[10px] px-4 text-[14px] font-[600]">Cancel</button>
+            <button type="submit" disabled={!ok} className="lib-primary inline-flex h-9 items-center rounded-[10px] px-4 text-[14px] font-[600] disabled:opacity-50">Create</button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ---------------------------------------------------------------- tabs
 
 /** The open pages as tabs over the page, once there's more than one. Middle click or × closes one. */
@@ -991,6 +1042,8 @@ export function NotesPage({ id }: { id: string | null }) {
   const tree = useMemo(() => treeOf(list ?? []), [list]);
   const current = id ?? (phone ? null : (list?.find((n) => !isFolder(n))?.id ?? null));
   const [renaming, setRenaming] = useState<string | null>(null);
+  // New file asks for its name first: undefined = closed, otherwise the parent it goes in.
+  const [newFileIn, setNewFileIn] = useState<string | null | undefined>(undefined);
 
   const reload = useCallback(async () => setList(await api.notes()), []);
   useEffect(() => void reload().catch((e) => toast.error((e as Error).message)), [reload]);
@@ -1103,11 +1156,10 @@ export function NotesPage({ id }: { id: string | null }) {
   );
 
   const add = useCallback(
-    async (parentId: string | null, kind: "page" | "canvas" | "file" = "page") => {
+    async (parentId: string | null, kind: "page" | "canvas" | "file" = "page", title = "") => {
       try {
         await saver.flush();
-        // A file gets a name ready to edit, so it highlights as soon as you change the extension.
-        const n = await api.createNote({ title: kind === "file" ? "untitled.py" : "", parentId, kind });
+        const n = await api.createNote({ title, parentId, kind });
         if (parentId) setOpen(parentId, true);
         await reload();
         setNote(n);
@@ -1213,7 +1265,7 @@ export function NotesPage({ id }: { id: string | null }) {
       ...(isFolder(n) ? [] : [{ label: "Open", onSelect: () => pick(n.id) }, { label: "Open in new tab", onSelect: () => pick(n.id, "new") }]),
       { label: "New page inside", onSelect: () => void add(n.id) },
       { label: "New canvas inside", onSelect: () => void add(n.id, "canvas") },
-      { label: "New code file inside", onSelect: () => void add(n.id, "file") },
+      { label: "New file inside", onSelect: () => setNewFileIn(n.id) },
       { label: "New folder inside", onSelect: () => void addFolder(n.id) },
       { label: "Add a PDF inside…", onSelect: () => pickPdf(n.id) },
       { label: "Rename", onSelect: () => setRenaming(n.id) },
@@ -1342,7 +1394,7 @@ export function NotesPage({ id }: { id: string | null }) {
     registerNotesActions((a) => {
       if (a === "new") void add(null);
       else if (a === "new-canvas") void add(null, "canvas");
-      else if (a === "new-file") void add(null, "file");
+      else if (a === "new-file") setNewFileIn(null);
       else if (a === "new-folder") void addFolder(null);
       else if (a === "add-pdf") pickPdf(null);
       else if (a === "import-md") fileInput.current?.click();
@@ -1416,6 +1468,15 @@ export function NotesPage({ id }: { id: string | null }) {
   return (
     <div className="notes-shell">
       {pickers}
+      <NewFileDialog
+        open={newFileIn !== undefined}
+        onClose={() => setNewFileIn(undefined)}
+        onCreate={(name) => {
+          const parent = newFileIn ?? null;
+          setNewFileIn(undefined);
+          void add(parent, "file", name);
+        }}
+      />
       {sidebarTree}
       {dnd.overlay}
       {showTree && (
@@ -1458,8 +1519,8 @@ export function NotesPage({ id }: { id: string | null }) {
             <button type="button" onClick={() => void add(null, "canvas")} className="note-row note-new">
               <PenTool className="size-3.5" /> New canvas
             </button>
-            <button type="button" onClick={() => void add(null, "file")} className="note-row note-new">
-              <FileCode2 className="size-3.5" /> New code file
+            <button type="button" onClick={() => setNewFileIn(null)} className="note-row note-new">
+              <FileCode2 className="size-3.5" /> New file
             </button>
           </div>
         </aside>

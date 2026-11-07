@@ -174,7 +174,7 @@ function NotesMenu({ pagesOpen, children }: { pagesOpen: boolean; children: Reac
           New page <span className="ml-auto text-[12px] text-muted-foreground">{mac ? "⌘⌥N" : "Ctrl+Alt+N"}</span>
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => run("new-canvas")}>New canvas</ContextMenuItem>
-        <ContextMenuItem onSelect={() => run("new-file")}>New code file</ContextMenuItem>
+        <ContextMenuItem onSelect={() => run("new-file")}>New file</ContextMenuItem>
         <ContextMenuItem onSelect={() => run("new-folder")}>New folder</ContextMenuItem>
         <ContextMenuItem onSelect={() => run("add-pdf")}>Add a PDF…</ContextMenuItem>
         <ContextMenuSeparator />

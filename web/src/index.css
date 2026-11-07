@@ -1705,3 +1705,5 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
   .note-file-page .note-file-name { max-width: none; }
   .note-file-status { padding: 0 14px; gap: 12px; padding-bottom: env(safe-area-inset-bottom); height: calc(28px + env(safe-area-inset-bottom)); }
 }
+.note-newfile-input { height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--foreground); font-family: var(--font-mono); font-size: 14px; outline: none; }
+.note-newfile-input:focus { border-color: color-mix(in oklab, var(--primary) 65%, var(--border)); box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 18%, transparent); }

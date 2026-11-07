@@ -1,6 +1,8 @@
 // Keyboard reference. Keep in sync with the handlers in pages/study.tsx, pages/browse.tsx,
 // runtime/runtime.js and the built-in card scripts in types/*/card.js.
-import { Block, Kbd, Section } from "@/components/settings-ui";
+import { toast } from "sonner";
+import { BigSwitch, Block, Kbd, Section } from "@/components/settings-ui";
+import { setVimMode, useVimMode } from "@/lib/vim";
 
 const mod = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 
@@ -53,6 +55,19 @@ const GROUPS: { title: string; description?: string; rows: Row[] }[] = [
     rows: [{ keys: [`${mod}+S`], what: "Save" }],
   },
   {
+    title: "Notes files",
+    description: "Code and text files in Notes (main.py, report.tex).",
+    rows: [
+      { keys: [`${mod}+S`], what: "Save now (it also saves on its own)" },
+      { keys: [`${mod}+F`], what: "Find and replace" },
+      { keys: [`${mod}+D`], what: "Select the next match too" },
+      { keys: [`${mod}+/`], what: "Comment or uncomment the line" },
+      { keys: ["Alt+↑", "Alt+↓"], what: "Move the line up or down" },
+      { keys: [`${mod}+Shift+[`, `${mod}+Shift+]`], what: "Fold or unfold the block" },
+      { keys: ["Tab", "Shift+Tab"], what: "Indent, outdent" },
+    ],
+  },
+  {
     title: "Anywhere",
     rows: [{ keys: [`${mod}+[`, "["], what: "Collapse or expand the sidebar" }],
   },
@@ -72,9 +87,34 @@ function Combo({ combo }: { combo: string }) {
   );
 }
 
+/** Vim keys in Notes' file editor. Saved with the collection. */
+function VimBlock() {
+  const on = useVimMode();
+  const flip = async (v: boolean) => {
+    try {
+      await setVimMode(v);
+    } catch (e) {
+      setVimMode(!v, { save: false });
+      toast.error("Couldn't save", { description: (e as Error).message });
+    }
+  };
+  return (
+    <Block
+      title="Vim keys"
+      description={
+        <>
+          Edit code and text files in Notes the Vim way: normal, insert and visual modes, motions, operators, counts, registers, <Kbd>.</Kbd>, <Kbd>/</Kbd> search and <Kbd>:</Kbd> commands (<Kbd>:w</Kbd> saves). The mode shows under the file. Pages keep the usual editor.
+        </>
+      }
+      aside={<BigSwitch id="vim-keys" checked={on} onCheckedChange={flip} aria-label="Vim keys" />}
+    />
+  );
+}
+
 export function ShortcutsSection() {
   return (
     <Section id="keys" title="Keyboard">
+      <VimBlock />
       {GROUPS.map((g) => (
         <Block key={g.title} title={g.title} description={g.description}>
           <dl className="flex flex-col">

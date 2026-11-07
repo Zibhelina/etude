@@ -533,7 +533,7 @@ export interface NoteSummary {
   /** A page you write in, a canvas you draw on, or a folder of pages. */
   id: string;
   /** A folder only holds pages; it has no body of its own. */
-  kind?: "page" | "folder" | "canvas" | "pdf";
+  kind?: "page" | "folder" | "canvas" | "pdf" | "file";
   parentId: string | null;
   title: string;
   icon: string | null;
@@ -554,17 +554,17 @@ export interface NoteLook {
 export interface NoteDoc { type: string; attrs?: Record<string, unknown>; content?: NoteDoc[]; text?: string; marks?: { type: string; attrs?: Record<string, unknown> }[] }
 /** Notes as a graph: pages (and ghosts for links to pages that don't exist yet) and the lines between them. */
 export interface NoteGraph {
-  nodes: { id: string; kind: "page" | "folder" | "canvas" | "pdf" | "ghost"; title: string; icon: string | null; parentId: string | null; links: number; created: string | null; tags: string[] }[];
+  nodes: { id: string; kind: "page" | "folder" | "canvas" | "pdf" | "file" | "ghost"; title: string; icon: string | null; parentId: string | null; links: number; created: string | null; tags: string[] }[];
   links: { from: string; to: string; kind: "link" | "parent" }[];
 }
-export interface Note extends NoteSummary { doc: NoteDoc; text: string; scene: CanvasScene | null; /** A PDF note's file in the media (files/<sha>.pdf). */ file: string | null }
+export interface Note extends NoteSummary { doc: NoteDoc; text: string; scene: CanvasScene | null; /** A PDF note's file in the media (files/<sha>.pdf). */ file: string | null; content: string | null }
 
 export const api = {
   notes: (archived = false) => call<NoteSummary[]>("GET", `/api/notes${qs({ archived: archived ? 1 : undefined })}`),
   note: (id: string) => call<Note>("GET", `/api/notes/${encodeURIComponent(id)}`),
   searchNotes: (q: string, limit = 20) => call<(NoteSummary & { snippet: string })[]>("GET", `/api/notes/search${qs({ q, limit })}`),
-  createNote: (input: { title?: string; parentId?: string | null; doc?: NoteDoc; icon?: string | null; after?: string | null; kind?: "page" | "folder" | "canvas" | "pdf"; scene?: CanvasScene; file?: string }) => call<Note>("POST", "/api/notes", input),
-  updateNote: (id: string, patch: { title?: string; doc?: NoteDoc; icon?: string | null; look?: NoteLook; kind?: "page" | "folder"; scene?: CanvasScene }) => call<Note>("PATCH", `/api/notes/${encodeURIComponent(id)}`, patch),
+  createNote: (input: { title?: string; parentId?: string | null; doc?: NoteDoc; icon?: string | null; after?: string | null; kind?: "page" | "folder" | "canvas" | "pdf" | "file"; scene?: CanvasScene; file?: string; content?: string }) => call<Note>("POST", "/api/notes", input),
+  updateNote: (id: string, patch: { title?: string; doc?: NoteDoc; icon?: string | null; look?: NoteLook; kind?: "page" | "folder"; scene?: CanvasScene; content?: string }) => call<Note>("PATCH", `/api/notes/${encodeURIComponent(id)}`, patch),
   /** A .excalidraw file (its text) as a new canvas. */
   importExcalidraw: (data: string, title: string, parentId: string | null = null) => call<Note>("POST", "/api/notes/import-excalidraw", { data, title, parentId }),
   moveNote: (id: string, parentId: string | null, index?: number) => call<Note>("POST", `/api/notes/${encodeURIComponent(id)}/move`, { parentId, index }),
@@ -572,7 +572,7 @@ export const api = {
   noteGraph: () => call<NoteGraph>("GET", "/api/notes/graph"),
   noteBacklinks: (id: string) => call<(NoteSummary & { snippet: string })[]>("GET", `/api/notes/${encodeURIComponent(id)}/backlinks`),
   importNotes: (files: { path: string; text: string }[], media: Record<string, string>, parentId: string | null = null, pdfs: { path: string; file: string }[] = []) =>
-    call<{ pages: number; folders: number; links: number; unresolved: number; pdfs: number; root: string | null; ids: string[] }>("POST", "/api/notes/import", { files, media, parentId, pdfs }),
+    call<{ pages: number; folders: number; files?: number; links: number; unresolved: number; pdfs: number; root: string | null; ids: string[] }>("POST", "/api/notes/import", { files, media, parentId, pdfs }),
   noteExportUrl: (id: string, format: "md" | "html") => `/api/notes/${encodeURIComponent(id)}/export?format=${format}`,
   deleteNote: (id: string) => call<{ ids: string[] }>("DELETE", `/api/notes/${encodeURIComponent(id)}`),
   uploadMedia: (file: File) => call<StoredMedia>("POST", `/api/media${qs({ name: file.name })}`, undefined, file),

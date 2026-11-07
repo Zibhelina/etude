@@ -81,6 +81,8 @@ const INDEX: { g: GroupId; label: string; words: string; fold?: string }[] = [
   { g: "privacy", label: "Send error reports", words: "crash errors telemetry" },
   { g: "privacy", label: "Share usage stats", words: "usage analytics telemetry" },
   { g: "keys", label: "Studying", words: "shortcuts keyboard space enter undo bury suspend keys" },
+  { g: "keys", label: "Vim keys", words: "vim vi neovim modal editor normal insert visual hjkl code files notes" },
+  { g: "keys", label: "Notes files", words: "shortcuts code file editor find replace fold comment notes" },
   { g: "keys", label: "Anywhere", words: "shortcuts keyboard ask search sidebar keys" },
   { g: "about", label: "Etude", words: "version update check new about" },
   { g: "about", label: "First-run setup", words: "setup onboarding first run again" },

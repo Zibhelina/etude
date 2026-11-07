@@ -308,7 +308,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.get("/api/notes/search", (c) => c.json(etude.notes.search(c.req.query("q") ?? "", Number(c.req.query("limit") ?? 20) || 20)));
   app.post("/api/notes", async (c) => {
     const b = await body(c);
-    return c.json(etude.notes.create({ title: b.title, parentId: b.parentId ?? null, doc: b.doc, icon: b.icon, look: b.look, after: b.after ?? null, kind: b.kind, scene: b.scene, file: b.file }));
+    return c.json(etude.notes.create({ title: b.title, parentId: b.parentId ?? null, doc: b.doc, icon: b.icon, look: b.look, after: b.after ?? null, kind: b.kind, scene: b.scene, file: b.file, content: b.content }));
   });
   // A .excalidraw file as a canvas (its inline pictures go into the media).
   app.post("/api/notes/import-excalidraw", async (c) => {
@@ -345,6 +345,11 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
       if (!data) throw new EtudeError("this PDF's file is missing from the media", 404);
       return new Response(new Uint8Array(data), { headers: { "content-type": "application/pdf", "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name.replace(/\.pdf$/i, ""))}.pdf` } });
     }
+    // A file downloads as itself, under its own name (it already has its extension).
+    if (n.kind === "file") {
+      const file = (n.title.trim() || "untitled.txt").replace(/[\\/:*?"<>|]+/g, " ").trim();
+      return new Response(n.content ?? "", { headers: { "content-type": "text/plain; charset=utf-8", "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file)}` } });
+    }
     if (n.kind === "canvas") {
       const { sceneToExcalidraw } = await import("../core/notes.ts");
       return new Response(JSON.stringify(sceneToExcalidraw(n.scene!, (m) => etude.readMediaFile(m)), null, 2), {
@@ -357,7 +362,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   });
   app.patch("/api/notes/:id", async (c) => {
     const b = await body(c);
-    return c.json(etude.notes.update(c.req.param("id"), { title: b.title, doc: b.doc, icon: b.icon, look: b.look, kind: b.kind, scene: b.scene }));
+    return c.json(etude.notes.update(c.req.param("id"), { title: b.title, doc: b.doc, icon: b.icon, look: b.look, kind: b.kind, scene: b.scene, content: b.content }));
   });
   app.post("/api/notes/:id/move", async (c) => {
     const b = await body(c);

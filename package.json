@@ -94,6 +94,7 @@
     "@excalidraw/excalidraw": "^0.18.1",
     "@noble/hashes": "^2.4.0",
     "@pkgjs/parseargs": "^0.11.0",
+    "@replit/codemirror-vim": "^6.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tiptap/core": "^3.33.0",
     "@tiptap/extension-code-block": "^3.33.0",

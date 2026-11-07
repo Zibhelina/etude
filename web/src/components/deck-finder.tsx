@@ -293,7 +293,7 @@ function FinderPanel({ onClose }: { onClose(): void }) {
                   >
                     <span className="flex size-8 shrink-0 items-center justify-center" aria-hidden><NoteIcon icon={h.n.icon} size={22} /></span>
                     <span className="min-w-0 flex-1 truncate text-[15px] text-foreground/85"><Marked text={h.n.title || "Untitled"} marks={h.marks} /></span>
-                    <span className="shrink-0 text-[12.5px] text-muted-foreground">Page</span>
+                    <span className="shrink-0 text-[12.5px] text-muted-foreground">{h.n.kind === "file" ? "File" : h.n.kind === "canvas" ? "Canvas" : "Page"}</span>
                     <span className="deck-finder-enter shrink-0 text-[12px] text-muted-foreground" aria-hidden>↵</span>
                   </div>
                 );

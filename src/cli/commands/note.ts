@@ -1,6 +1,6 @@
 import { command, group, CliError } from "../registry.ts";
 import { parseJson, readSource, textInput } from "../input.ts";
-import { docFromText, sceneFromExcalidraw } from "../../core/notes.ts";
+import { docFromText, isTextFile, sceneFromExcalidraw } from "../../core/notes.ts";
 
 group({ name: "note", summary: "Notes (beta): pages you write in, in a tree of their own", defaultVerb: "list" });
 
@@ -56,6 +56,13 @@ function sceneOf(ctx: any): unknown {
   return sceneFromExcalidraw(parseJson(raw, "--scene"), (name, data) => ctx.e.storeMedia(name, data, { dryRun: ctx.dry }));
 }
 
+const contentFlags = [
+  { name: "content", type: "string" as const, description: "A file's text, exactly as written. `-` reads stdin.", placeholder: "TEXT" },
+  { name: "content-file", type: "string" as const, description: "Read a file's text from this file on disk.", placeholder: "PATH" },
+];
+/** --content / --content-file, for a file note. */
+const contentOf = (ctx: any): string | undefined => textInput(ctx, ctx.flags.content, ctx.flags["content-file"]);
+
 function docOf(ctx: any): unknown {
   const text = textInput(ctx, ctx.flags.text, ctx.flags["text-file"]);
   const docRaw = ctx.flags.doc === "-" ? ctx.stdin() : ctx.flags.doc ?? (ctx.flags["doc-file"] !== undefined ? readSource(ctx, ctx.flags["doc-file"]) : undefined);
@@ -67,12 +74,12 @@ function docOf(ctx: any): unknown {
 
 command({
   name: "note new",
-  summary: "Make a page, or with --folder a folder that only holds pages.",
+  summary: "Make a page, or with --folder a folder that only holds pages, or with --file a code or text file (main.py, notes.tex) opened in a plain editor.",
   args: [{ name: "title", description: "Its title.", required: true }],
-  flags: [{ name: "parent", type: "string", description: "Put it inside this page or folder (id or exact title)." }, { name: "folder", type: "boolean", description: "Make a folder: it holds pages and has no body of its own." }, { name: "icon", type: "string", description: "One emoji." }, { name: "canvas", type: "boolean", description: "Make a canvas (a whiteboard you draw on) instead of a page." }, { name: "pdf", type: "string", description: "Make a PDF note from this file: it opens as the document itself. The file goes into the collection's media.", placeholder: "PATH" }, { name: "scene", type: "string", description: "A canvas's drawing as Excalidraw JSON ({ elements, appState, files }, or a whole .excalidraw file). `-` reads stdin.", placeholder: "JSON" }, { name: "scene-file", type: "string", description: "Read the canvas's drawing from a .excalidraw file.", placeholder: "PATH" }, ...docFlags, ...lookFlags],
+  flags: [{ name: "parent", type: "string", description: "Put it inside this page or folder (id or exact title)." }, { name: "folder", type: "boolean", description: "Make a folder: it holds pages and has no body of its own." }, { name: "icon", type: "string", description: "One emoji." }, { name: "canvas", type: "boolean", description: "Make a canvas (a whiteboard you draw on) instead of a page." }, { name: "pdf", type: "string", description: "Make a PDF note from this file: it opens as the document itself. The file goes into the collection's media.", placeholder: "PATH" }, { name: "scene", type: "string", description: "A canvas's drawing as Excalidraw JSON ({ elements, appState, files }, or a whole .excalidraw file). `-` reads stdin.", placeholder: "JSON" }, { name: "scene-file", type: "string", description: "Read the canvas's drawing from a .excalidraw file.", placeholder: "PATH" }, { name: "file", type: "boolean", description: "Make a file: plain text kept exactly as written, highlighted by the extension in its title (main.py, report.tex)." }, ...contentFlags, ...docFlags, ...lookFlags],
   writes: true,
   dryRun: true,
-  examples: ['etude note new "CMPT 307" --icon 📘', 'etude note new "Fall 2026" --folder', 'etude note new "Week 1" --parent "CMPT 307" --text "# Greedy\\n- exchange argument"'],
+  examples: ['etude note new "CMPT 307" --icon 📘', 'etude note new "Fall 2026" --folder', 'etude note new main.py --file --content-file ./main.py', 'etude note new "Week 1" --parent "CMPT 307" --text "# Greedy\\n- exchange argument"'],
   output: "the new page, as `note show` prints it",
   async run(ctx) {
     const parentId = ctx.flags.parent ? ctx.e.notes.resolve(ctx.flags.parent).id : null;
@@ -84,6 +91,11 @@ command({
       const m = ctx.e.storeMedia(basename(ctx.flags.pdf), readFileSync(ctx.flags.pdf), { dryRun: ctx.dry });
       if (m.kind !== "document") throw new CliError(`${ctx.flags.pdf} isn't a PDF`);
       return ctx.e.notes.create({ title: ctx.args.title, parentId, icon: ctx.flags.icon ?? null, kind: "pdf", file: m.url, look: lookOf(ctx) });
+    }
+    const content = contentOf(ctx);
+    if (content !== undefined || ctx.flags.file) {
+      if (docOf(ctx) !== undefined) throw new CliError("a file has text content, not a body: use --content or --content-file");
+      return ctx.e.notes.create({ title: ctx.args.title, parentId, icon: ctx.flags.icon ?? null, kind: "file", content: content ?? "" });
     }
     const scene = sceneOf(ctx);
     if (scene !== undefined || ctx.flags.canvas) {
@@ -98,18 +110,19 @@ command({
   name: "note edit",
   summary: "Change a page's title, icon, body or look (cover, width, font, text size), or turn it into a folder and back.",
   args: [{ name: "note", description: "Page id, or its exact title.", required: true }],
-  flags: [{ name: "title", type: "string", description: "New title." }, { name: "kind", type: "string", description: "page or folder. Only an empty page can become a folder." }, { name: "icon", type: "string", description: "One emoji; empty to remove." }, { name: "scene", type: "string", description: "A canvas's new drawing as Excalidraw JSON. `-` reads stdin.", placeholder: "JSON" }, { name: "scene-file", type: "string", description: "Read a canvas's new drawing from a .excalidraw file.", placeholder: "PATH" }, ...docFlags, ...lookFlags],
+  flags: [{ name: "title", type: "string", description: "New title." }, { name: "kind", type: "string", description: "page or folder. Only an empty page can become a folder." }, { name: "icon", type: "string", description: "One emoji; empty to remove." }, { name: "scene", type: "string", description: "A canvas's new drawing as Excalidraw JSON. `-` reads stdin.", placeholder: "JSON" }, { name: "scene-file", type: "string", description: "Read a canvas's new drawing from a .excalidraw file.", placeholder: "PATH" }, ...contentFlags, ...docFlags, ...lookFlags],
   writes: true,
   dryRun: true,
-  examples: ['etude note edit "Week 1" --title "Week 1 · Greedy"', 'etude note edit "Week 1" --text-file week1.txt', 'etude note edit "Week 1" --cover dawn --font serif --width wide'],
+  examples: ['etude note edit main.py --content-file ./main.py', 'etude note edit "Week 1" --title "Week 1 · Greedy"', 'etude note edit "Week 1" --text-file week1.txt', 'etude note edit "Week 1" --cover dawn --font serif --width wide'],
   output: "the page after the change",
   run(ctx) {
     const n = ctx.e.notes.resolve(ctx.args.note);
     const doc = docOf(ctx);
     const look = lookOf(ctx, n.look as Record<string, unknown>);
     const scene = sceneOf(ctx);
-    if (ctx.flags.title === undefined && ctx.flags.icon === undefined && ctx.flags.kind === undefined && doc === undefined && look === undefined && scene === undefined) throw new CliError("nothing to change: give --title, --icon, --kind, --text, --doc, --scene, --cover, --width, --font or --size");
-    return ctx.e.notes.update(n.id, { title: ctx.flags.title, icon: ctx.flags.icon, doc, look, kind: ctx.flags.kind, scene });
+    const content = contentOf(ctx);
+    if (ctx.flags.title === undefined && ctx.flags.icon === undefined && ctx.flags.kind === undefined && doc === undefined && look === undefined && scene === undefined && content === undefined) throw new CliError("nothing to change: give --title, --icon, --kind, --text, --doc, --scene, --content, --cover, --width, --font or --size");
+    return ctx.e.notes.update(n.id, { title: ctx.flags.title, icon: ctx.flags.icon, doc, look, kind: ctx.flags.kind, scene, content });
   },
 });
 
@@ -177,15 +190,15 @@ const IMAGE = /\.(png|jpe?g|gif|webp|svg|avif)$/i;
 
 command({
   name: "note import",
-  summary: "Import markdown files or a whole folder (an Obsidian vault) as pages, PDFs as PDF notes, and .excalidraw drawings as canvases.",
+  summary: "Import markdown files or a whole folder (an Obsidian vault) as pages, PDFs as PDF notes, code and text files (.py, .tex, …) as files, and .excalidraw drawings as canvases.",
   description:
-    "Each markdown file becomes a page and each folder a page holding its files, so a vault keeps its shape. [[Links]] (with |alias and #heading), relative .md links and ![[image]] embeds are understood; images found in the folder are stored in the collection's media. A folder note (Folder/Folder.md) becomes the folder's own page. Hidden folders (.obsidian, .trash) are skipped. A .excalidraw file given on its own becomes a canvas, with its pictures stored in the media. Each PDF (on its own or in a folder) becomes a PDF note that opens as the document.",
+    "Each markdown file becomes a page and each folder a page holding its files, so a vault keeps its shape. [[Links]] (with |alias and #heading), relative .md links and ![[image]] embeds are understood; images found in the folder are stored in the collection's media. A folder note (Folder/Folder.md) becomes the folder's own page. Hidden folders (.obsidian, .trash) are skipped. A .excalidraw file given on its own becomes a canvas, with its pictures stored in the media. Each PDF (on its own or in a folder) becomes a PDF note that opens as the document. Code, LaTeX and other text files (.py, .tex, .js, .json, …) become files: kept exactly as written and opened in a plain editor.",
   args: [{ name: "paths", description: "Markdown files or folders.", required: true, variadic: true }],
   flags: [{ name: "parent", type: "string", description: "Put the imported pages inside this page (id or exact title)." }],
   writes: true,
   dryRun: true,
   examples: ["etude note import ~/vault", 'etude note import week1.md week2.md --parent "CMPT 307"', "etude note import board.excalidraw"],
-  output: "{ pages, folders, links, unresolved, pdfs, root, ids, media, canvases }",
+  output: "{ pages, folders, files, links, unresolved, pdfs, root, ids, media, canvases }",
   async run(ctx) {
     const { existsSync, readdirSync, readFileSync, statSync } = await import("node:fs");
     const { basename, join, relative, resolve } = await import("node:path");
@@ -202,7 +215,7 @@ command({
       const scene = sceneFromExcalidraw(parseJson(readFileSync(d, "utf8"), basename(d)), (name, data) => ctx.e.storeMedia(name, data, { dryRun: ctx.dry }));
       canvases.push(ctx.e.notes.create({ title: basename(d).replace(/\.excalidraw(\.json)?$/i, ""), parentId: parentFor(), kind: "canvas", scene }).id);
     }
-    if (!paths.length) return { pages: 0, folders: 0, links: 0, unresolved: 0, pdfs: 0, root: null, ids: [], media: 0, canvases };
+    if (!paths.length) return { pages: 0, folders: 0, files: 0, links: 0, unresolved: 0, pdfs: 0, root: null, ids: [], media: 0, canvases };
     for (const p of paths) {
       if (!existsSync(p)) throw new CliError(`no such file or folder: ${p}`, "not_found");
       if (statSync(p).isDirectory()) {
@@ -213,7 +226,7 @@ command({
             const abs = join(dir, name);
             const rel = join(base, relative(p, abs)).replace(/\\/g, "/");
             if (statSync(abs).isDirectory()) walk(abs);
-            else if (/\.(md|markdown)$/i.test(name)) files.push({ path: rel, text: readFileSync(abs, "utf8") });
+            else if (/\.(md|markdown)$/i.test(name) || isTextFile(name)) files.push({ path: rel, text: readFileSync(abs, "utf8") });
             else if (IMAGE.test(name)) images.push({ rel: relative(p, abs).replace(/\\/g, "/"), abs });
             else if (/\.pdf$/i.test(name)) pdfFiles.push({ rel, abs });
           }
@@ -238,7 +251,7 @@ command({
 
 command({
   name: "note export",
-  summary: "A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file.",
+  summary: "A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file; a file as its own text.",
   args: [{ name: "note", description: "Page id, or its exact title.", required: true }],
   flags: [
     { name: "format", type: "string", values: ["md", "html"], default: "md", description: "md or html (a canvas is always .excalidraw)." },
@@ -249,7 +262,7 @@ command({
     const { docToHtml, docToMarkdown } = await import("../../core/notes-md.ts");
     const n = ctx.e.notes.resolve(ctx.args.note);
     const { sceneToExcalidraw } = await import("../../core/notes.ts");
-    const out = n.kind === "canvas" ? JSON.stringify(sceneToExcalidraw(n.scene!, (m) => ctx.e.readMediaFile(m)), null, 2) : ctx.flags.format === "html" ? docToHtml(n.doc, n.title) : docToMarkdown(n.doc, n.title);
+    const out = n.kind === "file" ? (n.content ?? "") : n.kind === "canvas" ? JSON.stringify(sceneToExcalidraw(n.scene!, (m) => ctx.e.readMediaFile(m)), null, 2) : ctx.flags.format === "html" ? docToHtml(n.doc, n.title) : docToMarkdown(n.doc, n.title);
     if (ctx.flags.output) {
       const { writeFileSync } = await import("node:fs");
       writeFileSync(ctx.flags.output, out);

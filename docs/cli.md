@@ -287,15 +287,15 @@ These work on every command, before or after the command words.
 - **note**: Notes (beta): pages you write in, in a tree of their own (`etude note` alone runs `list`)
   - [`note list`](#note-list) Every page, in tree order (parents before their pages).
   - [`note show`](#note-show) A page (its title, plain text and document tree) or a canvas (its title, text and Excalidraw scene).
-  - [`note new`](#note-new) Make a page, or with --folder a folder that only holds pages.
+  - [`note new`](#note-new) Make a page, or with --folder a folder that only holds pages, or with --file a code or text file (main.py, notes.tex) opened in a plain editor.
   - [`note edit`](#note-edit) Change a page's title, icon, body or look (cover, width, font, text size), or turn it into a folder and back.
   - [`note move`](#note-move) Put a page inside another page, or at the top level with --top.
   - [`note archive`](#note-archive) Archive a page and the pages inside it. Nothing is deleted.
   - [`note unarchive`](#note-unarchive) Bring an archived page back, with the pages inside it.
   - [`note delete`](#note-delete) Delete a page for good, with every page inside it.
   - [`note search`](#note-search) Pages whose title or text has every word, title matches first.
-  - [`note import`](#note-import) Import markdown files or a whole folder (an Obsidian vault) as pages, PDFs as PDF notes, and .excalidraw drawings as canvases.
-  - [`note export`](#note-export) A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file.
+  - [`note import`](#note-import) Import markdown files or a whole folder (an Obsidian vault) as pages, PDFs as PDF notes, code and text files (.py, .tex, …) as files, and .excalidraw drawings as canvases.
+  - [`note export`](#note-export) A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file; a file as its own text.
   - [`note graph`](#note-graph) Every page as a point and every [[link]] between pages as a line (what the graph view draws).
   - [`note backlinks`](#note-backlinks) The pages that link to a page.
 - **type**: Card types: fields, template (HTML/CSS/JS), prepare script and grader (`etude type` alone runs `list`)
@@ -2251,7 +2251,7 @@ Output: { id, kind, parentId, title, icon, look, …, text, doc, scene } (or the
 
 <a id="note-new"></a>
 
-Make a page, or with --folder a folder that only holds pages.
+Make a page, or with --folder a folder that only holds pages, or with --file a code or text file (main.py, notes.tex) opened in a plain editor.
 
 ```
 etude note new <title> [flags]
@@ -2272,6 +2272,9 @@ etude note new <title> [flags]
 | `--pdf <PATH>` | string | Make a PDF note from this file: it opens as the document itself. The file goes into the collection's media. |
 | `--scene <JSON>` | string | A canvas's drawing as Excalidraw JSON ({ elements, appState, files }, or a whole .excalidraw file). `-` reads stdin. |
 | `--scene-file <PATH>` | string | Read the canvas's drawing from a .excalidraw file. |
+| `--file` | boolean | Make a file: plain text kept exactly as written, highlighted by the extension in its title (main.py, report.tex). |
+| `--content <TEXT>` | string | A file's text, exactly as written. `-` reads stdin. |
+| `--content-file <PATH>` | string | Read a file's text from this file on disk. |
 | `--text <VALUE>` | string | Body as plain text: one paragraph per line, `# ` headings, `- ` bullets, `- [ ] ` tasks. `-` reads stdin. |
 | `--text-file <PATH>` | string | Read the plain-text body from a file. |
 | `--doc <VALUE>` | string | Body as a document tree (ProseMirror JSON, as `note show` prints it). `-` reads stdin. |
@@ -2287,6 +2290,7 @@ Output: the new page, as `note show` prints it
 ```sh
 etude note new "CMPT 307" --icon 📘
 etude note new "Fall 2026" --folder
+etude note new main.py --file --content-file ./main.py
 etude note new "Week 1" --parent "CMPT 307" --text "# Greedy\n- exchange argument"
 ```
 
@@ -2313,6 +2317,8 @@ etude note edit <note> [flags]
 | `--icon <VALUE>` | string | One emoji; empty to remove. |
 | `--scene <JSON>` | string | A canvas's new drawing as Excalidraw JSON. `-` reads stdin. |
 | `--scene-file <PATH>` | string | Read a canvas's new drawing from a .excalidraw file. |
+| `--content <TEXT>` | string | A file's text, exactly as written. `-` reads stdin. |
+| `--content-file <PATH>` | string | Read a file's text from this file on disk. |
 | `--text <VALUE>` | string | Body as plain text: one paragraph per line, `# ` headings, `- ` bullets, `- [ ] ` tasks. `-` reads stdin. |
 | `--text-file <PATH>` | string | Read the plain-text body from a file. |
 | `--doc <VALUE>` | string | Body as a document tree (ProseMirror JSON, as `note show` prints it). `-` reads stdin. |
@@ -2326,6 +2332,7 @@ etude note edit <note> [flags]
 Output: the page after the change
 
 ```sh
+etude note edit main.py --content-file ./main.py
 etude note edit "Week 1" --title "Week 1 · Greedy"
 etude note edit "Week 1" --text-file week1.txt
 etude note edit "Week 1" --cover dawn --font serif --width wide
@@ -2449,9 +2456,9 @@ Output: array of { id, title, …, snippet }
 
 <a id="note-import"></a>
 
-Import markdown files or a whole folder (an Obsidian vault) as pages, PDFs as PDF notes, and .excalidraw drawings as canvases.
+Import markdown files or a whole folder (an Obsidian vault) as pages, PDFs as PDF notes, code and text files (.py, .tex, …) as files, and .excalidraw drawings as canvases.
 
-Each markdown file becomes a page and each folder a page holding its files, so a vault keeps its shape. [[Links]] (with |alias and #heading), relative .md links and ![[image]] embeds are understood; images found in the folder are stored in the collection's media. A folder note (Folder/Folder.md) becomes the folder's own page. Hidden folders (.obsidian, .trash) are skipped. A .excalidraw file given on its own becomes a canvas, with its pictures stored in the media. Each PDF (on its own or in a folder) becomes a PDF note that opens as the document.
+Each markdown file becomes a page and each folder a page holding its files, so a vault keeps its shape. [[Links]] (with |alias and #heading), relative .md links and ![[image]] embeds are understood; images found in the folder are stored in the collection's media. A folder note (Folder/Folder.md) becomes the folder's own page. Hidden folders (.obsidian, .trash) are skipped. A .excalidraw file given on its own becomes a canvas, with its pictures stored in the media. Each PDF (on its own or in a folder) becomes a PDF note that opens as the document. Code, LaTeX and other text files (.py, .tex, .js, .json, …) become files: kept exactly as written and opened in a plain editor.
 
 ```
 etude note import <paths...> [flags]
@@ -2468,7 +2475,7 @@ etude note import <paths...> [flags]
 | `--parent <VALUE>` | string | Put the imported pages inside this page (id or exact title). |
 | `--dry-run` | boolean | Show what would change without writing anything. |
 
-Output: { pages, folders, links, unresolved, pdfs, root, ids, media, canvases }
+Output: { pages, folders, files, links, unresolved, pdfs, root, ids, media, canvases }
 
 ```sh
 etude note import ~/vault
@@ -2480,7 +2487,7 @@ etude note import board.excalidraw
 
 <a id="note-export"></a>
 
-A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file.
+A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file; a file as its own text.
 
 ```
 etude note export <note> [flags]
@@ -3626,7 +3633,7 @@ etude settings get ai.feedback.model
 
 Change settings with dotted key=value pairs (JSON values when they parse).
 
-Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words; empty keeps his usual one), minimiFace (the face he wears: deadpan, wink, proud, smug, hi, wand, close, curious, reading, sleepy, shocked or thinking), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own), avatar (your picture: {kind:"char",id}, {kind:"emoji",e,bg}, {kind:"photo",media}, or null for your initial; see `etude settings avatar`), banner (the cover behind your picture: a preset id like sky or night, image:files/<sha>.<ext>[:y], or null to match your picture; see `etude settings banner`), name (your name in the app, up to 40 characters; empty uses the account's). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.
+Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words; empty keeps his usual one), minimiFace (the face he wears: deadpan, wink, proud, smug, hi, wand, close, curious, reading, sleepy, shocked or thinking), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own), avatar (your picture: {kind:"char",id}, {kind:"emoji",e,bg}, {kind:"photo",media}, or null for your initial; see `etude settings avatar`), banner (the cover behind your picture: a preset id like sky or night, image:files/<sha>.<ext>[:y], or null to match your picture; see `etude settings banner`), name (your name in the app, up to 40 characters; empty uses the account's), vim (true turns on Vim keys in Notes' file editor). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.
 
 ```
 etude settings set <pairs...> [flags]

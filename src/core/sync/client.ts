@@ -17,11 +17,11 @@ const BLOB_OVERHEAD=1+12+16;
 
 export type SyncProgress = {
   /**
-   * The collection: snapshot (a device's first sync, when the vault has one: its parts), download (events and type assets),
-   * upload (type assets and events), apply (writing the changes into the collection).
+   * The collection: snapshot (a device's first sync, when the vault has one: its parts), download (events), types (the
+   * card types' asset files, both ways), upload (events), apply (writing the changes into the collection).
    * The media, after it: check (hashing local files; done and total count files), download, upload (files, then their events).
    */
-  step:"snapshot"|"download"|"check"|"upload"|"apply";
+  step:"snapshot"|"download"|"types"|"check"|"upload"|"apply";
   done:number;
   /** Null when the size isn't known ahead. */
   total:number|null;
@@ -301,7 +301,7 @@ export class SyncClient {
       if(plain.some(p=>p.event.table==="media"||p.event.table==="blob"))news=true;
     }
     // Type assets are part of the card types the projection writes, so their blobs move now. Media files come after.
-    await this.assets(t,key);
+    this.step("types");await this.assets(t,key);
     // Local changes go up before any media, so other devices don't wait for files.
     drain(db);
     this.step("upload",this.unsentBytes());

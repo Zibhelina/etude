@@ -256,10 +256,10 @@ export function ProfileHeader({ acct, inner }: { acct: AccountStatus | null; inn
   return (
     <div data-profile-header data-settings-row className="@container/ph relative">
       <span data-settings-title className="sr-only">Your picture</span>
-      <div className="relative h-[clamp(140px,14vw,184px)] max-md:h-[calc(140px+env(safe-area-inset-top))]" data-profile-cover>
+      <div className="group/cover relative h-[clamp(140px,14vw,184px)] max-md:h-[calc(140px+env(safe-area-inset-top))]" data-profile-cover>
         <BannerFade value={banner} avatar={avatar} />
         <div className={cn("pointer-events-none absolute inset-x-0 bottom-3.5 z-[2] mx-auto flex w-full justify-end @max-[34rem]/ph:top-[calc(0.75rem+env(safe-area-inset-top))] @max-[34rem]/ph:bottom-auto", inner)}>
-          <button type="button" onClick={() => setBannerOpen(true)} aria-label="Change banner" data-banner-pill className="pointer-events-auto inline-flex h-8 items-center gap-1.5 rounded-full bg-black/40 px-3 text-[12.5px] font-semibold text-white backdrop-blur-md transition-colors hover:bg-black/55">
+          <button type="button" onClick={() => setBannerOpen(true)} aria-label="Change banner" data-banner-pill className="pointer-events-auto inline-flex h-8 translate-y-1 items-center gap-1.5 rounded-full bg-black/40 px-3 text-[12.5px] font-semibold text-white opacity-0 backdrop-blur-md transition-[opacity,translate,background-color] duration-200 hover:bg-black/55 focus-visible:translate-y-0 focus-visible:opacity-100 group-hover/cover:translate-y-0 group-hover/cover:opacity-100 motion-reduce:translate-y-0 motion-reduce:transition-none [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100">
             <ImageIcon className="size-3.5" /> <span className="@max-[34rem]/ph:hidden">Change banner</span><span className="@min-[34rem]/ph:hidden">Banner</span>
           </button>
         </div>
@@ -270,7 +270,7 @@ export function ProfileHeader({ acct, inner }: { acct: AccountStatus | null; inn
             <span ref={pic} className="block rounded-full shadow-[0_0_0_5px_var(--background)] transition-[filter] duration-150 group-hover/pic:brightness-95">
               <AvatarPic value={avatar} size={phone ? 96 : 120} initial={letter || undefined} className={avatar ? undefined : "shadow-[inset_0_0_0_1px_var(--border)]"} />
             </span>
-            <span aria-hidden className="absolute right-[3%] bottom-[3%] grid size-[30px] place-items-center rounded-full bg-card text-foreground shadow-[0_0_0_3px_var(--background),inset_0_0_0_1px_var(--border),0_2px_6px_rgb(0_0_0/0.14)] dark:bg-muted transition-transform duration-150 group-hover/pic:scale-110 motion-reduce:transition-none" data-profile-camera>
+            <span aria-hidden className="absolute right-[3%] bottom-[3%] grid size-[30px] place-items-center rounded-full bg-card text-foreground shadow-[0_0_0_3px_var(--background),inset_0_0_0_1px_var(--border),0_2px_6px_rgb(0_0_0/0.14)] dark:bg-muted scale-75 opacity-0 transition-[opacity,scale] duration-150 group-hover/pic:scale-100 group-hover/pic:opacity-100 group-focus-visible/pic:scale-100 group-focus-visible/pic:opacity-100 motion-reduce:transition-none [@media(hover:none)]:scale-100 [@media(hover:none)]:opacity-100" data-profile-camera>
               <Camera className="size-[15px]" strokeWidth={2} />
             </span>
           </button>

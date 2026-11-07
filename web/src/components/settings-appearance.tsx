@@ -15,7 +15,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { CodeEditor } from "@/components/code-editor";
 import { AccentWheel } from "@/components/accent-wheel";
 import { BigSwitch, Block, Section } from "@/components/settings-ui";
-import { minimiFace } from "@/components/minimi";
+import { useMinimiFaces } from "@/components/minimi-faces";
+import { useMinimiFace } from "@/lib/minimi-face";
 import { setFunMode, useFunMode } from "@/lib/fun";
 import { ThemeMiniature, ThemeSample, ThemeSwatches } from "@/components/settings-theme-preview";
 import { api } from "@/lib/api";
@@ -423,6 +424,8 @@ function Swatch({ label, color, selected, onSelect }: { label: string; color: st
 /** Fun mode: Minimi in the corner instead of the plain ε. Saved with the collection. */
 function FunBlock() {
   const on = useFunMode();
+  const face = useMinimiFace();
+  const faces = useMinimiFaces();
   const flip = async (v: boolean) => {
     try {
       await setFunMode(v);
@@ -434,10 +437,15 @@ function FunBlock() {
   return (
     <Block
       title="Fun mode"
-      description="Minimi, Etude's cat, sits in the corner and answers when you ask something. Drag him anywhere. Off keeps the plain ε."
+      description="Minimi, Etude's cat, sits in the corner and answers when you ask something. Drag him anywhere, or hold him to change his face. Off keeps the plain ε."
       aside={
         <div className="flex items-center gap-3">
-          <img src={minimiFace} alt="" className="size-9 rounded-full bg-muted object-cover" draggable={false} />
+          {on && (
+            <button type="button" aria-label="Change Minimi's face" title="Change his face" onClick={(e) => faces.openAt(e.currentTarget)} className="rounded-full outline-ring transition-transform hover:scale-105 focus-visible:outline-2 active:scale-95">
+              <img src={face} alt="" className="size-9 rounded-full bg-muted object-cover" draggable={false} />
+            </button>
+          )}
+          {faces.node}
           <BigSwitch id="fun-mode" checked={on} onCheckedChange={flip} aria-label="Fun mode" />
         </div>
       }

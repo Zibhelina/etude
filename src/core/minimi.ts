@@ -2,6 +2,11 @@
 // personality lives here and isn't shown in the app; Settings → Appearance → Minimi's personality
 // replaces it with the user's own words. Either way the rules of the job (tools, facts, safety) stay.
 
+/** The faces Minimi can wear around the app (web/src/assets/minimi/faces/<id>.webp). Picked by holding him. */
+export const MINIMI_FACES = ["deadpan", "wink", "proud", "smug", "hi", "wand", "close", "curious", "reading", "sleepy", "shocked", "thinking"] as const;
+export type MinimiFace = (typeof MINIMI_FACES)[number];
+export const MINIMI_FACE_DEFAULT: MinimiFace = "deadpan";
+
 /** The longest personality the user can give Minimi. */
 export const MINIMI_MAX = 2000;
 

@@ -7,7 +7,7 @@ import { Markdown } from "@/components/markdown";
 import { humanInterval, RATING_LABEL, type Rating, type StudyCard } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { CardFrameHandle, CardResult } from "@/components/card-frame";
-import face from "@/assets/minimi/face.webp";
+import { faceSrc, minimiFaceId, useMinimiFace } from "@/lib/minimi-face";
 import sitBlink from "@/assets/minimi/sit-up-blink.webp";
 import sitLeft from "@/assets/minimi/sit-up-L.webp";
 import sitLegL from "@/assets/minimi/sit-legL.webp";
@@ -15,7 +15,8 @@ import sitLegR from "@/assets/minimi/sit-legR.webp";
 import sitNeutral from "@/assets/minimi/sit-up-n.webp";
 import sitRight from "@/assets/minimi/sit-up-R.webp";
 
-export const minimiFace = face;
+/** The face Minimi wears right now (a snapshot; components that need live updates use useMinimiFace). */
+export const minimiFace = () => faceSrc(minimiFaceId());
 export const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 export const modKey = () => (typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl");
 
@@ -216,7 +217,7 @@ export function Thread({ msgs, fun }: { msgs: ChatMsg[]; fun: boolean }) {
           <div key={i} className="st-me st-rise">{m.text}</div>
         ) : (
           <div key={i} className={cn("st-rise", fun ? "st-npc" : "")}>
-            {fun && <img src={face} alt="" />}
+            {fun && <img src={faceSrc(minimiFaceId())} alt="" />}
             {fun && <div className="st-who st-mini m-0">Minimi</div>}
             <div className={cn("st-msg", m.error && "text-danger")}>
               {m.typing && !m.text ? <span className="st-dots" aria-label="Writing"><i /><i /><i /></span> : <Markdown className="prose-etude">{m.text}</Markdown>}
@@ -284,7 +285,7 @@ export function Composer({ fun, chips, busy, onSend, onAttach, attached, onBack,
 export function AskTab({ fun, onClick }: { fun: boolean; onClick(): void }) {
   return (
     <button className="st-docktab" onClick={onClick}>
-      {fun ? <><img src={face} alt="" />Ask Minimi</> : <span className="pl-2">Ask about it</span>}
+      {fun ? <><img src={faceSrc(minimiFaceId())} alt="" />Ask Minimi</> : <span className="pl-2">Ask about it</span>}
       <ChevronDown className="size-4" strokeWidth={2.2} />
     </button>
   );

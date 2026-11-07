@@ -32,7 +32,7 @@ const itemTags = (r: Row) => Object.keys(r.tags ?? {}).filter(t => r.tags[t] ===
 function applySettings(e: Etude, r: Row) {
   // Provider URLs, key names and the Market catalog stay this device's own, and theme CSS is sanitized again.
   const incoming = safeSettings(clean(r.value));
-  for (const k of ["themes","theme","dayStartHour","learnAheadMinutes","typePrefs","fun","minimi","accent","avatar","banner","name"]) {
+  for (const k of ["themes","theme","dayStartHour","learnAheadMinutes","typePrefs","fun","minimi","minimiFace","accent","avatar","banner","name"]) {
     if (!(k in incoming)) continue;
     const v = incoming[k];
     if (k === "learnAheadMinutes" && !(typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 24 * 60)) continue;

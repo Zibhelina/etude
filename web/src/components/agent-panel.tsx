@@ -8,7 +8,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Markdown } from "@/components/markdown";
 import { EPSILON_PATH, Logo } from "@/components/logo";
-import { minimiFace } from "@/components/minimi";
+import { useMinimiFace } from "@/lib/minimi-face";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { agentApi, DATA_EVENT, type AgentEvent, type AssistantContent, type Attachment, type Conversation, type Item, type Message, type ModelGroup, type ToolItem, type UserContent } from "@/lib/agent";
 import { appPath, navigate } from "@/lib/router";
@@ -201,6 +201,7 @@ function RoundButton({ label, tip, onClick, disabled, children }: { label: strin
 /** Who's talking: Minimi's face in Fun mode, otherwise the ε on an ink disc. */
 function Avatar({ size = 34 }: { size?: number }) {
   const fun = useFunMode();
+  const minimiFace = useMinimiFace();
   return fun ? (
     <img src={minimiFace} alt="" data-agent-avatar className="shrink-0 rounded-full bg-card object-cover shadow-[inset_0_0_0_1px_var(--border),0_2px_6px_rgb(0_0_0/0.06)]" style={{ width: size, height: size, objectPosition: "50% 20%" }} />
   ) : (

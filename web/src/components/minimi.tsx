@@ -8,7 +8,7 @@ import down from "@/assets/minimi/down.webp";
 import look from "@/assets/minimi/look.webp";
 import { cn } from "@/lib/utils";
 
-export { default as minimiFace } from "@/assets/minimi/face.webp";
+import { useMinimiFaces } from "@/components/minimi-faces";
 
 const W = 84;
 const H = 124;
@@ -37,6 +37,7 @@ export function MinimiCorner({ onOpen, shortcut, rightOffset = "0px", talking = 
   const [page, setPage] = useState(false);
   const [drag, setDrag] = useState<null | { near: boolean }>(null);
   const [land, setLand] = useState(false);
+  const faces = useMinimiFaces();
 
   // Free space for his top-left corner, inside the window.
   const room = () => [Math.max(1, view()[0] - W), Math.max(1, view()[1] - H)] as const;
@@ -64,14 +65,17 @@ export function MinimiCorner({ onOpen, shortcut, rightOffset = "0px", talking = 
     return () => clearInterval(t);
   }, []);
 
-  const onPointerDown = (e: React.PointerEvent) => {
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button > 0) return;
+    faces.onPointerDown(e);
     const el = ref.current!;
     const r = el.getBoundingClientRect();
     const home = { x: view()[0] - W - MARGIN, y: view()[1] - H - MARGIN };
     const sx = e.clientX, sy = e.clientY;
     let moved = false;
     const move = (ev: PointerEvent) => {
+      // Held long enough that his faces fanned out: the finger is choosing a face, not carrying him.
+      if (!moved && document.querySelector("[data-minimi-faces] .mf-face")) return;
       const dx = ev.clientX - sx, dy = ev.clientY - sy;
       if (!moved && Math.hypot(dx, dy) < 5) return;
       moved = true;
@@ -115,6 +119,7 @@ export function MinimiCorner({ onOpen, shortcut, rightOffset = "0px", talking = 
       ref={ref}
       data-minimi
       onPointerDown={onPointerDown}
+      onContextMenu={faces.onContextMenu}
       className={cn("minimi group fixed z-30 touch-none select-none", drag ? "cursor-grabbing" : "cursor-grab", drag && "is-drag", drag?.near && "is-near", land && "is-land", talking && "is-talk")}
       style={pos ? { left: pos.x, top: pos.y, width: W, height: H } : { right: `calc(${MARGIN}px + ${rightOffset})`, bottom: MARGIN, width: W, height: H }}
     >
@@ -122,13 +127,14 @@ export function MinimiCorner({ onOpen, shortcut, rightOffset = "0px", talking = 
         Hm?
         <br />
         <b className="font-semibold">Ask me</b> <kbd className="ml-1 rounded-[5px] bg-muted px-1.5 py-px text-muted-foreground">{shortcut}</kbd>
-        <span className="mt-0.5 block text-[11.5px] text-muted-foreground/70">or drag me</span>
+        <span className="mt-0.5 block text-[11.5px] text-muted-foreground/70">drag me, or hold to change my face</span>
       </div>
       <button type="button" onClick={onOpen} aria-label={`Ask Minimi · ${shortcut}`} aria-expanded={talking} data-agent-launcher className="minimi-btn relative block size-full rounded-2xl outline-ring focus-visible:outline-2">
         <img src={read} alt="" draggable={false} className={cn("minimi-fr", !page && "on")} />
         <img src={down} alt="" draggable={false} className={cn("minimi-fr", page && "on")} />
         <img src={look} alt="" draggable={false} className="minimi-fr minimi-look" />
       </button>
+      {faces.node}
     </div>
   );
 }

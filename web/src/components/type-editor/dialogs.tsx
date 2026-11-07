@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { askEtude } from "@/components/agent-panel";
-import { minimiFace } from "@/components/minimi";
+import { faceSrc, minimiFaceId } from "@/lib/minimi-face";
 import { useFunMode } from "@/lib/fun";
 import { api, type CardType, type TypeSummary } from "@/lib/api";
 import { navigate } from "@/lib/router";
@@ -133,7 +133,7 @@ export function NewTypeDialog({
   const starts: { k: Start; icon: React.ReactNode; title: string; sub: string }[] = [
     {
       k: "describe",
-      icon: fun ? <img src={minimiFace} alt="" className="size-full object-cover" /> : <span className="score-serif text-[1.35rem] leading-none">ε</span>,
+      icon: fun ? <img src={faceSrc(minimiFaceId())} alt="" className="size-full object-cover" /> : <span className="score-serif text-[1.35rem] leading-none">ε</span>,
       title: "Describe it",
       sub: `Say what you want to practice. ${who} writes it, you check it.`,
     },

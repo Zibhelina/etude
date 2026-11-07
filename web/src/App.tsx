@@ -18,6 +18,7 @@ import { AGENT_SHORTCUT, AgentLauncher, AgentPanel, announceDataChange, useAgent
 import { MinimiCorner } from "@/components/minimi";
 import { MinimiChat } from "@/components/minimi-chat";
 import { loadFunMode, useFunMode } from "@/lib/fun";
+import { loadMinimiFace } from "@/lib/minimi-face";
 import { useUpdateDot } from "@/components/update-bar";
 import { PhoneTabBar } from "@/components/phone-shell";
 import { MorePage } from "@/pages/more";
@@ -109,6 +110,7 @@ export function App() {
   const narrow = useMedia(NARROW);
   const [collapsed, toggleSidebar] = useSidebar(agent.open && narrow);
   useEffect(() => void loadFunMode(), []);
+  useEffect(() => void loadMinimiFace(), []);
   const studying = path === "/study" || path === "/watch";
   const studyingRef = useRef(studying);
   studyingRef.current = studying;

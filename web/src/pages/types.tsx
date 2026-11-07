@@ -12,7 +12,7 @@ import { FolderMenu, FolderNameDialog, MoveDialog, leaf, parentOf, within, type 
 import { TypeThumb } from "@/components/type-editor/type-card";
 import { ACTS, actOf } from "@/components/type-editor/acts";
 import { download, exportShape, GRADER_LABEL, readPending } from "@/components/type-editor/starter";
-import { minimiFace } from "@/components/minimi";
+import { faceSrc, minimiFaceId } from "@/lib/minimi-face";
 import { api, type TypeSummary } from "@/lib/api";
 import { useFunMode } from "@/lib/fun";
 import { navigate, useLocation } from "@/lib/router";
@@ -402,7 +402,7 @@ function MinimiLine({ types, onDescribe }: { types: TypeSummary[]; onDescribe():
   const mostly = top.length === 2 ? ` Mostly ${top[0]} and ${top[1]}.` : top.length === 1 ? ` Mostly ${top[0]}.` : "";
   return (
     <div className="mt-6 flex items-start gap-3">
-      <img src={minimiFace} alt="Minimi" className="size-12 shrink-0 rounded-full object-cover" />
+      <img src={faceSrc(minimiFaceId())} alt="Minimi" className="size-12 shrink-0 rounded-full object-cover" />
       <p className="types-bubble relative max-w-[40rem] rounded-2xl bg-muted px-4 py-2.5 text-[15.5px] leading-snug">
         {mine.length ? (
           <>You've made <b>{mine.length}</b>.{mostly} Describe the next one and I'll write the first draft. </>
@@ -417,7 +417,7 @@ function MinimiLine({ types, onDescribe }: { types: TypeSummary[]; onDescribe():
 
 function YoursEmpty({ fun, onStart }: { fun: boolean; onStart(s: Start): void }) {
   const starts: [Start, React.ReactNode, string, string][] = [
-    ["describe", fun ? <img src={minimiFace} alt="" className="size-full object-cover" /> : <span className="score-serif text-[1.35rem] leading-none">ε</span>, "Describe it", `Say what you want to practice. ${fun ? "Minimi" : "Etude"} writes it, you check it.`],
+    ["describe", fun ? <img src={faceSrc(minimiFaceId())} alt="" className="size-full object-cover" /> : <span className="score-serif text-[1.35rem] leading-none">ε</span>, "Describe it", `Say what you want to practice. ${fun ? "Minimi" : "Etude"} writes it, you check it.`],
     ["copy", <Copy className="size-5" />, "Copy a type", "Start from one that's close and change it."],
     ["blank", <Plus className="size-5" />, "Blank", "Fields, HTML, CSS and a grader, from zero."],
   ];

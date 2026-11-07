@@ -69,7 +69,7 @@ import { decodeAssets, hashBytes, type AssetInfo } from "./assets.ts";
 import { imagePixels, normalizeBoxes, OcclusionError } from "./occlusion.ts";
 import { DEFAULT_PRIVACY, type Privacy } from "./telemetry.ts";
 import { muted } from "./sync/log.ts";
-import { MINIMI_MAX } from "./minimi.ts";
+import { MINIMI_FACE_DEFAULT, MINIMI_FACES, MINIMI_MAX, type MinimiFace } from "./minimi.ts";
 import { AvatarError, normalizeAvatar, type Avatar } from "./avatar.ts";
 import { BannerError, normalizeBanner, type Banner } from "./banner.ts";
 
@@ -158,6 +158,8 @@ export interface Settings {
   fun: boolean;
   /** Minimi's personality, written by the user. Empty keeps his usual one (src/core/minimi.ts). Only used in Fun mode. */
   minimi: string;
+  /** The face Minimi wears around the app, one of MINIMI_FACES. */
+  minimiFace: MinimiFace;
   /** Settings → Appearance: the accent painted over any theme (a preset id from ACCENTS or #rrggbb); null keeps the theme's own. */
   accent: string | null;
   /** Your picture (src/core/avatar.ts): a character, an emoji on a colour or a photo in the media; null shows your initial. */
@@ -174,7 +176,7 @@ export interface Onboarding {
   level: (typeof ONBOARDING_LEVELS)[number];
 }
 
-export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" }, privacy: DEFAULT_PRIVACY, fun: true, minimi: "", accent: null, avatar: null, banner: null, name: "" };
+export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" }, privacy: DEFAULT_PRIVACY, fun: true, minimi: "", minimiFace: MINIMI_FACE_DEFAULT, accent: null, avatar: null, banner: null, name: "" };
 
 /** Card preferences: short keys, and a few KB per type, since they ride along in the synced settings. */
 export const TYPE_PREF_KEY = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -671,6 +673,7 @@ export class Etude {
     if (typeof next.fun !== "boolean") throw new EtudeError("fun must be true or false");
     if (typeof next.minimi !== "string") throw new EtudeError("minimi must be text");
     if (next.minimi.length > MINIMI_MAX) throw new EtudeError(`minimi is too long (at most ${MINIMI_MAX} characters)`);
+    if (!MINIMI_FACES.includes(next.minimiFace)) throw new EtudeError(`minimiFace must be one of ${MINIMI_FACES.join(", ")}`);
     if (typeof next.accent === "string") next.accent = next.accent.trim().toLowerCase() || null;
     if (!isAccent(next.accent)) throw new EtudeError(`accent must be null (the theme's own), one of ${ACCENTS.map((a) => a.id).join(", ")}, or a #rrggbb color`);
     if (typeof next.name !== "string") throw new EtudeError("name must be text");

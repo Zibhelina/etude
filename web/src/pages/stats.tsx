@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { useFunMode } from "@/lib/fun";
 import { usePhone } from "@/lib/phone";
 import { track } from "@/lib/telemetry";
-import minimiFace from "@/assets/minimi/face.webp";
+import { useMinimiFace } from "@/lib/minimi-face";
 
 /** The engine window: ratings, verdicts and the heatmap cover this many weeks. */
 const WEEKS = 26;
@@ -175,6 +175,7 @@ function Empty({ children }: { children: ReactNode }) {
 /** Minimi says the one useful thing in Fun mode; with Fun off it's a plain line, or nothing. */
 function MinimiLine({ text, plain }: { text: ReactNode; plain?: ReactNode }) {
   const fun = useFunMode();
+  const minimiFace = useMinimiFace();
   if (!fun) return plain ? <Foot className="mb-1.5">{plain}</Foot> : null;
   return (
     <div className="mt-3.5 mb-1.5 flex items-start gap-3">

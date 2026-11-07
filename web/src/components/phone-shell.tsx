@@ -4,7 +4,8 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowseIcon, LibraryIcon, MoreIcon, StatsIcon } from "@/components/nav-icons";
 import { Logo } from "@/components/logo";
-import { minimiFace } from "@/components/minimi";
+import { useMinimiFaces } from "@/components/minimi-faces";
+import { useMinimiFace } from "@/lib/minimi-face";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +22,8 @@ const TABS = [
  * just above the island and stays solid behind it, so nothing scrolling underneath shows through the gaps.
  */
 export function PhoneTabBar({ path, updateDot, fun, onAsk }: { path: string; updateDot: boolean; fun?: boolean; onAsk(): void }) {
+  const face = useMinimiFace();
+  const faces = useMinimiFaces();
   return (
     <nav aria-label="Main" data-shell-tabs className="score-island pointer-events-none fixed inset-x-0 bottom-0 z-20 md:hidden">
       <div className="pointer-events-auto mx-auto flex max-w-md items-center gap-2.5 px-4 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-[359px]:gap-2 max-[359px]:px-3">
@@ -47,9 +50,10 @@ export function PhoneTabBar({ path, updateDot, fun, onAsk }: { path: string; upd
             );
           })}
         </div>
-        <button onClick={onAsk} aria-label={fun ? "Ask Minimi" : "Ask Etude"} data-agent-launcher className="score-capsule flex size-[58px] shrink-0 items-center justify-center overflow-hidden rounded-full border transition-transform active:scale-95">
-          {fun ? <img src={minimiFace} alt="" className="size-full object-cover" draggable={false} /> : <Logo className="size-[28px]" />}
+        <button onClick={onAsk} {...(fun ? { onPointerDown: faces.onPointerDown, onContextMenu: faces.onContextMenu } : {})} aria-label={fun ? "Ask Minimi · hold to change his face" : "Ask Etude"} data-agent-launcher className="score-capsule touch-none select-none [-webkit-touch-callout:none] flex size-[58px] shrink-0 items-center justify-center overflow-hidden rounded-full border transition-transform active:scale-95">
+          {fun ? <img src={face} alt="" className="size-full object-cover" draggable={false} /> : <Logo className="size-[28px]" />}
         </button>
+        {faces.node}
       </div>
     </nav>
   );

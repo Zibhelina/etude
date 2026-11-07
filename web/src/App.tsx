@@ -63,6 +63,8 @@ const typing = (t: EventTarget | null) => {
 };
 
 const NARROW = "(max-width: 1279px)";
+/** A desktop window this narrow shows the icon rail, whatever the sidebar was left as (it's still a desktop). Just under the iPad mini's 744, so tablets keep the sidebar they had. */
+const RAIL_ONLY = "(max-width: 739px)";
 /** Which screen a path is, for the page-in animation: a deck and its Library are different screens, /types/x stays /types. */
 const tabOf = (p: string) => (p.startsWith("/types") ? "/types" : p);
 const isStudy = (s: string) => s === "/study" || s === "/watch";
@@ -186,7 +188,8 @@ export function App() {
   const agent = useAgentPanel(() => funRef.current.fun && !funRef.current.phone && !funRef.current.minimiOff && !studyingRef.current);
   const [callMenu, setCallMenu] = useState<{ x: number; y: number } | null>(null);
   const narrow = useMedia(NARROW);
-  const [collapsed, toggleSidebar] = useSidebar(agent.open && narrow);
+  const railOnly = useMedia(RAIL_ONLY);
+  const [collapsed, toggleSidebar] = useSidebar((agent.open && narrow) || railOnly);
   useEffect(() => void loadFunMode(), []);
   useEffect(() => void loadMinimiFace(), []);
   const studying = path === "/study" || path === "/watch";

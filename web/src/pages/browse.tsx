@@ -13,13 +13,14 @@ import { api, relative, type DeckNode, type SearchRow, type TypeSummary } from "
 import { DeckIcon } from "@/components/deck-icon";
 import { appPath, withBase } from "@/lib/router";
 import { useLongPress, usePhone } from "@/lib/phone";
+import { useNarrow } from "@/lib/device";
 import { PhoneBrowseNav } from "@/components/phone-shell";
 import { cn } from "@/lib/utils";
 import { track } from "@/lib/telemetry";
 
 const PAGE = 200;
-/** iPad widths, landscape included: the list narrows to 304px so the inspector keeps its room. */
-const TABLET = "(min-width: 768px) and (max-width: 1199px)";
+/** iPad widths, landscape included, and narrower desktop windows (phones have their own Browse). */
+const TABLET = "(max-width: 1199px)";
 const DAY = 86_400_000;
 
 /** Plain-word filters; each adds one term of the search language. */
@@ -44,8 +45,10 @@ const COLS = [
   ["edited", "Edited", "updated", true],
 ] as const;
 type ColKey = (typeof COLS)[number][0];
-/** Columns iPad drops so the card text keeps its room. */
+/** Columns iPad drops so the card text keeps its room; a narrow desktop window drops more. */
 const TABLET_HIDDEN = new Set<ColKey>(["deck", "edited"]);
+const NARROW_HIDDEN = new Set<ColKey>(["deck", "edited", "every", "missed"]);
+const TINY_HIDDEN = new Set<ColKey>(["deck", "edited", "every", "missed", "type"]);
 
 const quote = (s: string) => (/[\s()"]/.test(s) ? `"${s.replace(/"/g, "")}"` : s);
 
@@ -163,11 +166,11 @@ function TableRow({ r, typeName, icon, words, active, checked, selecting, dirty,
           <span className="flex min-w-0 items-center gap-1.5">{icon && <DeckIcon icon={icon} size={18} className="shrink-0" />}<span className="truncate">{parts[parts.length - 1]}</span></span>
         </td>
       )}
-      <td className={cn(td, "text-[13.5px] text-muted-foreground")} title={typeName}>{typeName}{r.faces > 1 && <span className="text-muted-foreground/60"> · {r.faces}</span>}</td>
+      {cols.has("type") && <td className={cn(td, "text-[13.5px] text-muted-foreground")} title={typeName}>{typeName}{r.faces > 1 && <span className="text-muted-foreground/60"> · {r.faces}</span>}</td>}
       <td className={td}><State r={r} /></td>
-      <td className={cn(td, "text-right text-[13.5px] text-muted-foreground tabular")}>{r.interval != null && r.interval > 0 ? daysWords(r.interval) : none}</td>
+      {cols.has("every") && <td className={cn(td, "text-right text-[13.5px] text-muted-foreground tabular")}>{r.interval != null && r.interval > 0 ? daysWords(r.interval) : none}</td>}
       <td className={cn(td, "text-right text-[13.5px] tabular")}>{R != null && r.state !== 0 ? <span className={cn("font-semibold", R < 0.85 ? "text-hard" : "text-foreground")}>{Math.round(R * 100)}%</span> : none}</td>
-      <td className={cn(td, "text-right text-[13.5px] tabular", r.lapses >= 2 ? "font-semibold text-learn" : r.lapses ? "text-foreground" : "text-muted-foreground/50")}>{r.lapses}</td>
+      {cols.has("missed") && <td className={cn(td, "text-right text-[13.5px] tabular", r.lapses >= 2 ? "font-semibold text-learn" : r.lapses ? "text-foreground" : "text-muted-foreground/50")}>{r.lapses}</td>}
       {cols.has("edited") && <td className={cn(td, "text-right text-[13px] text-muted-foreground tabular")} title={new Date(r.updated).toLocaleString()}>{r.updated ? relative(r.updated) : ""}</td>}
     </tr>
   );
@@ -188,10 +191,14 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
   // Usage count (only when the person turned usage stats on).
   useEffect(() => track("browse.open"), []);
   const phone = usePhone();
-  const [tablet, setTablet] = useState(() => matchMedia(TABLET).matches);
+  // Room for the table's columns on a narrow desktop window (content, so by width).
+  // Below 740 the sidebar is a rail (App.tsx), and iPads (744 and up) keep the columns they had.
+  const narrowCols = useNarrow(740);
+  const tiny = useNarrow(600);
+  const [tablet, setTablet] = useState(() => !phone && matchMedia(TABLET).matches);
   useEffect(() => {
     const m = matchMedia(TABLET);
-    const h = () => setTablet(m.matches);
+    const h = () => setTablet(!phone && m.matches);
     m.addEventListener("change", h);
     return () => m.removeEventListener("change", h);
   }, []);
@@ -638,7 +645,8 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
     );
 
   // Desktop and iPad: the table fills the page; a picked card opens in a drawer on the right.
-  const cols = new Set<ColKey>(COLS.map(([k]) => k).filter((k) => !(tablet && TABLET_HIDDEN.has(k))));
+  const hidden = tiny ? TINY_HIDDEN : narrowCols ? NARROW_HIDDEN : tablet ? TABLET_HIDDEN : null;
+  const cols = new Set<ColKey>(COLS.map(([k]) => k).filter((k) => !hidden?.has(k)));
   const W: Partial<Record<ColKey, number>> = tablet ? { type: 92, next: 112, every: 74, recall: 70, missed: 66 } : { deck: 168, type: 104, next: 122, every: 78, recall: 72, missed: 70, edited: 100 };
   const sortBy = (o: string) => {
     if (order === o) setReverse((v) => !v);

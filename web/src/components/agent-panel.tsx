@@ -596,6 +596,8 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
   const sendText = useReadableOn("--highlight");
   const [renaming, setRenaming] = useState(false);
   const fun = useFunMode();
+  // A desktop window too narrow for the page and the panel side by side: the panel lies over the page.
+  const cramped = useNarrow(720);
   // Once the message wraps, the text takes the whole width and the buttons drop to a row under it.
   const [tall, setTall] = useState(false);
   useLayoutEffect(() => {
@@ -612,7 +614,7 @@ export function AgentPanel({ width, setWidth, onClose, onChanged }: { width: num
       data-agent-panel
       className={cn(
         "achat flex flex-col text-foreground",
-        phone ? "agent-sheet-in fixed inset-x-0 top-0 z-50 h-dvh pt-[env(safe-area-inset-top)]" : "agent-panel-in sticky top-0 h-dvh shrink-0",
+        phone ? "agent-sheet-in fixed inset-x-0 top-0 z-50 h-dvh pt-[env(safe-area-inset-top)]" : cramped ? "agent-panel-in fixed top-0 right-0 z-40 h-dvh max-w-full bg-background shadow-[-24px_0_60px_rgb(0_0_0/0.18)]" : "agent-panel-in sticky top-0 h-dvh shrink-0",
         dragging && "outline-2 -outline-offset-2 outline-ring/60",
       )}
       style={phone ? (vv ? { height: vv.h, top: vv.top } : undefined) : { width }}

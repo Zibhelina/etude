@@ -95,7 +95,8 @@ onmessage = async (e) => {
     await py.runPythonAsync(\`
 from pyodide.code import eval_code_async as __eval
 __r = await __eval(__code__, globals(), filename="<code>")
-if __r is not None:
+# Like a notebook: the last line's value is shown, but not the objects matplotlib calls return.
+if __r is not None and not type(__r).__module__.startswith("matplotlib"):
     import sys as __sys
     __sys.stdout.write(repr(__r) + "\\\\n")
 \`, { globals: ns });

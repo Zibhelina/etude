@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { registerNotesActions, setNotesPagesOpen, useNotesSlot } from "@/lib/sidebar-slot";
 import { useNoteTreeDrag, type Placement } from "@/components/note-tree-drag";
+import { activate, canSplitTo, closeTab as closeLayoutTab, count, findPane, focus as focusLayout, focusedPane, MAX_PANES, moveTab, normalizeLayout, openIn, openSplit, panes, prune, rects, setRatio, single, type Layout, type PaneNode, type Rect, type Side, type TabDrop } from "@/lib/note-layout";
 
 const OPEN_KEY = "etude.notes.open";
 const TABS_KEY = "etude.notes.tabs";
@@ -977,8 +978,19 @@ function NewFileDialog({ open, onClose, onCreate }: { open: boolean; onClose(): 
 
 // ---------------------------------------------------------------- tabs
 
-/** The open pages as tabs over the page, once there's more than one. Middle click or × closes one. */
-function NoteTabs({ tabs, all, current, onPick, onClose }: { tabs: string[]; all: NoteSummary[]; current: string | null; onPick(id: string): void; onClose(id: string): void }) {
+/** One pane's open pages as tabs in its top bar. Drag a tab to reorder it, to another pane, or to a pane's
+ *  edge to split. Middle click or × closes one; right-click has Split right / Split down. */
+function NoteTabs({ pane, tabs, all, current, onPick, onClose, onDrag, menu, dragging }: {
+  pane: string;
+  tabs: string[];
+  all: NoteSummary[];
+  current: string | null;
+  onPick(id: string): void;
+  onClose(id: string): void;
+  onDrag(id: string, e: React.PointerEvent<HTMLElement>): void;
+  menu(id: string): MenuEntry[];
+  dragging: string | null;
+}) {
   const by = useMemo(() => new Map(all.map((n) => [n.id, n])), [all]);
   const strip = useRef<HTMLDivElement>(null);
   // A fade on the edge where more tabs are hidden.
@@ -998,57 +1010,331 @@ function NoteTabs({ tabs, all, current, onPick, onClose }: { tabs: string[]; all
     strip.current?.querySelector<HTMLElement>(".note-tab.is-on")?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [current, tabs.length]);
   const shown = tabs.filter((t) => by.has(t));
-  if (shown.length < 2) return null;
   return (
-    <div ref={strip} role="tablist" aria-label="Open pages" className={cn("note-tabs", over.l && "fade-l", over.r && "fade-r")}>
+    <div ref={strip} role="tablist" aria-label="Open pages" data-tabs-of={pane} className={cn("note-tabs", over.l && "fade-l", over.r && "fade-r")}>
       {shown.map((tid) => {
         const n = by.get(tid)!;
         const on = tid === current;
         return (
-          <div
-            key={tid}
-            role="tab"
-            aria-selected={on}
-            tabIndex={on ? 0 : -1}
-            title={display(n)}
-            className={cn("note-tab group", on && "is-on")}
-            onClick={() => !on && onPick(tid)}
-            onMouseDown={(e) => e.button === 1 && e.preventDefault()}
-            onAuxClick={(e) => e.button === 1 && onClose(tid)}
-            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onPick(tid))}
-          >
-            <span className="note-tab-icon" aria-hidden>{isFile(n) && !n.icon ? <FileCode2 className="size-3.5" /> : <NoteIcon icon={n.icon} size={15} />}</span>
-            <span className={cn("min-w-0 flex-1 truncate", !n.title.trim() && "text-muted-foreground")}>{display(n)}</span>
-            <button
-              type="button"
-              aria-label={`Close ${display(n)}`}
-              className="note-tab-x"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClose(tid);
-              }}
-            >
-              <X className="size-3.5" />
-            </button>
-          </div>
+          <ContextMenu key={tid}>
+            <ContextMenuTrigger asChild>
+              <div
+                role="tab"
+                aria-selected={on}
+                tabIndex={on ? 0 : -1}
+                title={display(n)}
+                data-tab={tid}
+                className={cn("note-tab group", on && "is-on", dragging === tid && "is-dragging")}
+                onPointerDown={(e) => onDrag(tid, e)}
+                onClick={() => onPick(tid)}
+                onMouseDown={(e) => e.button === 1 && e.preventDefault()}
+                onAuxClick={(e) => e.button === 1 && onClose(tid)}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onPick(tid))}
+              >
+                <span className="note-tab-icon" aria-hidden>{isFile(n) && !n.icon ? <FileCode2 className="size-3.5" /> : <NoteIcon icon={n.icon} size={15} />}</span>
+                <span className={cn("min-w-0 flex-1 truncate", !n.title.trim() && "text-muted-foreground")}>{display(n)}</span>
+                <button
+                  type="button"
+                  aria-label={`Close ${display(n)}`}
+                  className="note-tab-x"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClose(tid);
+                  }}
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-52" onCloseAutoFocus={(e) => e.preventDefault()}>
+              {menu(tid).map((m, i) =>
+                m === "sep" ? <ContextMenuSeparator key={i} /> : (
+                  <ContextMenuItem key={i} disabled={m.disabled} variant={m.danger ? "destructive" : "default"} onSelect={m.onSelect}>{m.label}</ContextMenuItem>
+                ),
+              )}
+            </ContextMenuContent>
+          </ContextMenu>
         );
       })}
     </div>
   );
 }
 
+// ---------------------------------------------------------------- a pane
+
+/** What every pane needs from the screen. */
+type PaneCtx = {
+  phone: boolean;
+  list: NoteSummary[] | null;
+  tree: Tree;
+  listRef: React.MutableRefObject<NoteSummary[] | null>;
+  primed: Map<string, Note>;
+  bumps: Record<string, number>;
+  flushers: Set<() => Promise<void>>;
+  patchRow(id: string, p: Partial<NoteSummary>): void;
+  pick(pane: string, id: string, mode?: "replace" | "new" | "background"): void;
+  focus(pane: string): void;
+  missing(pane: string, id: string): void;
+  add(parentId: string | null, kind?: "page" | "canvas" | "file", title?: string): Promise<void>;
+  addFolder(parentId: string | null): Promise<void>;
+  setKind(n: NoteSummary, kind: "page" | "folder"): Promise<void>;
+  setOpen(id: string, on: boolean): void;
+  reload(): Promise<void>;
+  importVault(): void;
+};
+
+/** One open page and its own top bar, editor and saving. With one pane it scrolls with the window, as before. */
+function NotePane({ pane, noteId, ctx, focused, strip, plus }: {
+  pane: string;
+  noteId: string | null;
+  ctx: PaneCtx;
+  focused: boolean;
+  strip: React.ReactNode;
+  plus: React.ReactNode;
+}) {
+  const { list, tree, phone } = ctx;
+  const [note, setNote] = useState<Note | null>(null);
+  const bump = noteId ? (ctx.bumps[noteId] ?? 0) : 0;
+  const seen = useRef<{ id: string | null; bump: number }>({ id: null, bump: 0 });
+  useEffect(() => {
+    if (!noteId) return setNote(null);
+    const p = ctx.primed.get(noteId);
+    if (p) {
+      ctx.primed.delete(noteId);
+      seen.current = { id: noteId, bump };
+      return setNote(p);
+    }
+    if (seen.current.id === noteId && seen.current.bump === bump && note?.id === noteId) return;
+    seen.current = { id: noteId, bump };
+    let live = true;
+    api.note(noteId).then((n) => live && setNote(n)).catch(() => live && ctx.missing(pane, noteId));
+    return () => void (live = false);
+  }, [noteId, bump]);
+
+  const saver = useSaver(noteId, (n) => ctx.patchRow(n.id, { title: n.title, updated: n.updated }));
+  useEffect(() => {
+    ctx.flushers.add(saver.flush);
+    return () => void ctx.flushers.delete(saver.flush);
+  }, [saver.flush]);
+
+  const onPick = useCallback((oid: string) => ctx.pick(pane, oid), [ctx.pick, pane]);
+  // What [[links]] in the editor see: the pages as they are now. A link opens in this pane.
+  const links: NoteLinkOptions = useMemo(
+    () => ({
+      pages: (q: string): PageRef[] => {
+        const all = ctx.listRef.current ?? [];
+        const by = new Map(all.map((n) => [n.id, n]));
+        const path = (n: NoteSummary) => {
+          const out: string[] = [];
+          for (let p = n.parentId ? by.get(n.parentId) : undefined; p; p = p.parentId ? by.get(p.parentId) : undefined) out.unshift(display(p));
+          return out.join(" › ");
+        };
+        const ql = q.toLowerCase();
+        const hits = ql
+          ? all.filter((n) => n.title.toLowerCase().includes(ql)).sort((a, b) => Number(!a.title.toLowerCase().startsWith(ql)) - Number(!b.title.toLowerCase().startsWith(ql)) || a.title.length - b.title.length)
+          : [...all].sort((a, b) => b.updated.localeCompare(a.updated));
+        return hits.filter((n) => n.id !== noteId && !isFolder(n)).map((n) => ({ id: n.id, title: n.title, icon: n.icon, path: path(n) }));
+      },
+      create: async (title: string) => {
+        const n = await api.createNote({ title });
+        await ctx.reload();
+        return { id: n.id, title: n.title, icon: n.icon, path: "" };
+      },
+      open: (oid: string) => ctx.pick(pane, oid),
+      titleOf: (oid: string) => {
+        const n = (ctx.listRef.current ?? []).find((x) => x.id === oid);
+        return n ? display(n) : null;
+      },
+    }),
+    [noteId, pane, ctx.pick, ctx.reload],
+  );
+
+  // A rename in the sidebar shows here too (canvases and files show the name from the note).
+  const row = noteId ? list?.find((n) => n.id === noteId) : undefined;
+  const shown = note && note.id === noteId ? (row && row.title !== note.title ? { ...note, title: row.title } : note) : null;
+  const back = phone ? () => navigate("/notes") : undefined;
+  return (
+    <NoteTabsCtx.Provider value={strip}>
+      <NotePlusCtx.Provider value={plus}>
+        <section
+          data-pane={pane}
+          className={cn("notes-main note-pane", focused && "is-focus")}
+          onPointerDownCapture={() => ctx.focus(pane)}
+          onFocusCapture={() => ctx.focus(pane)}
+        >
+          {shown && isFile(shown) ? (
+            <FileView
+              key={shown.id}
+              note={shown}
+              all={list ?? []}
+              saveState={saver.state}
+              onPick={onPick}
+              onTitle={(title) => {
+                ctx.patchRow(shown.id, { title });
+                saver.queue({ title });
+              }}
+              onContent={(content) => saver.queue({ content })}
+              onSave={() => void saver.flush()}
+              onBack={back}
+            />
+          ) : shown && shown.kind === "pdf" ? (
+            <PdfNoteView key={shown.id} note={shown} all={list ?? []} onPick={onPick} />
+          ) : shown && shown.kind === "canvas" ? (
+            <CanvasView
+              key={shown.id}
+              note={shown}
+              all={list ?? []}
+              saveState={saver.state}
+              onPick={onPick}
+              onTitle={(title) => {
+                ctx.patchRow(shown.id, { title });
+                saver.queue({ title });
+              }}
+              onScene={(scene) => saver.queue({ scene })}
+            />
+          ) : shown && isFolder(shown) ? (
+            <FolderView
+              folder={shown}
+              kids={tree.get(shown.id) ?? []}
+              onPick={onPick}
+              onAdd={() => void ctx.add(shown.id)}
+              onAddFolder={() => void ctx.addFolder(shown.id)}
+              onMakePage={() => void ctx.setKind(shown, "page")}
+              onOpenFolder={(fid) => ctx.setOpen(fid, true)}
+              onBack={back}
+            />
+          ) : shown ? (
+            <PageView
+              key={shown.id}
+              note={shown}
+              tree={tree}
+              all={list ?? []}
+              saveState={saver.state}
+              onPick={onPick}
+              onTitle={(title) => {
+                ctx.patchRow(shown.id, { title });
+                saver.queue({ title });
+              }}
+              onDoc={(doc) => saver.queue({ doc })}
+              onIcon={(icon) => {
+                ctx.patchRow(shown.id, { icon });
+                void api.updateNote(shown.id, { icon }).catch((e) => toast.error((e as Error).message));
+              }}
+              onLook={(look) => {
+                // The page keeps its own copy of the look; the list icon may have changed in the sidebar since, so that part comes from the row.
+                const row = ctx.listRef.current?.find((x) => x.id === shown.id);
+                const next: NoteLook = { ...look };
+                if (row?.look?.showIcon) next.showIcon = true;
+                else delete next.showIcon;
+                ctx.patchRow(shown.id, { look: next });
+                void api.updateNote(shown.id, { look: next }).catch((e) => toast.error((e as Error).message));
+              }}
+              links={links}
+              onBack={back}
+            />
+          ) : list && list.length === 0 ? (
+            <div className="notes-empty">
+              <div className="text-[2.4rem]" aria-hidden>📝</div>
+              <h1 className="note-empty-title">Your first page</h1>
+              <p className="max-w-sm text-[14px] text-muted-foreground">Notes live next to your decks. Type <kbd>/</kbd> for blocks, <kbd>[[</kbd> to link a page, <kbd>#</kbd> for a heading. Everything saves on its own.</p>
+              <p className="max-w-sm text-[13px] text-muted-foreground/80">Notes is in beta: expect rough edges, and it doesn't sync to your other devices yet.</p>
+              <div className="mt-2 flex flex-wrap justify-center gap-2">
+                <button type="button" onClick={() => void ctx.add(null)} className="lib-raised inline-flex h-10 items-center gap-2 rounded-[10px] px-4 text-[14px] font-[600]">
+                  <FilePlus2 className="size-4" /> New page
+                </button>
+                <button type="button" onClick={ctx.importVault} className="lib-raised inline-flex h-10 items-center gap-2 rounded-[10px] px-4 text-[14px] font-[600]">
+                  <FolderInput className="size-4" /> Import a vault
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      </NotePlusCtx.Provider>
+    </NoteTabsCtx.Provider>
+  );
+}
+
+// ---------------------------------------------------------------- dragging tabs
+
+type TabDragView = { pane: string; note: string; label: string; x: number; y: number; drop: TabDrop | null; zone: Rect | null; line: Rect | null };
+
+/** The part of a pane you can see, in viewport pixels: its own box when split (it scrolls inside), the window otherwise. */
+function visibleRect(el: Element): Rect {
+  const r = (el.closest(".is-multi .note-pane-box") ?? el).getBoundingClientRect();
+  const top = Math.max(r.top, 0);
+  const bottom = Math.min(r.bottom, window.innerHeight);
+  return { x: r.left, y: top, w: r.width, h: Math.max(0, bottom - top) };
+}
+
+/** Where a tab dragged from `from` would land under the pointer, and what to draw for it. */
+function hitTabDrop(l: Layout, from: string, note: string, x: number, y: number): Pick<TabDragView, "drop" | "zone" | "line"> {
+  const none = { drop: null, zone: null, line: null };
+  const el = document.elementFromPoint(x, y);
+  const paneEl = el?.closest<HTMLElement>("[data-pane]");
+  const pid = paneEl?.dataset.pane;
+  if (!paneEl || !pid || !findPane(l.root, pid)) return none;
+  // Over a pane's top bar: among its tabs, before the one whose middle is right of the pointer.
+  const bar = el!.closest(".note-topbar");
+  if (bar && paneEl.contains(bar)) {
+    const tabs = [...paneEl.querySelectorAll<HTMLElement>(".note-tab[data-tab]")].filter((t) => t.dataset.tab !== note);
+    const next = tabs.find((t) => {
+      const r = t.getBoundingClientRect();
+      return r.left + r.width / 2 > x;
+    });
+    const br = bar.getBoundingClientRect();
+    const ref = next ?? tabs[tabs.length - 1];
+    const lx = ref ? (next ? ref.getBoundingClientRect().left - 2 : ref.getBoundingClientRect().right + 1) : br.left + 16;
+    return { drop: { pane: pid, before: next?.dataset.tab ?? null }, zone: null, line: { x: lx, y: br.top + 8, w: 2, h: br.height - 16 } };
+  }
+  // Over the page: near an edge splits that side; the middle of another pane joins its tabs.
+  const R = visibleRect(paneEl);
+  if (R.w < 40 || R.h < 40) return none;
+  const fx = (x - R.x) / R.w;
+  const fy = (y - R.y) / R.h;
+  const edges: [Side, number][] = [["left", fx], ["right", 1 - fx], ["top", fy], ["bottom", 1 - fy]];
+  const [side, d] = edges.reduce((a, b) => (b[1] < a[1] ? b : a));
+  const inset = (z: Rect): Rect => ({ x: z.x + 6, y: z.y + 6, w: z.w - 12, h: z.h - 12 });
+  if (d < 0.32 && canSplitTo(l, from, note, pid)) {
+    const zone = side === "left" ? { ...R, w: R.w / 2 } : side === "right" ? { ...R, x: R.x + R.w / 2, w: R.w / 2 } : side === "top" ? { ...R, h: R.h / 2 } : { ...R, y: R.y + R.h / 2, h: R.h / 2 };
+    return { drop: { pane: pid, side }, zone: inset(zone), line: null };
+  }
+  if (pid !== from) return { drop: { pane: pid, before: null }, zone: inset(R), line: null };
+  return none;
+}
+
 // ---------------------------------------------------------------- the screen
+
+const LAYOUT_KEY = "etude.notes.layout";
+function loadLayout(): Layout {
+  try {
+    const v = normalizeLayout(JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? "null"));
+    if (v) return v;
+  } catch {}
+  // Before split view the tabs were one list.
+  try {
+    const old = JSON.parse(localStorage.getItem(TABS_KEY) ?? "[]");
+    if (Array.isArray(old)) return single(old.filter((x) => typeof x === "string"));
+  } catch {}
+  return single([]);
+}
 
 export function NotesPage({ id }: { id: string | null }) {
   const phone = usePhone();
   const [list, setList] = useState<NoteSummary[] | null>(null);
-  const [note, setNote] = useState<Note | null>(null);
   const [open, setOpenSet] = useState<Set<string>>(() => new Set(JSON.parse(localStorage.getItem(OPEN_KEY) ?? "[]")));
   const tree = useMemo(() => treeOf(list ?? []), [list]);
-  const current = id ?? (phone ? null : (list?.find((n) => !isFolder(n))?.id ?? null));
   const [renaming, setRenaming] = useState<string | null>(null);
   // New file asks for its name first: undefined = closed, otherwise the parent it goes in.
   const [newFileIn, setNewFileIn] = useState<string | null | undefined>(undefined);
+  // A note just made, handed to the pane that opens it so it shows without a reload.
+  const primed = useRef(new Map<string, Note>()).current;
+  // Bumping a note's number makes the pane showing it read it again (it turned into a folder or a page).
+  const [bumps, setBumps] = useState<Record<string, number>>({});
+  const bumpNote = (nid: string) => setBumps((b) => ({ ...b, [nid]: (b[nid] ?? 0) + 1 }));
+  // Each pane's saver; flushed before tabs move between panes, so the new pane reads what was typed.
+  const flushers = useRef(new Set<() => Promise<void>>()).current;
+  const flushAll = useCallback(() => Promise.all([...flushers].map((f) => f())).then(() => {}), [flushers]);
 
   const reload = useCallback(async () => setList(await api.notes()), []);
   useEffect(() => void reload().catch((e) => toast.error((e as Error).message)), [reload]);
@@ -1061,15 +1347,47 @@ export function NotesPage({ id }: { id: string | null }) {
 
   // The title in the tree follows what's typed, before it's saved.
   const patchRow = useCallback((rid: string, p: Partial<NoteSummary>) => setList((l) => l?.map((n) => (n.id === rid ? { ...n, ...p } : n)) ?? l), []);
-  const saver = useSaver(current, (n) => patchRow(n.id, { title: n.title, updated: n.updated }));
+  const listRef = useRef(list);
+  listRef.current = list;
 
+  // ---- panes and their tabs. Desktop only: a phone shows one page at a time, from the address.
+  const [layout, setLayout] = useState<Layout>(loadLayout);
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+  useEffect(() => localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)), [layout]);
+  const multi = !phone && count(layout.root) > 1;
+  const current = phone ? id : (focusedPane(layout)?.active ?? null);
+
+  // The address opens a page in the focused pane (a plain click in the sidebar, a link, Ctrl+K), or goes to the
+  // pane where it's already open. With nothing open, the first page opens.
+  const lastId = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    if (!current) return setNote(null);
-    if (note?.id === current) return;
-    let live = true;
-    api.note(current).then((n) => live && setNote(n)).catch(() => live && navigate("/notes", { replace: true }));
-    return () => void (live = false);
-  }, [current]);
+    if (phone || !list) return;
+    if (lastId.current === id) return;
+    lastId.current = id;
+    const l = layoutRef.current;
+    const any = panes(l.root).some((p) => p.tabs.length);
+    const target = id ?? (any ? null : (list.find((n) => !isFolder(n))?.id ?? null));
+    if (!target) return;
+    setLayout((l) => {
+      const owner = panes(l.root).find((p) => p.tabs.includes(target));
+      return owner ? activate(l, owner.id, target) : openIn(l, l.focus, target, "replace");
+    });
+  }, [id, list, phone]);
+  // …and the address follows the focused pane's page, so a reload comes back to it.
+  const lastActive = useRef(current);
+  useEffect(() => {
+    if (phone || lastActive.current === current) return;
+    lastActive.current = current;
+    lastId.current = current;
+    if (current !== id) navigate(current ? `/notes?id=${encodeURIComponent(current)}` : "/notes", { replace: true });
+  }, [current, phone]);
+  // Pages that were archived or deleted leave their tabs.
+  useEffect(() => {
+    if (!list) return;
+    const ids = new Set(list.map((n) => n.id));
+    setLayout((l) => prune(l, (x) => ids.has(x)));
+  }, [list]);
 
   const setOpen = useCallback((oid: string, on: boolean) => {
     setOpenSet((s) => {
@@ -1090,90 +1408,138 @@ export function NotesPage({ id }: { id: string | null }) {
     if (up.some((u) => !open.has(u))) for (const u of up) setOpen(u, true);
   }, [current, list]);
 
-  // Tabs, like a browser's: opening a page normally replaces the page in the current tab; "Open in new tab"
-  // (or Ctrl/⌘+click, middle click) adds one next to it. The strip shows once there are two.
-  const [tabs, setTabsState] = useState<string[]>(() => {
-    try {
-      const v = JSON.parse(localStorage.getItem(TABS_KEY) ?? "[]");
-      return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
-    } catch {
-      return [];
-    }
-  });
-  const setTabs = useCallback((f: (t: string[]) => string[]) => {
-    setTabsState((t) => {
-      const next = f(t);
-      localStorage.setItem(TABS_KEY, JSON.stringify(next));
-      return next;
+  /** Opening a page in a pane: a plain click replaces the pane's current tab, like a browser; "new" opens a tab
+   *  next to it, "background" adds it without going there. A page already open in another pane goes there. */
+  const pickIn = useCallback(
+    (pane: string, pid: string, mode: "replace" | "new" | "background" = "replace") => {
+      if (phone) return navigate(`/notes?id=${encodeURIComponent(pid)}`);
+      setLayout((l) => {
+        const owner = panes(l.root).find((p) => p.tabs.includes(pid));
+        if (owner) return mode === "background" ? l : activate(l, owner.id, pid);
+        const next = openIn(l, pane, pid, mode);
+        return mode === "background" ? next : focusLayout(next, pane);
+      });
+    },
+    [phone],
+  );
+  const pick = useCallback((pid: string, tab?: TabMode) => pickIn(layoutRef.current.focus, pid, tab ?? "replace"), [pickIn]);
+  const focusPane = useCallback((pane: string) => setLayout((l) => focusLayout(l, pane)), []);
+  const closeTabIn = useCallback((pane: string, tid: string) => {
+    setLayout((l) => {
+      const p = findPane(l.root, pane);
+      if (!p || (count(l.root) === 1 && p.tabs.length <= 1)) return l;
+      return closeLayoutTab(l, pane, tid);
     });
   }, []);
-  const shownRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!current) return;
-    const was = shownRef.current;
-    shownRef.current = current;
-    setTabs((t) => {
-      if (t.includes(current)) return t;
-      const at = was ? t.indexOf(was) : -1;
-      if (at < 0) return t.length ? [...t, current] : [current];
-      const next = [...t];
-      next[at] = current;
-      return next;
-    });
-  }, [current, setTabs]);
-  // Pages that were archived or deleted leave their tabs.
-  useEffect(() => {
-    if (!list) return;
-    const ids = new Set(list.map((n) => n.id));
-    setTabs((t) => (t.every((x) => ids.has(x)) ? t : t.filter((x) => ids.has(x))));
-  }, [list, setTabs]);
 
-  const pick = useCallback(
-    (pid: string, tab?: TabMode) => {
-      if (tab) {
-        setTabs((t) => {
-          if (t.includes(pid)) return t;
-          const at = current ? t.indexOf(current) : -1;
-          const next = [...t];
-          if (at < 0 && current) next.push(current);
-          next.splice(at < 0 ? next.length : at + 1, 0, pid);
-          return next;
+  /** A page in a new pane beside one (the focused pane unless said), moving it there if it's open elsewhere. */
+  const sideLayout = (pid: string, side: Side, beside?: string): Layout | null => {
+    const l = layoutRef.current;
+    const target = beside ?? l.focus;
+    const owner = panes(l.root).find((p) => p.tabs.includes(pid));
+    return owner ? moveTab(l, owner.id, pid, { pane: target, side }) : openSplit(l, target, pid, side);
+  };
+  const openSide = async (pid: string, side: Side, beside?: string) => {
+    if (!sideLayout(pid, side, beside)) {
+      toast(count(layoutRef.current.root) >= MAX_PANES ? "Up to four pages side by side" : "It's already open there on its own");
+      return;
+    }
+    await flushAll();
+    const next = sideLayout(pid, side, beside);
+    if (next) setLayout(() => next);
+  };
+
+  // Dragging a tab: to reorder it, to another pane's tabs or middle, or to a pane's edge to split it.
+  const [tabDrag, setTabDrag] = useState<TabDragView | null>(null);
+  const dragEnded = useRef(0);
+  const startTabDrag = (pane: string, note: string, e: React.PointerEvent<HTMLElement>) => {
+    if (phone || e.button !== 0) return;
+    const sx = e.clientX;
+    const sy = e.clientY;
+    const n = listRef.current?.find((x) => x.id === note);
+    const label = n ? display(n) : "Page";
+    let on = false;
+    let hit: Pick<TabDragView, "drop" | "zone" | "line"> = { drop: null, zone: null, line: null };
+    const move = (ev: PointerEvent) => {
+      if (!on) {
+        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
+        on = true;
+        document.body.classList.add("note-tab-dragging");
+      }
+      hit = hitTabDrop(layoutRef.current, pane, note, ev.clientX, ev.clientY);
+      setTabDrag({ pane, note, label, x: ev.clientX, y: ev.clientY, ...hit });
+    };
+    const end = (apply: boolean) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
+      window.removeEventListener("keydown", key, true);
+      document.body.classList.remove("note-tab-dragging");
+      setTabDrag(null);
+      if (!on) return;
+      dragEnded.current = performance.now();
+      const drop = hit.drop;
+      if (apply && drop)
+        void flushAll().then(() => {
+          setLayout((l) => moveTab(l, pane, note, drop) ?? l);
         });
-        if (tab === "background") return;
-      }
-      void saver.flush();
-      navigate(`/notes?id=${encodeURIComponent(pid)}`);
-    },
-    [saver, current, setTabs],
-  );
-  const closeTab = useCallback(
-    (tid: string) => {
-      const at = tabs.indexOf(tid);
-      if (at < 0) return;
-      const next = tabs.filter((x) => x !== tid);
-      setTabs(() => next);
-      if (tid === current && next.length) {
-        void saver.flush();
-        navigate(`/notes?id=${encodeURIComponent(next[Math.min(at, next.length - 1)])}`, { replace: true });
-      }
-    },
-    [tabs, current, saver, setTabs],
-  );
+    };
+    const up = () => end(true);
+    const cancel = () => end(false);
+    const key = (ev: KeyboardEvent) => {
+      if (ev.key !== "Escape") return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      end(false);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
+    window.addEventListener("keydown", key, true);
+  };
+
+  // Dragging the line between two panes resizes them; double-click puts it back in the middle.
+  const area = useRef<HTMLDivElement>(null);
+  const startResize = (bar: { path: string; dir: "row" | "col"; x: number; y: number; w: number; h: number }, e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !area.current) return;
+    e.preventDefault();
+    const C = area.current.getBoundingClientRect();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    el.dataset.on = "";
+    document.body.classList.add("note-split-resizing", bar.dir === "row" ? "is-row" : "is-col");
+    const size = bar.dir === "row" ? bar.w * C.width : bar.h * C.height;
+    const min = Math.min(0.45, 220 / Math.max(size, 1));
+    const move = (ev: PointerEvent) => {
+      const f = bar.dir === "row" ? ((ev.clientX - C.left) / C.width - bar.x) / bar.w : ((ev.clientY - C.top) / C.height - bar.y) / bar.h;
+      const r = Math.max(min, Math.min(1 - min, f));
+      setLayout((l) => ({ ...l, root: setRatio(l.root, bar.path, r) }));
+    };
+    const up = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+      delete el.dataset.on;
+      document.body.classList.remove("note-split-resizing", "is-row", "is-col");
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  };
 
   const add = useCallback(
     async (parentId: string | null, kind: "page" | "canvas" | "file" = "page", title = "") => {
       try {
-        await saver.flush();
         const n = await api.createNote({ title, parentId, kind });
         if (parentId) setOpen(parentId, true);
         await reload();
-        setNote(n);
+        primed.set(n.id, n);
         navigate(`/notes?id=${encodeURIComponent(n.id)}`);
       } catch (e) {
         toast.error((e as Error).message);
       }
     },
-    [reload, saver, setOpen],
+    [reload, setOpen, primed],
   );
 
   // A folder holds pages and has no page of its own. It appears in the tree with its name ready to type.
@@ -1201,23 +1567,25 @@ export function NotesPage({ id }: { id: string | null }) {
         const old = listRef.current?.find((x) => x.id === rid);
         if (!old || title === old.title) return;
         patchRow(rid, { title });
-        if (note?.id === rid) setNote({ ...note, title });
         void api.updateNote(rid, { title }).catch((e) => toast.error((e as Error).message));
       },
     }),
-    [renaming, patchRow, note],
+    [renaming, patchRow],
   );
-  const setKind = async (n: NoteSummary, kind: "page" | "folder") => {
-    try {
-      await saver.flush();
-      await api.updateNote(n.id, { kind });
-      await reload();
-      if (kind === "page") navigate(`/notes?id=${encodeURIComponent(n.id)}`);
-      else if (current === n.id) setNote(await api.note(n.id));
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  };
+  const setKind = useCallback(
+    async (n: NoteSummary, kind: "page" | "folder") => {
+      try {
+        await flushAll();
+        await api.updateNote(n.id, { kind });
+        await reload();
+        bumpNote(n.id);
+        if (kind === "page") navigate(`/notes?id=${encodeURIComponent(n.id)}`);
+      } catch (e) {
+        toast.error((e as Error).message);
+      }
+    },
+    [flushAll, reload],
+  );
 
   // Ctrl/⌘+Alt+N: a new page next to nothing (top level).
   useEffect(() => {
@@ -1232,10 +1600,10 @@ export function NotesPage({ id }: { id: string | null }) {
   }, [add]);
 
   const archive = async (n: NoteSummary) => {
-    await saver.flush();
+    await flushAll();
     const r = await api.setNoteArchived(n.id, true);
     await reload();
-    if (current && r.ids.includes(current)) navigate("/notes", { replace: true });
+    if (phone && id && r.ids.includes(id)) navigate("/notes", { replace: true });
     toast(`Archived “${display(n)}”${r.ids.length > 1 ? ` and ${r.ids.length - 1} page${r.ids.length > 2 ? "s" : ""} inside` : ""}`, {
       action: { label: "Undo", onClick: async () => void (await api.setNoteArchived(n.id, false), await reload()) },
     });
@@ -1322,7 +1690,7 @@ export function NotesPage({ id }: { id: string | null }) {
     [reload],
   );
   const archiveMany = async (ids: string[]) => {
-    await saver.flush();
+    await flushAll();
     const gone = new Set<string>();
     try {
       for (const id of ids) (await api.setNoteArchived(id, true)).ids.forEach((x) => gone.add(x));
@@ -1331,7 +1699,7 @@ export function NotesPage({ id }: { id: string | null }) {
     }
     sel.clear();
     await reload();
-    if (current && gone.has(current)) navigate("/notes", { replace: true });
+    if (phone && id && gone.has(id)) navigate("/notes", { replace: true });
     toast(`Archived ${ids.length} ${ids.length === 1 ? "page" : "pages"}${gone.size > ids.length ? ` and ${gone.size - ids.length} inside` : ""}`, {
       action: { label: "Undo", onClick: async () => void (await Promise.all(ids.map((id) => api.setNoteArchived(id, false))), await reload()) },
     });
@@ -1391,8 +1759,14 @@ export function NotesPage({ id }: { id: string | null }) {
     const sibs = tree.get(n.parentId) ?? [];
     const at = sibs.findIndex((s) => s.id === n.id);
     const prev = at > 0 ? sibs[at - 1] : undefined;
+    const split: MenuEntry[] = phone
+      ? []
+      : [
+          { label: "Open to the right", disabled: !sideLayout(n.id, "right"), onSelect: () => void openSide(n.id, "right") },
+          { label: "Open below", disabled: !sideLayout(n.id, "bottom"), onSelect: () => void openSide(n.id, "bottom") },
+        ];
     return [
-      ...(isFolder(n) ? [] : [{ label: "Open", onSelect: () => pick(n.id) }, { label: "Open in new tab", onSelect: () => pick(n.id, "new") }]),
+      ...(isFolder(n) ? [] : [{ label: "Open", onSelect: () => pick(n.id) }, { label: "Open in new tab", onSelect: () => pick(n.id, "new") }, ...split]),
       { label: "New page inside", onSelect: () => void add(n.id) },
       { label: "New canvas inside", onSelect: () => void add(n.id, "canvas") },
       { label: "New file inside", onSelect: () => setNewFileIn(n.id) },
@@ -1432,39 +1806,22 @@ export function NotesPage({ id }: { id: string | null }) {
       </DropdownMenu>
     );
   };
-
-  // What [[links]] in the editor see: the pages as they are now.
-  const listRef = useRef(list);
-  listRef.current = list;
-  const links: NoteLinkOptions = useMemo(
-    () => ({
-      pages: (q: string): PageRef[] => {
-        const all = listRef.current ?? [];
-        const by = new Map(all.map((n) => [n.id, n]));
-        const path = (n: NoteSummary) => {
-          const out: string[] = [];
-          for (let p = n.parentId ? by.get(n.parentId) : undefined; p; p = p.parentId ? by.get(p.parentId) : undefined) out.unshift(display(p));
-          return out.join(" › ");
-        };
-        const ql = q.toLowerCase();
-        const hits = ql
-          ? all.filter((n) => n.title.toLowerCase().includes(ql)).sort((a, b) => Number(!a.title.toLowerCase().startsWith(ql)) - Number(!b.title.toLowerCase().startsWith(ql)) || a.title.length - b.title.length)
-          : [...all].sort((a, b) => b.updated.localeCompare(a.updated));
-        return hits.filter((n) => n.id !== current && !isFolder(n)).map((n) => ({ id: n.id, title: n.title, icon: n.icon, path: path(n) }));
+  // A tab's right-click menu.
+  const tabMenu = (pane: string, tid: string): MenuEntry[] => {
+    const p = findPane(layout.root, pane);
+    const others = (p?.tabs.length ?? 0) > 1;
+    return [
+      { label: "Split right", disabled: !sideLayout(tid, "right", pane), onSelect: () => void openSide(tid, "right", pane) },
+      { label: "Split down", disabled: !sideLayout(tid, "bottom", pane), onSelect: () => void openSide(tid, "bottom", pane) },
+      "sep",
+      { label: "Close", disabled: !multi && !others, onSelect: () => closeTabIn(pane, tid) },
+      {
+        label: "Close other tabs",
+        disabled: !others,
+        onSelect: () => setLayout((l) => (findPane(l.root, pane)?.tabs ?? []).filter((t) => t !== tid).reduce((acc, t) => closeLayoutTab(acc, pane, t), activate(l, pane, tid))),
       },
-      create: async (title: string) => {
-        const n = await api.createNote({ title });
-        await reload();
-        return { id: n.id, title: n.title, icon: n.icon, path: "" };
-      },
-      open: (oid: string) => pick(oid),
-      titleOf: (oid: string) => {
-        const n = (listRef.current ?? []).find((x) => x.id === oid);
-        return n ? display(n) : null;
-      },
-    }),
-    [current, pick, reload],
-  );
+    ];
+  };
 
   const folderInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -1475,7 +1832,6 @@ export function NotesPage({ id }: { id: string | null }) {
     const pdfs = [...(files ?? [])].filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
     if (!pdfs.length) return;
     try {
-      await saver.flush();
       let last: Note | null = null;
       for (const f of pdfs) {
         const m = await uploadPdf(f);
@@ -1486,7 +1842,7 @@ export function NotesPage({ id }: { id: string | null }) {
       if (parentId) setOpen(parentId, true);
       if (!phone) setNotesPagesOpen(true);
       await reload();
-      setNote(last);
+      primed.set(last.id, last);
       navigate(`/notes?id=${encodeURIComponent(last.id)}`);
     } catch (e) {
       toast.error((e as Error).message);
@@ -1500,7 +1856,7 @@ export function NotesPage({ id }: { id: string | null }) {
     if (!files?.length) return;
     const t = toast.loading("Importing…");
     try {
-      await saver.flush();
+      await flushAll();
       const drawings = [...files].filter((f) => /\.excalidraw(\.json)?$/i.test(f.name));
       let lastCanvas: string | null = null;
       for (const f of drawings) lastCanvas = (await api.importExcalidraw(await f.text(), f.name, null)).id;
@@ -1545,8 +1901,8 @@ export function NotesPage({ id }: { id: string | null }) {
   // Desktop: the pages live only in the app sidebar, under the Notes row. Folded sidebar or pages hidden (click
   // Notes) means no tree anywhere. Phones have no sidebar, so there the tree is the list screen.
   const inSidebar = !phone && !!slot;
-  const showTree = phone && !current;
-  const showPage = !phone || !!current;
+  const showTree = phone && !id;
+  const showPage = !phone || !!id;
   const pickers = (
     <>
       <input ref={folderInput} type="file" className="hidden" {...({ webkitdirectory: "", directory: "" } as any)} multiple onChange={(e) => void runImport(e.target.files).finally(() => (e.target.value = ""))} />
@@ -1567,26 +1923,41 @@ export function NotesPage({ id }: { id: string | null }) {
       slot!,
     );
 
-  // + in the top bar: a new top-level page, opened in a new tab next to this one.
-  const newTab = async () => {
+  // + in a pane's top bar: a new top-level page, opened in a new tab next to that pane's page.
+  const newTab = async (pane: string) => {
     try {
-      await saver.flush();
       const n = await api.createNote({ title: "", parentId: null });
       await reload();
-      setNote(n);
-      pick(n.id, "new");
+      primed.set(n.id, n);
+      pickIn(pane, n.id, "new");
     } catch (e) {
       toast.error((e as Error).message);
     }
   };
-  const tabPlus = phone ? null : (
-    <button type="button" className="note-tab-plus" onClick={() => void newTab()} aria-label="New page in a new tab" title="New page in a new tab">
-      <Plus className="size-4" />
-    </button>
-  );
-  const tabStrip = phone ? null : <NoteTabs tabs={tabs} all={list ?? []} current={current} onPick={pick} onClose={closeTab} />;
-  // NoteTabs renders nothing below two tabs; then the top bar shows the path as before.
-  const shownTabs = tabs.filter((x) => list?.some((n) => n.id === x)).length;
+
+  const ctx: PaneCtx = {
+    phone,
+    list,
+    tree,
+    listRef,
+    primed,
+    bumps,
+    flushers,
+    patchRow,
+    pick: pickIn,
+    focus: focusPane,
+    missing: (pane, nid) => (phone ? navigate("/notes", { replace: true }) : setLayout((l) => (count(l.root) === 1 && (findPane(l.root, pane)?.tabs.length ?? 0) <= 1 ? { ...l, root: { ...(l.root as PaneNode), tabs: [], active: null } } : closeLayoutTab(l, pane, nid)))),
+    add,
+    addFolder,
+    setKind,
+    setOpen,
+    reload,
+    importVault: () => folderInput.current?.click(),
+  };
+
+  const shownPanes = phone ? [{ k: "pane" as const, id: "phone", tabs: id ? [id] : [], active: id }] : panes(layout.root);
+  const geo = multi ? rects(layout.root) : null;
+  const existing = (t: string) => !!list?.some((n) => n.id === t);
   return (
     <div className="notes-shell">
       {pickers}
@@ -1648,104 +2019,66 @@ export function NotesPage({ id }: { id: string | null }) {
         </aside>
       )}
       {showPage && (
-        <NoteTabsCtx.Provider value={shownTabs > 1 ? tabStrip : null}>
-        <NotePlusCtx.Provider value={tabPlus}>
-        <section className="notes-main">
-          {note && note.id === current && isFile(note) ? (
-            <FileView
-              key={note.id}
-              note={note}
-              all={list ?? []}
-              saveState={saver.state}
-              onPick={pick}
-              onTitle={(title) => {
-                patchRow(note.id, { title });
-                saver.queue({ title });
-              }}
-              onContent={(content) => saver.queue({ content })}
-              onSave={() => void saver.flush()}
-              onBack={phone ? () => navigate("/notes") : undefined}
-            />
-          ) : note && note.id === current && note.kind === "pdf" ? (
-            <PdfNoteView
-              key={note.id}
-              note={note}
-              all={list ?? []}
-              onPick={pick}
-            />
-          ) : note && note.id === current && note.kind === "canvas" ? (
-            <CanvasView
-              key={note.id}
-              note={note}
-              all={list ?? []}
-              saveState={saver.state}
-              onPick={pick}
-              onTitle={(title) => {
-                patchRow(note.id, { title });
-                saver.queue({ title });
-              }}
-              onScene={(scene) => saver.queue({ scene })}
-            />
-          ) : note && note.id === current && isFolder(note) ? (
-            <FolderView
-              folder={note}
-              kids={tree.get(note.id) ?? []}
-              onPick={pick}
-              onAdd={() => void add(note.id)}
-              onAddFolder={() => void addFolder(note.id)}
-              onMakePage={() => void setKind(note, "page")}
-              onOpenFolder={(fid) => setOpen(fid, true)}
-              onBack={phone ? () => navigate("/notes") : undefined}
-            />
-          ) : note && note.id === current ? (
-            <PageView
-              key={note.id}
-              note={note}
-              tree={tree}
-              all={list ?? []}
-              saveState={saver.state}
-              onPick={pick}
-              onTitle={(title) => {
-                patchRow(note.id, { title });
-                saver.queue({ title });
-              }}
-              onDoc={(doc) => saver.queue({ doc })}
-              onIcon={(icon) => {
-                patchRow(note.id, { icon });
-                void api.updateNote(note.id, { icon }).catch((e) => toast.error((e as Error).message));
-              }}
-              onLook={(look) => {
-                // The page keeps its own copy of the look; the list icon may have changed in the sidebar since, so that part comes from the row.
-                const row = listRef.current?.find((x) => x.id === note.id);
-                const next: NoteLook = { ...look };
-                if (row?.look?.showIcon) next.showIcon = true;
-                else delete next.showIcon;
-                patchRow(note.id, { look: next });
-                void api.updateNote(note.id, { look: next }).catch((e) => toast.error((e as Error).message));
-              }}
-              links={links}
-              onBack={phone ? () => navigate("/notes") : undefined}
-            />
-          ) : list && list.length === 0 ? (
-            <div className="notes-empty">
-              <div className="text-[2.4rem]" aria-hidden>📝</div>
-              <h1 className="note-empty-title">Your first page</h1>
-              <p className="max-w-sm text-[14px] text-muted-foreground">Notes live next to your decks. Type <kbd>/</kbd> for blocks, <kbd>[[</kbd> to link a page, <kbd>#</kbd> for a heading. Everything saves on its own.</p>
-              <p className="max-w-sm text-[13px] text-muted-foreground/80">Notes is in beta: expect rough edges, and it doesn't sync to your other devices yet.</p>
-              <div className="mt-2 flex flex-wrap justify-center gap-2">
-                <button type="button" onClick={() => void add(null)} className="lib-raised inline-flex h-10 items-center gap-2 rounded-[10px] px-4 text-[14px] font-[600]">
-                  <FilePlus2 className="size-4" /> New page
-                </button>
-                <button type="button" onClick={() => folderInput.current?.click()} className="lib-raised inline-flex h-10 items-center gap-2 rounded-[10px] px-4 text-[14px] font-[600]">
-                  <FolderInput className="size-4" /> Import a vault
-                </button>
+        <div ref={area} className={cn("notes-split", multi && "is-multi")} data-panes={shownPanes.length}>
+          {shownPanes.map((p) => {
+            const g = geo?.panes.find((r) => r.id === p.id);
+            const tabsShown = p.tabs.filter(existing).length;
+            // One pane shows its tabs once there are two; with several panes each shows its tabs, so they can move.
+            const strip = phone || (!multi && tabsShown < 2) ? null : (
+              <NoteTabs
+                pane={p.id}
+                tabs={p.tabs}
+                all={list ?? []}
+                current={p.active}
+                onPick={(t) => performance.now() - dragEnded.current > 250 && pickIn(p.id, t)}
+                onClose={(t) => closeTabIn(p.id, t)}
+                onDrag={(t, e) => startTabDrag(p.id, t, e)}
+                menu={(t) => tabMenu(p.id, t)}
+                dragging={tabDrag?.pane === p.id ? tabDrag.note : null}
+              />
+            );
+            const plus = phone ? null : (
+              <button type="button" className="note-tab-plus" onClick={() => void newTab(p.id)} aria-label="New page in a new tab" title="New page in a new tab">
+                <Plus className="size-4" />
+              </button>
+            );
+            return (
+              <div
+                key={p.id}
+                className={cn("note-pane-box", g && g.x > 0.001 && "has-left", g && g.y > 0.001 && "has-top")}
+                style={g ? { left: `${g.x * 100}%`, top: `${g.y * 100}%`, width: `${g.w * 100}%`, height: `${g.h * 100}%` } : undefined}
+              >
+                <NotePane pane={p.id} noteId={p.active} ctx={ctx} focused={multi && layout.focus === p.id} strip={strip} plus={plus} />
               </div>
-            </div>
-          ) : null}
-        </section>
-        </NotePlusCtx.Provider>
-        </NoteTabsCtx.Provider>
+            );
+          })}
+          {geo?.bars.map((b) => (
+            <div
+              key={b.path}
+              role="separator"
+              aria-orientation={b.dir === "row" ? "vertical" : "horizontal"}
+              aria-label="Resize panes"
+              className={cn("note-split-bar", b.dir === "row" ? "is-row" : "is-col")}
+              style={
+                b.dir === "row"
+                  ? { left: `${(b.x + b.w * b.r) * 100}%`, top: `${b.y * 100}%`, height: `${b.h * 100}%` }
+                  : { top: `${(b.y + b.h * b.r) * 100}%`, left: `${b.x * 100}%`, width: `${b.w * 100}%` }
+              }
+              onPointerDown={(e) => startResize(b, e)}
+              onDoubleClick={() => setLayout((l) => ({ ...l, root: setRatio(l.root, b.path, 0.5) }))}
+            />
+          ))}
+        </div>
       )}
+      {tabDrag &&
+        createPortal(
+          <>
+            {tabDrag.zone && <div className="note-drop-zone" style={{ left: tabDrag.zone.x, top: tabDrag.zone.y, width: tabDrag.zone.w, height: tabDrag.zone.h }} />}
+            {tabDrag.line && <div className="note-drop-tabline" style={{ left: tabDrag.line.x, top: tabDrag.line.y, height: tabDrag.line.h }} />}
+            <div className="note-tab-ghost" style={{ transform: `translate(${Math.min(tabDrag.x + 14, window.innerWidth - 214)}px, ${Math.min(tabDrag.y + 12, window.innerHeight - 40)}px)` }}>{tabDrag.label}</div>
+          </>,
+          document.body,
+        )}
     </div>
   );
 }

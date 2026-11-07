@@ -42,7 +42,7 @@ export function PhoneTabBar({ path, updateDot, fun, onAsk }: { path: string; upd
                   data-tab-you
                   className="score-tab relative flex h-[52px] min-w-0 flex-1 items-center justify-center rounded-full active:scale-95 motion-reduce:transition-none"
                 >
-                  <span className={cn("relative block rounded-full transition-shadow duration-200", on ? "shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--foreground)]" : "shadow-[0_0_0_1.5px_color-mix(in_oklab,var(--foreground)_14%,transparent)]")}>
+                  <span className={cn("relative block size-10 shrink-0 rounded-full transition-shadow duration-200", on ? "shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--foreground)]" : "shadow-[0_0_0_1.5px_color-mix(in_oklab,var(--foreground)_14%,transparent)]")}>
                     <MyAvatar size={40} />
                     {updateDot && <span data-update-dot aria-label="Update available" className="absolute top-0 right-0 size-2.5 rounded-full bg-highlight ring-2 ring-card" />}
                   </span>

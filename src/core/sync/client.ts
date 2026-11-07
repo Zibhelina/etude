@@ -3,9 +3,10 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import type { Etude } from "../engine.ts";
 import { bootstrap, drain, install, localEvent, receive, rowFor, rows, type Change } from "./log.ts";
-import { createVault, decryptBlob, decryptEvent, encryptBlob, encryptEvent, fromB64, generateVaultKey, protectVault, sha256Hex, syncKeys, toB64, unwrapWithPassword, unwrapWithRecovery, type SyncKeys } from "./crypto.ts";
+import { createVault, decryptBlob, decryptEvent, decryptSnapshotPart, encryptBlob, encryptEvent, encryptSnapshotPart, fromB64, generateVaultKey, protectVault, randomBytes, sha256Hex, syncKeys, toB64, unwrapWithPassword, unwrapWithRecovery, type SyncKeys } from "./crypto.ts";
 import { CloudTransport, FolderTransport, type Transport } from "./transport.ts";
 import { projectChanges, projectionPending } from "./project.ts";
+import { finishSnapshot, mergeSnapshotPart, PART_REGISTERS, snapshotParts } from "./snapshot.ts";
 import { accountFor, secondStepBody, secondStepFrom, signInCode, type PendingSecondStep } from "../account.ts";
 
 /** Most ciphertext characters sent in one push. */
@@ -16,16 +17,22 @@ const BLOB_OVERHEAD=1+12+16;
 
 export type SyncProgress = {
   /**
-   * The collection: download (events and type assets), upload (type assets and events), apply (writing the changes into the collection).
+   * The collection: snapshot (a device's first sync, when the vault has one: its parts), download (events and type assets),
+   * upload (type assets and events), apply (writing the changes into the collection).
    * The media, after it: check (hashing local files; done and total count files), download, upload (files, then their events).
    */
-  step:"download"|"check"|"upload"|"apply";
+  step:"snapshot"|"download"|"check"|"upload"|"apply";
   done:number;
   /** Null when the size isn't known ahead. */
   total:number|null;
   /** Bytes per second over the last few seconds. */
   rate:number;
 };
+
+/** Events the vault's log grows by before a desktop device makes a new snapshot. ETUDE_SYNC_SNAPSHOT_EVERY changes it. */
+const snapshotEvery=()=>Number(globalThis.process?.env?.ETUDE_SYNC_SNAPSHOT_EVERY)||20_000;
+/** Registers per snapshot part (ETUDE_SYNC_SNAPSHOT_PART changes it). */
+const partRegisters=()=>Number(globalThis.process?.env?.ETUDE_SYNC_SNAPSHOT_PART)||PART_REGISTERS;
 
 /** A media folder whose files and subfolders didn't change is looked at again after this long anyway, for files rewritten in place. */
 const MEDIA_RESCAN_MS=10*60_000;
@@ -64,6 +71,7 @@ class Meter {
   moved(n:number) {const p=this.progress;if(!p)return;p.done+=n;const now=Date.now();this.samples.push([now,p.done]);while(this.samples.length>2&&now-this.samples[1][0]>5000)this.samples.shift();}
   view():SyncProgress|null {const p=this.progress,first=this.samples[0];if(!p||!first)return null;const ms=Date.now()-first[0];return {...p,rate:ms>0?Math.round((p.done-first[1])*1000/ms):0};}
 }
+const toHex=(b:Uint8Array)=>[...b].map(x=>x.toString(16).padStart(2,"0")).join("");
 /** Errors an automatic sync keeps quiet: the device is offline, or the server can't be reached. */
 const offline=(e:unknown)=>e instanceof TypeError || /fetch failed|network|offline|timeout/i.test((e as Error)?.message??"");
 /** Thrown inside the media task when it was asked to stop. */
@@ -241,7 +249,7 @@ export class SyncClient {
    * whose media keeps network errors quiet.
    */
   now(o:{waitMedia?:boolean;quiet?:boolean}={}):Promise<ReturnType<SyncClient["status"]>> {
-    if(o.waitMedia)return this.now({quiet:o.quiet}).then(async()=>{await this.mediaSettled();if(this.mediaError)throw new Error(this.mediaError);return this.status();});
+    if(o.waitMedia)return this.now({quiet:o.quiet}).then(async()=>{await this.mediaSettled();await this.snapshotting;if(this.mediaError)throw new Error(this.mediaError);return this.status();});
     if(this.active)return this.active;
     this.busy=true;
     this.active=this.run(!!o.quiet).then(()=>(this.error=null,this.meter.progress=null,{...this.status(),busy:false})).catch(e=>{this.error=e.message;throw e;}).finally(()=>{this.busy=false;this.active=null;this.meter.progress=null;});
@@ -273,6 +281,8 @@ export class SyncClient {
     let cursor=this.meta("cursor","");let more=true;
     // Whether media or blob events came in: a media task already running then makes another pass.
     let news=false;
+    // A device that has never pulled starts from the vault's snapshot, when there is one, and then pulls the events after it.
+    if(cursor===""&&t.snapshot){const seq=await this.fromSnapshot(t,key);if(seq!==null){cursor=String(seq);news=true;}}
     // A device that has never pulled downloads about the whole vault.
     this.step("download",cursor===""?await t.usage?.()??null:null);
     // The ids this device has, loaded once and only if a transport asks: a folder lists every file name each time.
@@ -304,9 +314,96 @@ export class SyncClient {
       drain(db);projectChanges(this.e);
     }
     this.set("config",{...this.config(),lastSync:new Date().toISOString()});
-    // The collection is in step. The media follows in the background.
+    // The collection is in step. The media follows in the background, and on the desktop a new snapshot when one is due.
     this.startMedia(t,key,news,quiet);
+    this.startSnapshot(t,key);
     return this.status();
+  }
+  /**
+   * Merges the vault's snapshot into a device that has never pulled and returns the seq it covers, or null when there
+   * is none. Parts merged by a run that stopped are skipped. A snapshot that can't be read falls back to the whole log,
+   * which gives the same registers: what merged already merges again harmlessly.
+   */
+  private async fromSnapshot(t:Transport,key:SyncKeys):Promise<number|null> {
+    for(let attempt=0;;attempt++) {
+      try {return await this.mergeSnapshot(t,key);}
+      catch(e) {
+        if(offline(e))throw e;
+        // A newer snapshot replaced this one while its parts downloaded: take the new one, once.
+        if(attempt===0&&(e as any).code==="not_found")continue;
+        this.set("snapshot_error",(e as Error)?.message??String(e));
+        return null;
+      }
+    }
+  }
+  private async mergeSnapshot(t:Transport,key:SyncKeys):Promise<number|null> {
+    const db=this.e.db;
+    let found;
+    // A server without snapshots doesn't have the route.
+    try {found=await t.snapshot!();} catch(e) {if((e as any).code==="not_found")return null;throw e;}
+    if(!found)return null;
+    const p=found.pointer,ref={id:p.id,seq:p.seq};
+    const resume=this.meta<{id:string;done:number}|null>("snapshot_progress",null);
+    const from=resume?.id===p.id?resume.done:0;
+    this.step("snapshot",p.size);
+    // The next part downloads while this one merges.
+    const load=(i:number)=>{const f=t.getBlob(p.parts[i]).then(ct=>(this.moved(ct.length),decryptSnapshotPart(key,ref,i,ct,p.parts[i])));f.catch(()=>{});return f;};
+    let next=from<p.parts.length?load(from):null;
+    for(let i=from;i<p.parts.length;i++) {
+      const json=await next!;next=i+1<p.parts.length?load(i+1):null;
+      db.tx(()=>{
+        const part=mergeSnapshotPart(db,json);
+        if(part.part!==i||part.last!==(i===p.parts.length-1))throw new Error("the snapshot's parts don't match its pointer");
+        this.set("snapshot_progress",{id:p.id,done:i+1});this.received+=part.registers;
+      });
+    }
+    db.tx(()=>{finishSnapshot(db);this.set("cursor",String(p.seq));this.set("snapshot",{seq:p.seq});db.run("DELETE FROM sync_meta WHERE key IN ('snapshot_progress','snapshot_error')");});
+    return p.seq;
+  }
+  /** The snapshot being made, one at a time. */
+  private snapshotting:Promise<void>|null=null;
+  /** On the desktop: a new snapshot once the log has grown enough since the last one. It runs in the background. */
+  private startSnapshot(t:Transport,key:SyncKeys) {
+    if(this.snapshotting||!t.putSnapshot||!globalThis.process?.versions?.node)return;
+    if(Number(this.meta("cursor","0"))-this.meta("snapshot",{seq:0}).seq<snapshotEvery())return;
+    // Kept for diagnosis; the collection may have closed meanwhile.
+    this.snapshotting=this.makeSnapshot(t,key).catch(e=>{try{if(!offline(e))this.set("snapshot_error",(e as Error)?.message??String(e));}catch{}}).finally(()=>{this.snapshotting=null;});
+  }
+  private async makeSnapshot(t:Transport,key:SyncKeys) {
+    const db=this.e.db;
+    // The media task sends its own events; the snapshot waits for them.
+    await this.mediaSettled();
+    // Parts an earlier attempt uploaded without getting to point the vault at them.
+    for(const name of this.meta<string[]>("snapshot_uploads",[]))await t.deleteBlob?.(name).catch(()=>{});
+    this.set("snapshot_uploads",[]);
+    let found;
+    try {found=await t.snapshot!();}
+    // A server without snapshots (the route isn't there): ask again only after as many events again.
+    catch(e) {if((e as any).code==="not_found"){this.set("snapshot",{seq:Number(this.meta("cursor","0"))});return;}throw e;}
+    const there=found?.pointer.seq??0;this.set("snapshot",{seq:there});
+    // Read in one go, with nothing waiting to be sent: the registers then hold exactly the events up to the cursor
+    // and this device's own, which are on the server too.
+    if(db.get("SELECT (SELECT count(*) FROM sync_outbox)+(SELECT count(*) FROM sync_events WHERE sent=0) AS n")!.n)return;
+    const seq=Number(this.meta("cursor","0"));
+    if(seq-there<snapshotEvery())return;
+    const parts=snapshotParts(db,partRegisters());
+    const ref={id:toHex(randomBytes(16)),seq},names:string[]=[];
+    try {
+      for(let i=0;i<parts.length;i++) {
+        const b=await encryptSnapshotPart(key,ref,i,parts[i]);parts[i]="";
+        this.set("snapshot_uploads",[...names,b.hash]);await t.putBlob(b.hash,b.ciphertext);names.push(b.hash);
+      }
+      await t.putSnapshot!({...ref,parts:names},found?.etag);
+      this.set("snapshot",{seq});this.set("snapshot_uploads",[]);
+      db.run("DELETE FROM sync_meta WHERE key='snapshot_error'");
+    } catch(e) {
+      // Another device's snapshot got there first, or the upload stopped: these parts are of no use.
+      if(offline(e))throw e;
+      for(const name of names)await t.deleteBlob?.(name).catch(()=>{});
+      this.set("snapshot_uploads",[]);
+      if(["etag_mismatch","not_newer"].includes((e as any).code))return;
+      throw e;
+    }
   }
   /** Sends the events not sent yet, in batches, after any push already under way. */
   private push(t:Transport,key:SyncKeys,m=this.meter) {

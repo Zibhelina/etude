@@ -197,16 +197,17 @@ export async function unwrapWithPrf(w: Wrap, prfOutput: Uint8Array, credentialId
 // ── events and blobs ───────────────────────────────────────────
 // Subkeys come from the vault key with HKDF, so the vault key itself never encrypts data.
 // Ciphertext layout: [1 byte version][12 bytes nonce][AES-256-GCM ciphertext + 16-byte tag].
-const subkey = (vk: Uint8Array, purpose: "events" | "blobs") => hkdf(vk, enc.encode("etude-sync"), `etude-${purpose}-v1`);
+type Purpose = "events" | "blobs" | "snapshots";
+const subkey = (vk: Uint8Array, purpose: Purpose) => hkdf(vk, enc.encode("etude-sync"), `etude-${purpose}-v1`);
 const eventAad = (id: string) => `etude-event:v1:${id}`;
 
-/** A vault key's event and blob subkeys, derived and imported once, for a whole sync. The ciphertext is the same as with the vault key itself. */
-export type SyncKeys = { events: CryptoKey; blobs: CryptoKey };
+/** A vault key's subkeys, derived and imported once, for a whole sync. The ciphertext is the same as with the vault key itself. */
+export type SyncKeys = { events: CryptoKey; blobs: CryptoKey; snapshots: CryptoKey };
 export async function syncKeys(vk: Uint8Array): Promise<SyncKeys> {
-  const key = async (purpose: "events" | "blobs") => aesKey(await subkey(vk, purpose), ["encrypt", "decrypt"]);
-  return { events: await key("events"), blobs: await key("blobs") };
+  const key = async (purpose: Purpose) => aesKey(await subkey(vk, purpose), ["encrypt", "decrypt"]);
+  return { events: await key("events"), blobs: await key("blobs"), snapshots: await key("snapshots") };
 }
-const keyFor = async (vk: Uint8Array | SyncKeys, purpose: "events" | "blobs") => (vk instanceof Uint8Array ? subkey(vk, purpose) : vk[purpose]);
+const keyFor = async (vk: Uint8Array | SyncKeys, purpose: Purpose) => (vk instanceof Uint8Array ? subkey(vk, purpose) : vk[purpose]);
 const BLOB_AAD = "etude-blob:v1";
 
 function pack(nonce: Uint8Array, ct: Uint8Array) {
@@ -237,6 +238,30 @@ export async function decryptBlob(vk: Uint8Array | SyncKeys, ciphertext: Uint8Ar
   if (expectedHash && (await sha256Hex(ciphertext)) !== expectedHash) throw new Error("blob hash mismatch");
   const { nonce, ct } = unpack(ciphertext);
   return open(await keyFor(vk, "blobs"), nonce, ct, BLOB_AAD);
+}
+
+// ── snapshots ──────────────────────────────────────────────────
+// A snapshot is the merged registers up to a server seq, in parts. Each part is gzip-compressed JSON under the snapshots
+// subkey. The AAD binds it to the snapshot's id and seq and to its place, so the server can't reorder parts, mix two
+// snapshots or claim a later seq; the last part says it is the last, so dropping parts from the end is noticed too.
+export type SnapshotRef = { id: string; seq: number };
+const snapshotAad = (s: SnapshotRef, part: number) => `etude-snapshot:v1:${s.id}:${s.seq}:${part}`;
+
+async function transform(data: Uint8Array, stream: CompressionStream | DecompressionStream): Promise<Uint8Array> {
+  return new Uint8Array(await new Response(new Blob([buf(data)]).stream().pipeThrough(stream)).arrayBuffer());
+}
+
+/** Encrypts one part's JSON text; upload it under the SHA-256 of what this returns. */
+export async function encryptSnapshotPart(vk: Uint8Array | SyncKeys, s: SnapshotRef, part: number, json: string): Promise<{ hash: string; ciphertext: Uint8Array }> {
+  const { nonce, ct } = await seal(await keyFor(vk, "snapshots"), await transform(enc.encode(json), new CompressionStream("gzip")), snapshotAad(s, part));
+  const ciphertext = pack(nonce, ct);
+  return { hash: await sha256Hex(ciphertext), ciphertext };
+}
+/** One part's JSON text, after checking it is this snapshot's part `part` and wasn't changed. */
+export async function decryptSnapshotPart(vk: Uint8Array | SyncKeys, s: SnapshotRef, part: number, ciphertext: Uint8Array, expectedHash?: string): Promise<string> {
+  if (expectedHash && (await sha256Hex(ciphertext)) !== expectedHash) throw new Error("blob hash mismatch");
+  const { nonce, ct } = unpack(ciphertext);
+  return new TextDecoder().decode(await transform(await open(await keyFor(vk, "snapshots"), nonce, ct, snapshotAad(s, part)), new DecompressionStream("gzip")));
 }
 
 // ── whole flows ────────────────────────────────────────────────

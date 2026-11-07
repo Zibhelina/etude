@@ -323,6 +323,19 @@ async function property(kind:"folder"|"cloud") {
     for(let n=0;n<3;n++)for(let i=0;i<3;i++)await sync(i);
     const expected=canonical(es[0]);for(const e of es.slice(1))assert.deepEqual(canonical(e),expected);
     for(const e of es){assert.deepEqual([...rows(e.db,"reviews").keys()].sort(),[...made.keys()].sort());assert.equal(e.db.get("SELECT count(*) n FROM reviews")!.n,[...made.values()].filter(k=>e.db.get("SELECT 1 FROM cards WHERE sync_id=?",k)).length);for(const k of deleted)assert.equal(e.db.get("SELECT 1 FROM items WHERE id=?",k),undefined);assert.equal(e.db.get("SELECT count(*) n FROM sync_outbox")!.n,0);}
+    if(kind==="cloud") {
+      // A device that joins now starts from the latest snapshot (the devices made them along the way, with
+      // ETUDE_SYNC_SNAPSHOT_EVERY low) and pulls only the events after it.
+      const late=await Etude.open(join(dir,"late.db"),{home:join(dir,"late")});es.push(late);
+      const s=syncFor(late);
+      await login(s,process.env.ETUDE_SYNC_TEST_SERVER!,process.env.ETUDE_SYNC_TEST_OUTBOX!,`property-${dir.split("/").at(-1)}@example.test`);
+      await s.unlock({password});await s.now({waitMedia:true});
+      assert.equal(late.db.get("SELECT value FROM sync_meta WHERE key='snapshot_error'")?.value,undefined);
+      assert.ok(late.db.get("SELECT count(*) n FROM sync_events")!.n<es[0].db.get("SELECT count(*) n FROM sync_events")!.n,"only the events after the snapshot");
+      assert.deepEqual(canonical(late),expected);
+      assert.deepEqual(relational(late),await rebuilt(late,dir));
+      es.pop();late.close();
+    }
     assert.equal(es[1].typeAsset("sync-basic","sample.json")!.size,18);
     // Only the type asset keeps its bytes in the database; the media file is on disk.
     assert.equal(es[0].db.get("SELECT count(*) n FROM sync_blobs")!.n,1);

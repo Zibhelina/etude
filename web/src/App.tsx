@@ -1,8 +1,9 @@
 import { autoSync, MEDIA_EVENT, setMediaPending, STATUS_EVENT, syncStatus, type SyncSeen } from "@/lib/sync";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useLocation } from "@/lib/router";
+import { navScroll, useLocation } from "@/lib/router";
+import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/sidebar";
 import { DecksPage } from "@/pages/decks";
 import { StudyPage } from "@/pages/study";
@@ -58,6 +59,55 @@ const typing = (t: EventTarget | null) => {
 };
 
 const NARROW = "(max-width: 1279px)";
+/** Which screen a path is, for the page-in animation: a deck and its Library are different screens, /types/x stays /types. */
+const tabOf = (p: string) => (p.startsWith("/types") ? "/types" : p);
+const isStudy = (s: string) => s === "/study" || s === "/watch";
+const LEAVE_MS = 140;
+const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/**
+ * Changing screens: the old one fades out first (it keeps its last render, so nothing inside it changes while it
+ * goes), then the new one rises in. Scrolling to the top waits for the swap, so the old page doesn't jump.
+ */
+function ScreenSwap({ path, page }: { path: string; page: React.ReactNode }) {
+  const screen = tabOf(path);
+  const [shown, setShown] = useState(screen);
+  const last = useRef(page);
+  const leaving = shown !== screen && !isStudy(screen) && !isStudy(shown) && !reducedMotion();
+  if (!leaving) last.current = page;
+  useEffect(() => {
+    if (shown === screen) return;
+    const t = setTimeout(() => setShown(screen), leaving ? LEAVE_MS : 0);
+    return () => clearTimeout(t);
+  }, [screen, shown, leaving]);
+  const screenRef = useRef(screen);
+  screenRef.current = screen;
+  useEffect(() => {
+    navScroll.top = (to) => {
+      const next = tabOf(new URL(to, location.origin).pathname);
+      if (next === screenRef.current || isStudy(next)) window.scrollTo(0, 0);
+    };
+  }, []);
+  // The old screen keeps its key while it fades, so it isn't rebuilt; the new one gets its own.
+  const key = leaving ? shown : screen;
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, [key]);
+  // For a moment after a screen opens, rows that arrive with its data fade in; later ones (a new search) don't.
+  const [fresh, setFresh] = useState(true);
+  useEffect(() => {
+    if (leaving) return;
+    setFresh(true);
+    const t = setTimeout(() => setFresh(false), 2400);
+    return () => clearTimeout(t);
+  }, [key, leaving]);
+  return (
+    <div key={key} className={cn(leaving ? "page-out" : "page-in", !leaving && fresh && "is-fresh")} aria-hidden={leaving || undefined} inert={leaving || undefined}>
+      {leaving ? last.current : page}
+    </div>
+  );
+}
+
 
 /**
  * Sidebar or rail. The choice is remembered; `auto` (Ask Etude open on a window too narrow for both) shows the
@@ -224,7 +274,9 @@ export function App() {
         >
           <Sidebar path={path} collapsed={collapsed} onToggle={toggleSidebar} />
           {/* Room under the last row for the corner Minimi or ε, and on a phone for the tab island and its fade. */}
-          <main key={dataKey} className="min-w-0 flex-1 max-md:overflow-x-clip pb-[calc(var(--tabbar-h)+2.5rem)] md:pb-32">{page}</main>
+          <main key={dataKey} className="min-w-0 flex-1 max-md:overflow-x-clip pb-[calc(var(--tabbar-h)+2.5rem)] md:pb-32">
+            <ScreenSwap path={path} page={page} />
+          </main>
           {agent.open ? (
             <AgentPanel
               width={agent.width}

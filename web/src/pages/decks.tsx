@@ -311,10 +311,10 @@ function DesktopDecks() {
       )}
       {!decks && <div className="h-56 animate-pulse rounded-2xl bg-muted/60" />}
 
-      {decks && decks.length > 0 && <div className="@container">{allDone ? <DonePanel decks={decks} stats={stats} /> : due > 0 ? <SessionCard decks={decks} stats={stats} /> : null}</div>}
+      {decks && decks.length > 0 && <div className="@container" data-loaded-fade>{allDone ? <DonePanel decks={decks} stats={stats} /> : due > 0 ? <SessionCard decks={decks} stats={stats} /> : null}</div>}
 
       {visible.length > 0 && (
-        <section className="mt-10" aria-label="Decks">
+        <section className="mt-10" aria-label="Decks" data-loaded-fade>
           <div className="mb-2 flex items-baseline justify-between">
             <span className="score-kicker font-semibold">Decks</span>
             <span className="text-[13px] text-muted-foreground tabular">{plural(top.length, "deck")} · {plural(totalCards, "card")}</span>

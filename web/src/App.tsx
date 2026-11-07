@@ -33,6 +33,7 @@ import { loadAvatar } from "@/lib/avatar";
 import { AvatarDialogHost } from "@/components/avatar";
 import { DeckFinder } from "@/components/deck-finder";
 import { NoteGraphHost } from "@/components/note-graph";
+import { TooSmall, useTooSmall } from "@/components/too-small";
 
 /** First-run setup: shown when the collection has no decks and setup wasn't finished or skipped, or on request. */
 function useOnboarding(skip: boolean) {
@@ -180,6 +181,7 @@ export function App() {
   const { path, params } = useLocation();
   const fun = useFunMode();
   const phone = usePhone();
+  const small = useTooSmall();
   // Fun mode on desktop and iPad: ⌘J and a tap on Minimi open his mini chat; the side panel is one click away from it.
   const minimiOff = useMinimiHidden();
   const funRef = useRef({ fun, phone, minimiOff });
@@ -300,6 +302,7 @@ export function App() {
 
   return (
     <TooltipProvider delayDuration={300}>
+      {small.on && path !== "/embed" && <TooSmall pose={small.pose} w={small.w} h={small.h} />}
       {studying ? (
         page
       ) : (

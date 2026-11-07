@@ -15,6 +15,7 @@ import { StatsPage } from "@/pages/stats";
 import { SettingsPage } from "@/pages/settings";
 import { EmbedStudy } from "@/pages/embed";
 import { MarketPage } from "@/pages/market";
+import { NotesPage } from "@/pages/notes";
 import { AGENT_SHORTCUT, AgentLauncher, AgentPanel, announceDataChange, useAgentPanel } from "@/components/agent-panel";
 import { MinimiCorner } from "@/components/minimi";
 import { MinimiChat } from "@/components/minimi-chat";
@@ -29,6 +30,7 @@ import { api } from "@/lib/api";
 import { loadAvatar } from "@/lib/avatar";
 import { AvatarDialogHost } from "@/components/avatar";
 import { DeckFinder } from "@/components/deck-finder";
+import { NoteGraphHost } from "@/components/note-graph";
 
 /** First-run setup: shown when the collection has no decks and setup wasn't finished or skipped, or on request. */
 function useOnboarding(skip: boolean) {
@@ -55,7 +57,7 @@ const RELOAD_ON_SYNC = new Set(["/", "/archive", "/deck", "/stats", "/more"]);
 
 const typing = (t: EventTarget | null) => {
   const el = t as HTMLElement | null;
-  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || !!el.closest?.("[contenteditable=true], .cm-editor, iframe"));
+  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || !!el.closest?.("[contenteditable=true], .cm-editor, iframe, .excalidraw"));
 };
 
 const NARROW = "(max-width: 1279px)";
@@ -122,7 +124,9 @@ function useSidebar(auto: boolean) {
   toggle.current = () => (auto ? setPeek((p) => !p) : setCollapsed((c) => !c));
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      const mod = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "b";
+      // Ctrl/⌘+[ (Ctrl/⌘+B is bold in the note editor and any text field).
+      // Not inside a canvas: Excalidraw uses Ctrl/⌘+[ to send a shape back.
+      const mod = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === "[" || e.code === "BracketLeft") && !(e.target as HTMLElement | null)?.closest?.(".excalidraw");
       // A bare [ outside a text field, like Linear and Notion, only while the sidebar is on screen
       // (not in a study session, a dialog or on a phone).
       const bracket =
@@ -259,6 +263,7 @@ export function App() {
   else if (path === "/stats") page = <StatsPage deck={params.get("deck") ?? undefined} />;
   else if (path === "/settings") page = <SettingsPage />;
   else if (path === "/market") page = <MarketPage />;
+  else if (path === "/notes") page = <NotesPage id={params.get("id")} />;
   else if (path === "/more") page = <MorePage />;
   else page = <DecksPage key={path} archived={path === "/archive"} />;
 
@@ -318,6 +323,7 @@ export function App() {
       {path !== "/embed" && <AvatarDialogHost />}
       {/* Ctrl/⌘K: find a deck. Browse and a deck's page keep the key for their own card search. */}
       <DeckFinder enabled={!studying && path !== "/embed" && path !== "/browse" && path !== "/deck" && !onboarding} />
+      {path !== "/embed" && <NoteGraphHost />}
       <Toaster position={phone ? "bottom-center" : "top-center"} mobileOffset={phone ? { bottom: studying ? 104 : 92, left: 12, right: 12 } : undefined} />
     </TooltipProvider>
   );

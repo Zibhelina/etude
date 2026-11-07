@@ -295,7 +295,7 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
   --sb-dur: 340ms;
   transition: width var(--sb-dur) var(--sb-ease);
 }
-.shell-sb .sb-toggle { transform: translateX(172px); transition: transform var(--sb-dur) var(--sb-ease), background-color 150ms, color 150ms; }
+.shell-sb .sb-toggle { transform: translateX(calc(var(--sbw, 232px) - 60px)); transition: transform var(--sb-dur) var(--sb-ease), background-color 150ms, color 150ms; }
 .shell-sb[data-collapsed] .sb-toggle { transform: translateX(6px); }
 .shell-sb .sb-group { height: 36px; transition: height var(--sb-dur) var(--sb-ease); }
 .shell-sb[data-collapsed] .sb-group { height: 16px; }
@@ -309,7 +309,7 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
 .shell-sb .sb-profile { height: 56px; transition: height var(--sb-dur) var(--sb-ease); }
 .shell-sb[data-collapsed] .sb-profile { height: 56px; }
 .shell-sb .sb-avatar { transform: translateY(8px); transition: transform var(--sb-dur) var(--sb-ease); }
-.shell-sb .sb-gear { transform: translate(170px, 10px); opacity: 1; transition: opacity 200ms ease 110ms, color 150ms; }
+.shell-sb .sb-gear { transform: translate(calc(var(--sbw, 232px) - 62px), 10px); opacity: 1; transition: opacity 200ms ease 110ms, color 150ms; }
 .shell-sb[data-collapsed] .sb-gear { opacity: 0; transition: opacity 110ms ease; }
 @media (prefers-reduced-motion: reduce) {
   .shell-sb, .shell-sb * { transition: none !important; }
@@ -359,6 +359,9 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
 
 /* Embedded in another app: no page background, the host's surface shows through. */
 html.embed, html.embed body { background: transparent; }
+html.embed-note, html.embed-note body { background: var(--card) !important; }
+html.embed-note body > #root > div { padding: 14px 16px 18px; }
+html.embed-note body > #root > div > div:first-child > span:first-child { display: none; }
 
 /* iOS zooms into any focused field under 16px; keep phone inputs at 16px. */
 @media (max-width: 640px) {
@@ -1028,3 +1031,535 @@ body.browse-resizing iframe { pointer-events: none; }
 .lib-bar-fill { transition: width 0.7s cubic-bezier(0.2, 0.8, 0.2, 1); animation: lib-bar-in 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both; transform-origin: left; }
 @keyframes lib-bar-in { from { transform: scaleX(0); } }
 @media (prefers-reduced-motion: reduce) { .lib-bar-fill { transition: none; animation: none; } }
+/* ---------------------------------------------------------------- Notes (beta) */
+.sb-beta { margin-left: auto; font: 650 10px/1 var(--font-sans); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 999px; padding: 3px 6px 2px; }
+.notes-shell { display: flex; min-height: 100dvh; margin-bottom: -8rem; }
+/* The sidebar is as wide as you drag it (lib/sidebar-slot.ts); while dragging nothing animates. */
+.shell-sb { position: sticky; }
+.shell-sb .sb-who { width: calc(var(--sbw, 232px) - 122px); }
+.shell-sb[data-resizing], .shell-sb[data-resizing] * { transition: none !important; }
+.sb-grip { position: absolute; top: 0; bottom: 0; right: 0; width: 7px; z-index: 5; cursor: col-resize; touch-action: none; }
+.sb-grip::after { content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 1px; background: transparent; transition: background-color 150ms, width 150ms; }
+.sb-grip:hover::after, .sb-grip[data-on]::after { width: 2px; background: color-mix(in oklab, var(--foreground) 26%, transparent); }
+body.sb-dragging, body.sb-dragging * { cursor: col-resize !important; user-select: none !important; }
+/* Notes' pages under the Notes row: flush, no lines, nested by indent; the other tabs follow the last page. */
+.sb-pages { display: flex; flex-direction: column; gap: 1px; padding: 2px 0 8px; }
+.sb-pages .note-row { color: var(--muted-foreground); min-height: 32px; }
+.sb-pages .note-row:hover, .sb-pages .note-row.is-on { color: var(--foreground); }
+.sb-pages .note-row-acts .note-row-act { width: 24px; height: 24px; }
+.sb-pages-empty { font-size: 13px; line-height: 1.45; color: color-mix(in oklab, var(--muted-foreground) 70%, transparent); padding: 4px 12px 8px 48px; }
+.notes-tree { position: sticky; top: 0; height: 100dvh; width: 260px; flex-shrink: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); padding: 14px 8px; overflow: hidden; }
+.notes-tree-head { display: flex; align-items: center; justify-content: space-between; height: 40px; padding: 0 6px 0 10px; font-size: 14.5px; }
+.notes-tree-head .sb-beta { margin-left: 0; }
+.notes-tree-list { flex: 1; overflow-y: auto; padding-top: 6px; display: flex; flex-direction: column; gap: 1px; }
+.note-row { display: flex; align-items: center; gap: 4px; min-height: 32px; border-radius: 8px; padding-right: 4px; font-size: 14px; color: var(--foreground); cursor: pointer; user-select: none; transition: background-color 120ms; text-align: left; width: 100%; }
+.note-row:hover { background: var(--sidebar-accent); }
+.note-row.is-on { background: var(--sidebar-accent); font-weight: 600; }
+.note-row-chev { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 5px; color: var(--muted-foreground); flex-shrink: 0; }
+.note-row-chev:hover { background: color-mix(in oklab, var(--foreground) 8%, transparent); }
+.note-row-icon { width: 20px; text-align: center; flex-shrink: 0; font-size: 14px; line-height: 1; }
+.note-row-acts { display: none; gap: 1px; }
+.note-row:hover .note-row-acts, .note-row:focus-within .note-row-acts, .note-row-acts:has([data-state=open]) { display: flex; }
+.note-row-act { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; color: var(--muted-foreground); }
+.note-row-act:hover { background: color-mix(in oklab, var(--foreground) 8%, transparent); color: var(--foreground); }
+.note-row-act.is-visible { width: 32px; height: 32px; }
+.note-new { color: var(--muted-foreground); padding-left: 10px; gap: 8px; margin-top: 4px; }
+.notes-main { flex: 1; min-width: 0; }
+.note-page { min-height: 100%; }
+.note-topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 48px; padding: 0 20px; background: color-mix(in oklab, var(--background) 88%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.note-save { font-size: 12px; color: var(--muted-foreground); transition: opacity 300ms; flex-shrink: 0; }
+.note-save.saved { opacity: 0.6; }
+.note-save.error { color: var(--danger); }
+.note-sheet { max-width: 720px; margin: 0 auto; padding: 40px 32px 30vh; }
+.note-title { display: block; width: 100%; resize: none; overflow: hidden; border: 0; outline: none; background: transparent; color: var(--foreground); font: 700 2.5rem/1.15 var(--font-sans); letter-spacing: -0.025em; padding: 0; margin-bottom: 26px; }
+.note-title::placeholder { color: color-mix(in oklab, var(--muted-foreground) 55%, transparent); }
+.note-editor .note-prose { outline: none; font-size: 16.5px; line-height: 1.7; color: var(--foreground); caret-color: var(--foreground); min-height: 40vh; }
+.note-prose > * + * { margin-top: 0.35em; }
+.note-prose p { margin: 0.15em 0; }
+.note-prose h1 { font-size: 1.85em; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 1.1em 0 0.25em; }
+.note-prose h2 { font-size: 1.45em; font-weight: 650; letter-spacing: -0.015em; line-height: 1.3; margin: 1em 0 0.2em; }
+.note-prose h3 { font-size: 1.2em; font-weight: 650; line-height: 1.35; margin: 0.9em 0 0.15em; }
+.note-prose > :first-child { margin-top: 0; }
+.note-prose ul, .note-prose ol { padding-left: 1.5em; }
+.note-prose ul { list-style: disc; }
+.note-prose ul ul { list-style: circle; }
+.note-prose ol { list-style: decimal; }
+.note-prose li { margin: 0.1em 0; padding-left: 0.15em; }
+.note-prose li > p { margin: 0; }
+.note-prose li::marker { color: var(--muted-foreground); }
+.note-prose ul[data-type=taskList] { list-style: none; padding-left: 0.15em; }
+.note-prose ul[data-type=taskList] > li { display: flex; align-items: flex-start; gap: 0.5em; margin: 0.1em 0; padding-left: 0; }
+.note-prose ul[data-type=taskList] > li > label { flex-shrink: 0; display: flex; align-items: center; height: 1.7em; user-select: none; }
+.note-prose ul[data-type=taskList] > li > div { flex: 1; min-width: 0; }
+.note-prose ul[data-type=taskList] > li > label input[type=checkbox] { appearance: none; width: 1.05em; height: 1.05em; border: 1.5px solid color-mix(in oklab, var(--muted-foreground) 70%, transparent); border-radius: 4px; display: grid; place-content: center; cursor: pointer; transition: background-color 120ms, border-color 120ms; margin: 0; }
+.note-prose ul[data-type=taskList] > li > label input[type=checkbox]:checked { background: var(--primary); border-color: var(--primary); }
+.note-prose ul[data-type=taskList] > li > label input[type=checkbox]:checked::after { content: ""; width: 0.55em; height: 0.3em; border: 2px solid var(--primary-foreground); border-top: 0; border-right: 0; transform: translateY(-1px) rotate(-45deg); }
+.note-prose li[data-checked=true] > div > p { color: var(--muted-foreground); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--muted-foreground) 60%, transparent); }
+.note-prose blockquote { border-left: 3px solid var(--foreground); padding-left: 1em; margin-left: 0.1em; color: color-mix(in oklab, var(--foreground) 85%, transparent); }
+.note-prose hr { border: 0; border-top: 1px solid var(--border); margin: 1.4em 0; }
+.note-prose hr.ProseMirror-selectednode { border-top-color: var(--highlight); }
+.note-prose a { color: var(--foreground); text-decoration: underline; text-decoration-color: color-mix(in oklab, var(--foreground) 35%, transparent); text-underline-offset: 3px; cursor: text; }
+.note-prose strong { font-weight: 650; }
+.note-prose code { font-family: var(--font-mono); font-size: 0.86em; background: var(--muted); color: color-mix(in oklab, var(--danger) 70%, var(--foreground)); padding: 0.12em 0.36em; border-radius: 5px; }
+.note-code { position: relative; margin: 0.6em 0; }
+.note-code pre { background: var(--muted); border-radius: 10px; padding: 2.3em 1.1em 1em; overflow-x: auto; font-family: var(--font-mono); font-size: 0.86em; line-height: 1.6; tab-size: 2; }
+.note-code pre code { background: none; padding: 0; color: var(--foreground); font-size: 1em; white-space: pre !important; display: block; min-width: max-content; }
+.note-code-lang { position: absolute; top: 8px; left: 12px; z-index: 1; font: 500 11.5px var(--font-sans); color: var(--muted-foreground); }
+.note-code-lang button { padding: 2px 6px; border-radius: 5px; }
+.note-code-lang button:hover { background: color-mix(in oklab, var(--foreground) 7%, transparent); color: var(--foreground); }
+.note-code-lang input { width: 9rem; padding: 2px 6px; border-radius: 5px; border: 1px solid var(--border); background: var(--background); color: var(--foreground); font: inherit; outline: none; }
+.note-prose p.is-empty::before, .note-prose h1.is-empty::before, .note-prose h2.is-empty::before, .note-prose h3.is-empty::before { content: attr(data-placeholder); float: left; height: 0; pointer-events: none; color: color-mix(in oklab, var(--muted-foreground) 55%, transparent); }
+.note-prose p.is-empty:not(.has-focus)::before { content: none; }
+.note-prose:has(> p.is-empty:only-child) > p.is-empty::before { content: attr(data-placeholder); }
+.note-prose ::selection { background: color-mix(in oklab, var(--highlight) 24%, transparent); }
+.note-bubble { display: flex; gap: 1px; padding: 3px; border-radius: 10px; border: 1px solid var(--border); background: var(--popover, var(--card)); box-shadow: 0 6px 24px rgb(0 0 0 / 0.12), 0 1px 3px rgb(0 0 0 / 0.08); z-index: 50; }
+.note-slash-host { position: fixed; z-index: 60; }
+.note-slash { width: 300px; max-height: 340px; overflow-y: auto; padding: 4px; border-radius: 12px; border: 1px solid var(--border); background: var(--popover, var(--card)); color: var(--foreground); box-shadow: 0 10px 34px rgb(0 0 0 / 0.14), 0 1px 3px rgb(0 0 0 / 0.08); animation: note-pop 120ms ease-out; }
+@keyframes note-pop { from { opacity: 0; transform: translateY(-3px) scale(0.98); } to { opacity: 1; transform: none; } }
+.note-subpages { margin-top: 2.4em; border-top: 1px solid var(--border); padding-top: 1em; display: flex; flex-direction: column; gap: 2px; }
+.note-subpage { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 8px; border-radius: 8px; font-size: 15px; text-align: left; text-decoration: underline; text-decoration-color: color-mix(in oklab, var(--foreground) 25%, transparent); text-underline-offset: 3px; }
+.note-subpage:hover { background: var(--sidebar-accent); }
+.notes-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 70dvh; text-align: center; padding: 24px; }
+.note-empty-title { font: 700 1.6rem/1.2 var(--font-sans); letter-spacing: -0.02em; }
+.note-link { display: inline; }
+.note-link > span { cursor: pointer; color: var(--foreground); font-weight: 550; text-decoration: underline; text-decoration-color: color-mix(in oklab, var(--foreground) 30%, transparent); text-decoration-thickness: 1px; text-underline-offset: 3px; border-radius: 4px; padding: 0 1px; transition: background-color 120ms, text-decoration-color 120ms; }
+.note-link > span:hover { background: color-mix(in oklab, var(--foreground) 6%, transparent); text-decoration-color: var(--foreground); }
+.note-link.is-missing > span { color: var(--muted-foreground); text-decoration-style: dashed; }
+.note-link.ProseMirror-selectednode > span { background: color-mix(in oklab, var(--highlight) 22%, transparent); }
+.note-prose img { display: block; max-width: 100%; height: auto; border-radius: 8px; margin: 0.6em 0; }
+.note-prose img.ProseMirror-selectednode { outline: 2px solid var(--highlight); outline-offset: 2px; }
+.note-backlinks { margin-top: 2.6em; border-top: 1px solid var(--border); padding-top: 1em; }
+.note-backlinks-head { font-size: 12px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 6px; padding: 0 8px; }
+.note-backlink { display: block; width: 100%; text-align: left; padding: 8px; border-radius: 9px; }
+.note-backlink:hover { background: var(--sidebar-accent); }
+.note-backlinks + .note-subpages { margin-top: 1.2em; }
+.note-subpages-head { font-size: 12px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 4px; padding: 0 8px; }
+.note-backlink-snip mark { background: none; color: var(--foreground); font-weight: 600; }
+/* Notes: equations */
+.note-math-inline { display: inline; position: relative; }
+.note-math-inline .note-math-out { cursor: pointer; border-radius: 4px; padding: 0 2px; transition: background-color 120ms; }
+.note-math-block { position: relative; margin: 0.7em 0; }
+.note-math-block .note-math-out { display: block; cursor: pointer; border-radius: 8px; padding: 6px 4px; overflow-x: auto; transition: background-color 120ms; }
+.note-math-out:hover, .is-on > .note-math-out { background: color-mix(in oklab, var(--foreground) 5%, transparent); }
+.note-math-out.has-error { opacity: 0.6; }
+.note-math-edit { display: flex; flex-direction: column; gap: 4px; z-index: 20; }
+.note-math-inline .note-math-edit { position: absolute; left: 0; top: calc(100% + 6px); width: min(360px, 80vw); padding: 6px; border-radius: 10px; border: 1px solid var(--border); background: var(--popover, var(--card)); box-shadow: 0 8px 28px rgb(0 0 0 / 0.14); animation: note-pop 120ms ease-out; }
+.note-math-block .note-math-edit { margin-top: 6px; }
+.note-math-edit textarea { width: 100%; resize: none; border: 1px solid var(--border); border-radius: 8px; background: var(--muted); color: var(--foreground); font: 13.5px/1.55 var(--font-mono); padding: 7px 10px; outline: none; }
+.note-math-edit textarea:focus { border-color: color-mix(in oklab, var(--foreground) 35%, transparent); }
+.note-math-hint { font-size: 11.5px; color: var(--muted-foreground); padding: 0 2px; }
+/* Notes: callouts */
+.note-callout { display: flex; gap: 10px; margin: 0.6em 0; padding: 12px 14px; border-radius: 10px; background: var(--muted); }
+.note-callout[data-kind=tip] { background: color-mix(in oklab, var(--success, #2f9a41) 11%, var(--background)); }
+.note-callout[data-kind=warning] { background: color-mix(in oklab, var(--warning, #c98a14) 13%, var(--background)); }
+.note-callout[data-kind=danger] { background: color-mix(in oklab, var(--danger, #c0392b) 11%, var(--background)); }
+.note-callout[data-kind=question] { background: color-mix(in oklab, var(--easy, #3b82f6) 11%, var(--background)); }
+.note-callout-icon { flex-shrink: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 16px; line-height: 1; margin-top: 2px; }
+.note-callout-icon:hover { background: color-mix(in oklab, var(--foreground) 8%, transparent); }
+.note-callout-body { flex: 1; min-width: 0; }
+.note-callout-body > div > :first-child { margin-top: 0; }
+/* Notes: tables */
+.note-prose .tableWrapper { overflow-x: auto; margin: 0.8em 0; }
+.note-prose table { border-collapse: collapse; table-layout: fixed; width: 100%; overflow: hidden; }
+.note-prose td, .note-prose th { border: 1px solid var(--border); padding: 6px 10px; vertical-align: top; position: relative; min-width: 80px; box-sizing: border-box; }
+.note-prose th { background: var(--muted); font-weight: 600; text-align: left; }
+.note-prose td > p, .note-prose th > p { margin: 0; }
+.note-prose .selectedCell::after { content: ""; position: absolute; inset: 0; background: color-mix(in oklab, var(--highlight) 16%, transparent); pointer-events: none; }
+.note-prose .column-resize-handle { position: absolute; right: -2px; top: 0; bottom: -2px; width: 4px; background: var(--highlight); pointer-events: none; }
+.note-prose.resize-cursor, .resize-cursor .note-prose { cursor: col-resize; }
+/* Notes: toggles */
+.note-prose .note-toggle { display: flex; gap: 4px; margin: 0.3em 0; }
+.note-prose .note-toggle > button { flex-shrink: 0; width: 22px; height: 1.7em; display: flex; align-items: center; justify-content: center; border-radius: 5px; color: var(--muted-foreground); }
+.note-prose .note-toggle > button::before { content: ""; width: 0; height: 0; border-left: 6px solid currentColor; border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent; transition: transform 150ms; }
+.note-prose .note-toggle.is-open > button::before { transform: rotate(90deg); }
+.note-prose .note-toggle > button:hover { background: color-mix(in oklab, var(--foreground) 7%, transparent); color: var(--foreground); }
+.note-prose .note-toggle > div { flex: 1; min-width: 0; }
+.note-prose .note-toggle summary { font-weight: 550; list-style: none; }
+.note-prose .note-toggle summary::-webkit-details-marker { display: none; }
+.note-prose .note-toggle [data-type=detailsContent] { padding-left: 2px; }
+.note-prose .note-toggle:not(.is-open) [data-type=detailsContent] { display: none; }
+.note-prose .is-empty.has-focus::before { content: attr(data-placeholder); float: left; height: 0; pointer-events: none; color: color-mix(in oklab, var(--muted-foreground) 55%, transparent); }
+/* Notes: cards in a page */
+.note-cards { margin: 0.9em 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card); }
+.note-cards.is-on { outline: 2px solid color-mix(in oklab, var(--highlight) 60%, transparent); outline-offset: 2px; }
+.note-cards-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 38px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; color: var(--muted-foreground); }
+.note-cards-btn { height: 28px; padding: 0 8px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--muted-foreground); }
+.note-cards-btn:hover { background: var(--accent); color: var(--foreground); }
+.note-cards-frame { display: block; width: 100%; border: 0; background: transparent; transition: height 160ms ease; }
+.note-cards-setup { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.note-cards-input { width: 100%; height: 36px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--foreground); padding: 0 10px; font-size: 14px; outline: none; }
+.note-card-form { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px 12px; }
+.note-card-kinds { display: flex; flex-wrap: wrap; gap: 4px; }
+.note-card-kind { height: 30px; padding: 0 10px; border-radius: 8px; font-size: 13px; color: var(--muted-foreground); border: 1px solid transparent; }
+.note-card-kind:hover:not(:disabled) { background: var(--accent); color: var(--foreground); }
+.note-card-kind.is-on { border-color: var(--border); background: var(--background); color: var(--foreground); font-weight: 600; }
+.note-card-kind:disabled:not(.is-on) { display: none; }
+.note-card-field { display: flex; flex-direction: column; gap: 4px; }
+.note-card-label { font-size: 12px; font-weight: 600; color: var(--muted-foreground); }
+.note-card-input { border: 1px solid var(--border); border-radius: 9px; background: var(--background); color: var(--foreground); font-size: 15px; }
+.note-card-input:focus-within, .note-card-plain:focus { border-color: color-mix(in oklab, var(--foreground) 35%, transparent); }
+.note-card-plain { height: 38px; padding: 0 10px; outline: none; }
+.note-card-foot { display: flex; align-items: center; gap: 6px; padding-top: 2px; }
+.note-card-foot .note-cards-btn, .note-card-foot .lib-raised { height: 32px; }
+.note-card-foot .note-card-plain { height: 32px; font-size: 13px; }
+.note-cards.note-card.is-on { outline: none; border-color: color-mix(in oklab, var(--highlight) 60%, transparent); }
+.note-cardmark { background: color-mix(in oklab, var(--highlight) 16%, transparent); border-bottom: 2px solid color-mix(in oklab, var(--highlight) 70%, transparent); border-radius: 3px 3px 0 0; padding: 0 1px; }
+@media (max-width: 767px) {
+  .notes-shell { display: block; min-height: auto; }
+  .notes-tree { position: static; height: auto; width: auto; border-right: 0; padding: calc(1rem + env(safe-area-inset-top)) 10px 0; }
+  .note-row { min-height: 44px; font-size: 16px; }
+  .note-row-acts { display: flex; }
+  .note-topbar { padding: 0 14px; }
+  .note-sheet { padding: 20px 18px 40vh; }
+  /* above 16px, so iOS doesn't zoom; beats the inputs-at-16px rule that shrank the title */
+  .note-sheet textarea.note-title { font-size: 2rem !important; }
+}
+@media (prefers-reduced-motion: reduce) { .note-slash { animation: none; } }
+/* Notes: looks (M5). Colours are named and drawn from these, so a page reads in light and dark. */
+:root {
+  --nf-sans: var(--font-sans);
+  --nf-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --nf-mono: var(--font-mono);
+  --nc-gray: #787774; --nc-brown: #9f6b53; --nc-orange: #d9730d; --nc-yellow: #b38a00; --nc-green: #2f8a4a; --nc-blue: #2f6fbf; --nc-purple: #8a4fbf; --nc-pink: #c14c8a; --nc-red: #d44c47;
+  --nc-gray-bg: #ebebea; --nc-brown-bg: #f2e6df; --nc-orange-bg: #fbeadb; --nc-yellow-bg: #fbf1c8; --nc-green-bg: #dff1e4; --nc-blue-bg: #dde9f8; --nc-purple-bg: #ece2f6; --nc-pink-bg: #f8e1ed; --nc-red-bg: #fbe2e0;
+}
+.dark {
+  --nc-gray: #a6a6a3; --nc-brown: #c49a85; --nc-orange: #e8964f; --nc-yellow: #dcbc4a; --nc-green: #5fbf7a; --nc-blue: #6aa4ea; --nc-purple: #b58be0; --nc-pink: #e182b5; --nc-red: #ef7d78;
+  --nc-gray-bg: #454543; --nc-brown-bg: #563f33; --nc-orange-bg: #5f3f22; --nc-yellow-bg: #6b5a17; --nc-green-bg: #26502f; --nc-blue-bg: #24466d; --nc-purple-bg: #48335f; --nc-pink-bg: #5c3049; --nc-red-bg: #622f2c;
+}
+.note-prose span[style*="background-color"] { border-radius: 3px; padding: 0 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.note-sheet.is-wide { max-width: 1000px; }
+.note-sheet.is-full { max-width: none; padding-left: 72px; padding-right: 72px; }
+.note-sheet.font-serif .note-prose, .note-sheet.font-serif .note-title { font-family: var(--nf-serif); }
+.note-sheet.font-serif .note-title { font-weight: 650; letter-spacing: -0.01em; }
+.note-sheet.font-mono .note-prose, .note-sheet.font-mono .note-title { font-family: var(--nf-mono); }
+.note-sheet.font-mono .note-title { font-size: 2.1rem; letter-spacing: -0.02em; }
+.note-sheet.size-small .note-prose { font-size: 14.5px; }
+.note-sheet.size-large .note-prose { font-size: 19px; }
+.note-sheet .note-prose, .note-sheet .note-title { transition: font-size 160ms ease; }
+.note-sheet { transition: max-width 240ms cubic-bezier(.32,.72,0,1); }
+/* menu */
+.note-menu-label { font-size: 11px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); padding-top: 6px; }
+.note-menu-fonts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 2px 4px 6px; }
+.note-menu-font { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0 6px; border-radius: 8px; border: 1px solid transparent; }
+.note-menu-font:hover { background: var(--accent); }
+.note-menu-font.is-on { border-color: var(--border); background: var(--background); }
+.note-menu-font.font-serif > span:first-child { font-family: var(--nf-serif); }
+.note-menu-font.font-mono > span:first-child { font-family: var(--nf-mono); }
+/* icon + cover */
+.note-cover { position: relative; height: 210px; overflow: hidden; margin-top: -48px; }
+.note-cover.is-image { cursor: grab; }
+.note-cover.is-image:active { cursor: grabbing; }
+.note-cover-acts { position: absolute; right: 20px; bottom: 12px; display: flex; gap: 6px; align-items: center; opacity: 0; transition: opacity 150ms; }
+.note-cover:hover .note-cover-acts, .note-cover-acts:has([data-state=open]) { opacity: 1; }
+.note-cover-btn { height: 30px; padding: 0 12px; border-radius: 8px; font-size: 12.5px; font-weight: 600; color: var(--foreground); background: color-mix(in oklab, var(--background) 88%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); box-shadow: 0 1px 3px rgb(0 0 0 / 0.15); }
+.note-cover-btn:hover { background: var(--background); }
+.note-cover-hint { height: 30px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 8px; font-size: 12px; color: #fff; background: rgb(0 0 0 / 0.38); }
+.note-page:has(.note-cover) .note-topbar { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.note-page:has(.note-cover) .note-topbar > * { background: color-mix(in oklab, var(--background) 94%, transparent); border-radius: 10px; padding: 2px 4px 2px 10px; box-shadow: 0 1px 3px rgb(0 0 0 / 0.18); }
+.note-page:has(.note-cover) .note-topbar .note-save { opacity: 1; color: var(--foreground); }
+.note-topbar > span:last-child { margin-left: auto; }
+.note-back { display: inline-flex; flex-shrink: 0; align-items: center; gap: 2px; height: 32px; padding: 0 10px 0 4px; font-size: 14px; color: var(--muted-foreground); border-radius: 10px; }
+.note-back:hover { color: var(--foreground); }
+.note-page:has(.note-cover) .note-topbar > .note-back { padding: 0 10px 0 4px; color: var(--foreground); }
+.note-page:has(.note-cover) .note-topbar > nav:empty { display: none; }
+.note-sheet.has-cover { padding-top: 0; }
+.note-page-icon { display: block; font-size: 64px; line-height: 1; margin: 18px 0 6px -4px; padding: 4px; border-radius: 12px; transition: background-color 120ms; }
+.note-page-icon:hover { background: color-mix(in oklab, var(--foreground) 6%, transparent); }
+.note-sheet.has-cover .note-page-icon { margin-top: -42px; position: relative; z-index: 1; }
+.note-addons { display: flex; gap: 2px; height: 30px; margin: 0 0 4px -8px; opacity: 0; transition: opacity 150ms; }
+.note-sheet:hover .note-addons, .note-addons:has([data-state=open]), .note-addons:focus-within { opacity: 1; }
+.note-sheet.has-cover:not(.has-icon) .note-addons { margin-top: 14px; }
+.note-sheet.has-icon.has-cover .note-addons, .note-sheet.has-icon .note-addons { margin-top: 0; }
+.note-addons:empty { display: none; }
+.note-addon { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; border-radius: 7px; font-size: 13px; color: var(--muted-foreground); }
+.note-addon:hover { background: var(--accent); color: var(--foreground); }
+/* the block handle */
+.note-handle-host { position: relative; }
+.note-handle { position: absolute; left: 0; top: 0; z-index: 6; display: flex; align-items: center; gap: 1px; opacity: 0; pointer-events: none; transition: opacity 120ms, transform 90ms ease-out; }
+.note-handle.is-on { opacity: 1; pointer-events: auto; }
+.note-handle.is-drag { opacity: 0; }
+.note-handle button { display: flex; align-items: center; justify-content: center; height: 26px; border-radius: 6px; color: color-mix(in oklab, var(--muted-foreground) 80%, transparent); }
+.note-handle-plus { width: 24px; }
+.note-handle-grip { width: 22px; cursor: grab; }
+.note-handle button:hover { background: color-mix(in oklab, var(--foreground) 8%, transparent); color: var(--foreground); }
+.note-handle-grip:active { cursor: grabbing; }
+.note-drop-line { position: absolute; left: 0; top: 0; height: 3px; border-radius: 2px; background: color-mix(in oklab, var(--easy) 75%, transparent); opacity: 0; pointer-events: none; z-index: 6; transition: opacity 80ms; }
+.note-drop-line.is-on { opacity: 1; }
+.note-prose .note-dragging { opacity: 0.35; }
+.note-prose .ProseMirror-selectednode:not(img):not(hr):not(.note-cards):not(.note-link):not(.note-math-inline) { background: color-mix(in oklab, var(--highlight) 10%, transparent); border-radius: 6px; box-shadow: 0 0 0 3px color-mix(in oklab, var(--highlight) 10%, transparent); }
+/* the selection bar's style picker */
+.note-fmt-anchor { position: relative; display: inline-flex; }
+.note-fmt-wrap { position: absolute; left: 50%; transform: translateX(-50%); z-index: 60; }
+.note-fmt-wrap.is-down { top: calc(100% + 8px); }
+.note-fmt-wrap.is-up { bottom: calc(100% + 10px); }
+.note-fmt-pop { width: 264px; padding: 8px; border-radius: 12px; border: 1px solid var(--border); background: var(--popover, var(--card)); color: var(--foreground); box-shadow: 0 10px 34px rgb(0 0 0 / 0.16), 0 1px 3px rgb(0 0 0 / 0.08); animation: note-pop 120ms ease-out; z-index: 60; }
+.note-fmt-head { font-size: 11px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); padding: 6px 4px 4px; }
+.note-swatches { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; }
+.note-swatch { display: flex; align-items: center; justify-content: center; height: 24px; border-radius: 6px; border: 1px solid transparent; }
+.note-swatch:hover { background: var(--accent); }
+.note-swatch.is-on { border-color: color-mix(in oklab, var(--foreground) 40%, transparent); }
+.note-swatch-a { font-weight: 650; font-size: 14px; line-height: 1; }
+.note-swatch-bg { width: 16px; height: 16px; border-radius: 4px; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent); }
+.note-swatch-bg.is-none { background: linear-gradient(to top right, transparent 46%, color-mix(in oklab, var(--danger) 70%, transparent) 46% 54%, transparent 54%); }
+.note-fmt-row { display: flex; flex-wrap: wrap; gap: 2px; }
+.note-fmt-row .note-swatch { padding: 0 8px; height: 28px; }
+.note-fmt-word { font-size: 13px; }
+/* block menu */
+.note-bm { position: fixed; z-index: 70; width: 300px; padding: 6px; border-radius: 12px; border: 1px solid var(--border); background: var(--popover, var(--card)); color: var(--foreground); box-shadow: 0 10px 34px rgb(0 0 0 / 0.16), 0 1px 3px rgb(0 0 0 / 0.08); animation: note-pop 120ms ease-out; }
+.note-bm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; }
+.note-bm-turn { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 6px; border-radius: 7px; font-size: 13px; text-align: left; min-width: 0; }
+.note-bm-turn:hover { background: var(--accent); }
+.note-bm-turn.is-on { color: var(--foreground); font-weight: 600; background: color-mix(in oklab, var(--foreground) 6%, transparent); }
+.note-bm-glyph { width: 22px; flex-shrink: 0; text-align: center; font-size: 12px; font-weight: 650; color: var(--muted-foreground); }
+.note-bm .note-swatches { margin-bottom: 2px; }
+.note-bm-aligns { display: flex; gap: 2px; padding: 4px 2px 0; }
+.note-bm-align { flex: 1; display: flex; justify-content: center; align-items: center; height: 28px; border-radius: 7px; color: var(--muted-foreground); }
+.note-bm-align:hover { background: var(--accent); color: var(--foreground); }
+.note-bm-align.is-on { color: var(--foreground); background: color-mix(in oklab, var(--foreground) 7%, transparent); }
+.note-bm-sep { height: 1px; background: var(--border); margin: 6px -6px; }
+.note-bm-item { display: flex; width: 100%; align-items: center; gap: 10px; height: 32px; padding: 0 8px; border-radius: 7px; font-size: 13.5px; }
+.note-bm-item:hover { background: var(--accent); }
+.note-bm-item svg { color: var(--muted-foreground); }
+.note-bm-item.is-danger:hover { color: var(--danger); }
+.note-bm-item.is-danger:hover svg { color: var(--danger); }
+/* columns */
+.note-prose .note-cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 28px; margin: 0.6em 0; }
+.note-prose .note-col { min-width: 0; padding: 2px 0; border-radius: 6px; transition: box-shadow 150ms; }
+.note-prose .note-col > :first-child { margin-top: 0; }
+.note-prose .note-cols:focus-within .note-col { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 9%, transparent); padding: 2px 8px; margin: 0 -8px; }
+@media (max-width: 767px) {
+  .note-prose .note-cols { grid-auto-flow: row; gap: 10px; }
+  /* the cover is the top of the page: it runs under the status bar and the floating top bar */
+  .note-topbar { height: calc(48px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); gap: 8px; }
+  .note-cover { height: calc(160px + env(safe-area-inset-top)); margin-top: calc(-48px - env(safe-area-inset-top)); }
+  .note-topbar > nav, .note-page:has(.note-cover) .note-topbar > nav { display: none; }
+  .note-page:has(.note-cover) .note-topbar > * { height: 32px; display: inline-flex; align-items: center; }
+  .note-sheet.is-full { padding-left: 18px; padding-right: 18px; }
+  .note-handle { display: none; }
+  .note-addons { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .note-handle, .note-sheet, .note-fmt-pop, .note-bm { transition: none; animation: none; } }
+/* Notes: resizable blocks */
+.note-cards { position: relative; margin-left: auto; margin-right: auto; max-width: 100%; }
+.note-rs { position: absolute; z-index: 3; opacity: 0; transition: opacity 120ms; }
+.note-cards:hover > .note-rs, .note-cards.is-resizing > .note-rs { opacity: 1; }
+.note-rs-l, .note-rs-r { top: 50%; width: 6px; height: 44px; margin-top: -22px; border-radius: 3px; background: color-mix(in oklab, var(--foreground) 28%, transparent); cursor: ew-resize; }
+.note-rs-l { left: 4px; }
+.note-rs-r { right: 4px; }
+.note-rs-b { left: 50%; bottom: 3px; width: 44px; height: 6px; margin-left: -22px; border-radius: 3px; background: color-mix(in oklab, var(--foreground) 28%, transparent); cursor: ns-resize; }
+.note-rs:hover { background: color-mix(in oklab, var(--foreground) 55%, transparent); }
+.note-cards.is-resizing .note-cards-frame { pointer-events: none; transition: none; }
+body.note-resizing-x, body.note-resizing-x * { cursor: ew-resize !important; user-select: none; }
+body.note-resizing-y, body.note-resizing-y * { cursor: ns-resize !important; user-select: none; }
+/* Notes: dragging a column */
+.note-colgrip { position: absolute; left: 0; top: 0; z-index: 6; width: 28px; height: 16px; display: flex; align-items: center; justify-content: center; border-radius: 5px; color: color-mix(in oklab, var(--muted-foreground) 80%, transparent); background: var(--background); box-shadow: 0 0 0 1px var(--border); opacity: 0; pointer-events: none; cursor: grab; transition: opacity 120ms; }
+.note-colgrip.is-on { opacity: 1; pointer-events: auto; }
+.note-colgrip.is-drag { opacity: 0; }
+.note-colgrip:hover { color: var(--foreground); }
+.note-drop-line { height: 3px; }
+/* Notes: table controls */
+.note-tbl-ui > * { position: fixed; z-index: 55; }
+.note-tbl-grip { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: color-mix(in oklab, var(--muted-foreground) 85%, transparent); background: var(--background); box-shadow: 0 0 0 1px var(--border); cursor: grab; touch-action: none; }
+.note-tbl-grip.is-col { height: 18px; }
+.note-tbl-grip.is-row { width: 18px; }
+.note-tbl-grip:hover { color: var(--foreground); background: var(--accent); }
+.note-tbl-grip.is-drag { cursor: grabbing; color: var(--foreground); }
+.note-tbl-add { display: flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--muted-foreground); background: color-mix(in oklab, var(--foreground) 4%, transparent); opacity: 0.0; transition: opacity 120ms, background-color 120ms; animation: note-tbl-in 140ms ease-out forwards; }
+.note-tbl-add.is-row { height: 20px; }
+.note-tbl-add.is-col { width: 20px; }
+.note-tbl-add:hover { background: color-mix(in oklab, var(--foreground) 10%, transparent); color: var(--foreground); }
+@keyframes note-tbl-in { to { opacity: 1; } }
+.note-tbl-mark { border-radius: 2px; background: color-mix(in oklab, var(--easy) 75%, transparent); pointer-events: none; }
+.note-prose .tableWrapper { padding: 0 0 2px; }
+.note-prose td, .note-prose th { transition: background-color 120ms; }
+.note-prose td:focus-within, .note-prose th:focus-within { background: color-mix(in oklab, var(--foreground) 3%, transparent); }
+/* Page icon */
+.note-page-icon { display: inline-flex; }
+.note-row-icon { display: inline-flex; align-items: center; justify-content: center; }
+
+
+
+
+/* Dragging pages in the Notes tree. */
+body.note-dragging, body.note-dragging * { cursor: grabbing !important; user-select: none !important; }
+.note-row.is-dragged { opacity: .38; }
+.note-row.is-drop-into { background: color-mix(in oklab, var(--primary) 14%, transparent) !important; box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--primary) 55%, transparent); color: var(--foreground); }
+.note-tree-line { position: fixed; z-index: 80; height: 2px; margin-top: -1px; border-radius: 2px; background: var(--primary); pointer-events: none; }
+.note-tree-line::before { content: ""; position: absolute; left: -5px; top: -3px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--primary); background: var(--background); }
+.note-drag-chip { position: fixed; z-index: 81; display: flex; align-items: center; gap: 6px; max-width: 220px; padding: 5px 10px 5px 8px; border-radius: 9px; font-size: 13px; background: var(--popover); color: var(--popover-foreground); border: 1px solid var(--border); box-shadow: 0 8px 24px -8px rgb(0 0 0 / .35); pointer-events: none; transform: rotate(-1.5deg); }
+.note-drag-chip.is-nowhere { opacity: .7; }
+@media (prefers-reduced-motion: reduce) { .note-drag-chip { transform: none; } }
+body.note-dragging .note-row-acts { display: none !important; }
+body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent; }
+
+/* Folders in the Notes tree, and typing a name in place. */
+.note-row[data-kind=folder] .note-row-icon { color: var(--muted-foreground); }
+.note-row[data-kind=folder]:hover .note-row-icon, .note-row[data-kind=folder].is-drop-into .note-row-icon { color: var(--foreground); }
+.note-row-rename { min-width: 0; flex: 1; height: 24px; margin: 0 2px 0 -3px; padding: 0 3px; border-radius: 5px; font: inherit; color: var(--foreground); background: var(--background); border: none; outline: none; box-shadow: 0 0 0 1.5px var(--primary); }
+.note-folder { padding-top: 56px; }
+.note-folder-head { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.note-folder-icon { color: var(--muted-foreground); }
+.note-folder-title { font-size: 32px; line-height: 1.15; font-weight: 700; letter-spacing: -0.01em; }
+.note-folder-list { display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+.note-folder-item { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 6px; border-bottom: 1px solid var(--border); text-align: left; font-size: 15px; }
+.note-folder-item:hover { background: var(--sidebar-accent); }
+
+/* Notes graph view (over the app, like the deck finder). */
+.note-graph-veil { position: absolute; inset: 0; background: color-mix(in oklab, var(--background) 40%, rgb(0 0 0 / 0.22)); backdrop-filter: blur(6px); animation: deck-finder-fade 0.16s ease-out both; }
+.dark .note-graph-veil { background: color-mix(in oklab, var(--background) 45%, rgb(0 0 0 / 0.4)); }
+.note-graph-box { box-shadow: inset 0 0 0 1px var(--border), 0 24px 60px -12px rgb(0 0 0 / 0.28); animation: note-graph-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+.dark .note-graph-box { box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1), 0 24px 70px -10px rgb(0 0 0 / 0.65); }
+.note-graph[data-closing] .note-graph-veil { animation: deck-finder-fade 0.14s ease-in reverse both; }
+.note-graph[data-closing] .note-graph-box { animation: note-graph-in 0.14s ease-in reverse both; }
+@keyframes note-graph-in { from { opacity: 0; transform: translateY(8px) scale(0.985); } }
+@media (prefers-reduced-motion: reduce) { .note-graph-box, .note-graph-veil { animation: none; } }
+
+/* Notes tabs (D, in the page bar): once two pages are open the tabs take the path's place in the top bar,
+   and the path moves above the title. */
+.note-tabs { display: flex; flex: 0 1 auto; min-width: 0; align-items: center; gap: 2px; height: 48px; margin-left: -8px; overflow-x: auto; scrollbar-width: none; }
+.note-tabs::-webkit-scrollbar { display: none; }
+.note-tabs.fade-r { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); }
+.note-tabs.fade-l { -webkit-mask-image: linear-gradient(to right, transparent, #000 36px); mask-image: linear-gradient(to right, transparent, #000 36px); }
+.note-tabs.fade-l.fade-r { -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
+.note-tab { position: relative; display: flex; flex: 0 0 180px; width: 180px; align-items: center; gap: 7px; height: 32px; padding: 0 30px 0 10px; font-size: 13px; color: var(--muted-foreground); border-radius: 8px; cursor: default; user-select: none; transition: background 120ms, color 120ms; }
+.note-tab:hover { color: var(--foreground); background: var(--sidebar-accent); }
+.note-tab.is-on { color: var(--foreground); background: var(--sidebar-accent); font-weight: 600; }
+.note-tab:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.note-tab-icon { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 16px; height: 16px; }
+.note-tab-x { position: absolute; right: 5px; top: 5px; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; background: inherit; border-radius: 6px; color: var(--muted-foreground); opacity: 0; transition: opacity 120ms; }
+.note-tab:hover .note-tab-x, .note-tab.is-on .note-tab-x, .note-tab-x:focus-visible { opacity: 1; }
+.note-tab-x:hover { background: color-mix(in oklab, var(--foreground) 10%, var(--sidebar-accent)); color: var(--foreground); }
+/* On a hovered background tab the × covers the end of the name, with a short fade so it doesn't cut a letter. */
+.note-tab.is-fresh { animation: note-tab-in 0.3s cubic-bezier(.32,.72,0,1); }
+@keyframes note-tab-in { from { opacity: 0; transform: translateY(4px); } }
+.note-tab-plus { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; color: var(--muted-foreground); opacity: 0; transition: opacity 140ms, background 120ms, color 120ms; }
+.note-topbar:hover .note-tab-plus, .note-tab-plus:focus-visible { opacity: 1; }
+.note-tab-plus:hover { background: var(--sidebar-accent); color: var(--foreground); }
+.note-page:has(.note-cover) .note-topbar > .note-tab-plus { padding: 0; border-radius: 8px; background: color-mix(in oklab, var(--background) 82%, transparent); }
+@media (hover: none) { .note-tab-plus { opacity: 1; } }
+.note-crumbs-above { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 0 0 6px -4px; font-size: 13px; color: var(--muted-foreground); }
+.note-canvas-name { flex: 0 1 220px; }
+@media (prefers-reduced-motion: reduce) { .note-tab, .note-tab-x { transition: none; } .note-tab.is-fresh { animation: none; } }
+/* Notes: canvases (Excalidraw). A canvas note fills the screen under its top bar; in a page it's a block. */
+.note-canvas-page { display: flex; flex-direction: column; height: 100dvh; min-height: 0; }
+/* With page tabs over it the canvas is that much shorter, so the window doesn't scroll and hide its toolbar. */
+.notes-main:has(> .note-tabs) .note-canvas-page { height: calc(100dvh - 40px); }
+.note-canvas-page .note-topbar, .notes-main:has(> .note-tabs) .note-canvas-page .note-topbar { position: relative; top: 0; }
+.note-canvas-page .note-topbar { flex-shrink: 0; }
+.note-canvas-title { min-width: 4ch; flex: 1; max-width: 32rem; height: 30px; padding: 0 6px; border-radius: 7px; background: transparent; color: var(--foreground); font-size: 14px; font-weight: 600; outline: none; }
+.note-canvas-title:hover { background: var(--accent); }
+.note-canvas-title:focus { background: var(--accent); }
+.note-canvas-board { position: relative; width: 100%; height: 100%; min-height: 0; }
+.note-canvas-full { flex: 1; }
+.note-canvas-loading, .note-canvas-empty { display: flex; height: 100%; min-height: 120px; align-items: center; justify-content: center; font-size: 13.5px; color: var(--muted-foreground); }
+.note-canvas-rest { display: block; width: 100%; cursor: pointer; padding: 0; overflow: hidden; background: transparent; }
+.note-canvas-rest:hover { background: color-mix(in oklab, var(--foreground) 3%, transparent); }
+.note-canvas-svg { display: flex; height: 100%; width: 100%; align-items: center; justify-content: center; padding: 10px; }
+.note-canvas-svg svg { max-width: 100%; max-height: 100%; width: auto; height: auto; }
+.note-canvas.is-editing { outline: 2px solid color-mix(in oklab, var(--highlight) 55%, transparent); outline-offset: 2px; }
+.note-canvas-live { font-weight: 500; font-size: 12px; color: var(--muted-foreground); }
+.note-canvas-pick { display: flex; flex-direction: column; gap: 2px; max-height: 240px; overflow-y: auto; }
+.note-canvas-pick-row { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border-radius: 8px; font-size: 14px; text-align: left; color: var(--foreground); }
+.note-canvas-pick-row:hover { background: var(--accent); }
+.note-canvas-pick-row.is-new { font-weight: 600; }
+/* Excalidraw dressed as Etude: the theme's surfaces, borders and font, raised islands like Etude's buttons,
+   the current tool on the accent (not Excalidraw's purple) and the board on the page's own background.
+   The doubled classes beat Excalidraw's own .excalidraw / .theme--dark rules, which load after ours. */
+.note-canvas-board .excalidraw.excalidraw, .note-canvas-board .excalidraw.theme--dark.theme--dark {
+  --ui-font: var(--font-sans, Inter, system-ui, sans-serif);
+  --color-primary: var(--primary); --color-primary-darker: color-mix(in oklab, var(--primary) 86%, black); --color-primary-darkest: color-mix(in oklab, var(--primary) 72%, black); --color-primary-hover: color-mix(in oklab, var(--primary) 90%, black);
+  --color-primary-light: var(--accent); --color-primary-light-darker: color-mix(in oklab, var(--foreground) 14%, var(--accent));
+  --color-brand-hover: var(--primary); --color-brand-active: var(--primary);
+  --color-surface-lowest: var(--background); --color-surface-low: var(--card); --color-surface-mid: var(--muted); --color-surface-high: var(--accent);
+  --color-surface-primary-container: var(--accent); --color-on-primary-container: var(--foreground); --color-on-surface: var(--foreground); --text-primary-color: var(--foreground);
+  --island-bg-color: var(--card); --popup-bg-color: var(--popover, var(--card)); --sidebar-bg-color: var(--card); --sidebar-border-color: var(--border); --default-border-color: var(--border);
+  --input-bg-color: var(--background); --input-border-color: var(--border); --input-hover-bg-color: var(--accent);
+  --button-hover-bg: var(--accent); --button-active-bg: var(--accent); --button-active-border: var(--border);
+  --color-selection: var(--highlight); --icon-fill-color: var(--foreground);
+  --shadow-island: 0 2px 0 var(--border); --border-radius-md: 9px; --border-radius-lg: 12px;
+  --default-bg-color: var(--background);
+  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+}
+.note-canvas-board .excalidraw .Island { border: 1px solid var(--border); box-shadow: 0 2px 0 var(--border); }
+.note-canvas-board .excalidraw .ToolIcon__icon { border-radius: 8px; color: var(--muted-foreground); }
+.note-canvas-board .excalidraw .ToolIcon__icon svg { color: inherit; }
+.note-canvas-board .excalidraw .ToolIcon:hover .ToolIcon__icon { color: var(--foreground); }
+.note-canvas-board .excalidraw .ToolIcon_type_radio:checked + .ToolIcon__icon, .note-canvas-board .excalidraw .ToolIcon_type_checkbox:checked + .ToolIcon__icon { background: var(--accent); color: var(--foreground); box-shadow: inset 0 0 0 1px var(--border); }
+.note-canvas-board .excalidraw .ToolIcon__keybinding { color: var(--muted-foreground); font-family: var(--font-sans, Inter, sans-serif); }
+.note-canvas-board .excalidraw .HintViewer { color: var(--muted-foreground); font-size: 12px; }
+.note-canvas-board .excalidraw .dropdown-menu-container, .note-canvas-board .excalidraw .popover, .note-canvas-board .excalidraw .picker { border: 1px solid var(--border); box-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.35); border-radius: 12px; }
+.note-canvas-board .excalidraw .dropdown-menu-item { border-radius: 8px; color: var(--foreground); }
+.note-canvas-board .excalidraw .dropdown-menu-item:hover { background: var(--accent); }
+.note-canvas-board .excalidraw .welcome-screen-decor, .note-canvas-board .excalidraw .welcome-screen-center__logo { display: none; }
+/* The board sits on the page: its own background is see-through (new canvases have none) and the page shows. */
+.note-canvas-board, .note-canvas-board .excalidraw-container { background: var(--background); }
+.note-canvas.is-embedded .note-canvas-board, .note-cards.note-canvas .note-canvas-board, .note-cards.note-canvas .note-canvas-board .excalidraw-container { background: var(--card); }
+.note-canvas.is-embedded .excalidraw .App-menu_top { padding-top: 6px; }
+/* While you draw in a page the board takes the side edges (Excalidraw's tools sit there); height still resizes. */
+.note-canvas.is-editing > .note-rs-l, .note-canvas.is-editing > .note-rs-r { display: none; }
+.note-canvas { margin-top: 1.1em; }
+/* Phone: the board ends above the tab bar, so Excalidraw's bottom bar (menu, undo) stays reachable. */
+/* (2.75rem: the "‹ Notes" back button above it.) */
+@media (max-width: 767px) { .note-canvas-page { height: calc(100dvh - var(--tabbar-h, 0px) - 2.75rem - 0.75rem); } }
+.ng-range { -webkit-appearance: none; appearance: none; height: 18px; background: transparent; cursor: pointer; }
+.ng-range::-webkit-slider-runnable-track { height: 4px; border-radius: 99px; background: linear-gradient(to right, var(--primary) var(--ng-fill, 0%), color-mix(in oklab, var(--foreground) 14%, transparent) var(--ng-fill, 0%)); }
+.ng-range::-moz-range-track { height: 4px; border-radius: 99px; background: color-mix(in oklab, var(--foreground) 14%, transparent); }
+.ng-range::-moz-range-progress { height: 4px; border-radius: 99px; background: var(--primary); }
+.ng-range::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 99px; background: var(--primary); box-shadow: 0 0 0 3px var(--background); }
+.ng-range::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 99px; background: var(--primary); box-shadow: 0 0 0 3px var(--background); }
+.ng-range:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 99px; }
+.ng-panel { animation: ng-panel-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+@keyframes ng-panel-in { from { opacity: 0; transform: translateX(10px); } }
+@media (pointer: coarse) { .ng-range { height: 28px; } .ng-range::-webkit-slider-thumb { width: 20px; height: 20px; margin-top: -8px; } .ng-range::-moz-range-thumb { width: 20px; height: 20px; } }
+@media (max-width: 639px) { .ng-panel { animation-name: ng-sheet-in; } }
+@keyframes ng-sheet-in { from { opacity: 0; transform: translateY(14px); } }
+@media (prefers-reduced-motion: reduce) { .ng-panel { animation: none; } }
+
+/* An embedded canvas while drawing: the board owns every pointer (no page text selection, no block drag), and Full screen lifts it over the app. */
+.note-canvas.is-editing .note-cards-frame { user-select: none; -webkit-user-select: none; touch-action: none; overscroll-behavior: contain; }
+.note-canvas.is-full { position: fixed; inset: 12px; z-index: 80; width: auto !important; margin: 0; display: flex; flex-direction: column; box-shadow: 0 24px 80px -20px rgb(0 0 0 / 0.55); }
+.note-canvas.is-full > .note-cards-frame { flex: 1; height: auto; }
+.note-canvas.is-full > .note-rs { display: none; }
+
+/* No Library and no ? help: Etude has neither, and they crowded the board. */
+.note-canvas-board .excalidraw .default-sidebar-trigger, .note-canvas-board .excalidraw .sidebar-trigger, .note-canvas-board .excalidraw .help-icon, .note-canvas-board .excalidraw .layer-ui__wrapper__footer-right .help-icon { display: none !important; }
+/* The compact (narrow board) bottom bar: a full-width strip becomes a small raised pill in the bottom-left
+   corner holding the menu, undo and redo, the same shape as the zoom pill on the wide board. */
+.note-canvas-board .excalidraw .App-bottom-bar { left: 10px; right: auto; bottom: 10px; width: auto; padding: 0; }
+.note-canvas-board .excalidraw .App-bottom-bar > .Island { width: auto; padding: 3px; border-radius: 12px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 2px 0 var(--border); }
+.note-canvas-board .excalidraw .App-bottom-bar .App-toolbar { padding: 0; border: 0; background: transparent; box-shadow: none; }
+.note-canvas-board .excalidraw .App-bottom-bar .App-toolbar-content { gap: 2px; padding: 0; justify-content: flex-start; }
+.note-canvas-board .excalidraw .App-bottom-bar .App-toolbar-content > * { margin: 0; }
+.note-canvas-board .excalidraw .App-bottom-bar .ToolIcon__icon, .note-canvas-board .excalidraw .App-bottom-bar button { width: 32px; height: 32px; min-width: 32px; border-radius: 9px; background: transparent; box-shadow: none; border: 0; }
+.note-canvas-board .excalidraw .App-bottom-bar .ToolIcon__icon:hover, .note-canvas-board .excalidraw .App-bottom-bar button:hover { background: var(--accent); }
+.note-canvas-board .excalidraw .App-bottom-bar .undo-redo-buttons { gap: 2px; padding-left: 2px; margin-left: 2px; border-left: 1px solid var(--border); }
+.note-canvas-board .excalidraw .App-bottom-bar svg { width: 16px; height: 16px; }
+
+/* An embedded canvas is just the board, like any other block: no header. Two small buttons float in its corner
+   on hover (full screen, open); it moves with the ⋮⋮ grip and goes away with the block menu or Backspace. */
+.note-cards.note-canvas { position: relative; }
+.note-canvas-acts { position: absolute; top: 8px; right: 8px; z-index: 6; display: flex; gap: 4px; opacity: 0; transition: opacity 120ms; pointer-events: none; }
+.note-canvas:hover > .note-canvas-acts, .note-canvas.is-full > .note-canvas-acts, .note-canvas-acts:focus-within { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .note-canvas-acts { opacity: 1; pointer-events: auto; } }
+.note-canvas-act { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9px; background: var(--card); color: var(--muted-foreground); border: 1px solid var(--border); box-shadow: 0 2px 0 var(--border); }
+.note-canvas-act:hover { color: var(--foreground); background: var(--accent); }
+/* While drawing, Excalidraw's own top-right corner is empty (Library is gone), so the buttons sit there. */
+.note-canvas.is-editing > .note-canvas-acts { top: 10px; right: 10px; }
+.note-canvas > .note-cards-frame { border-radius: inherit; overflow: hidden; }
+
+/* With two or more tabs the top bar is a solid band and the cover starts under it, so the tabs never sit on the picture. */
+.note-page.has-tabs:has(.note-cover) .note-topbar { background: var(--background); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.note-page.has-tabs:has(.note-cover) .note-topbar > * { background: none; box-shadow: none; padding: 0; border-radius: 0; }
+.note-page.has-tabs:has(.note-cover) .note-topbar > .note-tab-plus { border-radius: 8px; }
+.note-page.has-tabs:has(.note-cover) .note-topbar .note-save { opacity: 0.6; color: var(--muted-foreground); }
+.note-page.has-tabs .note-cover { margin-top: 0; }
+
+/* A canvas looks like the page it's on: no line under the top bar, no card fill or frame around an embedded
+   board, the page's own background behind the drawing. A thin outline shows only on hover and while drawing. */
+.note-canvas-board, .note-canvas-board .excalidraw-container, .note-cards.note-canvas .note-canvas-board, .note-cards.note-canvas .note-canvas-board .excalidraw-container { background: var(--background) !important; }
+.note-cards.note-canvas { background: var(--background); border-color: transparent; transition: border-color 120ms; }
+.note-cards.note-canvas:hover, .note-cards.note-canvas.is-editing { border-color: var(--border); }
+.note-cards.note-canvas.is-on, .note-canvas.is-editing { outline: none; }
+.note-canvas-rest, .note-canvas-rest:hover { background: transparent; }
+.note-canvas-page .note-topbar { border-bottom: 0; box-shadow: none; }

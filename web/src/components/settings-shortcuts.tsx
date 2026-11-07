@@ -54,7 +54,7 @@ const GROUPS: { title: string; description?: string; rows: Row[] }[] = [
   },
   {
     title: "Anywhere",
-    rows: [{ keys: [`${mod}+B`], what: "Collapse or expand the sidebar" }],
+    rows: [{ keys: [`${mod}+[`, "["], what: "Collapse or expand the sidebar" }],
   },
 ];
 

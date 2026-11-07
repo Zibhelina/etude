@@ -15,7 +15,7 @@ const TABS = [
   { to: "/", label: "Library", icon: LibraryIcon, match: (p: string) => p === "/" || p === "/deck" || p === "/archive" || p === "/browse" || p.startsWith("/types") },
   { to: "/stats", label: "Stats", icon: StatsIcon, match: (p: string) => p === "/stats" },
   { to: "/market", label: "Market", icon: MarketIcon, match: (p: string) => p === "/market" },
-  { to: "/settings", label: "You", icon: null, match: (p: string) => p === "/settings" || p === "/more" },
+  { to: "/settings", label: "You", icon: null, match: (p: string) => p === "/settings" || p === "/more" || p === "/notes" },
 ];
 
 /**

@@ -1,9 +1,10 @@
 // Ctrl/⌘K anywhere outside a study session: a search bar in the middle of the screen over a blurred page, with
 // suggestions before you type, that jumps to a deck in the Library. Enter opens the deck, ⌘/Ctrl+Enter studies it.
+import { NoteIcon } from "@/editor/note-icon";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Search } from "lucide-react";
-import { api, type DeckNode } from "@/lib/api";
+import { api, type DeckNode, type NoteSummary } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { DeckBadge } from "@/components/deck-icon";
@@ -98,6 +99,8 @@ export function DeckFinder({ enabled }: { enabled: boolean }) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (!((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k")) return;
+      // In a canvas Ctrl/⌘+K adds a link to a shape.
+      if ((e.target as HTMLElement | null)?.closest?.(".excalidraw")) return;
       // Browse and a deck's page use ⌘K for their own search; they run first and claim the key.
       if (e.defaultPrevented || !enabledRef.current) return;
       if (document.querySelector("[role=dialog]:not([data-deck-finder]), [role=alertdialog]")) return;
@@ -120,6 +123,7 @@ export function DeckFinder({ enabled }: { enabled: boolean }) {
 
 function FinderPanel({ onClose }: { onClose(): void }) {
   const [decks, setDecks] = useState<DeckNode[] | null>(null);
+  const [pages, setPages] = useState<NoteSummary[]>([]);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
   const [closing, setClosing] = useState(false);
@@ -131,6 +135,7 @@ function FinderPanel({ onClose }: { onClose(): void }) {
   useEffect(() => {
     let live = true;
     api.decks().then((d) => live && setDecks(d)).catch(() => live && setDecks([]));
+    api.notes().then((n) => live && setPages(n)).catch(() => {});
     const prev = document.activeElement as HTMLElement | null;
     const html = document.documentElement;
     const overflow = html.style.overflow;
@@ -164,6 +169,27 @@ function FinderPanel({ onClose }: { onClose(): void }) {
     return { title: hits.length ? "Decks" : "", rows: hits.slice(0, 50) };
   }, [decks, query]);
 
+  // Notes pages whose title matches, after the decks (only once you type).
+  const pageHits = useMemo(() => {
+    if (!query) return [];
+    const q = query.toLowerCase();
+    return pages
+      .map((n) => {
+        const t = (n.title || "Untitled").toLowerCase();
+        const at = t.indexOf(q);
+        const words = q.split(/\s+/).filter(Boolean);
+        const score = t === q ? 1000 : at === 0 ? 900 : at > 0 ? 700 - at : words.every((w) => t.includes(w)) ? 500 : -1;
+        return { n, score, marks: at >= 0 ? Array.from({ length: q.length }, (_, i) => at + i) : [] };
+      })
+      .filter((h) => h.score >= 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8);
+  }, [pages, query]);
+  const count = rows.length + pageHits.length;
+  // Pages go first when the best page matches better than the best deck ("greed" → the page Greedy, not a deck that only has those letters).
+  const pagesFirst = !!pageHits.length && (!rows.length || pageHits[0].score > (rows[0] as Hit).score);
+  const deckAt = (i: number) => (pagesFirst ? i - pageHits.length : i);
+  const pageAt = (i: number) => (pagesFirst ? i : i - rows.length);
   useEffect(() => setActive(0), [query]);
   useEffect(() => {
     list.current?.querySelector(`[data-i="${active}"]`)?.scrollIntoView({ block: "nearest" });
@@ -177,6 +203,7 @@ function FinderPanel({ onClose }: { onClose(): void }) {
       then?.();
     }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 120);
   };
+  const goPage = (n: NoteSummary) => close(() => navigate(`/notes?id=${enc(n.id)}`));
   const go = (d: DeckNode, study: boolean) => {
     const to = !study
       ? `/deck?name=${enc(d.name)}`
@@ -194,60 +221,24 @@ function FinderPanel({ onClose }: { onClose(): void }) {
     }
     if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) {
       e.preventDefault();
-      setActive((a) => (rows.length ? (a + 1) % rows.length : 0));
+      setActive((a) => (count ? (a + 1) % count : 0));
     } else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) {
       e.preventDefault();
-      setActive((a) => (rows.length ? (a - 1 + rows.length) % rows.length : 0));
-    } else if (e.key === "Enter" && rows[active]) {
+      setActive((a) => (count ? (a - 1 + count) % count : 0));
+    } else if (e.key === "Enter" && pageHits[pageAt(active)] && pageAt(active) >= 0) {
       e.preventDefault();
-      go(rows[active].deck, e.metaKey || e.ctrlKey);
+      goPage(pageHits[pageAt(active)].n);
+    } else if (e.key === "Enter" && deckAt(active) >= 0 && rows[deckAt(active)]) {
+      e.preventDefault();
+      go(rows[deckAt(active)].deck, e.metaKey || e.ctrlKey);
     } else if (e.key === "Tab") e.preventDefault();
   };
 
-  return createPortal(
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Find a deck"
-      data-deck-finder=""
-      data-closing={closing || undefined}
-      className="deck-finder fixed inset-0 z-[60] flex justify-center px-4"
-      onMouseDown={(e) => !(e.target as HTMLElement).closest(".deck-finder-box") && close()}
-      onKeyDown={onKey}
-      onMouseMove={() => (pointerMoved.current = true)}
-    >
-      <div className="deck-finder-veil" aria-hidden style={{ backdropFilter: "blur(14px) saturate(0.9)", WebkitBackdropFilter: "blur(14px) saturate(0.9)" }} />
-      <div className="deck-finder-box relative flex max-h-[min(560px,70dvh)] w-full max-w-[620px] flex-col self-start overflow-hidden rounded-2xl bg-popover text-popover-foreground">
-        <label className="flex h-14 shrink-0 items-center gap-3 px-4.5">
-          <Search className="size-5 shrink-0 text-muted-foreground" aria-hidden />
-          <input
-            ref={input}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Find a deck…"
-            aria-label="Find a deck"
-            role="combobox"
-            aria-expanded="true"
-            aria-controls="deck-finder-list"
-            aria-activedescendant={rows[active] ? `deck-finder-${active}` : undefined}
-            autoComplete="off"
-            spellCheck={false}
-            className="h-full min-w-0 flex-1 bg-transparent text-[17px] outline-none placeholder:text-muted-foreground/80"
-          />
-          <kbd className="hidden shrink-0 rounded-md border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground sm:block">esc</kbd>
-        </label>
-        <div className="h-px shrink-0 bg-border" />
-        <div ref={list} id="deck-finder-list" role="listbox" aria-label={title || "Decks"} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
-          {decks === null ? (
-            <div className="px-3 py-6 text-center text-sm text-muted-foreground">Loading your decks…</div>
-          ) : !rows.length ? (
-            <div className="px-3 py-8 text-center text-sm text-muted-foreground">
-              {query ? <>No deck called “{query}”.</> : "No decks yet."}
-            </div>
-          ) : (
-            <>
-              {title && <div className="px-2.5 pt-1.5 pb-1 text-[11.5px] font-semibold tracking-wide text-muted-foreground uppercase">{title}</div>}
-              {rows.map((h, i) => {
+  const decksSection = (
+    <>
+      {title && rows.length > 0 && <div className={cn("px-2.5 pb-1 text-[11.5px] font-semibold tracking-wide text-muted-foreground uppercase", pagesFirst ? "pt-3" : "pt-1.5")}>{title}</div>}
+              {rows.map((h, ri) => {
+                const i = pagesFirst ? ri + pageHits.length : ri;
                 const d = h.deck;
                 const name = leaf(d.name);
                 const parent = parentPath(d.name);
@@ -260,7 +251,7 @@ function FinderPanel({ onClose }: { onClose(): void }) {
                     role="option"
                     aria-selected={i === active}
                     className={cn("deck-finder-row flex cursor-pointer items-center gap-3 rounded-xl px-2.5 py-2", i === active && "is-active")}
-                    style={{ animationDelay: `${Math.min(i, 8) * 18}ms` }}
+                    style={{ animationDelay: `${Math.min(ri, 8) * 18}ms` }}
                     onMouseMove={() => pointerMoved.current && setActive(i)}
                     onClick={(e) => go(d, e.metaKey || e.ctrlKey)}
                   >
@@ -282,6 +273,77 @@ function FinderPanel({ onClose }: { onClose(): void }) {
                   </div>
                 );
               })}
+    </>
+  );
+  const pagesSection = (
+    <>
+              {pageHits.length > 0 && <div className={cn("px-2.5 pb-1 text-[11.5px] font-semibold tracking-wide text-muted-foreground uppercase", pagesFirst ? "pt-1.5" : "pt-3")}>Pages</div>}
+              {pageHits.map((h, j) => {
+                const i = pagesFirst ? j : rows.length + j;
+                return (
+                  <div
+                    key={h.n.id}
+                    id={`deck-finder-${i}`}
+                    data-i={i}
+                    role="option"
+                    aria-selected={i === active}
+                    className={cn("deck-finder-row flex cursor-pointer items-center gap-3 rounded-xl px-2.5 py-2", i === active && "is-active")}
+                    onMouseMove={() => pointerMoved.current && setActive(i)}
+                    onClick={() => goPage(h.n)}
+                  >
+                    <span className="flex size-8 shrink-0 items-center justify-center" aria-hidden><NoteIcon icon={h.n.icon} size={22} /></span>
+                    <span className="min-w-0 flex-1 truncate text-[15px] text-foreground/85"><Marked text={h.n.title || "Untitled"} marks={h.marks} /></span>
+                    <span className="shrink-0 text-[12.5px] text-muted-foreground">Page</span>
+                    <span className="deck-finder-enter shrink-0 text-[12px] text-muted-foreground" aria-hidden>↵</span>
+                  </div>
+                );
+              })}
+    </>
+  );
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Find a deck"
+      data-deck-finder=""
+      data-closing={closing || undefined}
+      className="deck-finder fixed inset-0 z-[60] flex justify-center px-4"
+      onMouseDown={(e) => !(e.target as HTMLElement).closest(".deck-finder-box") && close()}
+      onKeyDown={onKey}
+      onMouseMove={() => (pointerMoved.current = true)}
+    >
+      <div className="deck-finder-veil" aria-hidden style={{ backdropFilter: "blur(14px) saturate(0.9)", WebkitBackdropFilter: "blur(14px) saturate(0.9)" }} />
+      <div className="deck-finder-box relative flex max-h-[min(560px,70dvh)] w-full max-w-[620px] flex-col self-start overflow-hidden rounded-2xl bg-popover text-popover-foreground">
+        <label className="flex h-14 shrink-0 items-center gap-3 px-4.5">
+          <Search className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+          <input
+            ref={input}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Find a deck or page…"
+            aria-label="Find a deck"
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="deck-finder-list"
+            aria-activedescendant={active < count ? `deck-finder-${active}` : undefined}
+            autoComplete="off"
+            spellCheck={false}
+            className="h-full min-w-0 flex-1 bg-transparent text-[17px] outline-none placeholder:text-muted-foreground/80"
+          />
+          <kbd className="hidden shrink-0 rounded-md border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground sm:block">esc</kbd>
+        </label>
+        <div className="h-px shrink-0 bg-border" />
+        <div ref={list} id="deck-finder-list" role="listbox" aria-label={title || "Decks"} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
+          {decks === null ? (
+            <div className="px-3 py-6 text-center text-sm text-muted-foreground">Loading your decks…</div>
+          ) : !count ? (
+            <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+              {query ? <>No deck or page called “{query}”.</> : "No decks yet."}
+            </div>
+          ) : (
+            <>
+{pagesFirst ? <>{pagesSection}{decksSection}</> : <>{decksSection}{pagesSection}</>}
             </>
           )}
         </div>

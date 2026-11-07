@@ -336,6 +336,12 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const pdfs = Array.isArray(b.pdfs) ? b.pdfs.filter((f: any) => typeof f?.path === "string" && typeof f?.file === "string").map((f: any) => ({ path: String(f.path), file: String(f.file) })) : [];
     return c.json(etude.notes.importMarkdown(files, { parentId: b.parentId ?? null, media, pdfs }));
   });
+  // The Notes tutorial: { ifNew: true } when Notes opens (added once per collection), {} from the menu (a fresh copy).
+  app.post("/api/notes/tutorial", async (c) => {
+    const b = await c.req.json().catch(() => ({}));
+    const { addNotesTutorial } = await import("../core/notes-tutorial.ts");
+    return c.json(await addNotesTutorial(etude, { ifNew: b?.ifNew === true }));
+  });
   app.get("/api/notes/:id", (c) => c.json(etude.notes.get(c.req.param("id"))));
   app.get("/api/notes/:id/backlinks", (c) => c.json(etude.notes.backlinks(c.req.param("id"))));
   app.get("/api/notes/:id/export", async (c) => {

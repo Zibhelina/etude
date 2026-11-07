@@ -295,6 +295,7 @@ These work on every command, before or after the command words.
   - [`note delete`](#note-delete) Delete a page for good, with every page inside it.
   - [`note search`](#note-search) Pages whose title or text has every word, title matches first.
   - [`note import`](#note-import) Import markdown files or a whole folder (an Obsidian vault) as pages, PDFs as PDF notes, code and text files (.py, .tex, …) as files, and .excalidraw drawings as canvases.
+  - [`note tutorial`](#note-tutorial) Add the Notes tutorial: a folder of pages that shows what Notes can do, each with a short Try it yourself, and the deck Notes::Notes showcase with its cards.
   - [`note export`](#note-export) A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file; a file as its own text.
   - [`note pin`](#note-pin) Pin a page to the start page (a New tab in Notes). Pins show in the order they were made.
   - [`note unpin`](#note-unpin) Take a page off the start page.
@@ -2487,6 +2488,32 @@ Output: { pages, folders, files, links, unresolved, pdfs, root, ids, media, canv
 etude note import ~/vault
 etude note import week1.md week2.md --parent "CMPT 307"
 etude note import board.excalidraw
+```
+
+### etude note tutorial
+
+<a id="note-tutorial"></a>
+
+Add the Notes tutorial: a folder of pages that shows what Notes can do, each with a short Try it yourself, and the deck Notes::Notes showcase with its cards.
+
+Notes adds it by itself the first time it opens on a collection, once: archiving or deleting it doesn't bring it back. Without --if-new this adds a fresh copy at the top level (its cards keep their history). --if-new does what opening Notes does: adds it only if this collection has never had it.
+
+```
+etude note tutorial [flags]
+```
+
+*writes · `--dry-run`*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--if-new` | boolean | Only if this collection has never had it (what opening Notes does). |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { added, reason?: seen|exists, root, start, notes, items }
+
+```sh
+etude note tutorial
+etude note tutorial --if-new
 ```
 
 ### etude note export

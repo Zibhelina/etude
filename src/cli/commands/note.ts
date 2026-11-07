@@ -253,6 +253,22 @@ command({
 });
 
 command({
+  name: "note tutorial",
+  summary: "Add the Notes tutorial: a folder of pages that shows what Notes can do, each with a short Try it yourself, and the deck Notes::Notes showcase with its cards.",
+  description:
+    "Notes adds it by itself the first time it opens on a collection, once: archiving or deleting it doesn't bring it back. Without --if-new this adds a fresh copy at the top level (its cards keep their history). --if-new does what opening Notes does: adds it only if this collection has never had it.",
+  flags: [{ name: "if-new", type: "boolean", description: "Only if this collection has never had it (what opening Notes does)." }],
+  writes: true,
+  dryRun: "self",
+  examples: ["etude note tutorial", "etude note tutorial --if-new"],
+  output: "{ added, reason?: seen|exists, root, start, notes, items }",
+  async run(ctx) {
+    const { addNotesTutorial } = await import("../../core/notes-tutorial.ts");
+    return addNotesTutorial(ctx.e, { ifNew: !!ctx.flags["if-new"], dryRun: ctx.dry });
+  },
+});
+
+command({
   name: "note export",
   summary: "A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file; a file as its own text.",
   args: [{ name: "note", description: "Page id, or its exact title.", required: true }],

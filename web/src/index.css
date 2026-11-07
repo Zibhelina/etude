@@ -929,3 +929,10 @@ body.browse-resizing iframe { pointer-events: none; }
 .bn-tile:hover > span { filter: brightness(1.06); }
 .bn-tile:active { transform: scale(0.97); }
 @media (prefers-reduced-motion: reduce) { .bn-in, .ph-pop { animation: none; } .bn-tile, .bn-tile::after { transition: none; } }
+
+/* Profile header: the name being edited. An accent line draws in under it and the save/cancel buttons fade in. */
+.ph-edit .ph-line { animation: ph-line 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.ph-edit .ph-acts { animation: ph-acts 0.22s 0.06s ease-out both; }
+@keyframes ph-line { from { transform: scaleX(0); opacity: 0.4; } }
+@keyframes ph-acts { from { opacity: 0; transform: translateX(-4px); } }
+@media (prefers-reduced-motion: reduce) { .ph-edit .ph-line, .ph-edit .ph-acts { animation: none; } }

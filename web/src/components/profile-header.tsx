@@ -2,7 +2,7 @@
 // place) and how this collection syncs. The picture opens the picture dialog; Change banner opens "Your banner".
 // Nothing here remounts the page: banners cross-fade in place, dialogs fade over it.
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { Camera, Image as ImageIcon, Pencil } from "lucide-react";
+import { Camera, Check, Image as ImageIcon, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
 import { AvatarPic } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
@@ -271,29 +271,42 @@ export function ProfileHeader({ acct }: { acct: AccountStatus | null }) {
           </span>
         </button>
         <div className="order-2 mt-12 min-w-0 flex-1 pb-0.5 @max-[34rem]/ph:order-3 @max-[34rem]/ph:mt-0 @max-[34rem]/ph:basis-full" data-profile-who>
-          <div className="score-serif score-display mb-1 min-w-0 text-[26px] leading-[1.15] text-foreground">
+          <div className="score-serif score-display mb-2.5 min-w-0 text-[26px] leading-[1.15] text-foreground">
             {editing ? (
-              <input
-                ref={input}
-                autoFocus
-                onFocus={(e) => e.currentTarget.select()}
-                value={name}
-                maxLength={40}
-                onChange={(e) => setName(e.target.value)}
-                onBlur={() => void commit()}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") (e.preventDefault(), input.current?.blur());
-                  else if (e.key === "Escape") (e.preventDefault(), e.stopPropagation(), (cancelled.current = true), input.current?.blur());
-                }}
-                placeholder={fallback || "Add your name"}
-                aria-label="Your name"
-                data-profile-name-input
-                className="-mx-[7.5px] -my-[1.5px] max-w-full min-w-[6ch] rounded-lg border-[1.5px] border-primary bg-background px-1.5 py-px font-[inherit] text-[length:inherit] tracking-[inherit] text-foreground outline-none placeholder:text-muted-foreground/60"
-                style={{ width: `${Math.max(6, [...name].length + 2)}ch` }}
-              />
+              <span className="ph-edit relative inline-flex max-w-full items-center gap-1.5 py-0.5" data-profile-name-edit>
+                <span className="relative inline-grid min-w-0 max-w-full">
+                  <span aria-hidden className="invisible col-start-1 row-start-1 overflow-hidden whitespace-pre pr-1">{name || fallback || "Add your name"}</span>
+                  <input
+                    ref={input}
+                    autoFocus
+                    onFocus={(e) => e.currentTarget.select()}
+                    value={name}
+                    maxLength={40}
+                    onChange={(e) => setName(e.target.value)}
+                    onBlur={() => void commit()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.preventDefault(), input.current?.blur());
+                      else if (e.key === "Escape") (e.preventDefault(), e.stopPropagation(), (cancelled.current = true), input.current?.blur());
+                    }}
+                    placeholder={fallback || "Add your name"}
+                    aria-label="Your name"
+                    data-profile-name-input
+                    className="col-start-1 row-start-1 w-full min-w-[4ch] border-0 bg-transparent p-0 font-[inherit] text-[length:inherit] leading-[inherit] tracking-[inherit] text-foreground caret-primary outline-none selection:bg-primary/25 placeholder:font-sans placeholder:text-[20px] placeholder:leading-[1.5] placeholder:font-medium placeholder:tracking-[-0.01em] placeholder:text-muted-foreground/60"
+                  />
+                  <span aria-hidden className="ph-line pointer-events-none absolute inset-x-0 -bottom-[5px] h-[2px] origin-left rounded-full bg-primary" />
+                </span>
+                <span className="ph-acts ml-1 inline-flex shrink-0 items-center gap-1">
+                  <button type="button" aria-label="Save name" data-profile-name-save onMouseDown={(e) => e.preventDefault()} onClick={() => input.current?.blur()} className="grid size-7 place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_1px_0_var(--primary-edge,rgb(0_0_0/0.18))] transition-transform hover:scale-105 active:scale-95">
+                    <Check className="size-4" strokeWidth={2.6} />
+                  </button>
+                  <button type="button" aria-label="Cancel" data-profile-name-cancel onMouseDown={(e) => e.preventDefault()} onClick={() => ((cancelled.current = true), input.current?.blur())} className="grid size-7 place-items-center rounded-full bg-muted text-muted-foreground shadow-[inset_0_0_0_1px_var(--border)] transition-[color,transform] hover:scale-105 hover:text-foreground active:scale-95">
+                    <X className="size-4" strokeWidth={2.4} />
+                  </button>
+                </span>
+              </span>
             ) : (
               <button type="button" onClick={startEdit} data-profile-name aria-label={`Your name: ${shown || "not set"}. Edit`} className="group/nm -mx-1.5 inline-flex max-w-[calc(100%+0.75rem)] items-center gap-2 rounded-lg px-1.5 py-0.5 text-left outline-ring transition-colors hover:bg-muted focus-visible:outline-2">
-                <span className={cn("truncate", !shown && "text-muted-foreground/70 italic")}>{shown || "Add your name"}</span>
+                <span className={cn("truncate", !shown && "font-sans text-[20px] leading-[1.5] font-medium tracking-[-0.01em] text-muted-foreground")}>{shown || "Add your name"}</span>
                 <Pencil className="size-[15px] shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/nm:opacity-100 group-focus-visible/nm:opacity-100 [@media(pointer:coarse)]:opacity-70" />
               </button>
             )}

@@ -743,12 +743,11 @@ export function SettingsPage() {
           {searchBox("Search settings", undefined, true)}
           {q && <div className="absolute top-full right-0 left-0 z-30 mt-2 rounded-[14px] bg-popover p-1.5 shadow-[0_10px_30px_rgb(0_0_0/0.14)] ring-1 ring-border ring-inset">{results}</div>}
         </div>
-        <div />
-        <div className="flex min-w-0 flex-col gap-[54px]">
+        <div className="col-start-1 row-start-2 flex min-w-0 flex-col gap-[54px]">
           {GROUPS.map((g) => sectionView(g.id))}
           {saveBar}
         </div>
-        <nav aria-label="On this page" className="sticky top-8 flex flex-col gap-px pt-1">
+        <nav aria-label="On this page" className="sticky top-8 col-start-2 row-span-2 row-start-1 flex flex-col gap-px pt-2.5">
           <div className="px-2.5 pb-2 text-[11.5px] font-bold tracking-[0.12em] text-muted-foreground/70 uppercase">On this page</div>
           {GROUPS.map((g) => (
             <a

@@ -21,6 +21,8 @@ import { TableKit } from "@tiptap/extension-table";
 import { Details, DetailsContent, DetailsSummary } from "@tiptap/extension-details";
 import FileHandler from "@tiptap/extension-file-handler";
 import { api } from "@/lib/api";
+import { localBlobUrl, ownPath } from "@/lib/local-url";
+import { isLocal } from "@/lib/transport";
 import { toast } from "sonner";
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml", "image/avif"];
@@ -185,6 +187,27 @@ function RunOutput({ state, onClear }: { state: RunState; onClear(): void }) {
       {empty && state.done?.ok && <div className="note-run-none">No output</div>}
     </div>
   );
+}
+
+/** A picture as a plain <img> (so selection and styles stay as they were), its src through the core when there's no server. */
+function imageView({ node }: { node: { type: unknown; attrs: Record<string, any> } }) {
+  const img = document.createElement("img");
+  let shown: string | null = null;
+  const set = (attrs: Record<string, any>) => {
+    for (const k of ["alt", "title", "width", "height"]) attrs[k] == null ? img.removeAttribute(k) : img.setAttribute(k, String(attrs[k]));
+    const src = (attrs.src as string | null) ?? null;
+    if (src === shown) return;
+    shown = src;
+    const own = isLocal() ? ownPath(src) : null;
+    if (!own) return void (src ? img.setAttribute("src", src) : img.removeAttribute("src"));
+    img.removeAttribute("src");
+    localBlobUrl(own).then((u) => shown === src && img.setAttribute("src", u), () => {});
+  };
+  set(node.attrs);
+  return {
+    dom: img,
+    update: (n: { type: unknown; attrs: Record<string, any> }) => n.type === node.type && (set(n.attrs), true),
+  };
 }
 
 const fmtMs = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`);
@@ -356,7 +379,16 @@ export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page }
         onDrop: (e: Editor, files: File[], pos: number) => void insertImages(e, files, pos),
       }),
       // Only images in the collection's media or on the web, never data: or javascript: URLs.
-      Image.extend({ addAttributes() { return { ...this.parent?.(), src: { default: null, parseHTML: (el: HTMLElement) => { const s = el.getAttribute("src") ?? ""; return /^(\/media\/files\/|https:\/\/)/.test(s) ? s : null; } } }; } }).configure({ inline: false }),
+      Image.extend({
+        addAttributes() { return { ...this.parent?.(), src: { default: null, parseHTML: (el: HTMLElement) => { const s = el.getAttribute("src") || el.getAttribute("data-etude-src") || ""; return /^(\/media\/files\/|https:\/\/)/.test(s) ? s : null; } } }; },
+        // A picture in the media shows in the web edition too, where there is no server to ask for it.
+        addNodeView() { return imageView as any; },
+        // Wherever the plain markup is used instead, the web edition's media URL waits in data-etude-src (no server to ask).
+        renderHTML({ HTMLAttributes }) {
+          const src = HTMLAttributes.src as string | undefined;
+          return ["img", isLocal() && ownPath(src) ? { ...HTMLAttributes, src: undefined, "data-etude-src": src } : HTMLAttributes];
+        },
+      }).configure({ inline: false }),
       NoteLink.configure({
         pages: (q: string) => linkRef.current.pages(q),
         create: (t: string) => linkRef.current.create(t),

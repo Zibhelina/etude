@@ -31,6 +31,8 @@ export type SyncProgress = {
 
 /** Events the vault's log grows by before a desktop device makes a new snapshot. ETUDE_SYNC_SNAPSHOT_EVERY changes it. */
 const snapshotEvery=()=>Number(globalThis.process?.env?.ETUDE_SYNC_SNAPSHOT_EVERY)||20_000;
+/** How often a desktop device asks the server about its snapshot even when the log hasn't grown enough. */
+const SNAPSHOT_CHECK_MS=24*60*60_000;
 /** Registers per snapshot part (ETUDE_SYNC_SNAPSHOT_PART changes it). */
 const partRegisters=()=>Number(globalThis.process?.env?.ETUDE_SYNC_SNAPSHOT_PART)||PART_REGISTERS;
 
@@ -365,7 +367,10 @@ export class SyncClient {
   /** On the desktop: a new snapshot once the log has grown enough since the last one. It runs in the background. */
   private startSnapshot(t:Transport,key:SyncKeys) {
     if(this.snapshotting||!t.putSnapshot||!globalThis.process?.versions?.node)return;
-    if(Number(this.meta("cursor","0"))-this.meta("snapshot",{seq:0}).seq<snapshotEvery())return;
+    // Due once the log has grown enough since the last snapshot this device knows of; and once a day the server is asked
+    // anyway, for what this device can't see: a server that gained snapshots, or a snapshot gone with a vault reset.
+    const cursor=Number(this.meta("cursor","0")),every=snapshotEvery();
+    if(cursor<every||(cursor-this.meta("snapshot",{seq:0}).seq<every&&Date.now()-this.meta("snapshot_checked",0)<SNAPSHOT_CHECK_MS))return;
     // Kept for diagnosis; the collection may have closed meanwhile.
     this.snapshotting=this.makeSnapshot(t,key).catch(e=>{try{if(!offline(e))this.set("snapshot_error",(e as Error)?.message??String(e));}catch{}}).finally(()=>{this.snapshotting=null;});
   }
@@ -379,8 +384,9 @@ export class SyncClient {
     let found;
     try {found=await t.snapshot!();}
     // A server without snapshots (the route isn't there): ask again only after as many events again.
-    catch(e) {if((e as any).code==="not_found"){this.set("snapshot",{seq:Number(this.meta("cursor","0"))});return;}throw e;}
-    const there=found?.pointer.seq??0;this.set("snapshot",{seq:there});
+    // A server without snapshots (the route isn't there): asked again tomorrow.
+    catch(e) {if((e as any).code==="not_found"){this.set("snapshot",{seq:Number(this.meta("cursor","0"))});this.set("snapshot_checked",Date.now());return;}throw e;}
+    const there=found?.pointer.seq??0;this.set("snapshot",{seq:there});this.set("snapshot_checked",Date.now());
     // Read in one go, with nothing waiting to be sent: the registers then hold exactly the events up to the cursor
     // and this device's own, which are on the server too.
     if(db.get("SELECT (SELECT count(*) FROM sync_outbox)+(SELECT count(*) FROM sync_events WHERE sent=0) AS n")!.n)return;

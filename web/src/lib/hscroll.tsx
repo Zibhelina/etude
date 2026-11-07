@@ -1,6 +1,6 @@
 // One way to move every row that scrolls sideways (Market shelves, Featured, galleries, card types on a phone, chips):
 // round arrows over the row's edges on anything with a mouse (hidden at the end they can't go to, and when nothing
-// overflows), a fade at the side that has more, drag with the mouse (snaps to a card on release; a drag never counts
+// overflows), a fade at the side that has more (mouse and touch), drag with the mouse (snaps to a card on release; a drag never counts
 // as a click), ← → when the row has focus. Touch keeps the browser's own swipe.
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -35,8 +35,22 @@ export function useHScroll<T extends HTMLElement>(ref: RefObject<T | null>, opts
       const a = anchor.getBoundingClientRect();
       wrap.style.setProperty("--hs-y", `${Math.round(a.top - wrap.getBoundingClientRect().top + a.height / 2)}px`);
     }
-    const start = r.scrollLeft < 4;
+    // "At the start" means at the first card's snap point: a row with inline padding snaps a few px in, so
+    // scrollLeft is never 0 there (that showed the ‹ arrow on the very first card).
+    const first = stops(r)[0] ?? 0;
+    const start = r.scrollLeft <= first + 4;
     const end = r.scrollLeft + r.clientWidth >= r.scrollWidth - 4;
+    // Fade only over a card the edge actually cuts, so cards fully on screen are never dimmed.
+    const box = r.getBoundingClientRect();
+    let fl = 0, fr = 0;
+    for (const c of r.children) {
+      const b = (c as HTMLElement).getBoundingClientRect();
+      if (b.width < 1) continue;
+      if (b.left < box.left - 2 && b.right > box.left + 8) fl = Math.max(fl, Math.min(40, b.right - box.left));
+      if (b.right > box.right + 2 && b.left < box.right - 8) fr = Math.max(fr, Math.min(96, box.right - b.left));
+    }
+    r.style.setProperty("--hs-fl", `${start ? 0 : Math.round(fl)}px`);
+    r.style.setProperty("--hs-fr", `${end ? 0 : Math.round(fr)}px`);
     setEdge((e) => (e.start === start && e.end === end ? e : { start, end }));
   }, [ref]);
 

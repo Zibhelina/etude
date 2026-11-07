@@ -1,6 +1,6 @@
 // The desktop and iPad sidebar ("Panel"): attached full height on the left, the wordmark and its toggle on top,
 // the screens in two groups (Study, Make), and at the bottom the update button and who you are with Sync's state.
-// Collapsed it folds to a rail of icons. Nothing here renders below md (768 px); phones get the tab island.
+// Collapsed it folds to a rail of icons, in one motion (see Sidebar). Nothing here renders below md (768 px); phones get the tab island.
 import { useEffect, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SidebarIcon } from "@/components/sidebar-icon";
@@ -39,41 +39,42 @@ export const NAV_GROUPS: { label: string; items: Item[] }[] = [
 const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 export const SIDEBAR_KEY = mac ? "⌘B" : "Ctrl+B";
 
-/** Hover help in a rail, nothing when the label is already showing. */
+/**
+ * Hover help in a rail, nothing when the label is already showing. The Tooltip stays mounted either way (only its
+ * content comes and goes), so the button inside isn't remounted on toggle and its own transitions get to play.
+ */
 function Tip({ show, label, children }: { show: boolean; label: React.ReactNode; children: React.ReactElement }) {
-  if (!show) return children;
   return (
     <Tooltip>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side="right">{label}</TooltipContent>
+      {show && <TooltipContent side="right">{label}</TooltipContent>}
     </Tooltip>
   );
 }
 
+// The open sidebar and the rail share one layout: icons sit at the same x in both (the rail's centre line), and
+// the labels, wordmark, group titles and profile name stay mounted and fade, so folding is one motion with the width
+// instead of things popping in and out. The timing lives in index.css (.shell-sb).
 export function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed: boolean; onToggle(): void }) {
+  const hide = collapsed ? { "aria-hidden": true, tabIndex: -1 } : {};
   return (
     <aside
       aria-label="Main"
       data-shell-sidebar
       data-collapsed={collapsed || undefined}
-      className={cn(
-        "sticky top-0 hidden h-dvh shrink-0 flex-col overflow-hidden bg-sidebar py-3.5 transition-[width,padding] duration-[220ms] ease-[cubic-bezier(.3,.7,.2,1)] motion-reduce:transition-none md:flex",
-        collapsed ? "w-[72px] px-2.5" : "w-[232px] px-3",
-      )}
+      className={cn("shell-sb sticky top-0 hidden h-dvh shrink-0 flex-col overflow-hidden bg-sidebar px-2.5 py-3.5 md:flex", collapsed ? "w-[72px]" : "w-[232px]")}
     >
-      <div className={cn("mb-3.5 flex h-10 shrink-0 items-center", collapsed && "justify-center")}>
-        {!collapsed && (
-          <button onClick={() => navigate("/")} aria-label="Etude, go to Library" className="min-w-0 flex-1 rounded-md px-2.5 text-left outline-ring focus-visible:outline-2">
-            <Wordmark className="text-[1.45rem] leading-none" />
-          </button>
-        )}
+      <div className="relative mb-3.5 h-10 shrink-0">
+        <button {...hide} onClick={() => navigate("/")} aria-label="Etude, go to Library" className="sb-fade absolute inset-y-0 left-0 w-[160px] rounded-md pl-3 text-left outline-ring focus-visible:outline-2">
+          <Wordmark className="text-[1.45rem] leading-none whitespace-nowrap" />
+        </button>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={onToggle}
               aria-label={collapsed ? "Show sidebar" : "Hide sidebar"}
               aria-expanded={!collapsed}
-              className="flex size-10 shrink-0 items-center justify-center rounded-[10px] text-muted-foreground transition-colors outline-ring hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2"
+              className="sb-toggle absolute top-0 left-0 flex size-10 items-center justify-center rounded-[10px] text-muted-foreground transition-colors outline-ring hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2"
             >
               <SidebarIcon className="size-5" />
             </button>
@@ -87,11 +88,12 @@ export function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed
       <nav className="flex flex-col gap-0.5">
         {NAV_GROUPS.map((g, gi) => (
           <div key={g.label} className="flex flex-col gap-0.5">
-            {collapsed ? (
-              gi > 0 && <div aria-hidden className="h-4" />
-            ) : (
-              <div className="shell-group-label px-3 pt-3.5 pb-1.5 whitespace-nowrap">{g.label}</div>
-            )}
+            {/* Open: the group's title. Rail: nothing above the first group, a small gap above the others. */}
+            <div className={cn("sb-group shrink-0 overflow-hidden", gi === 0 && "sb-group-first")}>
+              <div aria-hidden={collapsed || undefined} className="sb-fade shell-group-label px-4 pt-[14px] pb-[6px] leading-4 whitespace-nowrap">
+                {g.label}
+              </div>
+            </div>
             {g.items.map((n) => {
               const on = n.match(path);
               return (
@@ -101,13 +103,12 @@ export function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed
                     aria-label={n.label}
                     aria-current={on ? "page" : undefined}
                     className={cn(
-                      "flex h-10 shrink-0 items-center gap-3 rounded-[10px] text-[14.5px] whitespace-nowrap text-muted-foreground transition-colors outline-ring hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2",
-                      collapsed ? "mx-auto w-[52px] justify-center px-0" : "px-3",
+                      "flex h-10 w-full shrink-0 items-center gap-3 rounded-[10px] px-4 text-[14.5px] whitespace-nowrap text-muted-foreground transition-colors outline-ring hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2",
                       on && "bg-sidebar-accent font-[650] text-foreground",
                     )}
                   >
                     <n.icon className="size-5 shrink-0" />
-                    {!collapsed && <span>{n.label}</span>}
+                    <span className="sb-fade sb-slide">{n.label}</span>
                   </button>
                 </Tip>
               );
@@ -232,7 +233,7 @@ function ProfileRow({ collapsed, settingsOn }: { collapsed: boolean; settingsOn:
   const avatar = (
     <button onClick={openAvatarDialog} aria-label="Change your picture" data-shell-avatar className="relative shrink-0 rounded-full outline-ring transition-transform duration-150 hover:scale-105 focus-visible:outline-2 motion-reduce:transition-none">
       <MyAvatar size={32} initial={d.initial} />
-      {d.tone === "warn" && collapsed && <span aria-hidden className="absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full bg-warning ring-2 ring-sidebar" />}
+      {d.tone === "warn" && <span aria-hidden className="sb-rail-only absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full bg-warning ring-2 ring-sidebar" />}
     </button>
   );
   const gear = (
@@ -251,25 +252,28 @@ function ProfileRow({ collapsed, settingsOn }: { collapsed: boolean; settingsOn:
     </Tip>
   );
   const label = d.line ? `${d.who} · ${d.line}` : d.who;
-  if (collapsed)
-    return (
-      <div data-shell-profile className="flex flex-col items-center gap-1.5">
-        <Tip show label={label}>
+  // One box for both shapes: open, avatar · name · gear on one row; rail, the avatar with the gear under it. The
+  // avatar keeps its x, the gear glides between the two spots and the name fades, all on the sidebar's timing.
+  return (
+    <div data-shell-profile className="sb-profile relative shrink-0">
+      <div className="sb-avatar absolute top-0 left-2.5">
+        <Tip show={collapsed} label={label}>
           {avatar}
         </Tip>
-        {gear}
       </div>
-    );
-  return (
-    <div data-shell-profile className="flex items-center gap-1 pt-2.5 pl-1.5">
-      {avatar}
-      <button onClick={() => navigate("/settings#sync")} title={[d.email, d.when].filter(Boolean).join(" · ") || undefined} aria-label={label} className="flex min-w-0 flex-1 items-center rounded-[10px] py-1 pr-1 pl-1.5 text-left outline-ring focus-visible:outline-2">
+      <button
+        {...(collapsed ? { "aria-hidden": true, tabIndex: -1 } : {})}
+        onClick={() => navigate("/settings#sync")}
+        title={[d.email, d.when].filter(Boolean).join(" · ") || undefined}
+        aria-label={label}
+        className="sb-fade sb-slide absolute top-2.5 left-[46px] flex h-10 w-[122px] min-w-0 items-center rounded-[10px] py-1 pr-1 pl-1.5 text-left outline-ring focus-visible:outline-2"
+      >
         <span className="min-w-0 flex-1 whitespace-nowrap">
           <b className="block truncate text-[14px] font-semibold text-foreground">{d.who}</b>
           <small className={cn("flex items-center gap-1.5 truncate text-[12px]", d.tone === "warn" ? "text-warning" : "text-muted-foreground")}>{d.line || " "}</small>
         </span>
       </button>
-      {gear}
+      <div className="sb-gear absolute top-0 left-0">{gear}</div>
     </div>
   );
 }

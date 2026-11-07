@@ -204,44 +204,36 @@ export function SidebarUpdate({ collapsed }: { collapsed: boolean }) {
       className={cn(
         "relative flex h-10 w-full shrink-0 items-center rounded-[10px] text-[13.5px] font-medium transition-colors outline-ring hover:bg-sidebar-accent focus-visible:outline-2 disabled:opacity-90",
         TINT,
-        collapsed ? "mx-auto w-[52px] justify-center px-0" : "gap-3 px-3",
+        "gap-3 px-4",
       )}
     >
       {busy ? <Loader2 className="size-5 shrink-0 animate-spin text-highlight" strokeWidth={1.8} /> : <CircleArrowUp className="size-5 shrink-0 text-highlight" strokeWidth={1.8} />}
-      {collapsed ? (
-        !busy && <span className="absolute top-1 right-1 size-2 rounded-full bg-highlight ring-2 ring-sidebar" aria-hidden />
-      ) : (
-        <>
-          <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-          {/* The count lives in the tooltip/popover: "3 new" read as new cards next to the New column. */}
-        </>
-      )}
+      {!busy && <span className="sb-rail-only absolute top-1 left-[38px] size-2 rounded-full bg-highlight ring-2 ring-sidebar" aria-hidden />}
+      {/* The count lives in the tooltip/popover: "3 new" read as new cards next to the New column. */}
+      <span className="sb-fade sb-slide min-w-0 flex-1 truncate text-left">{label}</span>
     </button>
   );
+  // The Tooltip stays mounted in both shapes so the button isn't remounted when the sidebar folds.
   if (busy)
-    return collapsed ? (
+    return (
       <Tooltip>
         <TooltipTrigger asChild>{button}</TooltipTrigger>
-        <TooltipContent side="right">{label}</TooltipContent>
+        {collapsed && <TooltipContent side="right">{label}</TooltipContent>}
       </Tooltip>
-    ) : (
-      button
     );
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      {collapsed ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <PopoverTrigger asChild>{button}</PopoverTrigger>
-          </TooltipTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>{button}</PopoverTrigger>
+        </TooltipTrigger>
+        {collapsed && (
           <TooltipContent side="right">
             {label}
             {count && <span className="opacity-60"> · {count} new</span>}
           </TooltipContent>
-        </Tooltip>
-      ) : (
-        <PopoverTrigger asChild>{button}</PopoverTrigger>
-      )}
+        )}
+      </Tooltip>
       <PopoverContent side="right" align="end" sideOffset={10} className="w-[22rem] max-w-[calc(100vw-2rem)] p-0 shadow-lg" onOpenAutoFocus={(e) => e.preventDefault()}>
         <UpdateDetails st={st} onUpdate={() => update(() => setOpen(false))} />
       </PopoverContent>

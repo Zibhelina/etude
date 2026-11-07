@@ -18,6 +18,7 @@ import type {} from "./note-cards";
 import type {} from "./note-card";
 import type {} from "./note-canvas";
 import type {} from "./note-style";
+import type {} from "./note-embed";
 
 export interface SlashItem {
   id: string;
@@ -58,6 +59,10 @@ export const SLASH_ITEMS: SlashItem[] = [
       input.onchange = () => input.files && window.dispatchEvent(new CustomEvent("etude:note-images", { detail: [...input.files] }));
       input.click();
     } },
+  { id: "run", title: "Runnable code", hint: "Python or JavaScript you can run here", glyph: "▶", keys: ["run", "python", "py", "javascript", "js", "repl", "execute"], run: (e, r) => e.chain().focus().deleteRange(r).setCodeBlock({ language: "python" }).run() },
+  { id: "html", title: "HTML", hint: "Your own widget or mini game, sandboxed", glyph: "◇", keys: ["html", "embed", "widget", "game", "iframe", "css", "custom"], run: (e, r) => e.chain().focus().deleteRange(r).insertHtmlBlock().run() },
+  { id: "video", title: "Video", hint: "A file, or a YouTube or Vimeo link", glyph: "▷", keys: ["video", "youtube", "vimeo", "movie", "mp4", "film"], run: (e, r) => e.chain().focus().deleteRange(r).insertVideo().run() },
+  { id: "pdf", title: "PDF", hint: "A document you can read in the page", glyph: "▤", keys: ["pdf", "document", "paper", "slides", "file"], run: (e, r) => e.chain().focus().deleteRange(r).insertPdf().run() },
   { id: "divider", title: "Divider", hint: "A line across", glyph: "—", keys: ["hr", "line", "---", "separator"], shortcut: "---", run: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
 ];
 

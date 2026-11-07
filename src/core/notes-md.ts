@@ -280,6 +280,12 @@ function blockMd(n: DocNode, indent = ""): string {
       return n.attrs?.title ? `[[${n.attrs.title}]]` : "";
     case "mathBlock":
       return `$$\n${n.attrs?.latex ?? ""}\n$$`;
+    case "htmlEmbed":
+      return String(n.attrs?.html ?? "");
+    case "noteVideo":
+      return n.attrs?.src ? `<video src="${n.attrs.src}" controls></video>` : "";
+    case "notePdf":
+      return n.attrs?.src ? `[${n.attrs?.name ?? "PDF"}](${n.attrs.src})` : "";
     case "callout":
       return `> [!${n.attrs?.kind ?? "note"}]\n` + kids.map((k) => blockMd(k)).join("\n\n").split("\n").map((l) => `> ${l}`.trimEnd()).join("\n");
     case "details": {
@@ -385,6 +391,12 @@ function blockHtml(n: DocNode): string {
       return `<p class="canvas">🎨 ${esc(String(n.attrs?.title || "Canvas"))}</p>`;
     case "mathBlock":
       return `<div class="math">\\[${esc(String(n.attrs?.latex ?? ""))}\\]</div>`;
+    case "htmlEmbed":
+      return `<iframe class="embed" sandbox="allow-scripts" srcdoc="${esc(String(n.attrs?.html ?? ""))}"></iframe>`;
+    case "noteVideo":
+      return n.attrs?.src ? `<video src="${esc(String(n.attrs.src))}" controls></video>` : "";
+    case "notePdf":
+      return n.attrs?.src ? `<p><a href="${esc(String(n.attrs.src))}">${esc(String(n.attrs?.name ?? "PDF"))}</a></p>` : "";
     case "callout":
       return `<aside class="callout ${esc(String(n.attrs?.kind ?? "note"))}">${inner()}</aside>`;
     case "details":

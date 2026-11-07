@@ -4,6 +4,7 @@ import { chatProviderKeyEnv } from "../../core/ai.ts";
 import { agentSettingRefusal } from "../../core/agent-guard.ts";
 import { EnvKeyError, setEnvKey } from "../../core/env-file.ts";
 import { AVATAR_CHARACTERS, AVATAR_EMOJI_BG } from "../../core/avatar.ts";
+import { BANNER_PRESETS } from "../../core/banner.ts";
 import { command, group, CliError } from "../registry.ts";
 import { deepDelete, deepGet, deepSet, looseValue, splitPair } from "../input.ts";
 
@@ -35,11 +36,11 @@ command({
   name: "settings set",
   summary: "Change settings with dotted key=value pairs (JSON values when they parse).",
   description:
-    "Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words; empty keeps his usual one), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own), avatar (your picture: {kind:\"char\",id}, {kind:\"emoji\",e,bg}, {kind:\"photo\",media}, or null for your initial; see `etude settings avatar`), name (your name in the app, up to 40 characters; empty uses the account's). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.",
+    "Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words; empty keeps his usual one), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own), avatar (your picture: {kind:\"char\",id}, {kind:\"emoji\",e,bg}, {kind:\"photo\",media}, or null for your initial; see `etude settings avatar`), banner (the cover behind your picture: a preset id like sky or night, image:files/<sha>.<ext>[:y], or null to match your picture; see `etude settings banner`), name (your name in the app, up to 40 characters; empty uses the account's). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.",
   args: [{ name: "pairs", description: "key=value pairs.", required: true, variadic: true }],
   writes: true,
   dryRun: true,
-  examples: ["etude settings set dayStartHour=4", "etude settings set ai.feedback.model=deepseek/deepseek-v4.1-flash-1017", "etude settings set ai.decision=null", "etude settings set accent=blue"],
+  examples: ["etude settings set dayStartHour=4", "etude settings set ai.feedback.model=deepseek/deepseek-v4.1-flash-1017", "etude settings set ai.decision=null", "etude settings set accent=blue", "etude settings set banner=night"],
   output: "{ changed: { key: { from, to } }, settings }",
   run(ctx) {
     const e = ctx.e;
@@ -124,6 +125,47 @@ command({
       value = { kind: "photo", media: m.file };
     }
     const to = e.updateSettings({ avatar: value as any }).avatar;
+    return { from, to };
+  },
+});
+
+// --------------------------------------------------------- your banner
+
+command({
+  name: "settings banner get",
+  summary: "Your banner (the cover behind your picture) and the colours and patterns it can be. null matches your picture.",
+  examples: ["etude settings banner get"],
+  output: "{ banner, presets: [{ id, bg, pattern }] }",
+  run: (ctx) => ({ banner: ctx.e.settings().banner, presets: BANNER_PRESETS.map(({ id, bg, pattern }) => ({ id, bg, pattern })) }),
+});
+
+command({
+  name: "settings banner set",
+  summary: "Set your banner: a preset, an image of your own, or match (follow your picture).",
+  description:
+    "The value is a preset id (see `etude settings banner get`), `image:<file>` (a local image, copied into the collection's media so Sync carries it; --y sets where it sits, 0 top to 100 bottom, default 50) or `match`. The app downscales uploaded images to 1600 px wide; the CLI keeps the file as it is.",
+  args: [{ name: "value", description: "Preset id, image:<file> or match.", required: true }],
+  flags: [{ name: "y", type: "string", description: "For an image: vertical position, 0 (top) to 100 (bottom)." }],
+  writes: true,
+  dryRun: true,
+  examples: ["etude settings banner set night", "etude settings banner set image:./cover.jpg --y 30", "etude settings banner set match"],
+  output: "{ from, to }",
+  run(ctx) {
+    const e = ctx.e;
+    const from = e.settings().banner;
+    const raw = String(ctx.args.value).trim();
+    let value: unknown = raw;
+    const y = ctx.flags.y === undefined ? undefined : Number(ctx.flags.y);
+    if (raw.startsWith("image:")) {
+      let media = raw.slice(6).replace(/^media:/, "");
+      if (!/^files\//.test(media)) {
+        const m = e.importMedia(media, { dryRun: ctx.dry });
+        if (m.kind !== "image") throw new CliError("a banner image must be an image file", "validation");
+        media = m.file;
+      }
+      value = { kind: "image", media, y: y ?? 50 };
+    }
+    const to = e.updateSettings({ banner: value as any }).banner;
     return { from, to };
   },
 });

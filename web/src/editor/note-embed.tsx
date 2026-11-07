@@ -4,8 +4,9 @@
 import { Node, mergeAttributes } from "@tiptap/core";
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { Code2, Download, FileText, Film, Minus, Plus, RotateCw } from "lucide-react";
+import { ChevronRight, Code2, Download, FileText, Film, Menu, Minus, Plus, RotateCw } from "lucide-react";
 import { api } from "@/lib/api";
 import { isLocal } from "@/lib/transport";
 import { useEtudeSrc } from "@/lib/local-url";
@@ -424,6 +425,245 @@ function PdfView({ node, updateAttributes, deleteNode, selected }: NodeViewProps
       {src && rs.handles}
     </NodeViewWrapper>
   );
+}
+
+/** A PDF's table of contents (its bookmarks), each entry with the page it opens. */
+type Section = { title: string; page: number | null; items: Section[] };
+async function outlineOf(doc: any): Promise<Section[]> {
+  const raw = await doc.getOutline().catch(() => null);
+  if (!raw?.length) return [];
+  const walk = (items: any[]): Promise<Section[]> =>
+    Promise.all(
+      items.map(async (it) => {
+        let page: number | null = null;
+        try {
+          let dest = it.dest;
+          if (typeof dest === "string") dest = await doc.getDestination(dest);
+          if (Array.isArray(dest)) page = typeof dest[0] === "number" ? dest[0] + 1 : (await doc.getPageIndex(dest[0])) + 1;
+        } catch {}
+        return { title: String(it.title ?? "").trim() || "Untitled", page, items: await walk(it.items ?? []) };
+      }),
+    );
+  return walk(raw);
+}
+const flat = (xs: Section[], depth = 0, out: (Section & { depth: number })[] = []) => {
+  for (const x of xs) out.push({ ...x, depth }), flat(x.items, depth + 1, out);
+  return out;
+};
+
+/** A page as a small picture in the side panel, drawn once it scrolls into view. */
+function PdfThumb({ doc, n, base, ratio, on, onPick }: { doc: any; n: number; base: number; ratio: number; on: boolean; onPick(n: number): void }) {
+  const box = useRef<HTMLButtonElement>(null);
+  const [seen, setSeen] = useState(false);
+  const W = 132;
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && setSeen(true), { rootMargin: "300px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  useEffect(() => {
+    if (!seen) return;
+    let live = true;
+    let task: any = null;
+    void (async () => {
+      const page = await doc.getPage(n);
+      if (!live) return;
+      const vp = page.getViewport({ scale: W / base });
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const c = document.createElement("canvas");
+      c.width = Math.floor(vp.width * dpr);
+      c.height = Math.floor(vp.height * dpr);
+      task = page.render({ canvas: c, viewport: vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined });
+      try {
+        await task.promise;
+      } catch {
+        return;
+      }
+      if (live) box.current?.querySelector(".note-pdf-thumb-img")?.replaceChildren(c);
+    })();
+    return () => {
+      live = false;
+      task?.cancel?.();
+    };
+  }, [seen, doc, n, base]);
+  return (
+    <button ref={box} type="button" className={cn("note-pdf-thumb", on && "is-on")} onClick={() => onPick(n)} aria-label={`Page ${n}`} aria-current={on ? "page" : undefined} data-thumb={n}>
+      <span className="note-pdf-thumb-img" style={{ width: W, height: Math.round(W * ratio) }} />
+      <span className="note-pdf-thumb-n tabular-nums">{n}</span>
+    </button>
+  );
+}
+
+const PANEL_KEY = "etude.notes.pdfPanel";
+
+/**
+ * A whole PDF as a note of its own: the pages fill the screen, scrolled like a reader. The page count and zoom
+ * go into `controls` (the note's top bar) with ☰, which opens a panel on the left: the PDF's chapters and
+ * sections when it has them, or its pages as pictures. Ctrl/⌘ + and − zoom, Ctrl/⌘ 0 fits the width.
+ */
+export function PdfDocument({ url, name, className, controls }: { url: string | null; name: string; className?: string; controls?: HTMLElement | null }) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const [pdf, setPdf] = useState<{ doc: any; pdfjs: Pdfjs; base: number; ratio: number } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [width, setWidth] = useState(900);
+  const [at, setAt] = useState(1);
+  const [toc, setToc] = useState<Section[]>([]);
+  const [panel, setPanel] = useState(() => localStorage.getItem(PANEL_KEY) === "1");
+  const [view, setView] = useState<"toc" | "pages">("toc");
+  const [shut, setShut] = useState<Set<string>>(new Set());
+  const side = useRef<HTMLDivElement>(null);
+  useEffect(() => localStorage.setItem(PANEL_KEY, panel ? "1" : "0"), [panel]);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  useEffect(() => {
+    if (!url) return;
+    let live = true;
+    let doc: any = null;
+    setErr(null);
+    setPdf(null);
+    setToc([]);
+    void loadPdfjs()
+      .then(async (pdfjs) => {
+        const origin = location.origin;
+        doc = await pdfjs.getDocument({ url, isEvalSupported: false, standardFontDataUrl: `${origin}/runtime/pdfjs/standard_fonts/`, cMapUrl: `${origin}/runtime/pdfjs/cmaps/`, cMapPacked: true, wasmUrl: `${origin}/runtime/pdfjs/wasm/` } as any).promise;
+        const p1 = await doc.getPage(1);
+        const vp = p1.getViewport({ scale: 1 });
+        if (!live) return;
+        setPdf({ doc, pdfjs, base: vp.width, ratio: vp.height / vp.width });
+        const t = await outlineOf(doc);
+        if (live) (setToc(t), setView(t.length ? "toc" : "pages"));
+      })
+      .catch((e) => live && setErr(String(e?.message ?? e)));
+    return () => {
+      live = false;
+      void doc?.destroy?.();
+    };
+  }, [url]);
+  const zoomBy = (d: number) => setZoom((z) => Math.min(3, Math.max(0.5, +(z + d).toFixed(2))));
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (e.key === "=" || e.key === "+") zoomBy(0.25);
+      else if (e.key === "-") zoomBy(-0.25);
+      else if (e.key === "0") setZoom(1);
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+  const goTo = (n: number) => {
+    const el = scroller.current?.querySelector<HTMLElement>(`[data-page="${n}"]`);
+    if (el && scroller.current) scroller.current.scrollTo({ top: el.offsetTop - 12, behavior: "smooth" });
+    if (window.innerWidth < 768) setPanel(false);
+  };
+  // The page you're on stays in view in the panel.
+  useEffect(() => {
+    if (!panel || view !== "pages") return;
+    side.current?.querySelector<HTMLElement>(`[data-thumb="${at}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [at, panel, view]);
+  const fit = pdf ? Math.min(width - 48, 920) / pdf.base : 1;
+  const scale = pdf ? Math.max(0.3, fit * zoom) : 1;
+  const pages = pdf ? Array.from({ length: pdf.doc.numPages }, (_, i) => i + 1) : [];
+  const rows = flat(toc);
+  // The section you're reading: the last one that starts at or before this page.
+  let here = -1;
+  rows.forEach((r, i) => r.page != null && r.page <= at && (here = i));
+  const hidden = (i: number) => {
+    // A row is hidden when one of its parents is folded.
+    for (let k = i - 1, d = rows[i].depth; k >= 0 && d > 0; k--) if (rows[k].depth < d) {
+      if (shut.has(String(k))) return true;
+      d = rows[k].depth;
+    }
+    return false;
+  };
+  const bar = pdf && (
+    <span className="note-pdf-ctl">
+      <button type="button" className={cn("note-cards-btn", panel && "is-on")} onClick={() => setPanel((x) => !x)} title={toc.length ? "Contents and pages" : "Pages"} aria-label="Contents and pages" aria-pressed={panel}><Menu className="size-4" /></button>
+      <span className="note-pdf-ctl-n tabular-nums">{at} / {pdf.doc.numPages}</span>
+      <span className="note-pdf-pill-sep" />
+      <button type="button" className="note-cards-btn" onClick={() => zoomBy(-0.25)} title="Zoom out (Ctrl −)" aria-label="Zoom out"><Minus className="size-3.5" /></button>
+      <button type="button" className="note-cards-btn min-w-[3.2rem] tabular-nums" onClick={() => setZoom(1)} title="Fit the width (Ctrl 0)">{Math.round(zoom * 100)}%</button>
+      <button type="button" className="note-cards-btn" onClick={() => zoomBy(0.25)} title="Zoom in (Ctrl +)" aria-label="Zoom in"><Plus className="size-3.5" /></button>
+    </span>
+  );
+  return (
+    <div
+      className={cn("note-pdf-doc", panel && pdf && "has-panel", className)}
+      onClick={(e) => {
+        // On a phone the panel floats over the pages: a tap on the dimmed pages closes it.
+        if (panel && window.innerWidth < 768 && e.target === e.currentTarget) setPanel(false);
+      }}
+    >
+      {pdf && (
+        <aside ref={side} className="note-pdf-side" aria-label="Contents" aria-hidden={!panel} inert={!panel ? true : undefined}>
+          {toc.length > 0 && (
+            <div className="note-pdf-side-tabs" role="tablist">
+              <button type="button" role="tab" aria-selected={view === "toc"} className={cn(view === "toc" && "is-on")} onClick={() => setView("toc")}>Contents</button>
+              <button type="button" role="tab" aria-selected={view === "pages"} className={cn(view === "pages" && "is-on")} onClick={() => setView("pages")}>Pages</button>
+            </div>
+          )}
+          {view === "toc" && toc.length ? (
+            <div className="note-pdf-toc" role="tree">
+              {rows.map((r, i) =>
+                hidden(i) ? null : (
+                  <div key={i} className={cn("note-pdf-toc-row", i === here && "is-on")} style={{ paddingLeft: 6 + r.depth * 14 }} role="treeitem" aria-current={i === here ? "location" : undefined}>
+                    {r.items.length ? (
+                      <button type="button" className="note-pdf-toc-fold" aria-label={shut.has(String(i)) ? "Unfold" : "Fold"} onClick={() => setShut((s) => { const x = new Set(s); x.has(String(i)) ? x.delete(String(i)) : x.add(String(i)); return x; })}>
+                        <ChevronRight className={cn("size-3 transition-transform", !shut.has(String(i)) && "rotate-90")} />
+                      </button>
+                    ) : <span className="note-pdf-toc-fold" />}
+                    <button type="button" className="note-pdf-toc-t" disabled={r.page == null} onClick={() => r.page != null && goTo(r.page)} title={r.title}>
+                      <span className="truncate">{r.title}</span>
+                      {r.page != null && <span className="note-pdf-toc-p tabular-nums">{r.page}</span>}
+                    </button>
+                  </div>
+                ),
+              )}
+            </div>
+          ) : (
+            <div className="note-pdf-thumbs">
+              {pages.map((n) => <PdfThumb key={n} doc={pdf.doc} n={n} base={pdf.base} ratio={pdf.ratio} on={n === at} onPick={goTo} />)}
+            </div>
+          )}
+        </aside>
+      )}
+      <div
+        ref={scroller}
+        className="note-pdf note-pdf-full"
+        tabIndex={0}
+        aria-label={name}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          const kids = el.querySelectorAll<HTMLElement>("[data-page]");
+          const mid = el.scrollTop + el.clientHeight / 3;
+          for (const k of kids) if (k.offsetTop + k.offsetHeight > mid) return setAt(Number(k.dataset.page));
+        }}
+      >
+        {err ? (
+          <div className="px-6 py-5 text-[14px] text-[var(--danger)]">Couldn't open this PDF: {err}</div>
+        ) : pdf ? (
+          pages.map((n) => <PdfPage key={`${n}-${scale.toFixed(3)}`} doc={pdf.doc} n={n} scale={scale} pdfjs={pdf.pdfjs} ratio={pdf.ratio} />)
+        ) : (
+          <div className="px-6 py-5 text-[14px] text-muted-foreground">Opening…</div>
+        )}
+      </div>
+      {bar && (controls ? createPortal(bar, controls) : <div className="note-pdf-pill">{bar}</div>)}
+    </div>
+  );
+}
+
+/** Puts a PDF in the media for a PDF note; null when it isn't one or the upload fails (a toast says why). */
+export async function uploadPdf(f: File) {
+  return upload(f, "document");
 }
 
 // ------------------------------------------------------------------ nodes

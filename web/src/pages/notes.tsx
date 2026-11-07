@@ -17,6 +17,7 @@ import { usePhone } from "@/lib/phone";
 import { NoteEditor, type NoteEditorHandle } from "@/editor/note-editor";
 import { NoteIcon, NoteIconPicker } from "@/editor/note-icon";
 import { CanvasBoard, exportBoard } from "@/editor/canvas-board";
+import { PdfDocument, uploadPdf } from "@/editor/note-embed";
 import { useScheme } from "@/lib/theme";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -44,9 +45,9 @@ function treeOf(list: NoteSummary[]): Tree {
   }
   return t;
 }
-const display = (n: { title: string; kind?: string }) => n.title.trim() || (n.kind === "folder" ? "New folder" : n.kind === "canvas" ? "Untitled canvas" : "Untitled");
+const display = (n: { title: string; kind?: string }) => n.title.trim() || (n.kind === "folder" ? "New folder" : n.kind === "canvas" ? "Untitled canvas" : n.kind === "pdf" ? "Untitled PDF" : "Untitled");
 /** A note's glyph when it has no icon of its own. */
-const fallbackIcon = (n: { kind?: string }) => (n.kind === "canvas" ? "🎨" : "📄");
+const fallbackIcon = (n: { kind?: string }) => (n.kind === "canvas" ? "🎨" : n.kind === "pdf" ? "📕" : "📄");
 const isFolder = (n: { kind?: string } | null | undefined) => n?.kind === "folder";
 
 // ---------------------------------------------------------------- saving
@@ -594,7 +595,7 @@ async function exportNote(note: Note, format: "md" | "html") {
     const url = URL.createObjectURL(await res.blob());
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${(note.title.trim() || "Untitled").replace(/[\\/:*?"<>|]+/g, " ").trim()}.${note.kind === "canvas" ? "excalidraw" : format}`;
+    a.download = `${(note.title.trim() || "Untitled").replace(/[\\/:*?"<>|]+/g, " ").trim()}.${note.kind === "canvas" ? "excalidraw" : note.kind === "pdf" ? "pdf" : format}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -638,7 +639,8 @@ const IMAGE = /\.(png|jpe?g|gif|webp|svg|avif)$/i;
 async function importPicked(files: FileList, parentId: string | null) {
   const list = [...files].filter((f) => !(f.webkitRelativePath || f.name).split("/").some((p) => p.startsWith(".")));
   const md = list.filter((f) => /\.(md|markdown)$/i.test(f.name));
-  if (!md.length) throw new Error("no markdown files in what you picked");
+  const pdfFiles = list.filter((f) => /\.pdf$/i.test(f.name));
+  if (!md.length && !pdfFiles.length) throw new Error("no markdown files or PDFs in what you picked");
   const media: Record<string, string> = {};
   for (const f of list.filter((f) => IMAGE.test(f.name))) {
     const m = await api.uploadMedia(f);
@@ -646,8 +648,13 @@ async function importPicked(files: FileList, parentId: string | null) {
     if (rel) media[rel] = m.url;
     media[f.name] ??= m.url;
   }
+  const pdfs: { path: string; file: string }[] = [];
+  for (const f of pdfFiles) {
+    const m = await api.uploadMedia(f);
+    if (m.kind === "document") pdfs.push({ path: f.webkitRelativePath || f.name, file: m.url });
+  }
   const texts = await Promise.all(md.map(async (f) => ({ path: f.webkitRelativePath || f.name, text: await f.text() })));
-  return api.importNotes(texts, media, parentId);
+  return api.importNotes(texts, media, parentId, pdfs);
 }
 
 // ---------------------------------------------------------------- a canvas
@@ -703,6 +710,55 @@ function CanvasView({ note, all, onScene, saveState, onPick }: {
         </span>
       </div>
       <CanvasBoard key={note.id} scene={note.scene!} onChange={onScene} name={t} onApi={(a) => (xapi.current = a)} className="note-canvas-full" />
+    </article>
+  );
+}
+
+// ---------------------------------------------------------------- a PDF
+
+/** A PDF note: its title in the top bar and the document filling the rest, like opening the file itself. */
+function PdfNoteView({ note, all, onPick }: { note: Note; all: NoteSummary[]; onPick(id: string): void }) {
+  const url = useEtudeSrc(note.file ? `/media/${note.file}` : null);
+  const [ctl, setCtl] = useState<HTMLSpanElement | null>(null);
+  const crumbs = useMemo(() => {
+    const by = new Map(all.map((n) => [n.id, n]));
+    const out: NoteSummary[] = [];
+    for (let p = note.parentId ? by.get(note.parentId) : undefined; p; p = p.parentId ? by.get(p.parentId) : undefined) out.unshift(p);
+    return out;
+  }, [all, note.parentId]);
+  const strip = useContext(NoteTabsCtx);
+  const plus = useContext(NotePlusCtx);
+  return (
+    <article className="note-page note-canvas-page note-pdf-note">
+      <div className="note-topbar">
+        {strip}
+        {!strip && (
+          <nav aria-label="Path" className="flex min-w-0 items-center gap-1 text-[13px] text-muted-foreground">
+            {crumbs.map((c) => (
+              <span key={c.id} className="flex min-w-0 items-center gap-1">
+                <button className="truncate rounded px-1 hover:text-foreground" onClick={() => onPick(c.id)}>{display(c)}</button>
+                <ChevronRight className="size-3 shrink-0 opacity-60" />
+              </span>
+            ))}
+            <span className="truncate px-1 text-foreground/80">{display(note)}</span>
+          </nav>
+        )}
+        {plus}
+        <span className="flex-1" />
+        <span className="flex shrink-0 items-center gap-1">
+          <span ref={setCtl} className="flex items-center" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" aria-label="PDF options" className="note-row-act is-visible"><MoreHorizontal className="size-4" /></button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onSelect={() => void exportNote(note, "md")}><Download className="size-4" /> Download the PDF</DropdownMenuItem>
+              {url && <DropdownMenuItem onSelect={() => window.open(url, "_blank", "noopener")}><ArrowUpRight className="size-4" /> Open in the browser's viewer</DropdownMenuItem>}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </span>
+      </div>
+      {note.file ? <PdfDocument url={url ?? null} name={display(note)} className="note-canvas-full" controls={ctl} /> : <div className="px-6 py-5 text-[14px] text-[var(--danger)]">This PDF's file is missing.</div>}
     </article>
   );
 }
@@ -1001,8 +1057,9 @@ export function NotesPage({ id }: { id: string | null }) {
       { label: "New page inside", onSelect: () => void add(n.id) },
       { label: "New canvas inside", onSelect: () => void add(n.id, "canvas") },
       { label: "New folder inside", onSelect: () => void addFolder(n.id) },
+      { label: "Add a PDF inside…", onSelect: () => pickPdf(n.id) },
       { label: "Rename", onSelect: () => setRenaming(n.id) },
-      n.kind === "canvas"
+      n.kind === "canvas" || n.kind === "pdf"
         ? "sep"
         : isFolder(n)
         ? { label: "Turn into a page", onSelect: () => void setKind(n, "page") }
@@ -1070,6 +1127,34 @@ export function NotesPage({ id }: { id: string | null }) {
 
   const folderInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const pdfInput = useRef<HTMLInputElement>(null);
+  const pdfParent = useRef<string | null>(null);
+  // Each PDF becomes a note of its own that opens as the document; the last one opens.
+  const addPdfs = async (files: FileList | File[] | null, parentId: string | null) => {
+    const pdfs = [...(files ?? [])].filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
+    if (!pdfs.length) return;
+    try {
+      await saver.flush();
+      let last: Note | null = null;
+      for (const f of pdfs) {
+        const m = await uploadPdf(f);
+        if (!m) continue;
+        last = await api.createNote({ title: f.name.replace(/\.pdf$/i, ""), parentId, kind: "pdf", file: m.url });
+      }
+      if (!last) return;
+      if (parentId) setOpen(parentId, true);
+      if (!phone) setNotesPagesOpen(true);
+      await reload();
+      setNote(last);
+      navigate(`/notes?id=${encodeURIComponent(last.id)}`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+  const pickPdf = (parentId: string | null) => {
+    pdfParent.current = parentId;
+    pdfInput.current?.click();
+  };
   const runImport = async (files: FileList | null) => {
     if (!files?.length) return;
     const t = toast.loading("Importing…");
@@ -1086,7 +1171,7 @@ export function NotesPage({ id }: { id: string | null }) {
       }
       const r = await importPicked(files, null);
       await reload();
-      toast.success(`Imported ${r.pages} page${r.pages === 1 ? "" : "s"}${r.links ? `, ${r.links} link${r.links === 1 ? "" : "s"}` : ""}${r.unresolved ? ` (${r.unresolved} to pages that don't exist yet)` : ""}`, { id: t });
+      toast.success(`Imported ${r.pages} page${r.pages === 1 ? "" : "s"}${r.pdfs ? `, ${r.pdfs} PDF${r.pdfs === 1 ? "" : "s"}` : ""}${r.links ? `, ${r.links} link${r.links === 1 ? "" : "s"}` : ""}${r.unresolved ? ` (${r.unresolved} to pages that don't exist yet)` : ""}`, { id: t });
       const first = r.root ?? r.ids[0];
       if (first) navigate(`/notes?id=${encodeURIComponent(first)}`);
     } catch (e) {
@@ -1100,6 +1185,7 @@ export function NotesPage({ id }: { id: string | null }) {
       if (a === "new") void add(null);
       else if (a === "new-canvas") void add(null, "canvas");
       else if (a === "new-folder") void addFolder(null);
+      else if (a === "add-pdf") pickPdf(null);
       else if (a === "import-md") fileInput.current?.click();
       else if (a === "import-vault") folderInput.current?.click();
       else if (a === "fold-all") {
@@ -1131,7 +1217,8 @@ export function NotesPage({ id }: { id: string | null }) {
   const pickers = (
     <>
       <input ref={folderInput} type="file" className="hidden" {...({ webkitdirectory: "", directory: "" } as any)} multiple onChange={(e) => void runImport(e.target.files).finally(() => (e.target.value = ""))} />
-      <input ref={fileInput} type="file" className="hidden" accept=".md,.markdown,text/markdown,.excalidraw,.json" multiple onChange={(e) => void runImport(e.target.files).finally(() => (e.target.value = ""))} />
+      <input ref={fileInput} type="file" className="hidden" accept=".md,.markdown,text/markdown,.excalidraw,.json,.pdf,application/pdf" multiple onChange={(e) => void runImport(e.target.files).finally(() => (e.target.value = ""))} />
+      <input ref={pdfInput} type="file" className="hidden" accept=".pdf,application/pdf" multiple onChange={(e) => void addPdfs(e.target.files, pdfParent.current).finally(() => (e.target.value = ""))} />
     </>
   );
   const sidebarTree =
@@ -1186,6 +1273,7 @@ export function NotesPage({ id }: { id: string | null }) {
                 <DropdownMenuContent align="end" className="w-60">
                   <DropdownMenuItem onSelect={() => folderInput.current?.click()}>Import a folder (Obsidian vault)…</DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => fileInput.current?.click()}>Import Markdown or .excalidraw files…</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => pickPdf(null)}>Add a PDF…</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               <button type="button" onClick={() => void add(null, "canvas")} aria-label="New canvas" title="New canvas" className="note-row-act is-visible">
@@ -1218,7 +1306,14 @@ export function NotesPage({ id }: { id: string | null }) {
         <NoteTabsCtx.Provider value={shownTabs > 1 ? tabStrip : null}>
         <NotePlusCtx.Provider value={tabPlus}>
         <section className="notes-main">
-          {note && note.id === current && note.kind === "canvas" ? (
+          {note && note.id === current && note.kind === "pdf" ? (
+            <PdfNoteView
+              key={note.id}
+              note={note}
+              all={list ?? []}
+              onPick={pick}
+            />
+          ) : note && note.id === current && note.kind === "canvas" ? (
             <CanvasView
               key={note.id}
               note={note}

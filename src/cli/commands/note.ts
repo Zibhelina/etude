@@ -69,13 +69,22 @@ command({
   name: "note new",
   summary: "Make a page, or with --folder a folder that only holds pages.",
   args: [{ name: "title", description: "Its title.", required: true }],
-  flags: [{ name: "parent", type: "string", description: "Put it inside this page or folder (id or exact title)." }, { name: "folder", type: "boolean", description: "Make a folder: it holds pages and has no body of its own." }, { name: "icon", type: "string", description: "One emoji." }, { name: "canvas", type: "boolean", description: "Make a canvas (a whiteboard you draw on) instead of a page." }, { name: "scene", type: "string", description: "A canvas's drawing as Excalidraw JSON ({ elements, appState, files }, or a whole .excalidraw file). `-` reads stdin.", placeholder: "JSON" }, { name: "scene-file", type: "string", description: "Read the canvas's drawing from a .excalidraw file.", placeholder: "PATH" }, ...docFlags, ...lookFlags],
+  flags: [{ name: "parent", type: "string", description: "Put it inside this page or folder (id or exact title)." }, { name: "folder", type: "boolean", description: "Make a folder: it holds pages and has no body of its own." }, { name: "icon", type: "string", description: "One emoji." }, { name: "canvas", type: "boolean", description: "Make a canvas (a whiteboard you draw on) instead of a page." }, { name: "pdf", type: "string", description: "Make a PDF note from this file: it opens as the document itself. The file goes into the collection's media.", placeholder: "PATH" }, { name: "scene", type: "string", description: "A canvas's drawing as Excalidraw JSON ({ elements, appState, files }, or a whole .excalidraw file). `-` reads stdin.", placeholder: "JSON" }, { name: "scene-file", type: "string", description: "Read the canvas's drawing from a .excalidraw file.", placeholder: "PATH" }, ...docFlags, ...lookFlags],
   writes: true,
   dryRun: true,
   examples: ['etude note new "CMPT 307" --icon 📘', 'etude note new "Fall 2026" --folder', 'etude note new "Week 1" --parent "CMPT 307" --text "# Greedy\\n- exchange argument"'],
   output: "the new page, as `note show` prints it",
-  run(ctx) {
+  async run(ctx) {
     const parentId = ctx.flags.parent ? ctx.e.notes.resolve(ctx.flags.parent).id : null;
+    if (ctx.flags.pdf !== undefined) {
+      const { existsSync, readFileSync } = await import("node:fs");
+      const { basename } = await import("node:path");
+      if (docOf(ctx) !== undefined || ctx.flags.canvas) throw new CliError("a PDF note is its file: drop --text/--doc/--canvas");
+      if (!existsSync(ctx.flags.pdf)) throw new CliError(`no such file: ${ctx.flags.pdf}`, "not_found");
+      const m = ctx.e.storeMedia(basename(ctx.flags.pdf), readFileSync(ctx.flags.pdf), { dryRun: ctx.dry });
+      if (m.kind !== "document") throw new CliError(`${ctx.flags.pdf} isn't a PDF`);
+      return ctx.e.notes.create({ title: ctx.args.title, parentId, icon: ctx.flags.icon ?? null, kind: "pdf", file: m.url, look: lookOf(ctx) });
+    }
     const scene = sceneOf(ctx);
     if (scene !== undefined || ctx.flags.canvas) {
       if (docOf(ctx) !== undefined) throw new CliError("a canvas has a drawing, not a body: drop --text/--doc");
@@ -168,20 +177,21 @@ const IMAGE = /\.(png|jpe?g|gif|webp|svg|avif)$/i;
 
 command({
   name: "note import",
-  summary: "Import markdown files or a whole folder (an Obsidian vault) as pages, and .excalidraw drawings as canvases.",
+  summary: "Import markdown files or a whole folder (an Obsidian vault) as pages, PDFs as PDF notes, and .excalidraw drawings as canvases.",
   description:
-    "Each markdown file becomes a page and each folder a page holding its files, so a vault keeps its shape. [[Links]] (with |alias and #heading), relative .md links and ![[image]] embeds are understood; images found in the folder are stored in the collection's media. A folder note (Folder/Folder.md) becomes the folder's own page. Hidden folders (.obsidian, .trash) are skipped. A .excalidraw file given on its own becomes a canvas, with its pictures stored in the media.",
+    "Each markdown file becomes a page and each folder a page holding its files, so a vault keeps its shape. [[Links]] (with |alias and #heading), relative .md links and ![[image]] embeds are understood; images found in the folder are stored in the collection's media. A folder note (Folder/Folder.md) becomes the folder's own page. Hidden folders (.obsidian, .trash) are skipped. A .excalidraw file given on its own becomes a canvas, with its pictures stored in the media. Each PDF (on its own or in a folder) becomes a PDF note that opens as the document.",
   args: [{ name: "paths", description: "Markdown files or folders.", required: true, variadic: true }],
   flags: [{ name: "parent", type: "string", description: "Put the imported pages inside this page (id or exact title)." }],
   writes: true,
   dryRun: true,
   examples: ["etude note import ~/vault", 'etude note import week1.md week2.md --parent "CMPT 307"', "etude note import board.excalidraw"],
-  output: "{ pages, folders, links, unresolved, root, ids, media, canvases }",
+  output: "{ pages, folders, links, unresolved, pdfs, root, ids, media, canvases }",
   async run(ctx) {
     const { existsSync, readdirSync, readFileSync, statSync } = await import("node:fs");
     const { basename, join, relative, resolve } = await import("node:path");
     const files: { path: string; text: string }[] = [];
     const images: { rel: string; abs: string }[] = [];
+    const pdfFiles: { rel: string; abs: string }[] = [];
     const all = (Array.isArray(ctx.args.paths) ? ctx.args.paths : [ctx.args.paths]).map((p: string) => resolve(p));
     const drawings = all.filter((p: string) => /\.excalidraw(\.json)?$/i.test(p));
     const paths = all.filter((p: string) => !drawings.includes(p));
@@ -192,7 +202,7 @@ command({
       const scene = sceneFromExcalidraw(parseJson(readFileSync(d, "utf8"), basename(d)), (name, data) => ctx.e.storeMedia(name, data, { dryRun: ctx.dry }));
       canvases.push(ctx.e.notes.create({ title: basename(d).replace(/\.excalidraw(\.json)?$/i, ""), parentId: parentFor(), kind: "canvas", scene }).id);
     }
-    if (!paths.length) return { pages: 0, folders: 0, links: 0, unresolved: 0, root: null, ids: [], media: 0, canvases };
+    if (!paths.length) return { pages: 0, folders: 0, links: 0, unresolved: 0, pdfs: 0, root: null, ids: [], media: 0, canvases };
     for (const p of paths) {
       if (!existsSync(p)) throw new CliError(`no such file or folder: ${p}`, "not_found");
       if (statSync(p).isDirectory()) {
@@ -205,10 +215,12 @@ command({
             if (statSync(abs).isDirectory()) walk(abs);
             else if (/\.(md|markdown)$/i.test(name)) files.push({ path: rel, text: readFileSync(abs, "utf8") });
             else if (IMAGE.test(name)) images.push({ rel: relative(p, abs).replace(/\\/g, "/"), abs });
+            else if (/\.pdf$/i.test(name)) pdfFiles.push({ rel, abs });
           }
         };
         walk(p);
-      } else files.push({ path: basename(p), text: readFileSync(p, "utf8") });
+      } else if (/\.pdf$/i.test(p)) pdfFiles.push({ rel: basename(p), abs: p });
+      else files.push({ path: basename(p), text: readFileSync(p, "utf8") });
     }
     const media: Record<string, string> = {};
     let stored = 0;
@@ -218,8 +230,9 @@ command({
       media[basename(im.abs)] ??= m.url;
       stored++;
     }
+    const pdfs = pdfFiles.map((f) => ({ path: f.rel, file: ctx.e.storeMedia(basename(f.abs), readFileSync(f.abs), { dryRun: ctx.dry }).url }));
     const parentId = parentFor();
-    return { ...ctx.e.notes.importMarkdown(files, { parentId, media }), media: stored, canvases };
+    return { ...ctx.e.notes.importMarkdown(files, { parentId, media, pdfs }), media: stored, canvases };
   },
 });
 

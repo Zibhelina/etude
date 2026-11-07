@@ -49,9 +49,9 @@ export const SIDEBAR_KEY = mac ? "⌘[" : "Ctrl+[";
  */
 function Tip({ show, label, children }: { show: boolean; label: React.ReactNode; children: React.ReactElement }) {
   return (
-    <Tooltip>
+    <Tooltip disabled={!show}>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      {show && <TooltipContent side="right">{label}</TooltipContent>}
+      <TooltipContent side="right">{label}</TooltipContent>
     </Tooltip>
   );
 }

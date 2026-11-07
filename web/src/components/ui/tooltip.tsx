@@ -17,16 +17,63 @@ function TooltipProvider({
   )
 }
 
+// Focus only opens a tooltip when the person moved there with Tab. Radix opens on any focus, so focus coming back
+// on its own (Esc closing Ctrl+K or a menu, returning to the window, a click that leaves the button focused) used
+// to pop tooltips up with nobody asking.
+let lastTab = 0
+if (typeof window !== "undefined") {
+  window.addEventListener("keydown", (e) => { if (e.key === "Tab") lastTab = performance.now() }, true)
+}
+const tabbedHere = () => performance.now() - lastTab < 600
+
+/**
+ * `disabled`: the tooltip has nothing to say right now (a rail label while the sidebar is open). It stays mounted so
+ * the trigger isn't remounted, but it can't open. Leaving the content out instead isn't enough: Radix still marks
+ * the tooltip open on hover and never closes it (the content that would track the pointer out isn't there), so all
+ * the rows you'd passed over popped up together the moment the content came back.
+ */
 function Tooltip({
+  disabled,
+  open: openProp,
+  defaultOpen,
+  onOpenChange,
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Root>) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+}: React.ComponentProps<typeof TooltipPrimitive.Root> & { disabled?: boolean }) {
+  const [inner, setInner] = React.useState(defaultOpen ?? false)
+  const controlled = openProp !== undefined
+  React.useEffect(() => {
+    if (disabled) setInner(false)
+  }, [disabled])
+  const open = disabled ? false : controlled ? openProp : inner
+  return (
+    <TooltipPrimitive.Root
+      data-slot="tooltip"
+      open={open}
+      onOpenChange={(o) => {
+        if (o && disabled) return
+        if (!controlled) setInner(o)
+        onOpenChange?.(o)
+      }}
+      {...props}
+    />
+  )
 }
 
 function TooltipTrigger({
+  onFocus,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+  return (
+    <TooltipPrimitive.Trigger
+      data-slot="tooltip-trigger"
+      onFocus={(e) => {
+        onFocus?.(e)
+        // preventDefault skips Radix's own open-on-focus.
+        if (!tabbedHere()) e.preventDefault()
+      }}
+      {...props}
+    />
+  )
 }
 
 function TooltipContent({

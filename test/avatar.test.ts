@@ -113,3 +113,18 @@ test("CLI: settings avatar get lists the characters; set takes a character, an e
   assert.equal(etude("settings", "get", "avatar.id").value, "owl");
   rmSync(dir, { recursive: true, force: true });
 });
+
+test("settings.name: default empty, trimmed, capped at 40", async () => {
+  const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-name-"));
+  const e = await Etude.open(join(dir, "c.db"), { home: dir });
+  try {
+    assert.equal(e.settings().name, "");
+    assert.equal(e.updateSettings({ name: "  João   Henrique " }).name, "João Henrique");
+    assert.throws(() => e.updateSettings({ name: "x".repeat(41) }), /too long/);
+    assert.throws(() => e.updateSettings({ name: 3 as unknown as string }), /must be text/);
+    assert.equal(e.settings().name, "João Henrique");
+  } finally {
+    e.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

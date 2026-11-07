@@ -9,7 +9,7 @@ import { SidebarUpdate } from "@/components/update-bar";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
 import { ArchiveIcon, BrowseIcon, LibraryIcon, MarketIcon, SettingsIcon, StatsIcon, TypesIcon } from "@/components/nav-icons";
 import { account } from "@/lib/account";
-import { openAvatarDialog } from "@/lib/avatar";
+import { openAvatarDialog, useMyName } from "@/lib/avatar";
 import { MyAvatar } from "@/components/avatar";
 import { etudeFetch } from "@/lib/transport";
 import { navigate } from "@/lib/router";
@@ -226,7 +226,8 @@ function describe(sync: SyncState | null, name: string | null) {
 
 function ProfileRow({ collapsed, settingsOn }: { collapsed: boolean; settingsOn: boolean }) {
   const { sync, name } = useWho();
-  const d = describe(sync, name);
+  const mine = useMyName();
+  const d = describe(sync, mine || name);
   // Your picture opens the picture dialog; the name beside it goes to Sync.
   const avatar = (
     <button onClick={openAvatarDialog} aria-label="Change your picture" data-shell-avatar className="relative shrink-0 rounded-full outline-ring transition-transform duration-150 hover:scale-105 focus-visible:outline-2 motion-reduce:transition-none">

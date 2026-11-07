@@ -55,12 +55,47 @@ export async function saveAvatar(a: Avatar | null): Promise<Avatar | null> {
   return s.avatar ?? null;
 }
 
-/** Reads the saved picture, so another device's choice wins over this one's copy. */
+// Your name in the app (settings.name, synced). Empty means the account's name or email is used.
+const NAME_KEY = "etude.myname";
+const NAME_EVENT = "etude:myname";
+let myName: string = (() => {
+  try {
+    return localStorage.getItem(NAME_KEY) ?? "";
+  } catch {
+    return "";
+  }
+})();
+function rememberName(n: string) {
+  myName = n;
+  try {
+    localStorage.setItem(NAME_KEY, n);
+  } catch {}
+  window.dispatchEvent(new CustomEvent(NAME_EVENT));
+}
+export function useMyName(): string {
+  const [n, setN] = useState(myName);
+  useEffect(() => {
+    const h = () => setN(myName);
+    window.addEventListener(NAME_EVENT, h);
+    h();
+    return () => window.removeEventListener(NAME_EVENT, h);
+  }, []);
+  return n;
+}
+/** Saves the picture and the name together (both sync). */
+export async function saveProfile(a: Avatar | null, name: string): Promise<void> {
+  const s = (await api.saveSettings({ avatar: a, name })) as { avatar?: Avatar | null; name?: string };
+  remember(s.avatar ?? null);
+  rememberName(s.name ?? "");
+}
+
+/** Reads the saved picture and name, so another device's choice wins over this one's copy. */
 export async function loadAvatar() {
   try {
-    const s = (await api.settings()) as { avatar?: Avatar | null };
+    const s = (await api.settings()) as { avatar?: Avatar | null; name?: string };
     const a = s.avatar ?? null;
     if (!sameAvatar(a, current)) remember(a);
+    if ((s.name ?? "") !== myName) rememberName(s.name ?? "");
   } catch {}
 }
 

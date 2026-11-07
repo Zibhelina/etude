@@ -1,12 +1,12 @@
 // Your picture: how it's drawn (a character, an emoji on a colour, a photo, or your initial), the pieces both pickers
 // share (character grid, emoji panel, photo crop), and the picture dialog Settings → Account and the sidebar open.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Check, ImageMinus, ImagePlus, Upload, ZoomIn, ZoomOut } from "lucide-react";
+import { Check, ImageMinus, ImagePlus, Pencil, Upload, ZoomIn, ZoomOut } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useEtudeSrc } from "@/lib/local-url";
 import { usePhone } from "@/lib/phone";
-import { AVATAR_BGS, AVATAR_EMOJI, AVATAR_EMOJI_BG, CHARACTERS, OPEN_AVATAR_EVENT, openAvatarDialog, characterSrc, sameAvatar, saveAvatar, useAvatar, type Avatar } from "@/lib/avatar";
+import { AVATAR_BGS, AVATAR_EMOJI, AVATAR_EMOJI_BG, CHARACTERS, OPEN_AVATAR_EVENT, openAvatarDialog, characterSrc, sameAvatar, saveProfile, useAvatar, useMyName, type Avatar } from "@/lib/avatar";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -371,6 +371,11 @@ export function AvatarDialogHost({ initial }: { initial?: string }) {
 
 export function AvatarDialog({ open, onOpenChange, initial }: { open: boolean; onOpenChange(o: boolean): void; initial?: string }) {
   const saved = useAvatar();
+  const savedName = useMyName();
+  const [name, setName] = useState(savedName);
+  const [editing, setEditing] = useState(false);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const fallbackName = (localStorage.getItem("etude.shell.name") ?? "").trim();
   const phone = usePhone();
   const [pick, setPick] = useState<AvatarPick>(saved);
   const [tab, setTab] = useState<Tab>("chars");
@@ -380,9 +385,7 @@ export function AvatarDialog({ open, onOpenChange, initial }: { open: boolean; o
   const [busy, setBusy] = useState(false);
   const tabs = useSlidingTabs(tab, open);
   const body = useEasedHeight();
-  // The preview pops whenever the pick changes.
-  const [popKey, setPopKey] = useState(0);
-  const choose = (p: AvatarPick) => (setPick(p), setPopKey((k) => k + 1));
+  const choose = (p: AvatarPick) => setPick(p);
   const draftSrc = useRef<string | null>(null);
   const setDraft = useCallback((d: PhotoDraft | null) => {
     const old = draftSrc.current;
@@ -395,6 +398,8 @@ export function AvatarDialog({ open, onOpenChange, initial }: { open: boolean; o
   useEffect(() => {
     if (!open) return;
     setPick(saved);
+    setName(savedName);
+    setEditing(false);
     setTab(tabOf(saved));
     setDir(0);
     if (saved?.kind === "emoji") setEmoji({ e: saved.e, bg: saved.bg });
@@ -408,15 +413,15 @@ export function AvatarDialog({ open, onOpenChange, initial }: { open: boolean; o
     if (k === tab) return;
     setDir(Math.sign(TABS.findIndex(([t]) => t === k) - TABS.findIndex(([t]) => t === tab)));
     setTab(k);
-    setPopKey((n) => n + 1);
   };
-  const unchanged = pick?.kind !== "draft" && sameAvatar(pick as Avatar | null, saved);
+  const nameChanged = name.replace(/\s+/g, " ").trim() !== savedName;
+  const unchanged = pick?.kind !== "draft" && sameAvatar(pick as Avatar | null, saved) && !nameChanged;
   const save = async () => {
     setBusy(true);
     try {
       const a = await finishPick(pick, draft);
-      await saveAvatar(a);
-      toast.success("Picture saved");
+      await saveProfile(a, name);
+      toast.success("Saved");
       onOpenChange(false);
     } catch (e) {
       toast.error("Couldn't save the picture", { description: (e as Error).message });
@@ -425,20 +430,41 @@ export function AvatarDialog({ open, onOpenChange, initial }: { open: boolean; o
     }
   };
   const big = phone ? 64 : 84;
-  const letter = initial ?? (localStorage.getItem("etude.shell.name") ?? "").trim().charAt(0).toUpperCase();
+  const shown = name.trim() || fallbackName;
+  const letter = (shown || initial || "").trim().charAt(0).toUpperCase();
+  const startEdit = () => (setEditing(true), requestAnimationFrame(() => nameInput.current?.select()));
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
       <DialogContent data-avatar-dialog className="flex h-[min(88dvh,44rem)] max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] sm:h-[min(37rem,calc(100dvh-3rem))] sm:max-h-none sm:max-w-[600px] sm:rounded-[22px] sm:p-0">
         <div aria-hidden className="mx-auto mt-2 h-[5px] w-[38px] rounded-full bg-border sm:hidden" />
         <div className="flex items-center gap-[18px] px-5 pt-3.5 pb-3 pr-12 sm:px-6 sm:pt-[22px] sm:pb-4 sm:pr-14">
-          <span key={popKey} className="av-fade flex" data-avatar-preview>
+          <span className="flex" data-avatar-preview>
             <AvatarPic value={pick} size={big} initial={letter} draft={draft} />
           </span>
           <div className="min-w-0 flex-1">
-            <DialogTitle className="text-[19px] font-semibold tracking-[-0.01em]">Your picture</DialogTitle>
-            <DialogDescription className="mt-1 text-[13.5px]">
-              <span data-avatar-name>Shows next to your name in the sidebar.</span>
-            </DialogDescription>
+            <DialogTitle className="sr-only">Your picture and name</DialogTitle>
+            {editing ? (
+              <input
+                ref={nameInput}
+                value={name}
+                maxLength={40}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={() => setEditing(false)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === "Escape") (e.preventDefault(), e.stopPropagation(), e.key === "Escape" && setName(savedName), setEditing(false));
+                }}
+                placeholder={fallbackName || "Your name"}
+                aria-label="Your name"
+                data-avatar-name-input
+                className="-mx-1.5 w-full rounded-lg border-0 bg-muted px-1.5 py-0.5 text-[21px] font-semibold tracking-[-0.01em] text-foreground outline-none ring-2 ring-primary/60 placeholder:text-muted-foreground/60"
+              />
+            ) : (
+              <button type="button" onClick={startEdit} data-avatar-name className="group -mx-1.5 flex max-w-full items-center gap-2 rounded-lg px-1.5 py-0.5 text-left outline-ring transition-colors hover:bg-muted focus-visible:outline-2">
+                <span className={cn("truncate text-[21px] font-semibold tracking-[-0.01em]", !shown && "text-muted-foreground")}>{shown || "Add your name"}</span>
+                <Pencil className="size-4 shrink-0 text-muted-foreground opacity-80 transition-opacity group-hover:opacity-100" />
+              </button>
+            )}
+            <DialogDescription className="mt-1 text-[13.5px]">Your picture and name show in the sidebar.</DialogDescription>
           </div>
         </div>
         <div className="px-5 pb-3.5 sm:px-6">

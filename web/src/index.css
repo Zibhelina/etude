@@ -874,3 +874,40 @@ body.browse-resizing iframe { pointer-events: none; }
 @media (max-width: 767px) { .deck-finder { padding-top: max(env(safe-area-inset-top), 12px); } }
 @media (prefers-reduced-motion: reduce) { .deck-finder-veil, .deck-finder-box, .deck-finder-row { animation: none !important; } }
 .deck-finder-mark { font-weight: 650; color: var(--primary); }
+/* ---------- first-run setup ("E · Open", onboarding.tsx / onboarding-ui.tsx) */
+.ob-serif { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; }
+.ob-stage { scrollbar-width: none; -webkit-mask-image: linear-gradient(#000 calc(100% - 28px), transparent); mask-image: linear-gradient(#000 calc(100% - 28px), transparent); }
+.ob-stage::-webkit-scrollbar { display: none; }
+.ob-bar { height: 6px; border-radius: 9999px; background: var(--muted); overflow: hidden; }
+.ob-bar > i { display: block; height: 100%; border-radius: inherit; background: var(--primary); transition: width 450ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.ob-pri { background: var(--primary); color: var(--primary-foreground); box-shadow: 0 3px 0 var(--primary-edge); transition: transform 60ms, box-shadow 60ms, filter 120ms; }
+.ob-pri:hover:not(:disabled) { filter: brightness(1.05); }
+.ob-pri:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--primary-edge); }
+.ob-pri:disabled { cursor: default; background: var(--accent); color: var(--muted-foreground); box-shadow: 0 3px 0 var(--border); }
+.ob-pri:disabled .ob-kbd { display: none; }
+.ob-kbd { font-family: Inter, sans-serif; background: color-mix(in oklab, var(--primary-foreground) 22%, transparent); }
+.ob-tile { background: var(--card); border: 1.5px solid var(--border); box-shadow: 0 3px 0 var(--border); transition: transform 60ms, box-shadow 60ms, border-color 120ms, background-color 120ms; }
+.ob-tile:has(> button:active:not(:disabled)) { transform: translateY(2px); box-shadow: 0 1px 0 var(--border); }
+.ob-tile.is-on { border-color: var(--primary); box-shadow: 0 3px 0 var(--primary); background: color-mix(in oklab, var(--primary) 7%, var(--card)); }
+.ob-tile.is-on:has(> button:active) { box-shadow: 0 1px 0 var(--primary); }
+.ob-tile > button:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.ob-tile-ic { background: var(--muted); transition: background-color 120ms, color 120ms; }
+.ob-tile.is-on .ob-tile-ic { background: var(--primary); color: var(--primary-foreground); }
+.ob-tile-k { color: var(--muted-foreground); box-shadow: inset 0 0 0 1px var(--border); }
+.ob-tile.is-on .ob-tile-k { background: var(--primary); color: var(--primary-foreground); box-shadow: none; }
+.ob-start { background: var(--card); box-shadow: inset 0 0 0 1.5px var(--border), 0 3px 0 var(--border); transition: transform 60ms, box-shadow 60ms; }
+.ob-start:active { transform: translateY(2px); box-shadow: inset 0 0 0 1.5px var(--border), 0 1px 0 var(--border); }
+.ob-round { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 9999px; background: var(--card); border: 1.5px solid var(--border); box-shadow: 0 3px 0 var(--border); transition: transform 60ms, box-shadow 60ms; }
+.ob-round:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--border); }
+.ob-round:disabled { opacity: 0.5; }
+.ob-sbtn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 12px; background: var(--card); border: 1.5px solid var(--border); box-shadow: 0 3px 0 var(--border); font-weight: 600; font-size: 14px; transition: transform 60ms, box-shadow 60ms; }
+.ob-sbtn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--border); }
+.ob-sbtn:disabled { opacity: 0.5; }
+@media (max-width: 767px) { .ob-sbtn { height: 36px; padding: 0 12px; font-size: 13px; } }
+.av-car-it .ob-car-on { box-shadow: 0 0 0 3px var(--background), 0 0 0 5.5px var(--primary); }
+.ob-cheer { animation: ob-hop 1.6s 0.2s ease-in-out infinite; }
+@keyframes ob-hop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@media (prefers-reduced-motion: reduce) {
+  .ob-cheer { animation: none; }
+  .ob-bar > i, .ob-tile, .ob-pri { transition: none; }
+}

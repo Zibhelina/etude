@@ -4084,7 +4084,7 @@ Encrypted offline collection sync over a folder or etude-cloud.
 
 Show connection, lock and pending change status.
 
-`mode` is how the vault key is kept: "password" (end-to-end, a Sync password or recovery key opens it) or "server" (the server keeps it, no password; not end-to-end), null before the vault exists. `passwordOptional`: the Sync server can keep vault keys, so Sync can start without a password. `busy`, `error` and `progress` describe the collection's sync: events, card type assets and the rebuild of what changed. Media files follow it in the background and report under `media`: `active` while that runs, its own `progress` and `error`, and `received`, the files from other devices written since the process started. `progress` gives the step (download, check, upload, apply), bytes `done` (files for check), the `total` when known and the `rate` in bytes per second.
+`mode` is how the vault key is kept: "password" (end-to-end, a Sync password or recovery key opens it) or "server" (the server keeps it, no password; not end-to-end), null before the vault exists. `passwordOptional`: the Sync server can keep vault keys, so Sync can start without a password. `busy`, `error` and `progress` describe the collection's sync: events, card type assets and the rebuild of what changed. Media files follow it in the background and report under `media`: `active` while that runs, its own `progress` and `error`, and `received`, the files from other devices written since the process started. `progress` gives the step (snapshot on a first sync from the vault's snapshot, download, check, upload, apply), bytes `done` (files for check), the `total` when known and the `rate` in bytes per second.
 
 ```
 etude sync status

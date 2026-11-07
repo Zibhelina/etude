@@ -18,7 +18,14 @@ export interface Transport {
   getBlob(name:string,signal?:AbortSignal): Promise<Uint8Array>;
   /** Bytes stored on the server, when it says. */
   usage?(): Promise<number|null>;
+  /** The vault's latest snapshot and its ETag, or null when it has none. Only a server keeps snapshots. */
+  snapshot?(): Promise<{pointer:SnapshotPointer;etag:string}|null>;
+  /** Points the vault at a new snapshot whose parts are uploaded already; `etag` is the one read, none for the first. Returns the new ETag. */
+  putSnapshot?(s:{id:string;seq:number;parts:string[]},etag?:string): Promise<string>;
+  deleteBlob?(name:string): Promise<void>;
 }
+/** etude-cloud's pointer to a snapshot: the seq it covers and its parts (blob names), in order. */
+export type SnapshotPointer = {v:1;id:string;seq:number;parts:string[];size:number};
 const VALID = /^[\w:.-]{1,128}$/;
 /** An event's file name: its id with "~" for ":", which Windows doesn't allow in file names. */
 const eventFile = (id: string) => id.replaceAll(":", "~") + ".json";
@@ -112,4 +119,10 @@ export class CloudTransport implements Transport {
   async putBlob(name:string,bytes:Uint8Array,signal?:AbortSignal) { await this.request("/v1/blobs/"+name,{method:"PUT",body:new Uint8Array(bytes),signal}); }
   async getBlob(name:string,signal?:AbortSignal) { return new Uint8Array(await (await this.request("/v1/blobs/"+name,{signal})).arrayBuffer()); }
   async usage() { try { const r:any=await (await this.request("/v1/vault")).json();return r.usedBytes||null; } catch { return null; } }
+  async snapshot() {
+    try { const r=await this.request("/v1/vault/snapshot");return {pointer:await r.json() as SnapshotPointer,etag:r.headers.get("etag")!}; }
+    catch(e) { if ((e as any).code === "no_snapshot") return null;throw e; }
+  }
+  async putSnapshot(s:{id:string;seq:number;parts:string[]},etag?:string) { const r=await this.request("/v1/vault/snapshot",{method:"PUT",headers:{"Content-Type":"application/json",...(etag?{"If-Match":etag}:{})},body:JSON.stringify(s)});return r.headers.get("etag")!; }
+  async deleteBlob(name:string) { await this.request("/v1/blobs/"+name,{method:"DELETE"}); }
 }

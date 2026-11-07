@@ -4,11 +4,11 @@ import { cn } from "@/lib/utils";
 
 /** The page column: one width, one padding. `wide` is for dashboards (Stats). */
 export function Page({ wide, className, children }: { wide?: boolean; className?: string; children: React.ReactNode }) {
-  return <div className={cn("mx-auto w-full px-4 pt-6 pb-10 max-md:pt-[calc(1.25rem+env(safe-area-inset-top))] sm:px-8 sm:pt-10 sm:pb-12", wide ? "max-w-5xl" : "max-w-4xl", className)}>{children}</div>;
+  return <div className={cn("mx-auto w-full px-4 pt-6 pb-10 phone:pt-[calc(1.25rem+env(safe-area-inset-top))] sm:px-8 sm:pt-10 sm:pb-12", wide ? "max-w-5xl" : "max-w-4xl", className)}>{children}</div>;
 }
 
 /** Page titles on a phone are set in Computer Modern, large ("Score", docs/mobile-design.md). */
-export const PHONE_H1 = "max-md:score-serif max-md:score-display max-md:text-[2.25rem] max-md:leading-[1.08] max-md:font-normal max-md:tracking-normal";
+export const PHONE_H1 = "phone:score-serif phone:score-display phone:text-[2.25rem] phone:leading-[1.08] phone:font-normal phone:tracking-normal";
 
 /** Negative margins that let a bar inside <Page> run edge to edge. */
 export const PAGE_BLEED = "-mx-4 px-4 sm:-mx-8 sm:px-8";
@@ -172,7 +172,7 @@ export function SaveBar({ visible, message, children, overTabBar = true, safeAre
       aria-hidden={!visible}
       className={cn(
         "sticky z-10 flex flex-wrap items-center gap-x-3 gap-y-2 border-t bg-background/95 py-3 backdrop-blur transition-opacity",
-        overTabBar ? "bottom-[var(--tabbar-h)] md:bottom-0" : "bottom-0",
+        overTabBar ? "bottom-[var(--tabbar-h)]" : "bottom-0",
         safeArea && "pb-[calc(0.75rem+env(safe-area-inset-bottom))]",
         visible ? "opacity-100" : "pointer-events-none opacity-0",
         className,

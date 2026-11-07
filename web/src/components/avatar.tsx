@@ -5,7 +5,7 @@ import { Check, ImageMinus, ImagePlus, Pencil, Upload, ZoomIn, ZoomOut } from "l
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useEtudeSrc } from "@/lib/local-url";
-import { usePhone } from "@/lib/phone";
+import { useNarrow } from "@/lib/device";
 import { AVATAR_BGS, AVATAR_EMOJI, AVATAR_EMOJI_BG, CHARACTERS, OPEN_AVATAR_EVENT, openAvatarDialog, characterSrc, sameAvatar, saveProfile, useAvatar, useMyName, type Avatar } from "@/lib/avatar";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -353,7 +353,7 @@ export function PictureBlock({ name }: { name?: string | null }) {
         <div data-settings-title className="text-[14.5px] font-semibold text-foreground">Your picture</div>
         <div className="mt-[3px] text-[13px] leading-[1.45] text-pretty text-muted-foreground">Shows next to your name in the sidebar.</div>
       </div>
-      <Button variant="outline" size="sm" className="h-10 max-sm:ml-20 md:h-8" onClick={openAvatarDialog} data-avatar-change>Change picture</Button>
+      <Button variant="outline" size="sm" className="phone:h-10 max-sm:ml-20 h-8" onClick={openAvatarDialog} data-avatar-change>Change picture</Button>
     </div>
   );
 }
@@ -376,7 +376,7 @@ export function AvatarDialog({ open, onOpenChange, initial }: { open: boolean; o
   const [editing, setEditing] = useState(false);
   const nameInput = useRef<HTMLInputElement>(null);
   const fallbackName = (localStorage.getItem("etude.shell.name") ?? "").trim();
-  const phone = usePhone();
+  const phone = useNarrow();
   const [pick, setPick] = useState<AvatarPick>(saved);
   const [tab, setTab] = useState<Tab>("chars");
   const [dir, setDir] = useState(0);
@@ -436,7 +436,7 @@ export function AvatarDialog({ open, onOpenChange, initial }: { open: boolean; o
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
       <DialogContent data-avatar-dialog className="flex h-[min(88dvh,44rem)] max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] sm:h-[min(37rem,calc(100dvh-3rem))] sm:max-h-none sm:max-w-[600px] sm:rounded-[22px] sm:p-0">
-        <div aria-hidden className="mx-auto mt-2 h-[5px] w-[38px] rounded-full bg-border sm:hidden" />
+        <div aria-hidden className="mx-auto mt-2 h-[5px] w-[38px] rounded-full bg-border desktop:hidden" />
         <div className="flex items-center gap-[18px] px-5 pt-3.5 pb-3 pr-12 sm:px-6 sm:pt-[22px] sm:pb-4 sm:pr-14">
           <span className="flex" data-avatar-preview>
             <AvatarPic value={pick} size={big} initial={letter} draft={draft} />

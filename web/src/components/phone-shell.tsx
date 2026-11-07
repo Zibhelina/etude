@@ -1,6 +1,6 @@
 // The phone shell ("Score", see docs/mobile-design.md): a floating tab pill with the Ask circle beside it,
 // the big serif page title that folds into a slim bar on scroll, and the bottom action sheet.
-// Nothing here renders at md (768 px) and up.
+// Only phones get it (lib/device.ts), at any width; a narrow desktop window keeps the sidebar.
 import { useEffect, useRef, useState } from "react";
 import { LibraryIcon, MarketIcon, StatsIcon } from "@/components/nav-icons";
 import { MyAvatar } from "@/components/avatar";
@@ -27,7 +27,7 @@ export function PhoneTabBar({ path, updateDot, fun, onAsk }: { path: string; upd
   const face = useMinimiFace();
   const faces = useMinimiFaces();
   return (
-    <nav aria-label="Main" data-shell-tabs className="score-island pointer-events-none fixed inset-x-0 bottom-0 z-20 md:hidden">
+    <nav aria-label="Main" data-shell-tabs className="score-island pointer-events-none fixed inset-x-0 bottom-0 z-20 desktop:hidden">
       <div className="pointer-events-auto mx-auto flex max-w-md items-center gap-2.5 px-4 pt-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-[359px]:gap-2 max-[359px]:px-3">
         <div className="score-capsule flex min-w-0 flex-1 items-center rounded-full border p-[5px]">
           {TABS.map((t) => {
@@ -100,7 +100,7 @@ export function PhoneTitle({ title, kicker, sub, back, actions, className }: {
   }, []);
   return (
     <>
-      <div aria-hidden={!folded} className={cn("score-fold fixed inset-x-0 top-0 z-20 flex h-[calc(3rem+env(safe-area-inset-top))] items-end transition-opacity duration-200 md:hidden", folded ? "opacity-100" : "pointer-events-none opacity-0")}>
+      <div aria-hidden={!folded} className={cn("score-fold fixed inset-x-0 top-0 z-20 flex h-[calc(3rem+env(safe-area-inset-top))] items-end transition-opacity duration-200 desktop:hidden", folded ? "opacity-100" : "pointer-events-none opacity-0")}>
         <div className="flex h-12 w-full items-center gap-1 px-2">
           {back ? (
             <button onClick={back.onClick} className="flex h-10 min-w-10 items-center justify-center rounded-full text-muted-foreground" aria-label={`Back to ${back.label}`}><ChevronLeftIcon /></button>
@@ -243,7 +243,7 @@ export function Mark({ kind, className }: { kind: "new" | "learn" | "due"; class
 export function PhoneBrowseNav({ current }: { current: "cards" | "types" }) {
   const tabs = [["cards", "Cards", "/browse"], ["types", "Card types", "/types"]] as const;
   return (
-    <div className="md:hidden" data-browse-nav>
+    <div className="desktop:hidden" data-browse-nav>
       <button onClick={() => navigate("/")} className="-ml-2 flex h-10 items-center gap-0.5 rounded-full pr-2 text-[15px] font-semibold text-muted-foreground active:text-foreground">
         <ChevronLeftIcon />
         Library

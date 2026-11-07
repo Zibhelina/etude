@@ -651,7 +651,7 @@ export function TypeEditor({ id }: { id: string }) {
 
       <div
         className={cn(
-          "sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 flex items-center gap-2 border-t bg-background/95 px-4 py-3 backdrop-blur transition-opacity sm:px-6 md:bottom-0 lg:px-8",
+          "sticky bottom-0 z-10 flex items-center gap-2 border-t bg-background/95 px-4 py-3 backdrop-blur transition-opacity phone:bottom-[calc(4rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8",
           dirty ? "opacity-100" : "pointer-events-none opacity-0",
         )}
       >

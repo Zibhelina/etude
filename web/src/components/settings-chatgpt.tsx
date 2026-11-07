@@ -198,7 +198,7 @@ export function ChatGptBlock({ provider, error, onChange }: { provider: ChatGptP
               hint={status.models.length || inNativeShell() ? "From your account's model list. Save to apply." : `Save to apply. Run \`etude settings chatgpt models\` to list what your plan offers.`}
             >
               <Select value={currentModel} onValueChange={(v) => onChange({ model: v })}>
-                <SelectTrigger className="h-10 w-full md:h-9">
+                <SelectTrigger className="phone:h-10 w-full h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

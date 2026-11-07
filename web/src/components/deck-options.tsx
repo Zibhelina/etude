@@ -576,7 +576,7 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
       />}
 
       {changed.length > 0 && (
-        <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 md:bottom-4">
+        <div className="sticky bottom-4 z-10 phone:bottom-[calc(4.5rem+env(safe-area-inset-bottom))]">
           <div className="flex flex-col gap-3 rounded-xl border bg-popover/95 p-3 shadow-lg backdrop-blur sm:flex-row sm:items-center sm:pl-4">
             <div className="min-w-0 flex-1 text-sm">
               <span className="font-medium">{changed.length} unsaved change{changed.length === 1 ? "" : "s"}</span>

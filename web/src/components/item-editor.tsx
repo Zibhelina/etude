@@ -81,7 +81,7 @@ export function ItemRow({ row: r, active, checked, onOpen, onToggle, className, 
       }}
       {...(phone ? handlers : {})}
       className={cn(
-        "group flex cursor-pointer items-start gap-3 border-b px-3 py-3 transition-colors hover:bg-accent/40 max-md:min-h-[4.25rem] max-md:select-none max-md:py-3.5 max-md:[-webkit-touch-callout:none]",
+        "group flex cursor-pointer items-start gap-3 border-b px-3 py-3 transition-colors hover:bg-accent/40 phone:min-h-[4.25rem] phone:select-none phone:py-3.5 phone:[-webkit-touch-callout:none]",
         phone && checked && "bg-highlight/[0.07]",
         (r.suspended || r.archived) && "opacity-55",
         className,
@@ -99,7 +99,7 @@ export function ItemRow({ row: r, active, checked, onOpen, onToggle, className, 
         />
       )}
       <div className="min-w-0 flex-1">
-        <div className={cn("line-clamp-2 text-sm leading-snug max-md:text-[15px]", active && "font-medium text-highlight")} aria-current={active || undefined}>{r.title || <span className="text-muted-foreground">{r.itemId}</span>}</div>
+        <div className={cn("line-clamp-2 text-sm leading-snug phone:text-[15px]", active && "font-medium text-highlight")} aria-current={active || undefined}>{r.title || <span className="text-muted-foreground">{r.itemId}</span>}</div>
         <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
           {!hideDeck && <><span className="truncate">{r.deck.split("::").slice(-1)[0]}</span><span>·</span></>}
           <span className="shrink-0">{r.type}</span>
@@ -387,7 +387,7 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
 
   return (
     <div className="@container/insp min-h-full w-full">
-    <div className={cn("@container mx-auto flex min-h-full w-full flex-col px-[34px] pt-[22px] @max-[44rem]/insp:px-6 @max-[44rem]/insp:pt-[18px] max-md:px-5! max-md:pt-[calc(0.5rem+env(safe-area-inset-top))]!", closeX ? "max-w-[1100px]" : "max-w-[760px]", phone && !closeAlways && "browse-slide")}>
+    <div className={cn("@container mx-auto flex min-h-full w-full flex-col px-[34px] pt-[22px] @max-[44rem]/insp:px-6 @max-[44rem]/insp:pt-[18px] phone:px-5! phone:pt-[calc(0.5rem+env(safe-area-inset-top))]!", closeX ? "max-w-[1100px]" : "max-w-[760px]", phone && !closeAlways && "browse-slide")}>
       {phone && !closeAlways ? (
         <>
           <div className="-mx-2 mb-1 flex h-12 items-center gap-1">
@@ -460,8 +460,8 @@ export function ItemEditor({ id, decks, tags, onSaved, onDeleted, onDuplicate, o
       <div
         data-savebar
         className={cn(
-          "browse-savebar sticky bottom-0 z-[3] -mx-[34px] mt-auto flex items-center gap-2.5 px-[34px] pt-3.5 pb-[18px] transition-[opacity,transform] duration-200 @max-[44rem]/insp:-mx-6 @max-[44rem]/insp:px-6 max-md:-mx-5! max-md:px-5!",
-          gutter && (fun ? "md:pr-[112px]!" : "md:pr-[84px]!"),
+          "browse-savebar sticky bottom-0 z-[3] -mx-[34px] mt-auto flex items-center gap-2.5 px-[34px] pt-3.5 pb-[18px] transition-[opacity,transform] duration-200 @max-[44rem]/insp:-mx-6 @max-[44rem]/insp:px-6 phone:-mx-5! phone:px-5!",
+          gutter && (fun ? "desktop:pr-[112px]!" : "desktop:pr-[84px]!"),
           dirty || mediaPending ? "opacity-100" : "pointer-events-none translate-y-2 opacity-0",
         )}
       >

@@ -249,7 +249,7 @@ export function TypeDetail({ id, onMissing }: { id: string; onMissing(): void })
 
   const edit = () => navigate(`/types/${encodeURIComponent(id)}?edit=1`);
   return (
-    <div className="types-page mx-auto w-full max-w-[62rem] px-4 pt-5 pb-12 max-md:pt-[calc(1rem+env(safe-area-inset-top))] sm:px-8 sm:pt-8">
+    <div className="types-page mx-auto w-full max-w-[62rem] px-4 pt-5 pb-12 phone:pt-[calc(1rem+env(safe-area-inset-top))] sm:px-8 sm:pt-8">
       <button className="-ml-1.5 mb-3 flex min-h-9 items-center gap-1 rounded-md px-1.5 text-[15px] text-muted-foreground transition-colors hover:text-foreground" onClick={() => navigate("/types")}>
         <ChevronLeft className="size-4" />Card types
       </button>

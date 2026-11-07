@@ -1,6 +1,6 @@
 // The desktop and iPad sidebar ("Panel"): attached full height on the left, the wordmark and its toggle on top,
 // the screens in two groups (Study, Make), and at the bottom the update button and who you are with Sync's state.
-// Collapsed it folds to a rail of icons, in one motion (see Sidebar). Nothing here renders below md (768 px); phones get the tab island.
+// Collapsed it folds to a rail of icons, in one motion (see Sidebar). Only desktops (the desktop app, browsers, iPad) get it, at any width; phones get the tab island.
 import { useEffect, useRef, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SidebarIcon } from "@/components/sidebar-icon";
@@ -78,7 +78,7 @@ export function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed
       data-collapsed={(drag === null ? collapsed : drag < SB_FOLD) || undefined}
       data-resizing={drag !== null || undefined}
       style={{ width: shown, ["--sbw" as string]: `${drag === null ? width : Math.max(SB_MIN, drag)}px` }}
-      className="shell-sb sticky top-0 hidden h-dvh shrink-0 flex-col overflow-hidden bg-sidebar px-2.5 py-3.5 md:flex"
+      className="shell-sb sticky top-0 hidden h-dvh shrink-0 flex-col overflow-hidden bg-sidebar px-2.5 py-3.5 desktop:flex"
     >
       <ResizeGrip collapsed={collapsed} width={width} onToggle={onToggle} onDrag={setDrag} />
       <div className="relative mb-3.5 h-10 shrink-0">

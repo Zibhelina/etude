@@ -235,7 +235,7 @@ function TypeLibrary() {
   const newType = (start?: Start) => setCreating({ start });
 
   return (
-    <div className="types-page mx-auto w-full max-w-[62rem] px-4 pt-5 pb-14 max-md:pt-[calc(0.5rem+env(safe-area-inset-top))] sm:px-8 sm:pt-12">
+    <div className="types-page mx-auto w-full max-w-[62rem] px-4 pt-5 pb-14 phone:pt-[calc(0.5rem+env(safe-area-inset-top))] sm:px-8 sm:pt-12">
       <PhoneBrowseNav current="types" />
       <header>
         <h1 className="score-serif score-display text-[2.25rem] leading-[1.1] sm:text-[2.5rem]">Card types</h1>

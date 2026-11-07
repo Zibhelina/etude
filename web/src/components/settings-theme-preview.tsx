@@ -103,7 +103,7 @@ export function ThemeSample() {
         <span className="text-warning">warning</span>
         <span className="text-danger">danger</span>
       </div>
-      <Input tabIndex={-1} placeholder="An input" className="h-10 md:h-9" />
+      <Input tabIndex={-1} placeholder="An input" className="phone:h-10 h-9" />
       <div className="flex gap-1.5" aria-hidden="true">
         {[1, 2, 3, 4, 5].map((i) => (
           <div key={i} className="h-8 flex-1 rounded" style={{ background: `var(--chart-${i})` }} />

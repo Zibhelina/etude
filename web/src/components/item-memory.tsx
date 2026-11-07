@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/markdown";
 import { RATING_LABEL, type ItemDetail } from "@/lib/api";
 import { EtudeImg } from "@/lib/local-url";
-import { usePhone } from "@/lib/phone";
+import { useNarrow } from "@/lib/device";
 import { cn } from "@/lib/utils";
 
 type Card = ItemDetail["cards"][number];
@@ -117,7 +117,7 @@ function Curve({ S, d, elapsed, interval, R, late, compact }: { S: number; d: nu
 
 export function MemoryPanel({ item, onPractice, onForget, onSuspend }: { item: ItemDetail; onPractice(): void; onForget(): void; onSuspend(): void }) {
   const [face, setFace] = useState(0);
-  const compact = usePhone();
+  const compact = useNarrow();
   const c: Card | undefined = item.cards[Math.min(face, item.cards.length - 1)];
   const allSuspended = item.cards.every((x) => x.suspended);
   if (!c) return null;

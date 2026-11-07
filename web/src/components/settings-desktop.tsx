@@ -54,7 +54,7 @@ export function DesktopSection() {
         stackAside
         aside={
           cmd?.canInstall && !cmd.ours ? (
-            <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" disabled={busy} onClick={install}>
+            <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={busy} onClick={install}>
               {busy ? <Loader2 className="size-4 animate-spin" /> : <Terminal className="size-4" />}
               Install the etude command
             </Button>
@@ -68,7 +68,7 @@ export function DesktopSection() {
         description="What the app and its engine wrote down. Attach them when you report a problem."
         stackAside
         aside={
-          <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => void app.showLogs()}>
+          <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={() => void app.showLogs()}>
             <FolderOpen className="size-4" />
             Show logs
           </Button>

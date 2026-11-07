@@ -521,7 +521,7 @@ export function SyncSection() {
         <Block>
           <p className="text-sm text-destructive">Couldn't read sync status: {loadError}</p>
           <div>
-            <Button variant="outline" size="sm" className="h-10 md:h-8" onClick={() => void load()}>
+            <Button variant="outline" size="sm" className="phone:h-10 h-8" onClick={() => void load()}>
               Try again
             </Button>
           </div>
@@ -556,7 +556,7 @@ export function SyncSection() {
               )}
               {problem && <Notice>{problem}</Notice>}
               <div className="flex flex-wrap items-center gap-2">
-                <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
+                <Button type="submit" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={!!busy}>
                   {(busy === "setup" || busy === "signin") && <Loader2 className="size-4 animate-spin" />}
                   {!status.configured && folder.trim() ? "Use this folder" : "Send code"}
                 </Button>
@@ -565,7 +565,7 @@ export function SyncSection() {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-10 md:h-8"
+                    className="phone:h-10 h-8"
                     disabled={!!busy}
                     onClick={() => {
                       setReauth(false);
@@ -575,7 +575,7 @@ export function SyncSection() {
                     Cancel
                   </Button>
                 ) : status.configured && (
-                  <Button type="button" variant="ghost" size="sm" className="h-10 md:h-8" disabled={!!busy} onClick={() => void signOut()}>
+                  <Button type="button" variant="ghost" size="sm" className="phone:h-10 h-8" disabled={!!busy} onClick={() => void signOut()}>
                     Change server
                   </Button>
                 )}
@@ -611,18 +611,18 @@ export function SyncSection() {
               <TextInput label="Sign-in code" value={code} onChange={setCode} autoComplete="one-time-code" inputMode="numeric" placeholder="6-digit code" mono />
               {problem && <Notice>{problem}</Notice>}
               <div className="flex flex-wrap items-center gap-2">
-                <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
+                <Button type="submit" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={!!busy}>
                   {busy === "verify" && <Loader2 className="size-4 animate-spin" />}
                   Verify
                 </Button>
-                <Button type="button" variant="ghost" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy} onClick={() => void signin()}>
+                <Button type="button" variant="ghost" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={!!busy} onClick={() => void signin()}>
                   Send again
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-10 gap-1.5 md:h-8"
+                  className="phone:h-10 gap-1.5 h-8"
                   disabled={!!busy}
                   onClick={() => {
                     setCodeSent(false);
@@ -651,7 +651,7 @@ export function SyncSection() {
               />
               <PlanChooser st={acct} onActive={afterPlan} onRefresh={loadAccount} />
               <div>
-                <Button type="button" variant="ghost" size="sm" className="h-10 md:h-8" disabled={!!busy} onClick={() => void signOut()}>
+                <Button type="button" variant="ghost" size="sm" className="phone:h-10 h-8" disabled={!!busy} onClick={() => void signOut()}>
                   Use another email
                 </Button>
               </div>
@@ -684,7 +684,7 @@ export function SyncSection() {
                 <>
                   {problem && <Notice>{problem}</Notice>}
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
+                    <Button type="submit" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={!!busy}>
                       {busy === "unlock" && <Loader2 className="size-4 animate-spin" />}
                       Start syncing
                     </Button>
@@ -693,7 +693,7 @@ export function SyncSection() {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-10 gap-1.5 md:h-8"
+                        className="phone:h-10 gap-1.5 h-8"
                         disabled={!!busy}
                         onClick={() => {
                           setWithPassword(true);
@@ -710,7 +710,7 @@ export function SyncSection() {
                   <TextInput label="Recovery key" value={recoveryInput} onChange={setRecoveryInput} autoComplete="off" mono placeholder="Your recovery key" />
                   {problem && <Notice>{problem}</Notice>}
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
+                    <Button type="submit" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={!!busy}>
                       {busy === "unlock" && <Loader2 className="size-4 animate-spin" />}
                       Unlock
                     </Button>
@@ -718,7 +718,7 @@ export function SyncSection() {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-10 gap-1.5 md:h-8"
+                      className="phone:h-10 gap-1.5 h-8"
                       disabled={!!busy}
                       onClick={() => {
                         setUseRecovery(false);
@@ -736,7 +736,7 @@ export function SyncSection() {
                   {newVault && <TextInput label="Confirm password" type="password" value={confirm} onChange={setConfirm} autoComplete="new-password" />}
                   {problem && <Notice>{problem}</Notice>}
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
+                    <Button type="submit" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={!!busy}>
                       {busy === "unlock" && <Loader2 className="size-4 animate-spin" />}
                       {newVault ? "Start syncing" : "Unlock"}
                     </Button>
@@ -745,7 +745,7 @@ export function SyncSection() {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-10 gap-1.5 md:h-8"
+                        className="phone:h-10 gap-1.5 h-8"
                         disabled={!!busy}
                         onClick={() => {
                           setWithPassword(false);
@@ -762,7 +762,7 @@ export function SyncSection() {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-10 gap-1.5 md:h-8"
+                        className="phone:h-10 gap-1.5 h-8"
                         disabled={!!busy}
                         onClick={() => {
                           setUseRecovery(true);
@@ -795,7 +795,7 @@ export function SyncSection() {
           <div className="rounded-lg border border-warning/40 bg-warning/5 p-3.5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
               <code className="min-w-0 flex-1 select-all font-mono text-[13px] leading-relaxed text-foreground/90 [overflow-wrap:anywhere]">{recoveryKey}</code>
-              <Button type="button" variant="outline" size="sm" className="h-10 shrink-0 gap-1.5 md:h-8" onClick={() => void copyRecovery()}>
+              <Button type="button" variant="outline" size="sm" className="phone:h-10 shrink-0 gap-1.5 h-8" onClick={() => void copyRecovery()}>
                 {copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />}
                 {copied ? "Copied" : "Copy"}
               </Button>
@@ -811,7 +811,7 @@ export function SyncSection() {
             <span>I've saved this key somewhere safe.</span>
           </label>
           <div>
-            <Button type="button" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!recoveryConfirmed} onClick={finishRecovery}>
+            <Button type="button" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={!recoveryConfirmed} onClick={finishRecovery}>
               Continue
             </Button>
           </div>
@@ -906,7 +906,7 @@ export function SyncSection() {
                 <TextInput label="Confirm password" type="password" value={confirm} onChange={setConfirm} autoComplete="new-password" />
                 {error && <Notice>{storeSafeMessage(error)}</Notice>}
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button type="submit" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy}>
+                  <Button type="submit" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={!!busy}>
                     {busy === "protect" && <Loader2 className="size-4 animate-spin" />}
                     Add password
                   </Button>
@@ -914,7 +914,7 @@ export function SyncSection() {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-10 md:h-8"
+                    className="phone:h-10 h-8"
                     disabled={!!busy}
                     onClick={() => {
                       setProtecting(false);
@@ -929,12 +929,12 @@ export function SyncSection() {
               </form>
             )}
             <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-              <Button type="button" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy || status.busy || (cloud && billingOn && !!acct && !planActive)} onClick={() => void syncNow()}>
+              <Button type="button" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={!!busy || status.busy || (cloud && billingOn && !!acct && !planActive)} onClick={() => void syncNow()}>
                 {syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                 Sync now
               </Button>
               {cloud && acct?.me && <ManagePlan st={acct} onChanged={loadAccount} />}
-              <Button type="button" variant="ghost" size="sm" className="h-10 gap-1.5 md:h-8" disabled={!!busy || status.busy} onClick={() => setConfirmOff(true)}>
+              <Button type="button" variant="ghost" size="sm" className="phone:h-10 gap-1.5 h-8" disabled={!!busy || status.busy} onClick={() => setConfirmOff(true)}>
                 <LogOut className="size-4" />
                 Sign out
               </Button>
@@ -1069,7 +1069,7 @@ function ManagePlan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise
     <Button
       variant="outline"
       size="sm"
-      className="h-10 gap-1.5 md:h-8"
+      className="phone:h-10 gap-1.5 h-8"
       disabled={busy}
       onClick={async () => {
         setBusy(true);
@@ -1132,7 +1132,7 @@ function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(
       <div className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">Sync isn't active on this account.</p>
         <div>
-          <Button variant="outline" size="sm" className="h-10 md:h-8" onClick={() => void onRefresh()}>Check again</Button>
+          <Button variant="outline" size="sm" className="phone:h-10 h-8" onClick={() => void onRefresh()}>Check again</Button>
         </div>
       </div>
     );
@@ -1148,7 +1148,7 @@ function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(
         <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
-            className="h-10 md:h-8"
+            className="phone:h-10 h-8"
             disabled={busy}
             onClick={async () => {
               setBusy(true);
@@ -1162,7 +1162,7 @@ function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(
           >
             {busy && <Loader2 className="size-4 animate-spin" />} I've paid
           </Button>
-          <Button variant="ghost" size="sm" className="h-10 md:h-8" onClick={() => setWaiting(false)}>Back to plans</Button>
+          <Button variant="ghost" size="sm" className="phone:h-10 h-8" onClick={() => setWaiting(false)}>Back to plans</Button>
         </div>
       </div>
     );
@@ -1200,7 +1200,7 @@ function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(
         <div>
           <Button
             size="sm"
-            className="h-10 gap-1.5 md:h-8"
+            className="phone:h-10 gap-1.5 h-8"
             disabled={busy}
             onClick={async () => {
               setBusy(true);
@@ -1281,7 +1281,7 @@ function TextInput({ label, hint, error, value, onChange, type = "text", placeho
       autoCapitalize="none"
       spellCheck={false}
       aria-invalid={!!error}
-      className={cn("h-10 md:h-9", mono && "font-mono text-[13px] md:text-[13px]", action && "min-w-0 flex-1")}
+      className={cn("phone:h-10 h-9", mono && "font-mono text-[13px] md:text-[13px]", action && "min-w-0 flex-1")}
       onChange={(e) => onChange(e.target.value)}
     />
   );
@@ -1307,7 +1307,7 @@ export function ChooseFolder({ onPick, className }: { onPick(folder: string): vo
     <Button
       type="button"
       variant="outline"
-      className={cn("h-10 shrink-0 md:h-9", className)}
+      className={cn("phone:h-10 shrink-0 h-9", className)}
       onClick={async () => {
         const folder = await app.pickFolder();
         if (folder) onPick(folder);

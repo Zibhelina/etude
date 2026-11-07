@@ -431,7 +431,7 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
       </div>
       <div className="flex-1" />
       {(phone || tablet
-        ? <Button variant="outline" size="icon" className="size-10 rounded-[10px] bg-card shadow-xs max-md:border-0 max-md:bg-transparent max-md:shadow-none max-md:dark:bg-transparent" onClick={() => setCreating(true)} aria-label="New card" title="New card · N"><Plus className="size-[22px]" /></Button>
+        ? <Button variant="outline" size="icon" className="size-10 rounded-[10px] bg-card shadow-xs phone:border-0 phone:bg-transparent phone:shadow-none phone:dark:bg-transparent" onClick={() => setCreating(true)} aria-label="New card" title="New card · N"><Plus className="size-[22px]" /></Button>
         : <Button variant="outline" className="h-10 gap-2 rounded-[10px] bg-card px-3.5 font-semibold" onClick={() => setCreating(true)} title="New card · N"><Plus className="size-[17px]" />New card</Button>)}
     </header>
   );
@@ -565,7 +565,7 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
   );
 
   // Fills the window exactly: the app's main adds bottom padding for scrolling pages, which this one cancels.
-  const H = "h-[calc(100dvh-var(--tabbar-h))] -mb-6 md:-mb-16";
+  const H = "h-[calc(100dvh-var(--tabbar-h))] -mb-16 phone:-mb-6";
 
   // An empty library: one page, no split, search or chips.
   if (library === 0 && !rows.length)

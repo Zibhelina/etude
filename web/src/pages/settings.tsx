@@ -21,6 +21,7 @@ import { ACCOUNT_EVENT, AccountSection } from "@/components/settings-account";
 import { DesktopSection } from "@/components/settings-desktop";
 import { PrivacySection } from "@/components/settings-privacy";
 import { canShowPurchases, desktopApp } from "@/lib/platform";
+import { isPhone, usePhone } from "@/lib/device";
 import { account, type AccountStatus } from "@/lib/account";
 import { currentTheme, THEME_EVENT } from "@/lib/theme";
 import { Block, Group, NumberField, REVEAL_EVENT, SettingsPageContext } from "@/components/settings-ui";
@@ -127,15 +128,9 @@ const hour12 = (h: number) => (h === 0 ? "midnight" : h < 12 ? `${h} am` : h ===
 const PRESET_NAME = { openrouter: "OpenRouter", openai: "OpenAI", chatgpt: "your ChatGPT plan", local: "a model on this computer" } as const;
 
 function useMode(ref: React.RefObject<HTMLElement | null>): Mode {
-  const phoneQuery = "(max-width: 767px)";
-  const [phone, setPhone] = useState(() => matchMedia(phoneQuery).matches);
+  // A phone gets the list → section flow; a desktop at any width gets the split or, with room, the one page.
+  const phone = usePhone();
   const [wide, setWide] = useState(() => window.innerWidth >= 1280);
-  useEffect(() => {
-    const mq = matchMedia(phoneQuery);
-    const h = () => setPhone(mq.matches);
-    mq.addEventListener("change", h);
-    return () => mq.removeEventListener("change", h);
-  }, []);
   useLayoutEffect(() => {
     // Measure the page's container: it stays put while this page swaps layouts inside it.
     const el = ref.current?.parentElement;
@@ -397,7 +392,7 @@ export function SettingsPage() {
 
   if (!saved || !draft) {
     return (
-      <div ref={rootRef} className="mx-auto w-full max-w-[1140px] px-5 py-10 max-md:pt-[calc(1.25rem+env(safe-area-inset-top))] sm:px-8 lg:px-12">
+      <div ref={rootRef} className="mx-auto w-full max-w-[1140px] px-5 py-10 phone:pt-[calc(1.25rem+env(safe-area-inset-top))] sm:px-8 lg:px-12">
         <h1 className="score-serif score-display mb-6 text-[2rem] leading-[1.1] text-foreground">Settings</h1>
         {loadError ? (
           <div className="rounded-[14px] p-6 text-sm ring-1 ring-destructive/40 ring-inset">
@@ -546,7 +541,7 @@ export function SettingsPage() {
                 description="The questions Etude asks on a new install: AI grading, Sync, and something to start with. Your decks stay as they are."
                 stackAside
                 aside={
-                  <Button variant="outline" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => window.dispatchEvent(new Event(ONBOARDING_EVENT))}>
+                  <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={() => window.dispatchEvent(new Event(ONBOARDING_EVENT))}>
                     <RotateCcw className="size-4" />
                     Run setup again
                   </Button>
@@ -598,7 +593,7 @@ export function SettingsPage() {
         aria-label="Search settings"
         autoComplete="off"
         spellCheck={false}
-        className={cn("w-full rounded-[10px] bg-card pr-9 pl-9 text-[16px] text-foreground ring-[1.5px] ring-border outline-none ring-inset placeholder:text-muted-foreground focus:ring-foreground/40 md:text-[14.5px] [&::-webkit-search-cancel-button]:hidden", big ? "h-12 rounded-[12px] pl-11 pr-12 md:text-[15.5px]" : "h-10")}
+        className={cn("w-full rounded-[10px] bg-card pr-9 pl-9 text-[14.5px] phone:text-[16px] text-foreground ring-[1.5px] ring-border outline-none ring-inset placeholder:text-muted-foreground focus:ring-foreground/40 [&::-webkit-search-cancel-button]:hidden", big ? "h-12 rounded-[12px] pl-11 pr-12 text-[15.5px]" : "h-10")}
       />
       {big && !q && (
         <kbd className="pointer-events-none absolute top-1/2 right-3 grid h-6 min-w-6 -translate-y-1/2 place-items-center rounded-md px-1.5 font-mono text-[12px] text-muted-foreground ring-1 ring-border ring-inset">/</kbd>
@@ -635,17 +630,17 @@ export function SettingsPage() {
   const saveBar = (
     <div
       className={cn(
-        "sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 mt-10 flex items-center gap-2 rounded-[14px] bg-card/95 px-4 py-2.5 shadow-[0_8px_30px_rgb(0_0_0/0.12)] ring-1 ring-border backdrop-blur ring-inset transition-opacity md:bottom-4",
+        "sticky bottom-4 phone:bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 mt-10 flex items-center gap-2 rounded-[14px] bg-card/95 px-4 py-2.5 shadow-[0_8px_30px_rgb(0_0_0/0.12)] ring-1 ring-border backdrop-blur ring-inset transition-opacity",
         dirty ? "opacity-100" : "pointer-events-none opacity-0",
       )}
       aria-hidden={!dirty}
     >
       <span className="min-w-0 truncate text-sm">{invalid ? <span className="text-destructive">Some fields need fixing</span> : <span className="text-muted-foreground">Unsaved changes</span>}</span>
       <div className="flex-1" />
-      <Button variant="ghost" size="sm" className="h-10 gap-1.5 md:h-8" onClick={() => setDraft(draftOf(saved))} tabIndex={dirty ? 0 : -1}>
+      <Button variant="ghost" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={() => setDraft(draftOf(saved))} tabIndex={dirty ? 0 : -1}>
         <RotateCcw className="size-4" />Discard
       </Button>
-      <Button size="sm" className="h-10 gap-1.5 md:h-8" onClick={save} disabled={saving || invalid} tabIndex={dirty ? 0 : -1}>
+      <Button size="sm" className="phone:h-10 gap-1.5 h-8" onClick={save} disabled={saving || invalid} tabIndex={dirty ? 0 : -1}>
         {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}Save <kbd className="hidden text-[10px] opacity-60 sm:inline">Ctrl S</kbd>
       </Button>
     </div>

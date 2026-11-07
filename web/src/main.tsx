@@ -7,6 +7,10 @@ import { startStoreKit } from "@/lib/storekit";
 import { startTelemetry } from "@/lib/telemetry";
 import { startScrollbars } from "@/lib/scrollbar";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { applyDevice } from "@/lib/device";
+
+// Phone or desktop, decided once for the session (lib/device.ts); CSS reads it from <html data-device>.
+applyDevice();
 
 // index.html already applied the cached theme; this confirms it with the server.
 startThemeSync();

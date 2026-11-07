@@ -216,23 +216,21 @@ export function SidebarUpdate({ collapsed }: { collapsed: boolean }) {
   // The Tooltip stays mounted in both shapes so the button isn't remounted when the sidebar folds.
   if (busy)
     return (
-      <Tooltip>
+      <Tooltip disabled={!collapsed}>
         <TooltipTrigger asChild>{button}</TooltipTrigger>
-        {collapsed && <TooltipContent side="right">{label}</TooltipContent>}
+        <TooltipContent side="right">{label}</TooltipContent>
       </Tooltip>
     );
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <Tooltip>
+      <Tooltip disabled={!collapsed || open}>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>{button}</PopoverTrigger>
         </TooltipTrigger>
-        {collapsed && (
-          <TooltipContent side="right">
-            {label}
-            {count && <span className="opacity-60"> · {count} new</span>}
-          </TooltipContent>
-        )}
+        <TooltipContent side="right">
+          {label}
+          {count && <span className="opacity-60"> · {count} new</span>}
+        </TooltipContent>
       </Tooltip>
       <PopoverContent side="right" align="end" sideOffset={10} className="w-[22rem] max-w-[calc(100vw-2rem)] p-0 shadow-lg" onOpenAutoFocus={(e) => e.preventDefault()}>
         <UpdateDetails st={st} onUpdate={() => update(() => setOpen(false))} />

@@ -332,6 +332,8 @@ These work on every command, before or after the command words.
   - [`settings get`](#settings-get) Current settings, or one dotted key. Key values are never printed: only whether each key's env var is set.
   - [`settings set`](#settings-set) Change settings with dotted key=value pairs (JSON values when they parse).
   - [`settings unset`](#settings-unset) Reset dotted keys to their defaults.
+  - [`settings avatar get`](#settings-avatar-get) Your picture, and the characters you can pick from.
+  - [`settings avatar set`](#settings-avatar-set) Pick your picture: a character, an emoji on a colour, a photo, or your initial.
   - [`settings test-ai`](#settings-test-ai) Grade a fixed sample answer with the configured providers, to check keys and models. Costs a fraction of a cent.
   - [`settings onboarding`](#settings-onboarding) Whether first-run setup would show (not done and no decks yet), and the comfort level picked there.
   - [`settings key set`](#settings-key-set) Save one API key to $ETUDE_HOME/.env (owner-only), read from stdin so it never appears in the shell history.
@@ -3280,7 +3282,7 @@ etude settings get ai.feedback.model
 
 Change settings with dotted key=value pairs (JSON values when they parse).
 
-Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words; empty keeps his usual one), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.
+Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words; empty keeps his usual one), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own), avatar (your picture: {kind:"char",id}, {kind:"emoji",e,bg}, {kind:"photo",media}, or null for your initial; see `etude settings avatar`). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.
 
 ```
 etude settings set <pairs...> [flags]
@@ -3327,6 +3329,58 @@ etude settings unset <keys...> [flags]
 
 ```sh
 etude settings unset ai.feedback.model dayStartHour
+```
+
+### etude settings avatar get
+
+<a id="settings-avatar-get"></a>
+
+Your picture, and the characters you can pick from.
+
+The picture shows next to your name in the sidebar and Settings. null means the first letter of your name.
+
+```
+etude settings avatar get
+```
+
+*read-only*
+
+Output: { avatar, characters: [{ id, name }] }
+
+```sh
+etude settings avatar get
+```
+
+### etude settings avatar set
+
+<a id="settings-avatar-set"></a>
+
+Pick your picture: a character, an emoji on a colour, a photo, or your initial.
+
+The value is a character id (see `etude settings avatar get`), `emoji:<emoji>` (with --bg, default #3d5fb8), `photo:<file>` (a local image, copied into the collection's media so Sync carries it; the app crops photos to a 256 px circle, the CLI keeps the file as it is) or `initial`.
+
+```
+etude settings avatar set <value> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `value` | fox, emoji:🦊, photo:~/me.webp or initial. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--bg <COLOR>` | string | The emoji's background, #rrggbb. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { from, to }
+
+```sh
+etude settings avatar set fox
+etude settings avatar set emoji:🦊 --bg '#24726e'
+etude settings avatar set photo:./me.webp
+etude settings avatar set initial
 ```
 
 ### etude settings test-ai

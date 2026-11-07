@@ -3,6 +3,7 @@ import { chatGptStatus, chatGptLogout, listChatGptModels, openInBrowser, beginCh
 import { chatProviderKeyEnv } from "../../core/ai.ts";
 import { agentSettingRefusal } from "../../core/agent-guard.ts";
 import { EnvKeyError, setEnvKey } from "../../core/env-file.ts";
+import { AVATAR_CHARACTERS, AVATAR_EMOJI_BG } from "../../core/avatar.ts";
 import { command, group, CliError } from "../registry.ts";
 import { deepDelete, deepGet, deepSet, looseValue, splitPair } from "../input.ts";
 
@@ -34,7 +35,7 @@ command({
   name: "settings set",
   summary: "Change settings with dotted key=value pairs (JSON values when they parse).",
   description:
-    "Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words; empty keeps his usual one), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.",
+    "Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words; empty keeps his usual one), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own), avatar (your picture: {kind:\"char\",id}, {kind:\"emoji\",e,bg}, {kind:\"photo\",media}, or null for your initial; see `etude settings avatar`). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.",
   args: [{ name: "pairs", description: "key=value pairs.", required: true, variadic: true }],
   writes: true,
   dryRun: true,
@@ -86,6 +87,44 @@ command({
       } else deepSet(next, k, structuredClone(def));
     }
     return { reset: ctx.args.keys, settings: e.updateSettings(next) };
+  },
+});
+
+// --------------------------------------------------------- your picture
+
+command({
+  name: "settings avatar get",
+  summary: "Your picture, and the characters you can pick from.",
+  description: "The picture shows next to your name in the sidebar and Settings. null means the first letter of your name.",
+  examples: ["etude settings avatar get"],
+  output: "{ avatar, characters: [{ id, name }] }",
+  run: (ctx) => ({ avatar: ctx.e.settings().avatar, characters: AVATAR_CHARACTERS }),
+});
+
+command({
+  name: "settings avatar set",
+  summary: "Pick your picture: a character, an emoji on a colour, a photo, or your initial.",
+  description:
+    `The value is a character id (see \`etude settings avatar get\`), \`emoji:<emoji>\` (with --bg, default ${AVATAR_EMOJI_BG}), \`photo:<file>\` (a local image, copied into the collection's media so Sync carries it; the app crops photos to a 256 px circle, the CLI keeps the file as it is) or \`initial\`.`,
+  args: [{ name: "value", description: "fox, emoji:🦊, photo:~/me.webp or initial.", required: true }],
+  flags: [{ name: "bg", type: "string", description: "The emoji's background, #rrggbb.", placeholder: "COLOR" }],
+  writes: true,
+  dryRun: true,
+  examples: ["etude settings avatar set fox", "etude settings avatar set emoji:🦊 --bg '#24726e'", "etude settings avatar set photo:./me.webp", "etude settings avatar set initial"],
+  output: "{ from, to }",
+  run(ctx) {
+    const e = ctx.e;
+    const from = e.settings().avatar;
+    const raw = String(ctx.args.value).trim();
+    let value: unknown = raw;
+    if (raw.startsWith("emoji:")) value = { kind: "emoji", e: raw.slice(6), bg: ctx.flags.bg ?? AVATAR_EMOJI_BG };
+    else if (raw.startsWith("photo:") && !/^photo:(media:)?files\//.test(raw)) {
+      const m = e.importMedia(raw.slice(6), { dryRun: ctx.dry });
+      if (m.kind !== "image") throw new CliError("a photo must be an image file", "validation");
+      value = { kind: "photo", media: m.file };
+    }
+    const to = e.updateSettings({ avatar: value as any }).avatar;
+    return { from, to };
   },
 });
 

@@ -452,8 +452,9 @@ function LibraryHeader({ onImport, onNew, hasDecks }: { onImport(): void; onNew(
   const pick = useImportPicker(onImport);
   return (
     <header className="mb-7 flex flex-wrap items-end gap-x-4 gap-y-3">
-      <div className="min-w-0 flex-1">
-        <div className="score-kicker font-semibold">{todayKicker()}</div>
+      {/* Keeps its width: on a narrow window the buttons go under the title instead of squeezing it. */}
+      <div className="min-w-[11rem] flex-1">
+        <div className="score-kicker font-semibold whitespace-nowrap">{todayKicker()}</div>
         <h1 className="lib-title mt-1.5 text-[2rem] leading-[1.1] font-semibold">Library</h1>
       </div>
       <div className="flex items-center gap-2">

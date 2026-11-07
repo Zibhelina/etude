@@ -694,11 +694,12 @@ export function SettingsPage() {
     return (
       <div ref={rootRef} data-settings-mode="split">
         <ProfileHeader acct={acct} inner="max-w-[1040px] px-8" />
-        <div className="mx-auto w-full max-w-[1040px] px-8 pt-9 pb-10">
+        {/* A narrow desktop window: the sections become a row of chips above the section, still the desktop layout. */}
+        <div className="@container mx-auto w-full max-w-[1040px] px-8 pt-9 pb-10 max-sm:px-5">
         <h1 className="score-serif score-display mb-6 text-[2rem] leading-[1.1] text-foreground">Settings</h1>
-        <div className="grid grid-cols-[200px_minmax(0,1fr)] items-start gap-8">
-          <nav aria-label="Sections" className="sticky top-6 flex flex-col gap-0.5">
-            {searchBox("Search", "mb-3")}
+        <div className="grid grid-cols-[200px_minmax(0,1fr)] items-start gap-8 @max-[500px]:grid-cols-1 @max-[500px]:gap-5">
+          <nav aria-label="Sections" className="sticky top-6 flex flex-col gap-0.5 @max-[500px]:static @max-[500px]:flex-row @max-[500px]:flex-wrap @max-[500px]:gap-1">
+            {searchBox("Search", "mb-3 @max-[500px]:w-full")}
             {q
               ? results
               : GROUPS.map((g) => (
@@ -709,8 +710,8 @@ export function SettingsPage() {
                     aria-current={cur === g.id ? "page" : undefined}
                     onClick={() => open(g.id)}
                     className={cn(
-                      "flex h-10 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[14.5px] whitespace-nowrap text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-                      cur === g.id && "font-semibold text-foreground",
+                      "flex h-10 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[14.5px] whitespace-nowrap text-muted-foreground transition-colors hover:bg-accent hover:text-foreground @max-[500px]:h-9 @max-[500px]:w-auto",
+                      cur === g.id && "font-semibold text-foreground @max-[500px]:bg-accent",
                     )}
                   >
                     <g.icon className="size-[18px] shrink-0" strokeWidth={1.9} />

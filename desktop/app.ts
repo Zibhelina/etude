@@ -195,8 +195,9 @@ function createWindow() {
     y: state.y,
     width: state.width,
     height: state.height,
-    minWidth: 360,
-    minHeight: 480,
+    // A narrow window stays the desktop layout (icon rail, pages reflow); this is the smallest it's built for.
+    minWidth: 480,
+    minHeight: 400,
     title: "Etude",
     backgroundColor: bg,
     show: false,

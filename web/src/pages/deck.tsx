@@ -176,10 +176,10 @@ export function DeckPage({ name }: { name: string }) {
 
       <Tabs value={tab} onValueChange={switchTab} className="mt-8">
         <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="overview" className="px-4">Overview</TabsTrigger>
-          <TabsTrigger value="cards" className="px-4">Cards</TabsTrigger>
-          <TabsTrigger value="options" className="px-4">Options</TabsTrigger>
-          <TabsTrigger value="manage" className="px-4">Manage</TabsTrigger>
+          <TabsTrigger value="overview" className="px-4 max-sm:px-2">Overview</TabsTrigger>
+          <TabsTrigger value="cards" className="px-4 max-sm:px-2">Cards</TabsTrigger>
+          <TabsTrigger value="options" className="px-4 max-sm:px-2">Options</TabsTrigger>
+          <TabsTrigger value="manage" className="px-4 max-sm:px-2">Manage</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-6 flex flex-col gap-8">
@@ -459,7 +459,7 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards, onChanged, phon
       {phone && !editing && (
         <PhoneDeckHero deck={deck} node={node} work={work} subdecks={subdecks} onRename={() => setEditing(true)} onIcon={() => setIconOpen(true)} />
       )}
-      <div className={cn("mt-5 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between", phone && "mt-4")}>
+      <div className={cn("mt-5 flex flex-col gap-5 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between", phone && "mt-4")}>
         <div className={cn("grid grid-cols-4 items-end gap-x-4 sm:flex sm:gap-x-8", phone && "hidden")}>
           {deck.resolved.mode !== "watch" && (
             <>
@@ -473,7 +473,7 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards, onChanged, phon
             <div className="mt-1.5 text-xs text-muted-foreground">Cards{node?.doneToday ? <span className="hidden sm:inline"> · {node.doneToday} done today</span> : ""}</div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {deck.archived ? <span className="inline-flex items-center gap-2 py-2 text-sm text-muted-foreground"><Archive className="size-4" />Archived</span> : deck.resolved.mode === "watch" ? (
             <Button size="lg" className={cn("flex-1 gap-2 px-6 sm:flex-none", phone && "h-[3.25rem] rounded-full text-[16px] pointer-coarse:h-[3.25rem]")} disabled={!node?.cards} title="A tour: each card can show an example answer, and nothing is scheduled" onClick={() => navigate(`/watch?deck=${enc(deck.name)}`)}>
               <Eye className="size-4" />Watch

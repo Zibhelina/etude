@@ -3,6 +3,10 @@
 @import "../../runtime/code.css";
 
 @custom-variant dark (&:is(.dark *));
+/* The device, not the window's width (lib/device.ts): the phone shell and phone screens use phone:, the
+   desktop shell uses desktop:. Content that only needs room keeps the width breakpoints (sm:, md:, max-md:). */
+@custom-variant phone (&:is([data-device="phone"] *));
+@custom-variant desktop (&:is([data-device="desktop"] *));
 
 @property --sbA { syntax: "<number>"; inherits: true; initial-value: 0; }
 

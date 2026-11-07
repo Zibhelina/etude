@@ -544,7 +544,13 @@ export interface NoteSummary {
   updated: string;
   children: number;
   empty?: boolean;
+  /** When it was pinned to the start page (null: not pinned). */
+  pinned?: string | null;
+  /** When the app last opened it (null: never). */
+  opened?: string | null;
 }
+/** What a start-page card shows: a page's first blocks or a file's first lines (canvases and PDFs draw themselves). */
+export interface NotePreview { id: string; kind: NonNullable<NoteSummary["kind"]>; blocks: NoteDoc[]; head: string | null }
 export interface NoteLook {
   cover?: { kind: "preset"; id: string } | { kind: "image"; media: string; y: number };
   width?: "normal" | "wide" | "full";
@@ -576,6 +582,9 @@ export const api = {
   importNotes: (files: { path: string; text: string }[], media: Record<string, string>, parentId: string | null = null, pdfs: { path: string; file: string }[] = []) =>
     call<{ pages: number; folders: number; files?: number; links: number; unresolved: number; pdfs: number; root: string | null; ids: string[] }>("POST", "/api/notes/import", { files, media, parentId, pdfs }),
   noteExportUrl: (id: string, format: "md" | "html") => `/api/notes/${encodeURIComponent(id)}/export?format=${format}`,
+  pinNote: (id: string, pinned: boolean) => call<NoteSummary>("POST", `/api/notes/${encodeURIComponent(id)}/pin`, { pinned }),
+  noteOpened: (id: string) => call<NoteSummary>("POST", `/api/notes/${encodeURIComponent(id)}/opened`),
+  notePreviews: (ids: string[]) => call<NotePreview[]>("GET", `/api/notes/previews${qs({ ids: ids.join(",") })}`),
   deleteNote: (id: string) => call<{ ids: string[] }>("DELETE", `/api/notes/${encodeURIComponent(id)}`),
   uploadMedia: (file: File) => call<StoredMedia>("POST", `/api/media${qs({ name: file.name })}`, undefined, file),
   importMedia: (path: string) => call<StoredMedia>("POST", "/api/media/import", { path }),

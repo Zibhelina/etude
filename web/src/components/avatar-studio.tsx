@@ -1,17 +1,18 @@
-// First-run setup's "Who's studying?" step: a carousel of the 18 characters (swipe, arrow keys, or Surprise me, which
-// spins like a slot machine), and "or use · An emoji | Your photo" for the other kinds. Self-contained, so the step
-// can move within setup: it saves the picture itself and calls onNext.
+// First-run setup's "Who's studying?" step: a carousel of the 18 characters (swipe, arrow keys, the round arrows on
+// its sides, or Surprise me, which spins like a slot machine), the name you want to be called, and "or · Emoji | Photo"
+// for the other kinds. Self-contained, so the step can move within setup: it saves the picture and name itself and
+// calls onNext.
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Dices, Loader2, Smile, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, Dices, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { AVATAR_EMOJI_BG, CHARACTERS, avatarNow, saveAvatar, type Avatar } from "@/lib/avatar";
+import { AVATAR_EMOJI_BG, CHARACTERS, avatarNow, saveAvatar, saveProfile, useMyName, type Avatar } from "@/lib/avatar";
 import { usePhone } from "@/lib/phone";
-import { useFunMode } from "@/lib/fun";
 import { cn } from "@/lib/utils";
 import { AvatarPic, EmojiPanel, PhotoPanel, finishPick, type AvatarPick, type PhotoDraft } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import minimiLook from "@/assets/minimi/look.webp";
+import { Foot, Primary, Title, fieldClass } from "@/components/onboarding-ui";
 
 const N = CHARACTERS.length;
 /** Signed distance from the centre on the ring of characters. */
@@ -22,19 +23,14 @@ const offset = (i: number, c: number) => {
   return d;
 };
 const reduced = () => typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+/** The longest name settings.name keeps. */
+const NAME_MAX = 40;
 
-function bubble(id: string, mine: boolean, pick: AvatarPick) {
-  if (pick?.kind === "emoji") return "Minimalist. I respect it.";
-  if (pick?.kind === "photo") return "Ooh, the real you.";
-  if (mine) return "Good choice. Very scholarly.";
-  if (id === "bear") return "Bramble isn't a morning bear either.";
-  return "Take your time. I went with the hat.";
-}
-
-export function AvatarStep({ onNext, title }: { onNext(): void; title?: React.ReactNode }) {
+export function AvatarStep({ onNext }: { onNext(): void }) {
   const phone = usePhone();
-  const fun = useFunMode();
   const start = avatarNow();
+  const savedName = useMyName();
+  const [name, setName] = useState(savedName);
   const [car, setCar] = useState(() => Math.max(0, CHARACTERS.findIndex((c) => start?.kind === "char" && c.id === start.id)));
   const [pick, setPick] = useState<AvatarPick>(start);
   const [spinning, setSpinning] = useState(false);
@@ -44,11 +40,19 @@ export function AvatarStep({ onNext, title }: { onNext(): void; title?: React.Re
   const [busy, setBusy] = useState(false);
   const prevD = useRef(new Map<number, number>());
   const timer = useRef<number | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(520);
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth || 520));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const move = (i: number) => !spinning && setCar(((i % N) + N) % N);
   const cur = CHARACTERS[car];
-  const mine = pick?.kind === "char" && pick.id === cur.id;
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -89,12 +93,12 @@ export function AvatarStep({ onNext, title }: { onNext(): void; title?: React.Re
   const swiped = useRef(false);
 
   // Sizes by distance from the centre, and each place's offset so neighbouring tiles keep the same gap.
-  const big = phone ? 168 : 196;
+  const big = Math.min(phone ? 128 : 156, width * 0.34);
   const sizes = [1, 0.62, 0.42, 0.3].map((k) => big * k);
-  const gap = phone ? 10 : 22;
+  const gap = phone ? 10 : 18;
   const places = [0];
   for (let k = 1; k < sizes.length; k++) places.push(places[k - 1] + sizes[k - 1] / 2 + gap + sizes[k] / 2);
-  const fade = phone ? [1, 1, 0.45, 0] : [1, 1, 0.7, 0.4];
+  const fade = [1, 1, 0.6, 0.3];
   const tiles = CHARACTERS.map((c, i) => {
     const d = offset(i, car);
     const ad = Math.abs(d);
@@ -110,22 +114,19 @@ export function AvatarStep({ onNext, title }: { onNext(): void; title?: React.Re
     for (const t of tiles) prevD.current.set(t.i, t.d);
   });
 
-  const keep = async (p: AvatarPick, draft?: PhotoDraft | null) => {
+  /** Saves the picture, and the name when one was typed (an empty box leaves the saved name as it is). */
+  const save = async (a: Avatar | null) => {
+    const n = name.trim().slice(0, NAME_MAX);
+    if (n && n !== savedName) await saveProfile(a ?? avatarNow(), n);
+    else if (a) await saveAvatar(a);
+  };
+  const finish = async (p: AvatarPick, draft?: PhotoDraft | null) => {
     setBusy(true);
     try {
       const a = await finishPick(p, draft ?? null);
       setPick(a);
+      await save(a);
       setSheet(null);
-    } catch (e) {
-      toast.error("Couldn't use that picture", { description: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  };
-  const next = async () => {
-    setBusy(true);
-    try {
-      if (pick && pick.kind !== "draft") await saveAvatar(pick as Avatar);
       onNext();
     } catch (e) {
       toast.error("Couldn't save the picture", { description: (e as Error).message });
@@ -135,93 +136,100 @@ export function AvatarStep({ onNext, title }: { onNext(): void; title?: React.Re
   };
 
   return (
-    <div className="relative flex flex-1 flex-col items-center justify-center gap-[18px] pb-4 text-center md:flex-none md:gap-3.5 md:pt-2" data-avatar-step>
-      <div>
-        <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.02em] md:text-[30px]">{title ?? "Who's studying?"}</h1>
-        <p className="mt-1.5 text-[14.5px] text-balance text-muted-foreground">Pick a face for your profile. You can change it any time.</p>
-      </div>
-      <div
-        className={cn("av-car relative flex overflow-hidden items-center justify-center", phone ? "-mx-5 h-[196px] w-[calc(100%+2.5rem)]" : "h-[212px] w-full max-w-[820px]", spinning && "is-spin")}
-        style={{ ["--sd" as string]: `${spinMs}ms` }}
-        data-avatar-carousel
-        onPointerDown={(e) => (swipe.current = { x: e.clientX })}
-        onPointerUp={(e) => {
-          const s = swipe.current;
-          swipe.current = null;
-          if (!s) return;
-          const dx = e.clientX - s.x;
-          if (Math.abs(dx) > 40) {
-            swiped.current = true;
-            move(car + (dx < 0 ? 1 : -1));
-            setTimeout(() => (swiped.current = false), 50);
-          }
-        }}
-      >
-        {tiles.map(({ c, i, ad, sz, x, jump, op }) => (
-          <button
-            key={c.id}
-            type="button"
-            aria-label={c.alt}
-            aria-current={ad === 0 || undefined}
-            tabIndex={ad === 0 ? 0 : -1}
-            data-car={i}
-            onClick={() => !swiped.current && move(i)}
-            className="av-car-it"
-            style={{
-              width: sz,
-              height: sz,
-              transform: `translate(calc(-50% + ${x}px), -50%)`,
-              opacity: op,
-              zIndex: 10 - Math.min(ad, 9),
-              filter: ad ? "saturate(.7)" : "none",
-              pointerEvents: op === 0 ? "none" : undefined,
-              transition: jump ? "none" : undefined,
-            }}
-          >
-            <span key={ad === 0 ? landKey : 0} className={cn(ad === 0 && landKey > 0 && "av-land", "relative", ad === 0 && mine && "is-on")}>
-              <img src={c.src} alt="" draggable={false} className="size-full rounded-full object-cover" />
-            </span>
-          </button>
-        ))}
-      </div>
-      <div className="flex items-center gap-3">
-        <button type="button" aria-label="Previous" onClick={() => move(car - 1)} disabled={spinning} className="grid size-[42px] place-items-center rounded-full border bg-background transition-colors hover:bg-accent disabled:opacity-50"><ChevronLeft className="size-[18px]" /></button>
-        <span className="min-w-[52px] text-[13px] text-muted-foreground tabular-nums" data-avatar-count>{car + 1} / {N}</span>
-        <button type="button" aria-label="Next" onClick={() => move(car + 1)} disabled={spinning} className="grid size-[42px] place-items-center rounded-full border bg-background transition-colors hover:bg-accent disabled:opacity-50"><ChevronRight className="size-[18px]" /></button>
-      </div>
-      <div className="flex flex-wrap justify-center gap-2">
-        <Button className="h-10 gap-1.5 px-4" disabled={spinning} onClick={() => setPick({ kind: "char", id: cur.id })} data-avatar-use>
-          {mine ? <><Check className="size-4" strokeWidth={2.6} /> This is me</> : <>Use this one</>}
-        </Button>
-        <Button variant="outline" className="h-10 gap-1.5 px-4" disabled={spinning} onClick={surprise} data-avatar-surprise><Dices className="size-4" /> Surprise me</Button>
-      </div>
-      <div className="mt-1 flex h-9 items-center gap-0.5 rounded-full border pr-[3px] pl-3 text-[13px] text-muted-foreground" data-avatar-or>
-        <span className="mr-1.5">or use</span>
-        <button type="button" onClick={() => setSheet("emoji")} className={cn("inline-flex h-[30px] items-center gap-1.5 rounded-full px-2.5 font-medium text-foreground transition-colors hover:bg-accent", pick?.kind === "emoji" && "bg-accent")} data-avatar-sheet="emoji">
-          {pick?.kind === "emoji" ? <AvatarPic value={pick} size={18} /> : <Smile className="size-[15px]" />} An emoji
-        </button>
-        <i aria-hidden className="h-[18px] w-px bg-border" />
-        <button type="button" onClick={() => setSheet("photo")} className={cn("inline-flex h-[30px] items-center gap-1.5 rounded-full px-2.5 font-medium text-foreground transition-colors hover:bg-accent", pick?.kind === "photo" && "bg-accent")} data-avatar-sheet="photo">
-          {pick?.kind === "photo" ? <AvatarPic value={pick} size={18} /> : <Upload className="size-[15px]" />} Your photo
-        </button>
-      </div>
-      <button onClick={() => void next()} disabled={busy || spinning} data-avatar-continue className="mt-3 flex h-12 w-full max-w-[420px] shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-[15px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40 md:mt-4">
-        {busy && <Loader2 className="size-4 animate-spin" />}
-        Continue
-      </button>
-      {fun && !phone && (
-        <div aria-hidden className="pointer-events-none fixed bottom-0 left-7 hidden items-end gap-2.5 lg:flex">
-          <img src={minimiLook} alt="" className="w-16" />
-          <div key={`${car}-${JSON.stringify(pick)}`} className="av-pop mb-[30px] max-w-[250px] rounded-[16px_16px_16px_4px] bg-muted px-3 py-2 text-left text-[13.5px] leading-snug text-foreground">{bubble(cur.id, mine, pick)}</div>
+    <>
+      <Title eyebrow="Your profile" lead="Pick a face and tell us what to call you. You can change both any time.">Who's studying?</Title>
+      <div ref={box} className="relative mt-5 w-full md:mt-[26px]" data-avatar-step>
+        <div
+          className={cn("av-car relative flex items-center justify-center overflow-hidden", phone ? "h-[150px]" : "h-[178px]", spinning && "is-spin")}
+          style={{ ["--sd" as string]: `${spinMs}ms` }}
+          data-avatar-carousel
+          onPointerDown={(e) => (swipe.current = { x: e.clientX })}
+          onPointerUp={(e) => {
+            const s = swipe.current;
+            swipe.current = null;
+            if (!s) return;
+            const dx = e.clientX - s.x;
+            if (Math.abs(dx) > 40) {
+              swiped.current = true;
+              move(car + (dx < 0 ? 1 : -1));
+              setTimeout(() => (swiped.current = false), 50);
+            }
+          }}
+        >
+          {tiles.map(({ c, i, ad, sz, x, jump, op }) => (
+            <button
+              key={c.id}
+              type="button"
+              aria-label={c.alt}
+              aria-current={ad === 0 || undefined}
+              tabIndex={ad === 0 ? 0 : -1}
+              data-car={i}
+              onClick={() => !swiped.current && move(i)}
+              className="av-car-it"
+              style={{
+                width: sz,
+                height: sz,
+                transform: `translate(calc(-50% + ${x}px), -50%)`,
+                opacity: op,
+                zIndex: 10 - Math.min(ad, 9),
+                filter: ad ? "saturate(.7)" : "none",
+                pointerEvents: op === 0 ? "none" : undefined,
+                transition: jump ? "none" : undefined,
+              }}
+            >
+              <span key={ad === 0 ? landKey : 0} className={cn(ad === 0 && landKey > 0 && "av-land", "relative", ad === 0 && "ob-car-on")}>
+                <img src={c.src} alt="" draggable={false} className="size-full rounded-full object-cover" />
+              </span>
+            </button>
+          ))}
         </div>
-      )}
-      <PickSheet kind={sheet} pick={pick} busy={busy} onClose={() => setSheet(null)} onUse={keep} />
-    </div>
+        <button type="button" aria-label="Previous" onClick={() => move(car - 1)} disabled={spinning} className="ob-round absolute top-1/2 left-0 z-20 -translate-y-1/2" data-avatar-prev>
+          <ChevronLeft className="size-[18px]" />
+        </button>
+        <button type="button" aria-label="Next" onClick={() => move(car + 1)} disabled={spinning} className="ob-round absolute top-1/2 right-0 z-20 -translate-y-1/2" data-avatar-next>
+          <ChevronRight className="size-[18px]" />
+        </button>
+      </div>
+      <div className="mx-auto mt-3 w-full max-w-[300px]">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value.slice(0, NAME_MAX))}
+          maxLength={NAME_MAX}
+          placeholder="Your name"
+          aria-label="Your name"
+          autoComplete="nickname"
+          spellCheck={false}
+          className={cn(fieldClass, "text-center text-[15.5px] font-semibold md:text-[15.5px]")}
+          data-avatar-name
+        />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+        <button type="button" disabled={spinning} onClick={surprise} className="ob-sbtn" data-avatar-surprise>
+          <Dices className="size-4" /> Surprise me
+        </button>
+        <div className="flex h-9 items-center gap-0.5 rounded-full pr-[3px] pl-3 text-[13px] text-muted-foreground shadow-[inset_0_0_0_1px_var(--border)] md:h-9" data-avatar-or>
+          <span className="mr-1.5">or</span>
+          <button type="button" onClick={() => setSheet("emoji")} className="inline-flex h-[30px] items-center rounded-full px-2.5 font-medium text-foreground transition-colors hover:bg-accent" data-avatar-sheet="emoji">
+            Emoji
+          </button>
+          <i aria-hidden className="h-[18px] w-px bg-border" />
+          <button type="button" onClick={() => setSheet("photo")} className="inline-flex h-[30px] items-center gap-[5px] rounded-full px-2.5 font-medium text-foreground transition-colors hover:bg-accent" data-avatar-sheet="photo">
+            <Upload className="size-3.5" /> Photo
+          </button>
+        </div>
+      </div>
+      <Foot>
+        <Primary onClick={() => void finish({ kind: "char", id: cur.id })} busy={busy} disabled={spinning}>
+          Use this one
+        </Primary>
+      </Foot>
+      <PickSheet kind={sheet} pick={pick} busy={busy} onClose={() => setSheet(null)} onUse={(p, draft) => void finish(p, draft)} onRemove={() => (setPick(null), setSheet(null))} />
+    </>
   );
 }
 
-/** The emoji or photo sheet from "or use". */
-function PickSheet({ kind, pick, busy, onClose, onUse }: { kind: null | "emoji" | "photo"; pick: AvatarPick; busy: boolean; onClose(): void; onUse(p: AvatarPick, draft?: PhotoDraft | null): void }) {
+/** The emoji or photo sheet from "or". "Use this" saves it and moves on. */
+function PickSheet({ kind, pick, busy, onClose, onUse, onRemove }: { kind: null | "emoji" | "photo"; pick: AvatarPick; busy: boolean; onClose(): void; onUse(p: AvatarPick, draft?: PhotoDraft | null): void; onRemove(): void }) {
   const [emoji, setEmoji] = useState({ e: pick?.kind === "emoji" ? pick.e : "🦊", bg: pick?.kind === "emoji" ? pick.bg : AVATAR_EMOJI_BG });
   const [draft, setDraft] = useState<PhotoDraft | null>(null);
   useEffect(() => {
@@ -241,7 +249,7 @@ function PickSheet({ kind, pick, busy, onClose, onUse }: { kind: null | "emoji" 
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-1 pb-[18px] sm:px-6">
           {kind === "emoji" && <EmojiPanel emoji={emoji.e} bg={emoji.bg} picked onChange={(e, bg) => setEmoji({ e, bg })} />}
-          {kind === "photo" && <PhotoPanel draft={draft} onDraft={(d) => setDraft((old) => (old && old.src !== d?.src && URL.revokeObjectURL(old.src), d))} saved={pick?.kind === "photo" ? pick : null} onRemove={() => onUse(null)} />}
+          {kind === "photo" && <PhotoPanel draft={draft} onDraft={(d) => setDraft((old) => (old && old.src !== d?.src && URL.revokeObjectURL(old.src), d))} saved={pick?.kind === "photo" ? pick : null} onRemove={onRemove} />}
         </div>
         <div className="flex items-center justify-end gap-2 border-t px-5 py-3.5 sm:px-6">
           <Button variant="outline" onClick={onClose} disabled={busy}>Back</Button>

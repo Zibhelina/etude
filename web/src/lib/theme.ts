@@ -22,7 +22,8 @@ let previewing = false;
 
 export const currentTheme = () => current;
 export const currentAccent = () => accent;
-export const isEmbed = () => appPath() === "/embed";
+/** An embed shown by another app (Lotus) follows its host; one inside a note page is Etude itself, so it keeps your theme. */
+export const isEmbed = () => appPath() === "/embed" && new URLSearchParams(location.search).get("host") !== "note";
 
 /** Any CSS color as #rrggbb (or #rrggbbaa when translucent), through a 1px canvas. */
 export function toHex(color: string): string | null {

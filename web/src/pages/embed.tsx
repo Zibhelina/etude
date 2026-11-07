@@ -53,6 +53,7 @@ function applyHostTheme(theme: any) {
 function useHostBridge() {
   useEffect(() => {
     document.documentElement.classList.add("embed");
+    if (new URLSearchParams(location.search).get("host") === "note") document.documentElement.classList.add("embed-note");
     const report = () => toHost({ type: "resize", height: Math.ceil(document.body.getBoundingClientRect().height) });
     const ro = new ResizeObserver(report);
     ro.observe(document.body);

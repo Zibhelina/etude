@@ -26,7 +26,7 @@ const reduced = () => typeof window !== "undefined" && window.matchMedia("(prefe
 /** Sparkles as [x %, y %, size]: the prototype's ten, kept clear of the edges. */
 const SPARKS: [number, number, number][] = [[10, 25, 3], [23, 66, 2], [35, 20, 2.5], [50, 53, 3.5], [63, 22, 2], [75, 74, 2.5], [88, 32, 3], [94, 78, 2], [17, 82, 2], [42, 80, 2]];
 
-function PatternSvg({ pattern, ink }: { pattern: Pattern; ink: string }) {
+export function PatternSvg({ pattern, ink }: { pattern: Pattern; ink: string }) {
   const id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const common = { className: "pointer-events-none absolute inset-0 size-full", viewBox: "0 0 600 132", preserveAspectRatio: "xMidYMid slice", "aria-hidden": true } as const;
   // Sparkles and stars are placed in % of the box at a fixed size, so no box's shape crops them at its edge.

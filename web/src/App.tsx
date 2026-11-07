@@ -2,7 +2,7 @@ import { autoSync, MEDIA_EVENT, setMediaPending, STATUS_EVENT, syncStatus, type 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { navScroll, useLocation } from "@/lib/router";
+import { navigate, navScroll, useLocation } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/sidebar";
 import { DecksPage } from "@/pages/decks";
@@ -192,6 +192,10 @@ export function App() {
   const [collapsed, toggleSidebar] = useSidebar((agent.open && narrow) || railOnly);
   useEffect(() => void loadFunMode(), []);
   useEffect(() => void loadMinimiFace(), []);
+  // Notes isn't on phones yet (it needs screens of its own): an old link to it opens the Library.
+  useEffect(() => {
+    if (phone && path === "/notes") navigate("/", { replace: true });
+  }, [phone, path]);
   const studying = path === "/study" || path === "/watch";
   const studyingRef = useRef(studying);
   studyingRef.current = studying;
@@ -290,7 +294,7 @@ export function App() {
   else if (path === "/stats") page = <StatsPage deck={params.get("deck") ?? undefined} />;
   else if (path === "/settings") page = <SettingsPage />;
   else if (path === "/market") page = <MarketPage />;
-  else if (path === "/notes") page = <NotesPage id={params.get("id")} />;
+  else if (path === "/notes") page = phone ? null : <NotesPage id={params.get("id")} />;
   else if (path === "/more") page = <MorePage />;
   else page = <DecksPage key={path} archived={path === "/archive"} />;
 
@@ -364,7 +368,7 @@ export function App() {
       {path !== "/embed" && <AvatarDialogHost />}
       {/* Ctrl/⌘K: find a deck. Browse and a deck's page keep the key for their own card search. */}
       <DeckFinder enabled={!studying && path !== "/embed" && path !== "/browse" && path !== "/deck" && !onboarding} />
-      {path !== "/embed" && <NoteGraphHost />}
+      {path !== "/embed" && !phone && <NoteGraphHost />}
       <Toaster position={phone ? "bottom-center" : "top-center"} mobileOffset={phone ? { bottom: studying ? 104 : 92, left: 12, right: 12 } : undefined} />
     </TooltipProvider>
   );

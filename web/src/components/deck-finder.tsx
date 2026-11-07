@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Search } from "lucide-react";
 import { api, type DeckNode, type NoteSummary } from "@/lib/api";
+import { isPhone } from "@/lib/device";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { DeckBadge } from "@/components/deck-icon";
@@ -135,7 +136,8 @@ function FinderPanel({ onClose }: { onClose(): void }) {
   useEffect(() => {
     let live = true;
     api.decks().then((d) => live && setDecks(d)).catch(() => live && setDecks([]));
-    api.notes().then((n) => live && setPages(n)).catch(() => {});
+    // Notes isn't on phones yet, so the finder lists only decks there.
+    if (!isPhone()) api.notes().then((n) => live && setPages(n)).catch(() => {});
     const prev = document.activeElement as HTMLElement | null;
     const html = document.documentElement;
     const overflow = html.style.overflow;

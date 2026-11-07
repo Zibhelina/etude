@@ -3,6 +3,7 @@
 import { toast } from "sonner";
 import { BigSwitch, Block, Kbd, Section } from "@/components/settings-ui";
 import { setVimMode, useVimMode } from "@/lib/vim";
+import { isPhone } from "@/lib/device";
 
 const mod = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 
@@ -114,8 +115,9 @@ function VimBlock() {
 export function ShortcutsSection() {
   return (
     <Section id="keys" title="Keyboard">
-      <VimBlock />
-      {GROUPS.map((g) => (
+      {/* Notes and its file editor aren't on phones yet. */}
+      {!isPhone() && <VimBlock />}
+      {GROUPS.filter((g) => !isPhone() || g.title !== "Notes files").map((g) => (
         <Block key={g.title} title={g.title} description={g.description}>
           <dl className="flex flex-col">
             {g.rows.map((r, i) => (

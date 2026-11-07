@@ -1,7 +1,7 @@
 // Phone only: the fifth tab. The places you visit less (card types, the Market, Settings) plus the
 // import and the update, so the tab bar can stay at four tabs and the ε.
 import { useEffect } from "react";
-import { Blocks, ChevronRight, CircleArrowUp, FileText, Settings, Store } from "lucide-react";
+import { Blocks, ChevronRight, CircleArrowUp, Settings, Store } from "lucide-react";
 import { navigate } from "@/lib/router";
 import { usePhone } from "@/lib/phone";
 import { PhoneTitle } from "@/components/phone-shell";
@@ -18,7 +18,6 @@ export function MorePage() {
   }, [phone]);
   const { st, behind } = useUpdater();
   const rows = [
-    { icon: FileText, label: "Notes · beta", sub: "Pages you write in", to: "/notes" },
     { icon: Blocks, label: "Card types", sub: "The kinds of cards, and their code", to: "/types" },
     { icon: Store, label: "Market", sub: "Shared decks, themes and types", to: "/market" },
     { icon: Settings, label: "Settings", sub: behind ? "An update is ready" : "AI grading, appearance, data", to: "/settings", dot: behind > 0 },

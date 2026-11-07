@@ -18,6 +18,7 @@ import { BigSwitch, Block, Section } from "@/components/settings-ui";
 import { useMinimiFaces } from "@/components/minimi-faces";
 import { useMinimiFace } from "@/lib/minimi-face";
 import { setFunMode, useFunMode } from "@/lib/fun";
+import { setMinimiHidden, useMinimiHidden } from "@/lib/minimi-hidden";
 import { ThemeMiniature, ThemeSample, ThemeSwatches } from "@/components/settings-theme-preview";
 import { api } from "@/lib/api";
 import { ACCENTS, accentColor, applyTheme, currentTheme, resolveTheme, setAccent, setPreviewing, toHex, useAccent, useScheme, type Theme } from "@/lib/theme";
@@ -426,6 +427,7 @@ function FunBlock() {
   const on = useFunMode();
   const face = useMinimiFace();
   const faces = useMinimiFaces();
+  const hidden = useMinimiHidden();
   const flip = async (v: boolean) => {
     try {
       await setFunMode(v);
@@ -437,9 +439,14 @@ function FunBlock() {
   return (
     <Block
       title="Fun mode"
-      description="Minimi, Etude's cat, sits in the corner and answers when you ask something. Drag him anywhere, or hold him to change his face. Off keeps the plain ε."
+      description="Minimi, Etude's cat, sits in the corner and answers when you ask something. Drag him anywhere, hold him to change his face, or right-click him to hide him. Off keeps the plain ε."
       aside={
         <div className="flex items-center gap-3">
+          {on && hidden && (
+            <Button variant="outline" size="sm" onClick={() => setMinimiHidden(false)} className="max-md:hidden">
+              Show Minimi
+            </Button>
+          )}
           {on && (
             <button type="button" aria-label="Change Minimi's face" title="Change his face" onClick={(e) => faces.openAt(e.currentTarget)} className="rounded-full outline-ring transition-transform hover:scale-105 focus-visible:outline-2 active:scale-95">
               <img src={face} alt="" className="size-9 rounded-full bg-muted object-cover" draggable={false} />

@@ -17,7 +17,9 @@ import { EmbedStudy } from "@/pages/embed";
 import { MarketPage } from "@/pages/market";
 import { NotesPage } from "@/pages/notes";
 import { AGENT_SHORTCUT, AgentLauncher, AgentPanel, announceDataChange, useAgentPanel } from "@/components/agent-panel";
-import { MinimiCorner } from "@/components/minimi";
+import { MinimiCorner, placeMinimiAt } from "@/components/minimi";
+import { PointMenu } from "@/components/point-menu";
+import { setMinimiHidden, useMinimiHidden } from "@/lib/minimi-hidden";
 import { MinimiChat } from "@/components/minimi-chat";
 import { loadFunMode, useFunMode } from "@/lib/fun";
 import { loadMinimiFace } from "@/lib/minimi-face";
@@ -153,14 +155,36 @@ function useMedia(q: string) {
   return on;
 }
 
+// A right-click on nothing in particular: not on text, a control, a picture or a board, and nothing selected
+// (those keep the browser's menu or their own). That's where "Show Minimi" lives while he's hidden.
+const NOT_BLANK = "a, button, input, textarea, select, label, summary, [contenteditable], [role=button], [role=menuitem], [role=tab], [role=option], [role=slider], [draggable=true], img, svg, canvas, video, audio, iframe, picture, [data-radix-popper-content-wrapper], [data-slot=context-menu-trigger], .ProseMirror, .excalidraw";
+function isBlankSpot(e: React.MouseEvent) {
+  if (e.defaultPrevented) return false;
+  const t = e.target as Element;
+  if (!(t instanceof Element) || t.closest(NOT_BLANK)) return false;
+  const sel = getSelection();
+  if (sel && !sel.isCollapsed && sel.toString().trim()) return false;
+  // On a line of the element's own text?
+  const r = document.createRange();
+  for (const n of t.childNodes) {
+    if (n.nodeType !== Node.TEXT_NODE || !n.textContent?.trim()) continue;
+    r.selectNodeContents(n);
+    for (const b of r.getClientRects()) if (e.clientX >= b.left && e.clientX <= b.right && e.clientY >= b.top && e.clientY <= b.bottom) return false;
+  }
+  return true;
+}
+
 export function App() {
   const { path, params } = useLocation();
   const fun = useFunMode();
   const phone = usePhone();
   // Fun mode on desktop and iPad: ⌘J and a tap on Minimi open his mini chat; the side panel is one click away from it.
-  const funRef = useRef({ fun, phone });
-  funRef.current = { fun, phone };
-  const agent = useAgentPanel(() => funRef.current.fun && !funRef.current.phone && !studyingRef.current);
+  const minimiOff = useMinimiHidden();
+  const funRef = useRef({ fun, phone, minimiOff });
+  funRef.current = { fun, phone, minimiOff };
+  // With Minimi put away, ⌘J opens the side panel: his mini chat would have nobody to sit beside.
+  const agent = useAgentPanel(() => funRef.current.fun && !funRef.current.phone && !funRef.current.minimiOff && !studyingRef.current);
+  const [callMenu, setCallMenu] = useState<{ x: number; y: number } | null>(null);
   const narrow = useMedia(NARROW);
   const [collapsed, toggleSidebar] = useSidebar(agent.open && narrow);
   useEffect(() => void loadFunMode(), []);
@@ -169,8 +193,8 @@ export function App() {
   const studyingRef = useRef(studying);
   studyingRef.current = studying;
   useEffect(() => {
-    if (!fun || phone || studying) agent.setMini(false);
-  }, [fun, phone, studying]);
+    if (!fun || phone || studying || minimiOff) agent.setMini(false);
+  }, [fun, phone, studying, minimiOff]);
   // Sync on its own, so every device shows the same collection without anyone pressing Sync:
   // local changes go up within ~10 s, other devices' changes come down every 30 s and whenever
   // the app comes back to the front. Not during a study session, which syncs when it ends.
@@ -275,6 +299,11 @@ export function App() {
         <div
           className="flex min-h-dvh"
           data-agent-open={agent.open}
+          onContextMenu={fun && !phone && minimiOff && !agent.open ? (e) => {
+            if (!isBlankSpot(e)) return;
+            e.preventDefault();
+            setCallMenu({ x: e.clientX, y: e.clientY });
+          } : undefined}
           style={{ "--agent-offset": agent.open ? `${agent.width}px` : "0px", } as React.CSSProperties}
         >
           <Sidebar path={path} collapsed={collapsed} onToggle={toggleSidebar} />
@@ -292,7 +321,16 @@ export function App() {
                 if (final) setDataKey((k) => k + 1);
               }}
             />
-          ) : phone ? null : fun ? (
+          ) : phone ? null : fun && minimiOff ? (
+            callMenu && (
+              <PointMenu
+                x={callMenu.x}
+                y={callMenu.y}
+                onClose={() => setCallMenu(null)}
+                items={[{ label: "Show Minimi", onSelect: () => (placeMinimiAt(callMenu.x, callMenu.y), setMinimiHidden(false)) }]}
+              />
+            )
+          ) : fun ? (
             <>
               <MinimiCorner onOpen={() => agent.setMini((m) => !m)} shortcut={AGENT_SHORTCUT} talking={agent.mini} />
               {agent.mini && (

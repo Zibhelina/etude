@@ -416,6 +416,39 @@ export function NoteStart({ bar, list, phone, onOpen, onCreate, onPin, actions }
   const want = cardNotes.filter((n) => n.kind === "page" || n.kind === "file" || !n.kind);
   const key = want.map((n) => `${n.id}@${n.updated}`).join(",");
   const [previews, setPreviews] = useState<Map<string, NotePreview>>(new Map());
+  // Dragging a card or an Earlier row into Pinned pins it; a pinned card dragged back down unpins it.
+  const DND = "application/x-etude-note";
+  const [dragFrom, setDragFrom] = useState<"pinned" | "recent" | null>(null);
+  const [over, setOver] = useState<"pinned" | "recent" | null>(null);
+  const dragProps = (n: NoteSummary) => ({
+    draggable: !phone,
+    onDragStart: (e: React.DragEvent) => {
+      e.dataTransfer.setData(DND, n.id);
+      e.dataTransfer.effectAllowed = "move";
+      setDragFrom(n.pinned ? "pinned" : "recent");
+    },
+    onDragEnd: () => (setDragFrom(null), setOver(null)),
+  });
+  const dropProps = (zone: "pinned" | "recent") => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!dragFrom || dragFrom === zone || !e.dataTransfer.types.includes(DND)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (over !== zone) setOver(zone);
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) setOver((o) => (o === zone ? null : o));
+    },
+    onDrop: (e: React.DragEvent) => {
+      const nid = e.dataTransfer.getData(DND);
+      const n = nid ? by.get(nid) : undefined;
+      setOver(null);
+      setDragFrom(null);
+      if (!n || dragFrom === zone) return;
+      e.preventDefault();
+      onPin(n, zone === "pinned");
+    },
+  });
   useEffect(() => {
     if (!want.length) return;
     let live = true;
@@ -437,6 +470,7 @@ export function NoteStart({ bar, list, phone, onOpen, onCreate, onPin, actions }
         title={display(n)}
         className="ns-card"
         data-note={n.id}
+        {...dragProps(n)}
         onClick={(e) => onOpen(n.id, e.ctrlKey || e.metaKey ? "new" : undefined)}
         onMouseDown={(e) => e.button === 1 && e.preventDefault()}
         onAuxClick={(e) => e.button === 1 && onOpen(n.id, "background")}
@@ -557,19 +591,19 @@ export function NoteStart({ bar, list, phone, onOpen, onCreate, onPin, actions }
                 <p className="ns-none">Pages you open show up here.</p>
               ) : (
                 <>
-                  <section className="ns-sec" aria-label="Pinned">
+                  <section className={cn("ns-sec ns-drop", dragFrom === "recent" && "is-target", over === "pinned" && "is-over")} aria-label="Pinned" {...dropProps("pinned")}>
                     <div className="ns-lbl">Pinned</div>
                     {pinned.length ? (
                       <div className="ns-shelf">{pinned.map(card)}</div>
                     ) : (
                       <div className="ns-pinnone">
                         <Pin className="size-[18px] shrink-0" aria-hidden />
-                        Pin a page to keep it here: hover a card and press the pin, or right-click a page.
+                        {dragFrom === "recent" ? "Drop it here to pin it." : "Pin a page to keep it here: drag a card here, press its pin, or right-click a page."}
                       </div>
                     )}
                   </section>
                   {jump.length > 0 && (
-                    <section className="ns-sec" aria-label="Jump back in">
+                    <section className={cn("ns-sec ns-drop", dragFrom === "pinned" && "is-target", over === "recent" && "is-over")} aria-label="Jump back in" {...dropProps("recent")}>
                       <div className="ns-lbl">Jump back in</div>
                       <div className="ns-shelf">{jump.map(card)}</div>
                     </section>
@@ -583,6 +617,7 @@ export function NoteStart({ bar, list, phone, onOpen, onCreate, onPin, actions }
                             key={n.id}
                             type="button"
                             className="ns-row"
+                            {...dragProps(n)}
                             onClick={(e) => onOpen(n.id, e.ctrlKey || e.metaKey ? "new" : undefined)}
                             onMouseDown={(e) => e.button === 1 && e.preventDefault()}
                             onAuxClick={(e) => e.button === 1 && onOpen(n.id, "background")}

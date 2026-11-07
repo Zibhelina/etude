@@ -1767,3 +1767,12 @@ body.note-tab-dragging, body.note-tab-dragging * { cursor: grabbing !important; 
   .note-canvas-board .excalidraw .App-toolbar .ToolIcon, .note-canvas-board .excalidraw .App-toolbar .ToolIcon__icon { width: 26px; height: 26px; }
   .note-canvas-board .excalidraw .App-toolbar .ToolIcon__icon svg { width: 15px; height: 15px; }
 }
+
+/* A page with a cover and one tab: the path and Saved/⋯ over the cover show only while the mouse is on the cover (or the bar). */
+@media (hover: hover) {
+  .note-page:not(.has-tabs):has(.note-cover) .note-topbar > * { opacity: 0; transition: opacity 0.16s ease; }
+  .note-page:not(.has-tabs):has(.note-cover:hover) .note-topbar > *,
+  .note-page:not(.has-tabs):has(.note-cover) .note-topbar:hover > *,
+  .note-page:not(.has-tabs):has(.note-cover) .note-topbar:focus-within > * { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .note-page:has(.note-cover) .note-topbar > * { transition: none; } }

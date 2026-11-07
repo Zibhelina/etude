@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.1.0
+
+- **Notes (beta).** A Notes tab, so your notes can live next to the cards they turn into. Pages, folders, canvases, PDFs and code files hang under Notes in the sidebar; drag them to move them, Shift+click to pick several, right-click for New page, folder, canvas or file, Import and View graph. Notes is on the computer for now: it doesn't sync yet and isn't in the phone apps.
+  - **Pages** edit like Notion or Obsidian: the / menu, Markdown shortcuts, to-dos, quotes, code with highlighting, equations (`$x^2$` or a `$$` block), tables, callouts, toggles, images, two or three columns, text colours, highlights and fonts, and a ⋮⋮ handle to move any block. Each page can have an icon, a cover and its own width, font and text size.
+  - **Cards in a page:** /cards puts a study block from a deck or a search in the page, graded and scheduled like Study, and /create-card writes a new card right there and lets you answer it in place.
+  - **Code that runs:** Python (with numpy and matplotlib plots) and JavaScript blocks run in the page, and an HTML block holds your own widgets and mini games. Video (files, YouTube, Vimeo) and PDF blocks read in the page.
+  - **Links:** `[[` links to another page (or makes it), backlinks under each page, #tags, and a graph of your pages with colours by folder or tag, forces you can tune and a timelapse of how it grew. Pages show up in Ctrl/⌘K.
+  - **Canvases:** an Excalidraw board as its own note or as a block in a page, full screen, exported as PNG, SVG or .excalidraw.
+  - **PDFs** open as their own notes, with the page count and zoom in the top bar and the PDF's chapters or its pages as thumbnails beside it. **Code and text files** (.py, .tex, .m, …) open in a plain editor highlighted by their extension and kept exactly as written; Vim keys are in Settings → Keyboard.
+  - **Tabs and split view:** open pages in tabs (right-click, Ctrl/⌘+click or middle click), and drag a tab or a page from the sidebar to a side to see up to four at once. A New tab is a start page: search or make a page, the things you can make with their keys, pinned pages and Jump back in.
+  - **Import and export:** bring in an Obsidian vault or Markdown files (folders, front matter, images, links and PDFs come along), and export a page as Markdown or HTML. `etude note` does all of it from the command line.
+- **Your profile:** a picture (one of 18 characters, an emoji or your own photo), your name and a banner at the top of Settings, all synced. First-run setup asks "Who's studying?" at the end, with a Surprise me slot machine.
+- **Setup is open on the page:** one question at a time in one column, the steps morphing into each other, and Skip on Sync takes you to the face step instead of skipping it.
+- **Minimi** wears the new design and has twelve faces: hold him on a phone (or pick in Settings → Appearance) and they fan out around him. In Fun mode Ask Etude answers as Minimi, and Settings → Appearance lets you write his personality yourself. Right-click him to hide him, right-click an empty spot to call him back. The mini chat is floating balloons over a frosted blur, and the Ask Etude panel uses the same balloons, with an empty chat that offers a plan for today's cards.
+- **Accent color** in Settings → Appearance: the theme's own, nine presets or any color from a wheel, over any theme.
+- **Ctrl/⌘K finds a deck** from anywhere (and pages, with Notes), with today's decks as suggestions; the Library's search opens it too.
+- **Library:** decks without an icon get three count rings (new, learning, due) that turn into a green check when you're done for the day, and Change icon offers None, Default, Emoji, your own Image or an Illustration. Archive is a line at the bottom of the page. On a phone, the session card leads with what you've done today, then what's left.
+- **Phone tabs** are Library, Stats, Market and your picture, which opens Settings. The Library's magnifier opens Browse, with Cards and Card types.
+- **A phone is a phone, a computer is a computer:** a narrow desktop window keeps the desktop layout with an icon rail instead of turning into the phone app. When a window gets too small for even that, Minimi squishes to fill it.
+- **Motion:** the sidebar folds to its rail in one move, changing tabs fades the old screen out and the new one in, Browse rows arrive one by one, and Minimi on the feedback bubble swings his legs and looks around.
+- **Review cards are due by study day**, from Settings' "Day starts at", like Anki. Learning cards keep their exact time.
+- **Sync without a password**, once the Sync server offers it: new devices only need to sign in, and a Sync password stays the end-to-end option, added or removed in Settings → Sync or with `etude sync protect` / `unprotect`. Selling on the Market says where to turn on two-step sign-in, which sellers will need.
+- **The iPhone app is built and sent to TestFlight by CI** on every push to main.
+- Fixes: free answer and code cards load their editor again in the web edition and the phone apps; tooltips open only when you point at something or Tab to it; Market rows hide ‹ on the first card and fade the edge that cuts a card; Settings' "On this page" lines up with the title.
+
 ## 3.0.3
 
 - **Pages open faster on a big collection.** The deck list, which every page shows, counts every deck from one read of the collection and is kept until something changes (or for half a minute, as cards come due); statistics read the day's start once instead of once per review; and the account part of Settings asks the Sync server in two steps instead of four, once for the whole page.

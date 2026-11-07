@@ -7,7 +7,7 @@
 
 /* the box */
 .ns-search { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 16px; border-radius: 14px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 1px 0 var(--border), 0 10px 30px rgb(0 0 0 / 0.07); transition: border-color 0.15s, box-shadow 0.15s; cursor: text; }
-.ns-search:focus-within { border-color: color-mix(in oklab, var(--primary) 60%, var(--border)); box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 16%, transparent), 0 10px 30px rgb(0 0 0 / 0.07); }
+.ns-search.is-typed:focus-within { border-color: color-mix(in oklab, var(--primary) 60%, var(--border)); box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 16%, transparent), 0 10px 30px rgb(0 0 0 / 0.07); }
 .ns-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: 400 17px/1.3 var(--font-sans); color: var(--foreground); }
 .ns-search input::placeholder { color: color-mix(in oklab, var(--muted-foreground) 75%, transparent); }
 .ns-search:focus-within .ns-search-kb { display: none; }
@@ -126,3 +126,10 @@
 
 /* Canvas, PDF and file cards share the page header (icon + title), on one line. */
 .ns-ttl.ns-one { -webkit-line-clamp: 1; }
+
+/* Drag a card into Pinned (or a pinned card back down): only the box under the label shows it can take the card (dashed), green under the pointer. */
+.ns-drop.is-target > .ns-pinnone, .ns-drop.is-target > .ns-shelf { outline: 1.5px dashed color-mix(in oklab, var(--muted-foreground) 45%, transparent); outline-offset: 6px; border-radius: 14px; transition: outline-color 0.14s, background-color 0.14s; }
+.ns-drop.is-target > .ns-pinnone { outline: none; border-color: color-mix(in oklab, var(--muted-foreground) 60%, var(--border)); }
+.ns-drop.is-over > .ns-shelf { outline-color: var(--primary); background: color-mix(in oklab, var(--primary) 8%, transparent); box-shadow: 0 0 0 6px color-mix(in oklab, var(--primary) 8%, transparent); }
+.ns-drop.is-over > .ns-pinnone { border-color: var(--primary); border-style: dashed; color: var(--foreground); background: color-mix(in oklab, var(--primary) 8%, transparent); }
+.ns-card[draggable="true"], .ns-row[draggable="true"] { -webkit-user-drag: element; }

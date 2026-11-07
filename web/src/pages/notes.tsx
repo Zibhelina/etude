@@ -28,6 +28,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { cn } from "@/lib/utils";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { registerNotesActions, setNotesPagesOpen, useNotesSlot } from "@/lib/sidebar-slot";
+import { NoteStart, StartTabIcon, isStartTab, newStartTab, startShortcut } from "@/components/note-start";
 import { useNoteTreeDrag, type Placement } from "@/components/note-tree-drag";
 import { activate, canSplitTo, dropPage, closeTab as closeLayoutTab, count, findPane, focus as focusLayout, focusedPane, MAX_PANES, moveTab, normalizeLayout, openIn, openSplit, panes, prune, rects, setRatio, single, type Layout, type PaneNode, type Rect, type Side, type TabDrop } from "@/lib/note-layout";
 
@@ -1009,11 +1010,13 @@ function NoteTabs({ pane, tabs, all, current, onPick, onClose, onDrag, menu, dra
   useEffect(() => {
     strip.current?.querySelector<HTMLElement>(".note-tab.is-on")?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [current, tabs.length]);
-  const shown = tabs.filter((t) => by.has(t));
+  const shown = tabs.filter((t) => by.has(t) || isStartTab(t));
   return (
     <div ref={strip} role="tablist" aria-label="Open pages" data-tabs-of={pane} className={cn("note-tabs", over.l && "fade-l", over.r && "fade-r")}>
       {shown.map((tid) => {
-        const n = by.get(tid)!;
+        // A New tab (the start page) isn't a note: it's called New tab and has an empty-page icon.
+        const n = by.get(tid) ?? { id: tid, title: "New tab", kind: "page" as const, icon: null };
+        const start = isStartTab(tid);
         const on = tid === current;
         return (
           <ContextMenu key={tid}>
@@ -1031,7 +1034,7 @@ function NoteTabs({ pane, tabs, all, current, onPick, onClose, onDrag, menu, dra
                 onAuxClick={(e) => e.button === 1 && onClose(tid)}
                 onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onPick(tid))}
               >
-                <span className="note-tab-icon" aria-hidden>{isFile(n) && !n.icon ? <FileCode2 className="size-3.5" /> : <NoteIcon icon={n.icon} size={15} />}</span>
+                <span className="note-tab-icon" aria-hidden>{start ? <StartTabIcon /> : isFile(n) && !n.icon ? <FileCode2 className="size-3.5" /> : <NoteIcon icon={n.icon} size={15} />}</span>
                 <span className={cn("min-w-0 flex-1 truncate", !n.title.trim() && "text-muted-foreground")}>{display(n)}</span>
                 <button
                   type="button"
@@ -1082,6 +1085,11 @@ type PaneCtx = {
   setOpen(id: string, on: boolean): void;
   reload(): Promise<void>;
   importVault(): void;
+  importMd(): void;
+  pickPdf(parentId: string | null): void;
+  newFile(): void;
+  setPinned(ids: string[], on: boolean): Promise<void>;
+  createFromStart(pane: string, title: string, newTab: boolean): Promise<void>;
 };
 
 /** One open page and its own top bar, editor and saving. With one pane it scrolls with the window, as before. */
@@ -1098,7 +1106,7 @@ function NotePane({ pane, noteId, ctx, focused, strip, plus }: {
   const bump = noteId ? (ctx.bumps[noteId] ?? 0) : 0;
   const seen = useRef<{ id: string | null; bump: number }>({ id: null, bump: 0 });
   useEffect(() => {
-    if (!noteId) return setNote(null);
+    if (!noteId || isStartTab(noteId)) return setNote(null);
     const p = ctx.primed.get(noteId);
     if (p) {
       ctx.primed.delete(noteId);
@@ -1163,7 +1171,34 @@ function NotePane({ pane, noteId, ctx, focused, strip, plus }: {
           onPointerDownCapture={() => ctx.focus(pane)}
           onFocusCapture={() => ctx.focus(pane)}
         >
-          {shown && isFile(shown) ? (
+          {isStartTab(noteId) ? (
+            list && (
+              <NoteStart
+                key={noteId}
+                list={list}
+                phone={phone}
+                bar={
+                  <div className="note-topbar">
+                    {strip ?? <span className="ns-tabname"><StartTabIcon /> New tab</span>}
+                    {plus}
+                    <span />
+                  </div>
+                }
+                onOpen={(oid, tab) => ctx.pick(pane, oid, tab ?? "replace")}
+                onCreate={(title, nt) => void ctx.createFromStart(pane, title, nt)}
+                onPin={(n, on) => void ctx.setPinned([n.id], on)}
+                actions={{
+                  page: () => void ctx.add(null),
+                  canvas: () => void ctx.add(null, "canvas"),
+                  file: ctx.newFile,
+                  folder: () => void ctx.addFolder(null),
+                  pdf: () => ctx.pickPdf(null),
+                  importMd: ctx.importMd,
+                  importVault: ctx.importVault,
+                }}
+              />
+            )
+          ) : shown && isFile(shown) ? (
             <FileView
               key={shown.id}
               note={shown}
@@ -1368,13 +1403,12 @@ export function NotesPage({ id }: { id: string | null }) {
     if (phone || !list) return;
     if (lastId.current === id) return;
     lastId.current = id;
+    // No page in the address (Notes clicked in the sidebar, the last tab closed): a New tab, the one already open, else a new one.
     const l = layoutRef.current;
-    const any = panes(l.root).some((p) => p.tabs.length);
-    const target = id ?? (any ? null : (list.find((n) => !isFolder(n))?.id ?? null));
-    if (!target) return;
+    const target = id ?? panes(l.root).flatMap((p) => p.tabs).find(isStartTab) ?? newStartTab();
     setLayout((l) => {
       const owner = panes(l.root).find((p) => p.tabs.includes(target));
-      return owner ? activate(l, owner.id, target) : openIn(l, l.focus, target, "replace");
+      return owner ? activate(l, owner.id, target) : openIn(l, l.focus, target, id ? "replace" : "new");
     });
   }, [id, list, phone]);
   // …and the address follows the focused pane's page, so a reload comes back to it.
@@ -1385,11 +1419,18 @@ export function NotesPage({ id }: { id: string | null }) {
     lastId.current = current;
     if (current !== id) navigate(current ? `/notes?id=${encodeURIComponent(current)}` : "/notes", { replace: true });
   }, [current, phone]);
+  // Opening a note tells the server, for the start page's Jump back in (folders don't count, the server knows).
+  useEffect(() => {
+    if (!current || isStartTab(current)) return;
+    let live = true;
+    api.noteOpened(current).then((n) => live && patchRow(n.id, { opened: n.opened }), () => {});
+    return () => void (live = false);
+  }, [current]);
   // Pages that were archived or deleted leave their tabs.
   useEffect(() => {
     if (!list) return;
     const ids = new Set(list.map((n) => n.id));
-    setLayout((l) => prune(l, (x) => ids.has(x)));
+    setLayout((l) => prune(l, (x) => ids.has(x) || isStartTab(x)));
   }, [list]);
 
   const setOpen = useCallback((oid: string, on: boolean) => {
@@ -1430,7 +1471,9 @@ export function NotesPage({ id }: { id: string | null }) {
   const closeTabIn = useCallback((pane: string, tid: string) => {
     setLayout((l) => {
       const p = findPane(l.root, pane);
-      if (!p || (count(l.root) === 1 && p.tabs.length <= 1)) return l;
+      if (!p) return l;
+      // Closing the last tab leaves a New tab, like a browser.
+      if (count(l.root) === 1 && p.tabs.length <= 1) return isStartTab(tid) ? l : openIn(l, pane, newStartTab(), "replace");
       return closeLayoutTab(l, pane, tid);
     });
   }, []);
@@ -1590,13 +1633,14 @@ export function NotesPage({ id }: { id: string | null }) {
     [flushAll, reload],
   );
 
-  // Ctrl/⌘+Alt+N: a new page next to nothing (top level).
+  // Ctrl/⌘+Alt+N / C / F: a new page, canvas or file at the top level (never AltGr, which types characters).
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === "n") {
-        e.preventDefault();
-        void add(null);
-      }
+      const k = startShortcut(e);
+      if (!k || e.defaultPrevented) return;
+      e.preventDefault();
+      if (k === "file") setNewFileIn(null);
+      else void add(null, k);
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -1734,6 +1778,9 @@ export function NotesPage({ id }: { id: string | null }) {
     return [
       { label: `Open ${pages.length} in tabs`, disabled: !pages.length, onSelect: () => (pages.forEach((p, i) => pick(p.id, i === 0 ? "new" : "background")), sel.clear()) },
       anyShown ? { label: "Hide icons", onSelect: () => void iconMany(all, false) } : { label: "Show icons", onSelect: () => void iconMany(all, true) },
+      all.every((x) => list?.find((n) => n.id === x)?.pinned)
+        ? { label: `Unpin ${all.length}`, onSelect: () => void setPinned(all, false).then(sel.clear) }
+        : { label: `Pin ${all.length} to the start page`, onSelect: () => void setPinned(all.filter((x) => !list?.find((n) => n.id === x)?.pinned), true).then(sel.clear) },
       "sep",
       { label: "Move to the top level", disabled: ids.every((id) => !list?.find((x) => x.id === id)?.parentId), onSelect: () => void toTopMany(ids).then(sel.clear) },
       "sep",
@@ -1752,6 +1799,21 @@ export function NotesPage({ id }: { id: string | null }) {
     } catch (e) {
       patchRow(n.id, { look: n.look });
       toast.error((e as Error).message);
+    }
+  };
+
+  // Pinned pages show at the top of the start page (a New tab).
+  const setPinned = async (ids: string[], on: boolean) => {
+    const stamp = new Date().toISOString();
+    for (const pid of ids) patchRow(pid, { pinned: on ? (listRef.current?.find((x) => x.id === pid)?.pinned ?? stamp) : null });
+    try {
+      for (const pid of ids) {
+        const r = await api.pinNote(pid, on);
+        patchRow(r.id, { pinned: r.pinned });
+      }
+    } catch (e) {
+      toast.error((e as Error).message);
+      await reload();
     }
   };
 
@@ -1777,6 +1839,7 @@ export function NotesPage({ id }: { id: string | null }) {
       { label: "Add a PDF inside…", onSelect: () => pickPdf(n.id) },
       { label: "Rename", onSelect: () => setRenaming(n.id) },
       n.look?.showIcon ? { label: "Hide icon", onSelect: () => void setListIcon(n, false) } : { label: "Show icon", onSelect: () => void setListIcon(n, true) },
+      n.pinned ? { label: "Unpin", onSelect: () => void setPinned([n.id], false) } : { label: "Pin to the start page", onSelect: () => void setPinned([n.id], true) },
       n.kind === "canvas" || n.kind === "pdf" || isFile(n)
         ? "sep"
         : isFolder(n)
@@ -1937,13 +2000,15 @@ export function NotesPage({ id }: { id: string | null }) {
       slot!,
     );
 
-  // + in a pane's top bar: a new top-level page, opened in a new tab next to that pane's page.
-  const newTab = async (pane: string) => {
+  // + in a pane's top bar: a New tab (the start page) next to that pane's page.
+  const newTab = (pane: string) => pickIn(pane, newStartTab(), "new");
+  // A page made from the start page opens in its tab; Ctrl/⌘ makes a new tab.
+  const createFromStart = async (pane: string, title: string, nt: boolean) => {
     try {
-      const n = await api.createNote({ title: "", parentId: null });
+      const n = await api.createNote({ title, parentId: null });
       await reload();
       primed.set(n.id, n);
-      pickIn(pane, n.id, "new");
+      pickIn(pane, n.id, nt ? "new" : "replace");
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -1967,11 +2032,16 @@ export function NotesPage({ id }: { id: string | null }) {
     setOpen,
     reload,
     importVault: () => folderInput.current?.click(),
+    importMd: () => fileInput.current?.click(),
+    pickPdf,
+    newFile: () => setNewFileIn(null),
+    setPinned,
+    createFromStart,
   };
 
   const shownPanes = phone ? [{ k: "pane" as const, id: "phone", tabs: id ? [id] : [], active: id }] : panes(layout.root);
   const geo = multi ? rects(layout.root) : null;
-  const existing = (t: string) => !!list?.some((n) => n.id === t);
+  const existing = (t: string) => isStartTab(t) || !!list?.some((n) => n.id === t);
   return (
     <div className="notes-shell">
       {pickers}
@@ -2052,7 +2122,7 @@ export function NotesPage({ id }: { id: string | null }) {
               />
             );
             const plus = phone ? null : (
-              <button type="button" className="note-tab-plus" onClick={() => void newTab(p.id)} aria-label="New page in a new tab" title="New page in a new tab">
+              <button type="button" className="note-tab-plus" onClick={() => newTab(p.id)} aria-label="New tab" title="New tab">
                 <Plus className="size-4" />
               </button>
             );

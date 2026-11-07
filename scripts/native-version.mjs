@@ -1,6 +1,6 @@
 // Writes package.json's version into the iOS Xcode project, so the native app can't drift from the release.
-// 2.5.0 → MARKETING_VERSION 2.5.0, CURRENT_PROJECT_VERSION 20500 (major*10000 + minor*100 + patch, the same as Android's versionCode).
-// Android reads package.json itself in android/app/build.gradle. Runs as part of `npm run app:sync`; `--check` only reports a mismatch.
+// 2.5.0 → MARKETING_VERSION 2.5.0, CURRENT_PROJECT_VERSION 20500 (major*10000 + minor*100 + patch).
+// Android reads package.json itself in android/app/build.gradle, with its own versionCode scheme (store/android/README.md). Runs as part of `npm run app:sync`; `--check` only reports a mismatch.
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

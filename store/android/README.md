@@ -1,6 +1,11 @@
 # Etude for Android
 
-The app is the serverless browser build (`npm run build:browser` → `dist-browser/`) inside a Capacitor shell in `android/`. App id `study.etude.app`, name Etude. `versionName` and `versionCode` come from `package.json`: 2.3.0 becomes versionName `2.3.0` and versionCode `20300` (major × 10000 + minor × 100 + patch). Bump the version in `package.json` before each upload; Play refuses a versionCode it has seen.
+The app is the serverless browser build (`npm run build:browser` → `dist-browser/`) inside a Capacitor shell in `android/`. App id `study.etude.app`, name Etude. `versionName` and `versionCode` come from `package.json` plus an optional Android-only build number, `ETUDE_ANDROID_BUILD` (default 0):
+
+- versionCode = major × 1000000 + minor × 10000 + patch × 100 + build
+- versionName = the `package.json` version, then `.<build>` when build is above 0
+
+So 3.1.1 builds as `3.1.1` / `3010100`, `ETUDE_ANDROID_BUILD=1` on the same version gives `3.1.1.1` / `3010101`, and 3.1.2 gives `3.1.2` / `3010200`. Minor, patch and build must each be below 100 (the build fails otherwise). Play refuses a versionCode it has seen, so each upload needs either a `package.json` bump or a higher `ETUDE_ANDROID_BUILD` for the same version; use the build number for an Android-only upload that doesn't warrant a release. Builds up to 3.1.1 used major × 10000 + minor × 100 + patch (3.1.1 = `30101`); every code in the new scheme is higher, so it stays monotonic on Play.
 
 `targetSdkVersion` and `compileSdkVersion` are 36 (Android 16). Since 31 August 2026, Google Play requires new apps and updates to target API 36 or higher. `minSdkVersion` is 24 (Android 7.0).
 
@@ -22,7 +27,11 @@ npm run app:android:debug     # android/app/build/outputs/apk/debug/app-debug.ap
 npm run app:android:release   # android/app/build/outputs/bundle/release/app-release.aab
 ```
 
-Without `ETUDE_KEYSTORE` set, the release bundle is unsigned (fine to inspect, not to upload).
+Without `ETUDE_KEYSTORE` set, the release bundle is unsigned (fine to inspect, not to upload). For an Android-only rebuild of the current version, set the build number: `ETUDE_ANDROID_BUILD=1 npm run app:android:release` (versionName `3.1.1.1`, versionCode `3010101` on 3.1.1). Check the result before uploading:
+
+```sh
+unzip -p android/app/build/outputs/bundle/release/app-release.aab base/manifest/AndroidManifest.xml | strings | grep -E '^[0-9.]+$'
+```
 
 ## The upload key (run once, keep it safe)
 

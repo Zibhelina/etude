@@ -38,6 +38,20 @@ test("the iOS project's version follows package.json", () => {
   assert.match(out, /matches package\.json/);
 });
 
+test("Android's versionCode leaves room for an Android-only build number above the old scheme", () => {
+  const gradle = read("android/app/build.gradle");
+  assert.match(gradle, /System\.getenv\('ETUDE_ANDROID_BUILD'\)/);
+  assert.match(gradle, /def etudeVersionCode = vMajor \* 1000000 \+ vMinor \* 10000 \+ vPatch \* 100 \+ etudeAndroidBuild/);
+  assert.match(gradle, /versionCode etudeVersionCode/);
+  assert.match(gradle, /versionName etudeVersionName/);
+  const code = (v: string, build = 0) => { const [a, b, c] = v.split(".").map(Number); return a * 1000000 + b * 10000 + c * 100 + build; };
+  // 3.1.1 went to Play as 30101 under major*10000 + minor*100 + patch.
+  assert.ok(code("3.1.1") > 30101);
+  assert.equal(code("3.1.1", 1), 3010101);
+  assert.ok(code("3.1.2") > code("3.1.1", 99));
+  assert.ok(code("4.0.0") > code("3.99.99", 99));
+});
+
 test("the iOS app declares the camera and photo strings its image inputs need", () => {
   const plist = read("ios/App/App/Info.plist");
   for (const key of ["NSCameraUsageDescription", "NSPhotoLibraryUsageDescription", "NSPhotoLibraryAddUsageDescription"])

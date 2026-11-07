@@ -283,6 +283,25 @@ function loadPdfjs(): Promise<Pdfjs> {
   }));
 }
 
+/** A PDF's first page drawn into a canvas `width` CSS pixels wide (the start page's cards). */
+export async function pdfFirstPage(url: string, width: number): Promise<HTMLCanvasElement> {
+  const pdfjs = await loadPdfjs();
+  const origin = location.origin;
+  const doc: any = await pdfjs.getDocument({ url, isEvalSupported: false, standardFontDataUrl: `${origin}/runtime/pdfjs/standard_fonts/`, cMapUrl: `${origin}/runtime/pdfjs/cmaps/`, cMapPacked: true, wasmUrl: `${origin}/runtime/pdfjs/wasm/` } as any).promise;
+  try {
+    const page = await doc.getPage(1);
+    const vp = page.getViewport({ scale: width / page.getViewport({ scale: 1 }).width });
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const c = document.createElement("canvas");
+    c.width = Math.floor(vp.width * dpr);
+    c.height = Math.floor(vp.height * dpr);
+    await page.render({ canvas: c, viewport: vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined }).promise;
+    return c;
+  } finally {
+    void doc.destroy?.();
+  }
+}
+
 function PdfPage({ doc, n, scale, pdfjs, ratio }: { doc: any; n: number; scale: number; pdfjs: Pdfjs; ratio: number }) {
   const box = useRef<HTMLDivElement>(null);
   const [seen, setSeen] = useState(false);

@@ -28,8 +28,8 @@ export interface CanvasEmbedOptions {
 const SAVE_MS = 600;
 const DEFAULT_H = 460;
 
-/** The drawing as an SVG picture, in the page's scheme. */
-function Preview({ scene, dark }: { scene: CanvasScene; dark: boolean }) {
+/** The drawing as an SVG picture, in the page's scheme (also the start page's canvas cards). */
+export function Preview({ scene, dark }: { scene: CanvasScene; dark: boolean }) {
   const box = useRef<HTMLDivElement>(null);
   const [empty, setEmpty] = useState(!scene.elements.length);
   useEffect(() => {

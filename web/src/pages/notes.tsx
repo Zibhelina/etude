@@ -653,7 +653,7 @@ async function importPicked(files: FileList, parentId: string | null) {
 // ---------------------------------------------------------------- a canvas
 
 /** A canvas note: its title in the top bar and the board filling the rest of the screen. */
-function CanvasView({ note, all, onTitle, onScene, saveState, onPick }: {
+function CanvasView({ note, all, onScene, saveState, onPick }: {
   note: Note;
   all: NoteSummary[];
   onTitle(t: string): void;
@@ -661,7 +661,7 @@ function CanvasView({ note, all, onTitle, onScene, saveState, onPick }: {
   saveState: SaveState;
   onPick(id: string): void;
 }) {
-  const [t, setT] = useState(note.title);
+  const t = note.title;
   const xapi = useRef<any>(null);
   const dark = useScheme() === "dark";
   const crumbs = useMemo(() => {
@@ -675,27 +675,19 @@ function CanvasView({ note, all, onTitle, onScene, saveState, onPick }: {
   return (
     <article className="note-page note-canvas-page">
       <div className="note-topbar">
-        {strip}
-        <nav aria-label="Path" className={cn("flex min-w-0 flex-1 items-center gap-1 text-[13px] text-muted-foreground", strip && "note-canvas-name")}>
-          {!strip && crumbs.map((c) => (
+        {strip ?? (
+        <nav aria-label="Path" className="flex min-w-0 items-center gap-1 text-[13px] text-muted-foreground">
+          {crumbs.map((c) => (
             <span key={c.id} className="flex min-w-0 items-center gap-1">
               <button className="truncate rounded px-1 hover:text-foreground" onClick={() => onPick(c.id)}>{display(c)}</button>
               <ChevronRight className="size-3 shrink-0 opacity-60" />
             </span>
           ))}
-          <input
-            value={t}
-            placeholder="Untitled canvas"
-            aria-label="Title"
-            className="note-canvas-title"
-            onChange={(e) => {
-              setT(e.target.value);
-              onTitle(e.target.value);
-            }}
-            onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
-          />
+          {crumbs.length > 0 && <span className="truncate px-1 text-foreground/80">{display({ title: t })}</span>}
         </nav>
+        )}
         {plus}
+        <span className="flex-1" />
         <span className="flex shrink-0 items-center gap-2">
           <span className={cn("note-save", saveState)} aria-live="polite">{saveState === "saving" ? "Saving…" : saveState === "error" ? "Not saved" : "Saved"}</span>
           <DropdownMenu>

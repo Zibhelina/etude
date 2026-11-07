@@ -334,6 +334,8 @@ These work on every command, before or after the command words.
   - [`settings unset`](#settings-unset) Reset dotted keys to their defaults.
   - [`settings avatar get`](#settings-avatar-get) Your picture, and the characters you can pick from.
   - [`settings avatar set`](#settings-avatar-set) Pick your picture: a character, an emoji on a colour, a photo, or your initial.
+  - [`settings banner get`](#settings-banner-get) Your banner (the cover behind your picture) and the colours and patterns it can be. null matches your picture.
+  - [`settings banner set`](#settings-banner-set) Set your banner: a preset, an image of your own, or match (follow your picture).
   - [`settings test-ai`](#settings-test-ai) Grade a fixed sample answer with the configured providers, to check keys and models. Costs a fraction of a cent.
   - [`settings onboarding`](#settings-onboarding) Whether first-run setup would show (not done and no decks yet), and the comfort level picked there.
   - [`settings key set`](#settings-key-set) Save one API key to $ETUDE_HOME/.env (owner-only), read from stdin so it never appears in the shell history.
@@ -3282,7 +3284,7 @@ etude settings get ai.feedback.model
 
 Change settings with dotted key=value pairs (JSON values when they parse).
 
-Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words; empty keeps his usual one), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own), avatar (your picture: {kind:"char",id}, {kind:"emoji",e,bg}, {kind:"photo",media}, or null for your initial; see `etude settings avatar`), name (your name in the app, up to 40 characters; empty uses the account's). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.
+Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words; empty keeps his usual one), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own), avatar (your picture: {kind:"char",id}, {kind:"emoji",e,bg}, {kind:"photo",media}, or null for your initial; see `etude settings avatar`), banner (the cover behind your picture: a preset id like sky or night, image:files/<sha>.<ext>[:y], or null to match your picture; see `etude settings banner`), name (your name in the app, up to 40 characters; empty uses the account's). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.
 
 ```
 etude settings set <pairs...> [flags]
@@ -3305,6 +3307,7 @@ etude settings set dayStartHour=4
 etude settings set ai.feedback.model=deepseek/deepseek-v4.1-flash-1017
 etude settings set ai.decision=null
 etude settings set accent=blue
+etude settings set banner=night
 ```
 
 ### etude settings unset
@@ -3381,6 +3384,55 @@ etude settings avatar set fox
 etude settings avatar set emoji:🦊 --bg '#24726e'
 etude settings avatar set photo:./me.webp
 etude settings avatar set initial
+```
+
+### etude settings banner get
+
+<a id="settings-banner-get"></a>
+
+Your banner (the cover behind your picture) and the colours and patterns it can be. null matches your picture.
+
+```
+etude settings banner get
+```
+
+*read-only*
+
+Output: { banner, presets: [{ id, bg, pattern }] }
+
+```sh
+etude settings banner get
+```
+
+### etude settings banner set
+
+<a id="settings-banner-set"></a>
+
+Set your banner: a preset, an image of your own, or match (follow your picture).
+
+The value is a preset id (see `etude settings banner get`), `image:<file>` (a local image, copied into the collection's media so Sync carries it; --y sets where it sits, 0 top to 100 bottom, default 50) or `match`. The app downscales uploaded images to 1600 px wide; the CLI keeps the file as it is.
+
+```
+etude settings banner set <value> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `value` | Preset id, image:<file> or match. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--y <VALUE>` | string | For an image: vertical position, 0 (top) to 100 (bottom). |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { from, to }
+
+```sh
+etude settings banner set night
+etude settings banner set image:./cover.jpg --y 30
+etude settings banner set match
 ```
 
 ### etude settings test-ai

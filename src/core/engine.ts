@@ -71,6 +71,7 @@ import { DEFAULT_PRIVACY, type Privacy } from "./telemetry.ts";
 import { muted } from "./sync/log.ts";
 import { MINIMI_MAX } from "./minimi.ts";
 import { AvatarError, normalizeAvatar, type Avatar } from "./avatar.ts";
+import { BannerError, normalizeBanner, type Banner } from "./banner.ts";
 
 /** The card columns a canonical replay computes; the rest of a card comes from its registers. */
 const REPLAY_FIELDS = ["state", "due", "stability", "difficulty", "elapsed_days", "scheduled_days", "reps", "lapses", "learning_steps", "last_review", "sched_state"];
@@ -161,6 +162,8 @@ export interface Settings {
   accent: string | null;
   /** Your picture (src/core/avatar.ts): a character, an emoji on a colour or a photo in the media; null shows your initial. */
   avatar: Avatar | null;
+  /** The cover behind your picture (src/core/banner.ts): a colour/pattern preset or an image in the media; null follows your picture. */
+  banner: Banner | null;
   /** Your name in the app (the sidebar, your initial). Empty falls back to the account's name or email. Up to 40 characters. */
   name: string;
 }
@@ -171,7 +174,7 @@ export interface Onboarding {
   level: (typeof ONBOARDING_LEVELS)[number];
 }
 
-export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" }, privacy: DEFAULT_PRIVACY, fun: true, minimi: "", accent: null, avatar: null, name: "" };
+export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" }, privacy: DEFAULT_PRIVACY, fun: true, minimi: "", accent: null, avatar: null, banner: null, name: "" };
 
 /** Card preferences: short keys, and a few KB per type, since they ride along in the synced settings. */
 export const TYPE_PREF_KEY = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -677,6 +680,12 @@ export class Etude {
       next.avatar = normalizeAvatar(next.avatar);
     } catch (e) {
       if (e instanceof AvatarError) throw new EtudeError(e.message);
+      throw e;
+    }
+    try {
+      next.banner = normalizeBanner(next.banner);
+    } catch (e) {
+      if (e instanceof BannerError) throw new EtudeError(e.message);
       throw e;
     }
     if (typeof next.onboarding.done !== "boolean") throw new EtudeError("onboarding.done must be true or false");

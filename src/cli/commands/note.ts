@@ -8,7 +8,7 @@ command({
   name: "note list",
   summary: "Every page, in tree order (parents before their pages).",
   flags: [{ name: "archived", type: "boolean", description: "The archived pages instead." }],
-  output: "array of { id, kind, parentId, title, icon, look, position, archived, created, updated, children, empty }",
+  output: "array of { id, kind, parentId, title, icon, look, position, archived, created, updated, children, empty, pinned, opened }",
   run(ctx) {
     return ctx.e.notes.list({ archived: !!ctx.flags.archived });
   },
@@ -272,6 +272,48 @@ command({
       return { file: ctx.flags.output };
     }
     return out;
+  },
+});
+
+command({
+  name: "note pin",
+  summary: "Pin a page to the start page (a New tab in Notes). Pins show in the order they were made.",
+  args: [{ name: "note", description: "Page id, or its exact title.", required: true }],
+  writes: true,
+  examples: ['etude note pin "CMPT 361"'],
+  output: "{ id, title, …, pinned }",
+  run(ctx) {
+    return ctx.e.notes.pin(ctx.e.notes.resolve(ctx.args.note).id);
+  },
+});
+
+command({
+  name: "note unpin",
+  summary: "Take a page off the start page.",
+  args: [{ name: "note", description: "Page id, or its exact title.", required: true }],
+  writes: true,
+  output: "{ id, title, …, pinned: null }",
+  run(ctx) {
+    return ctx.e.notes.unpin(ctx.e.notes.resolve(ctx.args.note).id);
+  },
+});
+
+command({
+  name: "note pinned",
+  summary: "The pages pinned to the start page, in pin order (archived ones left out).",
+  output: "array of { id, title, …, pinned }",
+  run(ctx) {
+    return ctx.e.notes.pinnedList();
+  },
+});
+
+command({
+  name: "note recent",
+  summary: "What the app opened last, newest first: the start page's Jump back in (folders left out).",
+  flags: [{ name: "limit", type: "number", description: "At most this many.", default: 10 }],
+  output: "array of { id, title, …, opened }",
+  run(ctx) {
+    return ctx.e.notes.recent(ctx.flags.limit ?? 10);
   },
 });
 

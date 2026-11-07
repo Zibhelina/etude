@@ -296,6 +296,10 @@ These work on every command, before or after the command words.
   - [`note search`](#note-search) Pages whose title or text has every word, title matches first.
   - [`note import`](#note-import) Import markdown files or a whole folder (an Obsidian vault) as pages, PDFs as PDF notes, code and text files (.py, .tex, …) as files, and .excalidraw drawings as canvases.
   - [`note export`](#note-export) A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file; a file as its own text.
+  - [`note pin`](#note-pin) Pin a page to the start page (a New tab in Notes). Pins show in the order they were made.
+  - [`note unpin`](#note-unpin) Take a page off the start page.
+  - [`note pinned`](#note-pinned) The pages pinned to the start page, in pin order (archived ones left out).
+  - [`note recent`](#note-recent) What the app opened last, newest first: the start page's Jump back in (folders left out).
   - [`note graph`](#note-graph) Every page as a point and every [[link]] between pages as a line (what the graph view draws).
   - [`note backlinks`](#note-backlinks) The pages that link to a page.
 - **type**: Card types: fields, template (HTML/CSS/JS), prepare script and grader (`etude type` alone runs `list`)
@@ -2223,7 +2227,7 @@ etude note list [flags]
 | --- | --- | --- |
 | `--archived` | boolean | The archived pages instead. |
 
-Output: array of { id, kind, parentId, title, icon, look, position, archived, created, updated, children, empty }
+Output: array of { id, kind, parentId, title, icon, look, position, archived, created, updated, children, empty, pinned, opened }
 
 ### etude note show
 
@@ -2507,6 +2511,78 @@ etude note export <note> [flags]
 | `-o, --output <PATH>` | string | Write to this file instead of stdout. |
 
 Output: the page's text (or { file } with -o)
+
+### etude note pin
+
+<a id="note-pin"></a>
+
+Pin a page to the start page (a New tab in Notes). Pins show in the order they were made.
+
+```
+etude note pin <note>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `note` | Page id, or its exact title. |
+
+Output: { id, title, …, pinned }
+
+```sh
+etude note pin "CMPT 361"
+```
+
+### etude note unpin
+
+<a id="note-unpin"></a>
+
+Take a page off the start page.
+
+```
+etude note unpin <note>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `note` | Page id, or its exact title. |
+
+Output: { id, title, …, pinned: null }
+
+### etude note pinned
+
+<a id="note-pinned"></a>
+
+The pages pinned to the start page, in pin order (archived ones left out).
+
+```
+etude note pinned
+```
+
+*read-only*
+
+Output: array of { id, title, …, pinned }
+
+### etude note recent
+
+<a id="note-recent"></a>
+
+What the app opened last, newest first: the start page's Jump back in (folders left out).
+
+```
+etude note recent [flags]
+```
+
+*read-only*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--limit <N>` | number | At most this many. Default `10`. |
+
+Output: array of { id, title, …, opened }
 
 ### etude note graph
 

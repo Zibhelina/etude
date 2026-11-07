@@ -63,6 +63,10 @@ export interface NoteSummary {
   children: number;
   /** Nothing written in it yet (only an empty page can become a folder). */
   empty?: boolean;
+  /** When it was pinned to the start page (null when it isn't); pinned pages show in pin order. */
+  pinned: string | null;
+  /** When the app last opened it (null if never); the start page's Jump back in. Folders don't count. */
+  opened: string | null;
 }
 export interface Note extends NoteSummary {
   doc: DocNode;
@@ -296,6 +300,20 @@ export function docFromText(text: string): DocNode {
 
 const now = () => new Date().toISOString();
 
+/** A block cut down for a preview: long text shortened, long lists, tables and nested content capped. */
+function trimBlock(n: DocNode, depth: number): DocNode {
+  const out: DocNode = { type: n.type };
+  if (n.attrs) {
+    const a: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(n.attrs)) a[k] = typeof v === "string" && v.length > 2000 ? v.slice(0, 2000) : v;
+    out.attrs = a;
+  }
+  if (n.marks) out.marks = n.marks;
+  if (typeof n.text === "string") out.text = n.text.length > 600 ? n.text.slice(0, 600) : n.text;
+  if (n.content && depth < 8) out.content = n.content.slice(0, n.type === "codeBlock" ? 1 : 12).map((k) => trimBlock(k, depth + 1));
+  return out;
+}
+
 function checkKind(k: unknown): NoteKind {
   if (k === undefined || k === null || k === "page") return "page";
   if (k === "folder") return "folder";
@@ -331,6 +349,8 @@ const row = (r: any): NoteSummary => ({
   created: r.created,
   updated: r.updated,
   children: r.children ?? 0,
+  pinned: r.pinned ?? null,
+  opened: r.opened ?? null,
   ...(r.empty !== undefined ? { empty: !!r.empty } : typeof r.text === "string" ? { empty: !r.text.trim() } : {}),
 });
 
@@ -344,12 +364,14 @@ export class Notes {
     if (!cols.includes("kind")) db.sql.exec("ALTER TABLE notes ADD COLUMN kind TEXT NOT NULL DEFAULT 'page'");
     if (!cols.includes("scene")) db.sql.exec("ALTER TABLE notes ADD COLUMN scene TEXT");
     if (!cols.includes("file")) db.sql.exec("ALTER TABLE notes ADD COLUMN file TEXT");
+    if (!cols.includes("pinned")) db.sql.exec("ALTER TABLE notes ADD COLUMN pinned TEXT");
+    if (!cols.includes("opened")) db.sql.exec("ALTER TABLE notes ADD COLUMN opened TEXT");
   }
 
   /** Every page, in tree order (parents before children, siblings by position). */
   list(opts: { archived?: boolean } = {}): NoteSummary[] {
     const rows = this.db.all(
-      `SELECT n.id, n.kind, n.parent_id, n.title, n.icon, n.look, n.position, n.archived, n.created, n.updated,
+      `SELECT n.id, n.kind, n.parent_id, n.title, n.icon, n.look, n.position, n.archived, n.created, n.updated, n.pinned, n.opened,
               (SELECT COUNT(*) FROM notes c WHERE c.parent_id = n.id AND c.archived = 0) AS children, (trim(n.text) = '') AS empty
          FROM notes n WHERE n.archived = ? ORDER BY n.position, n.created`,
       opts.archived ? 1 : 0,
@@ -380,6 +402,69 @@ export class Notes {
     );
     if (!r) throw new EtudeError(`no note "${id}"`, 404);
     return { ...row(r), doc: JSON.parse(r.doc), text: r.text, scene: r.kind === "canvas" ? (r.scene ? JSON.parse(r.scene) : emptyScene()) : null, file: r.kind === "pdf" ? (r.file ?? null) : null, content: r.kind === "file" ? String(r.text ?? "") : null };
+  }
+
+  /** Pins a page (or canvas, PDF, file, folder) to the start page. Pinning it again keeps its place. */
+  pin(id: string): NoteSummary {
+    this.get(id);
+    this.db.run("UPDATE notes SET pinned = ? WHERE id = ? AND pinned IS NULL", now(), id);
+    return this.summary(id);
+  }
+
+  unpin(id: string): NoteSummary {
+    this.get(id);
+    this.db.run("UPDATE notes SET pinned = NULL WHERE id = ?", id);
+    return this.summary(id);
+  }
+
+  /** The pinned pages in the order they were pinned. Archived ones are left out (their pin comes back with them). */
+  pinnedList(): NoteSummary[] {
+    return this.db.all("SELECT * FROM notes WHERE pinned IS NOT NULL AND archived = 0 ORDER BY pinned, created").map(row);
+  }
+
+  /** Marks that the app opened it, for the start page's Jump back in. Folders don't count; nothing else changes (not even its updated time). */
+  markOpened(id: string): NoteSummary {
+    const n = this.get(id);
+    if (n.kind !== "folder") this.db.run("UPDATE notes SET opened = ? WHERE id = ?", now(), id);
+    return this.summary(id);
+  }
+
+  /** What was opened last, newest first (folders and archived ones left out). */
+  recent(limit = 10): NoteSummary[] {
+    const n = Math.max(1, Math.min(200, Math.floor(Number(limit) || 10)));
+    return this.db.all("SELECT * FROM notes WHERE opened IS NOT NULL AND archived = 0 AND kind != 'folder' ORDER BY opened DESC, id LIMIT ?", n).map(row);
+  }
+
+  /**
+   * What the start page's cards show of each note, cheap: a page's first few top-level blocks (big blocks trimmed),
+   * a file's first lines. Canvases and PDFs have no head here; the card draws them from the note itself, lazily.
+   */
+  previews(ids: string[]): { id: string; kind: NoteKind; blocks: DocNode[]; head: string | null }[] {
+    const out: { id: string; kind: NoteKind; blocks: DocNode[]; head: string | null }[] = [];
+    for (const id of ids.slice(0, 40)) {
+      const r = this.db.get("SELECT id, kind, doc, text FROM notes WHERE id = ?", id);
+      if (!r) continue;
+      const kind = kindOf(r.kind);
+      if (kind === "file") {
+        out.push({ id, kind, blocks: [], head: String(r.text ?? "").split("\n").slice(0, 10).map((l: string) => l.slice(0, 160)).join("\n") });
+        continue;
+      }
+      let blocks: DocNode[] = [];
+      if (kind === "page") {
+        try {
+          blocks = ((JSON.parse(r.doc) as DocNode).content ?? []).slice(0, 6).map((b) => trimBlock(b, 0));
+        } catch {
+          blocks = [];
+        }
+      }
+      out.push({ id, kind, blocks, head: null });
+    }
+    return out;
+  }
+
+  private summary(id: string): NoteSummary {
+    const r = this.db.get("SELECT n.*, (SELECT COUNT(*) FROM notes c WHERE c.parent_id = n.id AND c.archived = 0) AS children FROM notes n WHERE n.id = ?", id);
+    return row(r);
   }
 
   /** Finds a page by id, or by exact title when exactly one page has it. */
@@ -519,7 +604,7 @@ export class Notes {
     if (!words.length) return [];
     const like = (w: string) => `%${w.replace(/[\\%_]/g, "\\$&")}%`;
     const cond = words.map(() => "(lower(title) LIKE ? ESCAPE '\\' OR lower(text) LIKE ? ESCAPE '\\')").join(" AND ");
-    const rows = this.db.all(`SELECT id, kind, parent_id, title, icon, look, position, archived, created, updated, text FROM notes WHERE archived = 0 AND kind != 'folder' AND ${cond}`, ...words.flatMap((w) => [like(w), like(w)]));
+    const rows = this.db.all(`SELECT id, kind, parent_id, title, icon, look, position, archived, created, updated, pinned, opened, text FROM notes WHERE archived = 0 AND kind != 'folder' AND ${cond}`, ...words.flatMap((w) => [like(w), like(w)]));
     const score = (r: any) => words.filter((w) => r.title.toLowerCase().includes(w)).length;
     return rows
       .sort((a, b) => score(b) - score(a) || b.updated.localeCompare(a.updated))
@@ -602,7 +687,7 @@ export class Notes {
   backlinks(id: string): (NoteSummary & { snippet: string })[] {
     const n = this.get(id);
     const rows = this.db.all(
-      `SELECT DISTINCT s.id, s.kind, s.parent_id, s.title, s.icon, s.look, s.position, s.archived, s.created, s.updated, s.text
+      `SELECT DISTINCT s.id, s.kind, s.parent_id, s.title, s.icon, s.look, s.position, s.archived, s.created, s.updated, s.pinned, s.opened, s.text
          FROM note_links l JOIN notes s ON s.id = l.from_id
         WHERE s.archived = 0 AND s.id != ? AND (l.to_id = ? OR (l.to_id IS NULL AND l.to_title = ? COLLATE NOCASE))
         ORDER BY s.updated DESC`,

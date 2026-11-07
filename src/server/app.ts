@@ -305,6 +305,9 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   // Notes (beta): pages with a document body.
   app.get("/api/notes", (c) => c.json(etude.notes.list({ archived: c.req.query("archived") === "1" })));
   app.get("/api/notes/graph", (c) => c.json(etude.notes.graph()));
+  app.get("/api/notes/pinned", (c) => c.json(etude.notes.pinnedList()));
+  app.get("/api/notes/recent", (c) => c.json(etude.notes.recent(Number(c.req.query("limit") ?? 10) || 10)));
+  app.get("/api/notes/previews", (c) => c.json(etude.notes.previews(String(c.req.query("ids") ?? "").split(",").filter(Boolean))));
   app.get("/api/notes/search", (c) => c.json(etude.notes.search(c.req.query("q") ?? "", Number(c.req.query("limit") ?? 20) || 20)));
   app.post("/api/notes", async (c) => {
     const b = await body(c);
@@ -364,6 +367,12 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const b = await body(c);
     return c.json(etude.notes.update(c.req.param("id"), { title: b.title, doc: b.doc, icon: b.icon, look: b.look, kind: b.kind, scene: b.scene, content: b.content }));
   });
+  app.post("/api/notes/:id/pin", async (c) => {
+    const b = await c.req.json().catch(() => ({}));
+    return c.json(b.pinned === false ? etude.notes.unpin(c.req.param("id")) : etude.notes.pin(c.req.param("id")));
+  });
+  // The app tells the server when it opens a note (not on every read), for the start page's Jump back in.
+  app.post("/api/notes/:id/opened", (c) => c.json(etude.notes.markOpened(c.req.param("id"))));
   app.post("/api/notes/:id/move", async (c) => {
     const b = await body(c);
     const index = b.index === undefined || b.index === null ? undefined : Number(b.index);

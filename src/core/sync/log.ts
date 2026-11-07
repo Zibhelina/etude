@@ -18,7 +18,7 @@ const id = (s: string) => `"${s}"`;
 const REF = "field IN ('/deck_id','/preset_id','/item_id','/card_id','/review_id','/attempt_id','/type')";
 /** Fields a card's schedule depends on, by table. A change to one is recorded with its key, so the projection replays the cards it reaches. */
 export const SCHEDULING: Record<string, string[]> = { decks: ["/name", "/preset_id", "/config"], presets: ["/config"], items: ["/deck_id", "/type", "/created"], types: ["/def/scheduler", "/def/schedulerOptions"], settings: ["/value/dayStartHour"] };
-const SETTINGS = new Set(["dayStartHour", "learnAheadMinutes", "theme", "themes", "typePrefs", "fun", "minimi","minimiFace", "accent", "avatar", "banner", "name"]);
+const SETTINGS = new Set(["dayStartHour", "learnAheadMinutes", "theme", "themes", "typePrefs", "fun", "minimi","minimiFace", "accent", "avatar", "banner", "name", "vim"]);
 export const safeSettings = (s: any) => Object.fromEntries(Object.entries(s ?? {}).filter(([k]) => SETTINGS.has(k)));
 
 function keyExpr(table: string, prefix: string) {

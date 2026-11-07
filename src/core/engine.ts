@@ -169,6 +169,8 @@ export interface Settings {
   banner: Banner | null;
   /** Your name in the app (the sidebar, your initial). Empty falls back to the account's name or email. Up to 40 characters. */
   name: string;
+  /** Vim keys (normal/insert/visual modes, motions, operators) in Notes' file editor. Off by default. */
+  vim: boolean;
 }
 
 export const ONBOARDING_LEVELS = ["simple", "standard", "tinker"] as const;
@@ -177,7 +179,7 @@ export interface Onboarding {
   level: (typeof ONBOARDING_LEVELS)[number];
 }
 
-export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" }, privacy: DEFAULT_PRIVACY, fun: true, minimi: "", minimiFace: MINIMI_FACE_DEFAULT, accent: null, avatar: null, banner: null, name: "" };
+export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" }, privacy: DEFAULT_PRIVACY, fun: true, minimi: "", minimiFace: MINIMI_FACE_DEFAULT, accent: null, avatar: null, banner: null, name: "", vim: false };
 
 /** Card preferences: short keys, and a few KB per type, since they ride along in the synced settings. */
 export const TYPE_PREF_KEY = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -689,6 +691,7 @@ export class Etude {
     if (!MINIMI_FACES.includes(next.minimiFace)) throw new EtudeError(`minimiFace must be one of ${MINIMI_FACES.join(", ")}`);
     if (typeof next.accent === "string") next.accent = next.accent.trim().toLowerCase() || null;
     if (!isAccent(next.accent)) throw new EtudeError(`accent must be null (the theme's own), one of ${ACCENTS.map((a) => a.id).join(", ")}, or a #rrggbb color`);
+    if (typeof next.vim !== "boolean") throw new EtudeError("vim must be true or false");
     if (typeof next.name !== "string") throw new EtudeError("name must be text");
     next.name = next.name.replace(/\s+/g, " ").trim();
     if ([...next.name].length > 40) throw new EtudeError("name is too long (at most 40 characters)");

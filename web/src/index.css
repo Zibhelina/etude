@@ -1672,3 +1672,36 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
   .note-pdf-doc.has-panel::after { opacity: 1; pointer-events: auto; }
 }
 @media (prefers-reduced-motion: reduce) { .note-pdf-side { transition: none; } }
+/* Notes: a code or text file (main.py, report.tex). The editor fills the page; the status line sits under it. */
+.note-file-page .note-file-name { font-family: var(--font-mono); font-size: 13.5px; font-weight: 550; }
+.note-file-editor { flex: 1; min-height: 0; overflow: hidden; }
+.note-file-editor .cm-editor { height: 100%; }
+/* Everything on the left: the corner Minimi sits over the right end. */
+.note-file-status { flex-shrink: 0; display: flex; align-items: center; gap: 16px; height: 30px; padding: 0 20px 0 18px; border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent); color: var(--muted-foreground); font-size: 12px; }
+.note-vim-mode { display: inline-flex; align-items: center; height: 19px; padding: 0 7px; border-radius: 5px; font-family: var(--font-mono); font-size: 11px; font-weight: 650; letter-spacing: 0.04em; color: var(--foreground); background: color-mix(in oklab, var(--foreground) 9%, transparent); }
+.note-vim-mode.is-insert { color: var(--primary-foreground); background: var(--primary); }
+.note-vim-mode.is-visual, .note-vim-mode.is-replace { color: var(--background); background: var(--warning); }
+/* Vim's mode line and : prompt, as one quiet bar at the bottom of the editor. */
+.note-file-editor .cm-panels-bottom { border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent); background: var(--background); }
+.note-file-editor .cm-vim-panel { padding: 3px 14px; font-family: var(--font-mono); font-size: 12px; color: var(--muted-foreground); min-height: 1.6em; }
+.note-file-editor .cm-vim-panel input { color: var(--foreground); font-family: var(--font-mono); }
+/* Search (Ctrl/⌘+F), restyled from CodeMirror's panel. */
+.note-file-editor .cm-panels-top { border-bottom: 1px solid color-mix(in oklab, var(--border) 70%, transparent); background: var(--background); }
+.note-file-editor .cm-search { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 14px; font-size: 12.5px; }
+.note-file-editor .cm-search br { display: none; }
+.note-file-editor .cm-search .cm-textfield { height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); color: var(--foreground); font-size: 12.5px; outline: none; }
+.note-file-editor .cm-search .cm-textfield:focus { border-color: color-mix(in oklab, var(--primary) 60%, var(--border)); }
+.note-file-editor .cm-search .cm-button { height: 28px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); background-image: none; color: var(--foreground); font-size: 12px; }
+.note-file-editor .cm-search .cm-button:hover { background: var(--accent); }
+.note-file-editor .cm-search label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted-foreground); }
+.note-file-editor .cm-search { position: relative; padding-right: 44px; }
+.note-file-editor .cm-search label { font-size: 12.5px; }
+.note-file-editor .cm-search input[name=replace] { margin-left: 10px; }
+.note-file-editor .cm-search button[name=close] { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border-radius: 7px; color: var(--muted-foreground); background: none; border: none; font-size: 18px; line-height: 1; cursor: pointer; }
+.note-file-editor .cm-search button[name=close]:hover { background: var(--accent); color: var(--foreground); }
+@media (max-width: 767px) {
+  /* The file's name is the file: phones keep it in the top bar (pages hide their path there). */
+  .note-file-page .note-topbar > nav { display: flex; }
+  .note-file-page .note-file-name { max-width: none; }
+  .note-file-status { padding: 0 14px; gap: 12px; padding-bottom: env(safe-area-inset-bottom); height: calc(28px + env(safe-area-inset-bottom)); }
+}

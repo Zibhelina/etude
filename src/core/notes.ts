@@ -3,6 +3,8 @@
 // rendered safely, searched and later merged across devices. `text` is the plain text, for search and previews.
 // Not synced yet (the notes table isn't in sync/log.ts TABLES); that comes with the Sync milestone.
 import { randomUUID } from "node:crypto";
+import { isTextFile } from "./text-files.ts";
+export { isTextFile, TEXT_FILE_EXTENSIONS } from "./text-files.ts";
 import type { Db } from "./db.ts";
 import { EtudeError, deckIcon } from "./engine.ts";
 import { docLinks, markdownToDoc, resolveLinks, frontMatter } from "./notes-md.ts";
@@ -43,7 +45,7 @@ export interface DocNode {
 }
 
 /** A page you write in, or a folder that only holds pages (it has no body of its own). */
-export type NoteKind = "page" | "folder" | "canvas" | "pdf";
+export type NoteKind = "page" | "folder" | "canvas" | "pdf" | "file";
 
 export interface NoteSummary {
   id: string;
@@ -69,6 +71,8 @@ export interface Note extends NoteSummary {
   scene: CanvasScene | null;
   /** A PDF note's file in the collection's media (files/<sha256>.pdf); null on everything else. */
   file: string | null;
+  /** A file's text, exactly as written (null unless kind is "file"). */
+  content: string | null;
 }
 
 /**
@@ -284,20 +288,29 @@ export function docFromText(text: string): DocNode {
 }
 
 const now = () => new Date().toISOString();
+
 function checkKind(k: unknown): NoteKind {
   if (k === undefined || k === null || k === "page") return "page";
   if (k === "folder") return "folder";
   if (k === "canvas") return "canvas";
   if (k === "pdf") return "pdf";
-  throw new EtudeError('a note is a "page", a "folder", a "canvas" or a "pdf"');
+  if (k === "file") return "file";
+  throw new EtudeError('a note is a "page", a "folder", a "canvas", a "pdf" or a "file"');
 }
-const kindOf = (k: unknown): NoteKind => (k === "folder" ? "folder" : k === "canvas" ? "canvas" : k === "pdf" ? "pdf" : "page");
+const kindOf = (k: unknown): NoteKind => (k === "folder" ? "folder" : k === "canvas" ? "canvas" : k === "pdf" ? "pdf" : k === "file" ? "file" : "page");
 const PDF_FILE = /^files\/[0-9a-f]{64}\.pdf$/;
 /** A PDF note's file: a PDF already in the collection's media ("files/<sha>.pdf" or its "/media/…" URL). */
 function checkPdfFile(f: unknown): string {
   const s = String(f ?? "").replace(/^\/?media\//, "");
   if (!PDF_FILE.test(s)) throw new EtudeError("a PDF note's file is a PDF in the collection's media (files/<sha256>.pdf): upload it first");
   return s;
+}
+/** A code or text file's contents: plain text, kept as it is (5 MB at most). */
+function checkContent(v: unknown): string {
+  if (typeof v !== "string") throw new EtudeError("a file's content is text");
+  if (Buffer.byteLength(v) > MAX_DOC_BYTES) throw new EtudeError("that file is too big (5 MB at most)", 413);
+  if (v.includes("\u0000")) throw new EtudeError("that looks like a binary file; files hold text (code, LaTeX, notes)");
+  return v;
 }
 const row = (r: any): NoteSummary => ({
   id: r.id,
@@ -359,7 +372,7 @@ export class Notes {
       id,
     );
     if (!r) throw new EtudeError(`no note "${id}"`, 404);
-    return { ...row(r), doc: JSON.parse(r.doc), text: r.text, scene: r.kind === "canvas" ? (r.scene ? JSON.parse(r.scene) : emptyScene()) : null, file: r.kind === "pdf" ? (r.file ?? null) : null };
+    return { ...row(r), doc: JSON.parse(r.doc), text: r.text, scene: r.kind === "canvas" ? (r.scene ? JSON.parse(r.scene) : emptyScene()) : null, file: r.kind === "pdf" ? (r.file ?? null) : null, content: r.kind === "file" ? String(r.text ?? "") : null };
   }
 
   /** Finds a page by id, or by exact title when exactly one page has it. */
@@ -371,7 +384,7 @@ export class Notes {
     throw new EtudeError(`no note "${ref}"`, 404);
   }
 
-  create(input: { title?: string; parentId?: string | null; doc?: unknown; icon?: string | null; look?: unknown; after?: string | null; kind?: NoteKind; scene?: unknown; file?: unknown } = {}): Note {
+  create(input: { title?: string; parentId?: string | null; doc?: unknown; icon?: string | null; look?: unknown; after?: string | null; kind?: NoteKind; scene?: unknown; file?: unknown; content?: unknown } = {}): Note {
     return this.db.tx(() => {
       const parent = input.parentId || null;
       if (parent) this.get(parent);
@@ -382,6 +395,9 @@ export class Notes {
       if (kind === "pdf" && input.doc !== undefined) throw new EtudeError("a PDF note is its file; it has no body of its own");
       if (kind !== "pdf" && input.file !== undefined) throw new EtudeError('only a PDF note has a file (make it with kind "pdf")');
       const file = kind === "pdf" ? checkPdfFile(input.file) : null;
+      if (kind === "file" && input.doc !== undefined) throw new EtudeError("a file has text content, not a doc");
+      if (kind !== "file" && input.content !== undefined) throw new EtudeError('only a file has content (make it with kind "file")');
+      const content = kind === "file" ? (input.content === undefined ? "" : checkContent(input.content)) : null;
       const scene = kind === "canvas" ? (input.scene === undefined ? emptyScene() : checkScene(input.scene)) : null;
       const doc = input.doc === undefined ? { type: "doc", content: [] } : checkDoc(input.doc);
       const id = randomUUID();
@@ -394,7 +410,7 @@ export class Notes {
       } else position = (this.db.get("SELECT MAX(position) AS p FROM notes WHERE parent_id IS ?", parent)?.p ?? -1) + 1;
       this.db.run(
         "INSERT INTO notes (id, kind, parent_id, title, icon, look, doc, scene, file, text, position, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        id, kind, parent, cleanTitle(input.title ?? ""), cleanIcon(input.icon ?? null), lookJson(input.look), JSON.stringify(doc), scene ? JSON.stringify(scene) : null, file, scene ? sceneText(scene) : docText(doc as DocNode), position, t, t,
+        id, kind, parent, cleanTitle(input.title ?? ""), cleanIcon(input.icon ?? null), lookJson(input.look), JSON.stringify(doc), scene ? JSON.stringify(scene) : null, file, content !== null ? content : scene ? sceneText(scene) : docText(doc as DocNode), position, t, t,
       );
       this.writeLinks(id, doc as DocNode);
       this.claimLinks(id);
@@ -402,7 +418,7 @@ export class Notes {
     });
   }
 
-  update(id: string, patch: { title?: string; doc?: unknown; icon?: string | null; look?: unknown; kind?: NoteKind; scene?: unknown }): Note {
+  update(id: string, patch: { title?: string; doc?: unknown; icon?: string | null; look?: unknown; kind?: NoteKind; scene?: unknown; content?: unknown }): Note {
     return this.db.tx(() => {
       const cur = this.get(id);
       if (patch.scene !== undefined && cur.kind !== "canvas") throw new EtudeError("only a canvas has a scene");
@@ -410,6 +426,9 @@ export class Notes {
       if (patch.kind !== undefined && (cur.kind === "canvas") !== (patch.kind === "canvas")) throw new EtudeError("a canvas stays a canvas");
       if (patch.kind !== undefined && (cur.kind === "pdf") !== (patch.kind === "pdf")) throw new EtudeError("a PDF note stays a PDF");
       if (patch.doc !== undefined && cur.kind === "pdf") throw new EtudeError("a PDF note is its file; it has no body of its own");
+      if (patch.kind !== undefined && (cur.kind === "file") !== (patch.kind === "file")) throw new EtudeError("a file stays a file");
+      if (patch.content !== undefined && cur.kind !== "file") throw new EtudeError("only a file has content");
+      if (patch.doc !== undefined && cur.kind === "file") throw new EtudeError("a file has text content, not a doc");
       const sets: string[] = [];
       const vals: any[] = [];
       if (patch.kind !== undefined) {
@@ -426,6 +445,10 @@ export class Notes {
         const doc = checkDoc(patch.doc);
         sets.push("doc = ?", "text = ?");
         vals.push(JSON.stringify(doc), docText(doc));
+      }
+      if (patch.content !== undefined) {
+        sets.push("text = ?");
+        vals.push(checkContent(patch.content));
       }
       if (patch.scene !== undefined) {
         const scene = checkScene(patch.scene);
@@ -562,7 +585,7 @@ export class Notes {
     const degree = new Map<string, number>();
     for (const l of links) if (l.kind === "link") for (const e of [l.from, l.to]) degree.set(e, (degree.get(e) ?? 0) + 1);
     const nodes = [
-      ...pages.map((p) => ({ id: p.id as string, kind: kindOf(p.kind), title: String(p.title), icon: (p.icon as string) ?? null, parentId: p.parent_id && ids.has(p.parent_id) ? (p.parent_id as string) : null, links: degree.get(p.id) ?? 0, created: (p.created as string) ?? null, tags: tagsOf(p.text as string) })),
+      ...pages.map((p) => ({ id: p.id as string, kind: kindOf(p.kind), title: String(p.title), icon: (p.icon as string) ?? null, parentId: p.parent_id && ids.has(p.parent_id) ? (p.parent_id as string) : null, links: degree.get(p.id) ?? 0, created: (p.created as string) ?? null, tags: kindOf(p.kind) === "file" ? [] : tagsOf(p.text as string) })),
       ...[...ghosts.values()].map((id) => ({ id, kind: "ghost" as const, title: id.slice(6), icon: null, parentId: null, links: degree.get(id) ?? 0, created: null, tags: [] as string[] })),
     ];
     return { nodes, links };
@@ -596,13 +619,13 @@ export class Notes {
    * vault keeps its shape). [[Links]] between the files, and to pages you already have, become page links.
    * `media` maps an image path as the files write it (or its file name) to a served URL.
    */
-  importMarkdown(files: { path: string; text: string }[], opts: { parentId?: string | null; media?: Record<string, string>; pdfs?: { path: string; file: string }[] } = {}): { pages: number; folders: number; links: number; unresolved: number; pdfs: number; root: string | null; ids: string[] } {
+  importMarkdown(files: { path: string; text: string }[], opts: { parentId?: string | null; media?: Record<string, string>; pdfs?: { path: string; file: string }[] } = {}): { pages: number; folders: number; links: number; unresolved: number; pdfs: number; root: string | null; ids: string[]; files: number } {
     return this.db.tx(() => {
       const parent = opts.parentId || null;
       if (parent) this.get(parent);
-      const md = files.filter((f) => /\.(md|markdown|txt)$/i.test(f.path) && !f.path.split("/").some((p) => p.startsWith(".")));
+      const md = files.filter((f) => (/\.(md|markdown|txt)$/i.test(f.path) || isTextFile(f.path)) && !f.path.split("/").some((p) => p.startsWith(".")));
       const pdfs = (opts.pdfs ?? []).filter((f) => /\.pdf$/i.test(f.path) && !f.path.split("/").some((p) => p.startsWith(".")));
-      if (!md.length && !pdfs.length) throw new EtudeError("no markdown files to import");
+      if (!md.length && !pdfs.length) throw new EtudeError("no markdown or code files to import");
       // Drop a common top folder (the vault's own name) only when there's more than one file.
       const split = (p: string) => p.replace(/\\/g, "/").split("/").filter(Boolean);
       const parts = [...md, ...pdfs].map((f) => split(f.path));
@@ -630,7 +653,14 @@ export class Notes {
       const made: { id: string; text: string }[] = [];
       const pageIds = new Set<string>();
       const sorted = md.map((f, i) => ({ f, segs: parts[i].slice(common) })).sort((a, b) => a.segs.join("/").localeCompare(b.segs.join("/"), undefined, { numeric: true }));
+      let codeFiles = 0;
       for (const { f, segs } of sorted) {
+        // Code and other text files (.py, .tex, …) come in as files, kept exactly as written, under their own name.
+        if (isTextFile(f.path) && !/\.(md|markdown|txt)$/i.test(f.path)) {
+          ids.push(this.create({ title: segs[segs.length - 1], parentId: folder(segs.slice(0, -1)), kind: "file", content: f.text }).id);
+          codeFiles++;
+          continue;
+        }
         const name = segs[segs.length - 1].replace(/\.(md|markdown|txt)$/i, "");
         const where = segs.slice(0, -1);
         const key = [...where, name].join("/");
@@ -677,7 +707,7 @@ export class Notes {
         if (first?.type === "heading" && docText({ type: "doc", content: [first] }).trim().toLowerCase() === own.trim().toLowerCase()) doc.content!.shift();
         this.update(m.id, { doc });
       }
-      return { pages: made.length, folders: ids.length - pageIds.size, links, unresolved, pdfs: pdfs.length, root: root ? rootId : null, ids };
+      return { pages: made.length, folders: ids.length - pageIds.size - codeFiles, links, unresolved, pdfs: pdfs.length, root: root ? rootId : null, ids, files: codeFiles };
     });
   }
 

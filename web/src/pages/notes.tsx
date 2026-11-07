@@ -4,7 +4,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { ArrowUpRight, Check, ChevronRight, Download, FilePlus2, Folder, FolderInput, FolderOpen, FolderPlus, ImagePlus, MoreHorizontal, PenTool, Plus, Smile, X } from "lucide-react";
+import { ArrowUpRight, Check, ChevronRight, Download, FileCode2, FilePlus2, Folder, FolderInput, FolderOpen, FolderPlus, ImagePlus, MoreHorizontal, PenTool, Plus, Smile, X } from "lucide-react";
 import type { NoteLinkOptions, PageRef } from "@/editor/note-link";
 import { etudeFetch } from "@/lib/transport";
 import { api, type CanvasScene, type Note, type NoteDoc, type NoteLook, type NoteSummary } from "@/lib/api";
@@ -18,6 +18,9 @@ import { NoteEditor, type NoteEditorHandle } from "@/editor/note-editor";
 import { NoteIcon, NoteIconPicker } from "@/editor/note-icon";
 import { CanvasBoard, exportBoard } from "@/editor/canvas-board";
 import { PdfDocument, uploadPdf } from "@/editor/note-embed";
+import { createFileEditor, fileLanguage, wrapsByDefault, type FileEditorHandle } from "@/editor/file-editor";
+import { setVimMode, useVimMode } from "@/lib/vim";
+import { isTextFile } from "../../../src/core/text-files.ts";
 import { useScheme } from "@/lib/theme";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -45,10 +48,11 @@ function treeOf(list: NoteSummary[]): Tree {
   }
   return t;
 }
-const display = (n: { title: string; kind?: string }) => n.title.trim() || (n.kind === "folder" ? "New folder" : n.kind === "canvas" ? "Untitled canvas" : n.kind === "pdf" ? "Untitled PDF" : "Untitled");
+const display = (n: { title: string; kind?: string }) => n.title.trim() || (n.kind === "folder" ? "New folder" : n.kind === "canvas" ? "Untitled canvas" : n.kind === "pdf" ? "Untitled PDF" : n.kind === "file" ? "untitled.txt" : "Untitled");
 /** A note's glyph when it has no icon of its own. */
 const fallbackIcon = (n: { kind?: string }) => (n.kind === "canvas" ? "🎨" : n.kind === "pdf" ? "📕" : "📄");
 const isFolder = (n: { kind?: string } | null | undefined) => n?.kind === "folder";
+const isFile = (n: { kind?: string } | null | undefined) => n?.kind === "file";
 
 // ---------------------------------------------------------------- saving
 
@@ -56,7 +60,7 @@ type SaveState = "saved" | "saving" | "error";
 
 /** Keeps a page's edits and writes them a moment after the last one, or at once on flush. */
 function useSaver(id: string | null, onSaved: (n: Note) => void) {
-  const pending = useRef<{ title?: string; doc?: NoteDoc; scene?: CanvasScene } | null>(null);
+  const pending = useRef<{ title?: string; doc?: NoteDoc; scene?: CanvasScene; content?: string } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [state, setState] = useState<SaveState>("saved");
   const idRef = useRef(id);
@@ -96,7 +100,7 @@ function useSaver(id: string | null, onSaved: (n: Note) => void) {
     };
   }, [flush]);
   const queue = useCallback(
-    (patch: { title?: string; doc?: NoteDoc; scene?: CanvasScene }) => {
+    (patch: { title?: string; doc?: NoteDoc; scene?: CanvasScene; content?: string }) => {
       pending.current = { ...pending.current, ...patch };
       setState("saving");
       if (timer.current) clearTimeout(timer.current);
@@ -169,7 +173,7 @@ function TreeRow({ n, depth, tree, open, setOpen, current, onPick, onAdd, onMenu
           <ChevronRight className={cn("size-3.5 transition-transform duration-150", expanded && "rotate-90")} />
         </button>
         <span className="note-row-icon" aria-hidden>
-          {folder && !n.icon ? (expanded && kids.length ? <FolderOpen className="size-4" /> : <Folder className="size-4" />) : <NoteIcon icon={n.icon} size={18} fallback={fallbackIcon(n)} />}
+          {folder && !n.icon ? (expanded && kids.length ? <FolderOpen className="size-4" /> : <Folder className="size-4" />) : isFile(n) && !n.icon ? <FileCode2 className="size-4" /> : <NoteIcon icon={n.icon} size={18} fallback={fallbackIcon(n)} />}
         </span>
         {editing ? (
           <RenameInput initial={n.title || (folder ? "New folder" : "")} onDone={(t) => rename.done(n.id, t)} />
@@ -280,7 +284,7 @@ function FolderView({ folder, kids, onPick, onAdd, onAddFolder, onMakePage, onOp
         <div className="note-folder-list">
           {kids.map((k) => (
             <button key={k.id} type="button" className="note-folder-item" onClick={() => (isFolder(k) ? (onOpenFolder(k.id), onPick(k.id)) : onPick(k.id))}>
-              <span className="note-row-icon" aria-hidden>{isFolder(k) && !k.icon ? <Folder className="size-4" /> : <NoteIcon icon={k.icon} size={18} />}</span>
+              <span className="note-row-icon" aria-hidden>{isFolder(k) && !k.icon ? <Folder className="size-4" /> : isFile(k) && !k.icon ? <FileCode2 className="size-4" /> : <NoteIcon icon={k.icon} size={18} />}</span>
               <span className="min-w-0 flex-1 truncate">{display(k)}</span>
               <ChevronRight className="size-4 text-muted-foreground" />
             </button>
@@ -595,7 +599,8 @@ async function exportNote(note: Note, format: "md" | "html") {
     const url = URL.createObjectURL(await res.blob());
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${(note.title.trim() || "Untitled").replace(/[\\/:*?"<>|]+/g, " ").trim()}.${note.kind === "canvas" ? "excalidraw" : note.kind === "pdf" ? "pdf" : format}`;
+    const base = (note.title.trim() || (isFile(note) ? "untitled.txt" : "Untitled")).replace(/[\\/:*?"<>|]+/g, " ").trim();
+    a.download = isFile(note) ? base : `${base}.${note.kind === "canvas" ? "excalidraw" : note.kind === "pdf" ? "pdf" : format}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -638,9 +643,9 @@ const IMAGE = /\.(png|jpe?g|gif|webp|svg|avif)$/i;
 /** Reads a picked folder (or files) and imports its markdown, uploading its images first. */
 async function importPicked(files: FileList, parentId: string | null) {
   const list = [...files].filter((f) => !(f.webkitRelativePath || f.name).split("/").some((p) => p.startsWith(".")));
-  const md = list.filter((f) => /\.(md|markdown)$/i.test(f.name));
+  const md = list.filter((f) => /\.(md|markdown)$/i.test(f.name) || isTextFile(f.name));
   const pdfFiles = list.filter((f) => /\.pdf$/i.test(f.name));
-  if (!md.length && !pdfFiles.length) throw new Error("no markdown files or PDFs in what you picked");
+  if (!md.length && !pdfFiles.length) throw new Error("no markdown, code files or PDFs in what you picked");
   const media: Record<string, string> = {};
   for (const f of list.filter((f) => IMAGE.test(f.name))) {
     const m = await api.uploadMedia(f);
@@ -763,6 +768,157 @@ function PdfNoteView({ note, all, onPick }: { note: Note; all: NoteSummary[]; on
   );
 }
 
+// ---------------------------------------------------------------- a file
+
+const WRAP_KEY = "etude.notes.wrap";
+/** Per-file wrap choice; files without one wrap when they read like prose (.tex, .txt). */
+function wrapOf(id: string, name: string): boolean {
+  try {
+    const v = (JSON.parse(localStorage.getItem(WRAP_KEY) ?? "{}") as Record<string, boolean>)[id];
+    if (typeof v === "boolean") return v;
+  } catch {}
+  // Phones wrap everything by default: sideways scrolling on a narrow screen loses the line.
+  return wrapsByDefault(name) || matchMedia("(max-width: 767px)").matches;
+}
+function saveWrap(id: string, on: boolean) {
+  try {
+    const m = JSON.parse(localStorage.getItem(WRAP_KEY) ?? "{}") as Record<string, boolean>;
+    m[id] = on;
+    localStorage.setItem(WRAP_KEY, JSON.stringify(m));
+  } catch {}
+}
+
+/** A code or text file (main.py, report.tex): its name in the top bar and a plain editor filling the rest. */
+function FileView({ note, all, onTitle, onContent, saveState, onPick, onSave, onBack }: {
+  note: Note;
+  all: NoteSummary[];
+  onTitle(t: string): void;
+  onContent(c: string): void;
+  saveState: SaveState;
+  onPick(id: string): void;
+  onSave(): void;
+  onBack?: () => void;
+}) {
+  const [t, setT] = useState(note.title);
+  const host = useRef<HTMLDivElement>(null);
+  const ed = useRef<FileEditorHandle | null>(null);
+  const vim = useVimMode();
+  const [wrap, setWrap] = useState(() => wrapOf(note.id, note.title));
+  const [pos, setPos] = useState({ line: 1, col: 1, sel: 0 });
+  const [mode, setMode] = useState<string | null>(null);
+  const cb = useRef({ onContent, onSave });
+  cb.current = { onContent, onSave };
+  const crumbs = useMemo(() => {
+    const by = new Map(all.map((n) => [n.id, n]));
+    const out: NoteSummary[] = [];
+    for (let p = note.parentId ? by.get(note.parentId) : undefined; p; p = p.parentId ? by.get(p.parentId) : undefined) out.unshift(p);
+    return out;
+  }, [all, note.parentId]);
+  const strip = useContext(NoteTabsCtx);
+  const plus = useContext(NotePlusCtx);
+  useEffect(() => {
+    if (!host.current) return;
+    const h = createFileEditor(host.current, {
+      value: note.content ?? "",
+      name: note.title,
+      vim,
+      wrap,
+      onChange: (v) => cb.current.onContent(v),
+      onSave: () => cb.current.onSave(),
+      onVimMode: setMode,
+    });
+    ed.current = h;
+    const where = () => {
+      const st = h.view.state;
+      const r = st.selection.main;
+      const line = st.doc.lineAt(r.head);
+      setPos({ line: line.number, col: r.head - line.from + 1, sel: Math.abs(r.to - r.from) });
+    };
+    const obs = h.view.dom.addEventListener.bind(h.view.dom);
+    obs("keyup", where);
+    obs("mouseup", where);
+    // A new, empty file starts with the cursor in it; one with something in it waits for a click.
+    if (!note.content) setTimeout(() => h.focus(), 0);
+    return () => {
+      h.destroy();
+      ed.current = null;
+    };
+    // The editor lives as long as this file is open; name, Vim and wrap change it in place below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note.id]);
+  useEffect(() => void ed.current?.setVim(vim), [vim]);
+  useEffect(() => ed.current?.setWrap(wrap), [wrap]);
+  // .m highlights with Octave's grammar, which is MATLAB's; call it what you'd call it.
+  const language = /\.m$/i.test(t) ? "MATLAB" : fileLanguage(t)?.name ?? "Plain text";
+  const lines = ed.current?.view.state.doc.lines;
+  return (
+    <article className="note-page note-canvas-page note-file-page">
+      <div className="note-topbar">
+        {onBack && (
+          <button type="button" className="note-back" onClick={onBack} aria-label="Back to Notes">
+            <ChevronRight className="size-4 rotate-180" /> Notes
+          </button>
+        )}
+        {strip}
+        <nav aria-label="Path" className={cn("flex min-w-0 flex-1 items-center gap-1 text-[13px] text-muted-foreground", strip && "note-canvas-name")}>
+          {!strip && crumbs.map((c) => (
+            <span key={c.id} className="flex min-w-0 items-center gap-1">
+              <button className="truncate rounded px-1 hover:text-foreground" onClick={() => onPick(c.id)}>{display(c)}</button>
+              <ChevronRight className="size-3 shrink-0 opacity-60" />
+            </span>
+          ))}
+          <input
+            value={t}
+            placeholder="untitled.txt"
+            aria-label="File name"
+            spellCheck={false}
+            className="note-canvas-title note-file-name"
+            onChange={(e) => {
+              const v = e.target.value.replace(/[\n/]/g, "");
+              setT(v);
+              onTitle(v);
+              ed.current?.setName(v);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === "ArrowDown") {
+                e.preventDefault();
+                ed.current?.focus();
+              }
+            }}
+          />
+        </nav>
+        {plus}
+        <span className="flex shrink-0 items-center gap-2">
+          <span className={cn("note-save", saveState)} aria-live="polite">{saveState === "saving" ? "Saving…" : saveState === "error" ? "Not saved" : "Saved"}</span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" aria-label="File options" className="note-row-act is-visible"><MoreHorizontal className="size-4" /></button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56" onCloseAutoFocus={(e) => (e.preventDefault(), ed.current?.focus())}>
+              <DropdownMenuItem onSelect={() => setWrap((w) => (saveWrap(note.id, !w), !w))}>
+                <Check className={cn("size-4", !wrap && "opacity-0")} /> Wrap long lines
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void setVimMode(!vim)?.catch((e: Error) => toast.error(`Couldn't save: ${e.message}`))}>
+                <Check className={cn("size-4", !vim && "opacity-0")} /> Vim keys
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => void exportNote({ ...note, title: t }, "md")}><Download className="size-4" /> Download {t.trim() || "untitled.txt"}</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </span>
+      </div>
+      <div ref={host} className={cn("note-file-editor", vim && "is-vim")} />
+      <div className="note-file-status" aria-label="File status">
+        {vim && mode && <span className={cn("note-vim-mode", `is-${mode.split(" ")[0]}`)} aria-live="polite">{mode.toUpperCase()}</span>}
+        <span>{language}</span>
+        <span className="tabular-nums">Ln {pos.line}, Col {pos.col}{pos.sel ? ` · ${pos.sel} selected` : ""}</span>
+        {lines !== undefined && <span className="tabular-nums max-sm:hidden">{lines} line{lines === 1 ? "" : "s"}</span>}
+        <span className="max-sm:hidden">{wrap ? "Wrap" : "No wrap"}</span>
+      </div>
+    </article>
+  );
+}
+
 // ---------------------------------------------------------------- tabs
 
 /** The open pages as tabs over the page, once there's more than one. Middle click or × closes one. */
@@ -805,7 +961,7 @@ function NoteTabs({ tabs, all, current, onPick, onClose }: { tabs: string[]; all
             onAuxClick={(e) => e.button === 1 && onClose(tid)}
             onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onPick(tid))}
           >
-            <span className="note-tab-icon" aria-hidden><NoteIcon icon={n.icon} size={15} /></span>
+            <span className="note-tab-icon" aria-hidden>{isFile(n) && !n.icon ? <FileCode2 className="size-3.5" /> : <NoteIcon icon={n.icon} size={15} />}</span>
             <span className={cn("min-w-0 flex-1 truncate", !n.title.trim() && "text-muted-foreground")}>{display(n)}</span>
             <button
               type="button"
@@ -947,10 +1103,11 @@ export function NotesPage({ id }: { id: string | null }) {
   );
 
   const add = useCallback(
-    async (parentId: string | null, kind: "page" | "canvas" = "page") => {
+    async (parentId: string | null, kind: "page" | "canvas" | "file" = "page") => {
       try {
         await saver.flush();
-        const n = await api.createNote({ title: "", parentId, kind });
+        // A file gets a name ready to edit, so it highlights as soon as you change the extension.
+        const n = await api.createNote({ title: kind === "file" ? "untitled.py" : "", parentId, kind });
         if (parentId) setOpen(parentId, true);
         await reload();
         setNote(n);
@@ -1056,10 +1213,11 @@ export function NotesPage({ id }: { id: string | null }) {
       ...(isFolder(n) ? [] : [{ label: "Open", onSelect: () => pick(n.id) }, { label: "Open in new tab", onSelect: () => pick(n.id, "new") }]),
       { label: "New page inside", onSelect: () => void add(n.id) },
       { label: "New canvas inside", onSelect: () => void add(n.id, "canvas") },
+      { label: "New code file inside", onSelect: () => void add(n.id, "file") },
       { label: "New folder inside", onSelect: () => void addFolder(n.id) },
       { label: "Add a PDF inside…", onSelect: () => pickPdf(n.id) },
       { label: "Rename", onSelect: () => setRenaming(n.id) },
-      n.kind === "canvas" || n.kind === "pdf"
+      n.kind === "canvas" || n.kind === "pdf" || isFile(n)
         ? "sep"
         : isFolder(n)
         ? { label: "Turn into a page", onSelect: () => void setKind(n, "page") }
@@ -1171,7 +1329,7 @@ export function NotesPage({ id }: { id: string | null }) {
       }
       const r = await importPicked(files, null);
       await reload();
-      toast.success(`Imported ${r.pages} page${r.pages === 1 ? "" : "s"}${r.pdfs ? `, ${r.pdfs} PDF${r.pdfs === 1 ? "" : "s"}` : ""}${r.links ? `, ${r.links} link${r.links === 1 ? "" : "s"}` : ""}${r.unresolved ? ` (${r.unresolved} to pages that don't exist yet)` : ""}`, { id: t });
+      toast.success(`Imported ${r.pages} page${r.pages === 1 ? "" : "s"}${r.pdfs ? `, ${r.pdfs} PDF${r.pdfs === 1 ? "" : "s"}` : ""}${r.files ? `, ${r.files} file${r.files === 1 ? "" : "s"}` : ""}${r.links ? `, ${r.links} link${r.links === 1 ? "" : "s"}` : ""}${r.unresolved ? ` (${r.unresolved} to pages that don't exist yet)` : ""}`, { id: t });
       const first = r.root ?? r.ids[0];
       if (first) navigate(`/notes?id=${encodeURIComponent(first)}`);
     } catch (e) {
@@ -1184,6 +1342,7 @@ export function NotesPage({ id }: { id: string | null }) {
     registerNotesActions((a) => {
       if (a === "new") void add(null);
       else if (a === "new-canvas") void add(null, "canvas");
+      else if (a === "new-file") void add(null, "file");
       else if (a === "new-folder") void addFolder(null);
       else if (a === "add-pdf") pickPdf(null);
       else if (a === "import-md") fileInput.current?.click();
@@ -1217,7 +1376,7 @@ export function NotesPage({ id }: { id: string | null }) {
   const pickers = (
     <>
       <input ref={folderInput} type="file" className="hidden" {...({ webkitdirectory: "", directory: "" } as any)} multiple onChange={(e) => void runImport(e.target.files).finally(() => (e.target.value = ""))} />
-      <input ref={fileInput} type="file" className="hidden" accept=".md,.markdown,text/markdown,.excalidraw,.json,.pdf,application/pdf" multiple onChange={(e) => void runImport(e.target.files).finally(() => (e.target.value = ""))} />
+      <input ref={fileInput} type="file" className="hidden" accept=".md,.markdown,text/markdown,.excalidraw,.json,.pdf,application/pdf,.py,.tex,.bib,.sty,.cls,.js,.ts,.tsx,.jsx,.c,.h,.cpp,.hpp,.java,.go,.rs,.m,.r,.jl,.sh,.sql,.yaml,.yml,.toml,.txt,.csv,.html,.css" multiple onChange={(e) => void runImport(e.target.files).finally(() => (e.target.value = ""))} />
       <input ref={pdfInput} type="file" className="hidden" accept=".pdf,application/pdf" multiple onChange={(e) => void addPdfs(e.target.files, pdfParent.current).finally(() => (e.target.value = ""))} />
     </>
   );
@@ -1272,7 +1431,7 @@ export function NotesPage({ id }: { id: string | null }) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-60">
                   <DropdownMenuItem onSelect={() => folderInput.current?.click()}>Import a folder (Obsidian vault)…</DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => fileInput.current?.click()}>Import Markdown or .excalidraw files…</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => fileInput.current?.click()}>Import Markdown, code or .excalidraw files…</DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => pickPdf(null)}>Add a PDF…</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -1299,6 +1458,9 @@ export function NotesPage({ id }: { id: string | null }) {
             <button type="button" onClick={() => void add(null, "canvas")} className="note-row note-new">
               <PenTool className="size-3.5" /> New canvas
             </button>
+            <button type="button" onClick={() => void add(null, "file")} className="note-row note-new">
+              <FileCode2 className="size-3.5" /> New code file
+            </button>
           </div>
         </aside>
       )}
@@ -1306,7 +1468,22 @@ export function NotesPage({ id }: { id: string | null }) {
         <NoteTabsCtx.Provider value={shownTabs > 1 ? tabStrip : null}>
         <NotePlusCtx.Provider value={tabPlus}>
         <section className="notes-main">
-          {note && note.id === current && note.kind === "pdf" ? (
+          {note && note.id === current && isFile(note) ? (
+            <FileView
+              key={note.id}
+              note={note}
+              all={list ?? []}
+              saveState={saver.state}
+              onPick={pick}
+              onTitle={(title) => {
+                patchRow(note.id, { title });
+                saver.queue({ title });
+              }}
+              onContent={(content) => saver.queue({ content })}
+              onSave={() => void saver.flush()}
+              onBack={phone ? () => navigate("/notes") : undefined}
+            />
+          ) : note && note.id === current && note.kind === "pdf" ? (
             <PdfNoteView
               key={note.id}
               note={note}

@@ -15,6 +15,8 @@ import { chatGptNativeHost, readChatGptHostId } from "../core/chatgpt.ts";
 import { DEFAULT_PRESET, type Rating } from "../core/model.ts";
 import { MAX_MEDIA_BYTES, mediaType } from "../core/media.ts";
 import { cardFrame } from "./frame.ts";
+import { runFrameHtml } from "../core/run-frame.ts";
+import { pyodideFile } from "./pyodide.ts";
 import { ASSET_NAME, assetMime } from "../core/assets.ts";
 import { agentFor, AgentError, AGENT_MAX_ATTACHMENT_BYTES, type AgentEvent } from "../core/agent.ts";
 import { streamSSE } from "hono/streaming";
@@ -40,6 +42,12 @@ const MIME: Record<string, string> = {
   ".woff": "font/woff",
   ".ttf": "font/ttf",
   ".ico": "image/x-icon",
+  ".wasm": "application/wasm",
+  ".zip": "application/zip",
+  ".whl": "application/zip",
+  ".tar": "application/x-tar",
+  ".bcmap": "application/octet-stream",
+  ".pfb": "application/octet-stream",
 };
 
 /** Third-party files the card runtime imports, served from node_modules so nothing is vendored. */
@@ -71,7 +79,8 @@ export const APP_CSP = [
   "media-src 'self' data: blob: https:",
   "font-src 'self' data:",
   "connect-src 'self'",
-  "frame-src 'self'",
+  // Notes can embed YouTube (privacy-enhanced) and Vimeo players; nothing else frames in the app page.
+  "frame-src 'self' https://www.youtube-nocookie.com https://player.vimeo.com",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
@@ -255,7 +264,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.post("/api/media", async (c) => {
     if (!c.req.header("content-type")?.includes("application/octet-stream")) return c.json({ error: "expected application/octet-stream" }, 415);
     const name = c.req.query("name") ?? "";
-    if (!mediaType(name)) throw new EtudeError("unsupported media type; choose an image, audio or video file");
+    if (!mediaType(name)) throw new EtudeError("unsupported media type; choose an image, audio, video or PDF file");
     const reader = c.req.raw.body?.getReader();
     const chunks: Uint8Array[] = [];
     let bytes = 0;
@@ -816,6 +825,8 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
 
   // --------------------------------------------- card frames and runtime
   const frameAssets = (id: string) => ({ type: id, files: etude.typeAssets(id) });
+  // Runs code from a note's code blocks (src/core/run-frame.ts): sandboxed, no access to the app.
+  app.get("/frame/run", (c) => c.body(runFrameHtml(publicBase(c)), 200, FRAME_HEADERS));
   app.get("/frame/:type", (c) => {
     const def = etude.type(c.req.param("type"));
     const base = publicBase(c);
@@ -843,6 +854,26 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     // An unsaved edit of a stored type still reaches the stored assets.
     const id = typeof b.def?.id === "string" ? b.def.id : "";
     return c.json({ html: cardFrame(b.def, base, frameAssets(id)) });
+  });
+  // Python for code blocks. Pyodide's own files come with Etude; packages (numpy, matplotlib…) are fetched the
+  // first time a block imports them, checked against Pyodide's list of hashes, and kept in $ETUDE_HOME.
+  // pdf.js's fonts, character maps and decoders, for PDFs in Notes (the app loads pdf.js itself).
+  app.get("/runtime/pdfjs/:dir/:file", (c) => {
+    const dir = c.req.param("dir");
+    const f = c.req.param("file");
+    if (!["standard_fonts", "cmaps", "wasm"].includes(dir) || !/^[\w.-]+$/.test(f)) return c.text("not found", 404);
+    let root: string;
+    try {
+      root = dirname(require.resolve("pdfjs-dist/package.json"));
+    } catch {
+      return c.text("not found", 404);
+    }
+    return sendFile(c, join(root, dir, f), { cache: "public, max-age=604800" });
+  });
+  app.get("/runtime/pyodide/:file", async (c) => {
+    const f = await pyodideFile(c.req.param("file"), etude.home);
+    if (!f) return c.text("not found", 404, { "Access-Control-Allow-Origin": "*" });
+    return sendFile(c, f, { cors: true, cache: "public, max-age=604800" });
   });
   app.get("/runtime/vendor/*", (c) => {
     const name = c.req.path.slice("/runtime/vendor/".length);

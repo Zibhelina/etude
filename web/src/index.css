@@ -1563,3 +1563,54 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 .note-cards.note-canvas.is-on, .note-canvas.is-editing { outline: none; }
 .note-canvas-rest, .note-canvas-rest:hover { background: transparent; }
 .note-canvas-page .note-topbar { border-bottom: 0; box-shadow: none; }
+/* Notes: runnable code blocks */
+.note-code-run { position: absolute; top: 6px; right: 8px; z-index: 1; }
+.note-run-btn { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 7px; font: 600 12px var(--font-sans); color: var(--muted-foreground); background: color-mix(in oklab, var(--foreground) 6%, transparent); transition: background 120ms, color 120ms; }
+.note-run-btn:hover:not(:disabled) { background: var(--primary); color: var(--primary-foreground); }
+.note-run-btn:disabled { opacity: .45; }
+.note-run-btn.is-stop { color: var(--danger); }
+.note-run-btn.is-stop:hover { background: color-mix(in oklab, var(--danger) 16%, transparent); color: var(--danger); }
+.note-code.is-runnable pre { border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }
+.note-run-out { margin-top: 6px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--card); animation: note-run-in 160ms ease-out; }
+.note-run-out.is-error { border-color: color-mix(in oklab, var(--danger) 40%, var(--border)); }
+@keyframes note-run-in { from { opacity: 0; transform: translateY(-3px); } }
+.note-run-head { display: flex; align-items: center; justify-content: space-between; height: 30px; padding: 0 6px 0 12px; font: 500 12px var(--font-sans); color: var(--muted-foreground); border-bottom: 1px solid var(--border); }
+.note-run-out:not(:has(.note-run-body)):not(:has(.note-run-none)) .note-run-head { border-bottom: 0; }
+.note-run-clear { height: 22px; padding: 0 8px; border-radius: 6px; font-size: 12px; }
+.note-run-clear:hover { background: var(--accent); color: var(--foreground); }
+.note-run-body { max-height: 420px; overflow: auto; padding: 8px 12px 10px; }
+.note-run-text { margin: 0; font-family: var(--font-mono); font-size: 0.82em; line-height: 1.55; white-space: pre-wrap; word-break: break-word; color: var(--foreground); }
+.note-run-text.is-err { color: var(--danger); white-space: pre; overflow-x: auto; }
+.note-run-text.is-result { color: var(--muted-foreground); }
+.note-run-text.is-result::before { content: "→ "; opacity: .7; }
+.note-run-text + .note-run-text { margin-top: 4px; }
+.note-run-img { display: block; max-width: 100%; margin: 6px 0; border-radius: 8px; background: #fff; }
+.note-run-none { padding: 6px 12px 8px; font-size: 12px; color: var(--muted-foreground); font-style: italic; }
+@media (prefers-reduced-motion: reduce) { .note-run-out { animation: none; } }
+/* Notes: embeds (HTML / mini-game, video, PDF) */
+.note-embed { position: relative; margin: 0.9em auto; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card); }
+.note-embed.is-on { outline: 2px solid color-mix(in oklab, var(--highlight) 60%, transparent); outline-offset: 2px; }
+.note-embed:hover > .note-rs, .note-embed.is-resizing > .note-rs { opacity: 1; }
+.note-embed.is-resizing iframe, .note-embed.is-resizing video { pointer-events: none; }
+.note-embed-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 38px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; color: var(--muted-foreground); }
+.note-embed-frame { display: block; width: 100%; border: 0; background: transparent; }
+.note-embed-code { border-bottom: 1px solid var(--border); }
+.note-embed-code .cm-editor { max-height: 360px; }
+.note-embed-code .cm-scroller { font-size: 13px; }
+.note-video { display: block; width: 100%; max-height: 70vh; background: #000; }
+.note-yt { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; }
+.note-yt iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.note-embed-empty { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
+.note-embed-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; height: 120px; border: 1.5px dashed var(--border); border-radius: 10px; color: var(--muted-foreground); font-size: 13px; cursor: pointer; transition: border-color 120ms, background 120ms; }
+.note-embed-drop:hover, .note-embed-drop.is-over { border-color: var(--primary); background: color-mix(in oklab, var(--primary) 6%, transparent); color: var(--foreground); }
+.note-pdf { position: relative; overflow: auto; background: color-mix(in oklab, var(--foreground) 5%, var(--background)); }
+.note-pdf-page { position: relative; margin: 12px auto; box-shadow: 0 1px 3px rgb(0 0 0 / .18); background: #fff; }
+.note-pdf-page canvas { display: block; }
+.note-pdf-bar { display: flex; align-items: center; gap: 4px; font-weight: 500; }
+.note-pdf .textLayer { position: absolute; inset: 0; overflow: clip; opacity: 1; line-height: 1; transform-origin: 0 0; z-index: 1; }
+.note-pdf .textLayer :is(span, br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
+.note-pdf .textLayer { --min-font-size: 1; --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv: calc(1 / var(--min-font-size)); }
+.note-pdf .textLayer > :not(.markedContent), .note-pdf .textLayer .markedContent span:not(.markedContent) { z-index: 1; --font-height: 0; font-size: calc(var(--text-scale-factor) * var(--font-height)); --scale-x: 1; --rotate: 0deg; transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
+.note-pdf .textLayer .markedContent { display: contents; }
+.note-pdf .textLayer ::selection { background: color-mix(in oklab, #3b82f6 35%, transparent); }
+.note-pdf .textLayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: 0; cursor: default; user-select: none; }

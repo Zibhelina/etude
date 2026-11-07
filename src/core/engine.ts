@@ -507,7 +507,7 @@ export class Etude {
   storeMedia(name: string, data: Uint8Array, opts: { dryRun?: boolean } = {}) {
     if (typeof name !== "string" || !name.trim()) throw new EtudeError("a media filename is required");
     const type = mediaType(name);
-    if (!type) throw new EtudeError("unsupported media type; choose an image, audio or video file");
+    if (!type) throw new EtudeError("unsupported media type; choose an image, audio, video or PDF file");
     if (!data.byteLength) throw new EtudeError("the media file is empty");
     if (data.byteLength > MAX_MEDIA_BYTES) throw new EtudeError("media files must be 100 MiB or smaller");
     const hash = createHash("sha256").update(data).digest("hex");
@@ -648,7 +648,7 @@ export class Etude {
     }
     if (path.startsWith("~/")) path = join(homedir(), path.slice(2));
     path = resolve(path);
-    if (!mediaType(path)) throw new EtudeError("unsupported media type; choose an image, audio or video file");
+    if (!mediaType(path)) throw new EtudeError("unsupported media type; choose an image, audio, video or PDF file");
     let data: Buffer;
     try {
       const stat = statSync(path);

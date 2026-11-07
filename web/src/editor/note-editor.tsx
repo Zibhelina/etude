@@ -1,7 +1,7 @@
 // The note editor (beta): Tiptap (ProseMirror) with markdown shortcuts as you type (# heading, - list,
 // [] to-do, > quote, ``` code, --- divider, **bold**, *italic*, `code`), the "/" menu, a bubble bar for a
 // selection and code blocks coloured by language. The document is ProseMirror JSON, which is what's stored.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EditorContent, NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type Editor, type NodeViewProps } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
@@ -16,6 +16,7 @@ import { Callout } from "./note-callout";
 import { CardMark, NoteCards } from "./note-cards";
 import { NoteCard } from "./note-card";
 import { CanvasEmbed } from "./note-canvas";
+import { NoteEmbeds } from "./note-embed";
 import { TableKit } from "@tiptap/extension-table";
 import { Details, DetailsContent, DetailsSummary } from "@tiptap/extension-details";
 import FileHandler from "@tiptap/extension-file-handler";
@@ -37,7 +38,8 @@ async function insertImages(editor: Editor, files: File[], pos?: number) {
     }
   }
 }
-import { Bold, Code, Italic, Link2, Strikethrough, Underline } from "lucide-react";
+import { Bold, Check, Code, Italic, Link2, Loader2, Play, Square, Strikethrough, Underline, X } from "lucide-react";
+import { runCode, runLanguage } from "./note-run";
 import { NoteCodeHighlight } from "./note-code-highlight";
 import { NoteStyle } from "./note-style";
 import { BlockHandle } from "./note-handle";
@@ -48,12 +50,28 @@ import { languageName } from "./highlight";
 import type { NoteDoc } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-/** A code block with its language shown in the corner; click it to change. */
-function CodeBlockView({ node, updateAttributes }: NodeViewProps) {
+/** A code block with its language shown in the corner; click it to change. JavaScript and Python blocks get a
+ * Run button (or Ctrl/⌘+Enter inside the block) and show what the code printed under it. The output isn't
+ * saved with the page: it's there until you run again, clear it or leave. */
+function CodeBlockView({ node, updateAttributes, editor, getPos }: NodeViewProps) {
   const [edit, setEdit] = useState(false);
   const lang = String(node.attrs.language ?? "");
+  const runs = runLanguage(lang);
+  const run = useCodeRun();
+  const code = node.textContent;
+  // Ctrl/⌘+Enter in this block runs it (the editor sends the event to the block holding the cursor).
+  useEffect(() => {
+    if (!runs) return;
+    const on = (e: Event) => {
+      const at = (e as CustomEvent<number>).detail;
+      const pos = typeof getPos === "function" ? getPos() : -1;
+      if (typeof pos === "number" && at >= pos && at <= pos + node.nodeSize) run.start(runs, node.textContent);
+    };
+    editor.view.dom.addEventListener("etude:run-code", on);
+    return () => editor.view.dom.removeEventListener("etude:run-code", on);
+  }, [runs, editor, getPos, node, run]);
   return (
-    <NodeViewWrapper as="div" className="note-code">
+    <NodeViewWrapper as="div" className={cn("note-code", runs && "is-runnable")}>
       <div className="note-code-lang" contentEditable={false}>
         {edit ? (
           <input
@@ -76,12 +94,99 @@ function CodeBlockView({ node, updateAttributes }: NodeViewProps) {
           <button type="button" onClick={() => setEdit(true)}>{lang ? languageName(lang) : "Plain text"}</button>
         )}
       </div>
+      {runs && (
+        <div className="note-code-run" contentEditable={false}>
+          {run.state.running ? (
+            <button type="button" className="note-run-btn is-stop" onClick={run.stop} title="Stop">
+              <Square className="size-2.5 fill-current" /> Stop
+            </button>
+          ) : (
+            <button type="button" className="note-run-btn" onClick={() => run.start(runs, code)} disabled={!code.trim()} title={`Run (${MOD}+Enter)`}>
+              <Play className="size-3 fill-current" /> Run
+            </button>
+          )}
+        </div>
+      )}
       <pre>
         <NodeViewContent<"code"> as="code" />
       </pre>
+      {runs && <RunOutput state={run.state} onClear={run.clear} />}
     </NodeViewWrapper>
   );
 }
+
+const MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
+
+type RunState = { running: boolean; status: string; parts: ({ kind: "text"; stream: string; text: string } | { kind: "image"; src: string })[]; done: null | { ok: boolean; ms: number } };
+const IDLE: RunState = { running: false, status: "", parts: [], done: null };
+const MAX_OUT = 200_000;
+
+function useCodeRun() {
+  const [state, setState] = useState<RunState>(IDLE);
+  const stopRef = useRef<null | (() => void)>(null);
+  const api = useMemo(
+    () => ({
+      start(lang: "js" | "python", code: string) {
+        stopRef.current?.();
+        setState({ ...IDLE, running: true });
+        let size = 0;
+        stopRef.current = runCode(lang, code, (e) =>
+          setState((s) => {
+            if (e.type === "status") return { ...s, status: e.text };
+            if (e.type === "done") return { ...s, running: false, status: "", done: { ok: e.ok, ms: e.ms } };
+            if (e.type === "image") return { ...s, parts: [...s.parts, { kind: "image", src: e.src }] };
+            if (size > MAX_OUT) return s;
+            size += e.text.length;
+            const text = size > MAX_OUT ? e.text.slice(0, Math.max(0, e.text.length - (size - MAX_OUT))) + "\n… (more output cut)\n" : e.text;
+            const last = s.parts[s.parts.length - 1];
+            if (last?.kind === "text" && last.stream === e.stream) return { ...s, parts: [...s.parts.slice(0, -1), { ...last, text: last.text + text }] };
+            return { ...s, parts: [...s.parts, { kind: "text", stream: e.stream, text }] };
+          }),
+        );
+      },
+      stop() {
+        stopRef.current?.();
+      },
+      clear() {
+        stopRef.current = null;
+        setState(IDLE);
+      },
+    }),
+    [],
+  );
+  useEffect(() => () => stopRef.current?.(), []);
+  return { state, ...api };
+}
+
+function RunOutput({ state, onClear }: { state: RunState; onClear(): void }) {
+  if (!state.running && !state.done) return null;
+  const empty = !state.parts.length;
+  return (
+    <div className={cn("note-run-out", state.done && !state.done.ok && "is-error")} contentEditable={false} aria-live="polite">
+      <div className="note-run-head">
+        <span className="flex items-center gap-1.5">
+          {state.running ? <Loader2 className="size-3 animate-spin" /> : state.done?.ok ? <Check className="size-3 text-[var(--success)]" /> : <X className="size-3 text-[var(--danger)]" />}
+          {state.running ? state.status || "Running…" : state.done?.ok ? `Ran in ${fmtMs(state.done.ms)}` : "Error"}
+        </span>
+        {!state.running && (
+          <button type="button" onClick={onClear} className="note-run-clear" title="Clear the output">
+            Clear
+          </button>
+        )}
+      </div>
+      {!empty && (
+        <div className="note-run-body">
+          {state.parts.map((p, i) =>
+            p.kind === "image" ? <img key={i} src={p.src} alt="Plot" className="note-run-img" /> : <div key={i} className={cn("note-run-text", p.stream === "err" && "is-err", p.stream === "result" && "is-result")}>{p.text.replace(/\n$/, "")}</div>,
+          )}
+        </div>
+      )}
+      {empty && state.done?.ok && <div className="note-run-none">No output</div>}
+    </div>
+  );
+}
+
+const fmtMs = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`);
 
 const CodeBlockWithLang = CodeBlock.extend({
   addNodeView() {
@@ -219,6 +324,7 @@ export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page }
       CardMark,
       NoteCard.configure({ page: () => pageRef.current ?? null }),
       CanvasEmbed.configure({ page: () => pageRef.current ?? null }),
+      ...NoteEmbeds,
       Callout,
       TableKit.configure({ table: { resizable: true, cellMinWidth: 80 } }),
       Details.configure({ persist: true, HTMLAttributes: { class: "note-toggle" } }),
@@ -266,6 +372,13 @@ export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page }
         if (sel.node?.type?.name === "canvasEmbed" && e.key.length === 1 && !e.ctrlKey && !e.metaKey) return true;
         // A key pressed while drawing in an embedded canvas is the board's, never the page's.
         if ((e.target as HTMLElement | null)?.closest?.(".note-canvas-board") || document.activeElement?.closest?.(".note-canvas-board")) return true;
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+          const { $from } = view.state.selection;
+          if ($from.parent.type.name === "codeBlock" && runLanguage($from.parent.attrs.language)) {
+            view.dom.dispatchEvent(new CustomEvent("etude:run-code", { detail: $from.pos }));
+            return true;
+          }
+        }
         if (e.key === "ArrowUp" && view.state.selection.from <= 1 && up.current) {
           up.current();
           return true;

@@ -346,7 +346,7 @@ export interface StoredMedia {
   path: string;
   url: string;
   mime: string;
-  kind: "image" | "audio" | "video";
+  kind: "image" | "audio" | "video" | "document";
   bytes: number;
   created: boolean;
   dryRun: boolean;

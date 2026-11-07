@@ -512,7 +512,69 @@ export interface OptimizeResult {
   applied: boolean;
 }
 
+/** Notes (beta): a page in the notes tree. */
+/** A canvas's drawing: Excalidraw's elements, with pictures named by their media file. */
+export interface CanvasScene {
+  type: "excalidraw";
+  version: 2;
+  elements: Record<string, any>[];
+  appState: { viewBackgroundColor?: string; gridSize?: number | null; gridModeEnabled?: boolean };
+  files: Record<string, { mimeType: string; media: string; created?: number }>;
+}
+/** A canvas's drawing: Excalidraw's elements, with pictures named by their media file. */
+export interface CanvasScene {
+  type: "excalidraw";
+  version: 2;
+  elements: Record<string, any>[];
+  appState: { viewBackgroundColor?: string; gridSize?: number | null; gridModeEnabled?: boolean };
+  files: Record<string, { mimeType: string; media: string; created?: number }>;
+}
+export interface NoteSummary {
+  /** A page you write in, a canvas you draw on, or a folder of pages. */
+  id: string;
+  /** A folder only holds pages; it has no body of its own. */
+  kind?: "page" | "folder" | "canvas";
+  parentId: string | null;
+  title: string;
+  icon: string | null;
+  look: NoteLook;
+  position: number;
+  archived: boolean;
+  created: string;
+  updated: string;
+  children: number;
+  empty?: boolean;
+}
+export interface NoteLook {
+  cover?: { kind: "preset"; id: string } | { kind: "image"; media: string; y: number };
+  width?: "normal" | "wide" | "full";
+  font?: "sans" | "serif" | "mono";
+  size?: "small" | "normal" | "large";
+}
+export interface NoteDoc { type: string; attrs?: Record<string, unknown>; content?: NoteDoc[]; text?: string; marks?: { type: string; attrs?: Record<string, unknown> }[] }
+/** Notes as a graph: pages (and ghosts for links to pages that don't exist yet) and the lines between them. */
+export interface NoteGraph {
+  nodes: { id: string; kind: "page" | "folder" | "canvas" | "ghost"; title: string; icon: string | null; parentId: string | null; links: number; created: string | null; tags: string[] }[];
+  links: { from: string; to: string; kind: "link" | "parent" }[];
+}
+export interface Note extends NoteSummary { doc: NoteDoc; text: string; scene: CanvasScene | null }
+
 export const api = {
+  notes: (archived = false) => call<NoteSummary[]>("GET", `/api/notes${qs({ archived: archived ? 1 : undefined })}`),
+  note: (id: string) => call<Note>("GET", `/api/notes/${encodeURIComponent(id)}`),
+  searchNotes: (q: string, limit = 20) => call<(NoteSummary & { snippet: string })[]>("GET", `/api/notes/search${qs({ q, limit })}`),
+  createNote: (input: { title?: string; parentId?: string | null; doc?: NoteDoc; icon?: string | null; after?: string | null; kind?: "page" | "folder" | "canvas"; scene?: CanvasScene }) => call<Note>("POST", "/api/notes", input),
+  updateNote: (id: string, patch: { title?: string; doc?: NoteDoc; icon?: string | null; look?: NoteLook; kind?: "page" | "folder"; scene?: CanvasScene }) => call<Note>("PATCH", `/api/notes/${encodeURIComponent(id)}`, patch),
+  /** A .excalidraw file (its text) as a new canvas. */
+  importExcalidraw: (data: string, title: string, parentId: string | null = null) => call<Note>("POST", "/api/notes/import-excalidraw", { data, title, parentId }),
+  moveNote: (id: string, parentId: string | null, index?: number) => call<Note>("POST", `/api/notes/${encodeURIComponent(id)}/move`, { parentId, index }),
+  setNoteArchived: (id: string, archived: boolean) => call<{ ids: string[]; archived: boolean }>("POST", `/api/notes/${encodeURIComponent(id)}/archive`, { archived }),
+  noteGraph: () => call<NoteGraph>("GET", "/api/notes/graph"),
+  noteBacklinks: (id: string) => call<(NoteSummary & { snippet: string })[]>("GET", `/api/notes/${encodeURIComponent(id)}/backlinks`),
+  importNotes: (files: { path: string; text: string }[], media: Record<string, string>, parentId: string | null = null) =>
+    call<{ pages: number; folders: number; links: number; unresolved: number; root: string | null; ids: string[] }>("POST", "/api/notes/import", { files, media, parentId }),
+  noteExportUrl: (id: string, format: "md" | "html") => `/api/notes/${encodeURIComponent(id)}/export?format=${format}`,
+  deleteNote: (id: string) => call<{ ids: string[] }>("DELETE", `/api/notes/${encodeURIComponent(id)}`),
   uploadMedia: (file: File) => call<StoredMedia>("POST", `/api/media${qs({ name: file.name })}`, undefined, file),
   importMedia: (path: string) => call<StoredMedia>("POST", "/api/media/import", { path }),
   decks: (archived = false) => call<DeckNode[]>("GET", `/api/decks${qs({ archived: archived ? 1 : undefined })}`),

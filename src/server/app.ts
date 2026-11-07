@@ -293,6 +293,68 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   });
 
   // ------------------------------------------------------------- decks
+  // Notes (beta): pages with a document body.
+  app.get("/api/notes", (c) => c.json(etude.notes.list({ archived: c.req.query("archived") === "1" })));
+  app.get("/api/notes/graph", (c) => c.json(etude.notes.graph()));
+  app.get("/api/notes/search", (c) => c.json(etude.notes.search(c.req.query("q") ?? "", Number(c.req.query("limit") ?? 20) || 20)));
+  app.post("/api/notes", async (c) => {
+    const b = await body(c);
+    return c.json(etude.notes.create({ title: b.title, parentId: b.parentId ?? null, doc: b.doc, icon: b.icon, look: b.look, after: b.after ?? null, kind: b.kind, scene: b.scene }));
+  });
+  // A .excalidraw file as a canvas (its inline pictures go into the media).
+  app.post("/api/notes/import-excalidraw", async (c) => {
+    const b = await body(c);
+    const { sceneFromExcalidraw } = await import("../core/notes.ts");
+    if (typeof b.data !== "string" || b.data.length > 60 * 1024 * 1024) throw new EtudeError("give the drawing as data (the .excalidraw file's text, 60 MB at most)", b.data ? 413 : 400);
+    let raw: unknown;
+    try {
+      raw = JSON.parse(b.data);
+    } catch {
+      throw new EtudeError("that file isn't an Excalidraw drawing (not JSON)");
+    }
+    const scene = sceneFromExcalidraw(raw, (name, data) => etude.storeMedia(name, data));
+    const title = String(b.title ?? "").replace(/\.excalidraw(\.json)?$/i, "") || "Canvas";
+    return c.json(etude.notes.create({ title, parentId: b.parentId ?? null, kind: "canvas", scene }));
+  });
+  app.post("/api/notes/import", async (c) => {
+    const b = await body(c);
+    const files = Array.isArray(b.files) ? b.files.map((f: any) => ({ path: String(f?.path ?? ""), text: String(f?.text ?? "") })) : [];
+    if (files.reduce((n: number, f: { text: string }) => n + f.text.length, 0) > 50 * 1024 * 1024) throw new EtudeError("that's too much markdown at once (50 MB at most)", 413);
+    const media = b.media && typeof b.media === "object" ? Object.fromEntries(Object.entries(b.media).filter(([, v]) => typeof v === "string" && /^\/media\/files\/[0-9a-f]{64}\.[a-z0-9]+$/.test(v as string))) as Record<string, string> : {};
+    return c.json(etude.notes.importMarkdown(files, { parentId: b.parentId ?? null, media }));
+  });
+  app.get("/api/notes/:id", (c) => c.json(etude.notes.get(c.req.param("id"))));
+  app.get("/api/notes/:id/backlinks", (c) => c.json(etude.notes.backlinks(c.req.param("id"))));
+  app.get("/api/notes/:id/export", async (c) => {
+    const { docToHtml, docToMarkdown } = await import("../core/notes-md.ts");
+    const n = etude.notes.get(c.req.param("id"));
+    const html = c.req.query("format") === "html";
+    const name = (n.title.trim() || "Untitled").replace(/[\\/:*?"<>|]+/g, " ").trim();
+    if (n.kind === "canvas") {
+      const { sceneToExcalidraw } = await import("../core/notes.ts");
+      return new Response(JSON.stringify(sceneToExcalidraw(n.scene!, (m) => etude.readMediaFile(m)), null, 2), {
+        headers: { "content-type": "application/json; charset=utf-8", "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}.excalidraw` },
+      });
+    }
+    return new Response(html ? docToHtml(n.doc, n.title) : docToMarkdown(n.doc, n.title), {
+      headers: { "content-type": html ? "text/html; charset=utf-8" : "text/markdown; charset=utf-8", "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}.${html ? "html" : "md"}` },
+    });
+  });
+  app.patch("/api/notes/:id", async (c) => {
+    const b = await body(c);
+    return c.json(etude.notes.update(c.req.param("id"), { title: b.title, doc: b.doc, icon: b.icon, look: b.look, kind: b.kind, scene: b.scene }));
+  });
+  app.post("/api/notes/:id/move", async (c) => {
+    const b = await body(c);
+    const index = b.index === undefined || b.index === null ? undefined : Number(b.index);
+    return c.json(etude.notes.move(c.req.param("id"), b.parentId ?? null, index));
+  });
+  app.post("/api/notes/:id/archive", async (c) => {
+    const b = await body(c);
+    if (typeof b.archived !== "boolean") throw new EtudeError("archived must be a boolean");
+    return c.json(etude.notes.setArchived(c.req.param("id"), b.archived));
+  });
+  app.delete("/api/notes/:id", (c) => c.json(etude.notes.delete(c.req.param("id"))));
   app.get("/api/decks", (c) => c.json(etude.deckTree({ archived: c.req.query("archived") === "1" })));
   app.get("/api/decks/archive", (c) => c.json(etude.archiveSummary()));
   app.post("/api/decks", async (c) => {

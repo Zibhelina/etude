@@ -67,7 +67,8 @@ export function MinimiCorner({ onOpen, shortcut, rightOffset = "0px", talking = 
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button > 0) return;
-    faces.onPointerDown(e);
+    // Hold-for-faces is a touch gesture (phone, iPad); with a mouse a press is a click or a drag.
+    if (e.pointerType !== "mouse") faces.onPointerDown(e);
     const el = ref.current!;
     const r = el.getBoundingClientRect();
     const home = { x: view()[0] - W - MARGIN, y: view()[1] - H - MARGIN };
@@ -127,7 +128,7 @@ export function MinimiCorner({ onOpen, shortcut, rightOffset = "0px", talking = 
         Hm?
         <br />
         <b className="font-semibold">Ask me</b> <kbd className="ml-1 rounded-[5px] bg-muted px-1.5 py-px text-muted-foreground">{shortcut}</kbd>
-        <span className="mt-0.5 block text-[11.5px] text-muted-foreground/70">drag me, or hold to change my face</span>
+        <span className="mt-0.5 block text-[11.5px] text-muted-foreground/70">or drag me</span>
       </div>
       <button type="button" onClick={onOpen} aria-label={`Ask Minimi · ${shortcut}`} aria-expanded={talking} data-agent-launcher className="minimi-btn relative block size-full rounded-2xl outline-ring focus-visible:outline-2">
         <img src={read} alt="" draggable={false} className={cn("minimi-fr", !page && "on")} />

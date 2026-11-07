@@ -1724,6 +1724,8 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 .notes-split.is-multi { position: sticky; top: 0; height: 100dvh; overflow: hidden; }
 .notes-split.is-multi .note-pane-box { position: absolute; overflow: auto; overscroll-behavior: contain; }
 .notes-split.is-multi .note-pane { min-height: 100%; }
+/* A canvas, PDF or code file fills its pane (a percentage of min-height gives the board no height at all). */
+.notes-split.is-multi .note-pane:has(> .note-canvas-page) { height: 100%; }
 .notes-split.is-multi .note-canvas-page { height: 100%; }
 .notes-split.is-multi .note-sheet { padding: 32px 28px 30vh; }
 .notes-split.is-multi .note-topbar { padding: 0 12px 0 16px; }
@@ -1750,3 +1752,18 @@ body.note-tab-dragging, body.note-tab-dragging * { cursor: grabbing !important; 
 .note-drop-tabline { position: fixed; z-index: 60; width: 2px; pointer-events: none; border-radius: 2px; background: var(--primary); }
 .note-tab-ghost { position: fixed; left: 0; top: 0; z-index: 61; pointer-events: none; max-width: 200px; padding: 6px 11px; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--foreground); background: var(--card, var(--background)); border: 1px solid var(--border); border-radius: 9px; box-shadow: 0 6px 20px rgb(0 0 0 / 0.18); }
 @media (prefers-reduced-motion: reduce) { .note-drop-zone { transition: none; } }
+/* A canvas in a narrow pane: Excalidraw's desktop toolbar is ~550 px, so it tightens instead of running off the edge. */
+.note-canvas-board { container-type: inline-size; }
+@container (max-width: 760px) {
+  .note-canvas-board .excalidraw .App-menu_top { grid-template-columns: auto 1fr auto; grid-gap: 8px; }
+  .note-canvas-board .excalidraw .App-menu_top > :nth-child(2) { justify-self: center; min-width: 0; }
+  .note-canvas-board .excalidraw .App-toolbar-content { padding: 4px; gap: 0; }
+  .note-canvas-board .excalidraw .App-toolbar .ToolIcon__keybinding { display: none; }
+  .note-canvas-board .excalidraw .App-toolbar .ToolIcon, .note-canvas-board .excalidraw .App-toolbar .ToolIcon__icon { width: 30px; height: 30px; }
+  .note-canvas-board .excalidraw .App-toolbar .Stack_horizontal { gap: 2px; }
+  .note-canvas-board .excalidraw .HintViewer { display: none; }
+}
+@container (max-width: 560px) {
+  .note-canvas-board .excalidraw .App-toolbar .ToolIcon, .note-canvas-board .excalidraw .App-toolbar .ToolIcon__icon { width: 26px; height: 26px; }
+  .note-canvas-board .excalidraw .App-toolbar .ToolIcon__icon svg { width: 15px; height: 15px; }
+}

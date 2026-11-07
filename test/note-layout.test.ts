@@ -71,3 +71,16 @@ test("archived pages leave, empty panes close, bad storage is refused", () => {
   assert.equal(normalizeLayout({ root: { k: "split", dir: "diag", a: {}, b: {} } }), null);
   assert.equal(normalizeLayout(null), null);
 });
+
+test("a page dragged in from the sidebar opens where it lands", async () => {
+  const { dropPage } = await import("../web/src/lib/note-layout.ts");
+  let l = single(["a", "b"], "a");
+  const p0 = l.focus;
+  l = dropPage(l, "x", { pane: p0, before: "b" })!;
+  assert.deepEqual(ids(l), [["a", "x", "b"]]);
+  l = dropPage(l, "y", { pane: p0, side: "bottom" })!;
+  assert.deepEqual(ids(l), [["a", "x", "b"], ["y"]]);
+  // Already open: it moves from where it was.
+  l = dropPage(l, "a", { pane: l.focus, before: null })!;
+  assert.deepEqual(ids(l), [["x", "b"], ["y", "a"]]);
+});

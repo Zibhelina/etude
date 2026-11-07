@@ -177,6 +177,22 @@ export function moveTab(l: Layout, from: string, note: string, to: TabDrop): Lay
   return { root, focus: to.pane };
 }
 
+/** A page that isn't open yet, dropped into a pane: among its tabs (before one, or at the end) or at an edge as a new pane.
+ *  A page already open somewhere moves from there instead. Null means nothing changes. */
+export function dropPage(l: Layout, note: string, to: TabDrop): Layout | null {
+  const owner = panes(l.root).find((p) => p.tabs.includes(note));
+  if (owner) return moveTab(l, owner.id, note, to);
+  if (!findPane(l.root, to.pane)) return null;
+  if ("side" in to) return openSplit(l, to.pane, note, to.side);
+  const root = mapPane(l.root, to.pane, (p) => {
+    const tabs = [...p.tabs];
+    const at = to.before ? tabs.indexOf(to.before) : -1;
+    tabs.splice(at < 0 ? tabs.length : at, 0, note);
+    return { ...p, tabs, active: note };
+  });
+  return { root, focus: to.pane };
+}
+
 /** Pages that were archived or deleted leave their tabs; panes left empty close. */
 export function prune(l: Layout, exists: (id: string) => boolean): Layout {
   let root = l.root;

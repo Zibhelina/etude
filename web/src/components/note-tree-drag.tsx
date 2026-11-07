@@ -28,7 +28,12 @@ function scrollParent(el: HTMLElement | null): HTMLElement | null {
 /** Where a page goes: its parent and its place among the parent's pages (none = the end). */
 export type Placement = { id: string; parentId: string | null; index?: number };
 
-export function useNoteTreeDrag({ list, tree, open, setOpen, place, selected }: {
+type Box = { x: number; y: number; w: number; h: number };
+/** Somewhere outside the tree that takes a dropped page (the open pages, for split view). */
+export type OutsideDrop<D> = { hit(id: string, x: number, y: number): { drop: D; zone: Box | null; line: Box | null } | null; drop(id: string, d: D): void };
+
+export function useNoteTreeDrag<D = unknown>({ list, tree, open, setOpen, place, selected, outside }: {
+  outside?: OutsideDrop<D>;
   list: NoteSummary[] | null;
   tree: Tree;
   open: Set<string>;
@@ -38,9 +43,9 @@ export function useNoteTreeDrag({ list, tree, open, setOpen, place, selected }: 
   /** The pages selected right now (Shift+click), outermost only. */
   selected(): string[];
 }) {
-  const [drag, setDrag] = useState<{ id: string; count: number; x: number; y: number; drop: NoteDrop | null } | null>(null);
-  const live = useRef({ list, tree, open, setOpen, place, selected });
-  live.current = { list, tree, open, setOpen, place, selected };
+  const [drag, setDrag] = useState<{ id: string; count: number; x: number; y: number; drop: NoteDrop | null; out: { zone: Box | null; line: Box | null } | null } | null>(null);
+  const live = useRef({ list, tree, open, setOpen, place, selected, outside });
+  live.current = { list, tree, open, setOpen, place, selected, outside };
   const cleanup = useRef<(() => void) | null>(null);
   useEffect(() => () => cleanup.current?.(), []);
 
@@ -55,6 +60,7 @@ export function useNoteTreeDrag({ list, tree, open, setOpen, place, selected }: 
     let press: ReturnType<typeof setTimeout> | undefined;
     let auto: ReturnType<typeof setInterval> | undefined;
     let hover: { id: string; t: number } | null = null;
+    let out: { drop: D; zone: Box | null; line: Box | null } | null = null;
     const scroller = scrollParent(treeEl);
 
     // Pressing one of the selected pages drags the whole selection.
@@ -131,6 +137,15 @@ export function useNoteTreeDrag({ list, tree, open, setOpen, place, selected }: 
     const update = (x: number, y: number) => {
       lastX = x;
       lastY = y;
+      // Off the tree, over the open pages: one page (not a folder) can open there.
+      const offTree = !treeEl.contains(document.elementFromPoint(x, y)) && !(scroller ?? treeEl).contains(document.elementFromPoint(x, y));
+      out = offTree && moving.length === 1 && n.kind !== "folder" ? (live.current.outside?.hit(n.id, x, y) ?? null) : null;
+      if (offTree) {
+        drop = null;
+        hover = null;
+        setDrag({ id: n.id, count: moving.length, x, y, drop: null, out: out && { zone: out.zone, line: out.line } });
+        return;
+      }
       drop = dropAt(y);
       if (drop && (isNoop(drop) || sameParentInto(drop))) drop = drop.kind === "into" ? null : { ...drop, line: undefined };
       if (drop?.kind === "into" && drop.target && !live.current.open.has(drop.target) && (live.current.tree.get(drop.target) ?? []).length) {
@@ -140,7 +155,7 @@ export function useNoteTreeDrag({ list, tree, open, setOpen, place, selected }: 
           hover = null;
         }
       } else hover = null;
-      setDrag({ id: n.id, count: moving.length, x, y, drop });
+      setDrag({ id: n.id, count: moving.length, x, y, drop, out: null });
     };
 
     const begin = () => {
@@ -150,6 +165,7 @@ export function useNoteTreeDrag({ list, tree, open, setOpen, place, selected }: 
       navigator.vibrate?.(8);
       update(lastX, lastY);
       auto = setInterval(() => {
+        if (out || !treeEl.contains(document.elementFromPoint(lastX, lastY))) return;
         const box = (scroller ?? document.documentElement).getBoundingClientRect();
         const top = scroller ? box.top : 0, bottom = scroller ? box.bottom : innerHeight;
         const edge = 48;
@@ -207,6 +223,7 @@ export function useNoteTreeDrag({ list, tree, open, setOpen, place, selected }: 
         setTimeout(() => window.removeEventListener("click", eatClick, true), 0);
       }
       setDrag(null);
+      if (commit && active && out) return void live.current.outside?.drop(n.id, out.drop);
       const d = drop;
       if (!commit || !active || !d || d.line === undefined && d.kind === "line") return;
       const to = d.parent;
@@ -242,11 +259,13 @@ export function useNoteTreeDrag({ list, tree, open, setOpen, place, selected }: 
     drag &&
     createPortal(
       <>
+        {drag.out?.zone && <div className="note-drop-zone" style={{ left: drag.out.zone.x, top: drag.out.zone.y, width: drag.out.zone.w, height: drag.out.zone.h }} aria-hidden />}
+        {drag.out?.line && <div className="note-drop-tabline" style={{ left: drag.out.line.x, top: drag.out.line.y, height: drag.out.line.h }} aria-hidden />}
         {drag.drop?.line && (
           <div className="note-tree-line" style={{ left: drag.drop.line.x, top: drag.drop.line.y, width: drag.drop.line.w }} aria-hidden />
         )}
         {dragged && (
-          <div className={cn("note-drag-chip", !drag.drop && "is-nowhere")} style={{ left: drag.x + 18, top: drag.y + 16 }} aria-hidden>
+          <div className={cn("note-drag-chip", !drag.drop && !drag.out && "is-nowhere")} style={{ left: drag.x + 18, top: drag.y + 16 }} aria-hidden>
             <NoteIcon icon={dragged.icon} size={16} />
             <span className="truncate">{drag.count > 1 ? `${title(dragged)} and ${drag.count - 1} more` : title(dragged)}</span>
           </div>

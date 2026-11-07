@@ -10,7 +10,13 @@ import { useScheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 // Excalidraw's fonts are served by Etude (web/public/excalidraw/fonts), never from a CDN.
-if (typeof window !== "undefined") (window as any).EXCALIDRAW_ASSET_PATH = new URL(withBase("/excalidraw/"), location.href).href;
+if (typeof window !== "undefined") {
+  (window as any).EXCALIDRAW_ASSET_PATH = new URL(withBase("/excalidraw/"), location.href).href;
+  // With a mouse the board keeps its desktop toolbars until it's really narrow (a split pane is often under 730 px);
+  // on a touch screen Excalidraw's own rule stands.
+  const fine = matchMedia("(pointer: fine)");
+  (window as any).EXCALIDRAW_IS_MOBILE = (w: number, h: number) => (fine.matches ? w < 380 || h < 300 : w < 730 || (h < 500 && w < 1000));
+}
 
 type Lib = typeof import("@excalidraw/excalidraw");
 let lib: Promise<Lib> | null = null;

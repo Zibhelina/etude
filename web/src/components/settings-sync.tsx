@@ -52,9 +52,9 @@ export interface SyncStatus {
   media?: { active: boolean; progress: SyncProgress | null; error: string | null; received: number };
 }
 
-/** download and upload count bytes; check counts media files. The total is null when it isn't known ahead. */
+/** snapshot, download and upload count bytes; check counts media files. The total is null when it isn't known ahead. */
 export interface SyncProgress {
-  step: "download" | "check" | "upload" | "apply";
+  step: "snapshot" | "download" | "check" | "upload" | "apply";
   done: number;
   total: number | null;
   /** Bytes per second. */
@@ -1224,10 +1224,10 @@ function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(
   );
 }
 
-const STEP: Record<SyncProgress["step"], string> = { download: "Downloading", check: "Checking media", upload: "Uploading", apply: "Applying changes" };
+const STEP: Record<SyncProgress["step"], string> = { snapshot: "Downloading your collection", download: "Downloading", check: "Checking media", upload: "Uploading", apply: "Applying changes" };
 
 function ProgressRow({ p, label = "Sync progress" }: { p: SyncProgress; label?: string }) {
-  const transfer = p.step === "download" || p.step === "upload";
+  const transfer = p.step === "snapshot" || p.step === "download" || p.step === "upload";
   // The download total is the server's estimate, so it never claims 100% before the step ends.
   const pct = p.total ? Math.min(p.step === "download" ? 99 : 100, Math.floor((p.done / p.total) * 100)) : null;
   const detail = p.step === "check"
@@ -1235,7 +1235,7 @@ function ProgressRow({ p, label = "Sync progress" }: { p: SyncProgress; label?: 
     : transfer
       ? p.total ? `${bytes(p.done)} of ${p.step === "download" ? "about " : ""}${bytes(p.total)}` : bytes(p.done)
       : "";
-  const rate = transfer && p.rate > 0 ? `${p.step === "download" ? "↓" : "↑"} ${bytes(p.rate)}/s` : "";
+  const rate = transfer && p.rate > 0 ? `${p.step === "upload" ? "↑" : "↓"} ${bytes(p.rate)}/s` : "";
   return (
     <div className="flex flex-col gap-1.5" data-sync-progress={p.step}>
       <div className="h-1.5 w-full max-w-72 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined}>

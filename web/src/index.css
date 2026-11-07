@@ -984,3 +984,42 @@ body.browse-resizing iframe { pointer-events: none; }
 .mf-hold circle { fill: none; stroke: var(--primary); stroke-width: 5; stroke-linecap: round; stroke-dasharray: 0 100; animation: mf-hold linear forwards; }
 @keyframes mf-hold { to { stroke-dasharray: 100 0; } }
 @media (prefers-reduced-motion: reduce) { .mf-face, .mf-scrim { transition: none; } }
+
+/* Moving between tabs: the old screen fades out (140 ms), then the new one fades in and rises a little.
+   Both end on transform: none so fixed children (drawers, drag chips) aren't trapped once it's done. */
+.page-out { animation: page-out 140ms ease-in both; pointer-events: none; }
+@keyframes page-out { to { opacity: 0; transform: translateY(-4px); } }
+.page-in { animation: page-in 420ms cubic-bezier(.22,.8,.2,1) backwards; }
+@keyframes page-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+/* What a screen loads after it opens (stats, the deck list, Market shelves, settings) fades in too, instead of
+   popping over the placeholder. The placeholders themselves fade in, after a beat, so a fast load never flashes one. */
+.page-in .stats-card, .page-in [data-loaded-fade], .page-in .mk-shelf, .page-in .mk-feat, .page-in [data-group], .page-in [data-settings-mode] > *:not([data-profile-header]) {
+  animation: page-part 380ms cubic-bezier(.22,.8,.2,1) backwards;
+}
+@keyframes page-part { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.page-in .animate-pulse { animation: page-ph 250ms ease 120ms both, pulse 2s cubic-bezier(0.4, 0, 0.6, 1) 370ms infinite; }
+@keyframes page-ph { from { opacity: 0; } }
+.page-in.is-fresh .page-fade { animation: page-part 340ms cubic-bezier(.22,.8,.2,1) backwards; }
+/* Browse: the rows arrive one after another, each dropping into place under the one before. Past the first
+   screenful they come together with the last one, so a long list doesn't keep trickling in. */
+.page-in.is-fresh [data-rows-fade] > * { animation: row-arrive 420ms cubic-bezier(.2,.9,.25,1.05) backwards; animation-delay: 646ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(1) { animation-delay: 0ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(2) { animation-delay: 38ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(3) { animation-delay: 76ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(4) { animation-delay: 114ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(5) { animation-delay: 152ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(6) { animation-delay: 190ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(7) { animation-delay: 228ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(8) { animation-delay: 266ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(9) { animation-delay: 304ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(10) { animation-delay: 342ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(11) { animation-delay: 380ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(12) { animation-delay: 418ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(13) { animation-delay: 456ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(14) { animation-delay: 494ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(15) { animation-delay: 532ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(16) { animation-delay: 570ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(17) { animation-delay: 608ms; }
+.page-in.is-fresh [data-rows-fade] > :nth-child(18) { animation-delay: 646ms; }
+@keyframes row-arrive { from { opacity: 0; transform: translateY(-12px); } 60% { opacity: 1; } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .page-in, .page-out, .page-in .stats-card, .page-in [data-loaded-fade], .page-in .mk-shelf, .page-in .mk-feat, .page-in [data-group], .page-in .animate-pulse { animation: none; } }

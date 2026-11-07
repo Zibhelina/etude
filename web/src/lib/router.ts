@@ -20,12 +20,15 @@ const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((l) => l());
 window.addEventListener("popstate", notify);
 
+/** Called after every navigation; the app swaps it to scroll only once the old screen has faded out. */
+export const navScroll = { top: (_to: string) => window.scrollTo(0, 0) };
+
 export function navigate(to: string, opts: { replace?: boolean } = {}) {
   if (to === appPath() + location.search) return;
   if (opts.replace) history.replaceState(null, "", withBase(to));
   else history.pushState(null, "", withBase(to));
   notify();
-  window.scrollTo(0, 0);
+  navScroll.top(to);
 }
 
 export function useLocation() {

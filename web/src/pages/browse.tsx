@@ -486,7 +486,8 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
   );
   const count = error
     ? <span className="min-w-0 truncate text-destructive">{error}</span>
-    : <span className="tabular min-w-0 truncate whitespace-nowrap">{library != null && total !== library ? `${total.toLocaleString("en-US")} of ${library.toLocaleString("en-US")}` : `${total.toLocaleString("en-US")} card${total === 1 ? "" : "s"}`}</span>;
+    : !loaded ? <span className="min-w-0" />
+    : <span className="tabular page-fade min-w-0 truncate whitespace-nowrap">{library != null && total !== library ? `${total.toLocaleString("en-US")} of ${library.toLocaleString("en-US")}` : `${total.toLocaleString("en-US")} card${total === 1 ? "" : "s"}`}</span>;
   const orderLabel = (ORDERS.find(([v]) => v === order)?.[1] ?? COLS.find(([, , o]) => o === order)?.[1] ?? "Sorted") + (reverse ? " ↑" : "");
   const toolbar = selecting && checked.size > 0 && !phone ? (
     bulkBar()
@@ -495,7 +496,7 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
       {selecting && <Box on={allChecked} label="Select all" onClick={() => setChecked(allChecked ? new Set() : new Set(items.map((r) => r.itemId)))} />}
       {count}
       <div className="flex-1" />
-      {items.length > 0 && <button className="shrink-0 rounded-lg px-2 py-1.5 font-semibold hover:bg-accent hover:text-foreground" onClick={() => (selecting ? endSelect() : setSelecting(true))}>{selecting ? "Done" : "Select"}</button>}
+      {items.length > 0 && <button className="page-fade shrink-0 rounded-lg px-2 py-1.5 font-semibold hover:bg-accent hover:text-foreground" onClick={() => (selecting ? endSelect() : setSelecting(true))}>{selecting ? "Done" : "Select"}</button>}
       <DropdownMenu>
         <DropdownMenuTrigger asChild><button className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 font-semibold whitespace-nowrap hover:bg-accent hover:text-foreground"><ArrowUpDown className="size-[15px]" />{orderLabel}</button></DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -619,7 +620,7 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
         {!selected && (
           <section className="block min-h-0 w-full min-w-0 overflow-y-auto px-5 pt-[calc(0.5rem+env(safe-area-inset-top))] [&>*]:shrink-0">
             {header}{search}{chipRow(false)}{toolbar}
-            <div ref={listRef} className="pb-[150px]">
+            <div ref={listRef} className="pb-[150px]" data-rows-fade>
               {items.map((r) => (
                 <Row key={r.itemId} r={r} typeName={typeName.get(r.type) ?? r.type} words={words} active={false} checked={checked.has(r.itemId)} selecting={selecting} dirty={dirtyId === r.itemId} phone tablet={false} onOpen={() => setSelected(r.itemId)} onToggle={() => toggle(r.itemId)} />
               ))}
@@ -669,7 +670,7 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
                 })}
               </tr>
             </thead>
-            <tbody>
+            <tbody data-rows-fade>
               {items.map((r) => (
                 <TableRow
                   key={r.itemId}

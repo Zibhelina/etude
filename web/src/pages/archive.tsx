@@ -178,7 +178,7 @@ export function ArchivePage() {
       {list && list.length === 0 && <ArchiveEmpty />}
 
       {sorted.length > 0 && (
-        <div role="list" aria-label="Archived decks" className={cn("grid auto-rows-fr", phone ? "grid-cols-2 gap-2.5" : "grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-3.5")}>
+        <div role="list" aria-label="Archived decks" data-loaded-fade className={cn("grid auto-rows-fr", phone ? "grid-cols-2 gap-2.5" : "grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-3.5")}>
           {sorted.map((d) => (
             <Tile
               key={d.name}

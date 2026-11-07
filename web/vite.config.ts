@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { excalidrawLocalFonts } from "./vite-excalidraw.ts";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
 
@@ -7,7 +8,7 @@ const api = `http://127.0.0.1:${process.env.ETUDE_PORT ?? 4610}`;
 
 export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
-  plugins: [react(), tailwindcss()],
+  plugins: [excalidrawLocalFonts(), react(), tailwindcss()],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   server: {
     port: 4611,

@@ -3,6 +3,7 @@
 // dist-browser/: the whole app as static files, and harness.html, a test page for the core alone.
 import { build, defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { excalidrawLocalFonts } from "../../web/vite-excalidraw.ts";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
@@ -89,7 +90,7 @@ const editorKit = {
 export default defineConfig({
   root: here("."),
   base: webBase ? `${webBase}/` : "./",
-  plugins: [scanWebApp, react(), tailwindcss(), webEdition, appCsp, editorKit],
+  plugins: [excalidrawLocalFonts(), scanWebApp, react(), tailwindcss(), webEdition, appCsp, editorKit],
   publicDir: here("../../web/public"),
   resolve: {
     alias: [

@@ -1707,3 +1707,17 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 }
 .note-newfile-input { height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--foreground); font-family: var(--font-mono); font-size: 14px; outline: none; }
 .note-newfile-input:focus { border-color: color-mix(in oklab, var(--primary) 65%, var(--border)); box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 18%, transparent); }
+
+/* Notes list: names only by default (Obsidian), with a quiet tag for PDFs, canvases and files. */
+.note-row-tag { flex-shrink: 0; margin-left: 6px; padding: 1px 5px; border-radius: 4px; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; line-height: 14px; color: var(--muted-foreground); background: color-mix(in oklab, var(--muted-foreground) 14%, transparent); }
+.note-row:hover .note-row-tag, .note-row:focus-within .note-row-tag { display: none; }
+/* A run of selected rows reads as one block: one fill, square where two selected rows meet, no gap between them. */
+.note-row.is-sel, .note-row.is-sel:hover, .note-row.is-sel.is-on { background: color-mix(in oklab, var(--primary) 16%, transparent); color: var(--foreground); }
+.note-row.is-sel:has(+ .note-row.is-sel) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: 0; }
+.note-row.is-sel + .note-row.is-sel { border-top-left-radius: 0; border-top-right-radius: 0; margin-top: 0; }
+/* The top bar with the tabs takes the left sidebar's colour, so the two read as one frame around the page (desktop).
+   Over a cover with a single tab it stays see-through, as before. */
+@media (min-width: 768px) {
+  .note-topbar, .note-page.has-tabs:has(.note-cover) .note-topbar { background: var(--sidebar); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .note-page:not(.has-tabs):has(.note-cover) .note-topbar { background: transparent; }
+}

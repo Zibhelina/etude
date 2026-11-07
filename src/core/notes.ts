@@ -161,6 +161,8 @@ export interface NoteLook {
   width?: "normal" | "wide" | "full";
   font?: "sans" | "serif" | "mono";
   size?: "small" | "normal" | "large";
+  /** Show the page's icon in the sidebar list. Off by default, so the list reads like Obsidian's: names only. */
+  showIcon?: boolean;
 }
 const WIDTHS = ["normal", "wide", "full"];
 const FONTS = ["sans", "serif", "mono"];
@@ -173,7 +175,7 @@ export function normalizeLook(v: unknown): NoteLook {
   if (typeof v !== "object" || Array.isArray(v)) throw new EtudeError("a note's look must be an object like { width: \"wide\", font: \"serif\" }");
   const o = v as Record<string, unknown>;
   const out: NoteLook = {};
-  for (const k of Object.keys(o)) if (!["cover", "width", "font", "size"].includes(k)) throw new EtudeError(`a note's look has no "${k.slice(0, 20)}" (it has cover, width, font, size)`);
+  for (const k of Object.keys(o)) if (!["cover", "width", "font", "size", "showIcon"].includes(k)) throw new EtudeError(`a note's look has no "${k.slice(0, 20)}" (it has cover, width, font, size, showIcon)`);
   const pick = (k: "width" | "font" | "size", allowed: string[]) => {
     const x = o[k];
     if (x == null || x === "" || x === "default") return;
@@ -183,6 +185,11 @@ export function normalizeLook(v: unknown): NoteLook {
   pick("width", WIDTHS);
   pick("font", FONTS);
   pick("size", SIZES);
+  const si = o.showIcon;
+  if (si != null && si !== "") {
+    if (si === true || si === "show" || si === "true") out.showIcon = true;
+    else if (!(si === false || si === "hide" || si === "false")) throw new EtudeError("look.showIcon is true or false (show or hide)");
+  }
   const c = o.cover;
   if (c != null && c !== "" && c !== "none") {
     if (typeof c === "string") {

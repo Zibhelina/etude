@@ -28,7 +28,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { cn } from "@/lib/utils";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { registerNotesActions, setNotesPagesOpen, useNotesSlot } from "@/lib/sidebar-slot";
-import { useNoteTreeDrag } from "@/components/note-tree-drag";
+import { useNoteTreeDrag, type Placement } from "@/components/note-tree-drag";
 
 const OPEN_KEY = "etude.notes.open";
 const TABS_KEY = "etude.notes.tabs";
@@ -54,6 +54,8 @@ const display = (n: { title: string; kind?: string }) => n.title.trim() || (n.ki
 const fallbackIcon = (n: { kind?: string }) => (n.kind === "canvas" ? "🎨" : n.kind === "pdf" ? "📕" : "📄");
 const isFolder = (n: { kind?: string } | null | undefined) => n?.kind === "folder";
 const isFile = (n: { kind?: string } | null | undefined) => n?.kind === "file";
+/** The small grey tag after a name that isn't a plain page, as Obsidian marks PDF and CANVAS. A file's name already ends in its extension. */
+const kindTag = (n: { kind?: string }): string | null => (n.kind === "pdf" ? "PDF" : n.kind === "canvas" ? "CANVAS" : null);
 
 // ---------------------------------------------------------------- saving
 
@@ -117,11 +119,14 @@ function useSaver(id: string | null, onSaved: (n: Note) => void) {
 type MenuEntry = { label: string; onSelect(): void; disabled?: boolean; danger?: boolean } | "sep";
 /** "new": open it in a new tab and go there; "background": add the tab and stay where you are. */
 type TabMode = "new" | "background";
-type DragProps = { start(n: NoteSummary, e: React.PointerEvent<HTMLElement>): void; draggingId: string | null; targetId: string | null };
+type DragProps = { start(n: NoteSummary, e: React.PointerEvent<HTMLElement>): void; draggingId: string | null; draggingMany: boolean; targetId: string | null };
 /** The row whose name is being typed in place (a new folder, or Rename). */
 type RenameProps = { id: string | null; done(id: string, title: string | null): void };
+/** Several pages picked at once with Shift+click, to move, archive or open together. */
+type SelectProps = { ids: Set<string>; shift(id: string): void; clear(): void };
 
-function TreeRow({ n, depth, tree, open, setOpen, current, onPick, onAdd, onMenu, menuItems, inSidebar, dnd, rename }: {
+function TreeRow({ n, depth, tree, open, setOpen, current, onPick, onAdd, onMenu, menuItems, inSidebar, dnd, rename, sel }: {
+  sel: SelectProps;
   dnd: DragProps;
   rename: RenameProps;
   menuItems(n: NoteSummary): MenuEntry[];
@@ -141,6 +146,7 @@ function TreeRow({ n, depth, tree, open, setOpen, current, onPick, onAdd, onMenu
   const on = current === n.id;
   const folder = isFolder(n);
   const editing = rename.id === n.id;
+  const picked = sel.ids.has(n.id);
   return (
     <>
       <ContextMenu>
@@ -150,14 +156,22 @@ function TreeRow({ n, depth, tree, open, setOpen, current, onPick, onAdd, onMenu
         aria-selected={on}
         aria-expanded={kids.length ? expanded : undefined}
         data-note-row={n.id}
-        className={cn("note-row group", on && "is-on", dnd.draggingId === n.id && "is-dragged", dnd.targetId === n.id && "is-drop-into")}
+        className={cn("note-row group", on && "is-on", picked && "is-sel", (dnd.draggingId === n.id || (dnd.draggingMany && picked)) && "is-dragged", dnd.targetId === n.id && "is-drop-into")}
         data-kind={folder ? "folder" : "page"}
         onPointerDown={(e) => !editing && dnd.start(n, e)}
         // In the sidebar the pages start under the word Notes and nest by indent only.
         style={{ paddingLeft: (inSidebar ? 28 : 6) + depth * 16 }}
         // A folder has no page of its own: clicking it opens or closes it.
         // Ctrl/⌘+click or a middle click opens the page in a new tab.
-        onClick={(e) => (editing ? undefined : folder ? setOpen(n.id, !expanded) : onPick(n.id, e.ctrlKey || e.metaKey ? "background" : undefined))}
+        // Shift+click picks a run of pages, from the last one picked (or the open page) to this one.
+        onClick={(e) => {
+          if (editing) return;
+          if (e.shiftKey) return void (e.preventDefault(), sel.shift(n.id));
+          if (sel.ids.size) sel.clear();
+          if (folder) setOpen(n.id, !expanded);
+          else onPick(n.id, e.ctrlKey || e.metaKey ? "background" : undefined);
+        }}
+        onContextMenu={() => !picked && sel.ids.size && sel.clear()}
         onMouseDown={(e) => e.button === 1 && !folder && e.preventDefault()}
         onAuxClick={(e) => e.button === 1 && !folder && !editing && onPick(n.id, "background")}
       >
@@ -173,14 +187,18 @@ function TreeRow({ n, depth, tree, open, setOpen, current, onPick, onAdd, onMenu
         >
           <ChevronRight className={cn("size-3.5 transition-transform duration-150", expanded && "rotate-90")} />
         </button>
-        <span className="note-row-icon" aria-hidden>
-          {folder && !n.icon ? (expanded && kids.length ? <FolderOpen className="size-4" /> : <Folder className="size-4" />) : isFile(n) && !n.icon ? <FileCode2 className="size-4" /> : <NoteIcon icon={n.icon} size={18} fallback={fallbackIcon(n)} />}
-        </span>
+        {/* Like Obsidian, the list shows names only; a page's icon shows here when you ask for it (right-click → Show icon). */}
+        {n.look?.showIcon && (
+          <span className="note-row-icon" aria-hidden>
+            {folder && !n.icon ? (expanded && kids.length ? <FolderOpen className="size-4" /> : <Folder className="size-4" />) : isFile(n) && !n.icon ? <FileCode2 className="size-4" /> : <NoteIcon icon={n.icon} size={18} fallback={fallbackIcon(n)} />}
+          </span>
+        )}
         {editing ? (
           <RenameInput initial={n.title || (folder ? "New folder" : "")} onDone={(t) => rename.done(n.id, t)} />
         ) : (
           <span className={cn("min-w-0 flex-1 truncate", !n.title.trim() && "text-muted-foreground")}>{display(n)}</span>
         )}
+        {!editing && kindTag(n) && <span className="note-row-tag">{kindTag(n)}</span>}
         <span className="note-row-acts" onClick={(e) => e.stopPropagation()}>
           {onMenu(n)}
           {!inSidebar && (
@@ -199,7 +217,7 @@ function TreeRow({ n, depth, tree, open, setOpen, current, onPick, onAdd, onMenu
         )}
       </ContextMenuContent>
       </ContextMenu>
-      {expanded && kids.map((k) => <TreeRow key={k.id} n={k} depth={depth + 1} tree={tree} open={open} setOpen={setOpen} current={current} onPick={onPick} onAdd={onAdd} onMenu={onMenu} menuItems={menuItems} inSidebar={inSidebar} dnd={dnd} rename={rename} />)}
+      {expanded && kids.map((k) => <TreeRow key={k.id} n={k} depth={depth + 1} tree={tree} open={open} setOpen={setOpen} current={current} onPick={onPick} onAdd={onAdd} onMenu={onMenu} menuItems={menuItems} inSidebar={inSidebar} dnd={dnd} rename={rename} sel={sel} />)}
     </>
   );
 }
@@ -1242,8 +1260,133 @@ export function NotesPage({ id }: { id: string | null }) {
     await reload();
   };
 
+  // ---- several pages at once (Shift+click)
+  const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  const anchor = useRef<string | null>(null);
+  const sel = useMemo<SelectProps>(
+    () => ({
+      ids: picked,
+      clear: () => {
+        anchor.current = null;
+        setPicked(new Set());
+      },
+      shift: (id) => {
+        // The pages in the order they show in the tree right now.
+        const rows = [...document.querySelectorAll<HTMLElement>("[role=tree] [data-note-row]")].map((r) => r.dataset.noteRow!);
+        const from = anchor.current && rows.includes(anchor.current) ? anchor.current : current && rows.includes(current) ? current : id;
+        anchor.current = from;
+        const a = rows.indexOf(from), b = rows.indexOf(id);
+        setPicked(new Set(a < 0 || b < 0 ? [id] : rows.slice(Math.min(a, b), Math.max(a, b) + 1)));
+      },
+    }),
+    [picked, current],
+  );
+  // Esc lets go of them; so does the list changing under them.
+  useEffect(() => {
+    if (!picked.size) return;
+    // An open menu takes its own Esc; only a second Esc lets go of the pages.
+    const h = (e: KeyboardEvent) => e.key === "Escape" && !document.querySelector("[role=menu]") && sel.clear();
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [picked, sel]);
+  useEffect(() => {
+    if (!list || !picked.size) return;
+    const ids = new Set(list.map((n) => n.id));
+    if ([...picked].some((x) => !ids.has(x))) setPicked(new Set([...picked].filter((x) => ids.has(x))));
+  }, [list]);
+  /** The picked pages without the ones inside another picked page (those go along with their parent), in tree order. */
+  const outermost = useCallback((): string[] => {
+    const by = new Map((listRef.current ?? []).map((n) => [n.id, n]));
+    const inPicked = (id: string) => {
+      for (let p = by.get(id)?.parentId ?? null; p; p = by.get(p)?.parentId ?? null) if (picked.has(p)) return true;
+      return false;
+    };
+    return (listRef.current ?? []).filter((n) => picked.has(n.id) && !inPicked(n.id)).map((n) => n.id);
+  }, [picked]);
+  const pickedRef = useRef(outermost);
+  pickedRef.current = outermost;
+
+  /** Puts several pages in place, one after another. They first go to the end of the top level so the order
+   * they land in can't be shuffled by each other, then each goes to its spot (lowest place first). */
+  const place = useCallback(
+    async (items: Placement[]) => {
+      if (items.length === 1) return void (await api.moveNote(items[0].id, items[0].parentId, items[0].index), await reload());
+      try {
+        for (const it of items) await api.moveNote(it.id, null);
+        const order = [...items].sort((a, b) => (a.index ?? Infinity) - (b.index ?? Infinity));
+        for (const it of order) await api.moveNote(it.id, it.parentId, it.index);
+      } finally {
+        await reload();
+      }
+    },
+    [reload],
+  );
+  const archiveMany = async (ids: string[]) => {
+    await saver.flush();
+    const gone = new Set<string>();
+    try {
+      for (const id of ids) (await api.setNoteArchived(id, true)).ids.forEach((x) => gone.add(x));
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+    sel.clear();
+    await reload();
+    if (current && gone.has(current)) navigate("/notes", { replace: true });
+    toast(`Archived ${ids.length} ${ids.length === 1 ? "page" : "pages"}${gone.size > ids.length ? ` and ${gone.size - ids.length} inside` : ""}`, {
+      action: { label: "Undo", onClick: async () => void (await Promise.all(ids.map((id) => api.setNoteArchived(id, false))), await reload()) },
+    });
+  };
+  const toTopMany = async (ids: string[]) => {
+    const by = new Map((list ?? []).map((n) => [n.id, n]));
+    const before: Placement[] = ids.map((id) => {
+      const p = by.get(id)?.parentId ?? null;
+      return { id, parentId: p, index: (tree.get(p) ?? []).findIndex((s) => s.id === id) };
+    });
+    try {
+      await place(ids.map((id) => ({ id, parentId: null })));
+      toast(`Moved ${ids.length} pages to the top level`, { action: { label: "Undo", onClick: () => void place(before) } });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+  const iconMany = async (ids: string[], show: boolean) => {
+    for (const id of ids) {
+      const n = list?.find((x) => x.id === id);
+      if (n) await setListIcon(n, show);
+    }
+  };
+  const bulkItems = (): MenuEntry[] => {
+    const ids = outermost();
+    const all = [...picked];
+    const pages = (list ?? []).filter((n) => picked.has(n.id) && !isFolder(n));
+    const anyShown = (list ?? []).some((n) => picked.has(n.id) && n.look?.showIcon);
+    return [
+      { label: `Open ${pages.length} in tabs`, disabled: !pages.length, onSelect: () => (pages.forEach((p, i) => pick(p.id, i === 0 ? "new" : "background")), sel.clear()) },
+      anyShown ? { label: "Hide icons", onSelect: () => void iconMany(all, false) } : { label: "Show icons", onSelect: () => void iconMany(all, true) },
+      "sep",
+      { label: "Move to the top level", disabled: ids.every((id) => !list?.find((x) => x.id === id)?.parentId), onSelect: () => void toTopMany(ids).then(sel.clear) },
+      "sep",
+      { label: `Archive ${ids.length} ${ids.length === 1 ? "page" : "pages"}`, danger: true, onSelect: () => void archiveMany(ids) },
+    ];
+  };
+
+  // Whether a page's icon shows in the list (off unless asked for). It lives in the page's look.
+  const setListIcon = async (n: NoteSummary, show: boolean) => {
+    const look: NoteLook = { ...(n.look ?? {}) };
+    if (show) look.showIcon = true;
+    else delete look.showIcon;
+    patchRow(n.id, { look });
+    try {
+      await api.updateNote(n.id, { look });
+    } catch (e) {
+      patchRow(n.id, { look: n.look });
+      toast.error((e as Error).message);
+    }
+  };
+
   // The same menu on ⋯ and on right-click.
   const menuItems = (n: NoteSummary): MenuEntry[] => {
+    if (picked.size > 1 && picked.has(n.id)) return bulkItems();
     const parent = n.parentId ? list?.find((x) => x.id === n.parentId) : undefined;
     const sibs = tree.get(n.parentId) ?? [];
     const at = sibs.findIndex((s) => s.id === n.id);
@@ -1256,6 +1399,7 @@ export function NotesPage({ id }: { id: string | null }) {
       { label: "New folder inside", onSelect: () => void addFolder(n.id) },
       { label: "Add a PDF inside…", onSelect: () => pickPdf(n.id) },
       { label: "Rename", onSelect: () => setRenaming(n.id) },
+      n.look?.showIcon ? { label: "Hide icon", onSelect: () => void setListIcon(n, false) } : { label: "Show icon", onSelect: () => void setListIcon(n, true) },
       n.kind === "canvas" || n.kind === "pdf" || isFile(n)
         ? "sep"
         : isFolder(n)
@@ -1394,16 +1538,7 @@ export function NotesPage({ id }: { id: string | null }) {
     return () => registerNotesActions(null);
   }, [add, addFolder]);
 
-  const dnd = useNoteTreeDrag({
-    list,
-    tree,
-    open,
-    setOpen,
-    move: async (mid, parentId, index) => {
-      await api.moveNote(mid, parentId, index);
-      await reload();
-    },
-  });
+  const dnd = useNoteTreeDrag({ list, tree, open, setOpen, place, selected: () => pickedRef.current() });
 
   const top = tree.get(null) ?? [];
   const slot = useNotesSlot();
@@ -1426,7 +1561,7 @@ export function NotesPage({ id }: { id: string | null }) {
         {list === null ? null : top.length === 0 ? (
           <p className="sb-pages-empty">No pages yet. Right-click Notes to make one.</p>
         ) : (
-          top.map((n) => <TreeRow key={n.id} n={n} depth={0} tree={tree} open={open} setOpen={setOpen} current={current} onPick={pick} onAdd={(p) => void add(p)} onMenu={rowMenu} menuItems={menuItems} inSidebar dnd={dnd} rename={rename} />)
+          top.map((n) => <TreeRow key={n.id} n={n} depth={0} tree={tree} open={open} setOpen={setOpen} current={current} onPick={pick} onAdd={(p) => void add(p)} onMenu={rowMenu} menuItems={menuItems} inSidebar dnd={dnd} rename={rename} sel={sel} />)
         )}
       </div>,
       slot!,
@@ -1498,7 +1633,7 @@ export function NotesPage({ id }: { id: string | null }) {
             {list === null ? null : top.length === 0 ? (
               <p className="px-3 py-2 text-[13px] text-muted-foreground">No pages yet.</p>
             ) : (
-              top.map((n) => <TreeRow key={n.id} n={n} depth={0} tree={tree} open={open} setOpen={setOpen} current={current} onPick={pick} onAdd={(p) => void add(p)} onMenu={rowMenu} menuItems={menuItems} dnd={dnd} rename={rename} />)
+              top.map((n) => <TreeRow key={n.id} n={n} depth={0} tree={tree} open={open} setOpen={setOpen} current={current} onPick={pick} onAdd={(p) => void add(p)} onMenu={rowMenu} menuItems={menuItems} dnd={dnd} rename={rename} sel={sel} />)
             )}
             <button type="button" onClick={() => void add(null)} className="note-row note-new">
               <Plus className="size-3.5" /> New page
@@ -1579,7 +1714,15 @@ export function NotesPage({ id }: { id: string | null }) {
                 patchRow(note.id, { icon });
                 void api.updateNote(note.id, { icon }).catch((e) => toast.error((e as Error).message));
               }}
-              onLook={(look) => void api.updateNote(note.id, { look }).catch((e) => toast.error((e as Error).message))}
+              onLook={(look) => {
+                // The page keeps its own copy of the look; the list icon may have changed in the sidebar since, so that part comes from the row.
+                const row = listRef.current?.find((x) => x.id === note.id);
+                const next: NoteLook = { ...look };
+                if (row?.look?.showIcon) next.showIcon = true;
+                else delete next.showIcon;
+                patchRow(note.id, { look: next });
+                void api.updateNote(note.id, { look: next }).catch((e) => toast.error((e as Error).message));
+              }}
               links={links}
               onBack={phone ? () => navigate("/notes") : undefined}
             />

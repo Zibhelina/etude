@@ -2283,6 +2283,7 @@ etude note new <title> [flags]
 | `--width <VALUE>` | string | Page width: normal, wide or full. |
 | `--font <VALUE>` | string | Page font: sans, serif or mono. |
 | `--size <VALUE>` | string | Text size: small, normal or large. |
+| `--list-icon <VALUE>` | string | Show the page's icon in the sidebar list: show or hide. Hidden by default, so the list shows names only, like Obsidian. |
 | `--dry-run` | boolean | Show what would change without writing anything. |
 
 Output: the new page, as `note show` prints it
@@ -2327,6 +2328,7 @@ etude note edit <note> [flags]
 | `--width <VALUE>` | string | Page width: normal, wide or full. |
 | `--font <VALUE>` | string | Page font: sans, serif or mono. |
 | `--size <VALUE>` | string | Text size: small, normal or large. |
+| `--list-icon <VALUE>` | string | Show the page's icon in the sidebar list: show or hide. Hidden by default, so the list shows names only, like Obsidian. |
 | `--dry-run` | boolean | Show what would change without writing anything. |
 
 Output: the page after the change

@@ -550,6 +550,8 @@ export interface NoteLook {
   width?: "normal" | "wide" | "full";
   font?: "sans" | "serif" | "mono";
   size?: "small" | "normal" | "large";
+  /** Show the icon in the sidebar list (off by default, like Obsidian). */
+  showIcon?: boolean;
 }
 export interface NoteDoc { type: string; attrs?: Record<string, unknown>; content?: NoteDoc[]; text?: string; marks?: { type: string; attrs?: Record<string, unknown> }[] }
 /** Notes as a graph: pages (and ghosts for links to pages that don't exist yet) and the lines between them. */

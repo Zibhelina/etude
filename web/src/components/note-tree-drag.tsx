@@ -1,7 +1,7 @@
 // Dragging pages in the Notes tree. Press a row and move: a line shows where it lands between pages,
 // and the middle of a row puts it inside that page. Hovering a folded page opens it after a moment.
 // Mouse and pen start after a few pixels (so a click still opens the page); touch starts after a long press.
-// Esc cancels. After a move a toast offers Undo.
+// Esc cancels. After a move a toast offers Undo. Dragging one of several selected pages moves them all.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -25,17 +25,22 @@ function scrollParent(el: HTMLElement | null): HTMLElement | null {
   return null;
 }
 
-export function useNoteTreeDrag({ list, tree, open, setOpen, move }: {
+/** Where a page goes: its parent and its place among the parent's pages (none = the end). */
+export type Placement = { id: string; parentId: string | null; index?: number };
+
+export function useNoteTreeDrag({ list, tree, open, setOpen, place, selected }: {
   list: NoteSummary[] | null;
   tree: Tree;
   open: Set<string>;
   setOpen(id: string, on: boolean): void;
-  /** Puts the page there; resolves when the tree has reloaded. */
-  move(id: string, parentId: string | null, index: number | undefined): Promise<void>;
+  /** Puts the pages there, in this order; resolves when the tree has reloaded. */
+  place(items: Placement[]): Promise<void>;
+  /** The pages selected right now (Shift+click), outermost only. */
+  selected(): string[];
 }) {
-  const [drag, setDrag] = useState<{ id: string; x: number; y: number; drop: NoteDrop | null } | null>(null);
-  const live = useRef({ list, tree, open, setOpen, move });
-  live.current = { list, tree, open, setOpen, move };
+  const [drag, setDrag] = useState<{ id: string; count: number; x: number; y: number; drop: NoteDrop | null } | null>(null);
+  const live = useRef({ list, tree, open, setOpen, place, selected });
+  live.current = { list, tree, open, setOpen, place, selected };
   const cleanup = useRef<(() => void) | null>(null);
   useEffect(() => () => cleanup.current?.(), []);
 
@@ -52,15 +57,25 @@ export function useNoteTreeDrag({ list, tree, open, setOpen, move }: {
     let hover: { id: string; t: number } | null = null;
     const scroller = scrollParent(treeEl);
 
-    // The page and every page under it can't be a target.
+    // Pressing one of the selected pages drags the whole selection.
+    const sel = live.current.selected();
+    const moving = sel.length > 1 && sel.includes(n.id) ? sel : [n.id];
+    const movingSet = new Set(moving);
+    // The pages and every page under them can't be a target.
     const { tree: t0 } = live.current;
-    const banned = new Set<string>([n.id]);
+    const banned = new Set<string>(moving);
     const walk = (id: string) => (t0.get(id) ?? []).forEach((k) => (banned.add(k.id), walk(k.id)));
-    walk(n.id);
-    const sibsOf = (parent: string | null) => (live.current.tree.get(parent) ?? []).filter((s) => s.id !== n.id);
+    moving.forEach(walk);
+    const sibsOf = (parent: string | null) => (live.current.tree.get(parent) ?? []).filter((s) => !movingSet.has(s.id));
     const byId = (id: string) => live.current.list?.find((x) => x.id === id);
     const fromParent = n.parentId ?? null;
     const fromIndex = (live.current.tree.get(fromParent) ?? []).findIndex((s) => s.id === n.id);
+    // Where each one was, for Undo.
+    const before: Placement[] = moving.map((id) => {
+      const x = byId(id);
+      const p = x?.parentId ?? null;
+      return { id, parentId: p, index: (t0.get(p) ?? []).findIndex((s) => s.id === id) };
+    });
 
     const lineFor = (r: HTMLElement, y: number, depthPlus = 0) => {
       const box = r.getBoundingClientRect();
@@ -110,8 +125,8 @@ export function useNoteTreeDrag({ list, tree, open, setOpen, move }: {
       }
       return null;
     };
-    const isNoop = (d: NoteDrop) => d.parent === fromParent && (d.kind === "into" ? false : d.index === fromIndex);
-    const sameParentInto = (d: NoteDrop) => d.kind === "into" && d.parent === fromParent;
+    const isNoop = (d: NoteDrop) => moving.length === 1 && d.parent === fromParent && (d.kind === "into" ? false : d.index === fromIndex);
+    const sameParentInto = (d: NoteDrop) => moving.length === 1 && d.kind === "into" && d.parent === fromParent;
 
     const update = (x: number, y: number) => {
       lastX = x;
@@ -125,7 +140,7 @@ export function useNoteTreeDrag({ list, tree, open, setOpen, move }: {
           hover = null;
         }
       } else hover = null;
-      setDrag({ id: n.id, x, y, drop });
+      setDrag({ id: n.id, count: moving.length, x, y, drop });
     };
 
     const begin = () => {
@@ -197,11 +212,12 @@ export function useNoteTreeDrag({ list, tree, open, setOpen, move }: {
       const to = d.parent;
       void (async () => {
         try {
-          await live.current.move(n.id, to, d.index);
+          await live.current.place(moving.map((id, k) => ({ id, parentId: to, index: d.index === undefined ? undefined : d.index + k })));
           if (to) live.current.setOpen(to, true);
-          const where = to ? `inside “${title(byId(to) ?? { title: "" })}”` : fromParent ? "to the top level" : "";
-          toast(`Moved “${title(n)}”${where ? ` ${where}` : ""}`, {
-            action: { label: "Undo", onClick: () => void live.current.move(n.id, fromParent, fromIndex) },
+          const where = to ? `inside “${title(byId(to) ?? { title: "" })}”` : before.some((b) => b.parentId) ? "to the top level" : "";
+          const what = moving.length > 1 ? `${moving.length} pages` : `“${title(n)}”`;
+          toast(`Moved ${what}${where ? ` ${where}` : ""}`, {
+            action: { label: "Undo", onClick: () => void live.current.place(before) },
           });
         } catch (err) {
           toast.error((err as Error).message);
@@ -232,12 +248,12 @@ export function useNoteTreeDrag({ list, tree, open, setOpen, move }: {
         {dragged && (
           <div className={cn("note-drag-chip", !drag.drop && "is-nowhere")} style={{ left: drag.x + 18, top: drag.y + 16 }} aria-hidden>
             <NoteIcon icon={dragged.icon} size={16} />
-            <span className="truncate">{title(dragged)}</span>
+            <span className="truncate">{drag.count > 1 ? `${title(dragged)} and ${drag.count - 1} more` : title(dragged)}</span>
           </div>
         )}
       </>,
       document.body,
     );
 
-  return { start, overlay, draggingId: drag?.id ?? null, targetId: drag?.drop?.kind === "into" ? drag.drop.target : null };
+  return { start, overlay, draggingId: drag?.id ?? null, draggingMany: (drag?.count ?? 0) > 1, targetId: drag?.drop?.kind === "into" ? drag.drop.target : null };
 }

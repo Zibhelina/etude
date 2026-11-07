@@ -8,10 +8,12 @@ import { humanInterval, RATING_LABEL, type Rating, type StudyCard } from "@/lib/
 import { cn } from "@/lib/utils";
 import type { CardFrameHandle, CardResult } from "@/components/card-frame";
 import face from "@/assets/minimi/face.webp";
-import sitHead from "@/assets/minimi/sit-head.webp";
+import sitBlink from "@/assets/minimi/sit-up-blink.webp";
+import sitLeft from "@/assets/minimi/sit-up-L.webp";
 import sitLegL from "@/assets/minimi/sit-legL.webp";
 import sitLegR from "@/assets/minimi/sit-legR.webp";
-import sitTorso from "@/assets/minimi/sit-torso.webp";
+import sitNeutral from "@/assets/minimi/sit-up-n.webp";
+import sitRight from "@/assets/minimi/sit-up-R.webp";
 
 export const minimiFace = face;
 export const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -168,20 +170,19 @@ export function Verdict({ verdict, score, prefix, late }: { verdict?: string | n
   );
 }
 
-/** Minimi sitting on the feedback bubble: two poses at 1 fps (head tilts, that side's leg comes forward). */
+/** Minimi sitting on the feedback bubble: four drawn upper-body frames (neutral, blink, looking left,
+ *  looking right) swap instantly on a 4.8 s loop while his hind legs swing; CSS only (`st-sit`). */
 function SittingMinimi() {
-  const [f, setF] = useState(0);
-  useEffect(() => {
-    if (reducedMotion()) return;
-    const t = window.setInterval(() => setF((x) => x ^ 1), 1000);
-    return () => window.clearInterval(t);
-  }, []);
   return (
-    <div className={cn("st-sit", f ? "p1" : "p0")} aria-hidden>
+    <div className="st-sit" aria-hidden>
+      <div className="up">
+        <img className="fn" src={sitNeutral} alt="" />
+        <img className="fk" src={sitBlink} alt="" />
+        <img className="fL" src={sitLeft} alt="" />
+        <img className="fR" src={sitRight} alt="" />
+      </div>
       <img className="lL" src={sitLegL} alt="" />
       <img className="lR" src={sitLegR} alt="" />
-      <img className="hd" src={sitHead} alt="" />
-      <img src={sitTorso} alt="" />
     </div>
   );
 }

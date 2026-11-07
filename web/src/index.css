@@ -492,17 +492,24 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 .st-msg { font-size: 17px; line-height: 1.6; background: var(--muted); padding: 14px 16px; border-radius: 16px; position: relative; z-index: 1; color: var(--foreground); }
 .st-who { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 4px; }
 .st-who.st-mini { color: var(--minimi-ink); }
-.st-sit { position: absolute; top: 0; right: 16px; width: 65px; height: 120px; z-index: 2; pointer-events: none; }
+/* seat line at 75.44% of the frame: top + 0.7544 × height = the bubble's padding-top */
+.st-sit { position: absolute; top: 20px; right: 16px; width: 52px; height: 101px; z-index: 2; pointer-events: none; }
 .st-sit img { position: absolute; inset: 0; width: 100%; height: 100%; }
-.st-sit .lL { transform-origin: 37.86% 78.54%; }
-.st-sit .lR { transform-origin: 61.85% 78.54%; }
-.st-sit .hd { transform-origin: 51.3% 58.71%; }
-.st-sit.p1 .hd { transform: rotate(8deg); }
-.st-sit.p0 .hd { transform: rotate(-8deg); }
-.st-sit.p1 .lL { transform: rotate(-5deg) scaleY(0.76); }
-.st-sit.p1 .lR { transform: rotate(-3deg) scaleY(1.03); }
-.st-sit.p0 .lL { transform: rotate(3deg) scaleY(1.03); }
-.st-sit.p0 .lR { transform: rotate(5deg) scaleY(0.76); }
+.st-sit .up { position: absolute; inset: 0; transform-origin: 50% 75%; animation: st-sit-breathe 2.4s ease-in-out infinite; }
+.st-sit .up img { opacity: 0; }
+.st-sit .up .fn { animation: st-sit-n 4.8s step-end infinite; }
+.st-sit .up .fk { animation: st-sit-k 4.8s step-end infinite; }
+.st-sit .up .fL { animation: st-sit-L 4.8s step-end infinite; }
+.st-sit .up .fR { animation: st-sit-R 4.8s step-end infinite; }
+.st-sit .lL { transform-origin: 41.23% 74%; animation: st-sit-kick 1.6s ease-in-out infinite; }
+.st-sit .lR { transform-origin: 60.82% 74%; animation: st-sit-kick 1.6s ease-in-out -0.8s infinite; }
+@keyframes st-sit-kick { 0%, 100% { transform: rotate(3deg) scaleY(1.02); } 50% { transform: rotate(-2deg) scaleY(0.8); } }
+@keyframes st-sit-breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.012, 0.99); } }
+/* neutral (blink) → looks left → neutral → looks right → neutral (blink); frames swap, never cross-fade */
+@keyframes st-sit-n { 0%, 8.5% { opacity: 1; } 9%, 11.5% { opacity: 0; } 12%, 18.5% { opacity: 1; } 20%, 42.5% { opacity: 0; } 44%, 49% { opacity: 1; } 50.5%, 73.5% { opacity: 0; } 75%, 87.5% { opacity: 1; } 88%, 90.5% { opacity: 0; } 91%, 100% { opacity: 1; } }
+@keyframes st-sit-k { 0%, 8.5% { opacity: 0; } 9%, 11.5% { opacity: 1; } 12%, 87.5% { opacity: 0; } 88%, 90.5% { opacity: 1; } 91%, 100% { opacity: 0; } }
+@keyframes st-sit-L { 0%, 18.5% { opacity: 0; } 20%, 42.5% { opacity: 1; } 44%, 100% { opacity: 0; } }
+@keyframes st-sit-R { 0%, 49% { opacity: 0; } 50.5%, 73.5% { opacity: 1; } 75%, 100% { opacity: 0; } }
 
 .st-thread { display: flex; flex-direction: column; gap: 10px; }
 .st-me { align-self: flex-end; max-width: 88%; background: var(--accent); padding: 9px 14px; border-radius: 16px 16px 4px 16px; font-size: 16px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -573,7 +580,7 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
   .st-stack { margin-bottom: 0; }
   .st-paper { padding: 22px 22px 28px; min-height: 300px; gap: 16px; }
   .st-fb.sit { padding-top: 80px; }
-  .st-sit { width: 54px; height: 100px; }
+  .st-sit { top: 16px; width: 44px; height: 85px; }
   .st-msg { font-size: 16px; }
   .st-slot { padding: 8px 22px max(24px, calc(env(safe-area-inset-bottom) + 12px)); min-height: 88px; }
   .st-pri { flex: 1; max-width: 300px; }
@@ -589,7 +596,8 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 @media (prefers-reduced-motion: reduce) {
   .st-in .st-flip, .st-in .st-head, .st-in.st-bare-card, .st-rise, .st-verdict, .st-slot.swapin > *, .st-docktab svg { animation: none !important; }
   .st-frame iframe, .st-flip { transition: none; }
-  .st-sit img { transform: none !important; }
+  .st-sit img, .st-sit .up { animation: none !important; }
+  .st-sit .up .fn { opacity: 1; }
 }
 /* ---------------------------------------------------------------- Library (decks, deck page, archive)
    Streak orange is fixed (it's a celebration colour, the same in every theme); everything else

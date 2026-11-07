@@ -17,6 +17,7 @@ import { ChangeIconDialog, DeckBadge } from "@/components/deck-icon";
 import { DonePanel, SessionCard, StreakCelebration, useMilestone } from "@/components/library-session";
 import { ArchivePage } from "@/pages/archive";
 import { ArchiveLink, useArchiveCount } from "@/components/archive-link";
+import { FINDER_KEY, openDeckFinder } from "@/components/deck-finder";
 
 /** Where a dragged deck would land: between rows (`line`) or inside a deck (`into`). */
 type Drop = { kind: "line" | "into"; parent: string; index: number | undefined; y: number; depth: number };
@@ -89,7 +90,6 @@ function DesktopDecks() {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(JSON.parse(localStorage.getItem("etude.collapsed") ?? "[]")));
   const [creating, setCreating] = useState(false);
   const [iconFor, setIconFor] = useState<DeckNode | null>(null);
-  const [query, setQuery] = useState<string | null>(null);
   const deckActions = useDeckActions(reload);
 
   const toggle = (name: string) => {
@@ -105,7 +105,6 @@ function DesktopDecks() {
     return decks.map((d) => ({ ...d, displayDepth: ancestorsOf(d.name).filter((n) => names.has(n)).length }));
   }, [decks]);
 
-  const q = query?.trim().toLowerCase() ?? "";
   const visible = useMemo(() => {
     const names = new Set(withDepth.map((d) => d.name));
     const kids = new Map<string, number>();
@@ -113,12 +112,10 @@ function DesktopDecks() {
       const parent = ancestorsOf(d.name).findLast((n) => names.has(n));
       if (parent) kids.set(parent, (kids.get(parent) ?? 0) + 1);
     }
-    // A search shows the matching decks with the decks they sit in, whatever is folded.
-    const keep = q ? new Set(withDepth.filter((d) => leafOf(d.name).toLowerCase().includes(q)).flatMap((d) => [d.name, ...ancestorsOf(d.name)])) : null;
     return withDepth
-      .filter((d) => (keep ? keep.has(d.name) : !ancestorsOf(d.name).some((n) => names.has(n) && collapsed.has(n))))
+      .filter((d) => !ancestorsOf(d.name).some((n) => names.has(n) && collapsed.has(n)))
       .map((d) => ({ ...d, kids: kids.get(d.name) ?? 0, hasChildren: (kids.get(d.name) ?? 0) > 0 }));
-  }, [withDepth, collapsed, q]);
+  }, [withDepth, collapsed]);
 
   const top = withDepth.filter((d) => d.displayDepth === 0);
   const due = top.filter((d) => d.mode !== "watch").reduce((a, d) => a + work(d), 0);
@@ -256,7 +253,7 @@ function DesktopDecks() {
       let path = "";
       const at = (name: string) => rows.current.get(name);
       for (const d of visible) {
-        if (!d.hasChildren || (!q && collapsed.has(d.name))) continue;
+        if (!d.hasChildren || collapsed.has(d.name)) continue;
         const chev = at(d.name)?.querySelector<SVGElement>("button[aria-expanded] svg")?.getBoundingClientRect();
         if (!chev) continue;
         const kids = visible.filter((k) => k.name.lastIndexOf("::") === d.name.length && k.name.startsWith(d.name + "::"));
@@ -285,7 +282,7 @@ function DesktopDecks() {
     const ro = new ResizeObserver(measure);
     ro.observe(list);
     return () => ro.disconnect();
-  }, [visible, collapsed, q]);
+  }, [visible, collapsed]);
   // Top-level decks have a badge (their icon, or the count rings) unless set to None, so subdecks indent past it.
   const anyIcon = top.some((d) => d.icon !== "none");
   // No deck has subdecks: no chevron column, so names start at the page margin.
@@ -305,7 +302,7 @@ function DesktopDecks() {
 
   return (
     <Page className="flex max-w-[52rem] flex-col md:-mb-[5.5rem] md:min-h-[calc(100dvh-2.5rem)]">
-      <LibraryHeader onImport={reload} onNew={() => setCreating(true)} query={query} setQuery={setQuery} hasDecks={!!decks?.length} />
+      <LibraryHeader onImport={reload} onNew={() => setCreating(true)} hasDecks={!!decks?.length} />
 
       {decks && decks.length === 0 && (
         <EmptyState title="No decks yet" action={<><ImportButton onDone={reload} /><Button size="sm" className="gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" />New deck</Button></>}>
@@ -314,7 +311,7 @@ function DesktopDecks() {
       )}
       {!decks && <div className="h-56 animate-pulse rounded-2xl bg-muted/60" />}
 
-      {decks && decks.length > 0 && !q && <div className="@container">{allDone ? <DonePanel decks={decks} stats={stats} /> : due > 0 ? <SessionCard decks={decks} stats={stats} /> : null}</div>}
+      {decks && decks.length > 0 && <div className="@container">{allDone ? <DonePanel decks={decks} stats={stats} /> : due > 0 ? <SessionCard decks={decks} stats={stats} /> : null}</div>}
 
       {visible.length > 0 && (
         <section className="mt-10" aria-label="Decks">
@@ -335,7 +332,7 @@ function DesktopDecks() {
               const lifted = dragged(d.name);
               const target = drag?.drop?.kind === "into" && drag.drop.parent === d.name && !isNoop(drag.name, drag.drop);
               const targetBlocked = target && blocked(drag!.name, drag!.drop!);
-              const open = d.hasChildren && (q ? true : !collapsed.has(d.name));
+              const open = d.hasChildren && !collapsed.has(d.name);
               const study = () => navigate(watch ? `/watch?deck=${enc(d.name)}` : `/study?deck=${enc(d.name)}${w ? "" : "&ahead=1"}`);
               const note = d.kids ? plural(d.kids, "subdeck") : sub ? plural(d.cards, "card") : undefined;
               const menu = { name: d.name, archived: false, disabled: deckActions.busy, onArchive: () => deckActions.archive(d.name, true), onDelete: () => deckActions.requestDelete(d.name), extra: menuFor(d) };
@@ -387,7 +384,7 @@ function DesktopDecks() {
                         className={cn("block max-w-full truncate text-left hover:underline", sub ? "text-[15px] font-medium" : "text-[15.5px] font-semibold")}
                         onClick={() => navigate(`/deck?name=${enc(d.name)}`)}
                       >
-                        {q || d.displayDepth === 0 ? (d.displayDepth === 0 ? d.name : name) : name}
+                        {d.displayDepth === 0 ? d.name : name}
                       </button>
                       <div className="mt-[3px] flex items-center gap-3">
                         <DeckCounts d={d} note={note} />
@@ -417,11 +414,9 @@ function DesktopDecks() {
               </div>
             )}
           </div>
-          {q && visible.length === 0 && <p className="px-1 py-8 text-center text-sm text-muted-foreground">No deck matches “{query}”.</p>}
         </section>
       )}
-      {decks && decks.length > 0 && !q && <ArchiveLink count={archived} className="mt-auto pt-10" />}
-      {q && decks && visible.length === 0 && <p className="mt-10 text-center text-sm text-muted-foreground">No deck matches “{query}”.</p>}
+      {decks && decks.length > 0 && <ArchiveLink count={archived} className="mt-auto pt-10" />}
       {deckActions.deleteDialog}
       {drag && (
         <div
@@ -453,7 +448,7 @@ function DesktopDecks() {
 }
 
 /** Date, title, and the page's actions: search the decks, import, new deck. */
-function LibraryHeader({ onImport, onNew, query, setQuery, hasDecks }: { onImport(): void; onNew(): void; query: string | null; setQuery(q: string | null): void; hasDecks: boolean }) {
+function LibraryHeader({ onImport, onNew, hasDecks }: { onImport(): void; onNew(): void; hasDecks: boolean }) {
   const pick = useImportPicker(onImport);
   return (
     <header className="mb-7 flex flex-wrap items-end gap-x-4 gap-y-3">
@@ -462,22 +457,10 @@ function LibraryHeader({ onImport, onNew, query, setQuery, hasDecks }: { onImpor
         <h1 className="lib-title mt-1.5 text-[2rem] leading-[1.1] font-semibold">Library</h1>
       </div>
       <div className="flex items-center gap-2">
-        {query !== null ? (
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Escape" && setQuery(null)}
-              placeholder="Find a deck"
-              aria-label="Find a deck"
-              className="h-10 w-52 rounded-xl pr-8 pl-8"
-            />
-            <button className="absolute top-1/2 right-1.5 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground" onClick={() => setQuery(null)} aria-label="Close search"><X className="size-4" /></button>
-          </div>
-        ) : (
-          hasDecks && <button className="flex size-10 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setQuery("")} aria-label="Find a deck" title="Find a deck"><Search className="size-[18px]" /></button>
+        {hasDecks && (
+          <button className="flex size-10 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent hover:text-foreground" onClick={openDeckFinder} aria-label="Find a deck" title={`Find a deck (${FINDER_KEY})`}>
+            <Search className="size-[18px]" />
+          </button>
         )}
         <button onClick={pick} className="lib-quiet inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold"><Upload className="size-4" />Import</button>
         <button onClick={onNew} className="lib-quiet inline-flex h-10 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold"><Plus className="size-4" />New deck</button>

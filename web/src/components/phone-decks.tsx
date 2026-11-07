@@ -12,6 +12,7 @@ import { ActionSheet, PhoneIconButton, PhoneTitle, type SheetAction } from "@/co
 import { DeckCounts, NewDeckDialog, todayKicker, useImportPicker, useLibrary } from "@/pages/decks";
 import { DeckMenu, type DeckMenuEntry, useDeckActions } from "@/components/deck-actions";
 import { ArchiveLink, useArchiveCount } from "@/components/archive-link";
+import { openDeckFinder } from "@/components/deck-finder";
 import { ChangeIconDialog, DeckBadge } from "@/components/deck-icon";
 import { DonePanel, SessionCard, StreakCelebration, useMilestone } from "@/components/library-session";
 
@@ -29,7 +30,6 @@ export function PhoneDecks() {
   const archivedCount = useArchiveCount();
   const [creating, setCreating] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [query, setQuery] = useState<string | null>(null);
   const pickFile = useImportPicker(reload);
 
   const all = decks ?? [];
@@ -39,8 +39,6 @@ export function PhoneDecks() {
   const cards = top.reduce((a, d) => a + d.cards, 0);
   const allDone = !!decks && decks.length > 0 && due === 0 && cards > 0;
   const milestone = useMilestone(stats, allDone);
-  const q = query?.trim().toLowerCase() ?? "";
-  const found = q ? all.filter((d) => leafOf(d.name).toLowerCase().includes(q)) : [];
 
   return (
     <div className="flex min-h-[calc(100dvh-var(--tabbar-h,0px)-2.5rem)] flex-col pb-4">
@@ -50,26 +48,13 @@ export function PhoneDecks() {
         className="lib-phone-title pb-4"
         actions={
           <>
-            {all.length > 0 && <PhoneIconButton label="Find a deck" onClick={() => setQuery(query === null ? "" : null)}>{query === null ? <Search /> : <X />}</PhoneIconButton>}
+            {all.length > 0 && <PhoneIconButton label="Find a deck" onClick={openDeckFinder}><Search /></PhoneIconButton>}
             <PhoneIconButton label="New deck or import" onClick={() => setAdding(true)}><Plus /></PhoneIconButton>
           </>
         }
       />
 
-      {query !== null && (
-        <div className="mx-5 mb-4">
-          <input
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Find a deck"
-            aria-label="Find a deck"
-            className="h-11 w-full rounded-xl border bg-card px-4 text-[16px] outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
-      )}
-
-      {!q && decks && top.length > 0 && (
+      {decks && top.length > 0 && (
         <div className="@container mx-5">{allDone ? <DonePanel decks={all} stats={stats} phone /> : due > 0 ? <SessionCard decks={all} stats={stats} phone /> : null}</div>
       )}
 
@@ -86,14 +71,8 @@ export function PhoneDecks() {
 
       {!decks && <div className="mx-5 mt-2 h-44 animate-pulse rounded-2xl bg-muted/50" />}
 
-      {q ? (
-        <section className="mt-2">
-          {found.length ? found.map((d) => <DeckRow key={d.id} d={d} decks={all} crumb onHold={() => navigate(`/deck?name=${enc(d.name)}`)} />) : <p className="px-5 py-8 text-center text-[14px] text-muted-foreground">No deck matches “{query}”.</p>}
-        </section>
-      ) : (
-        top.length > 0 && <DeckList decks={all} parent="" label="Decks" aside={`${top.length} · ${plural(cards, "card")}`} onChanged={reload} />
-      )}
-      {!q && decks && decks.length > 0 && (
+      {top.length > 0 && <DeckList decks={all} parent="" label="Decks" aside={`${top.length} · ${plural(cards, "card")}`} onChanged={reload} />}
+      {decks && decks.length > 0 && (
         <div className="mx-5 mt-auto pt-8"><ArchiveLink count={archivedCount} /></div>
       )}
 

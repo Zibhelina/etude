@@ -2,6 +2,7 @@
 // syncs; a localStorage copy shows it without a flash on load. src/core/avatar.ts checks and describes the values.
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { rememberBanner, type Banner } from "@/lib/banner";
 import { AVATAR_CHARACTERS, AVATAR_EMOJI_BG, type Avatar } from "../../../src/core/avatar.ts";
 
 export type { Avatar };
@@ -89,10 +90,18 @@ export async function saveProfile(a: Avatar | null, name: string): Promise<void>
   rememberName(s.name ?? "");
 }
 
-/** Reads the saved picture and name, so another device's choice wins over this one's copy. */
+/** Saves just the name (synced). Empty falls back to the account's name or email. */
+export async function saveName(name: string): Promise<string> {
+  const s = (await api.saveSettings({ name })) as { name?: string };
+  rememberName(s.name ?? "");
+  return s.name ?? "";
+}
+
+/** Reads the saved picture, name and banner, so another device's choice wins over this one's copy. */
 export async function loadAvatar() {
   try {
-    const s = (await api.settings()) as { avatar?: Avatar | null; name?: string };
+    const s = (await api.settings()) as { avatar?: Avatar | null; name?: string; banner?: Banner | null };
+    rememberBanner(s.banner ?? null);
     const a = s.avatar ?? null;
     if (!sameAvatar(a, current)) remember(a);
     if ((s.name ?? "") !== myName) rememberName(s.name ?? "");

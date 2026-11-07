@@ -1,4 +1,4 @@
-// First-run setup: comfort level, AI grading, Sync, then something to study. Every step can be
+// First-run setup: your picture, comfort level, AI grading, Sync, then something to study. Every step can be
 // skipped, and everything chosen here is in Settings afterwards. The comfort level only changes what
 // this flow offers; it doesn't hide anything elsewhere in the app.
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -46,12 +46,13 @@ import { etudeFetch } from "@/lib/transport";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { NATIVE_COPY } from "@/lib/native-copy";
+import { AvatarStep } from "@/components/avatar-studio";
 import { track } from "@/lib/telemetry";
 
 /** Settings → About → Run setup again. */
 export const ONBOARDING_EVENT = "etude:onboarding";
 
-type Step = "welcome" | "level" | "ai" | "accounts" | "setup" | "sync" | "done";
+type Step = "welcome" | "avatar" | "level" | "ai" | "accounts" | "setup" | "sync" | "done";
 type Account = "chatgpt" | "openrouter" | "openai" | "local" | "none";
 type SyncChoice = "cloud" | "folder" | "server" | "device";
 type AiOutcome = { preset: PresetId | null; tested: boolean } | "off" | "later";
@@ -113,7 +114,7 @@ export function Onboarding({ onFinish }: { onFinish(): void }) {
   }, [step]);
 
   // The steps this run goes through, for the progress dots.
-  const steps: Step[] = syncOnly ? ["sync"] : wantsAi === false ? ["level", "ai", "sync"] : ["level", "ai", "accounts", "setup", "sync"];
+  const steps: Step[] = syncOnly ? ["sync"] : wantsAi === false ? ["avatar", "level", "ai", "sync"] : ["avatar", "level", "ai", "accounts", "setup", "sync"];
   const at = steps.indexOf(step);
 
   const go = (s: Step) => setHistory((h) => [...h, s]);
@@ -154,13 +155,16 @@ export function Onboarding({ onFinish }: { onFinish(): void }) {
     <div ref={scroller} className="fixed inset-0 z-40 overflow-y-auto bg-background text-foreground" data-onboarding={step}>
       <div
         className={cn(
-          "mx-auto flex min-h-full w-full max-w-[420px] flex-col px-5 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.25rem)]",
+          "mx-auto flex min-h-full w-full flex-col px-5",
+          // The picture step's carousel needs the room; the bar on top stays as wide as the other steps.
+          step === "avatar" ? "max-w-[880px]" : "max-w-[420px]",
+          " pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1.25rem)]",
           "md:min-h-0 md:px-0 md:pt-[72px] md:pb-14",
         )}
       >
         {step === "welcome" ? (
           <Welcome
-            onStart={() => go("level")}
+            onStart={() => go("avatar")}
             onSignIn={() => {
               setSyncOnly(true);
               go("sync");
@@ -169,13 +173,15 @@ export function Onboarding({ onFinish }: { onFinish(): void }) {
           />
         ) : (
           <>
+            <div className="mx-auto w-full max-w-[420px]">
             <TopBar
               onBack={step === "done" ? undefined : back}
               total={steps.length}
               filled={step === "done" ? steps.length : at + 1}
               skipLabel={step === "done" ? undefined : step === "setup" ? "Later" : "Skip"}
               onSkip={() => {
-                if (step === "level") go("ai");
+                if (step === "avatar") go("level");
+                else if (step === "level") go("ai");
                 else if (step === "ai") {
                   setWantsAi(false);
                   afterAi("off");
@@ -184,6 +190,8 @@ export function Onboarding({ onFinish }: { onFinish(): void }) {
                 else if (step === "sync") afterSync("skipped");
               }}
             />
+            </div>
+            {step === "avatar" && <AvatarStep onNext={() => go("level")} />}
             {step === "level" && <LevelStep level={level} onChange={setLevel} onNext={() => go("ai")} />}
             {step === "ai" && (
               <AiStep

@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.1
+
+- **The Notes tutorial comes with Etude.** The first time you open Notes, it has a Notes showcase folder: Start here and nine pages (writing basics; links, tags and the graph; math, tables and callouts; look and layout; cards in a page; code you can run, with a forgetting-curve widget and a reaction game; pictures, video and PDFs; canvases; tabs, split view and the sidebar), each ending with a short Try it yourself, plus a canvas, a PDF, two code files and six cards in Notes::Notes showcase. It's added once: archive or delete it and it stays gone. Right-click Notes → Notes tutorial (or the button on an empty Notes) adds a fresh copy any time, and so does `etude note tutorial`.
+- Web edition: pictures in a page show (they could come up broken), and YouTube and Vimeo blocks play, as on the desktop.
+
 ## 3.1.0
 
 - **Notes (beta).** A Notes tab, so your notes can live next to the cards they turn into. Pages, folders, canvases, PDFs and code files hang under Notes in the sidebar; drag them to move them, Shift+click to pick several, right-click for New page, folder, canvas or file, Import and View graph. Notes is on the computer for now: it doesn't sync yet and isn't in the phone apps.

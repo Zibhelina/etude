@@ -100,7 +100,7 @@ function Tick({ size = 24 }: { size?: number }) {
 
 export function CharacterGrid({ pick, onPick, cols }: { pick: AvatarPick; onPick(id: string): void; cols: number }) {
   return (
-    <div role="radiogroup" aria-label="Characters" className="grid gap-[18px] p-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+    <div role="radiogroup" aria-label="Characters" className="grid gap-6 p-2.5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
       {CHARACTERS.map((c) => {
         const on = pick?.kind === "char" && pick.id === c.id;
         return (

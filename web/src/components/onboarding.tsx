@@ -114,7 +114,7 @@ export function Onboarding({ onFinish }: { onFinish(): void }) {
   }, [step]);
 
   // The steps this run goes through, for the progress dots.
-  const steps: Step[] = syncOnly ? ["sync"] : wantsAi === false ? ["avatar", "level", "ai", "sync"] : ["avatar", "level", "ai", "accounts", "setup", "sync"];
+  const steps: Step[] = syncOnly ? ["sync"] : wantsAi === false ? ["level", "ai", "sync", "avatar"] : ["level", "ai", "accounts", "setup", "sync", "avatar"];
   const at = steps.indexOf(step);
 
   const go = (s: Step) => setHistory((h) => [...h, s]);
@@ -148,7 +148,8 @@ export function Onboarding({ onFinish }: { onFinish(): void }) {
     setSync(outcome);
     // Came to sign in: the rest of Sync (sign-in code, starting it) is in Settings.
     if (syncOnly && outcome !== "skipped" && outcome.next) return void finish(() => navigate("/settings#sync"));
-    go("done");
+    // The face comes last, right before Done.
+    go(syncOnly ? "done" : "avatar");
   };
 
   return (
@@ -164,7 +165,7 @@ export function Onboarding({ onFinish }: { onFinish(): void }) {
       >
         {step === "welcome" ? (
           <Welcome
-            onStart={() => go("avatar")}
+            onStart={() => go("level")}
             onSignIn={() => {
               setSyncOnly(true);
               go("sync");
@@ -180,7 +181,7 @@ export function Onboarding({ onFinish }: { onFinish(): void }) {
               filled={step === "done" ? steps.length : at + 1}
               skipLabel={step === "done" ? undefined : step === "setup" ? "Later" : "Skip"}
               onSkip={() => {
-                if (step === "avatar") go("level");
+                if (step === "avatar") go("done");
                 else if (step === "level") go("ai");
                 else if (step === "ai") {
                   setWantsAi(false);
@@ -191,7 +192,7 @@ export function Onboarding({ onFinish }: { onFinish(): void }) {
               }}
             />
             </div>
-            {step === "avatar" && <AvatarStep onNext={() => go("level")} />}
+            {step === "avatar" && <AvatarStep onNext={() => go("done")} />}
             {step === "level" && <LevelStep level={level} onChange={setLevel} onNext={() => go("ai")} />}
             {step === "ai" && (
               <AiStep

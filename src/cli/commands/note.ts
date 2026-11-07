@@ -38,14 +38,17 @@ const lookFlags = [
   { name: "width", type: "string" as const, description: "Page width: normal, wide or full." },
   { name: "font", type: "string" as const, description: "Page font: sans, serif or mono." },
   { name: "size", type: "string" as const, description: "Text size: small, normal or large." },
+  { name: "list-icon", type: "string" as const, description: "Show the page's icon in the sidebar list: show or hide. Hidden by default, so the list shows names only, like Obsidian." },
 ];
 
 /** The look flags given, merged over the page's current look (undefined when none were given). */
 function lookOf(ctx: any, current: Record<string, unknown> = {}): Record<string, unknown> | undefined {
   const given = ["cover", "width", "font", "size"].filter((k) => ctx.flags[k] !== undefined);
-  if (!given.length) return undefined;
+  const icon = ctx.flags["list-icon"];
+  if (!given.length && icon === undefined) return undefined;
   const out: Record<string, unknown> = { ...current };
   for (const k of given) out[k] = ctx.flags[k] === "none" || ctx.flags[k] === "" ? undefined : ctx.flags[k];
+  if (icon !== undefined) out.showIcon = icon;
   return out;
 }
 
@@ -95,7 +98,7 @@ command({
     const content = contentOf(ctx);
     if (content !== undefined || ctx.flags.file) {
       if (docOf(ctx) !== undefined) throw new CliError("a file has text content, not a body: use --content or --content-file");
-      return ctx.e.notes.create({ title: ctx.args.title, parentId, icon: ctx.flags.icon ?? null, kind: "file", content: content ?? "" });
+      return ctx.e.notes.create({ title: ctx.args.title, parentId, icon: ctx.flags.icon ?? null, kind: "file", content: content ?? "", look: lookOf(ctx) });
     }
     const scene = sceneOf(ctx);
     if (scene !== undefined || ctx.flags.canvas) {

@@ -911,3 +911,7 @@ body.browse-resizing iframe { pointer-events: none; }
   .ob-cheer { animation: none; }
   .ob-bar > i, .ob-tile, .ob-pri { transition: none; }
 }
+/* Library session card: the three rings draw in once */
+@keyframes lib-ring-in { from { stroke-dashoffset: var(--lib-ring-c, 140); } }
+.lib-ring-arc { animation: lib-ring-in 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@media (prefers-reduced-motion: reduce) { .lib-ring-arc { animation: none; } }

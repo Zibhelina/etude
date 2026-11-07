@@ -790,7 +790,7 @@ function saveWrap(id: string, on: boolean) {
 }
 
 /** A code or text file (main.py, report.tex): its name in the top bar and a plain editor filling the rest. */
-function FileView({ note, all, onTitle, onContent, saveState, onPick, onSave, onBack }: {
+function FileView({ note, all, onContent, saveState, onPick, onSave, onBack }: {
   note: Note;
   all: NoteSummary[];
   onTitle(t: string): void;
@@ -800,7 +800,8 @@ function FileView({ note, all, onTitle, onContent, saveState, onPick, onSave, on
   onSave(): void;
   onBack?: () => void;
 }) {
-  const [t, setT] = useState(note.title);
+  // The name lives in the tab and the sidebar; Rename there changes it, and the highlighting follows.
+  const t = note.title;
   const host = useRef<HTMLDivElement>(null);
   const ed = useRef<FileEditorHandle | null>(null);
   const vim = useVimMode();
@@ -849,6 +850,7 @@ function FileView({ note, all, onTitle, onContent, saveState, onPick, onSave, on
   }, [note.id]);
   useEffect(() => void ed.current?.setVim(vim), [vim]);
   useEffect(() => ed.current?.setWrap(wrap), [wrap]);
+  useEffect(() => ed.current?.setName(t), [t]);
   // .m highlights with Octave's grammar, which is MATLAB's; call it what you'd call it.
   const language = /\.m$/i.test(t) ? "MATLAB" : fileLanguage(t)?.name ?? "Plain text";
   const lines = ed.current?.view.state.doc.lines;
@@ -861,34 +863,19 @@ function FileView({ note, all, onTitle, onContent, saveState, onPick, onSave, on
           </button>
         )}
         {strip}
-        <nav aria-label="Path" className={cn("flex min-w-0 flex-1 items-center gap-1 text-[13px] text-muted-foreground", strip && "note-canvas-name")}>
-          {!strip && crumbs.map((c) => (
-            <span key={c.id} className="flex min-w-0 items-center gap-1">
-              <button className="truncate rounded px-1 hover:text-foreground" onClick={() => onPick(c.id)}>{display(c)}</button>
-              <ChevronRight className="size-3 shrink-0 opacity-60" />
-            </span>
-          ))}
-          <input
-            value={t}
-            placeholder="untitled.txt"
-            aria-label="File name"
-            spellCheck={false}
-            className="note-canvas-title note-file-name"
-            onChange={(e) => {
-              const v = e.target.value.replace(/[\n/]/g, "");
-              setT(v);
-              onTitle(v);
-              ed.current?.setName(v);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === "ArrowDown") {
-                e.preventDefault();
-                ed.current?.focus();
-              }
-            }}
-          />
-        </nav>
+        {!strip && (
+          <nav aria-label="Path" className="flex min-w-0 items-center gap-1 text-[13px] text-muted-foreground">
+            {crumbs.map((c) => (
+              <span key={c.id} className="flex min-w-0 items-center gap-1">
+                <button className="truncate rounded px-1 hover:text-foreground" onClick={() => onPick(c.id)}>{display(c)}</button>
+                <ChevronRight className="size-3 shrink-0 opacity-60" />
+              </span>
+            ))}
+            <span className="note-file-name truncate px-1 text-foreground/80">{t || "untitled.txt"}</span>
+          </nav>
+        )}
         {plus}
+        <span className="flex-1" />
         <span className="flex shrink-0 items-center gap-2">
           <span className={cn("note-save", saveState)} aria-live="polite">{saveState === "saving" ? "Saving…" : saveState === "error" ? "Not saved" : "Saved"}</span>
           <DropdownMenu>

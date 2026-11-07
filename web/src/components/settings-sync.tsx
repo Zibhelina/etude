@@ -52,9 +52,9 @@ export interface SyncStatus {
   media?: { active: boolean; progress: SyncProgress | null; error: string | null; received: number };
 }
 
-/** snapshot, download and upload count bytes; check counts media files. The total is null when it isn't known ahead. */
+/** snapshot, download, types and upload count bytes; check counts media files. The total is null when it isn't known ahead. */
 export interface SyncProgress {
-  step: "snapshot" | "download" | "check" | "upload" | "apply";
+  step: "snapshot" | "download" | "types" | "check" | "upload" | "apply";
   done: number;
   total: number | null;
   /** Bytes per second. */
@@ -179,13 +179,16 @@ export function SyncSection() {
     if (status) shareStatus(status);
   }, [status]);
 
-  // A running sync, or media still coming in, is reported by status; look again until it settles.
+  // A running sync, or media still coming in, is reported by status; look again until it settles. A sync started
+  // here counts from the moment it's asked for: the status read before it still says idle, and the request only
+  // returns once the collection is in step, so without this its progress would never show.
   const mediaActive = !!status?.media?.active;
+  const [started, setStarted] = useState(false);
   useEffect(() => {
-    if (!status?.busy && !mediaActive) return;
+    if (!status?.busy && !mediaActive && !started && busy !== "now") return;
     const t = window.setInterval(() => void load(true), 1000);
     return () => window.clearInterval(t);
-  }, [status?.busy, mediaActive, load]);
+  }, [status?.busy, mediaActive, started, busy, load]);
 
   // Storage used changes with each sync.
   useEffect(() => {
@@ -337,7 +340,8 @@ export function SyncSection() {
         setCopied(false);
       }
       // "Start syncing" means it: run the first sync right away instead of waiting for the background one.
-      void callSync<SyncStatus>("POST", "/api/sync/now", {}).then(setStatus, () => void load(true));
+      setStarted(true);
+      void callSync<SyncStatus>("POST", "/api/sync/now", {}).then(setStatus, () => void load(true)).finally(() => setStarted(false));
     }
   };
 
@@ -830,7 +834,7 @@ export function SyncSection() {
             {!syncing && status.media?.active && (
               <div className="flex flex-col gap-1.5" data-sync-media="active">
                 <span className="text-sm">Your collection is up to date. Media files are still coming in.</span>
-                {status.media.progress && <ProgressRow p={status.media.progress} label="Media sync progress" />}
+                {status.media.progress && <ProgressRow p={status.media.progress} label="Media sync progress" media />}
               </div>
             )}
             {!syncing && !status.media?.active && status.media?.error && (
@@ -1224,10 +1228,33 @@ function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(
   );
 }
 
-const STEP: Record<SyncProgress["step"], string> = { snapshot: "Downloading your collection", download: "Downloading", check: "Checking media", upload: "Uploading", apply: "Applying changes" };
+/**
+ * What each step is doing: the thing it moves is always the real one, and the verb takes turns every few seconds,
+ * starting with the plain one. The media task's steps say "media files".
+ */
+const PHRASES: Record<"collection" | "media", Partial<Record<SyncProgress["step"], [string, string[]]>>> = {
+  collection: {
+    snapshot: ["your collection", ["Downloading", "Unpacking", "Unfolding", "Hauling in", "Unrolling"]],
+    download: ["changes from your other devices", ["Downloading", "Fetching", "Rounding up", "Reeling in", "Gathering"]],
+    types: ["card types", ["Downloading", "Twisting", "Polishing", "Untangling", "Assembling"]],
+    upload: ["your changes", ["Uploading", "Sending", "Beaming up", "Shipping", "Posting"]],
+    apply: ["your cards", ["Putting together", "Shuffling", "Sorting", "Stacking", "Filing"]],
+  },
+  media: {
+    check: ["media files", ["Checking", "Counting", "Sniffing", "Inspecting", "Tallying"]],
+    download: ["media files", ["Downloading", "Bamboozling", "Wrangling", "Coaxing in", "Herding"]],
+    upload: ["media files", ["Uploading", "Launching", "Tossing up", "Beaming up", "Catapulting"]],
+  },
+};
+const VERB_MS = 3000;
 
-function ProgressRow({ p, label = "Sync progress" }: { p: SyncProgress; label?: string }) {
-  const transfer = p.step === "snapshot" || p.step === "download" || p.step === "upload";
+function ProgressRow({ p, label = "Sync progress", media = false }: { p: SyncProgress; label?: string; media?: boolean }) {
+  // When this step started showing, so its first verb is the plain one.
+  const since = useRef<{ step: string; at: number } | null>(null);
+  if (since.current?.step !== p.step) since.current = { step: p.step, at: Date.now() };
+  const [object, verbs] = PHRASES[media ? "media" : "collection"][p.step] ?? PHRASES.collection[p.step] ?? ["", [p.step]];
+  const verb = verbs[Math.floor((Date.now() - since.current.at) / VERB_MS) % verbs.length];
+  const transfer = p.step === "snapshot" || p.step === "download" || p.step === "types" || p.step === "upload";
   // The download total is the server's estimate, so it never claims 100% before the step ends.
   const pct = p.total ? Math.min(p.step === "download" ? 99 : 100, Math.floor((p.done / p.total) * 100)) : null;
   const detail = p.step === "check"
@@ -1241,7 +1268,7 @@ function ProgressRow({ p, label = "Sync progress" }: { p: SyncProgress; label?: 
       <div className="h-1.5 w-full max-w-72 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined}>
         <div className={cn("h-full rounded-full bg-highlight transition-[width] duration-700", pct === null && "w-1/3 animate-pulse")} style={pct === null ? undefined : { width: `${Math.max(pct, 1.5)}%` }} />
       </div>
-      <span className="tabular-nums text-muted-foreground">{[STEP[p.step] + (pct === null ? "" : ` ${pct}%`), detail, rate].filter(Boolean).join(" · ")}</span>
+      <span className="tabular-nums text-muted-foreground">{[`${verb} ${object}`.trim() + (pct === null ? "" : ` ${pct}%`), detail, rate].filter(Boolean).join(" · ")}</span>
     </div>
   );
 }

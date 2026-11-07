@@ -158,7 +158,7 @@ test("sync reports its steps, and the upload total matches the bytes sent",async
     const record=(e:Etude)=>{const s=syncFor(e) as any,seen:any[]=[],step=s.step.bind(s);s.step=(...args:any[])=>{const p=step(...args);if(!seen.includes(p))seen.push(p);return p;};return seen;};
     const sa=record(a);await syncFor(a).now({waitMedia:true});
     // The collection first (the first sync builds the relational view once), then the media.
-    assert.deepEqual(sa.map(p=>p.step),["download","upload","apply","check","download","upload"]);
+    assert.deepEqual(sa.map(p=>p.step),["download","types","upload","apply","check","download","upload"]);
     const uploads=sa.filter(p=>p.step==="upload");for(const up of uploads)assert.equal(up.done,up.total);
     assert.ok(uploads[1].done>3000,"the media upload");
     assert.deepEqual(sa.find(p=>p.step==="check"),{step:"check",done:3,total:3,rate:0});

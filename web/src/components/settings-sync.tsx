@@ -1228,32 +1228,24 @@ function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(
   );
 }
 
-/**
- * What each step is doing: the thing it moves is always the real one, and the verb takes turns every few seconds,
- * starting with the plain one. The media task's steps say "media files".
- */
-const PHRASES: Record<"collection" | "media", Partial<Record<SyncProgress["step"], [string, string[]]>>> = {
+/** What each step is doing, naming what it moves. The media task's steps say "media files". */
+const PHRASES: Record<"collection" | "media", Partial<Record<SyncProgress["step"], string>>> = {
   collection: {
-    snapshot: ["your collection", ["Downloading", "Unpacking", "Unfolding", "Hauling in", "Unrolling"]],
-    download: ["changes from your other devices", ["Downloading", "Fetching", "Rounding up", "Reeling in", "Gathering"]],
-    types: ["card types", ["Downloading", "Twisting", "Polishing", "Untangling", "Assembling"]],
-    upload: ["your changes", ["Uploading", "Sending", "Beaming up", "Shipping", "Posting"]],
-    apply: ["your cards", ["Putting together", "Shuffling", "Sorting", "Stacking", "Filing"]],
+    snapshot: "Downloading your collection",
+    download: "Downloading changes from other devices",
+    types: "Syncing card types",
+    upload: "Uploading your changes",
+    apply: "Applying changes",
   },
   media: {
-    check: ["media files", ["Checking", "Counting", "Sniffing", "Inspecting", "Tallying"]],
-    download: ["media files", ["Downloading", "Bamboozling", "Wrangling", "Coaxing in", "Herding"]],
-    upload: ["media files", ["Uploading", "Launching", "Tossing up", "Beaming up", "Catapulting"]],
+    check: "Checking media files",
+    download: "Downloading media files",
+    upload: "Uploading media files",
   },
 };
-const VERB_MS = 3000;
 
 function ProgressRow({ p, label = "Sync progress", media = false }: { p: SyncProgress; label?: string; media?: boolean }) {
-  // When this step started showing, so its first verb is the plain one.
-  const since = useRef<{ step: string; at: number } | null>(null);
-  if (since.current?.step !== p.step) since.current = { step: p.step, at: Date.now() };
-  const [object, verbs] = PHRASES[media ? "media" : "collection"][p.step] ?? PHRASES.collection[p.step] ?? ["", [p.step]];
-  const verb = verbs[Math.floor((Date.now() - since.current.at) / VERB_MS) % verbs.length];
+  const phrase = PHRASES[media ? "media" : "collection"][p.step] ?? PHRASES.collection[p.step] ?? p.step;
   const transfer = p.step === "snapshot" || p.step === "download" || p.step === "types" || p.step === "upload";
   // The download total is the server's estimate, so it never claims 100% before the step ends.
   const pct = p.total ? Math.min(p.step === "download" ? 99 : 100, Math.floor((p.done / p.total) * 100)) : null;
@@ -1268,7 +1260,12 @@ function ProgressRow({ p, label = "Sync progress", media = false }: { p: SyncPro
       <div className="h-1.5 w-full max-w-72 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined}>
         <div className={cn("h-full rounded-full bg-highlight transition-[width] duration-700", pct === null && "w-1/3 animate-pulse")} style={pct === null ? undefined : { width: `${Math.max(pct, 1.5)}%` }} />
       </div>
-      <span className="tabular-nums text-muted-foreground">{[`${verb} ${object}`.trim() + (pct === null ? "" : ` ${pct}%`), detail, rate].filter(Boolean).join(" · ")}</span>
+      {/* Two lines that never wrap, the second kept even when empty, so the box keeps its height as the numbers change. */}
+      <span className="flex min-w-0 gap-1 text-muted-foreground">
+        <span className="truncate" title={phrase}>{phrase}</span>
+        {pct !== null && <span className="shrink-0 tabular-nums">{pct}%</span>}
+      </span>
+      <span className="truncate tabular-nums text-muted-foreground">{[detail, rate].filter(Boolean).join(" · ") || "\u00a0"}</span>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { BookOpen, ChevronLeft, ChevronRight, Clock, Database, Globe, Info, Keyb
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MyAvatar } from "@/components/avatar";
+import { ProfileHeader } from "@/components/profile-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { UpdateSettingsRow } from "@/components/update-bar";
@@ -49,7 +50,8 @@ const ANCHOR_GROUP: Record<string, GroupId> = { sync: "account", account: "accou
 /** What search knows: [section, row title as shown, extra words]. A row inside a fold names the fold. */
 const INDEX: { g: GroupId; label: string; words: string; fold?: string }[] = [
   { g: "account", label: "Sync", words: "sync now synced encrypted devices storage plan subscription billing server folder" },
-  { g: "account", label: "Your picture", words: "picture avatar photo profile emoji character face initial" },
+  { g: "account", label: "Your picture", words: "picture avatar photo profile emoji character face initial name" },
+  { g: "account", label: "Banner", words: "banner cover header background profile image" },
   { g: "account", label: "Sign in or create an account", words: "account email login sign in code" },
   { g: "account", label: "Passkeys", words: "passkey fingerprint face touch id login" },
   { g: "account", label: "Devices", words: "device iphone mac sign out" },
@@ -409,7 +411,7 @@ export function SettingsPage() {
 
   const intro: Record<GroupId, React.ReactNode> = {
     account: signedIn ? (
-      <>Signed in as <b>{email}</b>. Sync keeps the same collection on every device you sign in on, encrypted.</>
+      <>Sync keeps the same collection on every device you sign in on, encrypted.</>
     ) : (
       <>You're not signed in, and that's fine. Everything works without an account. You only need one for <b>Sync</b> and <b>paid decks</b>.</>
     ),
@@ -552,6 +554,7 @@ export function SettingsPage() {
         <H id={`settings-h-${g}`} className={cn("score-serif score-display text-foreground", H === "h1" ? "text-[2rem] leading-[1.1]" : "text-[1.625rem] leading-[1.15] max-lg:text-[1.5rem]")}>
           {groupLabel(g)}
         </H>
+        {g === "account" && <ProfileHeader acct={acct} />}
         <p data-settings-intro className="mt-2 mb-6 max-w-[600px] text-[15px] leading-normal text-pretty text-muted-foreground [&_b]:font-semibold [&_b]:text-foreground">
           {intro[g]}
         </p>

@@ -53,21 +53,27 @@
 @container (max-width: 700px) { .mk-hero { grid-template-columns: 1fr; gap: 4px; } .mk-hero-text { padding: 14px 10px 10px; } }
 @container (max-width: 600px) { .mk-hero { padding: 10px; margin-bottom: 32px; } .mk-hero-text { padding: 12px 6px 8px; } .mk-hero-text h2 { font-size: 27px; margin: 6px 0 8px; } .mk-hero-text p { font-size: 14.5px; -webkit-line-clamp: 3; } .mk-hero .mk-actions > :first-child { flex: 1; } }
 
-/* Featured: big cards in one sideways row, one and a bit on screen so the next one peeks in. */
+/* Featured: big cards in one sideways row. The first card sits on the page margin and the last on the right edge;
+   the ones between are centred with a slice of both neighbours. --pk is the room each side keeps for a neighbour
+   when a card is centred, --pe the row's own inline padding (the page margin it lines up with). */
 .mk-feat { margin-bottom: 40px; }
-.mk-feat-row { display: grid; grid-auto-flow: column; grid-auto-columns: calc(100% - 140px); gap: 18px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; padding: 4px 0 14px; margin: -4px 0 0; }
+.mk-feat-row { --pk: 76px; --gap: 16px; --pe: 0px; display: grid; grid-auto-flow: column; grid-auto-columns: calc(100% + 2 * var(--pe) - 2 * var(--pk)); gap: var(--gap); overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; padding: 4px var(--pe) 14px; scroll-padding-inline: var(--pk); margin: -4px 0 0; }
 .mk-feat-row::-webkit-scrollbar { display: none; }
-.mk-feat-row > .mk-hero { scroll-snap-align: start; margin-bottom: 0; }
+.mk-feat-row > .mk-hero { scroll-snap-align: center; margin-bottom: 0; }
+/* The slices fade out toward the page edge, the same on both sides; no fade on a side with nothing more (first and last card). */
+.mk-feat-row[data-hs] { --hs-fl: calc(var(--pk) - var(--gap) / 2) !important; --hs-fr: calc(var(--pk) - var(--gap) / 2) !important; }
+.mk-feat-row[data-hs]:not([data-more-left]) { --hs-fl: 0px !important; }
+.mk-feat-row[data-hs]:not([data-more-right]) { --hs-fr: 0px !important; }
 /* The picture fills the card's height so a long pitch doesn't leave an empty band under it. */
 .mk-feat-row .mk-hero-cover { aspect-ratio: auto; min-height: 100%; }
 @container (max-width: 700px) { .mk-feat-row .mk-hero-cover { aspect-ratio: 16 / 10; min-height: 0; } }
-.mk-feat.one .mk-feat-row { grid-auto-columns: 100%; }
+.mk-feat.one .mk-feat-row { --pk: var(--pe); }
 .mk-feat-dots { display: flex; justify-content: center; gap: 6px; margin-top: 4px; }
 .mk-feat-dots button { width: 7px; height: 7px; border-radius: 99px; background: color-mix(in oklab, var(--muted-foreground) 35%, transparent); transition: width .2s, background .2s; }
 .mk-feat-dots button[aria-current="true"] { width: 20px; background: var(--foreground); }
-@container (max-width: 860px) { .mk-feat-row { grid-auto-columns: 86%; gap: 14px; } }
+@container (max-width: 860px) { .mk-feat-row { --pk: 56px; --gap: 12px; } }
 @container (max-width: 1000px) and (min-width: 701px) { .mk-feat-row .mk-hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .mk-feat-row .mk-hero-text p { -webkit-line-clamp: 3; } }
-@container (max-width: 600px) { .mk-feat { margin-bottom: 32px; } .mk-feat-row { grid-auto-columns: 88%; gap: 12px; margin-inline: -1rem; padding-inline: 1rem; scroll-padding-inline: 1rem; } .mk-feat-row > .mk-hero { padding: 10px; } }
+@container (max-width: 600px) { .mk-feat { margin-bottom: 32px; } .mk-feat-row { --pk: 24px; --gap: 8px; --pe: 1rem; margin-inline: -1rem; } .mk-feat-row > .mk-hero { padding: 10px; } }
 @media (prefers-reduced-motion: reduce) { .mk-feat-dots button { transition: none; } }
 
 /* Votes, counts and comments */

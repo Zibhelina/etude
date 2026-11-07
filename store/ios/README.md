@@ -1,6 +1,6 @@
 # Etude for iPhone and iPad
 
-The app is the serverless browser build (`dist-browser/`) inside a Capacitor shell in `ios/`. Bundle id `study.etude.app`, display name Etude, version and build come from `package.json` (2.5.0 → Version 2.5.0, Build 20500: major × 10000 + minor × 100 + patch, the same scheme as Android's versionCode), iOS 15 or later, iPhone and iPad. Capacitor 8 uses Swift Package Manager, so there is no CocoaPods step.
+The app is the serverless browser build (`dist-browser/`) inside a Capacitor shell in `ios/`. Bundle id `study.etude.app`, display name Etude, version and build come from `package.json` (2.5.0 → Version 2.5.0, Build 20500: major × 10000 + minor × 100 + patch; Android's versionCode has its own scheme, see `store/android/README.md`), iOS 15 or later, iPhone and iPad. Capacitor 8 uses Swift Package Manager, so there is no CocoaPods step.
 
 What's already in the project:
 

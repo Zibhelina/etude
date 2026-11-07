@@ -3,10 +3,22 @@ apply plugin: 'org.jetbrains.kotlin.android'
 
 import groovy.json.JsonSlurper
 
-// Version from the repo's package.json: 2.3.0 → versionName "2.3.0", versionCode 20300 (major*10000 + minor*100 + patch).
+// Version from the repo's package.json plus an optional Android-only build number, ETUDE_ANDROID_BUILD (default 0),
+// for a store upload that doesn't bump package.json:
+//   versionCode = major*1000000 + minor*10000 + patch*100 + build
+//   versionName = the package.json version, then ".<build>" when build > 0
+// 3.1.1 → "3.1.1" / 3010100; 3.1.1 with ETUDE_ANDROID_BUILD=1 → "3.1.1.1" / 3010101; 3.1.2 → "3.1.2" / 3010200.
+// Every code is above the old scheme's (major*10000 + minor*100 + patch, last used for 3.1.1 = 30101).
 def etudeVersion = new JsonSlurper().parse(file('../../package.json')).version
 def (vMajor, vMinor, vPatch) = etudeVersion.tokenize('.-')[0..2].collect { it as int }
-def etudeVersionCode = vMajor * 10000 + vMinor * 100 + vPatch
+def buildEnv = System.getenv('ETUDE_ANDROID_BUILD')?.trim()
+if (buildEnv && !(buildEnv ==~ /\d+/)) throw new GradleException("ETUDE_ANDROID_BUILD must be a whole number, got '${buildEnv}'")
+def etudeAndroidBuild = buildEnv ? (buildEnv as int) : 0
+if (vMinor > 99 || vPatch > 99 || etudeAndroidBuild > 99) {
+    throw new GradleException("minor, patch and ETUDE_ANDROID_BUILD must be below 100 for the versionCode scheme (${etudeVersion}, build ${etudeAndroidBuild})")
+}
+def etudeVersionCode = vMajor * 1000000 + vMinor * 10000 + vPatch * 100 + etudeAndroidBuild
+def etudeVersionName = etudeAndroidBuild > 0 ? "${etudeVersion}.${etudeAndroidBuild}" : etudeVersion
 
 // Release signing reads the upload keystore from the environment, so no key is ever committed.
 // See store/android/README.md for the keytool command.
@@ -20,7 +32,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode etudeVersionCode
-        versionName etudeVersion
+        versionName etudeVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

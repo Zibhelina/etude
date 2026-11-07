@@ -585,6 +585,7 @@ export const api = {
   pinNote: (id: string, pinned: boolean) => call<NoteSummary>("POST", `/api/notes/${encodeURIComponent(id)}/pin`, { pinned }),
   noteOpened: (id: string) => call<NoteSummary>("POST", `/api/notes/${encodeURIComponent(id)}/opened`),
   notePreviews: (ids: string[]) => call<NotePreview[]>("GET", `/api/notes/previews${qs({ ids: ids.join(",") })}`),
+  notesTutorial: (ifNew = false) => call<{ added: boolean; reason?: "seen" | "exists"; root: string | null; start: string | null; notes: number; items: number }>("POST", "/api/notes/tutorial", { ifNew }),
   deleteNote: (id: string) => call<{ ids: string[] }>("DELETE", `/api/notes/${encodeURIComponent(id)}`),
   uploadMedia: (file: File) => call<StoredMedia>("POST", `/api/media${qs({ name: file.name })}`, undefined, file),
   importMedia: (path: string) => call<StoredMedia>("POST", "/api/media/import", { path }),

@@ -4,7 +4,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { ArrowUpRight, Check, ChevronRight, Download, FileCode2, FilePlus2, Folder, FolderInput, FolderOpen, FolderPlus, ImagePlus, MoreHorizontal, PenTool, Plus, Smile, X } from "lucide-react";
+import { ArrowUpRight, Check, ChevronRight, Download, FileCode2, FilePlus2, Folder, FolderInput, FolderOpen, FolderPlus, GraduationCap, ImagePlus, MoreHorizontal, PenTool, Plus, Smile, X } from "lucide-react";
 import type { NoteLinkOptions, PageRef } from "@/editor/note-link";
 import { etudeFetch } from "@/lib/transport";
 import { api, type CanvasScene, type Note, type NoteDoc, type NoteLook, type NoteSummary } from "@/lib/api";
@@ -1085,6 +1085,7 @@ type PaneCtx = {
   setOpen(id: string, on: boolean): void;
   reload(): Promise<void>;
   importVault(): void;
+  addTutorial(): void;
   importMd(): void;
   pickPdf(parentId: string | null): void;
   newFile(): void;
@@ -1281,6 +1282,9 @@ function NotePane({ pane, noteId, ctx, focused, strip, plus }: {
                 <button type="button" onClick={ctx.importVault} className="lib-raised inline-flex h-10 items-center gap-2 rounded-[10px] px-4 text-[14px] font-[600]">
                   <FolderInput className="size-4" /> Import a vault
                 </button>
+                <button type="button" onClick={ctx.addTutorial} className="lib-raised inline-flex h-10 items-center gap-2 rounded-[10px] px-4 text-[14px] font-[600]">
+                  <GraduationCap className="size-4" /> Notes tutorial
+                </button>
               </div>
             </div>
           ) : null}
@@ -1375,7 +1379,15 @@ export function NotesPage({ id }: { id: string | null }) {
   const flushAll = useCallback(() => Promise.all([...flushers].map((f) => f())).then(() => {}), [flushers]);
 
   const reload = useCallback(async () => setList(await api.notes()), []);
-  useEffect(() => void reload().catch((e) => toast.error((e as Error).message)), [reload]);
+  // The first time Notes opens on a collection it gets the tutorial (once: archived or deleted, it stays gone).
+  const seeded = useRef<{ root: string; start: string | null } | null>(null);
+  useEffect(() => {
+    void api
+      .notesTutorial(true)
+      .then((r) => void (r.added && r.root && (seeded.current = { root: r.root, start: r.start })), () => {})
+      .then(reload)
+      .catch((e) => toast.error((e as Error).message));
+  }, [reload]);
   // A canvas made from a page's /canvas block shows up in the tree.
   useEffect(() => {
     const h = () => void reload().catch(() => {});
@@ -1411,6 +1423,14 @@ export function NotesPage({ id }: { id: string | null }) {
       return owner ? activate(l, owner.id, target) : openIn(l, l.focus, target, id ? "replace" : "new");
     });
   }, [id, list, phone]);
+  // Just added: its folder unfolds and Start here opens, unless the address asked for another page.
+  useEffect(() => {
+    const s = seeded.current;
+    if (!s || !list) return;
+    seeded.current = null;
+    setOpen(s.root, true);
+    if (!id && s.start) navigate(`/notes?id=${encodeURIComponent(s.start)}`, { replace: true });
+  }, [list]);
   // …and the address follows the focused pane's page, so a reload comes back to it.
   const lastActive = useRef(current);
   useEffect(() => {
@@ -1573,6 +1593,20 @@ export function NotesPage({ id }: { id: string | null }) {
     el.addEventListener("pointercancel", up);
   };
 
+  // A fresh copy of the tutorial, on demand (right-click Notes, or the empty Notes page).
+  const addTutorial = useCallback(async () => {
+    const t = toast.loading("Adding the Notes tutorial…");
+    try {
+      const r = await api.notesTutorial(false);
+      if (!phone) setNotesPagesOpen(true);
+      await reload();
+      if (r.root) setOpen(r.root, true);
+      if (r.start) navigate(`/notes?id=${encodeURIComponent(r.start)}`);
+      toast.success("Added the Notes tutorial", { id: t, description: "The Notes showcase folder, with its cards in Notes::Notes showcase." });
+    } catch (e) {
+      toast.error(`Couldn't add the tutorial: ${(e as Error).message}`, { id: t });
+    }
+  }, [reload, setOpen, phone]);
   const add = useCallback(
     async (parentId: string | null, kind: "page" | "canvas" | "file" = "page", title = "") => {
       try {
@@ -1952,13 +1986,14 @@ export function NotesPage({ id }: { id: string | null }) {
       else if (a === "add-pdf") pickPdf(null);
       else if (a === "import-md") fileInput.current?.click();
       else if (a === "import-vault") folderInput.current?.click();
+      else if (a === "tutorial") void addTutorial();
       else if (a === "fold-all") {
         localStorage.setItem(OPEN_KEY, "[]");
         setOpenSet(new Set());
       }
     });
     return () => registerNotesActions(null);
-  }, [add, addFolder]);
+  }, [add, addFolder, addTutorial]);
 
   // A page dragged out of the sidebar onto the pages opens there: in a pane's tabs, its middle, or at an edge as a new pane.
   const outside = phone
@@ -2032,6 +2067,7 @@ export function NotesPage({ id }: { id: string | null }) {
     setOpen,
     reload,
     importVault: () => folderInput.current?.click(),
+    addTutorial: () => void addTutorial(),
     importMd: () => fileInput.current?.click(),
     pickPdf,
     newFile: () => setNewFileIn(null),
@@ -2071,6 +2107,7 @@ export function NotesPage({ id }: { id: string | null }) {
                   <DropdownMenuItem onSelect={() => folderInput.current?.click()}>Import a folder (Obsidian vault)…</DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => fileInput.current?.click()}>Import Markdown, code or .excalidraw files…</DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => pickPdf(null)}>Add a PDF…</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void addTutorial()}>Notes tutorial</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               <button type="button" onClick={() => void add(null, "canvas")} aria-label="New canvas" title="New canvas" className="note-row-act is-visible">

@@ -11,7 +11,7 @@ export const SB_FOLD = 150;
 const WIDTH_KEY = "etude.sidebar.width";
 const PAGES_KEY = "etude.notes.pagesOpen";
 
-export type NotesAction = "new" | "new-canvas" | "new-file" | "new-folder" | "add-pdf" | "import-md" | "import-vault" | "fold-all";
+export type NotesAction = "new" | "new-canvas" | "new-file" | "new-folder" | "add-pdf" | "import-md" | "import-vault" | "fold-all" | "tutorial";
 
 const clampW = (w: number) => Math.max(SB_MIN, Math.min(SB_MAX, Math.round(w)));
 const readW = () => {

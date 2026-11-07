@@ -192,6 +192,7 @@ function NotesMenu({ pagesOpen, children }: { pagesOpen: boolean; children: Reac
         <ContextMenuItem onSelect={() => run("fold-all")}>Fold every page</ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => openNoteGraph()}>View graph</ContextMenuItem>
+        <ContextMenuItem onSelect={() => run("tutorial")}>Notes tutorial</ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );

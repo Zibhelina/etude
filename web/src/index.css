@@ -852,3 +852,25 @@ body.browse-resizing iframe { pointer-events: none; }
   .av-pop, .av-fade, .av-land, .av-name-in { animation: none; }
 }
 .av-car-it .is-on { outline: 3px solid var(--primary); outline-offset: 4px; }
+
+/* Ctrl/⌘K deck finder: a search bar in the middle of the screen over the blurred page. */
+.deck-finder { padding-top: max(14dvh, 72px); }
+.deck-finder-veil { position: absolute; inset: 0; background: color-mix(in oklab, var(--background) 40%, rgb(0 0 0 / 0.18)); animation: deck-finder-fade 0.16s ease-out both; }
+.dark .deck-finder-veil { background: color-mix(in oklab, var(--background) 45%, rgb(0 0 0 / 0.35)); }
+.deck-finder-box { box-shadow: inset 0 0 0 1px var(--border), 0 2px 6px rgb(0 0 0 / 0.05), 0 24px 60px -12px rgb(0 0 0 / 0.28); animation: deck-finder-in 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.15) both; }
+.dark .deck-finder-box { box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1), 0 24px 70px -10px rgb(0 0 0 / 0.65); }
+.deck-finder[data-closing] .deck-finder-veil { animation: deck-finder-fade 0.12s ease-in reverse both; }
+.deck-finder[data-closing] .deck-finder-box { animation: deck-finder-out 0.12s ease-in both; }
+.deck-finder-row { animation: deck-finder-row 0.18s ease-out both; transition: background-color 0.08s; }
+.deck-finder-row.is-active { background: var(--accent); }
+.deck-finder-row.is-active .text-foreground\/85 { color: var(--foreground); }
+.deck-finder-enter { opacity: 0; transition: opacity 0.08s; }
+.deck-finder-row.is-active .deck-finder-enter { opacity: 1; }
+.deck-finder-kbd { display: inline-block; min-width: 1.35em; margin-right: 3px; padding: 0 4px; border-radius: 5px; text-align: center; font: inherit; font-size: 11px; box-shadow: inset 0 0 0 1px var(--border); }
+@keyframes deck-finder-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes deck-finder-in { from { opacity: 0; transform: translateY(-8px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes deck-finder-out { to { opacity: 0; transform: translateY(-4px) scale(0.98); } }
+@keyframes deck-finder-row { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@media (max-width: 767px) { .deck-finder { padding-top: max(env(safe-area-inset-top), 12px); } }
+@media (prefers-reduced-motion: reduce) { .deck-finder-veil, .deck-finder-box, .deck-finder-row { animation: none !important; } }
+.deck-finder-mark { font-weight: 650; color: var(--primary); }

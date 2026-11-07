@@ -96,6 +96,7 @@ export default defineConfig({
     alias: [
       { find: /^@\//, replacement: here("../../web/src") + "/" },
       { find: /^node:fs$/, replacement: here("./shims/fs.ts") },
+      { find: /^node:fs\/promises$/, replacement: here("./shims/fs-promises.ts") },
       { find: /^node:path$/, replacement: "pathe" },
       { find: /^node:url$/, replacement: here("./shims/url.ts") },
       { find: /^node:os$/, replacement: here("./shims/os.ts") },

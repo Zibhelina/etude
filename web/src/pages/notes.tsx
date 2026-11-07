@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { registerNotesActions, setNotesPagesOpen, useNotesSlot } from "@/lib/sidebar-slot";
 import { useNoteTreeDrag, type Placement } from "@/components/note-tree-drag";
-import { activate, canSplitTo, closeTab as closeLayoutTab, count, findPane, focus as focusLayout, focusedPane, MAX_PANES, moveTab, normalizeLayout, openIn, openSplit, panes, prune, rects, setRatio, single, type Layout, type PaneNode, type Rect, type Side, type TabDrop } from "@/lib/note-layout";
+import { activate, canSplitTo, dropPage, closeTab as closeLayoutTab, count, findPane, focus as focusLayout, focusedPane, MAX_PANES, moveTab, normalizeLayout, openIn, openSplit, panes, prune, rects, setRatio, single, type Layout, type PaneNode, type Rect, type Side, type TabDrop } from "@/lib/note-layout";
 
 const OPEN_KEY = "etude.notes.open";
 const TABS_KEY = "etude.notes.tabs";
@@ -1268,7 +1268,7 @@ function visibleRect(el: Element): Rect {
 }
 
 /** Where a tab dragged from `from` would land under the pointer, and what to draw for it. */
-function hitTabDrop(l: Layout, from: string, note: string, x: number, y: number): Pick<TabDragView, "drop" | "zone" | "line"> {
+function hitTabDrop(l: Layout, from: string | null, note: string, x: number, y: number): Pick<TabDragView, "drop" | "zone" | "line"> {
   const none = { drop: null, zone: null, line: null };
   const el = document.elementFromPoint(x, y);
   const paneEl = el?.closest<HTMLElement>("[data-pane]");
@@ -1295,11 +1295,14 @@ function hitTabDrop(l: Layout, from: string, note: string, x: number, y: number)
   const edges: [Side, number][] = [["left", fx], ["right", 1 - fx], ["top", fy], ["bottom", 1 - fy]];
   const [side, d] = edges.reduce((a, b) => (b[1] < a[1] ? b : a));
   const inset = (z: Rect): Rect => ({ x: z.x + 6, y: z.y + 6, w: z.w - 12, h: z.h - 12 });
-  if (d < 0.32 && canSplitTo(l, from, note, pid)) {
+  // A page from the sidebar that's already open somewhere drags like that tab.
+  const owner = from ?? panes(l.root).find((p) => p.tabs.includes(note))?.id ?? null;
+  const splittable = owner ? canSplitTo(l, owner, note, pid) : count(l.root) < MAX_PANES;
+  if (d < 0.32 && splittable) {
     const zone = side === "left" ? { ...R, w: R.w / 2 } : side === "right" ? { ...R, x: R.x + R.w / 2, w: R.w / 2 } : side === "top" ? { ...R, h: R.h / 2 } : { ...R, y: R.y + R.h / 2, h: R.h / 2 };
     return { drop: { pane: pid, side }, zone: inset(zone), line: null };
   }
-  if (pid !== from) return { drop: { pane: pid, before: null }, zone: inset(R), line: null };
+  if (pid !== owner) return { drop: { pane: pid, before: null }, zone: inset(R), line: null };
   return none;
 }
 
@@ -1894,7 +1897,18 @@ export function NotesPage({ id }: { id: string | null }) {
     return () => registerNotesActions(null);
   }, [add, addFolder]);
 
-  const dnd = useNoteTreeDrag({ list, tree, open, setOpen, place, selected: () => pickedRef.current() });
+  // A page dragged out of the sidebar onto the pages opens there: in a pane's tabs, its middle, or at an edge as a new pane.
+  const outside = phone
+    ? undefined
+    : {
+        hit: (nid: string, x: number, y: number) => {
+          const h = hitTabDrop(layoutRef.current, null, nid, x, y);
+          return h.drop ? h : null;
+        },
+        drop: (nid: string, d: TabDrop) =>
+          void flushAll().then(() => setLayout((l) => dropPage(l, nid, d) ?? l)),
+      };
+  const dnd = useNoteTreeDrag({ list, tree, open, setOpen, place, selected: () => pickedRef.current(), outside });
 
   const top = tree.get(null) ?? [];
   const slot = useNotesSlot();

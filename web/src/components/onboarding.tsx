@@ -183,8 +183,8 @@ export function Onboarding({ onFinish }: { onFinish(): void }) {
       return next;
     });
   };
-  // The last step's "Help improve Etude" box: off unless ticked.
-  const [shareUsage, setShareUsage] = useState(false);
+  // The last step's "Help improve Etude" box: on unless unticked.
+  const [shareUsage, setShareUsage] = useState(true);
 
   const finish = async (then?: () => void) => {
     try {

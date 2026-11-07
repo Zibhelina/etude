@@ -156,11 +156,16 @@ function land(el: Element | null, smooth = true) {
   row.classList.add("settings-flash");
 }
 
+/** Search hits that live in the profile header rather than in a section. */
+const PROFILE_HITS = new Set(["Your picture", "Banner"]);
+
 function findRow(g: GroupId, label: string): Element | null {
   const root = document.querySelector(`[data-group="${g}"]`);
   if (!root) return null;
   const want = label.toLowerCase();
-  const titles = [...root.querySelectorAll("[data-settings-title], [data-settings-section]")];
+  // The picture and banner rows live in the profile header at the top of the page.
+  const head = g === "account" ? [...document.querySelectorAll("[data-profile-header] [data-settings-title]")] : [];
+  const titles = [...head, ...root.querySelectorAll("[data-settings-title], [data-settings-section]")];
   return (
     titles.find((t) => (t.getAttribute("aria-label") ?? t.textContent ?? "").trim().toLowerCase() === want) ??
     titles.find((t) => (t.getAttribute("aria-label") ?? t.textContent ?? "").trim().toLowerCase().startsWith(want)) ??
@@ -321,6 +326,11 @@ export function SettingsPage() {
       setSpy(h.g);
       jumping.current = window.setTimeout(() => (jumping.current = null), 900);
       requestAnimationFrame(() => land(findRow(h.g, h.label)));
+      return;
+    }
+    if (mode === "phone" && h.g === "account" && PROFILE_HITS.has(h.label)) {
+      if (active) backToList();
+      window.setTimeout(() => land(findRow(h.g, h.label), false), 80);
       return;
     }
     if (mode === "phone" && active !== h.g) push(h.g);
@@ -554,7 +564,6 @@ export function SettingsPage() {
         <H id={`settings-h-${g}`} className={cn("score-serif score-display text-foreground", H === "h1" ? "text-[2rem] leading-[1.1]" : "text-[1.625rem] leading-[1.15] max-lg:text-[1.5rem]")}>
           {groupLabel(g)}
         </H>
-        {g === "account" && <ProfileHeader acct={acct} />}
         <p data-settings-intro className="mt-2 mb-6 max-w-[600px] text-[15px] leading-normal text-pretty text-muted-foreground [&_b]:font-semibold [&_b]:text-foreground">
           {intro[g]}
         </p>
@@ -642,7 +651,9 @@ export function SettingsPage() {
 
   if (mode === "phone") {
     return (
-      <div ref={rootRef} className="mx-auto w-full max-w-xl px-5 pt-[calc(1.25rem+env(safe-area-inset-top))] pb-6" data-settings-mode="phone">
+      <div ref={rootRef} data-settings-mode="phone">
+        {!active && <ProfileHeader acct={acct} inner="max-w-xl px-5" />}
+        <div className={cn("mx-auto w-full max-w-xl px-5 pb-6", active ? "pt-[calc(1.25rem+env(safe-area-inset-top))]" : "pt-7")}>
         {active ? (
           <>
             <button
@@ -676,6 +687,7 @@ export function SettingsPage() {
           </>
         )}
         {saveBar}
+        </div>
       </div>
     );
   }
@@ -683,7 +695,9 @@ export function SettingsPage() {
   if (mode === "split") {
     const cur = active ?? spy;
     return (
-      <div ref={rootRef} className="mx-auto w-full max-w-[1040px] px-8 py-10" data-settings-mode="split">
+      <div ref={rootRef} data-settings-mode="split">
+        <ProfileHeader acct={acct} inner="max-w-[1040px] px-8" />
+        <div className="mx-auto w-full max-w-[1040px] px-8 pt-9 pb-10">
         <h1 className="score-serif score-display mb-6 text-[2rem] leading-[1.1] text-foreground">Settings</h1>
         <div className="grid grid-cols-[200px_minmax(0,1fr)] items-start gap-8">
           <nav aria-label="Sections" className="sticky top-6 flex flex-col gap-0.5">
@@ -712,12 +726,15 @@ export function SettingsPage() {
             {saveBar}
           </div>
         </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div ref={rootRef} className="mx-auto w-full max-w-[1140px] px-12 py-10" data-settings-mode="page">
+    <div ref={rootRef} data-settings-mode="page">
+      <ProfileHeader acct={acct} inner="max-w-[1140px] px-12" />
+      <div className="mx-auto w-full max-w-[1140px] px-12 pt-10 pb-10">
       <div className="grid grid-cols-[minmax(0,1fr)_180px] items-start gap-x-14">
         <div className="relative mb-11">
           <h1 className="score-serif score-display mb-5 text-[2rem] leading-[1.1] text-foreground">Settings</h1>
@@ -747,6 +764,7 @@ export function SettingsPage() {
             </a>
           ))}
         </nav>
+      </div>
       </div>
     </div>
   );

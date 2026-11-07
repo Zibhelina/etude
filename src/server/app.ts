@@ -308,7 +308,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.get("/api/notes/search", (c) => c.json(etude.notes.search(c.req.query("q") ?? "", Number(c.req.query("limit") ?? 20) || 20)));
   app.post("/api/notes", async (c) => {
     const b = await body(c);
-    return c.json(etude.notes.create({ title: b.title, parentId: b.parentId ?? null, doc: b.doc, icon: b.icon, look: b.look, after: b.after ?? null, kind: b.kind, scene: b.scene }));
+    return c.json(etude.notes.create({ title: b.title, parentId: b.parentId ?? null, doc: b.doc, icon: b.icon, look: b.look, after: b.after ?? null, kind: b.kind, scene: b.scene, file: b.file }));
   });
   // A .excalidraw file as a canvas (its inline pictures go into the media).
   app.post("/api/notes/import-excalidraw", async (c) => {
@@ -330,7 +330,8 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const files = Array.isArray(b.files) ? b.files.map((f: any) => ({ path: String(f?.path ?? ""), text: String(f?.text ?? "") })) : [];
     if (files.reduce((n: number, f: { text: string }) => n + f.text.length, 0) > 50 * 1024 * 1024) throw new EtudeError("that's too much markdown at once (50 MB at most)", 413);
     const media = b.media && typeof b.media === "object" ? Object.fromEntries(Object.entries(b.media).filter(([, v]) => typeof v === "string" && /^\/media\/files\/[0-9a-f]{64}\.[a-z0-9]+$/.test(v as string))) as Record<string, string> : {};
-    return c.json(etude.notes.importMarkdown(files, { parentId: b.parentId ?? null, media }));
+    const pdfs = Array.isArray(b.pdfs) ? b.pdfs.filter((f: any) => typeof f?.path === "string" && typeof f?.file === "string").map((f: any) => ({ path: String(f.path), file: String(f.file) })) : [];
+    return c.json(etude.notes.importMarkdown(files, { parentId: b.parentId ?? null, media, pdfs }));
   });
   app.get("/api/notes/:id", (c) => c.json(etude.notes.get(c.req.param("id"))));
   app.get("/api/notes/:id/backlinks", (c) => c.json(etude.notes.backlinks(c.req.param("id"))));
@@ -339,6 +340,11 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const n = etude.notes.get(c.req.param("id"));
     const html = c.req.query("format") === "html";
     const name = (n.title.trim() || "Untitled").replace(/[\\/:*?"<>|]+/g, " ").trim();
+    if (n.kind === "pdf") {
+      const data = n.file ? etude.readMediaFile(n.file) : null;
+      if (!data) throw new EtudeError("this PDF's file is missing from the media", 404);
+      return new Response(new Uint8Array(data), { headers: { "content-type": "application/pdf", "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name.replace(/\.pdf$/i, ""))}.pdf` } });
+    }
     if (n.kind === "canvas") {
       const { sceneToExcalidraw } = await import("../core/notes.ts");
       return new Response(JSON.stringify(sceneToExcalidraw(n.scene!, (m) => etude.readMediaFile(m)), null, 2), {

@@ -175,6 +175,7 @@ function NotesMenu({ pagesOpen, children }: { pagesOpen: boolean; children: Reac
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => run("new-canvas")}>New canvas</ContextMenuItem>
         <ContextMenuItem onSelect={() => run("new-folder")}>New folder</ContextMenuItem>
+        <ContextMenuItem onSelect={() => run("add-pdf")}>Add a PDF…</ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => run("import-md")}>Import Markdown files…</ContextMenuItem>
         <ContextMenuItem onSelect={() => run("import-vault")}>Import a folder (Obsidian vault)…</ContextMenuItem>

@@ -170,7 +170,7 @@ test("notes: a canvas keeps its Excalidraw scene, its words are searchable, and 
   assert.equal(page.scene, null);
   assert.throws(() => e.notes.update(c.id, { doc: docFromText("x") }), /scene, not a doc/);
   assert.throws(() => e.notes.update(page.id, { scene: { elements: [] } }), /only a canvas/);
-  assert.throws(() => e.notes.create({ kind: "board" as any }), /or a "canvas"/);
+  assert.throws(() => e.notes.create({ kind: "board" as any }), /a "canvas" or a "pdf"/);
   const rect = { id: "r1", type: "rectangle", x: 0, y: 0, width: 100, height: 60, version: 1 };
   const label = { id: "t1", type: "text", text: "relax edge (u,v)", containerId: null, x: 10, y: 10, version: 1 };
   const gone = { id: "d1", type: "ellipse", isDeleted: true, version: 2 };

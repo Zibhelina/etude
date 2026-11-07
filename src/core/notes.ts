@@ -43,7 +43,7 @@ export interface DocNode {
 }
 
 /** A page you write in, or a folder that only holds pages (it has no body of its own). */
-export type NoteKind = "page" | "folder" | "canvas";
+export type NoteKind = "page" | "folder" | "canvas" | "pdf";
 
 export interface NoteSummary {
   id: string;
@@ -67,6 +67,8 @@ export interface Note extends NoteSummary {
   text: string;
   /** A canvas's drawing (null on a page). */
   scene: CanvasScene | null;
+  /** A PDF note's file in the collection's media (files/<sha256>.pdf); null on everything else. */
+  file: string | null;
 }
 
 /**
@@ -286,9 +288,17 @@ function checkKind(k: unknown): NoteKind {
   if (k === undefined || k === null || k === "page") return "page";
   if (k === "folder") return "folder";
   if (k === "canvas") return "canvas";
-  throw new EtudeError('a note is a "page", a "folder" or a "canvas"');
+  if (k === "pdf") return "pdf";
+  throw new EtudeError('a note is a "page", a "folder", a "canvas" or a "pdf"');
 }
-const kindOf = (k: unknown): NoteKind => (k === "folder" ? "folder" : k === "canvas" ? "canvas" : "page");
+const kindOf = (k: unknown): NoteKind => (k === "folder" ? "folder" : k === "canvas" ? "canvas" : k === "pdf" ? "pdf" : "page");
+const PDF_FILE = /^files\/[0-9a-f]{64}\.pdf$/;
+/** A PDF note's file: a PDF already in the collection's media ("files/<sha>.pdf" or its "/media/…" URL). */
+function checkPdfFile(f: unknown): string {
+  const s = String(f ?? "").replace(/^\/?media\//, "");
+  if (!PDF_FILE.test(s)) throw new EtudeError("a PDF note's file is a PDF in the collection's media (files/<sha256>.pdf): upload it first");
+  return s;
+}
 const row = (r: any): NoteSummary => ({
   id: r.id,
   kind: kindOf(r.kind),
@@ -313,6 +323,7 @@ export class Notes {
     if (!cols.includes("look")) db.sql.exec("ALTER TABLE notes ADD COLUMN look TEXT");
     if (!cols.includes("kind")) db.sql.exec("ALTER TABLE notes ADD COLUMN kind TEXT NOT NULL DEFAULT 'page'");
     if (!cols.includes("scene")) db.sql.exec("ALTER TABLE notes ADD COLUMN scene TEXT");
+    if (!cols.includes("file")) db.sql.exec("ALTER TABLE notes ADD COLUMN file TEXT");
   }
 
   /** Every page, in tree order (parents before children, siblings by position). */
@@ -348,7 +359,7 @@ export class Notes {
       id,
     );
     if (!r) throw new EtudeError(`no note "${id}"`, 404);
-    return { ...row(r), doc: JSON.parse(r.doc), text: r.text, scene: r.kind === "canvas" ? (r.scene ? JSON.parse(r.scene) : emptyScene()) : null };
+    return { ...row(r), doc: JSON.parse(r.doc), text: r.text, scene: r.kind === "canvas" ? (r.scene ? JSON.parse(r.scene) : emptyScene()) : null, file: r.kind === "pdf" ? (r.file ?? null) : null };
   }
 
   /** Finds a page by id, or by exact title when exactly one page has it. */
@@ -360,7 +371,7 @@ export class Notes {
     throw new EtudeError(`no note "${ref}"`, 404);
   }
 
-  create(input: { title?: string; parentId?: string | null; doc?: unknown; icon?: string | null; look?: unknown; after?: string | null; kind?: NoteKind; scene?: unknown } = {}): Note {
+  create(input: { title?: string; parentId?: string | null; doc?: unknown; icon?: string | null; look?: unknown; after?: string | null; kind?: NoteKind; scene?: unknown; file?: unknown } = {}): Note {
     return this.db.tx(() => {
       const parent = input.parentId || null;
       if (parent) this.get(parent);
@@ -368,6 +379,9 @@ export class Notes {
       if (kind === "folder" && input.doc !== undefined) throw new EtudeError("a folder holds pages; it has no body of its own");
       if (kind === "canvas" && input.doc !== undefined) throw new EtudeError("a canvas has a scene, not a doc");
       if (kind !== "canvas" && input.scene !== undefined) throw new EtudeError("only a canvas has a scene (make it with kind \"canvas\")");
+      if (kind === "pdf" && input.doc !== undefined) throw new EtudeError("a PDF note is its file; it has no body of its own");
+      if (kind !== "pdf" && input.file !== undefined) throw new EtudeError('only a PDF note has a file (make it with kind "pdf")');
+      const file = kind === "pdf" ? checkPdfFile(input.file) : null;
       const scene = kind === "canvas" ? (input.scene === undefined ? emptyScene() : checkScene(input.scene)) : null;
       const doc = input.doc === undefined ? { type: "doc", content: [] } : checkDoc(input.doc);
       const id = randomUUID();
@@ -379,8 +393,8 @@ export class Notes {
         position = after.position + 1;
       } else position = (this.db.get("SELECT MAX(position) AS p FROM notes WHERE parent_id IS ?", parent)?.p ?? -1) + 1;
       this.db.run(
-        "INSERT INTO notes (id, kind, parent_id, title, icon, look, doc, scene, text, position, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        id, kind, parent, cleanTitle(input.title ?? ""), cleanIcon(input.icon ?? null), lookJson(input.look), JSON.stringify(doc), scene ? JSON.stringify(scene) : null, scene ? sceneText(scene) : docText(doc as DocNode), position, t, t,
+        "INSERT INTO notes (id, kind, parent_id, title, icon, look, doc, scene, file, text, position, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        id, kind, parent, cleanTitle(input.title ?? ""), cleanIcon(input.icon ?? null), lookJson(input.look), JSON.stringify(doc), scene ? JSON.stringify(scene) : null, file, scene ? sceneText(scene) : docText(doc as DocNode), position, t, t,
       );
       this.writeLinks(id, doc as DocNode);
       this.claimLinks(id);
@@ -394,6 +408,8 @@ export class Notes {
       if (patch.scene !== undefined && cur.kind !== "canvas") throw new EtudeError("only a canvas has a scene");
       if (patch.doc !== undefined && cur.kind === "canvas") throw new EtudeError("a canvas has a scene, not a doc");
       if (patch.kind !== undefined && (cur.kind === "canvas") !== (patch.kind === "canvas")) throw new EtudeError("a canvas stays a canvas");
+      if (patch.kind !== undefined && (cur.kind === "pdf") !== (patch.kind === "pdf")) throw new EtudeError("a PDF note stays a PDF");
+      if (patch.doc !== undefined && cur.kind === "pdf") throw new EtudeError("a PDF note is its file; it has no body of its own");
       const sets: string[] = [];
       const vals: any[] = [];
       if (patch.kind !== undefined) {
@@ -580,14 +596,16 @@ export class Notes {
    * vault keeps its shape). [[Links]] between the files, and to pages you already have, become page links.
    * `media` maps an image path as the files write it (or its file name) to a served URL.
    */
-  importMarkdown(files: { path: string; text: string }[], opts: { parentId?: string | null; media?: Record<string, string> } = {}): { pages: number; folders: number; links: number; unresolved: number; root: string | null; ids: string[] } {
+  importMarkdown(files: { path: string; text: string }[], opts: { parentId?: string | null; media?: Record<string, string>; pdfs?: { path: string; file: string }[] } = {}): { pages: number; folders: number; links: number; unresolved: number; pdfs: number; root: string | null; ids: string[] } {
     return this.db.tx(() => {
       const parent = opts.parentId || null;
       if (parent) this.get(parent);
       const md = files.filter((f) => /\.(md|markdown|txt)$/i.test(f.path) && !f.path.split("/").some((p) => p.startsWith(".")));
-      if (!md.length) throw new EtudeError("no markdown files to import");
+      const pdfs = (opts.pdfs ?? []).filter((f) => /\.pdf$/i.test(f.path) && !f.path.split("/").some((p) => p.startsWith(".")));
+      if (!md.length && !pdfs.length) throw new EtudeError("no markdown files to import");
       // Drop a common top folder (the vault's own name) only when there's more than one file.
-      const parts = md.map((f) => f.path.replace(/\\/g, "/").split("/").filter(Boolean));
+      const split = (p: string) => p.replace(/\\/g, "/").split("/").filter(Boolean);
+      const parts = [...md, ...pdfs].map((f) => split(f.path));
       let common = 0;
       if (parts.length > 1) while (parts.every((p) => p.length > common + 1 && p[common] === parts[0][common])) common++;
       const root = common ? parts[0].slice(0, common).join("/") : null;
@@ -632,6 +650,13 @@ export class Notes {
         this.db.run("UPDATE notes SET kind = 'page' WHERE id = ?", id);
         made.push({ id, text: f.text });
       }
+      // PDFs in the folders become PDF notes where they sit, so [[links]] to them resolve too.
+      pdfs.forEach((f, i) => {
+        const segs = parts[md.length + i].slice(common);
+        const n = this.create({ title: segs[segs.length - 1].replace(/\.pdf$/i, ""), parentId: folder(segs.slice(0, -1)), kind: "pdf", file: f.file });
+        ids.push(n.id);
+        pageIds.add(n.id);
+      });
       const titles = this.byTitle();
       const media = opts.media ?? {};
       const mediaFor = (p: string) => media[p] ?? media[p.split("/").pop()!] ?? null;
@@ -639,7 +664,8 @@ export class Notes {
       for (const m of made) {
         const doc = markdownToDoc(m.text, {
           page: (t) => {
-            const id = titles.get(t.split("/").pop()!.toLowerCase()) ?? null;
+            const last = t.split("/").pop()!.toLowerCase();
+            const id = titles.get(last) ?? titles.get(last.replace(/\.pdf$/, "")) ?? null;
             id ? links++ : unresolved++;
             return id;
           },
@@ -651,7 +677,7 @@ export class Notes {
         if (first?.type === "heading" && docText({ type: "doc", content: [first] }).trim().toLowerCase() === own.trim().toLowerCase()) doc.content!.shift();
         this.update(m.id, { doc });
       }
-      return { pages: made.length, folders: ids.length - pageIds.size, links, unresolved, root: root ? rootId : null, ids };
+      return { pages: made.length, folders: ids.length - pageIds.size, links, unresolved, pdfs: pdfs.length, root: root ? rootId : null, ids };
     });
   }
 

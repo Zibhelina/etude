@@ -294,7 +294,7 @@ These work on every command, before or after the command words.
   - [`note unarchive`](#note-unarchive) Bring an archived page back, with the pages inside it.
   - [`note delete`](#note-delete) Delete a page for good, with every page inside it.
   - [`note search`](#note-search) Pages whose title or text has every word, title matches first.
-  - [`note import`](#note-import) Import markdown files or a whole folder (an Obsidian vault) as pages, and .excalidraw drawings as canvases.
+  - [`note import`](#note-import) Import markdown files or a whole folder (an Obsidian vault) as pages, PDFs as PDF notes, and .excalidraw drawings as canvases.
   - [`note export`](#note-export) A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file.
   - [`note graph`](#note-graph) Every page as a point and every [[link]] between pages as a line (what the graph view draws).
   - [`note backlinks`](#note-backlinks) The pages that link to a page.
@@ -2269,6 +2269,7 @@ etude note new <title> [flags]
 | `--folder` | boolean | Make a folder: it holds pages and has no body of its own. |
 | `--icon <VALUE>` | string | One emoji. |
 | `--canvas` | boolean | Make a canvas (a whiteboard you draw on) instead of a page. |
+| `--pdf <PATH>` | string | Make a PDF note from this file: it opens as the document itself. The file goes into the collection's media. |
 | `--scene <JSON>` | string | A canvas's drawing as Excalidraw JSON ({ elements, appState, files }, or a whole .excalidraw file). `-` reads stdin. |
 | `--scene-file <PATH>` | string | Read the canvas's drawing from a .excalidraw file. |
 | `--text <VALUE>` | string | Body as plain text: one paragraph per line, `# ` headings, `- ` bullets, `- [ ] ` tasks. `-` reads stdin. |
@@ -2448,9 +2449,9 @@ Output: array of { id, title, …, snippet }
 
 <a id="note-import"></a>
 
-Import markdown files or a whole folder (an Obsidian vault) as pages, and .excalidraw drawings as canvases.
+Import markdown files or a whole folder (an Obsidian vault) as pages, PDFs as PDF notes, and .excalidraw drawings as canvases.
 
-Each markdown file becomes a page and each folder a page holding its files, so a vault keeps its shape. [[Links]] (with |alias and #heading), relative .md links and ![[image]] embeds are understood; images found in the folder are stored in the collection's media. A folder note (Folder/Folder.md) becomes the folder's own page. Hidden folders (.obsidian, .trash) are skipped. A .excalidraw file given on its own becomes a canvas, with its pictures stored in the media.
+Each markdown file becomes a page and each folder a page holding its files, so a vault keeps its shape. [[Links]] (with |alias and #heading), relative .md links and ![[image]] embeds are understood; images found in the folder are stored in the collection's media. A folder note (Folder/Folder.md) becomes the folder's own page. Hidden folders (.obsidian, .trash) are skipped. A .excalidraw file given on its own becomes a canvas, with its pictures stored in the media. Each PDF (on its own or in a folder) becomes a PDF note that opens as the document.
 
 ```
 etude note import <paths...> [flags]
@@ -2467,7 +2468,7 @@ etude note import <paths...> [flags]
 | `--parent <VALUE>` | string | Put the imported pages inside this page (id or exact title). |
 | `--dry-run` | boolean | Show what would change without writing anything. |
 
-Output: { pages, folders, links, unresolved, root, ids, media, canvases }
+Output: { pages, folders, links, unresolved, pdfs, root, ids, media, canvases }
 
 ```sh
 etude note import ~/vault

@@ -1,4 +1,5 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import type { Etude } from "../engine.ts";
 import { bootstrap, drain, install, localEvent, receive, rowFor, rows, type Change } from "./log.ts";
@@ -396,13 +397,13 @@ export class SyncClient {
       else {
         const st=statSync(p),k=known.get(relative);
         hash=k&&k.size===st.size&&k.mtime===st.mtimeMs?k.hash:"";
-        if(!hash){go();hash=await sha256Hex(new Uint8Array(readFileSync(p)));fresh.push([relative,st.size,st.mtimeMs,hash]);}
+        if(!hash){go();hash=await sha256Hex(new Uint8Array(await readFile(p)));fresh.push([relative,st.size,st.mtimeMs,hash]);}
       }
       onDisk.set(relative,hash);local.set(hash,p);this.moved(1,m);
     }
     db.tx(()=>{for(const f of fresh)db.run("INSERT INTO sync_media_hashes VALUES(?,?,?,?) ON CONFLICT(file) DO UPDATE SET size=excluded.size,mtime=excluded.mtime,hash=excluded.hash",...f);for(const file of known.keys())if(!onDisk.has(file)||file.startsWith("files/"))db.run("DELETE FROM sync_media_hashes WHERE file=?",file);});
     // A file named by its hash is trusted until its bytes are used: then they are checked.
-    const readLocal=async(hash:string):Promise<Uint8Array|null>=>{const p=local.get(hash);if(!p)return null;const bytes=new Uint8Array(readFileSync(p));return await sha256Hex(bytes)===hash?bytes:null;};
+    const readLocal=async(hash:string):Promise<Uint8Array|null>=>{const p=local.get(hash);if(!p)return null;const bytes=new Uint8Array(await readFile(p));return await sha256Hex(bytes)===hash?bytes:null;};
     go();this.step("download",null,m);
     // Read the registers once: a collection can hold tens of thousands of media files.
     const blobs=rows(db,"blob"),media=rows(db,"media");
@@ -413,7 +414,7 @@ export class SyncClient {
     // A name that matches neither the registers nor the version last in step with them is read: the file is new, or its name is wrong.
     for(const [relative,p] of named) {
       const hash=onDisk.get(relative)!;if(hash===media.get(relative)?.hash||hash===seen.get(relative))continue;
-      const real=await sha256Hex(new Uint8Array(readFileSync(p)));
+      const real=await sha256Hex(new Uint8Array(await readFile(p)));
       if(real!==hash){onDisk.set(relative,real);if(local.get(hash)===p)local.delete(hash);local.set(real,p);}
     }
     const edited=(file:string)=>onDisk.has(file)&&onDisk.get(file)!==media.get(file)?.hash&&onDisk.get(file)!==seen.get(file);
@@ -444,7 +445,7 @@ export class SyncClient {
     const sent=new Map<string,string>(),mine:[string,string][]=[];
     await pool([...firstPath],BLOB_CONCURRENCY,async([hash,p])=>{
       go();
-      const bytes=new Uint8Array(readFileSync(p)),real=await sha256Hex(bytes);
+      const bytes=new Uint8Array(await readFile(p)),real=await sha256Hex(bytes);
       // The blob goes up before the event that names it.
       if(!blobs.has(real)) {const b=await encryptBlob(key,bytes);await t.putBlob(b.hash,b.ciphertext,stop);this.moved(b.ciphertext.length,m);localEvent(db,"blob",real,{"/name":b.hash});mine.push(["blob",real]);blobs.set(real,{name:b.hash});}
       sent.set(hash,real);

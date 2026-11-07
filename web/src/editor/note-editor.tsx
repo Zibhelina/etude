@@ -47,6 +47,7 @@ import { AlignButton, BlockMenu, StyleButton } from "./note-format";
 import { TableControls } from "./note-table-ui";
 import { SlashCommand } from "./slash-menu";
 import { languageName } from "./highlight";
+import { dropEmptyText } from "../../../src/core/doc-clean.ts";
 import type { NoteDoc } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -363,7 +364,7 @@ export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page }
         titleOf: (id: string) => linkRef.current.titleOf(id),
       }),
     ],
-    content: doc as any,
+    content: dropEmptyText(doc as any) as any,
     editorProps: {
       attributes: { class: "note-prose", "aria-label": "Page", spellcheck: "true" },
       handleKeyDown(view, e) {

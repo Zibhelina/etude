@@ -9,6 +9,7 @@ import type { Db } from "./db.ts";
 import { EtudeError, deckIcon } from "./engine.ts";
 import { docLinks, markdownToDoc, resolveLinks, frontMatter } from "./notes-md.ts";
 import { BANNER_PRESETS } from "./banner.ts";
+import { dropEmptyText } from "./doc-clean.ts";
 
 export const NOTES_SCHEMA = `
 CREATE TABLE IF NOT EXISTS notes (
@@ -268,7 +269,8 @@ export function checkDoc(doc: unknown): DocNode {
     return false;
   };
   if (bad(doc, 0)) throw new EtudeError("that note's doc isn't a valid document tree");
-  return JSON.parse(json);
+  // An empty text node would make the editor drop the whole page.
+  return dropEmptyText(JSON.parse(json) as DocNode);
 }
 
 /** Plain text (one paragraph per line, `# ` headings, `- ` bullets, `[ ]` tasks) as a document. For the CLI and quick notes. */

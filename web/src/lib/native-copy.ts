@@ -1,6 +1,6 @@
 // Text the iOS and Android apps show where desktop and web say something else. A phone has no
 // desktop app beside it and no folder to pick, and the store apps never point to the website
-// (test/store-rules.test.ts scans these).
+// (the mobile app's store-rules test scans these).
 
 export const NATIVE_COPY = {
   syncSetup: "Etude syncs your collection through a server.",

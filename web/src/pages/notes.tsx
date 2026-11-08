@@ -581,6 +581,9 @@ function PageView({ note, tree, all, onTitle, onDoc, saveState, onPick, links, o
           value={t}
           placeholder="Untitled"
           aria-label="Title"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
           className="note-title"
           onChange={(e) => {
             const v = e.target.value.replace(/\n/g, "");

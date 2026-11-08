@@ -398,7 +398,8 @@ export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page }
     ],
     content: dropEmptyText(doc as any) as any,
     editorProps: {
-      attributes: { class: "note-prose", "aria-label": "Page", spellcheck: "true" },
+      // No spellcheck, autocorrect or auto-capitals: notes are full of code, formulas and names they'd "fix".
+      attributes: { class: "note-prose", "aria-label": "Page", spellcheck: "false", autocorrect: "off", autocapitalize: "off" },
       handleKeyDown(view, e) {
         // A selected canvas block is never replaced by typing: only Delete/Backspace/arrows/Enter act on it.
         const sel = view.state.selection as any;

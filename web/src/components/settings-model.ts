@@ -28,12 +28,21 @@ export interface ChatGptProvider {
   vision?: boolean;
 }
 
-export type ChatProvider = OpenAiChatProvider | ChatGptProvider;
+/** The user's Command Code plan, through the local `cmd` binary (`cmd -p`). No API key. */
+export interface CommandCodeProvider {
+  kind: "commandcode";
+  /** Model passed to `cmd -p --model`; empty means Command Code's default. */
+  model: string;
+  timeoutMs?: number;
+}
+
+export type ChatProvider = OpenAiChatProvider | ChatGptProvider | CommandCodeProvider;
 
 export const CHATGPT_DEFAULT_MODEL = "gpt-6.1-sol";
 
 export const isOpenAiChat = (p: ChatProvider | null | undefined): p is OpenAiChatProvider => p?.kind === "openai-chat";
 export const isChatGpt = (p: ChatProvider | null | undefined): p is ChatGptProvider => p?.kind === "chatgpt";
+export const isCommandCode = (p: ChatProvider | null | undefined): p is CommandCodeProvider => p?.kind === "commandcode";
 
 export interface AiSettings {
   decision: DecisionProvider | null;
@@ -83,7 +92,7 @@ export const draftOf = (s: SettingsResponse | SettingsDraft): SettingsDraft => (
 /** The decision provider "llm" grades with the chat model, same as having none. */
 export const usesDecisionModel = (ai: AiSettings) => ai.decision?.kind === "openrouter-decisions";
 
-export type PresetId = "openrouter" | "openai" | "chatgpt" | "local";
+export type PresetId = "openrouter" | "openai" | "chatgpt" | "local" | "commandcode";
 
 export function presetAi(id: PresetId, defaults: AiSettings, current: AiSettings): AiSettings {
   const keep = { autoFeedback: current.autoFeedback, language: current.language, agent: current.agent };
@@ -93,6 +102,13 @@ export function presetAi(id: PresetId, defaults: AiSettings, current: AiSettings
       ...keep,
       decision: null,
       feedback: { kind: "chatgpt", model: CHATGPT_DEFAULT_MODEL, vision: true, timeoutMs: 60000 },
+      vision: null,
+    };
+  if (id === "commandcode")
+    return {
+      ...keep,
+      decision: null,
+      feedback: { kind: "commandcode", model: "", timeoutMs: 300000 },
       vision: null,
     };
   if (id === "openai")
@@ -112,6 +128,7 @@ export function presetAi(id: PresetId, defaults: AiSettings, current: AiSettings
 
 export function matchPreset(ai: AiSettings, defaults: AiSettings | undefined): PresetId | null {
   if (!usesDecisionModel(ai) && ai.feedback?.kind === "chatgpt") return "chatgpt";
+  if (!usesDecisionModel(ai) && ai.feedback?.kind === "commandcode") return "commandcode";
   const url = isOpenAiChat(ai.feedback) ? ai.feedback.url : "";
   if (defaults && usesDecisionModel(ai) && url === (isOpenAiChat(defaults.feedback) ? defaults.feedback.url : "")) return "openrouter";
   if (!usesDecisionModel(ai) && url.startsWith("https://api.openai.com/")) return "openai";
@@ -160,8 +177,13 @@ function checkChatGpt(p: ChatGptProvider, prefix: string, e: Errors) {
   if (p.timeoutMs != null && !(p.timeoutMs >= 1000 && p.timeoutMs <= 600_000)) e[`${prefix}.timeoutMs`] = "Between 1 and 600 seconds";
 }
 
+function checkCommandCode(p: { model?: string; timeoutMs?: number }, e: Errors) {
+  if (p.timeoutMs != null && !(p.timeoutMs >= 1000 && p.timeoutMs <= 600_000)) e["feedback.timeoutMs"] = "Between 1 and 600 seconds";
+}
+
 function checkProvider(p: ChatProvider, prefix: string, e: Errors) {
   if (isChatGpt(p)) checkChatGpt(p, prefix, e);
+  else if (isCommandCode(p)) checkCommandCode(p, e);
   else checkChat(p, prefix, e);
 }
 

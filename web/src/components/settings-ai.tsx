@@ -14,6 +14,7 @@ import { BigSwitch, Block, Disclosure, Field, Group, NumberField, Section, TextF
 import { ChatGptBlock } from "@/components/settings-chatgpt";
 import {
   isChatGpt,
+  isCommandCode,
   isOpenAiChat,
   keyVars,
   matchPreset,
@@ -22,6 +23,7 @@ import {
   type AiSettings,
   type ChatGptProvider,
   type ChatProvider,
+  type CommandCodeProvider,
   type Errors,
   type OpenAiChatProvider,
   type PresetId,
@@ -33,6 +35,7 @@ const PRESETS: { id: PresetId; label: string; hint: string }[] = [
   { id: "openrouter", label: "OpenRouter", hint: "Decision model for verdicts, a chat model for feedback. One key." },
   { id: "openai", label: "OpenAI", hint: "OpenAI's chat API judges and writes feedback. Needs an OpenAI key." },
   { id: "chatgpt", label: "ChatGPT", hint: "Grade with your ChatGPT Plus or Pro plan. No API key." },
+  { id: "commandcode", label: "Command Code", hint: "Ask Etude runs on your Command Code plan (the `cmd` binary). No API key." },
   { id: "local", label: "Local", hint: "An OpenAI-compatible server on this machine (llama.cpp, Ollama, vLLM). No key." },
 ];
 
@@ -47,9 +50,10 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
   const fb = ai.feedback;
   const fbOpen = isOpenAiChat(fb) ? fb : null;
   const fbGpt = isChatGpt(fb) ? fb : null;
+  const fbCmd = isCommandCode(fb) ? fb : null;
   const setFb = (patch: Partial<OpenAiChatProvider>) => set({ feedback: { ...(fbOpen ?? { kind: "openai-chat", url: "", model: "" }), ...patch } });
   const visionOpen = isOpenAiChat(ai.vision) ? ai.vision : null;
-  const visionTarget = ai.vision ?? (fb?.vision ? fb : null);
+  const visionTarget = ai.vision ?? (fb && fb.kind !== "commandcode" && fb.vision ? fb : null);
 
   // Endpoints stay folded unless something in them needs fixing or the setup matches no preset.
   const endpointError = Object.keys(errors).some((k) => /^(decision|feedback|vision)\./.test(k) && k !== "feedback.model");
@@ -93,6 +97,14 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
               error={errors["feedback.model"]}
               onChange={(patch: Partial<ChatGptProvider>) => set({ feedback: { ...fbGpt, ...patch } })}
             />
+          )}
+          {fbCmd && (
+            <Block description={<>Each turn runs the local <code className="font-mono">cmd -p</code> binary with your Command Code plan. Empty model uses Command Code's default.</>}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <TextField label="Model" mono value={fbCmd.model ?? ""} error={errors["feedback.model"]} onChange={(v) => set({ feedback: { ...fbCmd, model: v } })} placeholder="(default)" />
+                <NumberField label="Timeout" suffix="s" value={sec(fbCmd.timeoutMs ?? 300000)} error={errors["feedback.timeoutMs"]} onChange={(v) => set({ feedback: { ...fbCmd, timeoutMs: ms(v) } })} />
+              </div>
+            </Block>
           )}
           <KeysBlock ai={ai} saved={saved} />
         </Group>

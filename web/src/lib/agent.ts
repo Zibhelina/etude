@@ -69,7 +69,7 @@ export interface Conversation {
 }
 
 export interface ModelGroup {
-  provider: "chatgpt" | "openrouter" | "custom";
+  provider: "chatgpt" | "openrouter" | "custom" | "commandcode";
   label: string;
   models: { ref: string; name: string; vision?: boolean }[];
   error?: string;

@@ -24,10 +24,11 @@ A chat inside Etude that can do anything the CLI can: make decks from your notes
 | Provider | Where it comes from | Protocol |
 | --- | --- | --- |
 | ChatGPT | Your ChatGPT sign-in (Settings → AI). Models from your plan's model list. | Responses API with function tools |
+| Command Code | The local `cmd` binary, signed in with your Command Code plan (`cmd login`). | `cmd -p --output-format json`, one subprocess per turn |
 | OpenRouter | `OPENROUTER_API_KEY` (in the environment or `$ETUDE_HOME/.env`). Only models that support tool calling are listed. | Chat Completions with `tools` |
 | Custom endpoint | Your feedback model when it is a non-OpenRouter OpenAI-compatible server (OpenAI, llama.cpp, vLLM, Ollama). The model must support tool calls. | Chat Completions with `tools` |
 
-A model ref is `chatgpt:<model>`, `openrouter:<model>` or `custom:<model>`. Settings → AI → Assistant sets the default (`ai.agent.model`; empty means the feedback model):
+A model ref is `chatgpt:<model>`, `openrouter:<model>`, `custom:<model>` or `commandcode:<model>`. Settings → AI → Assistant sets the default (`ai.agent.model`; empty means the feedback model):
 
 ```sh
 etude settings set ai.agent.model=chatgpt:gpt-6.1-sol

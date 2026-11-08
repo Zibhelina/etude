@@ -464,7 +464,7 @@ These work on every command, before or after the command words.
   - [`agent rename`](#agent-rename) Give a conversation your own title. Automatic titles stop for it.
   - [`agent delete`](#agent-delete) Delete a conversation and its attachments. Changes it made to the collection stay.
   - [`agent undo`](#agent-undo) Put the collection back as it was before one of the assistant's replies (default: its latest reply that changed something). Changes made after it are undone too.
-  - [`agent models`](#agent-models) Models the assistant can use, from every configured provider (ChatGPT plan, OpenRouter tool-capable models, a custom endpoint).
+  - [`agent models`](#agent-models) Models the assistant can use, from every configured provider (ChatGPT plan, Command Code plan, OpenRouter tool-capable models, a custom endpoint).
 - **db**: The database file: path, backups, integrity, schema version
   - [`db path`](#db-path) Which database and media directory the CLI uses, and how it was chosen.
   - [`db backup`](#db-backup) Copy the database consistently (SQLite online backup; safe while the server runs).
@@ -6016,7 +6016,7 @@ etude agent ask <message...> [flags]
 | Flag | Type | Description |
 | --- | --- | --- |
 | `-c, --conversation <ID>` | string | Continue this conversation. |
-| `-m, --model <REF>` | string | Model ref: chatgpt:<model>, openrouter:<model> or custom:<model>. Default: the conversation's, then the last used, then the agent setting, then the feedback model. |
+| `-m, --model <REF>` | string | Model ref: chatgpt:<model>, openrouter:<model>, custom:<model> or commandcode:<model>. Default: the conversation's, then the last used, then the agent setting, then the feedback model. |
 | `--attach <FILE> (repeatable)` | string | Attach a file (image, PDF, text, .apkg). Repeat for several. |
 | `-y, --yes` | boolean | Allow destructive commands without asking. |
 
@@ -6128,7 +6128,7 @@ Output: { restored, undone: [message ids] }
 
 <a id="agent-models"></a>
 
-Models the assistant can use, from every configured provider (ChatGPT plan, OpenRouter tool-capable models, a custom endpoint).
+Models the assistant can use, from every configured provider (ChatGPT plan, Command Code plan, OpenRouter tool-capable models, a custom endpoint).
 
 ```
 etude agent models [flags]

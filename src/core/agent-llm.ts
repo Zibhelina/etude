@@ -2,6 +2,7 @@
 // (the user's ChatGPT plan) and OpenAI-compatible Chat Completions (OpenRouter, OpenAI, local servers).
 import { AiError, type AgentEffort, type ChatProvider } from "./ai.ts";
 import { chatGptEndpoints, chatGptFetch, chatGptNativeHost, getChatGptCredentials, failureMessage, ChatGptError, DEFAULT_CHATGPT_MODEL } from "./chatgpt.ts";
+import { commandCodeTurn } from "./commandcode.ts";
 
 export interface ToolSpec {
   name: string;
@@ -332,5 +333,19 @@ async function chatTurn(req: LlmRequest, p: Extract<ChatProvider, { kind: "opena
 /** One model turn: streams text through `onText` and returns the text and any tool calls. */
 export function llmTurn(req: LlmRequest): Promise<LlmResult> {
   const p = req.provider;
-  return p.kind === "chatgpt" ? responsesTurn(req, p) : chatTurn(req, p);
+  if (p.kind === "chatgpt") return responsesTurn(req, p);
+  if (p.kind === "openai-chat") return chatTurn(req, p);
+  return commandCodeCmdTurn(req, p);
+}
+
+/** Command Code plan, via the local `cmd -p` binary. One assistant turn per subprocess. */
+async function commandCodeCmdTurn(req: LlmRequest, p: Extract<ChatProvider, { kind: "commandcode" }>): Promise<LlmResult> {
+  const t0 = Date.now();
+  const messages = req.messages.map((m) => ({
+    role: m.role,
+    content: m.role === "assistant" && m.toolCalls?.length ? `${m.content}\n[tool calls: ${m.toolCalls.map((c) => `${c.name}(${c.arguments || "{}"})`).join(", ")}]` : m.content,
+  }));
+  const out = await commandCodeTurn(p, req.system, messages, req.signal);
+  req.onText?.(out.text);
+  return { text: out.text, toolCalls: [], model: out.model, ms: Date.now() - t0 };
 }

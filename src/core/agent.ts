@@ -10,6 +10,7 @@ import { AiError, type AgentEffort, type ChatProvider } from "./ai.ts";
 import { cheatSheet } from "./agent-cheatsheet.ts";
 import { agentRefusal } from "./agent-guard.ts";
 import { chatGptStatus, listChatGptModels } from "./chatgpt.ts";
+import { commandCodePresent, cmdcodeModelName, listCommandCodeModels } from "./commandcode.ts";
 import { llmTurn, type LlmMessage, type ToolCall, type ToolSpec } from "./agent-llm.ts";
 import type { Etude } from "./engine.ts";
 import { personaPrompt } from "./minimi.ts";
@@ -136,7 +137,7 @@ export interface ModelChoice {
 }
 
 export interface ModelGroup {
-  provider: "chatgpt" | "openrouter" | "custom";
+  provider: "chatgpt" | "openrouter" | "custom" | "commandcode";
   label: string;
   models: ModelChoice[];
   error?: string;
@@ -396,7 +397,7 @@ export class Agent {
     this.store.setKv("lastModel", null);
   }
 
-  /** A model ref as a provider. Refs: `chatgpt:<slug>`, `openrouter:<id>`, `custom:<id>`; null means the feedback provider. */
+  /** A model ref as a provider. Refs: `chatgpt:<slug>`, `openrouter:<id>`, `custom:<id>`, `commandcode:<model>`; null means the feedback provider. */
   resolveModel(ref: string | null | undefined): ChatProvider {
     const ai = this.etude.settings().ai;
     const fb = ai.feedback;
@@ -409,6 +410,10 @@ export class Agent {
     const kind = i < 0 ? "" : r.slice(0, i);
     const model = r.slice(i + 1);
     if (kind === "chatgpt") return { kind: "chatgpt", model, vision: true, ...(fb?.kind === "chatgpt" && fb.baseUrl ? { baseUrl: fb.baseUrl } : {}), timeoutMs: 180_000 };
+    if (kind === "commandcode") {
+      // No sign-in here: `cmd` runs under the user's existing Command Code login.
+      return { kind: "commandcode", model: model || "", timeoutMs: 180_000 };
+    }
     if (kind === "openrouter") {
       const env = fb?.kind === "openai-chat" && /openrouter\.ai/.test(fb.url) ? fb.apiKeyEnv : "OPENROUTER_API_KEY";
       const url = fb?.kind === "openai-chat" && /openrouter/.test(fb.url) ? fb.url : OPENROUTER_CHAT;
@@ -418,7 +423,7 @@ export class Agent {
       if (fb?.kind !== "openai-chat") throw new AgentError("no custom endpoint is configured", 409);
       return { ...fb, model, timeoutMs: Math.max(fb.timeoutMs ?? 0, 180_000) };
     }
-    throw new AgentError(`unknown model "${r}" (use chatgpt:<model>, openrouter:<model> or custom:<model>)`);
+    throw new AgentError(`unknown model "${r}" (use chatgpt:<model>, openrouter:<model>, custom:<model> or commandcode:<model>)`);
   }
 
   private visionOf(ref: string): boolean {
@@ -431,6 +436,7 @@ export class Agent {
     const fb = this.etude.settings().ai.feedback;
     if (!fb) return null;
     if (fb.kind === "chatgpt") return `chatgpt:${fb.model}`;
+    if (fb.kind === "commandcode") return `commandcode:${fb.model}`;
     return /openrouter\.ai/.test(fb.url) ? `openrouter:${fb.model}` : `custom:${fb.model}`;
   }
 
@@ -448,6 +454,24 @@ export class Agent {
       } catch (e) {
         g.error = (e as Error).message;
         if (fb?.kind === "chatgpt") g.models = [{ ref: `chatgpt:${fb.model}`, name: fb.model, vision: true }];
+      }
+      groups.push(g);
+    }
+    // Command Code plan: available whenever `cmd` is on PATH (the user's GO login already signs it in).
+    // The full GO list comes from `cmd --list-models` at runtime; never hardcode ids.
+    if (fb?.kind === "commandcode" || commandCodePresent()) {
+      const g: ModelGroup = { provider: "commandcode", label: "Command Code", models: [{ ref: "commandcode:", name: cmdcodeModelName(fb) }] };
+      try {
+        const fetched = await listCommandCodeModels();
+        const existing = new Set(g.models.map((m) => m.ref));
+        for (const m of fetched) {
+          const ref = `commandcode:${m.id}`;
+          if (existing.has(ref)) continue;
+          existing.add(ref);
+          g.models.push({ ref, name: m.id });
+        }
+      } catch (e) {
+        g.error = `couldn't load Command Code's models: ${(e as Error).message}`;
       }
       groups.push(g);
     }
@@ -473,7 +497,7 @@ export class Agent {
   configured(): boolean {
     const ai = this.etude.settings().ai;
     if (ai.feedback || ai.agent?.model) return true;
-    return chatGptStatus(this.etude.home).signedIn || !!process.env.OPENROUTER_API_KEY;
+    return chatGptStatus(this.etude.home).signedIn || !!process.env.OPENROUTER_API_KEY || commandCodePresent();
   }
 
   // ------------------------------------------------------------ attachments
@@ -814,7 +838,7 @@ Today: ${new Date().toISOString().slice(0, 10)}${page ? `\nThe user is looking a
     this.turns.set(turn.id, turn);
     emit({ type: "start", turnId: turn.id, conversation: this.conv(this.store.get("SELECT * FROM agent_conversations WHERE id = ?", convId)), userMessage: this.message(this.store.get("SELECT * FROM agent_messages WHERE id = ?", uid)) });
 
-    const images = provider.vision === false ? [] : atts.filter((a) => a.kind === "image").map((a) => `data:${a.mime};base64,${readFileSync(a.path).toString("base64")}`);
+    const images = provider.kind === "commandcode" ? [] : provider.vision === false ? [] : atts.filter((a) => a.kind === "image").map((a) => `data:${a.mime};base64,${readFileSync(a.path).toString("base64")}`);
     const messages: LlmMessage[] = [...history, { role: "user", content: this.userText(userContent, convId), ...(images.length ? { images } : {}) }];
     const startLen = messages.length;
     const items: AgentItem[] = [];

@@ -33,7 +33,16 @@ export interface ChatGptProvider {
   vision?: boolean;
 }
 
-export type ChatProvider = OpenAiChatProvider | ChatGptProvider;
+/** The user's Command Code plan, through the local `cmd` binary (`cmd -p`). No API key: sign in with `cmd login`. */
+export interface CommandCodeProvider {
+  kind: "commandcode";
+  /** Model passed to `cmd -p --model`; empty means Command Code's default. */
+  model: string;
+  /** Timeout in ms for one subprocess call. */
+  timeoutMs?: number;
+}
+
+export type ChatProvider = OpenAiChatProvider | ChatGptProvider | CommandCodeProvider;
 
 /** The env var a chat provider reads its key from (the ChatGPT plan uses none). */
 export function chatProviderKeyEnv(p: ChatProvider | null | undefined): string | undefined {
@@ -180,8 +189,16 @@ async function decide(p: DecisionProvider, ctx: GradingContext): Promise<AiVerdi
 const FEEDBACK_STYLE = (lang: string) =>
   `Write feedback for a student who just answered a practice card. Write in ${lang}. Talk to the student directly, in two to four short sentences of markdown (use $...$ for math). Start with whether the answer is right. Then name exactly what was missing or wrong, and the fix. If it is right, add the one thing that would make it exam-perfect, or say nothing more. No praise filler, no headings, no restating the question.`;
 
-async function chat(p: ChatProvider, system: string, user: string, image: string | null, json: boolean, home?: string) {
+async function chat(p: ChatProvider, system: string, user: string, image: string | null, json: boolean, home?: string, signal?: AbortSignal) {
   const t0 = Date.now();
+  if (p.kind === "commandcode") {
+    // Grading only: Minimi keeps its own HTTP path (see agent-llm.ts). Image answers
+    // need the vision provider, which has to be OpenAI-compatible — never commandcode.
+    if (image) throw new AiError("the Command Code provider can't read images; use a vision model that accepts images");
+    const { commandCodeTurn } = await import("./commandcode.ts");
+    const out = await commandCodeTurn(p, system, [{ role: "user", content: user }], signal);
+    return { text: out.text, model: out.model, ms: out.ms, cost: undefined };
+  }
   if (p.kind === "chatgpt") {
     try {
       const out = await chatGptResponses({
@@ -206,10 +223,10 @@ async function chat(p: ChatProvider, system: string, user: string, image: string
       ]
     : user;
   const reply = await post(
-    p.url,
+    (p as Extract<ChatProvider, { kind: "openai-chat" }>).url,
     {
-      model: p.model,
-      temperature: p.temperature ?? 0.3,
+      model: (p as Extract<ChatProvider, { kind: "openai-chat" }>).model,
+      temperature: (p as Extract<ChatProvider, { kind: "openai-chat" }>).temperature ?? 0.3,
       messages: [
         { role: "system", content: system },
         { role: "user", content },
@@ -217,12 +234,12 @@ async function chat(p: ChatProvider, system: string, user: string, image: string
       ...(json ? { response_format: { type: "json_object" } } : {}),
       usage: { include: true },
     },
-    p.apiKeyEnv,
-    p.timeoutMs ?? 45000,
+    (p as Extract<ChatProvider, { kind: "openai-chat" }>).apiKeyEnv,
+    (p as Extract<ChatProvider, { kind: "openai-chat" }>).timeoutMs ?? 45000,
   );
   const text: string = reply?.choices?.[0]?.message?.content ?? "";
   if (!text.trim()) throw new AiError("language model returned no text");
-  return { text: text.trim(), model: reply.model ?? p.model, ms: Date.now() - t0, cost: reply.usage?.cost as number | undefined };
+  return { text: text.trim(), model: reply.model ?? (p as Extract<ChatProvider, { kind: "openai-chat" }>).model, ms: Date.now() - t0, cost: reply.usage?.cost as number | undefined };
 }
 
 function parseJson(text: string): any {
@@ -259,7 +276,7 @@ export interface AiRunOptions {
 }
 
 export async function aiVerdict(settings: AiSettings, ctx: GradingContext, opts: AiRunOptions = {}): Promise<AiVerdict> {
-  const visionModel = settings.vision ?? (settings.feedback?.vision ? settings.feedback : null);
+  const visionModel = settings.vision ?? (settings.feedback && settings.feedback.kind !== "commandcode" && settings.feedback.vision ? settings.feedback : null);
   if (opts.vision || ctx.answerImage) {
     if (!visionModel) throw new AiError("no vision model configured");
     return judgeWithLlm(visionModel, ctx, settings.language, opts.home);
@@ -283,7 +300,7 @@ export async function aiVerdict(settings: AiSettings, ctx: GradingContext, opts:
 }
 
 export async function aiFeedback(settings: AiSettings, ctx: GradingContext, opts: AiRunOptions = {}): Promise<{ feedback: string; model: string; ms: number; cost?: number }> {
-  const p = ctx.answerImage ? (settings.vision ?? (settings.feedback?.vision ? settings.feedback : null)) : settings.feedback;
+  const p = ctx.answerImage ? (settings.vision ?? (settings.feedback && settings.feedback.kind !== "commandcode" && settings.feedback.vision ? settings.feedback : null)) : settings.feedback;
   if (!p) throw new AiError("no feedback model configured");
   const verdictLine = ctx.verdict && ctx.verdict !== "ungraded" ? `\n\n## Grade already given\n${ctx.verdict}${ctx.score != null ? ` (score ${ctx.score.toFixed(2)})` : ""}. Your feedback must agree with this grade.` : "";
   const out = await chat(p, FEEDBACK_STYLE(settings.language), contextText(ctx) + verdictLine, ctx.answerImage, false, opts.home);

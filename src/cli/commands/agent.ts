@@ -16,7 +16,7 @@ command({
   args: [{ name: "message", description: "What to ask.", required: true, variadic: true }],
   flags: [
     { name: "conversation", type: "string", short: "c", description: "Continue this conversation.", placeholder: "ID" },
-    { name: "model", type: "string", short: "m", description: "Model ref: chatgpt:<model>, openrouter:<model> or custom:<model>. Default: the conversation's, then the last used, then the agent setting, then the feedback model.", placeholder: "REF" },
+    { name: "model", type: "string", short: "m", description: "Model ref: chatgpt:<model>, openrouter:<model>, custom:<model> or commandcode:<model>. Default: the conversation's, then the last used, then the agent setting, then the feedback model.", placeholder: "REF" },
     { name: "attach", type: "string", multiple: true, description: "Attach a file (image, PDF, text, .apkg). Repeat for several.", placeholder: "FILE" },
     { name: "yes", type: "boolean", short: "y", description: "Allow destructive commands without asking." },
   ],
@@ -124,7 +124,7 @@ command({
 
 command({
   name: "agent models",
-  summary: "Models the assistant can use, from every configured provider (ChatGPT plan, OpenRouter tool-capable models, a custom endpoint).",
+  summary: "Models the assistant can use, from every configured provider (ChatGPT plan, Command Code plan, OpenRouter tool-capable models, a custom endpoint).",
   flags: [{ name: "search", type: "string", description: "Only models whose ref or name contains this.", placeholder: "TEXT" }],
   output: "{ configured, default, groups: [{ provider, label, models: [{ ref, name, vision }], error? }] }",
   async run(ctx) {

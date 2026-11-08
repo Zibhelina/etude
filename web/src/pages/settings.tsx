@@ -127,7 +127,7 @@ const ABOUT_LINKS = [
 ];
 
 const hour12 = (h: number) => (h === 0 ? "midnight" : h < 12 ? `${h} am` : h === 12 ? "noon" : `${h - 12} pm`);
-const PRESET_NAME = { openrouter: "OpenRouter", openai: "OpenAI", chatgpt: "your ChatGPT plan", local: "a model on this computer" } as const;
+const PRESET_NAME = { openrouter: "OpenRouter", openai: "OpenAI", chatgpt: "your ChatGPT plan", local: "a model on this computer", commandcode: "your Command Code plan" } as const;
 
 function useMode(ref: React.RefObject<HTMLElement | null>): Mode {
   // A phone gets the list → section flow; a desktop at any width gets the split or, with room, the one page.
@@ -458,7 +458,7 @@ export function SettingsPage() {
   const summary: Record<GroupId, string> = {
     account: signedIn ? `${email ?? "Signed in"}` : "Not signed in",
     study: dayOk ? `Day starts at ${hour12(day)}` : "Day start, learn ahead",
-    ai: !draft.ai.feedback ? "Off" : preset ? { openrouter: "OpenRouter", openai: "OpenAI", chatgpt: "ChatGPT plan", local: "On this computer" }[preset] : "Your own setup",
+    ai: !draft.ai.feedback ? "Off" : preset ? { openrouter: "OpenRouter", openai: "OpenAI", chatgpt: "ChatGPT plan", local: "On this computer", commandcode: "Command Code plan" }[preset] : "Your own setup",
     appearance: themeName,
     data: "Backup, import, clean up",
     privacy: "What Etude sends",

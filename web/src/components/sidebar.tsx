@@ -16,7 +16,7 @@ import { etudeFetch } from "@/lib/transport";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
-import { SB_DEFAULT, SB_FOLD, SB_MAX, SB_MIN, runNotesAction, setNotesPagesOpen, setNotesSlot, setSidebarWidth, useNotesPagesOpen, useSidebarWidth, type NotesAction } from "@/lib/sidebar-slot";
+import { SB_DEFAULT, SB_FOLD, SB_RAIL, SB_MAX, SB_MIN, runNotesAction, setNotesPagesOpen, setNotesSlot, setSidebarWidth, useNotesPagesOpen, useSidebarWidth, type NotesAction } from "@/lib/sidebar-slot";
 
 type Item = { to: string; label: string; beta?: boolean; icon: (p: { className?: string }) => React.ReactNode; match(p: string): boolean };
 
@@ -70,7 +70,7 @@ export function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed
   const onNotes = path === "/notes";
   const showPages = onNotes && pagesOpen && !collapsed;
   const [drag, setDrag] = useState<number | null>(null);
-  const shown = drag ?? (collapsed ? 72 : width);
+  const shown = drag ?? (collapsed ? SB_RAIL : width);
   return (
     <aside
       aria-label="Main"
@@ -126,7 +126,7 @@ export function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed
                   aria-current={on ? "page" : undefined}
                   aria-expanded={isNotes && onNotes && !collapsed ? pagesOpen : undefined}
                   className={cn(
-                    "flex h-10 w-full shrink-0 items-center gap-3 rounded-[10px] px-4 text-[14.5px] whitespace-nowrap text-muted-foreground transition-colors outline-ring hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2",
+                    "sb-item flex h-10 w-full shrink-0 items-center gap-3 rounded-[10px] px-4 text-[14.5px] whitespace-nowrap text-muted-foreground transition-colors outline-ring hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2",
                     on && "font-[650] text-foreground",
                     // With your pages showing, the open page carries the highlight, not Notes.
                     on && !(isNotes && showPages) && "bg-sidebar-accent",
@@ -208,7 +208,7 @@ function ResizeGrip({ collapsed, width, onToggle, onDrag }: { collapsed: boolean
     const el = e.currentTarget;
     el.setPointerCapture(e.pointerId);
     const x0 = e.clientX;
-    const w0 = collapsed ? 72 : width;
+    const w0 = collapsed ? SB_RAIL : width;
     let moved = false;
     setHot(true);
     document.body.classList.add("sb-dragging");
@@ -217,7 +217,7 @@ function ResizeGrip({ collapsed, width, onToggle, onDrag }: { collapsed: boolean
       moved = true;
       const w = Math.min(SB_MAX, w0 + ev.clientX - x0);
       live.current = w;
-      onDrag(w < SB_FOLD ? 72 : Math.max(SB_MIN, w));
+      onDrag(w < SB_FOLD ? SB_RAIL : Math.max(SB_MIN, w));
     };
     const up = () => {
       el.removeEventListener("pointermove", move);
@@ -245,7 +245,7 @@ function ResizeGrip({ collapsed, width, onToggle, onDrag }: { collapsed: boolean
       role="separator"
       aria-orientation="vertical"
       aria-label="Resize the sidebar"
-      aria-valuenow={collapsed ? 72 : width}
+      aria-valuenow={collapsed ? SB_RAIL : width}
       aria-valuemin={SB_MIN}
       aria-valuemax={SB_MAX}
       tabIndex={-1}

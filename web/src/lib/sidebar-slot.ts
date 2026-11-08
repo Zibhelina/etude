@@ -3,6 +3,8 @@
 import { useSyncExternalStore } from "react";
 
 export const SB_DEFAULT = 232;
+/** The folded sidebar: just the icons. */
+export const SB_RAIL = 58;
 export const SB_MIN = 200;
 export const SB_MAX = 480;
 /** Let go narrower than this and the sidebar folds into the rail. */

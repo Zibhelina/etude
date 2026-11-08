@@ -295,10 +295,18 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
 .shell-sb {
   --sb-ease: cubic-bezier(0.32, 0.72, 0, 1);
   --sb-dur: 340ms;
-  transition: width var(--sb-dur) var(--sb-ease);
+  transition: width var(--sb-dur) var(--sb-ease), padding var(--sb-dur) var(--sb-ease);
 }
+/* The rail is 58 px: 5 px of edge and a 48 px column, icons centred in it (14 px in from each side). */
+.shell-sb[data-collapsed] { padding-left: 5px; padding-right: 5px; }
+.shell-sb .sb-nav { transition: margin var(--sb-dur) var(--sb-ease), padding var(--sb-dur) var(--sb-ease); }
+.shell-sb[data-collapsed] .sb-nav { margin-left: -5px; margin-right: -5px; padding-left: 5px; padding-right: 5px; }
+.shell-sb .sb-item { transition: padding var(--sb-dur) var(--sb-ease), background-color 150ms, color 150ms; }
+.shell-sb[data-collapsed] .sb-item { padding-left: 14px; padding-right: 14px; }
+.shell-sb .sb-dot { transition: left var(--sb-dur) var(--sb-ease), opacity 120ms ease; }
+.shell-sb[data-collapsed] .sb-dot { left: 36px; }
 .shell-sb .sb-toggle { transform: translateX(calc(var(--sbw, 232px) - 60px)); transition: transform var(--sb-dur) var(--sb-ease), background-color 150ms, color 150ms; }
-.shell-sb[data-collapsed] .sb-toggle { transform: translateX(6px); }
+.shell-sb[data-collapsed] .sb-toggle { transform: translateX(4px); }
 .shell-sb .sb-group { height: 36px; transition: height var(--sb-dur) var(--sb-ease); }
 .shell-sb[data-collapsed] .sb-group { height: 16px; }
 .shell-sb[data-collapsed] .sb-group-first { height: 0; }
@@ -310,6 +318,7 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
 .shell-sb[data-collapsed] .sb-rail-only { opacity: 1; transition: opacity 200ms ease 160ms; }
 .shell-sb .sb-profile { height: 56px; transition: height var(--sb-dur) var(--sb-ease); }
 .shell-sb[data-collapsed] .sb-profile { height: 56px; }
+.shell-sb[data-collapsed] .sb-avatar { transform: translate(-2px, 8px); }
 .shell-sb .sb-avatar { transform: translateY(8px); transition: transform var(--sb-dur) var(--sb-ease); }
 .shell-sb .sb-gear { transform: translate(calc(var(--sbw, 232px) - 62px), 10px); opacity: 1; transition: opacity 200ms ease 110ms, color 150ms; }
 .shell-sb[data-collapsed] .sb-gear { opacity: 0; transition: opacity 110ms ease; }

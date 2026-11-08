@@ -333,9 +333,68 @@ function setScreenVar(height) {
 }
 
 function observeSize() {
-  const report = () => send("size", { height: Math.ceil(document.body.getBoundingClientRect().height) });
+  const report = () => {
+    send("size", { height: Math.ceil(document.body.getBoundingClientRect().height) });
+    tellField(false);
+  };
   new ResizeObserver(report).observe(document.body);
   report();
+}
+
+// The inputs an answer is typed into (the others are pickers: checkboxes, ranges, dates).
+const TEXT_INPUTS = ["text", "number", "search", "tel", "url", "email", "password"];
+const typesIn = (el) =>
+  (el instanceof HTMLTextAreaElement && !el.readOnly) || (el instanceof HTMLInputElement && TEXT_INPUTS.includes(el.type) && !el.readOnly) || (el instanceof HTMLElement && el.isContentEditable);
+
+// ---------- the field being typed in stays on screen ----------
+// The frame is as tall as its card and the page around it scrolls, so the app is what brings a field on
+// screen, above the on-screen keyboard and the bars over the page (web/src/lib/field-on-screen.ts). The
+// frame tells it where the focused field is: when it gets the focus, to show it, and when the card's
+// layout or scrolling moves it, to know.
+let field = null;
+// The field kept the focus while the window lost it (another window, the app around the card).
+let away = false;
+
+function tellField(reveal) {
+  if (!field) return;
+  const r = field.getBoundingClientRect();
+  send("field", { top: r.top, bottom: r.bottom, left: r.left, right: r.right, reveal });
+}
+
+// What focus() does unless told not to, short of the page: boxes in the card that scroll bring the field
+// into their view. Not the frame's own document: the frame grows to its card, so it only scrolls until then.
+function scrollToField(el) {
+  for (let box = el.parentElement; box && box !== document.body; box = box.parentElement) {
+    if (box.scrollHeight <= box.clientHeight || !/auto|scroll/.test(getComputedStyle(box).overflowY)) continue;
+    const r = el.getBoundingClientRect();
+    const b = box.getBoundingClientRect();
+    if (r.bottom > b.bottom) box.scrollTop += Math.min(r.bottom - b.bottom, r.top - b.top);
+    else if (r.top < b.top) box.scrollTop -= b.top - r.top;
+  }
+}
+
+function watchFields() {
+  document.addEventListener("focusin", (e) => {
+    // Coming back from another window to the same field leaves the page where the reader left it.
+    const back = away && e.target === field;
+    away = false;
+    field = typesIn(e.target) ? e.target : null;
+    if (!field) return send("field", {});
+    if (!back) scrollToField(field);
+    tellField(!back);
+  });
+  // Leaving for another window keeps the field (focus comes back to it); a blur inside the card drops it.
+  document.addEventListener("focusout", () =>
+    setTimeout(() => {
+      if (!field) return;
+      if (document.activeElement === field) away = !document.hasFocus();
+      else {
+        field = null;
+        send("field", {});
+      }
+    }),
+  );
+  addEventListener("scroll", () => tellField(false), { capture: true, passive: true });
 }
 
 function focusCard(root) {
@@ -344,8 +403,9 @@ function focusCard(root) {
     for (const el of root.querySelectorAll(selector)) {
       if (el.matches(":disabled, [readonly]") || el.closest("[inert]") || !el.getClientRects().length || getComputedStyle(el).visibility !== "visible") continue;
       if (el.hasAttribute("contenteditable") && !el.isContentEditable) continue;
-      if (!selector.startsWith("[autofocus]") && el instanceof HTMLInputElement && !["text", "number", "search", "tel", "url", "email", "password"].includes(el.type)) continue;
-      el.focus();
+      if (!selector.startsWith("[autofocus]") && el instanceof HTMLInputElement && !TEXT_INPUTS.includes(el.type)) continue;
+      // A field doesn't scroll the page to itself: the app places it (watchFields), when there is one.
+      el.focus(parent !== window && typesIn(el) ? { preventScroll: true } : undefined);
       if (document.activeElement === el) return;
     }
   }
@@ -568,6 +628,7 @@ export function boot(main, templateHtml, assets) {
     else if (msg.type === "media-state") setMediaPending(!!msg.pending);
   });
   forwardKeys();
+  watchFields();
   send("loaded");
 }
 

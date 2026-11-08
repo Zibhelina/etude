@@ -6,6 +6,7 @@ import { api, type Grade } from "@/lib/api";
 import { pageScheme, THEME_EVENT, useScheme } from "@/lib/theme";
 import { etudeFetch, isLocal } from "@/lib/transport";
 import { MEDIA_EVENT, MEDIA_STATE_EVENT, mediaPending } from "@/lib/sync";
+import { useFieldOnScreen } from "@/lib/field-on-screen";
 
 // Where the serverless builds keep the editor kit, from this bundle file (assets/…). A variable, so
 // the bundler leaves it alone: the kit is built after the app.
@@ -111,6 +112,7 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
   const [loaded, setLoaded] = useState(false);
   const latest = useRef(props);
   latest.current = props;
+  const onField = useFieldOnScreen(iframe, props.frameKey);
 
   const post = useCallback((msg: Record<string, unknown>, transfer: Transferable[] = []) => {
     iframe.current?.contentWindow?.postMessage({ etude: 1, ...msg }, "*", transfer);
@@ -170,7 +172,7 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
     collect: () => post({ type: "collect" }),
     showResult: (result, opts) => post({ type: "result", result, morph: opts?.morph }),
     focus: () => {
-      iframe.current?.focus();
+      iframe.current?.focus({ preventScroll: true });
       post({ type: "focus" });
     },
     snapshot: () => new Promise((resolve) => {
@@ -206,7 +208,8 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
           setLoaded(true);
           p.onMounted?.();
           if ((p.mode ?? "answer") === "answer" && p.autoFocus !== false) {
-            iframe.current?.focus();
+            // The card's field is placed on screen by onField, not by the frame scrolling into view.
+            iframe.current?.focus({ preventScroll: true });
             post({ type: "focus" });
           }
           break;
@@ -225,6 +228,9 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
           break;
         case "submit":
           p.onSubmit?.(msg.answer);
+          break;
+        case "field":
+          onField(msg);
           break;
         case "ready-state":
           p.onReady?.(!!msg.ready);
@@ -276,7 +282,7 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [props.frameKey, post]);
+  }, [props.frameKey, post, onField]);
 
   const localDoc = (html: string | undefined) => (html !== undefined && isLocal() ? withPageNonce(html) : html);
 

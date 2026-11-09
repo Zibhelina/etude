@@ -1,7 +1,7 @@
 ---
 title: Refund Policy
 description: When Etude refunds Sync subscriptions and paid Market decks.
-last-updated: 2026-11-03
+last-updated: 2026-11-09
 ---
 
 # Refund Policy
@@ -19,13 +19,24 @@ Etude is free to use without paying, so you can try everything before you subscr
 
 ## Paid Market decks
 
-- **No refunds** once a deck is in your library, except:
-  - the deck doesn't work in Etude, or is materially different from its description and preview, **and** you report it within 14 days of purchase **and** it isn't fixed within 7 days of your report;
-  - you were charged twice for the same deck.
-- Purchases from outside the regions where the paid Market is open (currently Canada and the United States) are refunded automatically.
-- If you're in the EU or UK, at checkout you're asked to agree to immediate access to the deck, which ends the 14-day withdrawal right that otherwise applies to digital content.
-- A refunded deck is removed from your library.
-- Paid decks are sold by their creators through Stripe. Refunds go back to your original payment method, whether Etude or the creator issues them. Write to hello@etude.study.
+Paid decks are final sales: **no refunds**, except where the law where you live gives you one (below) or where something went wrong on our side:
+
+- the deck doesn't work in Etude, or is materially different from its description and preview, **and** you report it within 14 days of purchase **and** it isn't fixed within 7 days of your report;
+- you were charged twice for the same deck.
+
+A refunded deck is removed from your library.
+
+**Decks sold by Etude** (the deck's page says "by Etude"):
+
+- Etude makes them, and Polar sells them to you as merchant of record, in every country, plus any tax Polar adds at checkout. Refunds are issued through Polar to your original payment method: write to hello@etude.study or reply to your Polar receipt.
+- **EU and UK:** you can cancel within 14 days of purchase as long as you haven't downloaded the deck. Before the first download, you're asked to confirm that you want it delivered right away and that you can no longer cancel once it's delivered; from that download on, the 14-day right to cancel no longer applies. We email you a copy of that confirmation.
+- **Brazil:** you can cancel within 7 days of purchase (Código de Defesa do Consumidor, art. 49).
+- Polar may also refund a purchase on its own, within 60 days of it, to settle a payment dispute.
+
+**Decks sold by independent creators:**
+
+- The creator sells them through Stripe, to buyers in Canada and the United States. Purchases from elsewhere are refunded automatically.
+- Refunds go back to your original payment method, whether Etude or the creator issues them. Write to hello@etude.study.
 
 ## Where the law says otherwise
 

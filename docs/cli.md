@@ -4791,6 +4791,7 @@ etude account install <listing> [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
+| `--immediate-access` | boolean | Needed for the first download of a deck sold by Etude: you want it delivered now and understand that, once it's delivered, you can no longer cancel the purchase where the law allows that (as in the EU and the UK). |
 | `--dry-run` | boolean | Show what would change without writing anything. |
 
 Output: { entry, result, ids, report }

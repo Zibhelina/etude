@@ -15,7 +15,7 @@ import { DetailLayout, niceDate, paragraphs, type InfoCell } from "@/components/
 import { Comments, socialCells, TileCounts, useEntryStats, Votes } from "@/components/market-social";
 import type { EntryCounts } from "@/lib/market-social";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { account, bytes, money, openOutside, type Creator, type LibraryItem, type Listing, type PaidEntry, type Sales } from "@/lib/account";
+import { account, bytes, IMMEDIATE_ACCESS_TEXT, money, openOutside, type Creator, type LibraryItem, type Listing, type PaidEntry, type Sales } from "@/lib/account";
 import { etudeFetch } from "@/lib/transport";
 import { api } from "@/lib/api";
 import { canShowPurchases } from "@/lib/platform";
@@ -126,6 +126,7 @@ const firstSentence = (d: string) => {
 /** A paid deck's page in the Market: the same layout as a free entry, with Buy where purchases may be shown. */
 export function PaidDetail({ entry, signedIn, onBack, onChanged }: { entry: PaidEntry; signedIn: boolean; onBack(): void; onChanged(): void }) {
   const [busy, setBusy] = useState<null | "buy" | "install">(null);
+  const [confirming, setConfirming] = useState(false);
   const buy = async () => {
     if (!signedIn) return navigate("/settings#account");
     setBusy("buy");
@@ -138,10 +139,12 @@ export function PaidDetail({ entry, signedIn, onBack, onChanged }: { entry: Paid
       setBusy(null);
     }
   };
-  const install = async () => {
+  const install = async (immediateAccess = false) => {
+    if (entry.needsDeliveryConfirmation && !immediateAccess) return setConfirming(true);
+    setConfirming(false);
     setBusy("install");
     try {
-      const r = await account.install(entry.listing);
+      const r = await account.install(entry.listing, immediateAccess);
       toast.success(r.result === "unchanged" ? "You already have the latest version" : `${r.result === "updated" ? "Updated" : "Installed"} ${entry.name}`, { description: `${r.report.items.created} new, ${r.report.items.updated} updated.` });
       onChanged();
     } catch (e) {
@@ -165,11 +168,12 @@ export function PaidDetail({ entry, signedIn, onBack, onChanged }: { entry: Paid
   ];
   const action = entry.owned ? (
     <>
-      <Button className="mk-big gap-1.5" disabled={!!busy || entry.installed === "installed"} onClick={install}>
+      <Button className="mk-big gap-1.5" disabled={!!busy || entry.installed === "installed"} onClick={() => void install()}>
         {busy ? <Loader2 className="size-4 animate-spin" /> : entry.installed === "installed" ? <Check className="size-4" /> : <Download className="size-4" />}
         {entry.installed === "installed" ? "Installed" : entry.installed === "update" ? "Update" : "Install"}
       </Button>
       {entry.installed && <Button variant="outline" className="mk-big" onClick={() => navigate("/")}>Open</Button>}
+      {confirming && <DeliveryConfirmDialog name={entry.name} onClose={() => setConfirming(false)} onConfirm={() => void install(true)} />}
     </>
   ) : canShowPurchases() ? (
     <Button className="mk-big gap-1.5" disabled={!!busy} onClick={buy} data-buy>
@@ -195,7 +199,7 @@ export function PaidDetail({ entry, signedIn, onBack, onChanged }: { entry: Paid
           )}
           {action && <div className="mk-actions">{action}</div>}
           <Votes k={sKey} stats={stats} setStats={setStats} signedIn={signedIn} />
-          {canShowPurchases() && !entry.owned && <p className="mk-fine">Prices in US dollars before tax. Sold to buyers in Canada and the United States. Buying gives you every future version.</p>}
+          {canShowPurchases() && !entry.owned && <p className="mk-fine">{entry.soldBy === "etude" ? "Prices in US dollars before tax. Sold by Etude through Polar, in every country. Buying gives you every future version." : "Prices in US dollars before tax. Sold to buyers in Canada and the United States. Buying gives you every future version."}</p>}
         </>
       }
       info={info}
@@ -268,10 +272,13 @@ export function LibraryView() {
     }
   }, []);
   useEffect(() => void load(), [load]);
-  const install = async (l: LibraryItem) => {
+  const [confirming, setConfirming] = useState<LibraryItem | null>(null);
+  const install = async (l: LibraryItem, immediateAccess = false) => {
+    if (l.needsDeliveryConfirmation && !immediateAccess) return setConfirming(l);
+    setConfirming(null);
     setBusy(l.listing);
     try {
-      const r = await account.install(l.listing);
+      const r = await account.install(l.listing, immediateAccess);
       toast.success(`${r.result === "updated" ? "Updated" : r.result === "unchanged" ? "Already up to date:" : "Installed"} ${l.name}`, { description: `${r.report.items.created} new, ${r.report.items.updated} updated.` });
       await load();
     } catch (e) {
@@ -331,6 +338,7 @@ export function LibraryView() {
     <section className="mk-lsec" data-library>
       {head}
       <div className="mk-panel mk-list">{body}</div>
+      {confirming && <DeliveryConfirmDialog name={confirming.name} onClose={() => setConfirming(null)} onConfirm={() => void install(confirming, true)} />}
     </section>
   );
 }
@@ -791,5 +799,38 @@ function ReviewQueue({ server }: { server: string }) {
         </ul>
       )}
     </section>
+  );
+}
+
+/**
+ * Before the first download of a deck sold by Etude: the buyer asks for it to be delivered now and acknowledges that,
+ * once it is, they can no longer cancel where the law allows that (EU/UK right of withdrawal). The text comes from the
+ * server (marketRules.immediateAccess), with a built-in copy as the fallback. The server won't hand out the deck before.
+ */
+function DeliveryConfirmDialog({ name, onClose, onConfirm }: { name: string; onClose(): void; onConfirm(): void }) {
+  const [ok, setOk] = useState(false);
+  const [text, setText] = useState(IMMEDIATE_ACCESS_TEXT);
+  useEffect(() => {
+    let live = true;
+    account.status().then((st) => { const t = st.offering?.marketRules?.immediateAccess?.text; if (live && t) setText(t); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md" data-delivery-dialog>
+        <DialogHeader>
+          <DialogTitle>Download {name}</DialogTitle>
+          <DialogDescription>Until you download it, you can still cancel this purchase where the law gives you that right. We email you a copy of this confirmation.</DialogDescription>
+        </DialogHeader>
+        <label className="flex cursor-pointer items-start gap-2.5 text-sm" data-immediate-access>
+          <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-current" checked={ok} onChange={(e) => setOk(e.target.checked)} />
+          <span>{text}</span>
+        </label>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button disabled={!ok} onClick={onConfirm} data-confirm-delivery><Download className="size-4" />Download</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

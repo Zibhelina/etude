@@ -43,8 +43,15 @@ export interface Offering {
   appleProducts?: string[];
   /** Google Play subscription and base plans for Sync, when the server takes Google Play purchases. */
   googleProducts?: { productIds: string[]; basePlans: string[] };
-  marketRules?: { minPrice: number; feeBps: number; currency: string; buyerCountries: string[] };
+  marketRules?: { minPrice: number; feeBps: number; currency: string; buyerCountries: string[]; immediateAccess?: { version: string; text: string } };
 }
+
+/**
+ * The box a buyer ticks before the first download of a deck sold by Etude. In the EU and the UK it's what ends the
+ * 14-day right to cancel once the deck is delivered. The server sends its own copy (marketRules.immediateAccess); this one is the fallback and
+ * matches its version 2026-11-09.
+ */
+export const IMMEDIATE_ACCESS_TEXT = "I want the deck delivered right away. I understand that once it's delivered, I can no longer cancel this purchase where the law allows that (as in the EU and the UK).";
 export interface Me {
   id: string;
   email: string;
@@ -76,10 +83,16 @@ export interface PaidEntry {
   currency: string;
   listing: string;
   preview: any[];
+  /** "etude" for decks Etude sells itself through Polar (every country); absent for creators' decks on Stripe. */
+  soldBy?: "etude";
+  /** null = every country (decks sold by Etude); creators' decks follow the server's marketRules. */
+  buyerCountries?: string[] | null;
   owned: boolean;
+  /** Owned, sold by Etude and not downloaded yet: the first install asks for the immediate-delivery confirmation. */
+  needsDeliveryConfirmation?: boolean;
   installed: "installed" | "update" | null;
 }
-export interface LibraryItem { listing: string; slug: string; name: string; cover: string | null; version: string | null; bytes: number | null; changelog: string; ownedSince: string; installed: "installed" | "update" | null; installedVersion: string | null }
+export interface LibraryItem { listing: string; slug: string; name: string; cover: string | null; version: string | null; bytes: number | null; changelog: string; ownedSince: string; installed: "installed" | "update" | null; installedVersion: string | null; /** A deck sold by Etude not downloaded yet: confirm immediate delivery before the first install. */ needsDeliveryConfirmation?: boolean }
 export interface Listing {
   id: string;
   slug: string;
@@ -169,7 +182,7 @@ export const account = {
   market: () => call<{ entries: PaidEntry[]; server: string }>("GET", "/api/account/market"),
   buy: (listing: string) => call<{ url: string; price: number; fee: number }>("POST", "/api/account/market/checkout", { listing }),
   library: () => call<{ library: LibraryItem[] }>("GET", "/api/account/library"),
-  install: (listing: string) => call<{ result: string; ids: string[]; report: any }>("POST", "/api/account/library/install", { listing }),
+  install: (listing: string, immediateAccess = false) => call<{ result: string; ids: string[]; report: any }>("POST", "/api/account/library/install", { listing, ...(immediateAccess ? { immediateAccess: true } : {}) }),
   creator: () => call<{ creator: Creator | null }>("GET", "/api/account/creator"),
   becomeCreator: (country: string, displayName?: string) => call<Creator>("POST", "/api/account/creator", { country, displayName }),
   onboarding: () => call<{ url: string }>("POST", "/api/account/creator/onboarding"),

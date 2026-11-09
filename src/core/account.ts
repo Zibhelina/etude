@@ -369,8 +369,13 @@ export class AccountClient {
     const idx = await this.json("GET", "/v1/market/paid-index.json", undefined, false);
     const installed = installedEntries(this.e);
     let owned = new Set<string>();
-    if (this.token()) owned = new Set(((await this.library().catch(() => ({ library: [] }))).library as Json[]).map((l) => l.listing));
-    return { ...idx, entries: (idx.entries as Json[]).map((x) => ({ ...x, owned: owned.has(x.listing), installed: libraryState(installed[paidId(x.id)], x.version) })) };
+    let needs = new Set<string>();
+    if (this.token()) {
+      const lib = (await this.library().catch(() => ({ library: [] }))).library as Json[];
+      owned = new Set(lib.map((l) => l.listing));
+      needs = new Set(lib.filter((l) => l.needsDeliveryConfirmation).map((l) => l.listing));
+    }
+    return { ...idx, entries: (idx.entries as Json[]).map((x) => ({ ...x, owned: owned.has(x.listing), needsDeliveryConfirmation: needs.has(x.listing), installed: libraryState(installed[paidId(x.id)], x.version) })) };
   }
   checkout = (listing: string) => this.json("POST", "/v1/market/checkout", { listing });
 
@@ -380,10 +385,18 @@ export class AccountClient {
     return { library: (r.library as Json[]).map((l) => ({ ...l, installed: libraryState(installed[paidId(l.slug)], l.version), installedVersion: installed[paidId(l.slug)]?.version ?? null })) };
   }
 
-  /** Downloads a purchased deck and imports it the way a free Market deck is imported. Installing again updates it in place. */
-  async install(listing: string, opts: { dryRun?: boolean } = {}) {
+  /**
+   * Downloads a purchased deck and imports it the way a free Market deck is imported. Installing again updates it in
+   * place. The first download of a deck sold by Etude needs `immediateAccess` (the buyer asked for delivery now and
+   * acknowledged losing the right to cancel where the law allows that); the server records it before handing it out.
+   */
+  async install(listing: string, opts: { dryRun?: boolean; immediateAccess?: boolean } = {}) {
     const lib = (await this.library()).library.find((l: Json) => l.listing === listing || l.slug === listing);
     if (!lib) throw new AccountError("that deck isn't in your library", 404, "not_owned");
+    if (lib.needsDeliveryConfirmation) {
+      if (!opts.immediateAccess || opts.dryRun) throw new AccountError("confirm that you want the deck delivered now: once it's delivered, you can no longer cancel the purchase where the law allows that (--immediate-access)", 409, "delivery_confirmation_required");
+      await this.json("POST", `/v1/listings/${encodeURIComponent(lib.listing)}/delivery`, { immediateAccess: true });
+    }
     const res = await this.request("GET", `/v1/listings/${encodeURIComponent(lib.listing)}/pack`);
     const pack = await res.json();
     const version = res.headers.get("x-etude-version") ?? lib.version ?? "1";

@@ -1,7 +1,7 @@
 ---
 title: Terms of Service
 description: The terms for Etude's online services: accounts, Sync and the paid Market.
-last-updated: 2026-11-03
+last-updated: 2026-11-09
 ---
 
 # Terms of Service
@@ -42,13 +42,16 @@ Etude Sync keeps your collection in step across your devices.
 
 The free Market is a public catalogue of decks, card types and themes hosted on GitHub. Each entry is published by its author under the license stated in it.
 
-The paid Market lets independent creators sell decks:
+The paid Market sells two kinds of decks:
 
-- **The creator is the seller.** When you buy a paid deck, you buy it from its creator, who is paid through their own Stripe account. Etude runs the Market and takes a fee from each sale. Payments are processed by Stripe.
-- **The creator made the deck**, and remains responsible for its content, its accuracy and any tax on the sale. We review every paid deck before it goes on sale (rights, minimum quality, an honest preview), but a review is not a guarantee that a deck is free of errors.
-- **What you get.** A personal, non-transferable license to use the deck in Etude on your own devices, including its future updates for as long as the creator keeps publishing them. You may not resell, share or republish it.
-- **Availability.** The paid Market is currently available to buyers in Canada and the United States. Purchases from elsewhere are refunded in full.
-- Creators agree to the separate [Creator Terms](creators).
+- **Decks sold by Etude.** Etude makes them and is responsible for their content and updates. Polar sells them to you as merchant of record, and [Polar's buyer terms](https://polar.sh/legal/checkout-buyer-terms) cover the payment. They're available in every country.
+- **Decks sold by independent creators.** The creator is the seller: when you buy one, you buy it from its creator, who is paid through their own Stripe account. Etude runs the Market and takes a fee from each sale, and Stripe processes the payment. The creator made the deck, and remains responsible for its content, its accuracy and any tax on the sale. These decks are currently available to buyers in Canada and the United States; purchases from elsewhere are refunded in full.
+
+For both:
+
+- **Review.** We review every paid deck before it goes on sale (rights, minimum quality, an honest preview), but a review is not a guarantee that a deck is free of errors.
+- **What you get.** A personal, non-transferable license to use the deck in Etude on your own devices, including its future updates for as long as Etude or the creator keeps publishing them. You may not resell, share or republish it.
+- Refunds follow the [Refund Policy](refunds). Creators agree to the separate [Creator Terms](creators).
 
 ## 5. What you can't do
 

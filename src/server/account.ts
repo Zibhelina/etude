@@ -78,7 +78,7 @@ export function accountRoutes(app: Hono, e: Etude) {
   app.get("/api/account/library", async (c) => c.json(await a.library()));
   app.post("/api/account/library/install", async (c) => {
     const b = await body(c);
-    return c.json(await a.install(need(b.listing, "listing"), { dryRun: !!b.dryRun }));
+    return c.json(await a.install(need(b.listing, "listing"), { dryRun: !!b.dryRun, immediateAccess: b.immediateAccess === true }));
   });
 
   app.get("/api/account/creator", async (c) => c.json({ creator: await a.creator() }));

@@ -1,7 +1,7 @@
 ---
 title: Privacy Policy
 description: What the Etude app, the website and Etude's server collect, who processes it, how long it's kept and how to delete it.
-last-updated: 2026-11-05
+last-updated: 2026-11-09
 ---
 
 # Privacy Policy
@@ -62,13 +62,13 @@ An account is optional. You need one only for Sync and the paid Market.
 | Subscription status from Polar (active, renewal or end date, Polar customer id) | to turn Sync on and off | while your account exists |
 | For Sync bought in the iPhone or iPad app: Apple's transaction id and original transaction id, the product (monthly or yearly), its status and renewal or end date, linked to your Etude account through a random token the app passes to Apple | to turn Sync on and off for the right account | while your account exists |
 | For Sync bought in the Android app: Google Play's purchase token and order id, the product (monthly or yearly), its status and renewal or end date, linked to your Etude account | to give your account Sync and handle renewals, cancellations and refunds | while the account exists |
-| Paid Market orders: deck, price, fee, tax, billing country, Stripe payment ids | to deliver purchases, handle refunds and meet tax law | 6 years after the sale, as Canadian tax law requires |
+| Paid Market orders: deck, price, fee, tax, billing country, Stripe payment ids or Polar order ids | to deliver purchases, handle refunds and meet tax law | 6 years after the sale, as Canadian tax law requires |
 | Creators: Stripe connected-account id, country, whether the account can sell | to send your buyers' payments to your Stripe account | while you sell, then 6 years for tax |
 | Emails you send to hello@etude.study | to answer you | as long as needed to help you |
 
 **What we can't see.** Sync encrypts your collection on your device with a key that only your devices hold. That key is protected by your Sync password, your recovery key or your passkey, and we never receive any of them. The server stores only ciphertext. We cannot read your decks, cards, answers, reviews, media or deck names, and we can't hand them to anyone, including in response to a legal demand. What the server can see is how much you store, how many changes you upload and when.
 
-**Payments.** Card details go to Polar (Sync) or Stripe (paid Market) directly. We never see or store your card number. In the Android app, Google Play sells Sync and handles the payment under [Google's privacy policy](https://policies.google.com/privacy). In the iPhone and iPad app, Apple sells Sync and handles the payment under [its own privacy policy](https://www.apple.com/legal/privacy/); from Apple's signed record of each purchase we keep only what's listed above, and we never get your card, your name or your Apple Account. On the website, Polar is the merchant of record for Sync, so it also processes your name, address and payment data as an independent controller under [its own privacy policy](https://polar.sh/legal/privacy).
+**Payments.** Card details go to Polar (Sync and decks sold by Etude) or Stripe (decks sold by creators) directly. We never see or store your card number. In the Android app, Google Play sells Sync and handles the payment under [Google's privacy policy](https://policies.google.com/privacy). In the iPhone and iPad app, Apple sells Sync and handles the payment under [its own privacy policy](https://www.apple.com/legal/privacy/); from Apple's signed record of each purchase we keep only what's listed above, and we never get your card, your name or your Apple Account. On the website, Polar is the merchant of record for Sync, so it also processes your name, address and payment data as an independent controller under [its own privacy policy](https://polar.sh/legal/privacy).
 
 ## 4. Who processes data for us
 
@@ -77,10 +77,10 @@ An account is optional. You need one only for Sync and the paid Market.
 | DigitalOcean | hosts the server, database and encrypted storage, its backups, and the anonymous error reports and usage counts | Toronto, Canada |
 | Resend | sends sign-in and account email (your address and the message) | United States |
 | Porkbun and Google | Porkbun forwards mail sent to hello@etude.study to a Gmail inbox, where it's read and stored | United States |
-| Polar | sells and bills Sync subscriptions bought on the website (merchant of record) | United States |
+| Polar | sells and bills Sync subscriptions bought on the website and decks sold by Etude (merchant of record) | United States |
 | Apple | sells and bills Sync bought in the iPhone and iPad app, and tells our server when those subscriptions renew, end or are refunded | United States |
 | Google | sells and bills Sync bought in the Android app (Google Play), and tells our server when those subscriptions renew, end or are refunded | United States |
-| Stripe | processes paid Market payments on creators' Stripe accounts | United States and Canada |
+| Stripe | processes payments for decks sold by creators, on the creators' Stripe accounts | United States and Canada |
 | GitHub | hosts the website, the free Market and app downloads | United States |
 
 Some of these are outside Canada, so your information may be processed under the laws of other countries. Each provider is bound by its contract with us to protect it and use it only to provide its service.

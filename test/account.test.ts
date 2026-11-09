@@ -22,6 +22,7 @@ function stub() {
   const verifyBodies: any[] = [];
   let fresh = true;
   let vaultKeys: unknown = null;
+  let refunded = false;
   const srv = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     let raw = "";
     for await (const c of req) raw += c;
@@ -45,7 +46,10 @@ function stub() {
     if (path === "/v1/me" && req.method === "GET") return send(200, { id: "acc_1", email: "a@example.test", device: { id: "dev_1" }, sync: { active: false, reason: "none" }, admin: false });
     if (path === "/v1/me" && req.method === "DELETE") return tokens.delete(auth), send(200, { ok: true, deleted: "acc_1" });
     if (path === "/v1/billing/sync") return send(200, { active: false, reason: "none", billing: true });
-    if (path === "/v1/library") return send(200, { library: [{ listing: "lst_1", slug: "pharm", name: "Pharm", version, changelog: "", pack: "/v1/listings/lst_1/pack" }] });
+    if (path === "/v1/library") {
+      const entry = { listing: "lst_1", slug: "pharm", name: "Pharm", version, changelog: "", pack: "/v1/listings/lst_1/pack" };
+      return send(200, refunded ? { library: [], revoked: [{ listing: "lst_1", slug: "pharm", name: "Pharm", cover: null, reason: "refunded", at: "2026-11-09T20:37:13.000Z" }] } : { library: [entry], revoked: [] });
+    }
     if (path === "/v1/listings/lst_1/pack") return send(200, pack, { "x-etude-version": version });
     if (path === "/v1/vault") return send(200, { hasKeys: !!vaultKeys });
     if (path === "/v1/vault/keys") {
@@ -65,6 +69,7 @@ function stub() {
     verifyBodies,
     expireSignin() { fresh = false; },
     setVaultKeys(keys: unknown) { vaultKeys = keys; },
+    refund(on = true) { refunded = on; },
     bump(next: string) {
       version = next;
       pack = { ...pack, items: [...pack.items, { id: "p2", type: "basic", deck: "Pharm", fields: { front: "Beta blocker ending", back: "-olol" } }] };
@@ -287,6 +292,54 @@ test("account: a creator from before direct charges reads as setupRequired, and 
     assert.equal(cr.stripeAccount, null);
     for (const link of [a.onboardingLink, a.dashboardLink])
       await assert.rejects(link(), (err: AccountError) => err.status === 409 && err.code === "creator_setup_required" && /Market → Sell/.test(err.message) && !/POST/.test(err.message));
+  } finally {
+    e.close();
+    await s.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("account: a bought deck stays out of exports; a refund locks its cards (history kept) and buying again restores exactly those", async () => {
+  const dir = mkdtempSync(join((process.env.TMPDIR ?? tmpdir()), "account-"));
+  const s = stub();
+  const url = await s.start();
+  const e = await Etude.open(join(dir, "etude.db"), { home: join(dir, "home") });
+  try {
+    const a = accountFor(e);
+    a.setServer(url);
+    await a.signin("a@example.test");
+    await a.verify("good-code");
+    s.bump("1.1.0");
+    await a.install("lst_1");
+    const rec = (e.db.setting<any>("market", {}).installed ?? {})[paidId("pharm")];
+    assert.deepEqual([rec.listing, rec.items, rec.types], ["lst_1", ["p1", "p2"], []]);
+
+    // The person's own deck exports; the bought one doesn't, and the pack says how many items it left out.
+    e.importPack({ etude: "pack/1", name: "Mine", decks: [{ name: "Mine" }], items: [{ id: "m1", type: "basic", deck: "Mine", fields: { front: "Q", back: "A" } }] });
+    const all = e.exportPack() as any;
+    assert.deepEqual(all.items.map((i: any) => i.id), ["m1"]);
+    assert.deepEqual(all.meta, { withheld: { paidItems: 2 } });
+    assert.equal((e.exportPack({ deck: "Pharm" }) as any).items.length, 0);
+    assert.equal((e.exportPack({ deck: "Mine" }) as any).meta, undefined);
+
+    const cardOf = (item: string) => e.db.get("SELECT id, suspended FROM cards WHERE item_id = ?", item)!;
+    // A card the person suspended themselves stays suspended after the deck comes back.
+    e.setSuspended([cardOf("p2").id as number], true);
+
+    s.refund();
+    const locked = await a.library();
+    assert.deepEqual(locked.changes, { locked: ["Pharm"], unlocked: [] });
+    assert.deepEqual(locked.revoked.map((r: any) => [r.slug, r.reason, r.locked]), [["pharm", "refunded", true]]);
+    assert.equal(cardOf("p1").suspended, 1);
+    assert.equal(cardOf("m1").suspended, 0);
+    // Checking again changes nothing.
+    assert.deepEqual((await a.library()).changes, { locked: [], unlocked: [] });
+
+    s.refund(false);
+    assert.deepEqual((await a.library()).changes, { locked: [], unlocked: ["Pharm"] });
+    assert.equal(cardOf("p1").suspended, 0);
+    assert.equal(cardOf("p2").suspended, 1);
+    assert.equal((e.db.setting<any>("market", {}).installed ?? {})[paidId("pharm")].locked, undefined);
   } finally {
     e.close();
     await s.stop();

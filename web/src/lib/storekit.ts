@@ -32,7 +32,7 @@ export interface StoreTransaction {
   revoked?: string;
 }
 export type PurchaseOutcome = { status: "purchased"; sync: AppleResult["sync"] } | { status: "pending" | "cancelled" | "unknown" };
-export interface AppleResult { ok: boolean; result: string; sync: { active: boolean; reason: string; source: string | null }; subscription: { productId: string; status: string; expires: string | null; environment: string } }
+export interface AppleResult { ok: boolean; result: string; sync: { active: boolean; reason: string; source: string | null }; subscription: { productId: string; status: string; expires: string | null; environment: string }; /** Set instead of `subscription` for a deck (non-consumable). */ deck?: { listing: string; slug: string; name: string } }
 export interface GoogleResult { ok: boolean; result: string; acknowledge: boolean; sync: AppleResult["sync"]; subscription: { productId: string; basePlanId: string; status: string; expires: string | null; test: boolean } }
 
 interface StorePlugin {
@@ -118,7 +118,28 @@ export async function buy(productId: string): Promise<PurchaseOutcome> {
   return { status: "purchased", sync: res.sync };
 }
 
-/** Restore Purchases: the App Store's current subscriptions for this Apple ID, sent to the Sync server. */
+/** A deck Etude sells itself that this iPhone app can sell (an App Store non-consumable), with the App Store's product. */
+export interface AppleDeck { listing: string; productId: string; product: StoreProduct | null }
+
+/** The decks this iPhone app sells, with their App Store price ([] outside the iPhone app or when none are set up). */
+export async function appleDecks(): Promise<AppleDeck[]> {
+  if (storeSource() !== "apple") return [];
+  const decks = (await account.appleInfo()).decks ?? [];
+  if (!decks.length) return [];
+  const products = await loadProducts(decks.map((d) => d.productId)).catch(() => [] as StoreProduct[]);
+  return decks.map((d) => ({ listing: d.listing, productId: d.productId, product: products.find((p) => p.id === d.productId) ?? null }));
+}
+
+/** Buys a deck through the App Store for the signed-in Etude account; the server puts it in the library. */
+export async function buyDeck(productId: string): Promise<{ status: "purchased" | "pending" | "cancelled" | "unknown"; deck?: AppleResult["deck"] }> {
+  const p = storeKit();
+  if (!p || storeSource() !== "apple") throw new Error("App Store purchases aren't available here.");
+  const r = await p.purchase({ productId, appAccountToken: (await account.appleInfo()).appAccountToken });
+  if (r.status !== "purchased" || !r.jws) return { status: (r.status as "pending" | "cancelled" | "unknown") ?? "unknown" };
+  return { status: "purchased", deck: (await submitTransaction(r as StoreTransaction)).deck };
+}
+
+/** Restore Purchases: the App Store's current subscriptions and decks for this Apple ID, sent to the Sync server. */
 export async function restore(): Promise<{ cancelled: boolean; found: number; active: boolean; errors: string[] }> {
   const p = storeKit();
   if (!p) throw new Error("App Store purchases aren't available here.");
@@ -127,7 +148,7 @@ export async function restore(): Promise<{ cancelled: boolean; found: number; ac
   const errors: string[] = [];
   for (const t of r.transactions) {
     try {
-      active = (await submitTransaction(t)).sync.active || active;
+      active = !!(await submitTransaction(t)).sync?.active || active;
     } catch (e) {
       errors.push((e as Error).message);
     }

@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.1.2
+
+- **Decks sold by Etude.** The paid Market now has decks Etude makes and sells itself, starting with Human Anatomy (3D): bought on the website through Polar, in every country, with tax handled at checkout. Creators' decks still sell through Stripe in Canada and the US.
+- **Before the first download** of a deck sold by Etude, you confirm that you want it delivered now; until then you can still cancel where the law gives you that right (EU, UK). You get an email with a copy of the confirmation.
+- **A refunded or disputed deck is locked:** its cards are suspended, with your progress kept, and come back as they were if you buy it again. The Market's Bought list shows it as refunded.
+- **Bought decks stay out of exports,** Market publishing and selling; the export says how many items it left out.
+- **Sync:** a new device starts from the vault's snapshot and pulls only what changed after it, instead of replaying the whole history, and Settings → Sync shows one plain phrase per step in a progress box that keeps its height.
+- Phone apps and the web edition: a card's images, sounds and fonts load from its type's assets even when the card was made elsewhere, and media keeps syncing and showing after iOS restarts WebKit's network process.
+- The folded sidebar is narrower (58 px), and Notes pages and titles no longer get spellcheck, autocorrect or automatic capitals.
+- Terms, Refund Policy and Privacy Policy describe decks sold by Etude: paid decks are final sales, refunded where the law gives a right (EU and UK until the first download, Brazil within 7 days) or when something went wrong on our side.
+
 ## 3.1.1
 
 - **The Notes tutorial comes with Etude.** The first time you open Notes, it has a Notes showcase folder: Start here and nine pages (writing basics; links, tags and the graph; math, tables and callouts; look and layout; cards in a page; code you can run, with a forgetting-curve widget and a reaction game; pictures, video and PDFs; canvases; tabs, split view and the sidebar), each ending with a short Try it yourself, plus a canvas, a PDF, two code files and six cards in Notes::Notes showcase. It's added once: archive or delete it and it stays gone. Right-click Notes → Notes tutorial (or the button on an empty Notes) adds a fresh copy any time, and so does `etude note tutorial`.

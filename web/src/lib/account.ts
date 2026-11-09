@@ -92,6 +92,8 @@ export interface PaidEntry {
   needsDeliveryConfirmation?: boolean;
   installed: "installed" | "update" | null;
 }
+/** A deck no longer on the account (refunded or disputed). `locked`: its cards here are suspended until it's bought again. */
+export interface RevokedItem { listing: string; slug: string; name: string; cover: string | null; reason: "refunded" | "disputed" | "revoked"; at: string | null; locked: boolean }
 export interface LibraryItem { listing: string; slug: string; name: string; cover: string | null; version: string | null; bytes: number | null; changelog: string; ownedSince: string; installed: "installed" | "update" | null; installedVersion: string | null; /** A deck sold by Etude not downloaded yet: confirm immediate delivery before the first install. */ needsDeliveryConfirmation?: boolean }
 export interface Listing {
   id: string;
@@ -172,7 +174,7 @@ export const account = {
   checkout: (plan: "monthly" | "yearly" = "monthly") => call<{ url: string }>("POST", "/api/account/billing/checkout", { plan }),
   portal: () => call<{ url: string }>("POST", "/api/account/billing/portal"),
   /** iOS app: the App Store products and the appAccountToken to buy them with. */
-  appleInfo: () => call<{ productIds: string[]; appAccountToken: string }>("GET", "/api/account/billing/apple"),
+  appleInfo: () => call<{ productIds: string[]; appAccountToken: string; decks?: { listing: string; slug: string; name: string; productId: string }[] }>("GET", "/api/account/billing/apple"),
   /** iOS app: hands a signed App Store transaction (JWS) to the Sync server. */
   appleTransaction: (jws: string) => call<import("./storekit").AppleResult>("POST", "/api/account/billing/apple/transaction", { jws }),
   /** Android app: the Play subscription, base plans and the obfuscatedAccountId to buy with. */
@@ -181,7 +183,7 @@ export const account = {
   googlePurchase: (purchaseToken: string) => call<import("./storekit").GoogleResult>("POST", "/api/account/billing/google/purchase", { purchaseToken }),
   market: () => call<{ entries: PaidEntry[]; server: string }>("GET", "/api/account/market"),
   buy: (listing: string) => call<{ url: string; price: number; fee: number }>("POST", "/api/account/market/checkout", { listing }),
-  library: () => call<{ library: LibraryItem[] }>("GET", "/api/account/library"),
+  library: () => call<{ library: LibraryItem[]; revoked?: RevokedItem[]; changes?: { locked: string[]; unlocked: string[] } }>("GET", "/api/account/library"),
   install: (listing: string, immediateAccess = false) => call<{ result: string; ids: string[]; report: any }>("POST", "/api/account/library/install", { listing, ...(immediateAccess ? { immediateAccess: true } : {}) }),
   creator: () => call<{ creator: Creator | null }>("GET", "/api/account/creator"),
   becomeCreator: (country: string, displayName?: string) => call<Creator>("POST", "/api/account/creator", { country, displayName }),

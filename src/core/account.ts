@@ -4,7 +4,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { EtudeError, type Etude } from "./engine.ts";
-import { DEFAULT_MARKET, installedEntries, installFile } from "./market.ts";
+import { DEFAULT_MARKET, installedEntries, installFile, patchInstall, type InstalledEntry } from "./market.ts";
 
 export const DEFAULT_CLOUD = "https://sync.etude.study";
 
@@ -381,8 +381,65 @@ export class AccountClient {
 
   async library() {
     const r = await this.json("GET", "/v1/library");
+    const changes = this.reconcile(r);
     const installed = installedEntries(this.e);
-    return { library: (r.library as Json[]).map((l) => ({ ...l, installed: libraryState(installed[paidId(l.slug)], l.version), installedVersion: installed[paidId(l.slug)]?.version ?? null })) };
+    return {
+      library: (r.library as Json[]).map((l) => ({ ...l, installed: libraryState(installed[paidId(l.slug)], l.version), installedVersion: installed[paidId(l.slug)]?.version ?? null })),
+      revoked: ((r.revoked ?? []) as Json[]).map((l) => ({ ...l, locked: !!installed[paidId(l.slug)]?.locked })),
+      changes,
+    };
+  }
+
+  /**
+   * Locks bought decks the server says were refunded or disputed: their cards are suspended (history kept) and the
+   * install record remembers which, so buying the deck again restores exactly those. Only the server's own word counts:
+   * being offline, signed out or on another account changes nothing here.
+   */
+  reconcile(lib: { library?: Json[]; revoked?: Json[] }) {
+    const installed = installedEntries(this.e);
+    const out = { locked: [] as string[], unlocked: [] as string[] };
+    const ids = (rec: InstalledEntry) => {
+      if (rec.items) return rec.items;
+      const names = rec.ids ?? [];
+      return names.flatMap((n) => this.e.db.all("SELECT i.id FROM items i JOIN decks d ON d.id = i.deck_id WHERE d.name = ? OR d.name LIKE ?", n, `${n}::%`).map((r) => r.id as string));
+    };
+    const cardsOf = (items: string[], suspended: 0 | 1) => {
+      const out: number[] = [];
+      for (let i = 0; i < items.length; i += 400) {
+        const part = items.slice(i, i + 400);
+        out.push(...this.e.db.all(`SELECT id FROM cards WHERE suspended = ? AND item_id IN (${part.map(() => "?").join(",")})`, suspended, ...part).map((r) => r.id as number));
+      }
+      return out;
+    };
+    for (const r of lib.revoked ?? []) {
+      const id = paidId(r.slug);
+      const rec = installed[id];
+      if (!rec || rec.locked) continue;
+      const cards = cardsOf(ids(rec), 0);
+      if (cards.length) this.e.setSuspended(cards, true);
+      patchInstall(this.e, id, { locked: { at: new Date().toISOString(), reason: String(r.reason ?? "revoked"), cards } });
+      out.locked.push(rec.name);
+    }
+    for (const l of lib.library ?? []) {
+      const id = paidId(l.slug);
+      const rec = installed[id];
+      if (!rec?.locked) continue;
+      const mine = new Set(rec.locked.cards);
+      const back = cardsOf(ids(rec), 1).filter((c) => mine.has(c));
+      if (back.length) this.e.setSuspended(back, false);
+      patchInstall(this.e, id, { locked: undefined });
+      out.unlocked.push(rec.name);
+    }
+    return out;
+  }
+
+  private reconciledAt = 0;
+  /** reconcile() against the server at most every 30 minutes (the app calls this after automatic syncs). */
+  async reconcilePurchases(o: { force?: boolean } = {}) {
+    if (!this.token()) return null;
+    if (!o.force && Date.now() - this.reconciledAt < 30 * 60_000) return null;
+    this.reconciledAt = Date.now();
+    return this.reconcile(await this.json("GET", "/v1/library"));
   }
 
   /**
@@ -401,6 +458,8 @@ export class AccountClient {
     const pack = await res.json();
     const version = res.headers.get("x-etude-version") ?? lib.version ?? "1";
     const out = installFile(this.e, { etudeMarket: 1, kind: "deck", id: paidId(lib.slug), name: lib.name, author: "Etude Market", description: "", tags: [], version, updated: version, content: pack } as any, opts);
+    // Which items and card types are paid: exports leave them out and a refund locks exactly these.
+    if (!opts.dryRun) patchInstall(this.e, paidId(lib.slug), { listing: lib.listing, items: (pack.items ?? []).map((i: Json) => String(i.id)), types: (pack.types ?? []).map((t: Json) => String(t.id)) });
     // The server is up (it just sent the pack), so waiting for the ping costs nothing; it never fails the install.
     if (!opts.dryRun && out.result !== "unchanged" && /^lst_/.test(lib.listing)) await this.marketDownload(`paid/${lib.listing}`);
     return out;

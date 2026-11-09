@@ -4126,12 +4126,35 @@ export class Etude {
     return report;
   }
 
+  /**
+   * What bought decks put in this collection (the Market's install records): their item ids, and the card types that
+   * came only with them. Paid content stays out of exports, publishing and sharing; it reaches the buyer's other
+   * devices through Sync. Records from before item ids were kept fall back to the decks they installed.
+   */
+  paidContent(): { items: Set<string>; types: Set<string> } {
+    const installed = this.db.setting<{ installed?: Record<string, any> }>("market", {}).installed ?? {};
+    const items = new Set<string>();
+    const types = new Set<string>();
+    for (const [id, rec] of Object.entries(installed)) {
+      if (!id.startsWith("paid-") || rec?.kind !== "deck") continue;
+      if (Array.isArray(rec.items)) for (const x of rec.items) items.add(String(x));
+      else for (const top of rec.ids ?? []) for (const r of this.db.all("SELECT i.id FROM items i JOIN decks d ON d.id = i.deck_id WHERE d.name = ? OR d.name LIKE ?", top, `${top}::%`)) items.add(r.id as string);
+      for (const t of rec.types ?? []) types.add(String(t));
+    }
+    // A type the person also uses for their own items stays exportable.
+    for (const t of [...types]) if (this.db.all("SELECT id FROM items WHERE type = ?", t).some((r) => !items.has(r.id as string))) types.delete(t);
+    return { items, types };
+  }
+
   exportPack(scope: StudyScope & { name?: string } = {}) {
     const { where, params } = this.scopeWhere(scope);
-    const items = this.db.all(
+    const paid = this.paidContent();
+    const all = this.db.all(
       `SELECT DISTINCT i.*, d.name AS deck FROM cards c JOIN items i ON i.id = c.item_id JOIN decks d ON d.id = i.deck_id WHERE ${where.replace("c.suspended = 0", "1")} ORDER BY i.ord`,
       ...params,
     );
+    const items = all.filter((i) => !paid.items.has(i.id));
+    const withheld = all.length - items.length;
     const deckNames = new Set<string>();
     for (const it of items) {
       const p = deckParts(it.deck);
@@ -4140,7 +4163,7 @@ export class Etude {
     const decks = [...deckNames].sort().map((n) => this.deckFromRow(this.deckRow(n)));
     const presetIds = new Set(decks.map((d) => d.presetId).filter(Boolean) as string[]);
     const typeIds = new Set(items.map((i) => i.type));
-    const custom = this.db.all("SELECT id FROM types WHERE builtin = 0").filter((t) => typeIds.has(t.id)).map((t) => this.typeWithAssets(t.id));
+    const custom = this.db.all("SELECT id FROM types WHERE builtin = 0").filter((t) => typeIds.has(t.id) && !paid.types.has(t.id)).map((t) => this.typeWithAssets(t.id));
     // Script schedulers the exported decks, presets or types use, unless they ship with Etude unchanged.
     const schedulerIds = new Set(
       [...decks.map((d) => d.config.scheduler), ...[...presetIds].map((id) => this.preset(id).config.scheduler), ...[...typeIds].map((id) => this.typeSchedulerLayer(id)?.scheduler)].filter(
@@ -4159,6 +4182,8 @@ export class Etude {
       tags: tags.map((t) => ({ name: t.tag, instructions: t.instructions, description: t.description })),
       ...(schedulers.length ? { schedulers } : {}),
       types: custom,
+      // Items of decks bought on the Market are left out; the count says so.
+      ...(withheld ? { meta: { withheld: { paidItems: withheld } } } : {}),
       items: items.map((i) => ({ id: i.id, type: i.type, deck: i.deck, tags: parse(i.tags, []), fields: parse(i.fields, {}), source: i.source, notes: i.notes, ...(i.archived ? { archived: true } : {}) })),
     };
   }

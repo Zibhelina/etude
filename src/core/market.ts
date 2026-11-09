@@ -440,6 +440,12 @@ export interface InstalledEntry {
   at: string;
   /** What it put in the collection: theme id, top-level deck names, or type ids. */
   ids: string[];
+  /** Paid decks: the listing they were bought as, and the item and card type ids the pack put in the collection. */
+  listing?: string;
+  items?: string[];
+  types?: string[];
+  /** Paid decks the server says were refunded or disputed: when, why, and the cards this suspended (to restore them). */
+  locked?: { at: string; reason: string; cards: number[] };
 }
 
 export function installedEntries(e: Etude): Record<string, InstalledEntry> {
@@ -449,6 +455,16 @@ export function installedEntries(e: Etude): Record<string, InstalledEntry> {
 function recordInstall(e: Etude, id: string, rec: InstalledEntry) {
   const cur = e.db.setting<{ installed?: Record<string, InstalledEntry> }>("market", {});
   e.db.setSetting("market", { ...cur, installed: { ...(cur.installed ?? {}), [id]: rec } });
+}
+
+/** Merges fields into an installed entry's record (`undefined` removes one). */
+export function patchInstall(e: Etude, id: string, patch: Partial<InstalledEntry>) {
+  const cur = e.db.setting<{ installed?: Record<string, InstalledEntry> }>("market", {});
+  const rec = cur.installed?.[id];
+  if (!rec) return;
+  const next: any = { ...rec, ...patch };
+  for (const k of Object.keys(patch)) if ((patch as any)[k] === undefined) delete next[k];
+  e.db.setSetting("market", { ...cur, installed: { ...(cur.installed ?? {}), [id]: next } });
 }
 
 export function forgetInstall(e: Etude, id: string): boolean {

@@ -15,7 +15,8 @@ import { DetailLayout, niceDate, paragraphs, type InfoCell } from "@/components/
 import { Comments, socialCells, TileCounts, useEntryStats, Votes } from "@/components/market-social";
 import type { EntryCounts } from "@/lib/market-social";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { account, bytes, IMMEDIATE_ACCESS_TEXT, money, openOutside, type Creator, type LibraryItem, type Listing, type PaidEntry, type Sales } from "@/lib/account";
+import { appleDecks, buyDeck, type AppleDeck } from "@/lib/storekit";
+import { account, bytes, IMMEDIATE_ACCESS_TEXT, money, openOutside, type Creator, type LibraryItem, type Listing, type PaidEntry, type RevokedItem, type Sales } from "@/lib/account";
 import { etudeFetch } from "@/lib/transport";
 import { api } from "@/lib/api";
 import { canShowPurchases } from "@/lib/platform";
@@ -127,6 +128,30 @@ const firstSentence = (d: string) => {
 export function PaidDetail({ entry, signedIn, onBack, onChanged }: { entry: PaidEntry; signedIn: boolean; onBack(): void; onChanged(): void }) {
   const [busy, setBusy] = useState<null | "buy" | "install">(null);
   const [confirming, setConfirming] = useState(false);
+  // In the iPhone app, a deck Etude also sells on the App Store is bought there, at the App Store's price.
+  const [apple, setApple] = useState<AppleDeck | null>(null);
+  useEffect(() => {
+    if (canShowPurchases() || entry.owned) return;
+    let live = true;
+    appleDecks().then((ds) => { if (live) setApple(ds.find((d) => d.listing === entry.listing && d.product) ?? null); }).catch(() => {});
+    return () => { live = false; };
+  }, [entry.listing, entry.owned]);
+  const buyInApp = async () => {
+    if (!apple) return;
+    if (!signedIn) return navigate("/settings#account");
+    setBusy("buy");
+    try {
+      const r = await buyDeck(apple.productId);
+      if (r.status === "purchased") {
+        toast.success(`${entry.name} is yours`, { description: "Install it from here or from your Library." });
+        onChanged();
+      } else if (r.status === "pending") toast("The purchase is waiting for approval", { description: "It shows up here once the App Store confirms it." });
+    } catch (e) {
+      toast.error("Couldn't complete the purchase", { description: msg(e) });
+    } finally {
+      setBusy(null);
+    }
+  };
   const buy = async () => {
     if (!signedIn) return navigate("/settings#account");
     setBusy("buy");
@@ -175,6 +200,11 @@ export function PaidDetail({ entry, signedIn, onBack, onChanged }: { entry: Paid
       {entry.installed && <Button variant="outline" className="mk-big" onClick={() => navigate("/")}>Open</Button>}
       {confirming && <DeliveryConfirmDialog name={entry.name} onClose={() => setConfirming(false)} onConfirm={() => void install(true)} />}
     </>
+  ) : apple?.product ? (
+    <Button className="mk-big gap-1.5" disabled={!!busy} onClick={() => void buyInApp()} data-buy-in-app>
+      {busy ? <Loader2 className="size-4 animate-spin" /> : <ShoppingBag className="size-4" />}
+      {signedIn ? `Buy · ${apple.product.displayPrice}` : "Sign in to buy"}
+    </Button>
   ) : canShowPurchases() ? (
     <Button className="mk-big gap-1.5" disabled={!!busy} onClick={buy} data-buy>
       {busy ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />}
@@ -242,7 +272,9 @@ export function usePaidIndex() {
       if (!st.offering?.market) return setAvailable(false), setEntries([]);
       setAvailable(true);
       const r = await account.market();
-      setEntries(canShowPurchases() ? r.entries : r.entries.filter((e) => e.owned));
+      // The iPhone app sells the decks Etude also sells on the App Store; elsewhere in the store apps only owned decks show.
+      const ios = canShowPurchases() ? [] : await appleDecks().catch(() => []);
+      setEntries(canShowPurchases() ? r.entries : r.entries.filter((e) => e.owned || ios.some((d) => d.listing === e.listing && d.product)));
     } catch {
       setEntries([]);
     } finally {
@@ -257,6 +289,7 @@ export function usePaidIndex() {
 /** Decks the account owns, as the "Bought" section of the Market's Yours tab. */
 export function LibraryView() {
   const [lib, setLib] = useState<LibraryItem[] | null>(null);
+  const [revoked, setRevoked] = useState<RevokedItem[]>([]);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -265,7 +298,10 @@ export function LibraryView() {
       const st = await account.status();
       setSignedIn(!!st.me);
       if (!st.me) return;
-      setLib((await account.library()).library);
+      const r = await account.library();
+      setLib(r.library);
+      setRevoked(r.revoked ?? []);
+      for (const name of r.changes?.locked ?? []) toast(`${name} was refunded`, { description: "Its cards are suspended. Buy it again to study them; your progress is kept." });
       setError(null);
     } catch (e) {
       setError(msg(e));
@@ -304,14 +340,14 @@ export function LibraryView() {
     );
   else if (error) body = <div className="px-3 py-3 text-sm text-destructive">{error}</div>;
   else if (!lib) body = <Skeleton className="h-16 rounded-lg" />;
-  else if (!lib.length)
+  else if (!lib.length && !revoked.length)
     body = (
       <div className="px-3 py-3 text-sm text-muted-foreground" data-library-empty>
         {canShowPurchases() ? "Decks you buy appear here, on every device signed in to your account." : "Decks on your Etude account appear here."}
       </div>
     );
   else
-    body = lib.map((l) => (
+    body = [...lib.map((l) => (
       <div key={l.listing} className="mk-li" data-library-item={l.slug}>
         <div className="mk-li-thumb">{l.cover ? <img src={l.cover} alt="" /> : <Layers className="size-5" />}</div>
         <div className="mk-li-text">
@@ -333,7 +369,16 @@ export function LibraryView() {
           )}
         </div>
       </div>
-    ));
+    )), ...revoked.map((r) => (
+      // Refunded or disputed: no longer on the account. Its cards stay in the collection, suspended, with their history.
+      <div key={`revoked-${r.listing}`} className="mk-li opacity-70" data-library-revoked={r.slug}>
+        <div className="mk-li-thumb">{r.cover ? <img src={r.cover} alt="" /> : <Layers className="size-5" />}</div>
+        <div className="mk-li-text">
+          <b>{r.name}</b>
+          <small>{r.reason === "disputed" ? "Payment disputed" : "Refunded"}{r.locked ? " · its cards are suspended; buy it again to study them" : ""}</small>
+        </div>
+      </div>
+    ))];
   return (
     <section className="mk-lsec" data-library>
       {head}

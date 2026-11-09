@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import type { Etude } from "../core/engine.ts";
 import { syncFor } from "../core/sync/client.ts";
+import { accountFor } from "../core/account.ts";
 export function syncRoutes(app:Hono,e:Etude) {
   const s=syncFor(e);
   app.get("/api/sync/status",c=>c.json(s.status()));
@@ -11,7 +12,10 @@ export function syncRoutes(app:Hono,e:Etude) {
   app.post("/api/sync/unlock",async c=>c.json(await s.unlock(await c.req.json())));
   app.post("/api/sync/protect",async c=>c.json(await s.protect((await c.req.json()).password)));
   app.post("/api/sync/unprotect",async c=>c.json(await s.unprotect()));
-  app.post("/api/sync/auto",async c=>{const b=await c.req.json().catch(()=>({}));await s.auto({pendingOnly:!!b?.pendingOnly});return c.json(s.status());});
+  app.post("/api/sync/auto",async c=>{const b=await c.req.json().catch(()=>({}));await s.auto({pendingOnly:!!b?.pendingOnly});
+    // Bought decks refunded or disputed get locked here too (at most every 30 minutes), not only when the Market opens.
+    void accountFor(e).reconcilePurchases().catch(()=>{});
+    return c.json(s.status());});
   app.post("/api/sync/now",async c=>c.json(await s.now()));
   app.post("/api/sync/off",async c=>c.json(await s.off()));
 }

@@ -50,8 +50,9 @@ The paid Market sells two kinds of decks:
 For both:
 
 - **Review.** We review every paid deck before it goes on sale (rights, minimum quality, an honest preview), but a review is not a guarantee that a deck is free of errors.
-- **What you get.** A personal, non-transferable license to use the deck in Etude on your own devices, including its future updates for as long as Etude or the creator keeps publishing them. You may not resell, share or republish it.
-- Refunds follow the [Refund Policy](refunds). Creators agree to the separate [Creator Terms](creators).
+- **What you get.** A personal, non-transferable license to use the deck in Etude on your own devices, including its future updates for as long as Etude or the creator keeps publishing them. You may not resell, share or republish it. Each copy you download carries a mark of your purchase. If you share a deck, we may end your access to it.
+- Refunds follow the [Refund Policy](refunds). A deck that's refunded, disputed or no longer yours leaves your library, and its cards in your collection are suspended (your progress is kept) until you buy it again. We may stop selling decks to an account that repeatedly buys and asks for refunds; Sync and everything else keep working.
+- Creators agree to the separate [Creator Terms](creators).
 
 ## 5. What you can't do
 

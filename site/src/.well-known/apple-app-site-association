@@ -2,7 +2,7 @@
   "applinks": {
     "details": [
       {
-        "appIDs": ["TEAMID.study.etude.app"],
+        "appIDs": ["HHSH3L6Z42.study.etude.app"],
         "components": [
           { "/": "/app", "comment": "Opens Etude" },
           { "/": "/app/*", "comment": "Opens a screen in Etude: /app/study?deck=…, /app/market, …" }

@@ -443,7 +443,7 @@ test("undo and bury discard the graded answer, and only rated answers count", as
   done();
 });
 
-test("goals: a first showing teaches, reviews and placement measure, drill decks practise", async () => {
+test("goals: a first showing teaches, reviews and placement measure, drill decks practise the rest", async () => {
   const { e, done } = await setup({ levels: false });
   e.updateDeck("Course", { config: { adaptiveChallenge: true } });
   const ctx = (item: string, opts = {}) => e.adaptContext(cardOf(e, item), new Date().toISOString(), opts)!;
@@ -466,6 +466,7 @@ test("goals: a first showing teaches, reviews and placement measure, drill decks
   assert.ok(f[0]._offset < 0 && f[1]._offset > 0, JSON.stringify(f.map((x) => x._offset)));
   e.updateDeck("Course", { config: { adaptiveChallenge: true, scheduler: "drill" } });
   assert.equal(ctx("w3").learner.goal, "practice", "no memory model");
+  assert.equal(ctx("w3", { placement: "p" }).learner.goal, "measure", "a placement probe measures on a drill too");
   assert.equal(ctx("w3").learner.target, 0.9, "the target follows the desired retention");
   done();
 });
@@ -490,11 +491,11 @@ async function practise(e: Etude, cards: number[], scores: number[]) {
     }
 }
 
-async function drillSetup(t: { after(fn: () => void): void }, config: Record<string, unknown>, typeScheduler = false) {
+async function drillSetup(t: { after(fn: () => void): void }, config: Record<string, unknown>, typeScheduler = false, type: { passAt?: number } = {}) {
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-adaptive-drill-"));
   const e = await Etude.open(join(dir, "etude.db"));
   t.after(() => (e.close(), rmSync(dir, { recursive: true, force: true })));
-  e.saveType(typeScheduler ? { ...SKILL_TYPE, scheduler: "drill" } : SKILL_TYPE);
+  e.saveType({ ...SKILL_TYPE, ...(typeScheduler ? { scheduler: "drill" } : {}), ...type });
   for (let n = 1; n <= 30; n++) e.upsertItem({ id: `s${n}`, type: "skill", deck: "Drills::Set", tags: [n <= 20 ? "level::1" : "level::2"], fields: { task: `t${n}` } });
   e.updateDeck("Drills", { config: { adaptivePace: true, newPerDay: 10, newPerDayMin: 1, newPerDayMax: 40, minutesPerDay: 60, levels: [{ tag: "level::1" }, { tag: "level::2" }], ...config } });
   const level1 = e.db.all("SELECT c.id FROM cards c JOIN items i ON i.id = c.item_id WHERE i.tags LIKE '%level::1%' ORDER BY c.id").map((r) => r.id as number);
@@ -538,4 +539,72 @@ test("in an FSRS deck, a type's drill cards count by their scores, not as unrate
   assert.ok(after.adaptive);
   assert.equal(after.known.items, 19);
   assert.equal(after.skills[0].level!.tag, "level::2");
+});
+
+/** A placement session on the drill deck: level 1 runs score `known`, level 2 runs `unknown`. Returns each probe's goal. */
+async function place(e: Etude, session: string, known: number, unknown: number) {
+  const goals: (string | undefined)[] = [];
+  for (let i = 0; i < 30; i++) {
+    const { card } = e.next({ deck: "Drills", placement: session });
+    if (!card) break;
+    const r = await e.submit(card.cardId, card.seed, Number(card.itemId.slice(1)) <= 20 ? known : unknown, { asOf: card.asOf, placement: card.placement });
+    goals.push(r.grade.adaptive?.goal);
+    e.rate(card.cardId, 0, { attemptId: r.attemptId! });
+  }
+  return goals;
+}
+
+test("on a drill, placement probes and quick checks measure; the other runs practise", async (t) => {
+  const { e, level1 } = await drillSetup(t, { scheduler: "drill", schedulerOptions: { perDay: 0 }, adaptiveChallenge: true });
+  const goals = await place(e, "p", 1, 0);
+  assert.ok(goals.length >= 6 && goals.every((g) => g === "measure"), JSON.stringify(goals));
+  const s = e.learnerSummary("Drills");
+  assert.ok(s.adaptive);
+  assert.equal(s.skills[0].placement?.frontier, "level::2", JSON.stringify(s.skills[0]));
+  const fresh = level1.find((id) => e.db.get<{ state: number }>("SELECT state FROM cards WHERE id = ?", id)!.state === 0)!;
+  const c = e.present(fresh, 1);
+  assert.equal(c.quickCheck, true);
+  const r = await e.submit(c.cardId, c.seed, 1, { asOf: c.asOf });
+  assert.equal(r.grade.adaptive?.goal, "measure", "a quick check");
+  e.rate(c.cardId, 0, { attemptId: r.attemptId! });
+  assert.equal(e.adaptContext(fresh, new Date().toISOString())!.learner.goal, "practice", "its next run practises");
+});
+
+test("a type's passAt decides what passed, and the estimates count passes", async (t) => {
+  assert.deepEqual(validateType({ ...SKILL_TYPE, passAt: 0.8 }), []);
+  for (const bad of [0, 1.2, "0.8"]) assert.ok(validateType({ ...SKILL_TYPE, passAt: bad as never }).some((m) => m.includes("passAt")), String(bad));
+  // Runs of 0.85: under the deck's target (0.9), over the type's pass mark (0.8).
+  const { e, level1 } = await drillSetup(t, { scheduler: "drill", schedulerOptions: { perDay: 0 } }, false, { passAt: 0.8 });
+  await practise(e, level1, [0.85, 0.85, 0.85, 0.85, 0.85]);
+  const s = e.learnerSummary("Drills");
+  assert.ok(s.adaptive && s.pace && s.skills[0].level);
+  assert.equal(s.skills[0].success, 1, "every run passed, whatever its exact score");
+  assert.equal(s.known.items, 20);
+  assert.equal(s.skills[0].level.tag, "level::2", "level 1 is held");
+  assert.equal(s.pace.youngRetention, 1);
+  // Without the pass mark the same runs fall short of the target, and the estimates follow the scores.
+  e.saveType(SKILL_TYPE);
+  const plain = e.learnerSummary("Drills");
+  assert.ok(plain.adaptive);
+  assert.equal(plain.known.items, 0);
+  assert.equal(plain.skills[0].success, 0.85);
+});
+
+test("with a pass mark, a placement band passes only on probes that pass", async (t) => {
+  // Probes of 0.85 average above the placement's 0.8, but each one falls under the type's 0.9.
+  const { e } = await drillSetup(t, { scheduler: "drill", schedulerOptions: { perDay: 0 } }, false, { passAt: 0.9 });
+  await place(e, "p", 0.85, 0.85);
+  const s = e.learnerSummary("Drills");
+  assert.ok(s.adaptive);
+  assert.equal(s.skills[0].placement?.frontier, "level::1", JSON.stringify(s.skills[0]));
+});
+
+test("on a drill, the pace holds young runs to the target success, not the desired retention", async (t) => {
+  const { e, level1 } = await drillSetup(t, { scheduler: "drill", schedulerOptions: { perDay: 0 }, targetSuccess: 0.8 });
+  // Four in five young runs pass: on the target, though under the desired retention (0.9).
+  await practise(e, level1, [1, 1, 0.5, 1, 1, 1]);
+  const s = e.learnerSummary("Drills");
+  assert.ok(s.adaptive && s.pace);
+  assert.equal(s.pace.youngRetention, 0.8);
+  assert.match(s.pace.reason, /holding as planned/);
 });

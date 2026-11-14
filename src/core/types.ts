@@ -98,6 +98,7 @@ export function validateType(def: unknown): string[] {
     if (!v || typeof v !== "object" || typeof v.field !== "string" || !keyOk(v.id) || !keyOk(v.requires) || !keyOk(v.difficulty)) errors.push('variants must look like {"field": "sentences"}, with optional id, requires and difficulty keys');
     else if (!t.fields?.some((f) => f.name === v.field && (f.kind === "json" || f.kind === "list"))) errors.push("variants.field must name a json or list field of the type");
   }
+  if (t.passAt !== undefined && !(typeof t.passAt === "number" && t.passAt > 0 && t.passAt <= 1)) errors.push("passAt must be a score above 0 and at most 1");
   if (t.facesWhen) {
     const e = checkSyntax(t.facesWhen, ["fields"], `${t.id}/facesWhen`);
     if (e) errors.push(e);

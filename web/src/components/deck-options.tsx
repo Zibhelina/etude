@@ -494,7 +494,7 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
       </Group>
 
       <Group title="Adaptive" description="Fit the work to how you're doing. Off: the deck works as built.">
-        {row("adaptivePace", <Switch checked={value("adaptivePace")} onCheckedChange={(v) => set("adaptivePace", v)} aria-label="Adaptive pace" />, "Raise or lower the new cards per day from how well last week's new cards held (against the desired retention) and your study time.", { inline: true })}
+        {row("adaptivePace", <Switch checked={value("adaptivePace")} onCheckedChange={(v) => set("adaptivePace", v)} aria-label="Adaptive pace" />, `Raise or lower the new cards per day from how well last week's new cards held (against the ${fsrs ? "desired retention" : "target success"}) and your study time.`, { inline: true })}
         {value("adaptivePace") && <>
           {row("minutesPerDay", <NumberField value={value("minutesPerDay")} min={1} onChange={(v) => set("minutesPerDay", v)} suffix="min/day" ariaLabel="Time budget in minutes per day" />, "Study time per day the pace aims for.")}
           {row("newPerDayMin", <NumberField value={value("newPerDayMin")} min={0} onChange={(v) => set("newPerDayMin", v)} suffix="cards" ariaLabel="Fewest new cards per day" />, "The pace never goes below this.")}
@@ -503,10 +503,15 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
         {row(
           "adaptiveChallenge",
           <Switch checked={value("adaptiveChallenge")} onCheckedChange={(v) => set("adaptiveChallenge", v)} aria-label="Adaptive challenge" />,
-          "Let card types choose versions for you: the clearest one when a card is new, one of its usual difficulty when FSRS measures your memory. Only types that support it change.",
+          "Let card types choose versions for you: the clearest one when a card is new, one of its usual difficulty when your memory or your level is being measured, and on a drill one that fits how you're doing. Only types that support it change.",
           { inline: true },
         )}
         {(value("adaptivePace") || value("adaptiveChallenge")) && <>
+          {row(
+            "targetSuccess",
+            <NumberField value={Math.round((value("targetSuccess") ?? retention) * 100)} min={50} max={99} onChange={(v) => set("targetSuccess", v / 100)} suffix="% pass" ariaLabel="Target success" />,
+            `How often your answers should pass when a card type picks the challenge for you, as on a drill. A drill run passes at the score its card type sets, or else at this one.${value("targetSuccess") == null ? " Until you set it, it follows the desired retention." : ""}`,
+          )}
           {row(
             "levels",
             <Textarea value={levelsText(value("levels"))} onChange={(e) => set("levels", parseLevels(e.target.value))} placeholder={"level::1 check::1\nlevel::2 check::2"} rows={3} className="font-mono text-sm" aria-label="Levels" />,

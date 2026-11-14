@@ -1828,6 +1828,7 @@ export class Etude {
       ...(def.scheduler && def.schedulerOptions && Object.keys(def.schedulerOptions).length ? { schedulerOptions: def.schedulerOptions } : {}),
       ...(def.skills && Object.keys(def.skills).length ? { skills: def.skills } : {}),
       ...(def.variants ? { variants: def.variants } : {}),
+      ...(def.passAt !== undefined ? { passAt: def.passAt } : {}),
     };
     this.checkSchedulerRef({ scheduler: clean.scheduler });
     const old = this.db.get("SELECT def FROM types WHERE id = ?", def.id);

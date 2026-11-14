@@ -41,9 +41,9 @@ etude deck show "Networks::Week 1"   # resolved, inherited, presetBase, own conf
 | `autoApply` | false | the app applies the suggested rating without asking |
 | `burySiblings` | true | other faces of the same item wait until tomorrow |
 | `enableFuzz`, `enableShortTerm`, `weights` | | FSRS-6 options |
-| `adaptiveChallenge` | false | card types get a `learner` argument and pick variants by goal: clearest when new, usual difficulty when FSRS measures memory |
-| `adaptivePace` | false | each day's new-card limit follows how well last week's young cards held (against `desiredRetention`) and the study time; placement probes and quick checks aren't new cards and don't count |
-| `targetSuccess` | null | share of right answers practice aims for (decks without a memory model); null follows `desiredRetention` |
+| `adaptiveChallenge` | false | card types get a `learner` argument and pick variants by goal: clearest when new, usual difficulty when FSRS measures memory and for placement probes and quick checks on any scheduler |
+| `adaptivePace` | false | each day's new-card limit follows how well last week's young cards held (against `desiredRetention`; on a scheduler without a memory model, against `targetSuccess`) and the study time; placement probes and quick checks aren't new cards and don't count |
+| `targetSuccess` | null | share of answers that should pass when practice sets the challenge (decks without a memory model); a drill run passes at its type's `passAt`, else at this score; null follows `desiredRetention` |
 | `minutesPerDay` | 20 | study time the adaptive pace aims for |
 | `newPerDayMin` / `newPerDayMax` | 5 / 25 | bounds for the adaptive pace |
 | `levels` | `[]` | ordered levels by tag, each with an optional check tag: `[{"tag":"level::1","check":"check::1"}]` |

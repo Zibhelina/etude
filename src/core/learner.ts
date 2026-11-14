@@ -5,10 +5,11 @@ import type { LevelSpec, PresetConfig } from "./model.ts";
 /**
  * What this showing's answer will be used for, which decides how a type should pick its variant.
  * - `teach`: a new card's first showing. It's encoding, not recall: show the clearest version.
- * - `measure`: the answer is evidence about memory (FSRS reviews and learning steps, placement probes,
- *   quick checks). Show a version of the item's usual difficulty, whatever the learner's state, so the
- *   evidence stays comparable; vary the context, not the difficulty.
- * - `practice`: nothing measures memory (a scheduler without one, like drill). Aim at `target`.
+ * - `measure`: the answer is evidence (FSRS reviews and learning steps; placement probes and quick
+ *   checks on any scheduler, since they decide what counts as known). Show a version of the item's
+ *   usual difficulty, whatever the learner's state, so the evidence stays comparable; vary the
+ *   context, not the difficulty.
+ * - `practice`: the other answers on a scheduler without a memory model, like drill. Aim at `target`.
  */
 export type LearnerGoal = "teach" | "measure" | "practice";
 
@@ -16,7 +17,7 @@ export type LearnerGoal = "teach" | "measure" | "practice";
 export interface Learner {
   asOf: string;
   goal: LearnerGoal;
-  /** Share of answers to aim for when practising: the deck's targetSuccess, else its desired retention. */
+  /** Share of answers that should pass when practising: the deck's targetSuccess, else its desired retention. */
   target: number;
   /** The skill this card's face trains. */
   skill: string;
@@ -103,12 +104,12 @@ export function fitSkills(attempts: GradedAttempt[]): SkillModel {
 export const targetOf = (cfg: PresetConfig) => cfg.targetSuccess ?? cfg.desiredRetention;
 
 /**
- * Whether an answer passed: rated above Again, or, unrated (a drill's run), scored at the target.
- * Null for an unrated answer without a score, which says nothing.
+ * Whether an answer passed: rated above Again, or, unrated (a drill's run), scored at least `mark`
+ * (the type's passAt, else the deck's target). Null for an unrated answer without a score, which says nothing.
  */
-export function passes(rating: number, score: number | null, target: number): boolean | null {
+export function passes(rating: number, score: number | null, mark: number): boolean | null {
   if (rating >= 1) return rating > 1;
-  return score == null ? null : score >= target;
+  return score == null ? null : score >= mark;
 }
 
 /** On a scheduler without a memory model (a drill, Leitner), a card is held once this many answers in a row passed. */
@@ -126,8 +127,11 @@ export const YOUNG_STABILITY = 21;
 export interface PaceHistory {
   /** Days with at least one review in the window. */
   activeDays: number;
-  /** Reviews of young cards, and how many weren't rated Again. */
-  young: { reviews: number; passed: number };
+  /**
+   * Reviews of young cards, how many passed, and the share that should have: the desired retention for
+   * FSRS cards, the target success for cards on another scheduler (the desired retention when left out).
+   */
+  young: { reviews: number; passed: number; goal?: number };
   minutes: number;
   newCards: number;
 }
@@ -135,7 +139,7 @@ export interface PaceHistory {
 export interface Pace {
   value: number;
   base: number;
-  /** Share of young-card reviews not rated Again. */
+  /** Share of young-card reviews that passed (not rated Again; a drill's run, scored at its pass mark). */
   youngRetention: number | null;
   minutesPerDay: number | null;
   reason: string;
@@ -143,16 +147,17 @@ export interface Pace {
 
 /**
  * Today's new-card limit from the last week. Its signal is what new cards cost: how well recently
- * learned cards hold (your ratings, against the deck's desired retention) and the time spent. All
- * reviews together say little, since FSRS keeps them near the desired retention by design. More new
- * cards only when young cards hold and time is left; fewer when either falls short.
+ * learned cards hold (your ratings, against the deck's desired retention; a drill's runs, against its
+ * target success) and the time spent. All reviews together say little, since FSRS keeps them near the
+ * desired retention by design. More new cards only when young cards hold and time is left; fewer when
+ * either falls short.
  */
 export function pace(cfg: PresetConfig, h: PaceHistory): Pace {
   const lo = cfg.newPerDayMin, hi = Math.max(cfg.newPerDayMin, cfg.newPerDayMax);
   if (h.young.reviews < 20 || h.activeDays === 0)
     return { value: clamp(Math.round(cfg.newPerDay), lo, hi), base: cfg.newPerDay, youngRetention: null, minutesPerDay: null, reason: "not enough reviews of recently learned cards yet" };
   const retention = h.young.passed / h.young.reviews;
-  const goal = cfg.desiredRetention;
+  const goal = h.young.goal ?? cfg.desiredRetention;
   const minutes = h.minutes / h.activeDays;
   const base = Math.max(h.newCards / h.activeDays, lo);
   const byMemory = clamp(1 + 3 * (retention - goal), 0.5, 1.5);

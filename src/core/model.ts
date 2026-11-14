@@ -102,6 +102,12 @@ export interface CardTypeDef {
   /** The skill each face trains (`{ read: "reading", listen: "listening" }`), for adaptive decks. Faces left out train "general". */
   skills?: Record<string, string>;
   /**
+   * The score an answer needs to pass, for types whose scores give partial credit (a share of characters
+   * right, stars). On adaptive decks it decides what passed, and the skill estimates count passes, so
+   * `_p` is the chance an answer passes. Without it an unrated answer passes at the deck's target success.
+   */
+  passAt?: number;
+  /**
    * A list field whose entries are interchangeable variants (sentences, contexts). On adaptive decks
    * each entry gets `_p` (predicted success), `_known` (share of its `requires` items the learner
    * knows), `_seen` and `_difficulty` before prepare runs.
@@ -206,7 +212,10 @@ export interface PresetConfig {
   adaptiveChallenge: boolean;
   /** The day's new-card limit follows recent success and study time, between `newPerDayMin` and `newPerDayMax`. */
   adaptivePace: boolean;
-  /** Share of answers practice aims for, and the score a drill's run needs to pass on an adaptive deck. Null: the desired retention. */
+  /**
+   * Share of answers that should pass when practice sets the challenge, and what the adaptive pace holds a drill's
+   * young runs to. A drill's run passes at its type's `passAt`, else at this score. Null: the desired retention.
+   */
   targetSuccess: number | null;
   /** Study time the adaptive pace aims for. */
   minutesPerDay: number;

@@ -22,6 +22,7 @@ import { CanvasEmbed } from "./note-canvas";
 import { Portal } from "./note-portal";
 import { KanbanEmbed } from "./note-kanban";
 import { NoteEmbeds } from "./note-embed";
+import { FindBar, NoteFind, findShortcut } from "./note-find";
 import { TableKit } from "@tiptap/extension-table";
 import { Details, DetailsContent } from "@tiptap/extension-details";
 import { NoteDetailsSummary, ToggleTurn } from "./note-toggle";
@@ -305,7 +306,12 @@ export interface NoteEditorHandle {
   normalize(doc: NoteDoc): NoteDoc;
   /** Puts a newer page in without a save of its own: only the blocks that differ change, so the cursor stays where it was. */
   replace(doc: NoteDoc): void;
+  /** Opens the find bar (with Replace for "replace"). */
+  find(mode: "find" | "replace"): void;
 }
+
+/** The page editor typed in last, for Ctrl/⌘+F pressed while nothing on a page has the focus. */
+let lastFocused: Editor | null = null;
 
 function focusEnd(editor: Editor) {
   // Like Notion: the cursor goes to an empty line at the end, made when the last block has something in it.
@@ -320,7 +326,9 @@ function focusEnd(editor: Editor) {
 /** Marks a change that came from a save made somewhere else: it's shown, not saved again. */
 const EXTERNAL = "etude-external";
 
-export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page, editable = true, shared = false }: {
+export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page, editable = true, shared = false, findDock }: {
+  /** Where the find bar goes (the page's top right). Without it the editor has no find. */
+  findDock?: React.RefObject<HTMLElement | null>;
   /** In a shared folder: others' cursors show here and this one's goes to them. */
   shared?: boolean;
   doc: NoteDoc;
@@ -379,6 +387,7 @@ export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page, 
       Portal.configure({ page: () => pageRef.current ?? null }),
       KanbanEmbed.configure({ page: () => pageRef.current ?? null, links: () => linkRef.current ?? null }),
       ...NoteEmbeds,
+      NoteFind,
       Callout,
       TableKit.configure({ table: { resizable: true, cellMinWidth: 80 } }),
       Details.configure({ persist: true, HTMLAttributes: { class: "note-toggle" } }),
@@ -489,9 +498,36 @@ export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page, 
         const tr = editor.state.tr.replace(start, a, next.slice(start, b)).setMeta(EXTERNAL, true).setMeta("addToHistory", false);
         editor.view.dispatch(tr);
       },
+      find: (mode) => findDock && setFind((f) => ({ mode, ask: (f?.ask ?? 0) + 1 })),
     };
     return () => void (editorRef.current = null);
   }, [editor, editorRef]);
+  const [find, setFind] = useState<{ mode: "find" | "replace"; ask: number } | null>(null);
+  // Ctrl/⌘+F and Ctrl+H: from anywhere on this page, or from outside any page when this was the page typed in last.
+  useEffect(() => {
+    if (!editor || !findDock) return;
+    const focus = () => void (lastFocused = editor);
+    editor.on("focus", focus);
+    if (!lastFocused || lastFocused.isDestroyed) lastFocused = editor;
+    const key = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      const mode = findShortcut(e);
+      if (!mode) return;
+      const page = findDock.current?.parentElement;
+      const a = document.activeElement as HTMLElement | null;
+      const mine = !!a && !!page?.contains(a);
+      const elsewhere = !!a?.closest?.(".note-page, input, textarea, [contenteditable='true'], [role='dialog'], .cm-editor");
+      if (!mine && (elsewhere || lastFocused !== editor || !editor.view.dom.isConnected || !(editor.view.dom as HTMLElement).offsetParent)) return;
+      e.preventDefault();
+      setFind((f) => ({ mode, ask: (f?.ask ?? 0) + 1 }));
+    };
+    window.addEventListener("keydown", key);
+    return () => {
+      editor.off("focus", focus);
+      if (lastFocused === editor) lastFocused = null;
+      window.removeEventListener("keydown", key);
+    };
+  }, [editor, findDock]);
   // The role can change while the page is open (the owner made you a viewer, or an editor).
   useEffect(() => {
     if (editor && editor.isEditable !== editable) editor.setEditable(editable, false);
@@ -503,6 +539,7 @@ export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page, 
       <TableControls editor={editor} />
       <ColumnsBar editor={editor} />
       <BlockMenu editor={editor} />
+      {find && findDock?.current && <FindBar editor={editor} dock={findDock.current} mode={find.mode} ask={find.ask} onClose={() => setFind(null)} />}
       <EditorContent
         editor={editor}
         className="note-editor"

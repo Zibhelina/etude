@@ -1333,6 +1333,22 @@ body.sb-dragging, body.sb-dragging * { cursor: col-resize !important; user-selec
 .notes-main { flex: 1; min-width: 0; }
 .note-page { min-height: 100%; }
 .note-topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 48px; padding: 0 20px; background: color-mix(in oklab, var(--background) 88%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+/* Find and replace in a page: a zero-height dock under the top bar, so the bar floats at the top right while you scroll. */
+.note-find-dock { position: sticky; top: 48px; z-index: 6; height: 0; display: flex; align-items: flex-start; justify-content: flex-end; padding: 0 16px; }
+.note-find { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; width: min(420px, calc(100vw - 32px)); padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--popover); color: var(--popover-foreground); box-shadow: 0 6px 24px rgb(0 0 0 / 0.16); }
+.note-find-row { display: flex; align-items: center; gap: 2px; }
+.note-find-input { flex: 1; min-width: 0; height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--background); color: var(--foreground); font-size: 13px; outline: none; }
+.note-find-input:focus { border-color: color-mix(in oklab, var(--primary) 60%, var(--border)); }
+.note-find-count { min-width: 64px; padding: 0 6px; text-align: right; font-size: 12px; color: var(--muted-foreground); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.note-find-count.is-none { color: var(--danger); }
+.note-find-btn { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; color: var(--muted-foreground); }
+.note-find-btn:hover:not(:disabled) { background: color-mix(in oklab, var(--foreground) 8%, transparent); color: var(--foreground); }
+.note-find-btn:disabled, .note-find-text:disabled { opacity: 0.4; }
+.note-find-btn.is-on { background: color-mix(in oklab, var(--primary) 18%, transparent); color: var(--foreground); }
+.note-find-text { height: 28px; padding: 0 10px; margin-left: 2px; border: 1px solid var(--border); border-radius: 7px; font-size: 12px; white-space: nowrap; }
+.note-find-text:hover:not(:disabled) { background: var(--accent); }
+.note-find-hit { background: color-mix(in oklab, var(--warning) 30%, transparent); border-radius: 2px; }
+.note-find-hit.is-current { background: color-mix(in oklab, var(--warning) 70%, transparent); outline: 1px solid var(--warning); }
 .note-save { font-size: 12px; color: var(--muted-foreground); transition: opacity 300ms; flex-shrink: 0; }
 .note-save.saved { opacity: 0.6; }
 .note-save.error { color: var(--danger); }

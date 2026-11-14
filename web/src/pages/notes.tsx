@@ -4,7 +4,7 @@
 import { createContext, Fragment, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { Archive, ArrowUpRight, Check, Code2, SquareKanban, RotateCw, ChevronRight, Download, FileCode2, FilePlus2, Folder, FolderInput, FolderOpen, FolderPlus, GraduationCap, HardDrive, ImagePlus, Loader2, MoreHorizontal, PenTool, Plus, RefreshCw, Smile, Users, X } from "lucide-react";
+import { Archive, ArrowUpRight, Check, Code2, SquareKanban, RotateCw, ChevronRight, Download, FileCode2, FilePlus2, Folder, FolderInput, FolderOpen, FolderPlus, GraduationCap, HardDrive, ImagePlus, Loader2, MoreHorizontal, PenTool, Plus, RefreshCw, Search, Smile, Users, X } from "lucide-react";
 import katex from "katex";
 import type { NoteLinkOptions, PageRef } from "@/editor/note-link";
 import { etudeFetch, isLocal } from "@/lib/transport";
@@ -33,7 +33,7 @@ import { copyPath, diskPath, FolderSyncDialog, fsAncestors, fsParent, LocalMedia
 import { setVimMode, useVimMode } from "@/lib/vim";
 import { isTextFile } from "../../../src/core/text-files.ts";
 import { useScheme } from "@/lib/theme";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -502,6 +502,8 @@ export function titleHint(typed: string, name: string): string {
   return typed.length < name.length && name.toLowerCase().startsWith(typed.toLowerCase()) ? name.slice(typed.length) : "";
 }
 
+const FIND_KEYS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? { find: "⌘F", replace: "⇧⌘H" } : { find: "Ctrl+F", replace: "Ctrl+H" };
+
 function PageView({ note, tree, all, onTitle, onPageTitle, onDoc, saveState, onPick, links, onIcon, onLook, onBack, editorRef }: {
   note: Note;
   /** The pane's hold on the editor, to put in a page saved somewhere else. */
@@ -524,6 +526,9 @@ function PageView({ note, tree, all, onTitle, onPageTitle, onDoc, saveState, onP
   const hintRef = useRef<HTMLDivElement>(null);
   const ownEd = useRef<NoteEditorHandle | null>(null);
   const ed = editorRef ?? ownEd;
+  const findDock = useRef<HTMLDivElement>(null);
+  // Find picked in the page's menu opens once the menu has closed (it gives the focus back to its button first).
+  const findNext = useRef(false);
   // A page kept as a file shows the title it was given, never its file's name; that name is only suggested.
   const onDisk = !!note.local;
   const [t, setT] = useState(onDisk ? (note.local?.pageTitle ?? "") : note.title);
@@ -612,7 +617,7 @@ function PageView({ note, tree, all, onTitle, onPageTitle, onDoc, saveState, onP
             <DropdownMenuTrigger asChild>
               <button type="button" aria-label="Page options" className="note-row-act is-visible"><MoreHorizontal className="size-4" /></button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-56" onCloseAutoFocus={(e) => findNext.current && (e.preventDefault(), (findNext.current = false), ed.current?.find(ro ? "find" : "replace"))}>
               {!ro && <>
               <DropdownMenuLabel className="note-menu-label">Font</DropdownMenuLabel>
               <div className="note-menu-fonts">
@@ -639,12 +644,15 @@ function PageView({ note, tree, all, onTitle, onPageTitle, onDoc, saveState, onP
               ))}
               <DropdownMenuSeparator />
               </>}
+              <DropdownMenuItem onSelect={() => void (findNext.current = true)}><Search className="size-4" /> {ro ? "Find in the page" : "Find and replace"}<DropdownMenuShortcut>{ro ? FIND_KEYS.find : FIND_KEYS.replace}</DropdownMenuShortcut></DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => void exportNote(note, "md")}><Download className="size-4" /> Export as Markdown</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => void exportNote(note, "html")}><Download className="size-4" /> Export as HTML</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </span>
       </div>
+      <div ref={findDock} className="note-find-dock" />
       {/* With tabs in the top bar, the page's folder path sits in the page's top-left corner, under them. */}
       {strip && crumbs.length > 0 && (
         <nav aria-label="Path" className="note-crumbs-corner">
@@ -760,7 +768,7 @@ function PageView({ note, tree, all, onTitle, onPageTitle, onDoc, saveState, onP
         />
         </div>
         </div>
-        <NoteEditor key={note.id} doc={note.doc} onChange={onDoc} editorRef={ed} onEscapeUp={() => title.current?.focus()} links={links} page={{ id: note.id, title: t || note.title }} editable={!ro} shared={!!shareNow} />
+        <NoteEditor key={note.id} doc={note.doc} onChange={onDoc} editorRef={ed} onEscapeUp={() => title.current?.focus()} links={links} page={{ id: note.id, title: t || note.title }} editable={!ro} shared={!!shareNow} findDock={findDock} />
         <Backlinks id={note.id} title={t || note.title} onPick={onPick} />
         {kids.length > 0 && (
           <div className="note-subpages">
@@ -3355,6 +3363,32 @@ export function NotesPage({ id, active = true }: { id: string | null; active?: b
       action: { label: "Undo", onClick: () => void Promise.all(gone.map((n) => api.restoreFromTrash(n.id, where.get(n.id)!))).then(reload, (e) => (toast.error((e as Error).message), void reload())) },
     });
   };
+  // Deleting for good (Archive keeps things): asked first, with how many pages inside go too. No Undo.
+  const [deleteAsk, setDeleteAsk] = useState<{ items: NoteSummary[]; inside: number; open: boolean } | null>(null);
+  const askDelete = (ids: string[]) => {
+    const items = (list ?? []).filter((n) => ids.includes(n.id));
+    if (!items.length) return;
+    let inside = 0;
+    const count = (pid: string) => (tree.get(pid) ?? []).forEach((k) => (inside++, count(k.id)));
+    items.forEach((n) => count(n.id));
+    setDeleteAsk({ items, inside, open: true });
+  };
+  const deleteNow = async (items: NoteSummary[]) => {
+    await flushAll();
+    const gone: string[] = [];
+    try {
+      for (const n of items) gone.push(...(await api.deleteNote(n.id)).ids);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+    sel.clear();
+    closeGone(gone);
+    await reload();
+    if (!gone.length) return;
+    if (phone && id && gone.includes(id)) navigate("/notes", { replace: true });
+    const done = items.filter((n) => gone.includes(n.id));
+    toast(done.length === 1 ? `Deleted “${display(done[0])}”${gone.length > 1 ? ` and ${gone.length - 1} page${gone.length > 2 ? "s" : ""} inside` : ""}` : `Deleted ${done.length} pages${gone.length > done.length ? ` and ${gone.length - done.length} inside` : ""}`);
+  };
   const archiveMany = async (ids: string[]) => {
     const disk = (list ?? []).filter((n) => ids.includes(n.id) && n.local);
     if (disk.length && disk.length === ids.length) return void setTrashAsk({ items: disk, open: true });
@@ -3423,6 +3457,7 @@ export function NotesPage({ id, active = true }: { id: string | null; active?: b
             { label: "Move to the top level", disabled: ids.every((id) => !list?.find((x) => x.id === id)?.parentId), onSelect: () => void toTopMany(ids).then(sel.clear) },
             "sep",
             { label: `Archive ${ids.length} ${ids.length === 1 ? "page" : "pages"}`, danger: true, onSelect: () => void archiveMany(ids) },
+            { label: `Delete ${ids.length} ${ids.length === 1 ? "page" : "pages"}…`, danger: true, onSelect: () => askDelete(ids) },
           ] as MenuEntry[])),
     ];
   };
@@ -3565,6 +3600,7 @@ export function NotesPage({ id, active = true }: { id: string | null; active?: b
       { label: "Move out a level", disabled: !n.parentId, onSelect: () => void move(n, parent?.parentId ?? null) },
       "sep",
       { label: "Archive", danger: true, onSelect: () => void archive(n) },
+      { label: "Delete…", danger: true, onSelect: () => askDelete([n.id]) },
     ];
   };
   const rowMenu = (n: NoteSummary) => {
@@ -4170,6 +4206,31 @@ export function NotesPage({ id, active = true }: { id: string | null; active?: b
           toast.success(`Opened “${name}”`, { description: synced ? "Its files are on their way from your other devices." : "Its files stay where they are on this computer." });
         }}
       />
+      <AlertDialog open={!!deleteAsk?.open} onOpenChange={(o) => !o && setDeleteAsk((d) => d && { ...d, open: false })}>
+        <AlertDialogContent data-delete-ask>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{deleteAsk?.items.length === 1 ? `Delete “${display(deleteAsk.items[0])}”?` : `Delete ${deleteAsk?.items.length ?? 0} pages?`}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteAsk?.inside ? `${deleteAsk.inside === 1 ? "The page" : `The ${deleteAsk.inside} pages`} inside ${deleteAsk.items.length === 1 ? "it" : "them"} go${deleteAsk.inside === 1 ? "es" : ""} too. ` : ""}
+              {deleteAsk?.items.some((n) => n.share) ? "Everyone it's shared with loses it as well. " : ""}
+              This can't be undone. To put {deleteAsk?.items.length === 1 && !deleteAsk.inside ? "it" : "them"} away and keep {deleteAsk?.items.length === 1 && !deleteAsk.inside ? "it" : "them"}, use Archive.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                const items = deleteAsk?.items;
+                setDeleteAsk((d) => d && { ...d, open: false });
+                if (items) void deleteNow(items);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog open={!!trashAsk?.open} onOpenChange={(o) => !o && setTrashAsk((t) => t && { ...t, open: false })}>
         <AlertDialogContent data-trash-ask>
           <AlertDialogHeader>

@@ -10,7 +10,7 @@ import { search, searchKeymap } from "@codemirror/search";
 import type { InlineContext, MarkdownConfig } from "@lezer/markdown";
 import type { SyntaxNodeRef } from "@lezer/common";
 import { createMarkdownEditor, mdNodes, type Katex, type MdBuild } from "./markdown-editor";
-import { loadVim, saveOf, type FileEditorHandle } from "./file-editor";
+import { loadVim, replaceKeymap, saveOf, type FileEditorHandle } from "./file-editor";
 
 export interface MarkdownFileOptions {
   value: string;
@@ -661,7 +661,7 @@ export function createMarkdownFileEditor(parent: HTMLElement, opts: MarkdownFile
       mdNodes.of(drawing(opts)),
       Prec.high(editKeys),
       search({ top: true }),
-      keymap.of(searchKeymap),
+      keymap.of([...replaceKeymap, ...searchKeymap]),
       linkClicks(opts),
       Prec.highest(pageTheme),
       EditorView.contentAttributes.of({ "aria-label": "Markdown file" }),

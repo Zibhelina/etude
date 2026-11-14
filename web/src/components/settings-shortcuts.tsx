@@ -61,6 +61,8 @@ const GROUPS: { title: string; description?: string; rows: Row[] }[] = [
       { keys: [`${mod}+Enter`], what: "Tick or untick the to-do you're on" },
       { keys: ["Tab", "Shift+Tab"], what: "Indent, outdent (several lines at once when they're selected)" },
       { keys: [`${mod}+Shift+↑`, `${mod}+Shift+↓`], what: "Move the selected blocks up or down" },
+      { keys: [`${mod}+F`], what: "Find in the page (Enter, Shift+Enter: next, previous)" },
+      { keys: mod === "⌘" ? ["⌘+Shift+H"] : ["Ctrl+H"], what: "Find and replace (Enter replaces one; All, or Ctrl/⌘+Alt+Enter, replaces every match)" },
     ],
   },
   {
@@ -68,7 +70,8 @@ const GROUPS: { title: string; description?: string; rows: Row[] }[] = [
     description: "Code and text files in the Notebook (main.py, report.tex).",
     rows: [
       { keys: [`${mod}+S`], what: "Save now (it also saves on its own)" },
-      { keys: [`${mod}+F`], what: "Find and replace" },
+      { keys: [`${mod}+F`], what: "Find" },
+      { keys: mod === "⌘" ? ["⌘+Shift+H"] : ["Ctrl+H"], what: "Find and replace" },
       { keys: [`${mod}+D`], what: "Select the next match too" },
       { keys: [`${mod}+/`], what: "Comment or uncomment the line" },
       { keys: ["Alt+↑", "Alt+↓"], what: "Move the line up or down" },

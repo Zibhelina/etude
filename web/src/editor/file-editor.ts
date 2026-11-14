@@ -9,9 +9,25 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { LanguageDescription, bracketMatching, foldGutter, foldKeymap, indentOnInput, indentUnit, syntaxHighlighting, type LanguageSupport } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
+import { highlightSelectionMatches, openSearchPanel, search, searchKeymap } from "@codemirror/search";
 import { classHighlighter } from "@lezer/highlight";
 import { editorTheme } from "./code-editor";
+
+/** Ctrl+H (and Ctrl/⌘+Shift+H; ⌘+H hides the app on a Mac): the search panel, ready to type the replacement. */
+export const replaceKeymap = [
+  ...(/Mac|iPhone|iPad/.test(navigator.platform) ? [] : ["Mod-h"]),
+  "Shift-Mod-h",
+].map((key) => ({
+  key,
+  run: (view: EditorView) => {
+    openSearchPanel(view);
+    const field = view.dom.querySelector<HTMLInputElement>(".cm-search input[name=replace]");
+    const find = view.dom.querySelector<HTMLInputElement>(".cm-search input[name=search]");
+    (find?.value ? field : find)?.focus();
+    (find?.value ? field : find)?.select();
+    return true;
+  },
+}));
 
 /** Extensions CodeMirror doesn't know by name, or knows as something else (.m is MATLAB here, not Mathematica). */
 const BY_EXT: Record<string, string> = { m: "Octave", sty: "LaTeX", cls: "LaTeX", ltx: "LaTeX", bib: "LaTeX", ipy: "Python", pyi: "Python", mts: "TypeScript", cts: "TypeScript", jsonc: "JSON", zsh: "Shell", fish: "Shell", bash: "Shell", env: "Properties files", conf: "Properties files", cfg: "Properties files" };
@@ -162,7 +178,7 @@ export function createFileEditor(parent: HTMLElement, opts: FileEditorOptions): 
         search({ top: true }),
         highlightSelectionMatches(),
         indent.of(indentExt(opts.name)),
-        keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, ...foldKeymap, indentWithTab]),
+        keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...replaceKeymap, ...searchKeymap, ...historyKeymap, ...foldKeymap, indentWithTab]),
         syntaxHighlighting(classHighlighter),
         editorTheme,
         fileTheme,

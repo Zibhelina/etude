@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CoverGallery } from "@/components/market-gallery";
+import { CoverGallery, MediaGallery } from "@/components/market-gallery";
 import { AGE_CELL, DetailLayout, niceDate, paragraphs, type InfoCell } from "@/components/market-detail";
 import { Comments, socialCells, TileCounts, useEntryStats, Votes } from "@/components/market-social";
 import type { EntryCounts } from "@/lib/market-social";
@@ -131,6 +131,12 @@ export function PaidDetail({ entry, signedIn, menu, notice, onBack, onChanged }:
   const [confirming, setConfirming] = useState(false);
   // In the iPhone app, a deck Etude also sells on the App Store is bought there, at the App Store's price.
   const [apple, setApple] = useState<AppleDeck | null>(null);
+  const [shots, setShots] = useState<string[]>([]);
+  useEffect(() => {
+    let live = true;
+    api.paidMedia(entry.id).then((r) => { if (live) setShots(r.media); }).catch(() => {});
+    return () => { live = false; };
+  }, [entry.id]);
   useEffect(() => {
     if (canShowPurchases() || entry.owned) return;
     let live = true;
@@ -225,7 +231,7 @@ export function PaidDetail({ entry, signedIn, menu, notice, onBack, onChanged }:
           <div className="mk-by">by {isOfficial(entry.author, entry.soldBy) ? <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><OfficialSeal size={18} />Etude</span> : entry.author}{entry.owned && <span className="mk-pill"><BadgeCheck className="size-3" />Owned</span>}{entry.installed === "update" && <span className="mk-pill update">Update</span>}</div>
         </>
       }
-      gallery={<CoverGallery cover={<PaidCover entry={entry} />} />}
+      gallery={shots.length ? <MediaGallery name={entry.name} media={shots} url={(i) => api.paidMediaUrl(entry.id, i)} cover={<PaidCover entry={entry} />} /> : <CoverGallery cover={<PaidCover entry={entry} />} />}
       actions={
         <>
           {canShowPurchases() && !entry.owned && (

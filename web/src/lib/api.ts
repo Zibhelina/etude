@@ -963,6 +963,9 @@ export const api = {
   marketCoverUrl: (kind: MarketKind, id: string) => `/api/market/cover/${kind}/${encodeURIComponent(id)}${qs({ v: marketRev || undefined, token: apiToken() || undefined })}`,
   /** Coming soon pictures: "cover" or a preview's position. */
   comingSoonUrl: (id: string, slot: "cover" | number) => `/api/market/coming-soon/${encodeURIComponent(id)}/${slot}${apiToken() ? `?token=${encodeURIComponent(apiToken()!)}` : ""}`,
+  /** A paid deck's gallery: the catalog paths, and a URL for each by position. */
+  paidMedia: (slug: string) => call<{ media: string[] }>("GET", `/api/market/paid-media/${encodeURIComponent(slug)}`),
+  paidMediaUrl: (slug: string, i: number) => `/api/market/paid-media/${encodeURIComponent(slug)}/${i}${apiToken() ? `?token=${encodeURIComponent(apiToken()!)}` : ""}`,
   marketForget: (id: string) => call<{ forgot: boolean }>("POST", "/api/market/forget", { id }),
   /** Authors whose entries you hid: kept in your settings and synced. */
   hiddenAuthors: () => call<{ hiddenAuthors: { author: string; since: string }[] }>("GET", "/api/market/hidden-authors"),

@@ -260,8 +260,31 @@ export const MAX_COVER_BYTES = 600 * 1024;
 const COVER_TYPE: Record<string, string> = { webp: "image/webp", png: "image/png", jpg: "image/jpeg" };
 
 /** Only catalog-owned image/video paths can be served. No external URLs or traversal. */
-export const MARKET_MEDIA_PATH = /^media\/(themes|decks|types|plugins)\/[a-z0-9-]+\/[a-z0-9-]+\.(webp|png|jpg|mp4|webm)$/;
+export const MARKET_MEDIA_PATH = /^media\/(themes|decks|types|plugins|paid)\/[a-z0-9-]+\/[a-z0-9-]+\.(webp|png|jpg|mp4|webm)$/;
 export const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
+/**
+ * Screens for a paid deck. Its pack lives on the sync server, but its gallery sits in the public catalog under
+ * `media/paid/<slug>/`, listed in order by that folder's `list.json` (an array of file names). A catalog without
+ * one gives an empty list.
+ */
+const paidMediaCache = new Map<string, { at: number; media: string[] }>();
+export async function fetchPaidMedia(url: string, slug: string): Promise<string[]> {
+  if (!ENTRY_ID.test(slug)) return [];
+  const key = `${url}#${slug}`;
+  const hit = paidMediaCache.get(key);
+  if (hit && Date.now() - hit.at < 60_000) return hit.media;
+  let media: string[] = [];
+  try {
+    const { text } = await readMarketFile(url, `media/paid/${slug}/list.json`);
+    const list = JSON.parse(text);
+    if (Array.isArray(list)) media = list.filter((f) => typeof f === "string").map((f) => `media/paid/${slug}/${f}`).filter((p) => MARKET_MEDIA_PATH.test(p)).slice(0, 24);
+  } catch {
+    media = [];
+  }
+  paidMediaCache.set(key, { at: Date.now(), media });
+  return media;
+}
+
 export async function fetchMarketMedia(url: string, path: string): Promise<{ body: Buffer; type: string }> {
   const m = MARKET_MEDIA_PATH.exec(path);
   if (!m) throw new MarketError(`unexpected media path ${path}`);

@@ -30,7 +30,7 @@ import { streamSSE } from "hono/streaming";
 import { applyUpdate, updateStatus, UpdateError } from "../core/update.ts";
 import { isEventName, telemetryAllowed, telemetryFor, usageEventFor } from "../core/telemetry.ts";
 import { activityFor } from "../core/activity.ts";
-import { buildSubmission, fetchComingSoon, fetchComingSoonAsset, fetchMarketMedia, fetchCover, fetchEntry, fetchIndex, ghStatus, installEntry, installState, installedEntries, manualPublishUrl, marketSettings, publishFile, summarize, entryPath, entryJson, forgetInstall, type MarketKind } from "../core/market.ts";
+import { buildSubmission, fetchPaidMedia, fetchComingSoon, fetchComingSoonAsset, fetchMarketMedia, fetchCover, fetchEntry, fetchIndex, ghStatus, installEntry, installState, installedEntries, manualPublishUrl, marketSettings, publishFile, summarize, entryPath, entryJson, forgetInstall, type MarketKind } from "../core/market.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const require = createRequire(import.meta.url);
@@ -1154,6 +1154,15 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const path = slot === "cover" ? hit?.cover : hit?.media[Number(slot)];
     if (!path) return c.json({ error: slot === "cover" ? "no cover" : "no media" }, 404);
     const { body, type } = await fetchComingSoonAsset(url, path);
+    return c.body(new Uint8Array(body), 200, { "Content-Type": type, "Cache-Control": "max-age=600", "X-Content-Type-Options": "nosniff" });
+  });
+  // A paid deck's gallery, from the public catalog's media/paid/<slug>/ (its pack stays on the sync server).
+  app.get("/api/market/paid-media/:slug", async (c) => c.json({ media: await fetchPaidMedia(marketSettings(etude).url, c.req.param("slug")) }));
+  app.get("/api/market/paid-media/:slug/:i{[0-9]+}", async (c) => {
+    const url = marketSettings(etude).url;
+    const path = (await fetchPaidMedia(url, c.req.param("slug")))[Number(c.req.param("i"))];
+    if (!path) return c.json({ error: "no media" }, 404);
+    const { body, type } = await fetchMarketMedia(url, path);
     return c.body(new Uint8Array(body), 200, { "Content-Type": type, "Cache-Control": "max-age=600", "X-Content-Type-Options": "nosniff" });
   });
   app.post("/api/market/install", async (c) => {

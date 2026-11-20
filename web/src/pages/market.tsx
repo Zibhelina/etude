@@ -42,7 +42,7 @@ const GRADER_WORD: Record<string, string> = { self: "self-rated", script: "check
 const plural = (n: number, w: string) => `${n.toLocaleString("en-US")} ${w}${n === 1 ? "" : "s"}`;
 const kb = (b: number) => (b < 1e6 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1e6).toFixed(1)} MB`);
 /** The shelves' order: these first, the rest after, what you already have last. */
-const FEATURED = ["piano-hero", "kanji-mage", "countries-of-the-world", "chess", "anatomy-3d", "flippy-bit", "periodic-table", "piano", "logic-puzzles", "geometry-puzzles", "etude-showcase", "morse-code-letters"];
+const FEATURED = ["piano-hero", "kanji-mage", "countries-of-the-world", "chess", "typing-test", "anatomy-3d", "flippy-bit", "periodic-table", "piano", "logic-puzzles", "geometry-puzzles", "etude-showcase", "morse-code-letters"];
 const official = (author: string) => isOfficial(author);
 
 type Filter = "all" | MarketKind;
@@ -379,7 +379,15 @@ export function MarketPage() {
             ) : (
               <>
                 <Featured items={featured} stats={stats} onOpen={open} onChanged={() => (void load(true), void reloadStats())} />
-                <Shelf title="Decks" sub="Install one and it shows up in your Library." items={sorted(items.filter((it) => !it.paid && it.e.kind === "deck"))} stats={stats} onAll={() => setFilter("deck")} onOpen={open} onTry={tryOn} />
+                <section className="mk-shelf" data-decks-grid>
+                  <div className="mk-shelf-head">
+                    <div className="min-w-0 flex-1">
+                      <h2 className="mk-serif">Decks</h2>
+                      <p>Install one and it shows up in your Library.</p>
+                    </div>
+                  </div>
+                  <div className="mk-grid">{sorted(items.filter((it) => !it.paid && it.e.kind === "deck")).map((it) => <AnyTile key={it.key} it={it} counts={stats[it.key]} onOpen={() => open(it)} onTry={tryOn} />)}</div>
+                </section>
                 <Shelf
                   title={canShowPurchases() ? "Paid decks" : "Your decks"}
                   sub={canShowPurchases() ? "From creators, sold on etude.study. The creator sets the price." : "Bought with your Etude account"}
@@ -390,7 +398,6 @@ export function MarketPage() {
                   data-paid-section
                 />
                 <Shelf title="Coming soon" sub="Decks we're still making. Here's a first look." items={soon} stats={stats} onOpen={open} onTry={tryOn} data-soon-section />
-                <Shelf title="Card types" sub="New kinds of cards. Try one here before you install it." items={sorted(items.filter((it) => !it.paid && it.e.kind === "type"))} stats={stats} onAll={() => setFilter("type")} onOpen={open} onTry={tryOn} />
                 {!isNativeApp() && <Shelf title="Plugins" sub="Free sandboxed extensions for desktop and web. Every plugin shows its permissions before you install it." items={sorted(items.filter((it) => !it.paid && it.e.kind === "plugin"))} stats={stats} onAll={() => setFilter("plugin")} onOpen={open} onTry={tryOn} />}
                 <Shelf title="Themes" sub="Try one on. Nothing changes until you keep it." items={sorted(items.filter((it) => !it.paid && it.e.kind === "theme"))} stats={stats} onAll={() => setFilter("theme")} onOpen={open} onTry={tryOn} themes />
               </>

@@ -542,6 +542,20 @@ function StateMark({ state }: { state: MarketEntry["installed"] }) {
 }
 
 /** The entry's cover: its image, its theme in miniature, or its first sample cards. */
+/** The cover in the detail gallery with its title set on it, as on the Featured card: the covers leave their left
+ *  side dark for it, so without the title that side would read as an empty gap. */
+function TitledCover({ entry }: { entry: MarketEntry }) {
+  return (
+    <div className="mk-tcover">
+      <EtudeImg src={api.marketCoverUrl(entry.kind, entry.id)} alt="" />
+      <div className="mk-tcover-text" aria-hidden="true">
+        <div className="mk-eyebrow">{KIND_LABEL[entry.kind]}</div>
+        <div className="mk-serif mk-tcover-name">{entry.name}{official(entry.author) && <OfficialSeal size={22} className="mk-seal-title" />}</div>
+      </div>
+    </div>
+  );
+}
+
 function Cover({ entry }: { entry: MarketEntry }) {
   const s = s_(entry);
   if (entry.kind === "theme") return <ThemeMiniature theme={s.theme} />;
@@ -792,7 +806,7 @@ function EntryDetail({ entry, all, repo, inUse, trying, signedIn, menu, notice, 
           </div>
         </>
       }
-      gallery={<MarketGallery entry={entry} cover={entry.kind === "theme" ? <div className="mk-theme-big"><ThemeMiniature theme={s.theme} /></div> : <Cover entry={entry} />} />}
+      gallery={<MarketGallery entry={entry} cover={entry.kind === "theme" ? <div className="mk-theme-big"><ThemeMiniature theme={s.theme} /></div> : entry.cover ? <TitledCover entry={entry} /> : <Cover entry={entry} />} />}
       actions={
         <>
           <div className="mk-actions">{actions}</div>

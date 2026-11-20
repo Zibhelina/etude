@@ -342,3 +342,12 @@
 
 /* In the Featured card the counts follow the author, instead of running off to the right edge. */
 .mk-hero .mk-counts { margin-left: 4px; }
+
+/* The detail gallery's cover with its title over the dark left side, like the Featured card. */
+.mk-tcover { position: relative; width: 100%; height: 100%; background: #0c0c0e; color: #fff; isolation: isolate; }
+.mk-tcover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+.mk-tcover::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, rgb(8 8 10 / .85) 0%, rgb(8 8 10 / .55) 30%, transparent 58%); }
+.mk-tcover-text { position: absolute; left: 7%; top: 50%; transform: translateY(-50%); max-width: 42%; }
+.mk-tcover .mk-eyebrow { color: #fff; letter-spacing: .16em; font-weight: 700; text-shadow: 0 1px 10px rgb(0 0 0 / .5); }
+.mk-tcover-name { font-size: clamp(22px, 4.2cqw, 40px); line-height: 1.04; font-weight: 600; margin-top: 10px; text-wrap: balance; text-shadow: 0 2px 20px rgb(0 0 0 / .5); }
+.mk-gal-cover:has(.mk-tcover) img { object-fit: cover; }

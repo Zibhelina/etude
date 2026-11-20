@@ -1,6 +1,6 @@
 // Holidays (Settings → Appearance): Minimi's Christmas outfit (Santa hat and scarf, every frame and face),
 // a few optional decorations (a garland and a holly sprig on today's session) and
-// optional snow. "auto" puts it on from Dec 1 to Jan 6 and takes it off by itself; "on"/"off" force it.
+// optional snow. "auto" puts it on from Nov 15 to Jan 6 and takes it off by itself; "on"/"off" force it.
 // Saved with the collection (it syncs); a localStorage copy avoids a flash on load. Nothing seasonal shows
 // inside a card or the study screen except Minimi's outfit.
 import { useEffect, useState } from "react";
@@ -50,8 +50,8 @@ let prefs: HolidayPrefs = (() => {
   }
 })();
 
-/** Dec 1 to Jan 6, in the device's own calendar. */
-export const inSeason = (d = new Date()) => (d.getMonth() === 11) || (d.getMonth() === 0 && d.getDate() <= 6);
+/** Nov 15 to Jan 6, in the device's own calendar. */
+export const inSeason = (d = new Date()) => (d.getMonth() === 10 && d.getDate() >= 15) || d.getMonth() === 11 || (d.getMonth() === 0 && d.getDate() <= 6);
 export const holidayActive = () => prefs.holiday === "on" || (prefs.holiday === "auto" && inSeason());
 export const holidayPrefs = () => prefs;
 

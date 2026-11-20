@@ -55,7 +55,7 @@ const save = async (patch: Partial<HolidayPrefs>, before: HolidayPrefs) => {
 export function HolidayBlock() {
   const h = useHoliday();
   const before: HolidayPrefs = { holiday: h.holiday, holidayDecor: h.holidayDecor, holidaySnow: h.holidaySnow };
-  const when = h.holiday === "auto" ? (inSeason() ? "On now, until Jan 6." : "Comes on by itself on Dec 1 and goes away after Jan 6.") : h.holiday === "on" ? "On until you set it back." : "Off all year.";
+  const when = h.holiday === "auto" ? (inSeason() ? "On now, until Jan 6." : "Comes on by itself on Nov 15 and goes away after Jan 6.") : h.holiday === "on" ? "On until you set it back." : "Off all year.";
   const item = "phone:h-10 h-8 px-3 text-[13px]";
   return (
     <>

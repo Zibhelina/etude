@@ -182,7 +182,7 @@ export interface Settings {
   vim: boolean;
   /** Sounds: a pop when you tick a to-do in a Notebook page and a chime when a whole list is done. On by default. */
   sounds: boolean;
-  /** Holidays: Minimi's Christmas outfit and the extras. auto = Dec 1 to Jan 6, on/off force it. */
+  /** Holidays: Minimi's Christmas outfit and the extras. auto = Nov 15 to Jan 6, on/off force it. */
   holiday: "auto" | "on" | "off";
   /** Holiday decorations: none, few (a garland and a holly sprig on today's session) or cozy (plus a warm glow). */
   holidayDecor: "none" | "few" | "cozy";

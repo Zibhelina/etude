@@ -19,7 +19,7 @@ export function OfficialSeal({ size = 18, className }: { size?: number; classNam
     <svg className={`mk-seal${className ? ` ${className}` : ""}`} width={size} height={size} viewBox="0 0 24 24" role="img" aria-label="Official Etude deck" data-official>
       <title>Official: made by the Etude team</title>
       <polygon points={pts.join(" ")} fill="var(--mk-seal, #22c55e)" stroke="var(--mk-seal, #22c55e)" strokeWidth="1" strokeLinejoin="round" />
-      <text x="12" y="17.6" textAnchor="middle" fontSize="17.5" fontWeight="700" fill="#fff" style={{ fontFamily: "KaTeX_Main, \"Latin Modern Roman\", Georgia, serif" }}>ε</text>
+      <text x="12" y="17.2" textAnchor="middle" fontSize="16" fontWeight="700" fill="#fff" style={{ fontFamily: "Inter, system-ui, sans-serif" }}>ε</text>
     </svg>
   );
 }

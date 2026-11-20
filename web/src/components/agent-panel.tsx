@@ -385,7 +385,9 @@ export function useAgentChat({ onClose, onChanged, takeAsk = true, store = LAST_
   // Set when deliver() creates a brand-new conversation so the [convId] effect doesn't flash or race against send().
   const skipControlsFor = useRef<string | null>(null);
   const [usage, setUsage] = useState<ContextUse | null>(null);
-  const [bgTasks, setBgTasks] = useState<BackgroundTask[]>([]);
+  // Scoped to the conversation that owns them, so tasks from one chat can never leak into a new or switched chat.
+  const [bgState, setBgState] = useState<{ convId: string; tasks: BackgroundTask[] }>({ convId: "", tasks: [] });
+  const openSeq = useRef(0);
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -408,6 +410,7 @@ export function useAgentChat({ onClose, onChanged, takeAsk = true, store = LAST_
   };
 
   const openConv = useCallback(async (id: string | null) => {
+    const seq = ++openSeq.current;
     leaveReply(id);
     if (!id) {
       // A new chat stays with whoever you were talking to.
@@ -415,21 +418,24 @@ export function useAgentChat({ onClose, onChanged, takeAsk = true, store = LAST_
       setConv(null);
       setModel(null);
       setResume(null);
-      setBgTasks([]);
+      setBgState({ convId: "", tasks: [] });
       kept.current.set(null);
       return;
     }
     try {
       const c = await agentApi.get(id);
+      if (seq !== openSeq.current) return;
       setConv(c);
       setModel(c.model);
-      setBgTasks(c.tasks ?? []);
+      setBgState({ convId: c.id, tasks: c.tasks ?? [] });
       kept.current.set(id);
       stick.current = true;
       if (c.running && liveRef.current?.turnId !== c.running) setResume({ conv: c.id, turn: c.running });
       else setResume((r) => (r && r.conv !== c.id ? null : r));
     } catch {
+      if (seq !== openSeq.current) return;
       setConv(null);
+      setBgState({ convId: "", tasks: [] });
       kept.current.set(null);
     }
   }, []);
@@ -472,8 +478,12 @@ export function useAgentChat({ onClose, onChanged, takeAsk = true, store = LAST_
 
   // Watch live background tasks (ACP background tool calls, Hermes subagents & shell jobs) for any open external chat.
   const isExternalChat = profile.brain.kind === "external";
+  const bgTasks = convId && isExternalChat && bgState.convId === convId ? bgState.tasks : [];
   useEffect(() => {
-    if (!convId || !isExternalChat) return;
+    if (!convId || !isExternalChat) {
+      setBgState({ convId: "", tasks: [] });
+      return;
+    }
     const ctl = new AbortController();
     let timer: ReturnType<typeof setTimeout> | null = null;
     const loop = async () => {
@@ -482,7 +492,7 @@ export function useAgentChat({ onClose, onChanged, takeAsk = true, store = LAST_
           await agentApi.watchTasks(
             convId,
             (next) => {
-              if (!ctl.signal.aborted) setBgTasks(next);
+              if (!ctl.signal.aborted) setBgState({ convId, tasks: next });
             },
             ctl.signal,
           );
@@ -569,12 +579,14 @@ export function useAgentChat({ onClose, onChanged, takeAsk = true, store = LAST_
 
   /** Talk to someone else: a new chat with that profile. The old one stays in the history. */
   const pickProfile = (id: string) => {
+    openSeq.current++;
     setNextProfile(id);
     leaveReply(null);
     setConv(null);
     setModel(null);
     setLive(null);
     setResume(null);
+    setBgState({ convId: "", tasks: [] });
     kept.current.set(null);
     requestAnimationFrame(() => input.current?.focus());
   };
@@ -664,7 +676,9 @@ export function useAgentChat({ onClose, onChanged, takeAsk = true, store = LAST_
     if (!takeAsk) return;
     const take = () => {
       if (asked == null) return;
+      openSeq.current++;
       setConv(null);
+      setBgState({ convId: "", tasks: [] });
       kept.current.set(null);
       setText(asked);
       asked = null;
@@ -793,7 +807,7 @@ export function useAgentChat({ onClose, onChanged, takeAsk = true, store = LAST_
           setPicks({});
           return;
         case "tasks":
-          if (!state.detached) setBgTasks(e.tasks);
+          if (!state.detached && state.conv) setBgState({ convId: state.conv, tasks: e.tasks });
           return;
         case "look":
           // The model asked to see the screen: answer from this window, not part of the chat.

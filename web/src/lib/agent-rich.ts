@@ -174,7 +174,7 @@ const OWN = /^\/(api|media|type-assets|embed|runtime)\//;
 
 /** Written as a file on the agent's computer ("~/a.png", "file:///a.png", "/tmp/a.png"), not a web or app address. */
 export function isLocalPath(src: string): boolean {
-  return src.startsWith("~/") || src.startsWith("file://") || (src.startsWith("/") && !src.startsWith("//") && !OWN.test(src));
+  return src.startsWith("~/") || src.startsWith("file://") || /^[A-Za-z]:[\\/]/.test(src) || (src.startsWith("/") && !src.startsWith("//") && !OWN.test(src));
 }
 
 // ------------------------------------------------------------------ charts

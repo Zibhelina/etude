@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,6 +9,10 @@ import { runningAgents } from "../src/core/acp.ts";
 import { ACP_PRESETS, checkAgents, freeAgentId } from "../src/core/acp-agents.ts";
 import { agentRefusal, agentsSettingRefusal } from "../src/core/agent-guard.ts";
 import { run, parseInvocation } from "../src/cli/run.ts";
+
+afterEach(() => {
+  for (const c of runningAgents()) c.close();
+});
 
 const FAKE = join(import.meta.dirname, "fixtures", "fake-acp-agent.mjs");
 
@@ -217,7 +221,7 @@ test("acp: a file sent with Steer goes to the agent as its path, and shows in th
   assert.equal(s.text, "this one");
   assert.equal(s.attachments[0].name, "look.png");
   const said = received().filter((x) => x.method === "session/prompt").at(-1).params.prompt[0].text as string;
-  assert.match(said, /^\/steer this one\n\nAttached; open them from these paths:\n- look\.png \(image\): \/.+\.png$/);
+  assert.match(said, /^\/steer this one\n\nAttached; open them from these paths:\n- look\.png \(image\): (?:\/|[A-Za-z]:\\).+\.png$/);
   e.close();
 });
 
@@ -441,14 +445,26 @@ test("acp guard: the assistant and etude mcp can never set ai.agents", async () 
 test("acp: deleting a Hermes chat deletes its session in Hermes too; other agents and failures leave the chat deleted", async () => {
   const { dir, e, a } = await setup();
   // A stand-in `hermes`: `sessions delete` is logged (and fails for an id starting with "bad"), anything else is the ACP agent.
-  const { writeFileSync, chmodSync } = await import("node:fs");
+  const { writeFileSync } = await import("node:fs");
   const bin = join(dir, "bin");
   (await import("node:fs")).mkdirSync(bin);
-  const hermes = join(bin, "hermes");
   const dels = join(dir, "deletes.log");
-  writeFileSync(hermes, `#!/bin/sh\nif [ "$3" = sessions ]; then echo "$@" >> ${JSON.stringify(dels)}; case "$6" in bad*) echo "boom" >&2; exit 2;; esac; echo "Deleted session '$6'."; exit 0; fi\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(FAKE)} "$@"\n`);
-  chmodSync(hermes, 0o755);
-  e.updateSettings({ ai: { ...e.settings().ai, agents: [...(e.settings().ai.agents ?? []), { id: "herm", name: "Herm", command: hermes, args: ["-p", "tutor", "acp"], preset: "hermes" }] } });
+  const hermesJs = join(bin, "hermes.mjs");
+  writeFileSync(
+    hermesJs,
+    `import { appendFileSync } from "node:fs"; import { spawn } from "node:child_process";
+const a = process.argv.slice(2);
+if (a[2] === "sessions") {
+  appendFileSync(${JSON.stringify(dels)}, a.join(" ") + "\\n");
+  if ((a[5] || "").startsWith("bad")) { process.stderr.write("boom\\n"); process.exit(2); }
+  process.stdout.write("Deleted session '" + a[5] + "'.\\n");
+  process.exit(0);
+}
+const c = spawn(${JSON.stringify(process.execPath)}, [${JSON.stringify(FAKE)}, ...a], { stdio: "inherit" });
+c.on("exit", (code, sig) => process.exit(code ?? (sig ? 1 : 0)));
+`,
+  );
+  e.updateSettings({ ai: { ...e.settings().ai, agents: [...(e.settings().ai.agents ?? []), { id: "herm", name: "Herm", command: process.execPath, args: [hermesJs, "-p", "tutor", "acp"], preset: "hermes" }] } });
 
   const conv = chat(e, a, "herm");
   await a.send(conv.id, { text: "hello" }, () => {});

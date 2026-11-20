@@ -164,7 +164,7 @@ export function deleteAgentSession(def: AcpAgentDef, sessionId: string, timeoutM
   });
 }
 
-type Pending = { resolve(v: any): void; reject(e: Error): void; method: string };
+type Pending = { resolve(v: any): void; reject(e: Error): void; method: string; onSettle?(): void };
 
 export class AcpConnection {
   readonly def: AcpAgentDef;
@@ -243,7 +243,10 @@ export class AcpConnection {
       untrack(this);
       this.clearAllTasks();
       const why = this.lastError() ?? `${def.name} stopped (${code !== null ? `exit code ${code}` : signal})`;
-      for (const p of this.pending.values()) p.reject(new AcpError(why));
+      for (const p of this.pending.values()) {
+        p.onSettle?.();
+        p.reject(new AcpError(why));
+      }
       this.pending.clear();
     });
     const init = (await Promise.race([
@@ -291,6 +294,7 @@ export class AcpConnection {
       const p = this.pending.get(Number(m.id));
       if (!p) return;
       this.pending.delete(Number(m.id));
+      p.onSettle?.();
       if (m.error) p.reject(new AcpError(String(m.error.message ?? "the agent answered with an error") + (m.error.data?.details ? `: ${m.error.data.details}` : ""), m.error.code));
       else p.resolve(m.result ?? null);
       return;
@@ -344,19 +348,21 @@ export class AcpConnection {
     this.child!.stdin!.write(JSON.stringify(m) + "\n");
   }
 
-  request<T = any>(method: string, params: unknown, timeoutMs = 0): Promise<T> {
+  request<T = any>(method: string, params: unknown, timeoutMs = 0, onSettle?: () => void): Promise<T> {
     if (!this.child || this.exited !== null) return Promise.reject(new AcpError(`${this.def.name} isn't running`));
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout> | null = null;
       this.pending.set(id, {
         method,
+        onSettle,
         resolve: (v) => (timer && clearTimeout(timer), resolve(v)),
         reject: (e) => (timer && clearTimeout(timer), reject(e)),
       });
       if (timeoutMs) {
         timer = setTimeout(() => {
           this.pending.delete(id);
+          onSettle?.();
           reject(new AcpError(`${this.def.name} didn't answer ${method} within ${Math.round(timeoutMs / 1000)} s`));
         }, timeoutMs);
         timer.unref?.();
@@ -547,15 +553,22 @@ export class AcpConnection {
     const st = this.steering.get(sessionId) ?? { n: 0, said: "" };
     st.n++;
     this.steering.set(sessionId, st);
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      if (--st.n <= 0) this.steering.delete(sessionId);
+    };
     try {
-      // A second session/prompt while the first runs; it answers at once and isn't a turn of its own.
-      await this.request("session/prompt", { sessionId, prompt: [{ type: "text", text: `/steer ${text}` }] }, 30_000);
+      // A second session/prompt while the first runs; release runs synchronously on the response so follow-up
+      // chunks in the same stdout buffer aren't swallowed as part of the steer receipt.
+      await this.request("session/prompt", { sessionId, prompt: [{ type: "text", text: `/steer ${text}` }] }, 30_000, release);
       // Its answer quotes the words back, so only how the answer opens says whether it took them.
       return !/^\s*(no active turn|⚠|usage:)/i.test(st.said);
     } catch {
       return false;
     } finally {
-      if (--st.n <= 0) this.steering.delete(sessionId);
+      release();
     }
   }
 

@@ -20,9 +20,11 @@ const tree = (dir: string, prefix = ""): string[] =>
 async function setup(t: T) {
   // By its real path: on a Mac the temp folder is behind a link, and an open folder is kept by where it really is.
   const root = realpathSync(mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-take-")));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
   const e = await Etude.open(join(root, "etude.db"), { home: join(root, "home") });
-  t.after(() => e.close());
+  t.after(() => {
+    e.close();
+    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  });
   const vault = join(root, "Vault");
   mkdirSync(vault);
   const f = e.folders.open(vault, { name: "Vault" });

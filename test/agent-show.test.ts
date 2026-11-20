@@ -1,13 +1,19 @@
-import { test } from "node:test";
+import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { Etude } from "../src/core/engine.ts";
 import { agentFor, type AgentEvent, type AssistantContent } from "../src/core/agent.ts";
+import { runningAgents } from "../src/core/acp.ts";
 import { createApp } from "../src/server/app.ts";
 import { keepShown, localPath, shownRefs } from "../src/core/agent-show.ts";
 import { chartSpec, isLocalPath, richSegments } from "../web/src/lib/agent-rich.ts";
+
+afterEach(() => {
+  for (const c of runningAgents()) c.close();
+});
 
 const FAKE = join(import.meta.dirname, "fixtures", "fake-acp-agent.mjs");
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
@@ -96,7 +102,8 @@ test("charts come in several shapes and end up as one", () => {
 });
 
 test("what counts as a file on this computer", () => {
-  for (const p of ["/tmp/a.png", "~/a.png", "file:///tmp/a.png"]) assert.ok(isLocalPath(p) && localPath(p), p);
+  const fileUrl = pathToFileURL(join(tmpdir(), "a.png")).href;
+  for (const p of ["/tmp/a.png", "~/a.png", fileUrl]) assert.ok(isLocalPath(p) && localPath(p), p);
   for (const p of ["https://x.test/a.png", "/media/files/ab.png", "/api/agent/conversations/x", "//x.test/a.png", "a.png"]) assert.ok(!isLocalPath(p) && !localPath(p), p);
   assert.deepEqual(shownRefs('MEDIA:/tmp/a.png\n![x](/tmp/b.jpg) ::sticker{file="/tmp/c.webp"} {"file": "/tmp/d.html"} MEDIA:/etc/passwd\n![y](https://x.test/e.png)'), ["/tmp/a.png", "/tmp/b.jpg", "/tmp/c.webp", "/tmp/d.html"]);
 });

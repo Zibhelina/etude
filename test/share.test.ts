@@ -305,7 +305,7 @@ test("sharing between two collections: invite, accept, edits both ways, merges, 
   assert.equal(A.e.notes.get(w1.id).share?.space, space.id);
   // Keys live in the share secrets file, 0600.
   const sec = join(A.home, "share", "acc_ann.json");
-  assert.equal(statSync(sec).mode & 0o777, 0o600);
+  if (process.platform !== "win32") assert.equal(statSync(sec).mode & 0o777, 0o600);
   assert.ok(JSON.parse(readFileSync(sec, "utf8")).keys[space.id]["2"]);
 
   await A.sh.invite(space.id, "bob@example.com", "edit");

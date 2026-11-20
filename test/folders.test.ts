@@ -505,9 +505,11 @@ test("folders: a canvas and a kanban board are .etude files too, and an .html fi
 test("folders: the routes and the CLI read and write pages kept as files", async (t) => {
   const dir = vault(t);
   const home = mkdtempSync(join(tmpdir(), "etude-folder-home-"));
-  t.after(() => rmSync(home, { recursive: true, force: true }));
   const e = await Etude.open(join(home, "etude.db"), { home });
-  t.after(() => e.close());
+  t.after(() => {
+    e.close();
+    rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  });
   const app = createApp(e);
   const json = async (method: string, path: string, body?: unknown) => {
     const r = await Promise.resolve(app.request(path, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) }));

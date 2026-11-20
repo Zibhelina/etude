@@ -16,9 +16,11 @@ const docOf = (...blocks: unknown[]) => ({ type: "doc", content: blocks });
 
 async function setup(t: T) {
   const root = realpathSync(mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-bring-")));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
   const e = await Etude.open(join(root, "etude.db"), { home: join(root, "home") });
-  t.after(() => e.close());
+  t.after(() => {
+    e.close();
+    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  });
   const vault = join(root, "Vault");
   mkdirSync(vault);
   const f = e.folders.open(vault, { name: "Vault" });

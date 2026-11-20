@@ -50,6 +50,7 @@ export function localPath(raw: string): string | null {
     }
   }
   if (s === "~" || s.startsWith("~/")) return join(homedir(), s.slice(1));
+  if (/^[A-Za-z]:[\\/]/.test(s)) return s;
   if (s.startsWith("/") && !s.startsWith("//") && !OWN.test(s)) return s;
   return null;
 }

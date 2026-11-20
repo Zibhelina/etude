@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
@@ -14,10 +14,14 @@ import { run } from "../src/cli/run.ts";
 
 type T = { after(fn: () => void): void };
 const password = "a test Sync password";
-const temp = (t: T) => {
+const tempDirs: string[] = [];
+afterEach(() => {
+  for (const d of tempDirs.splice(0)) rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+});
+const temp = (_t: T) => {
   // By its real path: on a Mac the temp folder is behind a link, and an open folder is kept by where it really is.
   const dir = realpathSync(mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-folder-sync-")));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  tempDirs.push(dir);
   return dir;
 };
 /** Devices of one vault, over the folder transport. `sync()` runs them in order, twice, so what a pass sends reaches the others. */

@@ -10,6 +10,7 @@ import { viewCommandsAfter, viewDir, viewQueueStamp, writeViewState, type ViewPa
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 import { DEFAULT_SETTINGS, Etude, EtudeError, type StudyScope } from "../core/engine.ts";
 import { isFsId } from "../core/folders.ts";
 import { folderRoutes } from "./folders.ts";
@@ -1126,7 +1127,11 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const hit = (await fetchIndex(url)).entries.find((x) => x.kind === c.req.param("kind") && x.id === c.req.param("id"));
     if (!hit?.cover) return c.json({ error: "no cover" }, 404);
     const { body, type } = await fetchCover(url, hit.cover);
-    return c.body(new Uint8Array(body), 200, { "Content-Type": type, "Cache-Control": "max-age=600", "X-Content-Type-Options": "nosniff" });
+    // A cover keeps its path when it's redrawn, so the client asks again each time and gets a 304 when nothing changed.
+    const etag = `"${createHash("sha1").update(body).digest("base64url")}"`;
+    const headers = { "Cache-Control": "no-cache", ETag: etag, "X-Content-Type-Options": "nosniff" };
+    if (c.req.header("if-none-match") === etag) return c.body(null, 304, headers);
+    return c.body(new Uint8Array(body), 200, { ...headers, "Content-Type": type });
   });
   app.get("/api/market/media/:kind/:id/:index", async (c) => {
     const url = marketSettings(etude).url;

@@ -1,4 +1,4 @@
-import { afterEach, test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
@@ -15,7 +15,7 @@ import { run } from "../src/cli/run.ts";
 type T = { after(fn: () => void): void };
 const password = "a test Sync password";
 const tempDirs: string[] = [];
-afterEach(() => {
+after(() => {
   for (const d of tempDirs.splice(0)) rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 const temp = (_t: T) => {

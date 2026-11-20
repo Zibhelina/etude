@@ -6,9 +6,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { accentText } from "../../../src/core/themes.ts";
 import { cn } from "@/lib/utils";
 
-type Hsv = { h: number; s: number; v: number };
+export type Hsv = { h: number; s: number; v: number };
 
-function hsvToHex({ h, s, v }: Hsv): string {
+export function hsvToHex({ h, s, v }: Hsv): string {
   const f = (n: number) => {
     const k = (n + h / 60) % 6;
     return v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
@@ -17,7 +17,7 @@ function hsvToHex({ h, s, v }: Hsv): string {
   return `#${x(f(5))}${x(f(3))}${x(f(1))}`;
 }
 
-function hexToHsv(hex: string): Hsv {
+export function hexToHsv(hex: string): Hsv {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
   const max = Math.max(r, g, b), d = max - Math.min(r, g, b);
   let h = 0;
@@ -30,7 +30,7 @@ const SOFT = "conic-gradient(from 0deg, #e5604f, #ec8a3c, #e2b53a, #3fae52, #2fb
 const SIZE = 196;
 
 /** Drags with the pointer anywhere after it went down on `el`. */
-function useDrag(onMove: (x: number, y: number, rect: DOMRect) => void) {
+export function useDrag(onMove: (x: number, y: number, rect: DOMRect) => void) {
   const ref = useRef<HTMLDivElement>(null);
   const move = useRef(onMove);
   move.current = onMove;

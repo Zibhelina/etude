@@ -4,7 +4,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-export type PointMenuItem = { label: string; onSelect(): void };
+export type PointMenuItem = { label: string; onSelect(): void; hint?: string; disabled?: boolean } | "sep";
 
 export function PointMenu({ x, y, items, onClose }: { x: number; y: number; items: PointMenuItem[]; onClose(): void }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -16,7 +16,7 @@ export function PointMenu({ x, y, items, onClose }: { x: number; y: number; item
     const vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
     const w = el.offsetWidth, h = el.offsetHeight;
     setAt({ left: x + w + 8 > vw ? Math.max(8, x - w) : x, top: y + h + 8 > vh ? Math.max(8, y - h) : y });
-    el.querySelector<HTMLElement>("[role=menuitem]")?.focus({ preventScroll: true });
+    el.querySelector<HTMLElement>("[role=menuitem]:not(:disabled)")?.focus({ preventScroll: true });
   }, [x, y]);
   useEffect(() => {
     const down = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && onClose();
@@ -55,21 +55,27 @@ export function PointMenu({ x, y, items, onClose }: { x: number; y: number; item
       className="point-menu fixed z-[70] min-w-[9.5rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
       style={at}
     >
-      {items.map((it) => (
-        <button
-          key={it.label}
-          type="button"
-          role="menuitem"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-            it.onSelect();
-          }}
-          className="flex w-full cursor-default items-center rounded-sm px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-        >
-          {it.label}
-        </button>
-      ))}
+      {items.map((it, i) =>
+        it === "sep" ? (
+          <div key={`sep${i}`} role="separator" className="-mx-1 my-1 h-px bg-border" />
+        ) : (
+          <button
+            key={it.label}
+            type="button"
+            role="menuitem"
+            disabled={it.disabled}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+              it.onSelect();
+            }}
+            className="flex w-full cursor-default items-center gap-6 rounded-sm px-2 py-1.5 text-left text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-45"
+          >
+            {it.label}
+            {it.hint && <span className="ml-auto text-xs tracking-wide text-muted-foreground">{it.hint}</span>}
+          </button>
+        ),
+      )}
     </div>,
     document.body,
   );

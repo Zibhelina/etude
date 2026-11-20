@@ -1,7 +1,7 @@
 // Streaming chat with function tools, for the in-app agent. Two protocols: the Responses API
 // (the user's ChatGPT plan) and OpenAI-compatible Chat Completions (OpenRouter, OpenAI, local servers).
 import { AiError, type AgentEffort, type ChatProvider } from "./ai.ts";
-import { chatGptEndpoints, chatGptFetch, chatGptNativeHost, getChatGptCredentials, failureMessage, ChatGptError, DEFAULT_CHATGPT_MODEL } from "./chatgpt.ts";
+import { chatGptEndpoints, chatGptFetch, chatGptNativeHost, getChatGptCredentials, failureMessage, streamErrorFields, ChatGptError, DEFAULT_CHATGPT_MODEL } from "./chatgpt.ts";
 
 export interface ToolSpec {
   name: string;
@@ -42,6 +42,8 @@ export interface LlmResult {
   model: string;
   ms: number;
   cost?: number;
+  /** What this request held in the context window, when the provider says: its prompt plus its answer. */
+  tokens?: number;
 }
 
 /** Reads a server-sent-events body and calls `on` with every parsed `data:` payload. */
@@ -178,6 +180,7 @@ async function responsesTurn(req: LlmRequest, p: Extract<ChatProvider, { kind: "
   let model = body.model as string;
   const calls = new Map<string, ToolCall>();
   let completed = false;
+  let tokens: number | undefined;
   let failure: Error | null = null;
   try {
     await readSse(
@@ -198,6 +201,7 @@ async function responsesTurn(req: LlmRequest, p: Extract<ChatProvider, { kind: "
           case "response.completed": {
             completed = true;
             if (ev.response?.model) model = ev.response.model;
+            if (ev.response?.usage) tokens = (Number(ev.response.usage.input_tokens) || 0) + (Number(ev.response.usage.output_tokens) || 0) || undefined;
             if (process.env.ETUDE_AGENT_TRACE && ev.response?.usage) process.stderr.write(`[agent] usage ${JSON.stringify(ev.response.usage)}\n`);
             for (const it of ev.response?.output ?? []) {
               if (it?.type === "function_call" && !calls.has(it.call_id)) calls.set(it.call_id, { id: it.call_id, name: it.name, arguments: it.arguments ?? "{}" });
@@ -215,7 +219,7 @@ async function responsesTurn(req: LlmRequest, p: Extract<ChatProvider, { kind: "
             return true;
           }
           case "error":
-            failure = new AiError(failureMessage({ code: ev.code, detail: ev.message, param: ev.param }));
+            failure = new AiError(failureMessage(streamErrorFields(ev)));
             return true;
         }
       },
@@ -227,7 +231,7 @@ async function responsesTurn(req: LlmRequest, p: Extract<ChatProvider, { kind: "
   }
   if (failure) throw failure;
   if (!completed) throw new AiError("the model's stream ended without finishing");
-  return { text, toolCalls: [...calls.values()], model, ms: Date.now() - t0 };
+  return { text, toolCalls: [...calls.values()], model, ms: Date.now() - t0, tokens };
 }
 
 // ---------------------------------------------------------- Chat Completions
@@ -292,6 +296,7 @@ async function chatTurn(req: LlmRequest, p: Extract<ChatProvider, { kind: "opena
   let text = "";
   let model = p.model;
   let cost: number | undefined;
+  let tokens: number | undefined;
   const parts: { id: string; name: string; args: string }[] = [];
   let failure: Error | null = null;
   try {
@@ -304,6 +309,7 @@ async function chatTurn(req: LlmRequest, p: Extract<ChatProvider, { kind: "opena
         }
         if (ev?.model) model = ev.model;
         if (ev?.usage?.cost != null) cost = Number(ev.usage.cost);
+        if (ev?.usage) tokens = (Number(ev.usage.prompt_tokens) || 0) + (Number(ev.usage.completion_tokens) || 0) || tokens;
         const d = ev?.choices?.[0]?.delta;
         if (!d) return;
         if (typeof d.content === "string" && d.content) {
@@ -326,7 +332,7 @@ async function chatTurn(req: LlmRequest, p: Extract<ChatProvider, { kind: "opena
   }
   if (failure) throw failure;
   const toolCalls = parts.filter(Boolean).map((c, i) => ({ id: c.id || `call_${i}_${Date.now()}`, name: c.name, arguments: c.args || "{}" }));
-  return { text, toolCalls, model, ms: Date.now() - t0, cost };
+  return { text, toolCalls, model, ms: Date.now() - t0, cost, tokens };
 }
 
 /** One model turn: streams text through `onText` and returns the text and any tool calls. */

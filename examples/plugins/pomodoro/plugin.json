@@ -1,0 +1,14 @@
+{
+  "etude": "plugin/1",
+  "id": "pomodoro",
+  "name": "Pomodoro",
+  "version": "1.0.0",
+  "author": "Etude",
+  "description": "A focus timer that floats over every screen, folds into a pill, chimes when a phase ends, and adds Ctrl/⌘K commands.",
+  "main": "main.js",
+  "views": {
+    "timer": "timer.html"
+  },
+  "permissions": ["ui.commands", "ui.floating", "notify", "storage"],
+  "platforms": ["desktop", "web"]
+}

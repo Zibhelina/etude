@@ -4,7 +4,8 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { EtudeError, type Etude } from "./engine.ts";
-import { DEFAULT_MARKET, installedEntries, installFile, patchInstall, type InstalledEntry } from "./market.ts";
+import { DEFAULT_MARKET, installedEntries, installedItemIds, installedItems, installFile, installGone, patchInstall, removeInstalledDeck, type InstalledEntry } from "./market.ts";
+import { retryTransient } from "./net-retry.ts";
 
 export const DEFAULT_CLOUD = "https://sync.etude.study";
 
@@ -31,6 +32,8 @@ interface Saved {
   token?: string;
   email?: string;
   accountId?: string;
+  /** This install's device on the server (sharing keeps a keypair per device). */
+  deviceId?: string;
   /** The address of the last emailed sign-in, so a 6-digit code can be redeemed with it. */
   pendingEmail?: string;
   pendingSecond?: PendingSecondStep;
@@ -126,6 +129,24 @@ export class AccountClient {
   email(): string | undefined {
     return this.load().email;
   }
+  /** The signed-in account's id, saved at sign-in (older sign-ins: asked of the server once and kept). */
+  async accountId(): Promise<string> {
+    const s = this.load();
+    if (s.accountId) return s.accountId;
+    const me = await this.json("GET", "/v1/me");
+    if (typeof me?.id !== "string") throw new AccountError("the Etude server didn't say which account this is", 502, "external");
+    this.save({ ...this.load(), accountId: me.id, deviceId: me.device?.id });
+    return me.id;
+  }
+  /** This install's device id on the server, saved at sign-in (older sign-ins: asked of the server once and kept). */
+  async deviceId(): Promise<string> {
+    const s = this.load();
+    if (s.deviceId) return s.deviceId;
+    const me = await this.json("GET", "/v1/me");
+    if (typeof me?.device?.id !== "string") throw new AccountError("the Etude server didn't say which device this is", 502, "external");
+    this.save({ ...this.load(), accountId: me.id, deviceId: me.device.id });
+    return me.device.id;
+  }
 
   setServer(raw: string) {
     const server = raw.trim() ? checkServerUrl(raw) : "";
@@ -136,15 +157,15 @@ export class AccountClient {
   }
 
   /** Adopts a token issued elsewhere (the Sync sign-in) so both share one device. */
-  adopt(server: string, token: string, account: { id?: string; email?: string }) {
+  adopt(server: string, token: string, account: { id?: string; email?: string; device?: { id?: string } }) {
     const s = this.load();
     if (s.token && s.token !== token) return;
-    this.save({ ...s, server: checkServerUrl(server), token, email: account.email, accountId: account.id });
+    this.save({ ...s, server: checkServerUrl(server), token, email: account.email, accountId: account.id, deviceId: account.device?.id });
   }
 
   /** `auth: "optional"` sends the token when signed in (public routes that add `myVote` or hide blocked authors). */
-  async request(method: string, path: string, opts: { body?: unknown; raw?: Uint8Array; type?: string; auth?: boolean | "optional" } = {}): Promise<Response> {
-    const headers: Record<string, string> = {};
+  async request(method: string, path: string, opts: { body?: unknown; raw?: Uint8Array; type?: string; auth?: boolean | "optional"; headers?: Record<string, string> } = {}): Promise<Response> {
+    const headers: Record<string, string> = { ...opts.headers };
     const auth = opts.auth ?? true;
     const token = this.token();
     if (auth === true) {
@@ -161,7 +182,10 @@ export class AccountClient {
     }
     let res: Response;
     try {
-      res = await fetch(this.server() + path, { method, headers, body, signal: AbortSignal.timeout(60_000) });
+      // A dropped connection or refused stream (many transfers on one HTTP/2 connection) gets a few more tries, for
+      // requests that are safe to repeat: everything but POST, and the POSTs of events (the server keeps one per id).
+      const send = () => fetch(this.server() + path, { method, headers, body, signal: AbortSignal.timeout(60_000) });
+      res = method === "POST" && !/\/events$/.test(path) ? await send() : await retryTransient(send);
     } catch (err) {
       throw new AccountError(`couldn't reach ${this.server()}: ${(err as Error).message}`, 502, "offline");
     }
@@ -190,6 +214,7 @@ export class AccountClient {
     const s = this.load();
     delete s.token;
     delete s.accountId;
+    delete s.deviceId;
     this.save(s);
   }
 
@@ -283,7 +308,7 @@ export class AccountClient {
       this.save(rest);
       return { reauth: true, email: r.account.email };
     }
-    this.save({ ...rest, token: r.token, email: r.account.email, accountId: r.account.id });
+    this.save({ ...rest, token: r.token, email: r.account.email, accountId: r.account.id, deviceId: r.account.device?.id });
     return { reauth: false, email: r.account.email };
   }
 
@@ -312,7 +337,7 @@ export class AccountClient {
   async passkeyLoginVerify(body: { challengeId: string; response: unknown }) {
     const signedIn = !!this.token();
     const r = await this.json("POST", "/v1/auth/passkey/login/verify", { ...body, deviceName: defaultDeviceName() }, signedIn);
-    if (!r.reauth && r.token) this.save({ ...this.load(), token: r.token, email: r.account.email, accountId: r.account.id });
+    if (!r.reauth && r.token) this.save({ ...this.load(), token: r.token, email: r.account.email, accountId: r.account.id, deviceId: r.account.device?.id });
     return { reauth: !!r.reauth, email: r.account.email };
   }
 
@@ -375,7 +400,7 @@ export class AccountClient {
       owned = new Set(lib.map((l) => l.listing));
       needs = new Set(lib.filter((l) => l.needsDeliveryConfirmation).map((l) => l.listing));
     }
-    return { ...idx, entries: (idx.entries as Json[]).map((x) => ({ ...x, owned: owned.has(x.listing), needsDeliveryConfirmation: needs.has(x.listing), installed: libraryState(installed[paidId(x.id)], x.version) })) };
+    return { ...idx, entries: (idx.entries as Json[]).map((x) => ({ ...x, owned: owned.has(x.listing), needsDeliveryConfirmation: needs.has(x.listing), installed: libraryState(this.e, installed[paidId(x.id)], x.version) })) };
   }
   checkout = (listing: string) => this.json("POST", "/v1/market/checkout", { listing });
 
@@ -384,25 +409,21 @@ export class AccountClient {
     const changes = this.reconcile(r);
     const installed = installedEntries(this.e);
     return {
-      library: (r.library as Json[]).map((l) => ({ ...l, installed: libraryState(installed[paidId(l.slug)], l.version), installedVersion: installed[paidId(l.slug)]?.version ?? null })),
-      revoked: ((r.revoked ?? []) as Json[]).map((l) => ({ ...l, locked: !!installed[paidId(l.slug)]?.locked })),
+      library: (r.library as Json[]).map((l) => ({ ...l, installed: libraryState(this.e, installed[paidId(l.slug)], l.version), installedVersion: installed[paidId(l.slug)]?.version ?? null })),
+      revoked: (r.revoked ?? []) as Json[],
       changes,
     };
   }
 
   /**
-   * Locks bought decks the server says were refunded or disputed: their cards are suspended (history kept) and the
-   * install record remembers which, so buying the deck again restores exactly those. Only the server's own word counts:
-   * being offline, signed out or on another account changes nothing here.
+   * Takes bought decks the server says were refunded or disputed out of this collection: their items, cards, history,
+   * card types and media (`removeInstalledDeck`). Buying one again installs it afresh. Decks that 3.1.2 to 3.2.0 locked
+   * (cards suspended) and that were bought again get those cards back. Only the server's own word counts: being
+   * offline, signed out or on another account changes nothing here.
    */
   reconcile(lib: { library?: Json[]; revoked?: Json[] }) {
     const installed = installedEntries(this.e);
-    const out = { locked: [] as string[], unlocked: [] as string[] };
-    const ids = (rec: InstalledEntry) => {
-      if (rec.items) return rec.items;
-      const names = rec.ids ?? [];
-      return names.flatMap((n) => this.e.db.all("SELECT i.id FROM items i JOIN decks d ON d.id = i.deck_id WHERE d.name = ? OR d.name LIKE ?", n, `${n}::%`).map((r) => r.id as string));
-    };
+    const out = { removed: [] as string[], unlocked: [] as string[] };
     const cardsOf = (items: string[], suspended: 0 | 1) => {
       const out: number[] = [];
       for (let i = 0; i < items.length; i += 400) {
@@ -412,20 +433,16 @@ export class AccountClient {
       return out;
     };
     for (const r of lib.revoked ?? []) {
-      const id = paidId(r.slug);
-      const rec = installed[id];
-      if (!rec || rec.locked) continue;
-      const cards = cardsOf(ids(rec), 0);
-      if (cards.length) this.e.setSuspended(cards, true);
-      patchInstall(this.e, id, { locked: { at: new Date().toISOString(), reason: String(r.reason ?? "revoked"), cards } });
-      out.locked.push(rec.name);
+      const rec = installed[paidId(r.slug)];
+      if (!rec || !removeInstalledDeck(this.e, paidId(r.slug))) continue;
+      out.removed.push(rec.name);
     }
     for (const l of lib.library ?? []) {
       const id = paidId(l.slug);
       const rec = installed[id];
       if (!rec?.locked) continue;
       const mine = new Set(rec.locked.cards);
-      const back = cardsOf(ids(rec), 1).filter((c) => mine.has(c));
+      const back = cardsOf(installedItems(this.e, rec), 1).filter((c) => mine.has(c));
       if (back.length) this.e.setSuspended(back, false);
       patchInstall(this.e, id, { locked: undefined });
       out.unlocked.push(rec.name);
@@ -458,8 +475,9 @@ export class AccountClient {
     const pack = await res.json();
     const version = res.headers.get("x-etude-version") ?? lib.version ?? "1";
     const out = installFile(this.e, { etudeMarket: 1, kind: "deck", id: paidId(lib.slug), name: lib.name, author: "Etude Market", description: "", tags: [], version, updated: version, content: pack } as any, opts);
-    // Which items and card types are paid: exports leave them out and a refund locks exactly these.
-    if (!opts.dryRun) patchInstall(this.e, paidId(lib.slug), { listing: lib.listing, items: (pack.items ?? []).map((i: Json) => String(i.id)), types: (pack.types ?? []).map((t: Json) => String(t.id)) });
+    // Which items and card types are paid: exports leave them out and a refund locks exactly these. Items Sync had
+    // deleted came in under fresh ids, and those are the ones listed.
+    if (!opts.dryRun) patchInstall(this.e, paidId(lib.slug), { listing: lib.listing, items: installedItemIds(pack.items ?? [], out.remap), types: (pack.types ?? []).map((t: Json) => String(t.id)) });
     // The server is up (it just sent the pack), so waiting for the ping costs nothing; it never fails the install.
     if (!opts.dryRun && out.result !== "unchanged" && /^lst_/.test(lib.listing)) await this.marketDownload(`paid/${lib.listing}`);
     return out;
@@ -553,6 +571,11 @@ export class AccountClient {
   reviewQueue = () => this.json("GET", "/v1/admin/review");
   approve = (id: string, notes?: string) => this.json("POST", `/v1/admin/listings/${encodeURIComponent(id)}/approve`, notes ? { notes } : {});
   reject = (id: string, notes: string) => this.json("POST", `/v1/admin/listings/${encodeURIComponent(id)}/reject`, { notes });
+  /**
+   * Sells a deck Etude sells itself in the iPhone app too, as this App Store non-consumable product (App Review
+   * 3.1.3(b)); `null` stops. The App Store sets the price. Only house listings qualify.
+   */
+  appleProduct = (id: string, productId: string | null) => this.json("PUT", `/v1/admin/listings/${encodeURIComponent(id)}/apple`, { productId });
 
   private packOf(deck: string, name?: string) {
     if (!deck?.trim()) throw new AccountError("choose a deck", 400, "invalid");
@@ -585,8 +608,9 @@ export function pingFreeInstall(e: Etude, out: { entry: { kind: string; id: stri
   return accountFor(e).marketDownload(key);
 }
 
-function libraryState(rec: { version: string } | undefined, version: string | null): "installed" | "update" | null {
-  if (!rec) return null;
+/** Like `installState`: a deck Sync took away from this collection reads as not installed, so it can be installed again. */
+function libraryState(e: Etude, rec: InstalledEntry | undefined, version: string | null): "installed" | "update" | null {
+  if (!rec || installGone(e, rec)) return null;
   return version && rec.version !== version ? "update" : "installed";
 }
 

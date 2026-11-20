@@ -4,7 +4,7 @@
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import type { UtilityProcess } from "electron";
-import { choose, collectionPath, freePort, lastError, probe, usualPort } from "./find.ts";
+import { choose, collectionPath, freePort, lastError, probe, probeAt, usualPort } from "./find.ts";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -15,6 +15,8 @@ export interface StartOptions {
   log(line: string): void;
   /** What the engine prints. */
   output(chunk: string): void;
+  /** Another computer's Etude to open when it answers (its collection, its agents, its chats); else one starts here. */
+  remote?: string | null;
 }
 
 export class Engine {
@@ -35,9 +37,14 @@ export class Engine {
     this.child = child;
   }
 
-  /** False when the app uses an engine started elsewhere (a terminal), which it neither watches nor stops. */
+  /** False when the app uses an engine started elsewhere (a terminal, another computer), which it doesn't stop. */
   get owned(): boolean {
     return !!this.child;
+  }
+
+  /** True when the engine is another computer's. */
+  get remote(): boolean {
+    return !/^http:\/\/127\.0\.0\.1:/.test(this.origin);
   }
 
   /** A URL in the engine, carrying the password; the web app keeps it for its API calls. */
@@ -57,6 +64,11 @@ export class Engine {
   }
 
   static async start(o: StartOptions): Promise<Engine> {
+    if (o.remote) {
+      const there = await probeAt(o.remote);
+      if (there.kind === "etude") return new Engine(o.remote, null, there.db, there.version, null);
+      o.log(`${o.remote} doesn't answer (${there.kind}); using this computer's own collection`);
+    }
     const collection = collectionPath(o.env);
     const usual = usualPort(o.env);
     const found = await probe(usual);

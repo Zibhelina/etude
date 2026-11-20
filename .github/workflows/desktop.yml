@@ -4,6 +4,8 @@ name: Desktop app
 # outside the repo (desktop/smoke.ts). On a pull request the installers are kept as artifacts to try.
 # On a version tag they go into a draft release, published by hand after trying it (see the release
 # routine in the plan); only then do downloads and the apps' updaters see it.
+# Releases come from the public repository, where these runners are free. The private copy of this
+# repository pays for every minute past a small monthly credit, so there it only runs by hand.
 
 on:
   pull_request:
@@ -17,6 +19,7 @@ permissions:
 
 jobs:
   build:
+    if: github.repository == 'Zibhelina/etude' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:

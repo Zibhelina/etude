@@ -1,4 +1,5 @@
 import type { Db, Row } from "../db.ts";
+import { ensureNotesSchema } from "../notes-schema.ts";
 
 export type Stamp = [number, number, string];
 export function tick(last: Stamp, remote?: Stamp, now = Date.now()): Stamp {
@@ -8,8 +9,12 @@ export function tick(last: Stamp, remote?: Stamp, now = Date.now()): Stamp {
 }
 export const compare = (a: Stamp, b: Stamp) => a[0] - b[0] || a[1] - b[1] || a[2].localeCompare(b[2]);
 export type Change = { v: 1; table: string; key: string; stamp: Stamp; fields: Record<string, unknown>; deleted?: boolean };
-export const TABLES = ["presets", "decks", "types", "schedulers", "type_folders", "type_placement", "items", "cards", "attempts", "reviews", "tag_meta", "settings", "type_assets"];
+export const TABLES = ["presets", "decks", "types", "schedulers", "type_folders", "type_placement", "items", "cards", "attempts", "reviews", "tag_meta", "settings", "type_assets", "notes"];
 const UUID_TABLES = ["decks", "cards", "attempts", "reviews"];
+/** The note columns a write to which syncs. When this device last opened a note is its own. */
+const NOTE_FIELDS = ["parent_id", "title", "icon", "doc", "text", "position", "archived", "created", "updated", "look", "kind", "scene", "file", "pinned"];
+/** Notes whose body is text kept as written; every other kind's text is worked out from its body on each device. */
+const CONTENT_KINDS = ["file", "web"];
 /** The card columns that sync; the schedule is replayed from reviews instead. */
 const CARD_FIELDS = ["item_id", "face", "suspended", "buried_until", "sync_reset", "sync_due", "sync_due_at"];
 const q = (s: string) => `'${s.replaceAll("'", "''")}'`;
@@ -18,7 +23,7 @@ const id = (s: string) => `"${s}"`;
 const REF = "field IN ('/deck_id','/preset_id','/item_id','/card_id','/review_id','/attempt_id','/type')";
 /** Fields a card's schedule depends on, by table. A change to one is recorded with its key, so the projection replays the cards it reaches. */
 export const SCHEDULING: Record<string, string[]> = { decks: ["/name", "/preset_id", "/config"], presets: ["/config"], items: ["/deck_id", "/type", "/created"], types: ["/def/scheduler", "/def/schedulerOptions"], settings: ["/value/dayStartHour"] };
-const SETTINGS = new Set(["dayStartHour", "learnAheadMinutes", "theme", "themes", "typePrefs", "fun", "minimi","minimiFace", "accent", "avatar", "banner", "name", "vim"]);
+const SETTINGS = new Set(["dayStartHour", "learnAheadMinutes", "theme", "themes", "typePrefs", "fun", "minimi","minimiFace", "accent", "avatar", "banner", "name", "vim", "sounds", "holiday", "holidayDecor", "holidaySnow", "agentProfiles", "agentProfile", "hiddenAuthors"]);
 export const safeSettings = (s: any) => Object.fromEntries(Object.entries(s ?? {}).filter(([k]) => SETTINGS.has(k)));
 
 function keyExpr(table: string, prefix: string) {
@@ -58,6 +63,9 @@ export function install(db: Db) {
     CREATE INDEX IF NOT EXISTS sync_registers_ref ON sync_registers(tbl,field,value) WHERE ${REF};
     CREATE TABLE IF NOT EXISTS sync_replay (card TEXT PRIMARY KEY, ts TEXT, review TEXT, row TEXT NOT NULL);
     INSERT OR IGNORE INTO sync_control(id,device) VALUES(1,lower(hex(randomblob(16))));`);
+  // Notes joined Sync after collections already synced: one that was set up before gets its notes sent once.
+  ensureNotesSchema(db);
+  const notesLate = !db.get("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='sync_notes_insert'") && !!db.get("SELECT 1 FROM sync_meta WHERE key='bootstrapped'");
   for (const table of UUID_TABLES) {
     if (!db.all(`PRAGMA table_info(${table})`).some(r => r.name === "sync_id")) db.sql.exec(`ALTER TABLE ${table} ADD COLUMN sync_id TEXT`);
     db.run(`UPDATE ${table} SET sync_id=${table === "cards" ? "json_array(item_id,face)" : "lower(hex(randomblob(16)))"} WHERE sync_id IS NULL`);
@@ -85,12 +93,13 @@ export function install(db: Db) {
       const selectRow = uid && op === "INSERT" ? rowExpr(db, table, "s") : row;
       const selectKey = uid && op === "INSERT" ? "s.sync_id" : key;
       const from = uid && op === "INSERT" ? ` FROM ${table} s WHERE s.id=NEW.id` : "";
-      db.sql.exec(`CREATE TRIGGER IF NOT EXISTS sync_${table}_${op.toLowerCase()} AFTER ${op}${table === "cards" && op === "UPDATE" ? ` OF ${CARD_FIELDS.join(",")}` : ""} ON ${table}
+      db.sql.exec(`CREATE TRIGGER IF NOT EXISTS sync_${table}_${op.toLowerCase()} AFTER ${op}${table === "cards" && op === "UPDATE" ? ` OF ${CARD_FIELDS.join(",")}` : table === "notes" && op === "UPDATE" ? ` OF ${NOTE_FIELDS.join(",")}` : ""} ON ${table}
         WHEN (SELECT applying FROM sync_control WHERE id=1)=0 AND ${op === "UPDATE" && ["types","schedulers"].includes(table) ? "(NEW.builtin=0 OR OLD.builtin=0)" : allowed(table, p)} ${uid && op === "UPDATE" ? "AND OLD.sync_id IS NOT NULL" : ""} ${op === "DELETE" && ["attempts","reviews"].includes(table) ? "AND EXISTS(SELECT 1 FROM cards WHERE id=OLD.card_id)" : ""}
         BEGIN ${assign} UPDATE sync_control SET counter=CASE WHEN wall>=CAST(unixepoch('subsec')*1000 AS INTEGER) THEN counter+1 ELSE 0 END,wall=MAX(wall,CAST(unixepoch('subsec')*1000 AS INTEGER)) WHERE id=1;
         INSERT INTO sync_outbox(tbl,key,old,value,wall,counter) SELECT ${q(table)},${selectKey},${op === "UPDATE" ? rowExpr(db, table, "OLD") : "NULL"},${op === "DELETE" ? "NULL" : selectRow},(SELECT wall FROM sync_control WHERE id=1),(SELECT counter FROM sync_control WHERE id=1)${from}; END;`);
     }
   }
+  if (notesLate) db.run(`INSERT INTO sync_outbox(tbl,key,old,value) SELECT 'notes',s.id,NULL,${rowExpr(db, "notes", "s")} FROM notes s`);
 }
 
 export function muted<T>(db: Db, fn: () => T): T {
@@ -120,14 +129,22 @@ function normal(table: string, raw: Row) {
     delete r.title; delete r.search;
   }
   if (table === "cards") for (const k of Object.keys(r)) if (!CARD_FIELDS.includes(k)) delete r[k];
+  if (table === "notes") {
+    for (const k of Object.keys(r)) if (!NOTE_FIELDS.includes(k)) delete r[k];
+    if (!CONTENT_KINDS.includes(r.kind)) delete r.text;
+  }
   if (table === "reviews") { delete r.card_before; delete r.due_after; delete r.state; }
   return flatten(r);
 }
-/** Merges an event into the registers. A key whose registers changed is marked for projection in the same transaction. */
+/**
+ * Merges an event into the registers. A key whose registers changed is marked for projection in the same transaction.
+ * An event for a table this version doesn't know (a newer app syncs something more) is kept in the registers like any
+ * other: the projection leaves it alone, and the version that knows the table builds it from there (`fingerprint`).
+ */
 export function apply(db: Db, event: Change) {
-  if (event.v !== 1 || !TABLES.concat("media", "blob").includes(event.table) || !Array.isArray(event.stamp) || event.stamp.length !== 3) throw new Error("unsupported sync event");
+  if (event.v !== 1 || typeof event.table !== "string" || !event.table || typeof event.key !== "string" || !event.fields || typeof event.fields !== "object" || !Array.isArray(event.stamp) || event.stamp.length !== 3) throw new Error("unsupported sync event");
   let changed = false;
-  const marks = new Set<string>(), watched = SCHEDULING[event.table];
+  const marks = new Set<string>(), watched = Object.hasOwn(SCHEDULING, event.table) ? SCHEDULING[event.table] : undefined;
   if (event.deleted) {
     const old = db.get("SELECT stamp FROM sync_deleted WHERE tbl=? AND key=?", event.table, event.key);
     if (!old || compare(event.stamp, JSON.parse(old.stamp)) > 0) { db.run("INSERT INTO sync_deleted VALUES(?,?,?) ON CONFLICT(tbl,key) DO UPDATE SET stamp=excluded.stamp", event.table, event.key, JSON.stringify(event.stamp)); changed = true; }
@@ -152,9 +169,32 @@ export function localEvent(db: Db, table: string, key: string, fields: Record<st
   if (!captured) db.run("UPDATE sync_control SET wall=?,counter=? WHERE id=1", stamp[0], stamp[1]);
   return eventId;
 }
+/**
+ * Notes in a shared space, which the space keeps in step on every member's devices (its own merge, block by block):
+ * the space's notes and the notes under its root here.
+ */
+function sharedNotes(db: Db): (id: string) => boolean {
+  if (!db.get("SELECT 1 FROM sqlite_master WHERE type='table' AND name='share_spaces'")) return () => false;
+  const known = new Set(db.all("SELECT note_id FROM share_state").map(r => r.note_id as string));
+  const roots = new Set(db.all("SELECT root_id FROM share_spaces WHERE root_id IS NOT NULL").map(r => r.root_id as string));
+  const parent = (id: string) => db.get("SELECT parent_id FROM notes WHERE id=?", id)?.parent_id as string | null | undefined;
+  return id => {
+    for (let at: string | null | undefined = id, n = 0; at && n < 256; at = parent(at), n++) if (known.has(at) || roots.has(at)) return true;
+    return false;
+  };
+}
+/** Many writes to one note between syncs (an editor saves every few seconds) go up as one change: from its first value to its last. */
+function coalesceNotes(rows: Row[]): Row[] {
+  const last = new Map<string, number>(), first = new Map<string, Row>();
+  rows.forEach((r, i) => { if (r.tbl === "notes") { last.set(r.key, i); if (!first.has(r.key)) first.set(r.key, r); } });
+  return rows.flatMap((r, i) => r.tbl !== "notes" ? [r] : last.get(r.key) !== i ? [] : [{ ...r, old: first.get(r.key)!.old }]);
+}
 export function drain(db: Db) {
   db.tx(() => {
-    for (const r of db.all("SELECT * FROM sync_outbox ORDER BY seq")) {
+    const outbox = db.all("SELECT * FROM sync_outbox ORDER BY seq");
+    const shared = outbox.some(r => r.tbl === "notes") ? sharedNotes(db) : () => false;
+    for (const r of coalesceNotes(outbox)) {
+      if (r.tbl === "notes" && shared(r.key)) continue;
       const next = r.value ? normal(r.tbl, JSON.parse(r.value)) : {};
       const old = r.old ? normal(r.tbl, JSON.parse(r.old)) : {};
       const fields: Record<string, unknown> = {};
@@ -211,7 +251,34 @@ export function rowFor(db: Db, table: string, key: string): Row | null {
   for (const r of regs) assign(row, r.field, r.value);
   return row;
 }
+/**
+ * Whether a key of `table` is deleted for good: tombstoned, or deleted here and waiting in the outbox (the next drain
+ * tombstones it). Null when Sync was never set up on this collection, which has no tombstones.
+ */
+export function deletedKeys(db: Db, table: string): ((key: string) => boolean) | null {
+  if (!db.get("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sync_deleted'")) return null;
+  const pending = new Set(db.all("SELECT key FROM sync_outbox WHERE tbl=? AND value IS NULL", table).map(r => r.key as string));
+  return key => pending.has(key) || !!db.get("SELECT 1 FROM sync_deleted WHERE tbl=? AND key=?", table, key);
+}
 /** Keys of `table` whose register `field` points at `target`. */
 export function referring(db: Db, table: string, field: string, target: string): string[] {
   return db.all(`SELECT key FROM sync_registers WHERE tbl=? AND field=? AND value=? AND ${REF}`, table, field, JSON.stringify(target)).map(r => r.key);
+}
+/**
+ * Media files (paths in the media folder) deleted here on purpose, `media prune`: each one Sync knows is marked
+ * deleted for the other devices with a `/deleted` register, and this device forgets the version it last had in step,
+ * so the file coming back later reads as added again (`/deleted` false). A register rather than a tombstone, so the
+ * same name (under `files/`, the same bytes) can live again; and a field an Etude from before it doesn't read, so
+ * such a device goes on syncing as it did and keeps its own copy. Nothing happens on a collection that never synced.
+ */
+export function mediaDeleted(db: Db, files: string[]) {
+  if (!db.get("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sync_control'")) return;
+  const seen = !!db.get("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sync_media_seen'");
+  db.tx(() => {
+    for (const file of files) {
+      const r = rowFor(db, "media", file);
+      if (r && typeof r.hash === "string" && r.deleted !== true) localEvent(db, "media", file, { "/deleted": true });
+      if (seen) db.run("DELETE FROM sync_media_seen WHERE file=?", file);
+    }
+  });
 }

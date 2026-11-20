@@ -2,6 +2,7 @@
 // pick from (components/minimi-faces.tsx). A localStorage copy avoids a flash of the default on load.
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { holidayArt, useHoliday } from "@/lib/holiday";
 
 const files = import.meta.glob("@/assets/minimi/faces/*.webp", { eager: true, import: "default" }) as Record<string, string>;
 
@@ -9,7 +10,8 @@ const files = import.meta.glob("@/assets/minimi/faces/*.webp", { eager: true, im
 export const FACES = ["deadpan", "wink", "proud", "smug", "hi", "wand", "close", "curious", "reading", "sleepy", "shocked", "thinking"] as const;
 export type FaceId = (typeof FACES)[number];
 export const FACE_NAMES: Record<FaceId, string> = { deadpan: "Deadpan", wink: "Wink", proud: "Proud", smug: "Smug", hi: "Hi", wand: "Wand", close: "Close", curious: "Curious", reading: "Reading", sleepy: "Sleepy", shocked: "Shocked", thinking: "Thinking" };
-export const faceSrc = (id: FaceId): string => files[Object.keys(files).find((k) => k.endsWith(`/${id}.webp`))!];
+// In his holiday outfit while the holidays are on (lib/holiday).
+export const faceSrc = (id: FaceId): string => holidayArt(files[Object.keys(files).find((k) => k.endsWith(`/${id}.webp`))!]);
 
 const KEY = "etude.minimiFace";
 const EVENT = "etude:minimi-face";
@@ -43,6 +45,7 @@ export async function loadMinimiFace() {
 }
 
 export function useMinimiFaceId(): FaceId {
+  useHoliday(); // the face's picture changes with the holiday outfit
   const [id, setId] = useState(face);
   useEffect(() => {
     const h = () => setId(face);

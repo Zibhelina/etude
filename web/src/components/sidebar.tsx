@@ -12,11 +12,11 @@ import { account } from "@/lib/account";
 import { useMyName } from "@/lib/avatar";
 import { MyAvatar } from "@/components/avatar";
 import { openNoteGraph } from "@/components/note-graph";
-import { etudeFetch } from "@/lib/transport";
+import { etudeFetch, isLocal } from "@/lib/transport";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
-import { SB_DEFAULT, SB_FOLD, SB_RAIL, SB_MAX, SB_MIN, runNotesAction, setNotesPagesOpen, setNotesSlot, setSidebarWidth, useNotesPagesOpen, useSidebarWidth, type NotesAction } from "@/lib/sidebar-slot";
+import { SB_DEFAULT, SB_FOLD, SB_RAIL, SB_MAX, SB_MIN, runNotesAction, setNotesPagesOpen, setNotesSlot, setNotesView, setSidebarWidth, useNotesPagesOpen, useNotesView, useSidebarWidth, type NotesAction } from "@/lib/sidebar-slot";
 
 type Item = { to: string; label: string; beta?: boolean; icon: (p: { className?: string }) => React.ReactNode; match(p: string): boolean };
 
@@ -25,7 +25,7 @@ export const NAV_GROUPS: { label: string; items: Item[] }[] = [
     label: "Study",
     items: [
       { to: "/", label: "Library", icon: LibraryIcon, match: (p) => p === "/" || p === "/deck" },
-      { to: "/notes", label: "Notes", beta: true, icon: NotesIcon, match: (p) => p === "/notes" },
+      { to: "/notes", label: "Notebook", icon: NotesIcon, match: (p) => p === "/notes" },
       { to: "/browse", label: "Browse", icon: BrowseIcon, match: (p) => p === "/browse" },
       { to: "/stats", label: "Stats", icon: StatsIcon, match: (p) => p === "/stats" },
       { to: "/archive", label: "Archive", icon: ArchiveIcon, match: (p) => p === "/archive" },
@@ -42,6 +42,8 @@ export const NAV_GROUPS: { label: string; items: Item[] }[] = [
 
 const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 export const SIDEBAR_KEY = mac ? "⌘[" : "Ctrl+[";
+export const SIDEBAR_OPEN_KEY = mac ? "⌘]" : "Ctrl+]";
+export const SIDEBAR_HIDE_KEY = mac ? "⌘<" : "Ctrl+<";
 
 /**
  * Hover help in a rail, nothing when the label is already showing. The Tooltip stays mounted either way (only its
@@ -63,24 +65,32 @@ function Tip({ show, label, children }: { show: boolean; label: React.ReactNode;
 // into the rail, drag the rail out and it opens again; double-click the edge for the usual width. On Notes your
 // pages hang under the Notes row (Notes portals its tree into the slot), and the other tabs come after them: with a
 // long tree you scroll the sidebar down to reach them.
-export function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed: boolean; onToggle(): void }) {
+export function Sidebar({ path, mode, onMode }: { path: string; mode: "open" | "rail" | "none"; onMode(m: "open" | "rail" | "none"): void }) {
+  const collapsed = mode !== "open";
+  const none = mode === "none";
+  const onToggle = () => onMode(collapsed ? "open" : "rail");
   const hide = collapsed ? { "aria-hidden": true, tabIndex: -1 } : {};
   const width = useSidebarWidth();
   const pagesOpen = useNotesPagesOpen();
   const onNotes = path === "/notes";
-  const showPages = onNotes && pagesOpen && !collapsed;
+  const showPages = pagesOpen && !collapsed;
+  // Notes' Pages · Chats, at the top. On Chats the sidebar is only the chats: no Library, Notebook and the rest.
+  const notesView = useNotesView();
+  const chatsOnly = showPages && notesView === "chats";
   const [drag, setDrag] = useState<number | null>(null);
-  const shown = drag ?? (collapsed ? SB_RAIL : width);
+  const shown = drag ?? (none ? 0 : collapsed ? SB_RAIL : width);
   return (
     <aside
       aria-label="Main"
       data-shell-sidebar
       data-collapsed={(drag === null ? collapsed : drag < SB_FOLD) || undefined}
+      data-none={(none && drag === null) || undefined}
+      inert={(none && drag === null) || undefined}
       data-resizing={drag !== null || undefined}
       style={{ width: shown, ["--sbw" as string]: `${drag === null ? width : Math.max(SB_MIN, drag)}px` }}
       className="shell-sb sticky top-0 hidden h-dvh shrink-0 flex-col overflow-hidden bg-sidebar px-2.5 py-3.5 desktop:flex"
     >
-      <ResizeGrip collapsed={collapsed} width={width} onToggle={onToggle} onDrag={setDrag} />
+      {!none && <ResizeGrip collapsed={collapsed} width={width} onToggle={onToggle} onDrag={setDrag} />}
       <div className="relative mb-3.5 h-10 shrink-0">
         <button {...hide} onClick={() => navigate("/")} aria-label="Etude, go to Library" className="sb-fade absolute inset-y-0 left-0 w-[160px] rounded-md pl-3 text-left outline-ring focus-visible:outline-2">
           <Wordmark className="text-[1.45rem] leading-none whitespace-nowrap" />
@@ -89,7 +99,7 @@ export function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed
           <TooltipTrigger asChild>
             <button
               onClick={onToggle}
-              aria-label={collapsed ? "Show sidebar" : "Hide sidebar"}
+              aria-label={collapsed ? "Show sidebar" : "Fold sidebar"}
               aria-expanded={!collapsed}
               className="sb-toggle absolute top-0 left-0 flex size-10 items-center justify-center rounded-[10px] text-muted-foreground transition-colors outline-ring hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2"
             >
@@ -97,13 +107,24 @@ export function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed
             </button>
           </TooltipTrigger>
           <TooltipContent side="right">
-            {collapsed ? "Show sidebar" : "Hide sidebar"} <span className="opacity-60">[ · {SIDEBAR_KEY}</span>
+            {collapsed ? <>Show sidebar <span className="opacity-60">{SIDEBAR_OPEN_KEY}</span></> : <>Fold sidebar <span className="opacity-60">{SIDEBAR_KEY}</span></>}
           </TooltipContent>
         </Tooltip>
       </div>
 
+      {showPages && (
+        <div className="nsb-switch sb-fade shrink-0" role="tablist" aria-label="Show in the sidebar">
+          {(["pages", "chats"] as const).map((v) => (
+            <button key={v} type="button" role="tab" aria-selected={notesView === v} className={cn(notesView === v && "is-on")} onClick={() => setNotesView(v)} data-notes-view={v}>
+              {v === "pages" ? "Pages" : "Chats"}
+            </button>
+          ))}
+        </div>
+      )}
+
       <nav className="sb-nav -mx-2.5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-2.5">
-        {NAV_GROUPS.map((g, gi) => (
+        {chatsOnly && <div ref={setNotesSlot} data-notes-slot className="sb-pages shrink-0" />}
+        {!chatsOnly && NAV_GROUPS.map((g, gi) => (
           <div key={g.label} className="flex flex-col gap-0.5">
             {/* Open: the group's title. Rail: nothing above the first group, a small gap above the others. */}
             <div className={cn("sb-group shrink-0 overflow-hidden", gi === 0 && "sb-group-first")}>
@@ -124,7 +145,7 @@ export function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed
                   }}
                   aria-label={n.label}
                   aria-current={on ? "page" : undefined}
-                  aria-expanded={isNotes && onNotes && !collapsed ? pagesOpen : undefined}
+                  aria-expanded={isNotes && !collapsed ? pagesOpen : undefined}
                   className={cn(
                     "sb-item flex h-10 w-full shrink-0 items-center gap-3 rounded-[10px] px-4 text-[14.5px] whitespace-nowrap text-muted-foreground transition-colors outline-ring hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2",
                     on && "font-[650] text-foreground",
@@ -158,6 +179,13 @@ export function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed
   );
 }
 
+/** With no sidebar, the window's left edge: hover shows a sliver, a click brings the rail back. */
+export function SidebarEdge({ onMode }: { onMode(m: "open" | "rail" | "none"): void }) {
+  return (
+    <button type="button" className="sb-edge" aria-label={`Show the sidebar (${SIDEBAR_HIDE_KEY})`} title={`Show the sidebar · ${SIDEBAR_HIDE_KEY}`} onClick={() => onMode("rail")} />
+  );
+}
+
 /** Right-click Notes: what used to be the buttons on its row. From another tab, Notes opens and then does it. */
 function NotesMenu({ pagesOpen, children }: { pagesOpen: boolean; children: React.ReactElement }) {
   const run = (a: NotesAction) => {
@@ -174,12 +202,15 @@ function NotesMenu({ pagesOpen, children }: { pagesOpen: boolean; children: Reac
           New page <span className="ml-auto text-[12px] text-muted-foreground">{mac ? "⌘⌥N" : "Ctrl+Alt+N"}</span>
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => run("new-canvas")}>New canvas</ContextMenuItem>
+        <ContextMenuItem onSelect={() => run("new-web")}>New web file</ContextMenuItem>
+        <ContextMenuItem onSelect={() => run("new-kanban")}>New kanban</ContextMenuItem>
         <ContextMenuItem onSelect={() => run("new-file")}>New file</ContextMenuItem>
         <ContextMenuItem onSelect={() => run("new-folder")}>New folder</ContextMenuItem>
         <ContextMenuItem onSelect={() => run("add-pdf")}>Add a PDF…</ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => run("import-md")}>Import Markdown or code files…</ContextMenuItem>
         <ContextMenuItem onSelect={() => run("import-vault")}>Import a folder (Obsidian vault)…</ContextMenuItem>
+        {!isLocal() && <ContextMenuItem onSelect={() => run("open-folder")}>Open a folder from this computer…</ContextMenuItem>}
         <ContextMenuSeparator />
         <ContextMenuItem
           onSelect={() => {

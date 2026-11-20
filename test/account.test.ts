@@ -2,16 +2,20 @@ import { tmpdir } from "node:os";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { Etude } from "../src/core/engine.ts";
 import { accountFor, AccountError, checkServerUrl, paidId, signInCode } from "../src/core/account.ts";
 import { syncFor } from "../src/core/sync/client.ts";
+import { patchInstall } from "../src/core/market.ts";
 import { agentRefusal } from "../src/core/agent-guard.ts";
 import { COMMANDS } from "../src/cli/registry.ts";
+import { run } from "../src/cli/run.ts";
 import { createVault } from "../src/core/sync/crypto.ts";
 import "../src/cli/commands/index.ts";
+
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
 /** Just enough of etude-cloud for the client: sign-in, me, library, pack download, deletion. */
 function stub() {
@@ -20,6 +24,7 @@ function stub() {
   let version = "1.0.0";
   const calls: string[] = [];
   const verifyBodies: any[] = [];
+  const appleBodies: any[] = [];
   let fresh = true;
   let vaultKeys: unknown = null;
   let refunded = false;
@@ -57,6 +62,14 @@ function stub() {
       return vaultKeys ? send(200, vaultKeys, { etag: '"keys"' }) : send(404, { error: { code: "no_keys", message: "none" } });
     }
     if (path === "/v1/auth/logout") return tokens.delete(auth), send(200, { ok: true });
+    // Admin: a house listing's App Store product (etude-cloud PUT /v1/admin/listings/:id/apple).
+    if (path === "/v1/admin/listings/lst_1/apple" && req.method === "PUT") {
+      appleBodies.push(body);
+      if (!fresh) return send(403, { error: { code: "reauth_required", message: "Sign in again to approve, reject, hide or refund as an admin." } });
+      if (body.productId === "study.etude.sync.monthly") return send(409, { error: { code: "sync_product", message: "That's an Etude Sync product, not a deck." } });
+      return send(200, { listing: "lst_1", appleProductId: body.productId ?? null });
+    }
+    if (path === "/v1/admin/listings/lst_creator/apple" && req.method === "PUT") return send(409, { error: { code: "not_house_listing", message: "Only decks Etude sells itself are sold in the iPhone app." } });
     // A creator from before direct charges: no usable Stripe account until they set up again.
     if (path === "/v1/creator" && req.method === "GET") return send(200, { country: "CA", displayName: "Old", stripeAccount: null, chargesEnabled: false, payoutsEnabled: false, detailsSubmitted: false, setupRequired: true });
     // Selling needs two-step sign-in, which this account doesn't have.
@@ -67,12 +80,21 @@ function stub() {
   return {
     calls,
     verifyBodies,
+    appleBodies,
     expireSignin() { fresh = false; },
     setVaultKeys(keys: unknown) { vaultKeys = keys; },
     refund(on = true) { refunded = on; },
     bump(next: string) {
       version = next;
       pack = { ...pack, items: [...pack.items, { id: "p2", type: "basic", deck: "Pharm", fields: { front: "Beta blocker ending", back: "-olol" } }] };
+    },
+    /** A card type of the deck's own and an item with a picture, in a subdeck. */
+    extras() {
+      pack = {
+        ...pack,
+        types: [{ id: "pharm-card", name: "Pharm card", fields: [{ name: "q", kind: "markdown" }], grader: { kind: "self" }, template: { html: "<p>{{q}}</p>" } }],
+        items: [...pack.items, { id: "p3", type: "pharm-card", deck: "Pharm::Pictures", fields: { q: `data:image/png;base64,${PNG}` } }],
+      };
     },
     async start() {
       await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
@@ -299,7 +321,129 @@ test("account: a creator from before direct charges reads as setupRequired, and 
   }
 });
 
-test("account: a bought deck stays out of exports; a refund locks its cards (history kept) and buying again restores exactly those", async () => {
+test("account: a bought deck stays out of exports; a refund takes it out of the collection with its card type and media, and buying again installs it afresh", async () => {
+  const dir = mkdtempSync(join((process.env.TMPDIR ?? tmpdir()), "account-"));
+  const s = stub();
+  const url = await s.start();
+  const e = await Etude.open(join(dir, "etude.db"), { home: join(dir, "home") });
+  try {
+    const a = accountFor(e);
+    a.setServer(url);
+    await a.signin("a@example.test");
+    await a.verify("good-code");
+    s.bump("1.1.0");
+    s.extras();
+    await a.install("lst_1");
+    const rec = () => (e.db.setting<any>("market", {}).installed ?? {})[paidId("pharm")];
+    assert.deepEqual([rec().listing, rec().items, rec().types], ["lst_1", ["p1", "p2", "p3"], ["pharm-card"]]);
+    const picture = String(JSON.parse(e.db.get("SELECT fields FROM items WHERE id = 'p3'")!.fields as string).q);
+    assert.match(picture, /^\/media\/files\/[0-9a-f]{64}\.png$/);
+    const pictureFile = join(e.mediaDir, picture.slice("/media/".length));
+    assert.ok(existsSync(pictureFile));
+
+    // The person's own deck exports; the bought one doesn't, and the pack says how many items it left out.
+    e.importPack({ etude: "pack/1", name: "Mine", decks: [{ name: "Mine" }], items: [{ id: "m1", type: "basic", deck: "Mine", fields: { front: "Q", back: "A" } }] });
+    const all = e.exportPack() as any;
+    assert.deepEqual(all.items.map((i: any) => i.id), ["m1"]);
+    assert.deepEqual(all.meta, { withheld: { paidItems: 3 } });
+    assert.equal((e.exportPack({ deck: "Pharm" }) as any).items.length, 0);
+    assert.equal((e.exportPack({ deck: "Mine" }) as any).meta, undefined);
+
+    // A refund takes the deck out: items, cards, its card type, its picture and the decks it leaves empty.
+    const items = () => e.db.all("SELECT id FROM items ORDER BY id").map((r) => r.id as string);
+    s.refund();
+    const gone = await a.library();
+    assert.deepEqual(gone.changes, { removed: ["Pharm"], unlocked: [] });
+    assert.deepEqual(gone.revoked.map((r: any) => [r.slug, r.reason]), [["pharm", "refunded"]]);
+    assert.deepEqual(items(), ["m1"]);
+    assert.equal(e.db.get("SELECT COUNT(*) AS n FROM cards")!.n, 1);
+    assert.ok(!e.db.get("SELECT 1 FROM types WHERE id = 'pharm-card'"));
+    assert.ok(!existsSync(pictureFile));
+    assert.deepEqual(e.db.all("SELECT name FROM decks WHERE name LIKE 'Pharm%'"), []);
+    assert.equal(rec(), undefined);
+    // Checking again changes nothing.
+    assert.deepEqual((await a.library()).changes, { removed: [], unlocked: [] });
+
+    // Bought again: the library offers Install, and installing brings everything back.
+    s.refund(false);
+    const back = await a.library();
+    assert.deepEqual(back.changes, { removed: [], unlocked: [] });
+    assert.equal(back.library[0].installed, null);
+    await a.install("lst_1");
+    assert.deepEqual(items(), ["m1", "p1", "p2", "p3"]);
+    assert.ok(e.db.get("SELECT 1 FROM types WHERE id = 'pharm-card'"));
+    assert.ok(existsSync(pictureFile));
+  } finally {
+    e.close();
+    await s.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("account: a bought deck Sync deleted reads as not installed and installs again under fresh ids, which the paid list, a refund and exports follow", async () => {
+  const dir = mkdtempSync(join((process.env.TMPDIR ?? tmpdir()), "account-"));
+  const s = stub();
+  const url = await s.start();
+  const e = await Etude.open(join(dir, "etude.db"), { home: join(dir, "home") });
+  try {
+    const a = accountFor(e);
+    a.setServer(url);
+    await a.signin("a@example.test");
+    await a.verify("good-code");
+    const sy = syncFor(e);
+    sy.setup({ folder: join(dir, "shared") });
+    await sy.unlock({ password: "a test Sync password" });
+    const rec = () => (e.db.setting<any>("market", {}).installed ?? {})[paidId("pharm")];
+    const items = () => e.db.all("SELECT id FROM items ORDER BY id").map((r) => r.id as string);
+    await a.install("lst_1");
+    await sy.now({ waitMedia: true });
+    assert.deepEqual(rec().items, ["p1"]);
+
+    // Deleted here (or on another device): Sync keeps p1 deleted for good, and the library offers the deck again.
+    e.deleteDeck("Pharm", { items: true });
+    await sy.now({ waitMedia: true });
+    assert.deepEqual(items(), []);
+    assert.equal((await a.library()).library[0].installed, null);
+
+    // A new version came out meanwhile: p1 comes back as p1.r1, the new p2 keeps its id.
+    s.bump("1.1.0");
+    const r = await a.install("lst_1");
+    assert.equal(r.result, "created");
+    assert.deepEqual(r.remap, { p1: "p1.r1" });
+    assert.ok(!s.calls.some((c) => c.endsWith("/delivery")), "delivery confirmation stays the server's, per order");
+    await sy.now({ waitMedia: true });
+    assert.deepEqual(items(), ["p1.r1", "p2"]);
+    assert.deepEqual([rec().items, rec().remap, rec().listing], [["p1.r1", "p2"], { p1: "p1.r1" }, "lst_1"]);
+    assert.equal((await a.library()).library[0].installed, "installed");
+    assert.deepEqual((e.exportPack() as any).meta, { withheld: { paidItems: 2 } });
+
+    // A refund takes out the items under their new ids, and Sync keeps those deleted too.
+    s.refund();
+    assert.deepEqual((await a.library()).changes, { removed: ["Pharm"], unlocked: [] });
+    assert.deepEqual(items(), []);
+    assert.equal(rec(), undefined);
+    await sy.now({ waitMedia: true });
+
+    // Bought again: everything comes in under ids Sync hasn't deleted.
+    s.refund(false);
+    assert.equal((await a.library()).library[0].installed, null);
+    const back = await a.install("lst_1");
+    assert.deepEqual([back.result, back.remap], ["created", { p1: "p1.r2", p2: "p2.r1" }]);
+    await sy.now({ waitMedia: true });
+    assert.deepEqual(items(), ["p1.r2", "p2.r1"]);
+
+    // Installing again keeps the map.
+    const again = await a.install("lst_1");
+    assert.deepEqual([again.remap, again.report.items.created], [{ p1: "p1.r2", p2: "p2.r1" }, 0]);
+    assert.deepEqual(rec().items, ["p1.r2", "p2.r1"]);
+  } finally {
+    e.close();
+    await s.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("account: a deck an earlier version locked after a refund gets its cards back when it's bought again", async () => {
   const dir = mkdtempSync(join((process.env.TMPDIR ?? tmpdir()), "account-"));
   const s = stub();
   const url = await s.start();
@@ -311,38 +455,68 @@ test("account: a bought deck stays out of exports; a refund locks its cards (his
     await a.verify("good-code");
     s.bump("1.1.0");
     await a.install("lst_1");
-    const rec = (e.db.setting<any>("market", {}).installed ?? {})[paidId("pharm")];
-    assert.deepEqual([rec.listing, rec.items, rec.types], ["lst_1", ["p1", "p2"], []]);
-
-    // The person's own deck exports; the bought one doesn't, and the pack says how many items it left out.
-    e.importPack({ etude: "pack/1", name: "Mine", decks: [{ name: "Mine" }], items: [{ id: "m1", type: "basic", deck: "Mine", fields: { front: "Q", back: "A" } }] });
-    const all = e.exportPack() as any;
-    assert.deepEqual(all.items.map((i: any) => i.id), ["m1"]);
-    assert.deepEqual(all.meta, { withheld: { paidItems: 2 } });
-    assert.equal((e.exportPack({ deck: "Pharm" }) as any).items.length, 0);
-    assert.equal((e.exportPack({ deck: "Mine" }) as any).meta, undefined);
-
-    const cardOf = (item: string) => e.db.get("SELECT id, suspended FROM cards WHERE item_id = ?", item)!;
-    // A card the person suspended themselves stays suspended after the deck comes back.
-    e.setSuspended([cardOf("p2").id as number], true);
-
-    s.refund();
-    const locked = await a.library();
-    assert.deepEqual(locked.changes, { locked: ["Pharm"], unlocked: [] });
-    assert.deepEqual(locked.revoked.map((r: any) => [r.slug, r.reason, r.locked]), [["pharm", "refunded", true]]);
-    assert.equal(cardOf("p1").suspended, 1);
-    assert.equal(cardOf("m1").suspended, 0);
-    // Checking again changes nothing.
-    assert.deepEqual((await a.library()).changes, { locked: [], unlocked: [] });
-
-    s.refund(false);
-    assert.deepEqual((await a.library()).changes, { locked: [], unlocked: ["Pharm"] });
-    assert.equal(cardOf("p1").suspended, 0);
-    assert.equal(cardOf("p2").suspended, 1);
+    // What 3.1.2 to 3.2.0 left after a refund: the cards suspended and listed in the install record.
+    const cards = e.db.all("SELECT id FROM cards ORDER BY id").map((r) => r.id as number);
+    e.setSuspended(cards, true);
+    patchInstall(e, paidId("pharm"), { locked: { at: "2026-11-11T15:08:50.000Z", reason: "refunded", cards: [cards[0]] } });
+    assert.deepEqual((await a.library()).changes, { removed: [], unlocked: ["Pharm"] });
+    assert.deepEqual(e.db.all("SELECT suspended FROM cards ORDER BY id").map((r) => r.suspended), [0, 1]);
     assert.equal((e.db.setting<any>("market", {}).installed ?? {})[paidId("pharm")].locked, undefined);
   } finally {
     e.close();
     await s.stop();
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("account apple-product: an admin links a house listing to its App Store product, unlinks it with none, and server refusals come through", async () => {
+  const dir = mkdtempSync(join((process.env.TMPDIR ?? tmpdir()), "account-apple-"));
+  const s = stub();
+  const url = await s.start();
+  const e = await Etude.open(join(dir, "etude.db"), { home: join(dir, "home") });
+  const cli = async (...argv: string[]) => {
+    let out = "";
+    let err = "";
+    const io = { stdout: (t: string) => (out += t), stderr: (t: string) => (err += t), stdin: () => "", isTTY: false, env: { ETUDE_HOME: join(dir, "home") } };
+    const code = await run(argv, io, { etude: e });
+    return { code, out: out ? JSON.parse(out) : null, err };
+  };
+  try {
+    const a = accountFor(e);
+    a.setServer(url);
+    await a.signin("a@example.test");
+    await a.verify("482913");
+
+    const linked = await cli("account", "apple-product", "lst_1", "study.etude.deck.pharmacology");
+    assert.equal(linked.code, 0, linked.err);
+    assert.deepEqual(linked.out, { listing: "lst_1", appleProductId: "study.etude.deck.pharmacology" });
+    assert.deepEqual(s.appleBodies.at(-1), { productId: "study.etude.deck.pharmacology" });
+    assert.ok(s.calls.includes("PUT /v1/admin/listings/lst_1/apple"));
+
+    const unlinked = await cli("account", "apple-product", "lst_1", "none");
+    assert.equal(unlinked.code, 0, unlinked.err);
+    assert.deepEqual(unlinked.out, { listing: "lst_1", appleProductId: null });
+    assert.deepEqual(s.appleBodies.at(-1), { productId: null }, "none sends productId null");
+
+    const sync = await cli("account", "apple-product", "lst_1", "study.etude.sync.monthly");
+    assert.notEqual(sync.code, 0);
+    assert.match(sync.err, /Etude Sync product/);
+    const creator = await cli("account", "apple-product", "lst_creator", "study.etude.deck.other");
+    assert.notEqual(creator.code, 0);
+    assert.match(creator.err, /decks Etude sells itself/);
+
+    s.expireSignin();
+    await assert.rejects(a.appleProduct("lst_1", "study.etude.deck.pharmacology"), (err: AccountError) => err.status === 403 && err.code === "reauth_required");
+  } finally {
+    e.close();
+    await s.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("account apple-product: Ask Etude can't run it", () => {
+  const cmd = COMMANDS.find((c) => c.name === "account apple-product")!;
+  assert.ok(cmd, "the command is registered");
+  assert.equal(cmd.writes, true);
+  assert.match(agentRefusal({ cmd, values: {}, named: {}, attachmentDir: (process.env.TMPDIR ?? tmpdir()) }) ?? "", /can't change the Etude account/);
 });

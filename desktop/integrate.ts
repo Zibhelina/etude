@@ -8,7 +8,10 @@ import { log } from "./log.ts";
 
 const prefsPath = () => join(app.getPath("userData"), "desktop.json");
 
-function prefs(): { declined?: string[] } {
+/** Another computer's Etude this app opens when it answers (`remote` in desktop.json), or undefined. */
+export const remoteSetting = (): unknown => prefs().remote;
+
+function prefs(): { declined?: string[]; remote?: unknown } {
   try {
     return JSON.parse(readFileSync(prefsPath(), "utf8"));
   } catch {

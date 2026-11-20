@@ -49,6 +49,10 @@ etude deck show "Networks::Week 1"   # resolved, inherited, presetBase, own conf
 | `levels` | `[]` | ordered levels by tag, each with an optional check tag: `[{"tag":"level::1","check":"check::1"}]` |
 | `levelAdvanceAt` / `levelMix` | 0.8 / 0.2 | stable share of a level that opens the next one, and the next level's share of new cards |
 | `quickChecksPerDay` | 30 | after a placement, earlier cards it judged known, on top of `newPerDay` and mixed in with the new cards; too many wrong in a level lowers the placement |
+| `prerequisites` | false | new cards wait until the concepts their item `needs::` are mastered (`concept::` tags), and come in prerequisite order; see docs/schedulers.md#prerequisites |
+| `masteryStreak` / `masteryShare` | 1 / 1 | a card is mastered in review with its last N answers passed; share of a concept's cards that must be |
+| `conceptsInProgress` | 2 | concepts worked on at once; 0 = no limit |
+| `implicitReviews` | false | skip a due review when a card that needs its concept was answered correctly after it fell due |
 
 Changing retention, steps, maximum interval, weights or the deadline only affects future reviews. Add `--reschedule` (or run `etude card reschedule --deck X`) to replay history with the new settings. Commands print a `hint` when that's needed.
 

@@ -1,7 +1,8 @@
-import { DEFAULT_SETTINGS, type Settings } from "../../core/engine.ts";
+import { DEFAULT_SETTINGS, type Etude, type Settings } from "../../core/engine.ts";
+import { agentFor } from "../../core/agent.ts";
 import { chatGptStatus, chatGptLogout, listChatGptModels, openInBrowser, beginChatGptLogin, readChatGptHostId, importChatGptCredentials, ChatGptError } from "../../core/chatgpt.ts";
 import { chatProviderKeyEnv } from "../../core/ai.ts";
-import { agentSettingRefusal } from "../../core/agent-guard.ts";
+import { agentSettingRefusal, agentsSettingRefusal } from "../../core/agent-guard.ts";
 import { EnvKeyError, setEnvKey } from "../../core/env-file.ts";
 import { AVATAR_CHARACTERS, AVATAR_EMOJI_BG } from "../../core/avatar.ts";
 import { BANNER_PRESETS } from "../../core/banner.ts";
@@ -10,11 +11,19 @@ import { deepDelete, deepGet, deepSet, looseValue, splitPair } from "../input.ts
 
 group({ name: "settings", summary: "App settings: AI providers and models, day start, learn-ahead, ChatGPT sign-in", defaultVerb: "get" });
 
-/** Settings with the API key status (never the keys themselves). */
-function view(e: any) {
+/** Settings with the API key status (never the keys themselves). Redacts external agent env values for Ask/MCP. */
+function view(e: any, redactAgentEnv = false) {
   const s: Settings = e.settings();
   const envs = [s.ai.decision?.apiKeyEnv, chatProviderKeyEnv(s.ai.feedback), chatProviderKeyEnv(s.ai.vision)].filter(Boolean) as string[];
-  return { ...s, keyStatus: Object.fromEntries(envs.map((k) => [k, !!process.env[k]])), dbPath: e.path, mediaDir: e.mediaDir };
+  const ai = redactAgentEnv && Array.isArray((s.ai as any)?.agents)
+    ? {
+        ...s.ai,
+        agents: (s.ai as any).agents.map((a: any) =>
+          a?.env && typeof a.env === "object" ? { ...a, env: Object.fromEntries(Object.keys(a.env).map((k) => [k, "[redacted]"])) } : a,
+        ),
+      }
+    : s.ai;
+  return { ...s, ai, keyStatus: Object.fromEntries(envs.map((k) => [k, !!process.env[k]])), dbPath: e.path, mediaDir: e.mediaDir };
 }
 
 command({
@@ -24,7 +33,7 @@ command({
   flags: [{ name: "defaults", type: "boolean", description: "Show the built-in defaults instead." }],
   examples: ["etude settings", "etude settings get ai.feedback.model"],
   run(ctx) {
-    const s = ctx.flags.defaults ? DEFAULT_SETTINGS : view(ctx.e);
+    const s = ctx.flags.defaults ? DEFAULT_SETTINGS : view(ctx.e, !!(ctx.agent || ctx.mcp));
     if (!ctx.args.key) return s;
     const v = deepGet(s, ctx.args.key);
     if (v === undefined) throw new CliError(`no setting "${ctx.args.key}"`, "not_found");
@@ -36,11 +45,11 @@ command({
   name: "settings set",
   summary: "Change settings with dotted key=value pairs (JSON values when they parse).",
   description:
-    "Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words; empty keeps his usual one), minimiFace (the face he wears: deadpan, wink, proud, smug, hi, wand, close, curious, reading, sleepy, shocked or thinking), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own), avatar (your picture: {kind:\"char\",id}, {kind:\"emoji\",e,bg}, {kind:\"photo\",media}, or null for your initial; see `etude settings avatar`), banner (the cover behind your picture: a preset id like sky or night, image:files/<sha>.<ext>[:y], or null to match your picture; see `etude settings banner`), name (your name in the app, up to 40 characters; empty uses the account's), vim (true turns on Vim keys in Notes' file editor). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.",
+    "Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words, the same text as his profile's in `etude agents`; empty keeps his usual one), agentProfiles and agentProfile (who you talk to in Ask and the default one; easier with `etude agents`), minimiFace (the face he wears: deadpan, wink, proud, smug, hi, wand, close, curious, reading, sleepy, shocked or thinking), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own), avatar (your picture: {kind:\"char\",id}, {kind:\"emoji\",e,bg}, {kind:\"photo\",media}, or null for your initial; see `etude settings avatar`), banner (the cover behind your picture: a preset id like sky or night, image:files/<sha>.<ext>[:y], or null to match your picture; see `etude settings banner`), name (your name in the app, up to 40 characters; empty uses the account's), vim (true turns on Vim keys in Notes' file editor), sounds (false silences the pop when you tick a to-do and the chime when a list is done), holiday (auto puts Minimi in his Christmas outfit with the extras from Dec 1 to Jan 6; on or off forces it), holidayDecor (none, few for a garland and a holly sprig on today's session, or cozy for a warm glow too), holidaySnow (true lets a few slow flakes fall outside the study screen), ai.agents (the external agents Ask Etude can use over ACP: a JSON list of { id, name, command, args, env?, cwd? }; only you can set it, never the assistant or `etude mcp`). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.",
   args: [{ name: "pairs", description: "key=value pairs.", required: true, variadic: true }],
   writes: true,
   dryRun: true,
-  examples: ["etude settings set dayStartHour=4", "etude settings set ai.feedback.model=deepseek/deepseek-v4.1-flash-1017", "etude settings set ai.decision=null", "etude settings set accent=blue", "etude settings set banner=night"],
+  examples: ["etude settings set dayStartHour=4", "etude settings set ai.feedback.model=deepseek/deepseek-v4.1-flash-1017", "etude settings set ai.decision=null", "etude settings set accent=blue", "etude settings set banner=night", `etude settings set 'ai.agents=[{"id":"mine","name":"Mine","command":"my-agent","args":["--acp"]}]'`],
   output: "{ changed: { key: { from, to } }, settings }",
   run(ctx) {
     const e = ctx.e;
@@ -49,7 +58,7 @@ command({
     const changed: Record<string, { from: unknown; to: unknown }> = {};
     for (const p of ctx.args.pairs) {
       const [k, raw] = splitPair(p, "key=value");
-      const refused = ctx.agent ? agentSettingRefusal(k) : null;
+      const refused = ctx.agent ? agentSettingRefusal(k) : ctx.mcp ? agentsSettingRefusal(k) : null;
       if (refused) throw new CliError(refused, "validation");
       if (/apiKey$|secret|token/i.test(k) && !/Env$/.test(k)) throw new CliError(`refusing to store a secret in settings; put it in the environment or ${ctx.home}/.env and set ${k}Env instead`, "validation");
       const top = k.split(".")[0];
@@ -80,7 +89,7 @@ command({
     const e = ctx.e;
     const next = structuredClone(e.settings()) as any;
     for (const k of ctx.args.keys) {
-      const refused = ctx.agent ? agentSettingRefusal(k) : null;
+      const refused = ctx.agent ? agentSettingRefusal(k) : ctx.mcp ? agentsSettingRefusal(k) : null;
       if (refused) throw new CliError(refused, "validation");
       const def = deepGet(DEFAULT_SETTINGS, k);
       if (def === undefined) {
@@ -185,6 +194,50 @@ command({
   examples: ["etude settings onboarding", "etude settings set onboarding.level=tinker", "etude settings set onboarding.done=false"],
   output: "{ done, level, show, decks }",
   run: (ctx) => ctx.e.onboardingStatus(),
+});
+
+// --------------------------------------------------------- your OK for AI providers
+
+const PROVIDER_ARG = { name: "provider", description: "chatgpt, or the provider's host: openrouter.ai, api.openai.com…", required: true };
+/** Grading's providers and Ask's (its default profile), each with what it's for. */
+const consentView = (e: Etude) => e.aiConsentStatus([agentFor(e).askProvider()]);
+
+command({
+  name: "settings consent list",
+  summary: "Who AI grading and Ask send to with the current settings, and whether you agreed to each. Only the iPhone app asks.",
+  description:
+    "The consent is only asked for in the iPhone app: there, nothing goes to a provider until the person agrees to it, once per provider and for everything Etude sends it: grading, feedback, the AI test and AI card edits (cards and answers), and Ask (messages, and what the assistant reads in Etude). Everywhere else, the CLI included, grading and Ask send as before whatever this says (`required` is false), and these commands only edit the setting. `for` says what uses each provider (grading, assistant: Ask's default profile), and `ready` whether it can send now (its key is set, or ChatGPT is signed in). The iPhone app asks during first-run setup, and once at launch for a provider that's ready but not agreed to. A model on this machine (127.0.0.1, localhost) never needs an OK. The agreements stay on this device; Sync doesn't carry them.",
+  examples: ["etude settings consent list"],
+  output: "{ required, providers: [{ id, name, for: (grading|assistant)[], ready, agreed: date|null }], agreed: { [provider]: date } }",
+  run: (ctx) => consentView(ctx.e),
+});
+
+command({
+  name: "settings consent agree",
+  summary: "Agree to send to an AI provider: cards and answers for grading, messages for Ask. Only the iPhone app asks for it.",
+  description: "It matters where the iPhone app opens this collection; elsewhere grading and Ask don't wait for it. Only you can give it: Ask Etude and `etude mcp` are refused.",
+  args: [PROVIDER_ARG],
+  writes: true,
+  examples: ["etude settings consent agree openrouter.ai", "etude settings consent agree chatgpt"],
+  output: "{ required, providers: [{ id, name, for, ready, agreed }], agreed }",
+  run(ctx) {
+    if (ctx.agent || ctx.mcp) throw new CliError("the assistant can't agree to send your cards to an AI provider: only the user can, in Settings → AI grading or with the etude CLI.", "validation");
+    ctx.e.agreeToAi(ctx.args.provider);
+    return consentView(ctx.e);
+  },
+});
+
+command({
+  name: "settings consent withdraw",
+  summary: "Take back your OK for an AI provider: in the iPhone app nothing more goes to it until you agree again.",
+  args: [PROVIDER_ARG],
+  writes: true,
+  examples: ["etude settings consent withdraw openrouter.ai"],
+  output: "{ required, providers: [{ id, name, for, ready, agreed }], agreed }",
+  run(ctx) {
+    ctx.e.withdrawAiConsent(ctx.args.provider);
+    return consentView(ctx.e);
+  },
 });
 
 // --------------------------------------------------------- API keys

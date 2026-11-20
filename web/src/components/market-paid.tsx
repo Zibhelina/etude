@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CoverGallery } from "@/components/market-gallery";
-import { DetailLayout, niceDate, paragraphs, type InfoCell } from "@/components/market-detail";
+import { AGE_CELL, DetailLayout, niceDate, paragraphs, type InfoCell } from "@/components/market-detail";
 import { Comments, socialCells, TileCounts, useEntryStats, Votes } from "@/components/market-social";
 import type { EntryCounts } from "@/lib/market-social";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -125,7 +125,7 @@ const firstSentence = (d: string) => {
 };
 
 /** A paid deck's page in the Market: the same layout as a free entry, with Buy where purchases may be shown. */
-export function PaidDetail({ entry, signedIn, onBack, onChanged }: { entry: PaidEntry; signedIn: boolean; onBack(): void; onChanged(): void }) {
+export function PaidDetail({ entry, signedIn, menu, notice, onBack, onChanged }: { entry: PaidEntry; signedIn: boolean; menu?: React.ReactNode; notice?: React.ReactNode; onBack(): void; onChanged(): void }) {
   const [busy, setBusy] = useState<null | "buy" | "install">(null);
   const [confirming, setConfirming] = useState(false);
   // In the iPhone app, a deck Etude also sells on the App Store is bought there, at the App Store's price.
@@ -185,6 +185,7 @@ export function PaidDetail({ entry, signedIn, onBack, onChanged }: { entry: Paid
   const n = s.items ?? 0;
   const info: InfoCell[] = [
     ...socialCells(stats),
+    AGE_CELL,
     { label: n === 1 ? "Card" : "Cards", value: n.toLocaleString("en-US") },
     { label: "Updates", value: "Included" },
     { label: "Size", value: bytes(entry.bytes) },
@@ -214,6 +215,8 @@ export function PaidDetail({ entry, signedIn, onBack, onChanged }: { entry: Paid
   return (
     <DetailLayout
       onBack={onBack}
+      menu={menu}
+      notice={notice}
       head={
         <>
           <div className="mk-eyebrow">Deck{canShowPurchases() ? " · paid" : ""}</div>
@@ -301,7 +304,7 @@ export function LibraryView() {
       const r = await account.library();
       setLib(r.library);
       setRevoked(r.revoked ?? []);
-      for (const name of r.changes?.locked ?? []) toast(`${name} was refunded`, { description: "Its cards are suspended. Buy it again to study them; your progress is kept." });
+      for (const name of r.changes?.removed ?? []) toast(`${name} was refunded`, { description: "Its cards left your collection. Buy it again to study it." });
       setError(null);
     } catch (e) {
       setError(msg(e));
@@ -370,12 +373,12 @@ export function LibraryView() {
         </div>
       </div>
     )), ...revoked.map((r) => (
-      // Refunded or disputed: no longer on the account. Its cards stay in the collection, suspended, with their history.
+      // Refunded or disputed: no longer on the account, and its cards are out of the collection.
       <div key={`revoked-${r.listing}`} className="mk-li opacity-70" data-library-revoked={r.slug}>
         <div className="mk-li-thumb">{r.cover ? <img src={r.cover} alt="" /> : <Layers className="size-5" />}</div>
         <div className="mk-li-text">
           <b>{r.name}</b>
-          <small>{r.reason === "disputed" ? "Payment disputed" : "Refunded"}{r.locked ? " · its cards are suspended; buy it again to study them" : ""}</small>
+          <small>{r.reason === "disputed" ? "Payment disputed" : "Refunded"} · buy it again to study it</small>
         </div>
       </div>
     ))];

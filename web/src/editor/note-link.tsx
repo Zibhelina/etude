@@ -14,7 +14,7 @@ export interface PageRef {
   id: string;
   title: string;
   icon: string | null;
-  /** Where it sits ("CMPT 307 › Week 1"). */
+  /** Where it sits ("Algorithms › Week 1"). */
   path: string;
 }
 
@@ -40,7 +40,10 @@ function LinkView({ node, extension }: NodeViewProps) {
   const id = node.attrs.id as string | null;
   const current = id ? opts.titleOf(id) : null;
   const label = (node.attrs.label as string | null) || current || (node.attrs.title as string);
-  const missing = !id || current === null;
+  // A link to a file in a folder on this computer names a place on disk: it's followed as it is (the tree only knows
+  // the folders that are unfolded, so the file may not be in the list), and never taken for a page to make.
+  const onDisk = !!id && id.startsWith("fs:");
+  const missing = !id || (current === null && !onDisk);
   return (
     <NodeViewWrapper as="span" className={cn("note-link", missing && "is-missing")} data-note-link="" title={missing ? `No page called “${node.attrs.title}” yet: click to make it` : undefined}>
       <span
@@ -50,7 +53,7 @@ function LinkView({ node, extension }: NodeViewProps) {
           // A plain click follows the link; Alt/Shift-click puts the cursor there instead.
           if (e.button !== 0 || e.altKey || e.shiftKey) return;
           e.preventDefault();
-          if (id && current !== null) opts.open(id);
+          if (id && !missing) opts.open(id);
           else void opts.create(String(node.attrs.title)).then((p) => opts.open(p.id));
         }}
       >

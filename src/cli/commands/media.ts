@@ -15,7 +15,7 @@ command({
   name: "media prune",
   summary: "Delete media files nothing in the collection names any more.",
   description:
-    "A file counts as used when any field, template, deck or tag text, setting, past attempt or conversation mentions its name. Hidden files, files without an extension, names starting with `_` (Anki's mark for files a template loads itself) and files changed in the last hour are kept. Deleted files can't be restored from database backups; preview with --dry-run.",
+    "A file counts as used when any field, template, deck or tag text, setting, past attempt or conversation mentions its name, or a page, Markdown or web file in a folder the Notebook opens on this computer does (its trash included). While one of those folders isn't there (a drive not plugged in), nothing is pruned. Hidden files, files without an extension, names starting with `_` (Anki's mark for files a template loads itself) and files changed in the last hour are kept. On a synced collection the files also go from your other devices at their next sync, unless one of them still uses a file: then it comes back here. Deleted files can't be restored from database backups; preview with --dry-run.",
   writes: true,
   dryRun: "self",
   confirm: true,

@@ -323,6 +323,10 @@ Output is JSON on stdout. Errors are `{"error", "code"}` on stderr with a distin
 
 Agents that use Etude should read [skill/SKILL.md](skill/SKILL.md). It can be dropped into an agent's skills folder as is.
 
+Notes work by path as well as id (`etude note read "Fall 2026/CMPT 307/Week 1"`), and everything you can do to a note in the app has a command: `note patch` (find-and-replace on a page's Markdown or a file's text, touching only what changes), `note append` (under a heading, at a block or line), `note block` (any block as the editor's JSON: columns, toggles, colours, portals), `note canvas add|edit|delete` (shapes, text, arrows between shapes, pictures), plus `note kanban`, `move`, `portal`, `pin` and `archive`. [skill/references/notes.md](skill/references/notes.md) has the details.
+
+For agents that speak MCP (Claude Code, Codex, Claude Desktop, Cursor and others), `etude mcp` serves your collection as tools: `claude mcp add etude -- etude mcp`. The app can stay open, and a page open in it takes the change live. [docs/mcp.md](docs/mcp.md) has the setup for each agent and the tool list.
+
 ## Architecture
 
 ### The model

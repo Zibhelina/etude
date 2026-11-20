@@ -18,7 +18,7 @@ Pull requests never get the secrets, so a pull request from anyone builds the sa
 
 When the secrets are there, the step "The Mac apps' signatures hold" also checks that each app is signed by a Developer ID with the hardened runtime, and when notarized, that `stapler validate` and `spctl` accept the apps and the `.dmg` files. A broken signature fails the build before anything reaches a release.
 
-### What João creates (once)
+### What the account holder creates (once)
 
 Only the Account Holder of the Apple Developer team can create a Developer ID certificate. On an individual account that's the account owner.
 

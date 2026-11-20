@@ -1,7 +1,7 @@
 ---
 title: Refund Policy
 description: When Etude refunds Sync subscriptions and paid Market decks.
-last-updated: 2026-11-09
+last-updated: 2026-11-11
 ---
 
 # Refund Policy
@@ -24,7 +24,7 @@ Paid decks are final sales: **no refunds**, except where the law where you live 
 - the deck doesn't work in Etude, or is materially different from its description and preview, **and** you report it within 14 days of purchase **and** it isn't fixed within 7 days of your report;
 - you were charged twice for the same deck.
 
-A refunded deck is removed from your library, and its cards in your collection are suspended (your progress is kept) until you buy it again. We may stop selling decks to an account that repeatedly buys and asks for refunds; Sync and everything else keep working.
+A refunded deck is removed from your library, and its cards leave your collection, with their review history; buying it again installs it afresh. We may stop selling decks to an account that repeatedly buys and asks for refunds; Sync and everything else keep working.
 
 **Decks sold by Etude** (the deck's page says "by Etude"):
 

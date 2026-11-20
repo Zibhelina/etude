@@ -116,7 +116,8 @@ export function ItemPreview({ item, type, fields, dirty, version, flipped, onFli
             onKey={(k) => k === " " && onFlip()}
           />
         )}
-        {dirty && <span className="mt-3 text-[12px] text-muted-foreground">Showing your unsaved edits</span>}
+        {/* In the sheet's bottom padding, so the fields below don't move when an edit starts or is saved. */}
+        {dirty && <span className="pointer-events-none absolute inset-x-0 bottom-[3px] truncate px-[26px] text-[12px] leading-[18px] text-muted-foreground max-md:bottom-px max-md:px-5">Showing your unsaved edits</span>}
       </div>
     </div>
   );

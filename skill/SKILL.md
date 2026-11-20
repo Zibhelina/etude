@@ -1,6 +1,6 @@
 ---
 name: etude
-description: Use when a user wants to create, edit, organize, schedule or study flashcards in Etude (a spaced-repetition app with programmable card types and AI grading), quiz them in chat from their decks, check their progress, or author packs and card types. Drives everything through the `etude` CLI, which prints JSON.
+description: Use when a user wants to create, edit, organize, schedule or study flashcards in Etude (a spaced-repetition app with programmable card types and AI grading), quiz them in chat from their decks, check their progress, author packs and card types, or find, read, write and edit their notes (pages, files, canvases, kanban boards) in Etude's Notebook. Drives everything through the `etude` CLI, which prints JSON.
 ---
 
 # Etude
@@ -82,6 +82,17 @@ etude deck set "Course" adaptivePace=true adaptiveChallenge=true   # optional: p
 
 **Themes.** `etude theme list`, then `etude theme set paper`. Make one with `etude theme create sea --from midnight --var highlight="oklch(0.7 0.12 210)" --use`, and change it later with `theme edit` (variables, scheme, `--css-file`). `theme export`/`import` move themes between collections.
 
+## Notes (the Notebook)
+
+Notes are pages, folders, code files, web files, kanban boards, canvases and PDFs in a tree of their own. Any note can be named by its id, the first 8 characters of it, its title, or its path (`Fall 2026/CMPT 307/Week 1`).
+
+- Find: `etude note tree`, `etude note search <words>`. Read: `etude note read <note>` (a page as Markdown; `--blocks` numbers its blocks).
+- Change a page with the smallest edit: `etude note patch <page> --old "…" --new "…"` (find-and-replace on its Markdown; only the blocks it touches are rewritten) and `etude note append <page> --md "…" [--under "Heading" | --top | --at N]`. For columns, toggles, portals, colours and other things Markdown can't say, `etude note block <page> <n>` prints a block as JSON and `--set`, `--to`, `--delete` change it.
+- Files and web files take the same `patch` and `append` on their exact text. Canvases: `etude note canvas add|edit|delete`. Boards: `etude note kanban` to see one, `kanban card` to read a card, `kanban add|move|edit|archive|column` to work it (`edit --old/--new` changes part of a card's page).
+- Don't rewrite a user's page whole (`note edit --md`): it drops what Markdown can't say. Archive instead of deleting.
+
+Details, Markdown and the JSON shape of every block: [references/notes.md](references/notes.md). For agents that speak MCP, `etude mcp` serves the same as tools ([docs/mcp.md](../docs/mcp.md)).
+
 ## Quizzing a user in chat
 
 Use this when the user wants to practise with you instead of in the app. Every rating you record is a real review that changes their schedule.
@@ -118,4 +129,5 @@ Never invent a grade, rate a card the user didn't answer, or rate on their behal
 - [references/authoring.md](references/authoring.md): pack format, built-in type fields, generators, building a deck from notes.
 - [references/scheduling.md](references/scheduling.md): settings keys, presets vs overrides, deadlines, due dates, leeches, rescheduling.
 - [references/types.md](references/types.md): writing custom card types (points to `docs/types.md`).
+- [references/notes.md](references/notes.md): the Notebook: finding notes, small edits to pages, block JSON, files, canvases, organizing, and shared folders (view-only notes refuse writes).
 - `docs/cli.md`: every command, flag and output shape, plus recipes. `docs/packs.md` and `docs/types.md` hold the formats.

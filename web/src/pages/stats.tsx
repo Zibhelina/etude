@@ -3,13 +3,13 @@
 // quieter sections after. Each scheduler gets its own page: FSRS has a memory model, a rated script
 // (Leitner) has due dates and ratings but no recall, a drill is measured by its runs.
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Check, ChevronDown, Flame, Library, Play, Store } from "lucide-react";
+import { BookOpen, Check, ChevronDown, FileCode, FileText, Flame, Globe, SquareKanban, Library, MessageCircle, Play, Shapes, Store } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Bars, Gauge, Heatmap, Keys, StackBar, TargetBar, dayKey, fmtDay, fmtDuration, hourName, parseDay, type Part } from "@/components/stats-charts";
 import { ForgettingCurve, Histogram, ProgressChart, crossing, spanWord } from "@/components/stats-viz";
-import { api, type DeckNode, type LearnerSummary, type PracticeCard, type StatsScheduler, type Stats, type StatsDeck } from "@/lib/api";
+import { api, type ActivityKind, type ActivitySummary, type ConceptMap, type DeckNode, type LearnerSummary, type PracticeCard, type StatsScheduler, type Stats, type StatsDeck } from "@/lib/api";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { useFunMode } from "@/lib/fun";
@@ -57,6 +57,11 @@ export function StatsPage({ deck }: { deck?: string }) {
       {error && !stats && <div className="stats-card px-6 py-12 text-center text-muted-foreground">{error}</div>}
       {!stats && !error && <Loading />}
       {stats && <Body stats={stats} deck={deck} />}
+      {stats && !deck && (
+        <div className="mt-[22px] flex flex-col gap-[22px] max-md:mt-3 max-md:gap-3" data-activity-stats>
+          <ActivityStats />
+        </div>
+      )}
     </div>
   );
 }
@@ -164,6 +169,44 @@ function Kv({ items, className }: { items: { value: ReactNode; label: string; to
           <span className="truncate text-[12.5px] font-medium text-muted-foreground">{it.label}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+const CONCEPT_DOT: Record<string, string> = { mastered: "bg-good", "in-progress": "bg-highlight", unlocked: "bg-muted-foreground/60", locked: "bg-transparent ring-1 ring-inset ring-muted-foreground/50" };
+const CONCEPT_STATE: Record<string, string> = { mastered: "Mastered", "in-progress": "In progress", unlocked: "Ready to start", locked: "Locked" };
+
+/** Decks with prerequisites on: each concept, needs first, with how much of it is mastered. */
+function Concepts({ deck }: { deck: string }) {
+  const [map, setMap] = useState<ConceptMap | null>(null);
+  useEffect(() => {
+    setMap(null);
+    api.concepts(deck).then(setMap, () => setMap(null));
+  }, [deck]);
+  if (!map?.prerequisites || !map.concepts.length) return null;
+  const name = (p: string) => (p.split("::").pop() ?? p).replace(/[-_]+/g, " ");
+  const done = map.concepts.filter((c) => c.state === "mastered").length;
+  return (
+    <div className="mb-6">
+      <Section q="Which concepts have you mastered?" aside={`${done} of ${map.concepts.length} mastered`}>
+        <ul className="flex flex-col text-sm">
+          {map.concepts.map((c) => (
+            <li key={c.concept} className="flex items-center gap-3 py-1.5" title={[c.concept, CONCEPT_STATE[c.state], c.missing.length ? `Needs ${c.missing.map(name).join(", ")}` : ""].filter(Boolean).join(" · ")}>
+              <span className={cn("size-2 shrink-0 rounded-full", CONCEPT_DOT[c.state])} aria-label={CONCEPT_STATE[c.state]} />
+              <span className={cn("min-w-0 flex-1 truncate", c.state === "in-progress" ? "text-highlight" : c.state === "locked" ? "text-muted-foreground" : "")} style={{ paddingLeft: `${Math.min(c.depth, 6) * 0.75}rem` }}>
+                {name(c.concept)}
+              </span>
+              <span className="tabular shrink-0 text-muted-foreground">{c.mastered}/{c.cards}</span>
+            </li>
+          ))}
+        </ul>
+        {(map.cycles.length > 0 || map.danglingNeeds.length > 0) && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            {map.cycles.length > 0 && `Concepts that need each other: ${map.cycles.map((c) => c.map(name).join(" ↔ ")).join("; ")}. `}
+            {map.danglingNeeds.length > 0 && `Needed but taught nowhere (treated as met): ${map.danglingNeeds.map(name).join(", ")}.`}
+          </p>
+        )}
+      </Section>
     </div>
   );
 }
@@ -359,6 +402,7 @@ function FsrsBody({ stats: s, d, deck }: { stats: Stats; d: D; deck?: string }) 
       </section>
 
       {deck && <Skills deck={deck} />}
+      {deck && <Concepts deck={deck} />}
 
       {/* Streak and heatmap */}
       <Section q="How are you studying?" a={habitSentence(s, d)}>
@@ -1068,5 +1112,174 @@ function RatedBody({ stats: s, d, deck, summary }: { stats: Stats; d: D; deck: s
         </Row2>
       )}
     </Stack>
+  );
+}
+
+// ------------------------------------------------------------------ activity (Settings → Privacy → Activity)
+
+const ACT_RANGES: [number, string][] = [[7, "7 days"], [30, "30 days"], [90, "90 days"]];
+const ACT_RANGES_SHORT: [number, string][] = [[7, "7d"], [30, "30d"], [90, "90d"]];
+const ACT_ICON: Record<ActivityKind, typeof FileText> = { page: FileText, file: FileCode, pdf: BookOpen, canvas: Shapes, kanban: SquareKanban, web: Globe, chat: MessageCircle, screen: Library };
+const ACT_KIND: Record<ActivityKind, string> = { page: "Page", file: "File", pdf: "PDF", canvas: "Canvas", kanban: "Board", web: "Web page", chat: "Ask chat", screen: "Screen" };
+/** Time, grouped the way a person thinks of it: writing places, reading places, the chat, studying, the rest. */
+const ACT_GROUPS: { key: string; label: string; color: string; kinds?: ActivityKind[]; screens?: string[] }[] = [
+  { key: "pages", label: "Pages", color: "var(--highlight)", kinds: ["page"] },
+  { key: "files", label: "Files", color: "var(--new)", kinds: ["file", "pdf", "web"] },
+  { key: "boards", label: "Boards", color: "var(--hard)", kinds: ["canvas", "kanban"] },
+  { key: "ask", label: "Ask", color: "var(--learn)", kinds: ["chat"] },
+  { key: "study", label: "Studying", color: "color-mix(in oklab, var(--highlight) 50%, var(--card))", screens: ["study", "watch"] },
+  { key: "rest", label: "Other", color: "var(--stats-ink-bar)", screens: [] },
+];
+
+function actParts(a: ActivitySummary): Part[] {
+  const sums = new Map(ACT_GROUPS.map((g) => [g.key, 0]));
+  for (const k of a.kinds) if (k.kind !== "screen") {
+    const g = ACT_GROUPS.find((x) => x.kinds?.includes(k.kind)) ?? ACT_GROUPS.at(-1)!;
+    sums.set(g.key, sums.get(g.key)! + k.ms);
+  }
+  for (const s of a.screens) {
+    const g = ACT_GROUPS.find((x) => x.screens?.includes(s.screen)) ?? ACT_GROUPS.at(-1)!;
+    sums.set(g.key, sums.get(g.key)! + s.ms);
+  }
+  return ACT_GROUPS.map((g) => ({ key: g.key, label: g.label, value: sums.get(g.key)!, color: g.color, hint: fmtDuration(sums.get(g.key)!) }));
+}
+
+const actWhen = (iso: string, today: string) => {
+  const d = dayKey(new Date(iso));
+  if (d === today) return "today";
+  const y = parseDay(today);
+  y.setDate(y.getDate() - 1);
+  return d === dayKey(y) ? "yesterday" : fmtDay(d, { month: "short", day: "numeric" });
+};
+
+const openActivity = (t: ActivitySummary["top"][number]) => navigate(`/notes?id=${encodeURIComponent(t.kind === "chat" ? `chat:${t.ref}` : t.ref)}`);
+
+/** Your own time and writing in the app, when Activity is on (or was). Nothing shows for the deck pages. */
+function ActivityStats() {
+  const [range, setRange] = useState(30);
+  const [a, setA] = useState<ActivitySummary | null>(null);
+  const [all, setAll] = useState(false);
+  const narrow = useNarrow();
+  useEffect(() => {
+    let live = true;
+    api.activitySummary(range).then((r) => live && setA(r), () => live && setA(null));
+    return () => void (live = false);
+  }, [range]);
+  if (!a) return null;
+  const any = a.totals.ms > 0 || a.totals.typed > 0 || a.totals.pasted > 0;
+  if (!a.on && !any) return <ActivityInvite />;
+
+  const days = a.days;
+  const n = days.length;
+  const todayRow = days[n - 1];
+  const parts = actParts(a);
+  const biggest = [...parts].sort((x, y) => y.value - x.value)[0];
+  const places = a.top.filter((t) => t.ms > 0 || t.typed > 0);
+  const shown = all ? places : places.slice(0, 8);
+  const lab = (i: number) => (i === n - 1 ? "today" : n <= 7 ? fmtDay(days[i].day, { weekday: "short" }) : (n - 1 - i) % (n > 30 ? 14 : 7) === 0 && i > 2 ? fmtDay(days[i].day, { month: "short", day: "numeric" }) : "");
+  const wordsDays = days.filter((d) => d.words > 0).length;
+  return (
+    <>
+      <Section
+        q="Where does your time go?"
+        aside={<span className="block [&>span]:flex-nowrap"><Seg<number> value={range} options={narrow ? ACT_RANGES_SHORT : ACT_RANGES} onChange={setRange} label="Activity range" /></span>}
+        a={a.totals.ms === 0 && a.totals.words === 0 ? (a.on ? <>Nothing yet. Time shows up here as you use Etude.</> : <>Activity is off. This is what it kept.</>) : <><b>{fmtDuration(a.totals.ms)}</b> in Etude in the last {n === 7 ? "week" : `${n} days`}, most of it in <b>{biggest.key === "rest" ? "the rest of the app" : biggest.label.toLowerCase()}</b>.</>}
+      >
+        <Kv
+          className="mb-[22px] max-md:mb-4"
+          items={[
+            { value: fmtDuration(todayRow.ms), label: "today" },
+            { value: num(a.totals.words), label: "words written" },
+            { value: num(places.filter((p) => p.kind !== "chat").length), label: narrow ? "pages, files" : "pages and files used" },
+          ]}
+        />
+        {a.totals.ms > 0 && (
+          <>
+            <StackBar parts={parts.filter((p) => p.value > 0)} label="Time by where it went" />
+            <Keys parts={parts.filter((p) => p.value > 0)} show="share" />
+            <div className="mt-[22px]">
+              <Bars
+                label={`Minutes in Etude per day, last ${n} days`}
+                values={days.map((d) => Math.round(d.ms / 6000) / 10)}
+                labels={days.map((_, i) => lab(i))}
+                height={110}
+                hot={(i) => i === n - 1}
+                strong={(i) => i === n - 1}
+                tip={(i) => [i === n - 1 ? "Today" : fmtDay(days[i].day), days[i].ms ? fmtDuration(days[i].ms) : "not in Etude", ...(days[i].words ? [`${num(days[i].words)} words written`] : [])]}
+              />
+            </div>
+          </>
+        )}
+        {!a.on && <ActivityOffLine />}
+      </Section>
+
+      <Row2>
+        <Section q="What did you work on?" a={places[0] ? <><b>{places[0].title}</b> took the most, {fmtDuration(places[0].ms)}.</> : "Nothing yet."}>
+          {places.length > 0 ? (
+            <ul className="flex flex-col" data-activity-top>
+              {shown.map((t) => {
+                const Icon = ACT_ICON[t.kind] ?? FileText;
+                const Tag = t.missing ? "div" : "button";
+                return (
+                  <li key={`${t.kind}:${t.ref}`}>
+                    <Tag {...(t.missing ? {} : { type: "button" as const, onClick: () => openActivity(t) })} className={cn("flex w-full items-center gap-3 rounded-[10px] px-2 py-[9px] text-left", !t.missing && "hover:bg-[var(--stats-track)]")}>
+                      <i className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--stats-track)]"><Icon className="size-4" /></i>
+                      <span className="min-w-0 flex-1">
+                        <span className={cn("block truncate text-[14.5px] font-semibold", t.missing && "line-through decoration-1")}>{t.title}</span>
+                        <span className="block truncate text-[12.5px]">{ACT_KIND[t.kind]}{t.path && t.path !== t.title ? ` · ${t.path}` : ""} · {actWhen(t.last, a.today)}{t.missing ? " · gone" : ""}</span>
+                      </span>
+                      <span className="shrink-0 text-right">
+                        <b className="tabular block text-[14.5px] font-semibold">{fmtDuration(t.ms)}</b>
+                        {t.words > 0 && <span className="tabular block text-[12.5px]">{plural(t.words, "word")}</span>}
+                      </span>
+                    </Tag>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <Empty>Open a page or a file and it shows up here.</Empty>
+          )}
+          {places.length > 8 && (
+            <Button variant="ghost" size="sm" className="mt-1.5" onClick={() => setAll(!all)}>
+              {all ? "Show fewer" : `Show all ${places.length}`}
+            </Button>
+          )}
+        </Section>
+
+        <Section q="How much do you write?" a={a.totals.words ? <><b>{num(a.totals.words)}</b> words in the last {n === 7 ? "week" : `${n} days`}{todayRow.words ? <>, {num(todayRow.words)} of them today</> : ""}.</> : "No writing yet."}>
+          <Bars
+            label={`Words written per day, last ${n} days`}
+            values={days.map((d) => d.words)}
+            labels={days.map((_, i) => lab(i))}
+            height={110}
+            hot={(i) => i === n - 1}
+            strong={(i) => i === n - 1}
+            tip={(i) => [i === n - 1 ? "Today" : fmtDay(days[i].day), days[i].words ? plural(days[i].words, "word") : "no writing", ...(days[i].typed ? [`${num(days[i].typed)} characters typed`] : [])]}
+          />
+          <p className="mt-3 text-[13px] leading-[1.45] text-pretty">
+            {a.totals.typed ? <><b className="tabular">{num(a.totals.typed)}</b> characters typed, <b className="tabular">{num(a.totals.pasted)}</b> pasted, <b className="tabular">{num(a.totals.deleted)}</b> deleted{wordsDays ? <>, on {plural(wordsDays, "day")}</> : ""}.</> : <>Words count when you start one, in pages, files, canvases and Ask.</>}
+          </p>
+        </Section>
+      </Row2>
+    </>
+  );
+}
+
+function ActivityOffLine() {
+  return (
+    <p className="mt-4 text-[13px] leading-[1.45]">
+      Activity is off, so nothing new is added. <button type="button" className="font-semibold underline underline-offset-2" onClick={() => navigate("/settings#privacy")}>Settings → Privacy</button> turns it back on or deletes this.
+    </p>
+  );
+}
+
+/** While Activity is off and nothing was kept: one quiet line saying what it would add. */
+function ActivityInvite() {
+  return (
+    <Section q="Your notes, too" a={<>Stats can also show how long you spend in each page and file, and how much you write.</>}>
+      <p className="mb-4 max-w-[640px] text-[14px] leading-normal text-pretty">It's off unless you turn it on. It keeps only counts (time, characters, words), never what you wrote, and it stays on this computer: Sync doesn't carry it and nobody else sees it.</p>
+      <Button variant="outline" className="h-10" onClick={() => navigate("/settings#privacy")} data-activity-invite>Turn it on in Settings</Button>
+    </Section>
   );
 }

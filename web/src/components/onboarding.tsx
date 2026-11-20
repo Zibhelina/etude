@@ -34,7 +34,8 @@ import { CopyValue } from "@/components/settings-ui";
 import { useChatGptSignIn } from "@/components/settings-chatgpt";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
 import { ChooseFolder } from "@/components/settings-sync";
-import { presetAi, type AiSettings, type OnboardingLevel, type PresetId, type SettingsResponse, type TestResult } from "@/components/settings-model";
+import { aiProviderName, aiProvidersOf, presetAi, type AiSettings, type OnboardingLevel, type PresetId, type SettingsResponse, type TestResult } from "@/components/settings-model";
+import { asksAiConsent, useAiConsent, WHAT_IS_SENT } from "@/components/ai-consent";
 import { useImportPicker } from "@/pages/decks";
 import { announceDataChange } from "@/components/agent-panel";
 import { api } from "@/lib/api";
@@ -54,6 +55,7 @@ import { useFunMode } from "@/lib/fun";
 import { track } from "@/lib/telemetry";
 import { BackCtx, FootSlot, Foot, Ghost, MorphCtx, Note, Option, Options, Primary, Problem, Steps, Title, fieldClass, useMorph } from "@/components/onboarding-ui";
 import cheer from "@/assets/library/minimi-cheer.webp";
+import { holidayArt } from "@/lib/holiday";
 
 /** Settings → About → Run setup again. */
 export const ONBOARDING_EVENT = "etude:onboarding";
@@ -338,7 +340,7 @@ const Loading = () => (
 function Welcome({ fun, onStart, onSignIn }: { fun: boolean; onStart(): void; onSignIn(): void }) {
   return (
     <>
-      {fun ? <img src={cheer} alt="" draggable={false} className="ob-cheer w-[92px] md:w-[110px]" /> : <Logo className="size-[84px]" />}
+      {fun ? <img src={holidayArt(cheer)} alt="" draggable={false} className="ob-cheer w-[92px] md:w-[110px]" /> : <Logo className="size-[84px]" />}
       <Wordmark className="mt-2.5 block text-[40px] leading-none" />
       <h1 className="ob-serif mt-5 text-[28px] leading-[1.18] font-normal tracking-[-0.005em] text-balance md:mt-[22px] md:text-[34px]">Flashcards that check your answers.</h1>
       <p className="mt-2.5 max-w-[26rem] text-[14px] leading-normal text-pretty text-muted-foreground md:text-[15px]">
@@ -378,10 +380,29 @@ function AiStep({ value, onChange, onNext }: { value: boolean | null; onChange(v
       <Note>
         <b>Either way</b> you get spaced repetition, the Market, Anki import and Sync. AI can be turned on later in Settings.
       </Note>
+      {value === true && asksAiConsent() && (
+        <Note className="mt-2.5">
+          <b>What AI sees.</b> To grade and to run the assistant, Etude sends {WHAT_IS_SENT}. It goes straight from this device to the service you pick next: ChatGPT (OpenAI), OpenRouter or your own server. Etude's servers never see it. You agree when you connect it, and can take it back in Settings → AI grading.
+        </Note>
+      )}
       <Foot>
         <Primary onClick={onNext} disabled={value === null}>Continue</Primary>
       </Foot>
     </>
+  );
+}
+
+/** The iPhone app: what the Agree button on a connect screen agrees to, or that it was. */
+function AgreeNote({ ids, agreed }: { ids: string[]; agreed: boolean }) {
+  const who = ids.map(aiProviderName).join(" and ");
+  return (
+    <Note className="mt-2.5">
+      {agreed ? (
+        <>You agreed: Etude sends {WHAT_IS_SENT} from this device to {who}, for grading and the assistant. Take it back any time in Settings → AI grading.</>
+      ) : (
+        <><b>Agree</b> lets Etude send {WHAT_IS_SENT} from this device to {who}, for grading and the assistant. Etude's servers never see it. Take it back any time in Settings → AI grading.</>
+      )}
+    </Note>
   );
 }
 
@@ -439,6 +460,8 @@ function SetupStep({ path, level, settings, onSettings, onDone }: {
     const s = (await api.settings()) as SettingsResponse;
     onSettings(s);
   };
+  // Who a preset sends answers to, for the person's OK before the first one goes.
+  const providersOf = (id: PresetId) => (settings.defaults?.ai ? aiProvidersOf(presetAi(id, settings.defaults.ai, settings.ai)) : []);
   if (path === "chatgpt") return <ChatGptSetup apply={apply} onDone={onDone} />;
   if (path === "local") return <LocalSetup apply={apply} onDone={onDone} />;
   if (guided)
@@ -451,7 +474,8 @@ function SetupStep({ path, level, settings, onSettings, onDone }: {
         onSkip={() => onDone("off")}
       />
     );
-  return <KeySetup provider={path === "openai" ? "openai" : "openrouter"} newcomer={path === "none"} apply={apply} onDone={onDone} />;
+  const keyProvider = path === "openai" ? "openai" : "openrouter";
+  return <KeySetup provider={keyProvider} providers={providersOf(keyProvider)} newcomer={path === "none"} apply={apply} onDone={onDone} />;
 }
 
 type Apply = (id: PresetId, patch?: (ai: AiSettings) => AiSettings) => Promise<void>;
@@ -480,14 +504,21 @@ function Verdict({ result }: { result: { ok: true; ms: number } | { ok: false; e
 }
 
 function ChatGptSetup({ apply, onDone }: { apply: Apply; onDone(o: AiOutcome): void }) {
-  const { status, busy, failure, remote, waitingUrl, start } = useChatGptSignIn();
+  const { status, busy, failure, remote, waitingUrl, start: signIn } = useChatGptSignIn();
+  // In the iPhone app the button is the agreement: it records the OK for ChatGPT, then signs in. No dialog here.
+  const consent = useAiConsent();
+  const toAgree = consent.missing(["chatgpt"]).length > 0 || consent.agreed === null;
+  // Elsewhere sign-in starts inside the tap, as before (a browser blocks the window it opens otherwise).
+  const start = () => (consent.asks ? void consent.agree(["chatgpt"]).then((ok) => void (ok && signIn())) : void signIn());
+  const signInLabel = consent.asks ? "Agree and continue with ChatGPT" : "Sign in with ChatGPT";
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<Awaited<ReturnType<typeof runTest>> | null>(null);
   const tested = useRef(false);
   const signedIn = !!status?.signedIn;
 
   useEffect(() => {
-    if (!signedIn || tested.current) return;
+    // Signed in earlier without agreeing (iPhone app): the sample answer waits for "Agree and test".
+    if (!signedIn || tested.current || toAgree) return;
     tested.current = true;
     setTesting(true);
     apply("chatgpt")
@@ -495,12 +526,12 @@ function ChatGptSetup({ apply, onDone }: { apply: Apply; onDone(o: AiOutcome): v
       .catch((e: Error) => ({ ok: false as const, error: e.message }))
       .then((r) => setResult(r))
       .finally(() => setTesting(false));
-  }, [signedIn, apply]);
+  }, [signedIn, apply, toAgree]);
 
   return (
     <>
       <Title eyebrow="AI grading" lead="A browser window opens, you sign in, and come back here. Etude never sees your password.">Connect ChatGPT</Title>
-      <Steps items={[<>Tap <b>Sign in with ChatGPT</b></>, <>Approve Etude on the OpenAI page</>, <>We grade a sample answer to make sure it works</>]} />
+      <Steps items={[<>Tap <b>{signInLabel}</b></>, <>Approve Etude on the OpenAI page</>, <>We grade a sample answer to make sure it works</>]} />
       {signedIn && status && (
         <p className="mt-3 flex items-center gap-1.5 text-[13.5px] text-foreground/90">
           <CircleCheck className="size-4 text-success" />
@@ -522,18 +553,23 @@ function ChatGptSetup({ apply, onDone }: { apply: Apply; onDone(o: AiOutcome): v
         </a>
       )}
       <Note>Grading counts toward your ChatGPT usage, like any chat. Free ChatGPT accounts don't work.</Note>
+      {consent.asks && <AgreeNote ids={["chatgpt"]} agreed={!toAgree} />}
       <Foot>
-        {signedIn ? (
+        {signedIn && consent.asks && toAgree ? (
+          <Primary onClick={() => void consent.agree(["chatgpt"])}>Agree and test</Primary>
+        ) : signedIn ? (
           <Primary onClick={() => onDone({ preset: "chatgpt", tested: !!result?.ok })} busy={testing}>Continue</Primary>
         ) : (
-          <Primary onClick={start} busy={busy === "login" || !!waitingUrl}>Sign in with ChatGPT</Primary>
+          <Primary onClick={start} busy={busy === "login" || !!waitingUrl}>{signInLabel}</Primary>
         )}
       </Foot>
     </>
   );
 }
 
-function KeySetup({ provider, newcomer, apply, onDone }: { provider: "openrouter" | "openai"; newcomer: boolean; apply: Apply; onDone(o: AiOutcome): void }) {
+function KeySetup({ provider, providers, newcomer, apply, onDone }: { provider: "openrouter" | "openai"; providers: string[]; newcomer: boolean; apply: Apply; onDone(o: AiOutcome): void }) {
+  const consent = useAiConsent();
+  const toAgree = consent.asks && (consent.agreed === null || consent.missing(providers).length > 0);
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Awaited<ReturnType<typeof runTest>> | null>(null);
@@ -593,7 +629,10 @@ function KeySetup({ provider, newcomer, apply, onDone }: { provider: "openrouter
         className="mt-4"
         onSubmit={(e) => {
           e.preventDefault();
-          void test();
+          // In the iPhone app "Agree and test" is the agreement: the OK is recorded, then the key is saved and tested.
+          if (!key.trim()) return;
+          if (consent.asks) void consent.agree(providers).then((ok) => void (ok && test()));
+          else void test();
         }}
       >
         <label htmlFor="ob-key" className="text-[12.5px] text-muted-foreground">API key</label>
@@ -629,11 +668,12 @@ function KeySetup({ provider, newcomer, apply, onDone }: { provider: "openrouter
       <p className="mt-2.5 text-[12px] leading-[1.45] text-muted-foreground">
         {serverless() ? "Kept only on this device, in the app's private storage." : <>Saved to <span className="font-mono">~/.etude/.env</span> as <span className="font-mono">{env}</span>, readable only by you.</>}
       </p>
+      {consent.asks && <AgreeNote ids={providers} agreed={!toAgree} />}
       <Foot ghost={!result?.ok ? <Ghost href={provider === "openrouter" ? OPENROUTER_KEYS : OPENAI_KEYS}>Open {provider === "openrouter" ? "openrouter.ai" : "platform.openai.com"}</Ghost> : undefined}>
         {result?.ok ? (
           <Primary onClick={() => onDone({ preset: provider, tested: true })}>Continue</Primary>
         ) : (
-          <Primary form="ob-key-form" busy={busy} disabled={!key.trim()}>{result ? "Test again" : "Save and test"}</Primary>
+          <Primary form="ob-key-form" busy={busy} disabled={!key.trim()}>{toAgree ? "Agree and test" : result ? "Test again" : "Save and test"}</Primary>
         )}
       </Foot>
     </>
@@ -677,6 +717,11 @@ function LocalSetup({ apply, onDone }: { apply: Apply; onDone(o: AiOutcome): voi
   const [model, setModel] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Awaited<ReturnType<typeof runTest>> | null>(null);
+  const consent = useAiConsent();
+  // A server on this machine needs no OK; one elsewhere does, and in the iPhone app "Agree and test" gives it.
+  const providers = aiProvidersOf({ feedback: { kind: "openai-chat", url: url.trim() } });
+  const toAgree = consent.asks && providers.length > 0 && (consent.agreed === null || consent.missing(providers).length > 0);
+  const check = () => (consent.asks ? void consent.agree(providers).then((ok) => void (ok && test())) : void test());
   const test = async () => {
     setBusy(true);
     setResult(null);
@@ -703,11 +748,12 @@ function LocalSetup({ apply, onDone }: { apply: Apply; onDone(o: AiOutcome): voi
         </label>
       </div>
       <Verdict result={result} />
+      {consent.asks && providers.length > 0 && <AgreeNote ids={providers} agreed={!toAgree} />}
       <Foot>
         {result?.ok ? (
           <Primary onClick={() => onDone({ preset: "local", tested: true })}>Continue</Primary>
         ) : (
-          <Primary onClick={test} busy={busy} disabled={!url.trim() || !model.trim()}>{result ? "Test again" : "Save and test"}</Primary>
+          <Primary onClick={check} busy={busy} disabled={!url.trim() || !model.trim()}>{toAgree ? "Agree and test" : result ? "Test again" : "Save and test"}</Primary>
         )}
       </Foot>
     </>

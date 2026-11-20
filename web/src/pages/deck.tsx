@@ -480,6 +480,11 @@ function Header({ deck, node, work, tags, onRenamed, onAddCards, onChanged, phon
             </Button>
           ) : (
             <>
+              {node?.home && node.home !== "queue" && (
+                <Button size="lg" variant="outline" className={cn("flex-1 gap-2 px-5 sm:flex-none", phone && "h-[3.25rem] rounded-xl text-[15px]")} onClick={() => navigate(`/home?deck=${enc(deck.name)}`)}>
+                  <Library className="size-4" />Open home
+                </Button>
+              )}
               <CustomStudy deck={deck.name} tags={tags} disabled={!node?.cards} phone={phone} adaptive={deck.resolved.adaptiveChallenge || deck.resolved.adaptivePace} />
               {work || !node?.cards ? (
                 <Button size="lg" className={cn("flex-1 gap-2 px-6 sm:flex-none", phone && "h-[3.25rem] rounded-xl text-[16px] font-semibold shadow-[0_3px_0_var(--primary-edge)] pointer-coarse:h-[3.25rem]")} disabled={!work} onClick={() => navigate(`/study?deck=${enc(deck.name)}`)}>
@@ -693,7 +698,7 @@ function Subdecks({ parent, decks }: { parent: string; decks: DeckNode[] }) {
             {!d.archived && d.cards > 0 && (
               <button
                 className={cn("lib-play flex size-[38px] shrink-0 items-center justify-center rounded-full active:scale-90", !w && "dim")}
-                onClick={() => navigate(d.mode === "watch" ? `/watch?deck=${enc(d.name)}` : `/study?deck=${enc(d.name)}${w ? "" : "&ahead=1"}`)}
+                onClick={() => navigate(d.mode === "watch" ? `/watch?deck=${enc(d.name)}` : d.home && d.home !== "queue" ? `/home?deck=${enc(d.name)}` : `/study?deck=${enc(d.name)}${w ? "" : "&ahead=1"}`)}
                 aria-label={`${w ? "Practice" : "Practice ahead"} ${leafOf(d.name)}`}
               >
                 {w ? <Play className="size-3.5 translate-x-px fill-current" /> : <FastForward className="size-4" />}

@@ -25,21 +25,23 @@ import {
   type MarketKind,
 } from "../../core/market.ts";
 import { accountFor, AccountError, pingFreeInstall } from "../../core/account.ts";
+import { sameAuthor } from "../../core/util.ts";
 import { command, group, CliError, Failed } from "../registry.ts";
 import { parseJson, readSource } from "../input.ts";
 
-group({ name: "market", summary: "Market: browse, install and publish shared themes, decks and card types", defaultVerb: "list" });
+group({ name: "market", summary: "Market: browse, install and publish shared themes, decks, card types and plugins", defaultVerb: "list" });
 
-const KIND_FLAG = { name: "kind", type: "string" as const, description: "theme, deck or type.", values: [...MARKET_KINDS] };
+const KIND_FLAG = { name: "kind", type: "string" as const, description: "theme, deck, type or plugin.", values: [...MARKET_KINDS] };
 const URL_FLAG = { name: "url", type: "string" as const, description: "Read the market from this URL or folder instead of the configured one (`settings set market.url=…`).", placeholder: "URL" };
 
 command({
   name: "market list",
-  summary: "Entries in the market, newest first, with whether each is installed here.",
+  summary: "Entries in the market, newest first, with whether each is installed here. Entries by authors you hid are left out.",
   flags: [
     KIND_FLAG,
     { name: "query", type: "string", alias: ["q"], description: "Only entries whose name, description, author or tags contain these words.", placeholder: "WORDS" },
     { name: "refresh", type: "boolean", description: "Skip the one-minute cache of the index." },
+    { name: "all", type: "boolean", description: "Include entries by authors you hid (`market hide-author`)." },
     URL_FLAG,
   ],
   examples: ["etude market list", "etude market list --kind theme", 'etude market list -q "japanese"'],
@@ -49,7 +51,9 @@ command({
     const index = await fetchIndex(url, { refresh: ctx.flags.refresh });
     const words = String(ctx.flags.query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
     const installed = installedEntries(ctx.e);
+    const hidden = ctx.flags.all ? [] : ctx.e.hiddenAuthors().map((h) => h.author);
     return index.entries
+      .filter((x) => !hidden.some((a) => sameAuthor(a, x.author)))
       .filter((x) => !ctx.flags.kind || x.kind === ctx.flags.kind)
       .filter((x) => words.every((w) => [x.name, x.description, x.author, ...x.tags].join(" ").toLowerCase().includes(w)))
       .map(({ summary: _s, path: _p, ...x }) => ({ ...x, installed: installState(ctx.e, x, installed) }));
@@ -89,13 +93,13 @@ command({
   name: "market install",
   summary: "Add an entry to your collection. Installing again updates it; decks keep your scheduling.",
   description:
-    "A theme becomes a custom theme (it gets a new id if yours already uses the published one). A deck or card type is imported as a pack: items match by id, so reinstalling updates content and keeps review history. With --file, installs a local entry file instead of one from the market.",
+    "A theme becomes a custom theme (it gets a new id if yours already uses the published one). A deck or card type is imported as a pack: items match by id, so reinstalling updates content and keeps review history. With Sync, an item whose id was deleted (you deleted the deck, here or on another device) comes back under a fresh id, `<id>.r1` or the next free one: `remap` lists them, and the install record keeps them so updates follow. With --file, installs a local entry file instead of one from the market.",
   args: [{ name: "id", description: "Entry id (omit with --file).", required: false }],
   flags: [KIND_FLAG, URL_FLAG, { name: "file", type: "string", description: "Install this entry file (`-` for stdin).", placeholder: "FILE" }, { name: "use", type: "boolean", description: "Themes: also select it." }],
   writes: true,
   dryRun: "self",
   examples: ["etude market install dusk-rose --use", "etude market install morse-code --dry-run", "etude market install --file my-deck.json"],
-  output: "{ entry, result: created|updated|unchanged, ids, dryRun, report }",
+  output: "{ entry, result: created|updated|unchanged, ids, dryRun, report, remap?: { packId: id } }",
   async run(ctx) {
     let out;
     if (ctx.flags.file) out = installFile(ctx.e, parseJson(readSource(ctx, ctx.flags.file), ctx.flags.file), { dryRun: ctx.dry });
@@ -113,7 +117,7 @@ command({
 command({
   name: "market installed",
   summary: "What you installed from the market, with what each put in your collection.",
-  output: "array of { id, kind, name, version, updated, at, ids }",
+  output: "array of { id, kind, name, version, updated, at, ids, remap? }",
   run: (ctx) => Object.entries(installedEntries(ctx.e)).map(([id, r]) => ({ id, ...r })),
 });
 
@@ -127,6 +131,42 @@ command({
     if (!forgetInstall(ctx.e, ctx.args.id)) throw new CliError(`"${ctx.args.id}" isn't installed`, "not_found");
     return { forgot: ctx.args.id };
   },
+});
+
+// ------------------------------------------------------------------ authors you hid
+// Kept in your settings and synced; the app leaves their entries out of every Market list, and so does `market list`.
+
+const AUTHOR_ARG = { name: "author", description: "The author's name, as their entries show it (any case).", required: true, variadic: true };
+const authorOf = (ctx: { args: Record<string, any> }) => ([] as string[]).concat(ctx.args.author).join(" ");
+
+command({
+  name: "market hide-author",
+  summary: "Hide everything from one author: their entries leave every Market list, in the app and in `market list`. Synced with your settings.",
+  description: "Installed entries stay installed and keep showing under Yours. `market show-author` undoes it; Settings → Privacy lists who you hid.",
+  args: [AUTHOR_ARG],
+  writes: true,
+  dryRun: true,
+  examples: ['etude market hide-author "Jane Doe"'],
+  output: "{ author, hidden: true, hiddenAuthors: string[] }",
+  run: (ctx) => ctx.e.hideAuthor(authorOf(ctx)),
+});
+
+command({
+  name: "market show-author",
+  summary: "Show an author's entries in the Market again.",
+  args: [AUTHOR_ARG],
+  writes: true,
+  dryRun: true,
+  examples: ['etude market show-author "Jane Doe"'],
+  output: "{ author, hidden: false, hiddenAuthors: string[] }",
+  run: (ctx) => ctx.e.showAuthor(authorOf(ctx)),
+});
+
+command({
+  name: "market hidden-authors",
+  summary: "The Market authors you hid, oldest first.",
+  output: "{ hiddenAuthors: [{ author, since }] }",
+  run: (ctx) => ({ hiddenAuthors: ctx.e.hiddenAuthors() }),
 });
 
 const PUBLISH_FLAGS = [

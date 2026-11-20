@@ -10,6 +10,7 @@ import { NATIVE_COPY } from "@/lib/native-copy";
 import { cn } from "@/lib/utils";
 import { Block, CopyValue, Field, NumberField } from "@/components/settings-ui";
 import { CHATGPT_DEFAULT_MODEL, type ChatGptProvider } from "@/components/settings-model";
+import { useAiConsent } from "@/components/ai-consent";
 
 export interface ChatGptStatus {
   signedIn: boolean;
@@ -136,7 +137,10 @@ export function useChatGptSignIn() {
 }
 
 export function ChatGptBlock({ provider, error, onChange }: { provider: ChatGptProvider; error?: string; onChange(patch: Partial<ChatGptProvider>): void }) {
-  const { status, busy, failure, remote, waitingUrl, start, signOut } = useChatGptSignIn();
+  const { status, busy, failure, remote, waitingUrl, start: signIn, signOut } = useChatGptSignIn();
+  // Grading with the plan sends cards and answers to OpenAI: in the iPhone app the person agrees first.
+  const consent = useAiConsent();
+  const start = () => consent.confirm(["chatgpt"], () => void signIn());
 
   const signedIn = !!status?.signedIn;
   const currentModel = provider.model || CHATGPT_DEFAULT_MODEL;
@@ -272,6 +276,7 @@ export function ChatGptBlock({ provider, error, onChange }: { provider: ChatGptP
           )}
         </div>
       )}
+      {consent.dialog}
     </Block>
   );
 }

@@ -1,6 +1,6 @@
 {
   "name": "@zibhelina/etude",
-  "version": "3.1.2",
+  "version": "3.2.0",
   "description": "Spaced-repetition practice with programmable card types and AI grading.",
   "keywords": [
     "spaced-repetition",
@@ -70,6 +70,7 @@
     "unpdf": "^1.9.1"
   },
   "devDependencies": {
+    "@zumer/snapdom": "^3.7.4",
     "@capacitor/android": "^8.5.3",
     "@capacitor/app": "^8.1.2",
     "@capacitor/assets": "^3.0.5",

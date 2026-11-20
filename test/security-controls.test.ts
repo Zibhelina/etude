@@ -100,7 +100,7 @@ test("the desktop window: isolated, sandboxed, no Node; links, navigation, permi
   assert.match(app, /\["http:", "https:", "mailto:"\]\.includes\(u\.protocol\)/, "only web and mail links leave the app");
   assert.match(app, /setPermissionRequestHandler\([^\n]*details\.isMainFrame/);
   assert.match(app, /setPermissionCheckHandler\([^\n]*details\.isMainFrame/);
-  assert.match(app, /e\.senderFrame === win\.webContents\.mainFrame/, "IPC answers the top frame only");
+  assert.match(app, /e\.sender === w\.webContents && e\.senderFrame === w\.webContents\.mainFrame/, "IPC answers a window's top frame only");
   const preload = read("desktop/preload.cjs");
   assert.equal((preload.match(/exposeInMainWorld\(/g) ?? []).length, 1);
   assert.doesNotMatch(preload, /exposeInMainWorld\([^)]*\b(?:require|process|ipcRenderer)\s*[,}]/, "no raw Node or IPC handed to the page");

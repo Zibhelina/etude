@@ -52,7 +52,7 @@ function Setup({ deck, q, n, onDone, onCancel }: { deck: string | null; q: strin
           ))}
         </select>
       ) : (
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder='tag:greedy  or  deck:"CMPT 307" is:due' aria-label="Search" className="note-cards-input font-mono text-[13px]" autoFocus />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder='tag:greedy  or  deck:"Algorithms" is:due' aria-label="Search" className="note-cards-input font-mono text-[13px]" autoFocus />
       )}
       <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
         <label className="flex items-center gap-2">

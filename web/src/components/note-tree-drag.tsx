@@ -38,8 +38,10 @@ export function useNoteTreeDrag<D = unknown>({ list, tree, open, setOpen, place,
   tree: Tree;
   open: Set<string>;
   setOpen(id: string, on: boolean): void;
-  /** Puts the pages there, in this order; resolves when the tree has reloaded. */
-  place(items: Placement[]): Promise<void>;
+  /** Puts the pages there, in this order; resolves when the tree has reloaded. A move between the collection and a
+   * folder on this computer answers with what to tell: it has no Undo here (the originals wait in the Archive or
+   * the folder's trash). */
+  place(items: Placement[]): Promise<void | { told: string }>;
   /** The pages selected right now (Shift+click), outermost only. */
   selected(): string[];
 }) {
@@ -229,8 +231,9 @@ export function useNoteTreeDrag<D = unknown>({ list, tree, open, setOpen, place,
       const to = d.parent;
       void (async () => {
         try {
-          await live.current.place(moving.map((id, k) => ({ id, parentId: to, index: d.index === undefined ? undefined : d.index + k })));
+          const crossed = await live.current.place(moving.map((id, k) => ({ id, parentId: to, index: d.index === undefined ? undefined : d.index + k })));
           if (to) live.current.setOpen(to, true);
+          if (crossed) return void toast(crossed.told);
           const where = to ? `inside “${title(byId(to) ?? { title: "" })}”` : before.some((b) => b.parentId) ? "to the top level" : "";
           const what = moving.length > 1 ? `${moving.length} pages` : `“${title(n)}”`;
           toast(`Moved ${what}${where ? ` ${where}` : ""}`, {

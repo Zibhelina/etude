@@ -1,18 +1,19 @@
 // Minimi's mini chat (Fun mode, desktop and iPad): no panel, just speech balloons floating beside him wherever he
-// sits. His replies sit on the left, yours on the right, no tails (João's pick). It is
+// sits. His replies sit on the left, yours on the right, no tails (compact style). It is
 // Ask Etude, the same conversation as the side panel; ⤢ moves it there.
-import { useLayoutEffect, useRef, useState } from "react";
-import { ArrowUp, Maximize2, Plus, Square, SquarePen, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Maximize2, SquarePen, X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AttachmentChip, BubbleContext, LiveView, MessageView, openAiSettings, useAgentChat } from "@/components/agent-panel";
-import { isNativeApp } from "@/lib/platform";
+import { RichContext } from "@/components/agent-rich";
+import { Composer, LiveView, MessageView, YouContext, askName, openAiSettings, useAgentChat } from "@/components/agent-panel";
+import { useFunMode } from "@/lib/fun";
+import { MINIMI_PROFILE_ID } from "@/lib/agent-profiles";
 import { cn } from "@/lib/utils";
 
-const NATIVE_ATTACH = isNativeApp() ? "image/*,application/pdf,text/*,.md,.csv,.json,.apkg" : undefined;
 const GAP = 18;
 const EDGE = 8;
 /** Room above the balloons for the round buttons. */
-const CTRL = 54;
+const CTRL = 40;
 
 const CHIPS: { label: string; file?: boolean }[] = [
   { label: "What should I review today?" },
@@ -60,7 +61,7 @@ function IconButton({ label, tip, onClick, disabled, children }: { label: string
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button type="button" aria-label={label} disabled={disabled} onClick={onClick} className="mchat-round flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors outline-ring hover:text-foreground focus-visible:outline-2 disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-[18px]">
+        <button type="button" aria-label={label} disabled={disabled} onClick={onClick} className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors outline-ring hover:bg-accent hover:text-foreground focus-visible:outline-2 disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-[15px]">
           {children}
         </button>
       </TooltipTrigger>
@@ -69,9 +70,13 @@ function IconButton({ label, tip, onClick, disabled, children }: { label: string
   );
 }
 
-export function MinimiChat({ onClose, onExpand, onChanged }: { onClose(): void; onExpand(): void; onChanged(final: boolean): void }) {
+export function MinimiChat({ onClose, onExpand, onChanged, onProfile }: { onClose(): void; onExpand(): void; onChanged(final: boolean): void; onProfile?(id: string | null): void }) {
   const chat = useAgentChat({ onClose, onChanged, takeAsk: false });
-  const { conv, models, text, setText, atts, setAtts, live, busy, scroller, input, fileInput, stick, openConv, addFiles, send, stop, answer, undo, notConfigured, messages, empty, canSend, suggest } = chat;
+  // The corner shows whoever this chat is with, while it's open (App.tsx).
+  useEffect(() => onProfile?.(chat.profile.id), [chat.profile.id]);
+  const { conv, models, profile, live, busy, scroller, fileInput, stick, openConv, addFiles, answer, undo, removeConv, notConfigured, messages, empty, suggest } = chat;
+  const fun = useFunMode();
+  const minimi = profile.id === MINIMI_PROFILE_ID;
   const card = useRef<HTMLDivElement>(null);
   const place = usePlaceBesideMinimi(card);
   const [scrolled, setScrolled] = useState(false);
@@ -80,9 +85,9 @@ export function MinimiChat({ onClose, onExpand, onChanged }: { onClose(): void; 
     <div
       ref={card}
       role="dialog"
-      aria-label="Ask Minimi"
+      aria-label={`Ask ${askName(profile, fun)}`}
       data-minimi-chat
-      className={cn("mchat fixed z-40 flex w-[320px] max-w-[calc(100vw-16px)] flex-col text-foreground", place ? "visible" : "invisible", place && (place.flip ? "is-flip" : "is-right"))}
+      className={cn("mchat fixed z-40 flex w-[360px] max-w-[calc(100vw-16px)] flex-col text-foreground", place ? "visible" : "invisible", place && (place.flip ? "is-flip" : "is-right"))}
       style={{ left: place?.left ?? 0, top: place?.top ?? 0, maxHeight: `min(520px, calc(100dvh - ${CTRL + EDGE}px))` }}
       onDragOver={(e) => e.dataTransfer.types.includes("Files") && e.preventDefault()}
       onDrop={(e) => {
@@ -90,9 +95,10 @@ export function MinimiChat({ onClose, onExpand, onChanged }: { onClose(): void; 
         addFiles([...e.dataTransfer.files]);
       }}
     >
+      {chat.consentDialog}
       {/* backdrop-filter set inline: the CSS minifier keeps only the -webkit- copy, which Chrome ignores. */}
       <div className="mchat-veil" aria-hidden style={{ backdropFilter: "blur(16px) saturate(0.8)" }} />
-      <div className="mchat-ctl absolute -top-[52px] right-0 flex gap-2">
+      <div className="mchat-ctl absolute -top-9 right-0 flex gap-0.5">
         {!empty && (
           <IconButton label="New chat" disabled={busy || !conv} onClick={() => openConv(null)}>
             <SquarePen />
@@ -106,7 +112,7 @@ export function MinimiChat({ onClose, onExpand, onChanged }: { onClose(): void; 
         </IconButton>
       </div>
 
-      <BubbleContext.Provider value>
+      <YouContext.Provider value>
         <div
           ref={scroller}
           className={cn("mchat-log flex min-h-0 flex-1 flex-col overflow-y-auto", scrolled && "is-scrolled")}
@@ -118,7 +124,7 @@ export function MinimiChat({ onClose, onExpand, onChanged }: { onClose(): void; 
         >
           {notConfigured ? (
             <div className="flex flex-col items-start gap-2.5">
-              <div data-mbub className="mchat-b max-w-[88%] px-[14px] py-2.5 text-[14.5px] leading-[1.42]">
+              <div className="text-[14.5px] leading-[1.42]">
                 Hm. I need a brain first. Connect a model in Settings → AI and I'm all yours.
               </div>
               <button type="button" onClick={openAiSettings} className="mchat-chip self-end">
@@ -126,10 +132,14 @@ export function MinimiChat({ onClose, onExpand, onChanged }: { onClose(): void; 
               </button>
             </div>
           ) : empty ? (
-            <div data-mbub className="mchat-b max-w-[88%] self-start px-[14px] py-2.5 text-[14.5px] leading-[1.42]">
-              Hm? What do you want: a card explained, new cards made, or a quick quiz on what's due?
-            </div>
+            // Only Minimi greets and offers suggestions; another agent's mini chat starts as just the box.
+            !profile.available ? (
+              <div className="self-start text-[14.5px] leading-[1.42]">{`${profile.note}. Pick someone else above, or open Etude on that computer.`}</div>
+            ) : minimi ? (
+              <div className="self-start text-[14.5px] leading-[1.42]">Hm? What do you want: a card explained, new cards made, or a quick quiz on what's due?</div>
+            ) : null
           ) : (
+            <RichContext.Provider value={{ conv: conv?.id ?? "", send: suggest }}>
             <div className="flex flex-col gap-2.5">
               {messages.map((m, i) => (
                 <MessageView key={m.id} m={m} conv={conv!.id} last={i === messages.length - 1 && !live} groups={models?.groups} onUndo={() => undo(m)} />
@@ -141,11 +151,12 @@ export function MinimiChat({ onClose, onExpand, onChanged }: { onClose(): void; 
                 </>
               )}
             </div>
+            </RichContext.Provider>
           )}
         </div>
-      </BubbleContext.Provider>
+      </YouContext.Provider>
 
-      {empty && !notConfigured && (
+      {empty && !notConfigured && minimi && (
         <div className="flex shrink-0 flex-wrap justify-end gap-1.5 pt-2.5">
           {CHIPS.map((c) => (
             <button key={c.label} type="button" className="mchat-chip" onClick={() => (c.file ? fileInput.current?.click() : suggest(c.label))}>
@@ -156,51 +167,7 @@ export function MinimiChat({ onClose, onExpand, onChanged }: { onClose(): void; 
       )}
 
       <div className="shrink-0 pt-4">
-        {atts.length > 0 && (
-          <div className="flex flex-wrap justify-end gap-1.5 pb-2">
-            {atts.map((a) => (
-              <AttachmentChip key={"key" in a ? a.key : a.id} a={a} conv={conv?.id} onRemove={"id" in a ? () => setAtts((x) => x.filter((y) => !("id" in y) || y.id !== a.id)) : undefined} />
-            ))}
-          </div>
-        )}
-        <div className="mchat-pill flex items-end gap-1 rounded-[22px] p-1" onClick={(e) => e.target === e.currentTarget && input.current?.focus()}>
-          <input ref={fileInput} type="file" multiple hidden accept={NATIVE_ATTACH} onChange={(e) => (addFiles([...(e.target.files ?? [])]), (e.target.value = ""))} />
-          <button type="button" aria-label="Attach files" title="Attach images, PDFs, text or .apkg" disabled={!!notConfigured} onClick={() => fileInput.current?.click()} className="grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors outline-ring hover:bg-accent hover:text-foreground focus-visible:outline-2 disabled:opacity-40">
-            <Plus className="size-[18px]" strokeWidth={2.2} />
-          </button>
-          <textarea
-            ref={input}
-            value={text}
-            rows={1}
-            disabled={!!notConfigured}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                send();
-              }
-            }}
-            onPaste={(e) => {
-              const files = [...e.clipboardData.files];
-              if (files.length) {
-                e.preventDefault();
-                addFiles(files);
-              }
-            }}
-            placeholder="Ask Minimi"
-            aria-label="Message"
-            className="block max-h-28 min-h-8 flex-1 resize-none bg-transparent py-1.5 text-[14.5px] leading-[20px] text-foreground outline-none placeholder:text-muted-foreground/70 [field-sizing:content]"
-          />
-          {busy ? (
-            <button type="button" aria-label="Stop" onClick={stop} className="grid size-8 shrink-0 place-items-center rounded-full bg-foreground text-background outline-ring hover:opacity-85 focus-visible:outline-2">
-              <Square className="size-2.5 fill-current" />
-            </button>
-          ) : (
-            <button type="button" aria-label="Send" disabled={!canSend} onClick={send} className={cn("grid size-8 shrink-0 place-items-center rounded-full transition-all outline-ring focus-visible:outline-2", canSend ? "bg-primary text-primary-foreground" : "pointer-events-none scale-75 opacity-0")}>
-              <ArrowUp className="size-[18px]" strokeWidth={2.2} />
-            </button>
-          )}
-        </div>
+        <Composer chat={chat} phone={false} below onDelete={conv ? () => (removeConv(conv.id), openConv(null)) : undefined} />
       </div>
     </div>
   );

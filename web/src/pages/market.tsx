@@ -3,7 +3,7 @@
 // Themes can be tried on: the whole app repaints until you keep it or take it off. Publish opens a pull
 // request with the user's GitHub CLI.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Blocks, Check, ChevronRight, Download, ExternalLink, Eye, GitPullRequest, Layers, Loader2, Palette, RefreshCw, Search, Store, Upload, X } from "lucide-react";
+import { Blocks, Check, ChevronRight, Download, ExternalLink, Eye, GitPullRequest, Layers, Loader2, Palette, Puzzle, RefreshCw, Search, Store, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,8 @@ import { download } from "@/components/type-editor/starter";
 import { api, ApiError, type CardType, type ComingSoonEntry, type MarketEntry, type MarketFile, type MarketKind, type PublishResult } from "@/lib/api";
 import { EtudeImg } from "@/lib/local-url";
 import { MarketGallery } from "@/components/market-gallery";
-import { DetailLayout, niceDate, paragraphs, type InfoCell } from "@/components/market-detail";
+import { AGE_CELL, DetailLayout, EntryMenu, HiddenNotice, niceDate, paragraphs, type InfoCell } from "@/components/market-detail";
+import { sameAuthor } from "../../../src/core/util.ts";
 import { Comments, socialCells, TileCounts, useEntryStats, Votes } from "@/components/market-social";
 import { useMarketStats, type EntryCounts } from "@/lib/market-social";
 import { HArrows, nearestIndex, useHScroll } from "@/lib/hscroll";
@@ -32,9 +33,10 @@ import { money, type PaidEntry } from "@/lib/account";
 import { canShowPurchases, isNativeApp } from "@/lib/platform";
 import { SoonDetail, SoonTile } from "@/components/market-soon";
 import { track } from "@/lib/telemetry";
+import { notifyPluginsChanged } from "@/lib/plugins";
 
-const KIND_LABEL: Record<MarketKind, string> = { theme: "Theme", deck: "Deck", type: "Card type" };
-const KIND_ICON: Record<MarketKind, React.ComponentType<{ className?: string }>> = { theme: Palette, deck: Layers, type: Blocks };
+const KIND_LABEL: Record<MarketKind, string> = { theme: "Theme", deck: "Deck", type: "Card type", plugin: "Plugin" };
+const KIND_ICON: Record<MarketKind, React.ComponentType<{ className?: string }>> = { theme: Palette, deck: Layers, type: Blocks, plugin: Puzzle };
 const GRADER_WORD: Record<string, string> = { self: "self-rated", script: "checked by script", ai: "AI-graded", hybrid: "script + AI" };
 const plural = (n: number, w: string) => `${n.toLocaleString("en-US")} ${w}${n === 1 ? "" : "s"}`;
 const kb = (b: number) => (b < 1e6 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1e6).toFixed(1)} MB`);
@@ -77,6 +79,7 @@ function metaLine(e: MarketEntry): string {
   const s = s_(e);
   if (e.kind === "theme") return `${s.theme.scheme === "light" ? "Light" : "Dark"} theme`;
   if (e.kind === "type") return `Card type · ${(s.types as any[]).map((t) => GRADER_WORD[t.grader] ?? t.grader).join(", ")}`;
+  if (e.kind === "plugin") return `Plugin · ${s.plugin?.permissions?.length ?? 0} permission${s.plugin?.permissions?.length === 1 ? "" : "s"}`;
   const p = parts(s.decks).length;
   return `${plural(s.items, "card")}${p > 1 ? ` · ${p} parts` : ""}${s.watch ? " · tour" : ""}`;
 }
@@ -94,7 +97,7 @@ export function MarketPage() {
   const tab: Tab = tabs.includes(params.get("tab") as Tab) ? (params.get("tab") as Tab) : "browse";
   const paid = usePaidIndex();
   const { stats, reload: reloadStats } = useMarketStats();
-  const [data, setData] = useState<{ repo: string; url: string; selectedTheme: string; entries: MarketEntry[]; comingSoon?: ComingSoonEntry[] } | null>(null);
+  const [data, setData] = useState<{ repo: string; url: string; selectedTheme: string; entries: MarketEntry[]; comingSoon?: ComingSoonEntry[]; hiddenAuthors?: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [publishing, setPublishing] = useState(false);
@@ -176,14 +179,40 @@ export function MarketPage() {
   const open = (it: AnyItem) => navigate(`/market?entry=${it.key}`);
   const leaveDetail = () => navigate(filter === "all" ? "/market" : `/market?kind=${filter}`);
 
-  // ---- what Discover shows
+  // ---- authors you hid: left out of every list here (Discover, shelves, search); Yours and a direct link still reach them.
+  const hiddenAuthors = data?.hiddenAuthors ?? [];
+  const isHidden = (author: string) => hiddenAuthors.some((a) => sameAuthor(a, author));
+  const setHidden = (list: string[]) => setData((d) => (d ? { ...d, hiddenAuthors: list } : d));
+  const showAuthor = async (author: string) => {
+    try {
+      setHidden((await api.showAuthor(author)).hiddenAuthors);
+    } catch (e) {
+      toast.error("Couldn't show them again", { description: (e as Error).message });
+    }
+  };
+  const hideAuthor = async (author: string) => {
+    try {
+      setHidden((await api.hideAuthor(author)).hiddenAuthors);
+      toast(`You won't see ${author}'s entries anymore`, { description: "Show them again here or in Settings → Privacy.", action: { label: "Undo", onClick: () => void showAuthor(author) } });
+      leaveDetail();
+    } catch (e) {
+      toast.error("Couldn't hide them", { description: (e as Error).message });
+    }
+  };
+  /** The entry's menu; `author` only for entries other people made. */
+  const menuFor = (key: string, name: string, author: string | null) => (
+    <EntryMenu name={name} entryKey={key} author={author} hidden={!!author && isHidden(author)} onHide={() => author && void hideAuthor(author)} onShow={() => author && void showAuthor(author)} />
+  );
+  const noticeFor = (author: string | null) => (author && isHidden(author) ? <HiddenNotice author={author} onShow={() => void showAuthor(author)} /> : null);
+
+  // ---- what Discover shows (phones stay plugin-free)
   const items = useMemo<Item[]>(() => [
     ...paid.entries.map((e): Item => ({ paid: true, key: `paid/${e.listing}`, e })),
-    ...(data?.entries ?? []).map((e): Item => ({ paid: false, key: `${e.kind}/${e.id}`, e })),
-  ], [paid.entries, data]);
+    ...(data?.entries ?? []).filter((e) => !isNativeApp() || e.kind !== "plugin").map((e): Item => ({ paid: false, key: `${e.kind}/${e.id}`, e })),
+  ].filter((it) => !(data?.hiddenAuthors ?? []).some((a) => sameAuthor(a, it.e.author))), [paid.entries, data]);
   const kindOf = (it: AnyItem): MarketKind => (it.paid ? "deck" : it.e.kind);
   const counts = useMemo(() => {
-    const c = { all: 0, theme: 0, deck: 0, type: 0 } as Record<Filter, number>;
+    const c = { all: 0, theme: 0, deck: 0, type: 0, plugin: 0 } as Record<Filter, number>;
     for (const it of [...items, ...soon]) (c.all++, c[kindOf(it)]++);
     return c;
   }, [items, soon]);
@@ -209,7 +238,8 @@ export function MarketPage() {
     const key = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       const typing = !!t?.closest?.("input, textarea, select, [contenteditable=true]");
-      if (document.querySelector("[role=dialog]")) return;
+      // An open dialog or menu (the entry's …) takes Escape for itself.
+      if (document.querySelector("[role=dialog], [role=menu]")) return;
       if (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && tab === "browse" && !detail) {
         e.preventDefault();
         searchRef.current?.focus();
@@ -234,9 +264,12 @@ export function MarketPage() {
   const repo = data?.repo ?? "";
   let body: React.ReactNode;
   if (detail && openFree) {
+    const by = official(openFree.author) ? null : openFree.author;
     body = (
       <EntryDetail
         key={`${openFree.kind}/${openFree.id}`}
+        menu={menuFor(`${openFree.kind}/${openFree.id}`, openFree.name, by)}
+        notice={noticeFor(by)}
         entry={openFree}
         all={data?.entries ?? []}
         repo={repo}
@@ -251,9 +284,11 @@ export function MarketPage() {
       />
     );
   } else if (detail && openSoon) {
-    body = <SoonDetail key={openSoon.id} entry={openSoon} onBack={leaveDetail} />;
+    body = <SoonDetail key={openSoon.id} entry={openSoon} menu={menuFor(`soon/${openSoon.id}`, openSoon.name, null)} onBack={leaveDetail} />;
   } else if (detail && openPaid) {
-    body = <PaidDetail key={openPaid.listing} entry={openPaid} signedIn={paid.signedIn} onBack={leaveDetail} onChanged={() => (void paid.reload(), void reloadStats())} />;
+    // Decks Etude sells are its own; a creator's can be hidden like any author's.
+    const by = openPaid.soldBy === "etude" || official(openPaid.author) ? null : openPaid.author;
+    body = <PaidDetail key={openPaid.listing} entry={openPaid} menu={menuFor(`paid/${openPaid.listing}`, openPaid.name, by)} notice={noticeFor(by)} signedIn={paid.signedIn} onBack={leaveDetail} onChanged={() => (void paid.reload(), void reloadStats())} />;
   } else {
     body = (
       <>
@@ -261,7 +296,13 @@ export function MarketPage() {
           <div className="min-w-0 flex-1">
             <h1 className="mk-serif text-[34px] leading-[1.1] font-semibold max-md:text-[30px]">Market</h1>
             <p className="mt-2 max-w-[560px] text-[14.5px] leading-snug text-muted-foreground">
-              {canShowPurchases() ? "Decks, card types and themes people made. Most of it is free." : "Decks, card types and themes people made, free to install."}{" "}
+              {canShowPurchases()
+                ? isNativeApp()
+                  ? "Decks, card types and themes people made. Most of it is free."
+                  : "Decks, card types, themes and plugins people made. Most of it is free."
+                : isNativeApp()
+                  ? "Decks, card types and themes people made, free to install."
+                  : "Decks, card types, themes and plugins people made, free to install."}{" "}
               {data && <a className="whitespace-nowrap underline decoration-muted-foreground/40 underline-offset-2 hover:text-foreground" href={`https://github.com/${data.repo}`} target="_blank" rel="noreferrer">Browse on GitHub</a>}
             </p>
           </div>
@@ -292,11 +333,11 @@ export function MarketPage() {
           <>
             <label className="mk-search">
               <Search className="size-[18px]" />
-              <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search decks, card types, themes" aria-label="Search the market" autoComplete="off" />
+              <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={isNativeApp() ? "Search decks, card types, themes" : "Search decks, card types, themes, plugins"} aria-label="Search the market" autoComplete="off" />
               {query ? <button type="button" aria-label="Clear search" onClick={() => (setQuery(""), searchRef.current?.focus())}><X className="size-4" /></button> : <kbd>/</kbd>}
             </label>
             <div className="mk-chips" role="group" aria-label="Kind">
-              {(["all", "deck", "type", "theme"] as Filter[]).map((f) => (
+              {((isNativeApp() ? ["all", "deck", "type", "theme"] : ["all", "deck", "type", "theme", "plugin"]) as Filter[]).map((f) => (
                 <button key={f} aria-pressed={filter === f} onClick={() => setFilter(f)}>
                   {f === "all" ? "All" : f === "type" ? "Card types" : `${KIND_LABEL[f]}s`}
                   {data && <span>{counts[f]}</span>}
@@ -349,8 +390,15 @@ export function MarketPage() {
                 />
                 <Shelf title="Coming soon" sub="Decks we're still making. Here's a first look." items={soon} stats={stats} onOpen={open} onTry={tryOn} data-soon-section />
                 <Shelf title="Card types" sub="New kinds of cards. Try one here before you install it." items={sorted(items.filter((it) => !it.paid && it.e.kind === "type"))} stats={stats} onAll={() => setFilter("type")} onOpen={open} onTry={tryOn} />
+                {!isNativeApp() && <Shelf title="Plugins" sub="Free sandboxed extensions for desktop and web. Every plugin shows its permissions before you install it." items={sorted(items.filter((it) => !it.paid && it.e.kind === "plugin"))} stats={stats} onAll={() => setFilter("plugin")} onOpen={open} onTry={tryOn} />}
                 <Shelf title="Themes" sub="Try one on. Nothing changes until you keep it." items={sorted(items.filter((it) => !it.paid && it.e.kind === "theme"))} stats={stats} onAll={() => setFilter("theme")} onOpen={open} onTry={tryOn} themes />
               </>
+            )}
+            {data && !error && (
+              <p className="mk-fine mt-10" data-age-note>
+                Everything in the Market fits a 13+ age rating. If something doesn't, report it from its page.
+                {hiddenAuthors.length > 0 && <> You hid {hiddenAuthors.length === 1 ? "1 author" : `${hiddenAuthors.length} authors`}; <a href="/settings#privacy" className="underline underline-offset-2 hover:text-foreground" onClick={(x) => (x.preventDefault(), navigate("/settings#privacy"))}>show them again</a> in Settings.</>}
+              </p>
             )}
           </>
         )}
@@ -575,6 +623,7 @@ function Yours({ data, showBought, onOpen, onChanged, onThemes }: { data: { sele
   const goTo = (e: MarketEntry) => {
     const s = s_(e);
     if (e.kind === "deck") navigate(`/deck?name=${encodeURIComponent(s.decks[0])}`);
+    else if (e.kind === "plugin") navigate("/settings#plugins");
     else navigate(`/types/${encodeURIComponent(s.types[0].id)}`);
   };
   return (
@@ -592,7 +641,7 @@ function Yours({ data, showBought, onOpen, onChanged, onThemes }: { data: { sele
       <section className="mk-lsec">
         <div className="mk-lhead"><span>Installed from the Market{inst.length > 0 && <i>{inst.length}</i>}</span></div>
         <div className="mk-panel mk-list">
-          {inst.length === 0 && <div className="px-3 py-3 text-sm text-muted-foreground">Nothing yet. Decks and card types you install show up here.</div>}
+          {inst.length === 0 && <div className="px-3 py-3 text-sm text-muted-foreground">{isNativeApp() ? "Nothing yet. Decks and card types you install show up here." : "Nothing yet. Decks, card types and plugins you install show up here."}</div>}
           {inst.map((e) => (
             <div key={`${e.kind}/${e.id}`} className="mk-li" role="button" tabIndex={0} onClick={() => onOpen(e)} onKeyDown={(x) => x.key === "Enter" && x.target === x.currentTarget && onOpen(e)}>
               <div className="mk-li-thumb"><Cover entry={e} /></div>
@@ -632,7 +681,7 @@ function Yours({ data, showBought, onOpen, onChanged, onThemes }: { data: { sele
 
 // ------------------------------------------------------------------ detail
 
-function EntryDetail({ entry, all, repo, inUse, trying, signedIn, onTry, onKeep, onBack, onOpen, onInstalled }: { entry: MarketEntry; all: MarketEntry[]; repo: string; inUse: boolean; trying: boolean; signedIn: boolean; onTry(): void; onKeep(): void; onBack(): void; onOpen(e: MarketEntry): void; onInstalled(): void }) {
+function EntryDetail({ entry, all, repo, inUse, trying, signedIn, menu, notice, onTry, onKeep, onBack, onOpen, onInstalled }: { entry: MarketEntry; all: MarketEntry[]; repo: string; inUse: boolean; trying: boolean; signedIn: boolean; menu: React.ReactNode; notice: React.ReactNode; onTry(): void; onKeep(): void; onBack(): void; onOpen(e: MarketEntry): void; onInstalled(): void }) {
   const [file, setFile] = useState<MarketFile | null>(null);
   const [busy, setBusy] = useState<null | "install" | "use">(null);
   const s = s_(entry);
@@ -652,12 +701,15 @@ function EntryDetail({ entry, all, repo, inUse, trying, signedIn, onTry, onKeep,
         const sel = t.themes.find((x) => x.id === r.ids[0]);
         if (sel) applyTheme(sel);
       }
-      const what = entry.kind === "theme" ? "theme" : entry.kind === "deck" ? "deck" : "card type";
+      if (entry.kind === "plugin") notifyPluginsChanged();
+      const what = entry.kind === "theme" ? "theme" : entry.kind === "deck" ? "deck" : entry.kind === "plugin" ? "plugin" : "card type";
       toast.success(r.result === "unchanged" ? `You already have the latest ${what}` : `${r.result === "updated" ? "Updated" : "Installed"} ${entry.name}`, {
         description:
           entry.kind === "theme"
             ? use ? "It's on now." : "Pick it in Settings → Appearance."
-            : `${r.report.items.created} new, ${r.report.items.updated} updated item${r.report.items.updated === 1 ? "" : "s"}${r.report.types.created ? `, ${plural(r.report.types.created, "card type")}` : ""}.`,
+            : entry.kind === "plugin"
+              ? r.report?.pausedForPermissions ? "Paused in Settings → Plugins so you can review its new permissions." : "Manage permissions any time in Settings → Plugins."
+              : `${r.report.items.created} new, ${r.report.items.updated} updated item${r.report.items.updated === 1 ? "" : "s"}${r.report.types.created ? `, ${plural(r.report.types.created, "card type")}` : ""}.`,
       });
       onInstalled();
     } catch (e) {
@@ -670,6 +722,7 @@ function EntryDetail({ entry, all, repo, inUse, trying, signedIn, onTry, onKeep,
   const goTo = () => {
     if (entry.kind === "deck") navigate(`/deck?name=${encodeURIComponent(s.decks[0])}`);
     else if (entry.kind === "type") navigate(`/types/${encodeURIComponent(s.types[0].id)}`);
+    else if (entry.kind === "plugin") navigate("/settings#plugins");
     else navigate("/settings#appearance");
   };
 
@@ -713,7 +766,7 @@ function EntryDetail({ entry, all, repo, inUse, trying, signedIn, onTry, onKeep,
   const p = parts(entry.kind === "deck" ? s.decks : []);
   const types: { id: string; name: string }[] = entry.kind === "deck" ? s.types : [];
   // The numbers row, App Store style: what people think first, then what you get, then the file facts.
-  const info: InfoCell[] = [...socialCells(stats)];
+  const info: InfoCell[] = [...socialCells(stats), AGE_CELL];
   // Parts and card types have their own sections below, so the row only counts the cards.
   if (entry.kind === "deck") info.push({ label: s.items === 1 ? "Card" : "Cards", value: Number(s.items).toLocaleString("en-US") });
   if (entry.kind === "type") info.push({ label: "Checks", value: (s.types as any[]).map((t) => GRADER_WORD[t.grader] ?? t.grader).join(", ") });
@@ -725,6 +778,8 @@ function EntryDetail({ entry, all, repo, inUse, trying, signedIn, onTry, onKeep,
   return (
     <DetailLayout
       onBack={onBack}
+      menu={menu}
+      notice={notice}
       head={
         <>
           <div className="mk-eyebrow">{KIND_LABEL[entry.kind]}</div>
@@ -766,6 +821,12 @@ function EntryDetail({ entry, all, repo, inUse, trying, signedIn, onTry, onKeep,
               return m ? <button key={t.id} onClick={() => onOpen(m)}>{t.name}<ChevronRight className="size-3.5" /></button> : <span key={t.id}>{t.name}</span>;
             })}
           </div>
+        </section>
+      )}
+      {entry.kind === "plugin" && (s.plugin?.permissions?.length ?? 0) > 0 && (
+        <section className="mk-sec">
+          <h3 className="mk-serif">Permissions</h3>
+          <div className="mk-parts">{(s.plugin.permissions as string[]).map((perm: string) => <span key={perm}>{perm}</span>)}</div>
         </section>
       )}
       {entry.kind === "type" && (
@@ -833,11 +894,12 @@ function PublishDialog({ repo, onClose }: { repo: string; onClose(): void }) {
 
   useEffect(() => {
     api.publishStatus().then(setGh).catch(() => setGh({ ok: false, reason: "couldn't check gh" }));
-    Promise.all([api.themes(), api.decks(), api.types()]).then(([t, d, ty]) => {
+    Promise.all([api.themes(), api.decks(), api.types(), api.plugins().catch(() => ({ plugins: [], bundled: [] }))]).then(([t, d, ty, pl]) => {
       setOptions({
         theme: t.themes.filter((x) => !x.builtin).map((x) => ({ value: x.id, label: x.name })),
         deck: d.filter((x) => x.cards > 0).map((x) => ({ value: x.name, label: `${"  ".repeat(x.depth)}${x.name.split("::").pop()}` })),
         type: ty.filter((x) => !x.builtin).map((x) => ({ value: x.id, label: `${x.name} (${x.id})` })),
+        plugin: pl.plugins.map((x) => ({ value: x.id, label: `${x.manifest.name} (${x.id})` })),
       });
     });
   }, []);

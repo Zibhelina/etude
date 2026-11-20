@@ -23,6 +23,9 @@ export interface Template {
   js?: string;
 }
 
+/** How a deck or subdeck opens: the normal study queue, a built-in catalog, a card type's home, or a custom home template. */
+export type DeckHomeSpec = "queue" | "catalog" | { type: string } | Template;
+
 /** How an answer becomes a score. */
 export type GraderSpec =
   | { kind: "self" }
@@ -65,6 +68,16 @@ export interface CardTypeDef {
    */
   showVerdict?: boolean;
   /**
+   * The card is made to fill one screen, like a game: the study page shows it in focus mode (no header,
+   * no idle bottom bar) and tells it the screen's height (`etude.screen`). Default false.
+   */
+  fitScreen?: boolean;
+  /**
+   * Faces that come first: while an item's card on one of these faces is new and not suspended, the item's
+   * other new cards wait (a lesson before its exercises). Quick checks and placement probes don't wait.
+   */
+  leadFaces?: string[];
+  /**
    * Numbers the grader puts in `details` that are worth tracking over time (WPM, accuracy...).
    * Practice decks chart them. Without it, every top-level numeric detail is tracked.
    */
@@ -76,6 +89,11 @@ export interface CardTypeDef {
   scheduler?: string;
   /** Default settings for `scheduler`; a deck's `schedulerOptions` override them key by key. */
   schedulerOptions?: Record<string, unknown>;
+  /**
+   * Optional default Deck Home for decks whose cards use this type ("catalog", or a custom sandboxed
+   * home.html/css/js view). A deck's own `home` setting always wins (and never inherits down to subdecks).
+   */
+  home?: "catalog" | Template;
   /**
    * Files shipped once with the type, `{ name: base64 }`. Cards load them with `etude.asset(name)`.
    * Stored apart from the definition; omitted on save means "keep the stored ones".
@@ -178,6 +196,8 @@ export interface PresetConfig {
   burySiblings: boolean;
   /** "watch": a tour deck. Every card is shown once with an example answer and nothing is scheduled. */
   mode: "study" | "watch";
+  /** Own deck home ("queue" default, "catalog", `{ type }`, or custom template). Never inherited from parent decks. */
+  home?: DeckHomeSpec;
   /** Which scheduler decides when cards come back: "fsrs" (spaced repetition) or another scheduler's id. */
   scheduler: string;
   /** Settings for a non-FSRS scheduler, by option name. */
@@ -200,6 +220,16 @@ export interface PresetConfig {
   levelMix: number;
   /** Quick checks after a placement: earlier cards it judged known, offered on top of `newPerDay`. */
   quickChecksPerDay: number;
+  /** New cards wait until the concepts their item `needs::` are mastered, and come in prerequisite order. */
+  prerequisites: boolean;
+  /** A card is mastered when it's in review and its last this-many answers passed. */
+  masteryStreak: number;
+  /** Share of a concept's cards that must be mastered for the concept to be. */
+  masteryShare: number;
+  /** While this many concepts are in progress, new cards come only from them. 0: no limit. */
+  conceptsInProgress: number;
+  /** Leave out a due review when a card that needs its concept was just answered correctly. */
+  implicitReviews: boolean;
 }
 
 export interface LevelSpec {
@@ -238,6 +268,11 @@ export const DEFAULT_PRESET: PresetConfig = {
   levelAdvanceAt: 0.8,
   levelMix: 0.2,
   quickChecksPerDay: 30,
+  prerequisites: false,
+  masteryStreak: 1,
+  masteryShare: 1,
+  conceptsInProgress: 2,
+  implicitReviews: false,
 };
 
 export interface Preset {

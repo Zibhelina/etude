@@ -174,6 +174,19 @@ export function validateConfig(c: Partial<PresetConfig>): string[] {
     e.push("weights must have 17, 19 or 21 numbers");
   if (c.deadline && Number.isNaN(new Date(c.deadline).getTime())) e.push("deadline must be an ISO date");
   if (c.mode !== undefined && c.mode !== "study" && c.mode !== "watch") e.push('mode must be "study" or "watch"');
+  if (c.home !== undefined && c.home !== "queue" && c.home !== "catalog") {
+    const h = c.home as any;
+    const isTypeRef = h && typeof h === "object" && !Array.isArray(h) && typeof h.type === "string" && /^[a-z0-9][a-z0-9-]{0,63}$/.test(h.type) && h.html === undefined;
+    const isTpl =
+      h &&
+      typeof h === "object" &&
+      !Array.isArray(h) &&
+      typeof h.html === "string" &&
+      (h.css === undefined || typeof h.css === "string") &&
+      (h.js === undefined || typeof h.js === "string") &&
+      h.html.length + (h.css?.length ?? 0) + (h.js?.length ?? 0) <= 512 * 1024;
+    if (!isTypeRef && !isTpl) e.push('home must be "queue", "catalog", {"type": "<id>"}, or {"html": "...", "css"?, "js"?}');
+  }
   if (c.scheduler !== undefined && (typeof c.scheduler !== "string" || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(c.scheduler))) e.push('scheduler must be "fsrs" or a scheduler id');
   if (c.schedulerOptions !== undefined && (c.schedulerOptions === null || typeof c.schedulerOptions !== "object" || Array.isArray(c.schedulerOptions))) e.push("schedulerOptions must be an object");
   if (
@@ -182,13 +195,16 @@ export function validateConfig(c: Partial<PresetConfig>): string[] {
       Object.entries(c.newPerFace).some(([face, n]) => !/^[\w-]+$/.test(face) || (n !== null && !(typeof n === "number" && Number.isFinite(n) && n >= 0))))
   )
     e.push("newPerFace must map face names to non-negative numbers (null drops an inherited limit)");
-  for (const k of ["adaptiveChallenge", "adaptivePace"] as const) if (c[k] !== undefined && typeof c[k] !== "boolean") e.push(`${k} must be true or false`);
+  for (const k of ["adaptiveChallenge", "adaptivePace", "prerequisites", "implicitReviews"] as const) if (c[k] !== undefined && typeof c[k] !== "boolean") e.push(`${k} must be true or false`);
   if (c.targetSuccess !== undefined && c.targetSuccess !== null && !(typeof c.targetSuccess === "number" && c.targetSuccess >= 0.5 && c.targetSuccess <= 0.99)) e.push("targetSuccess must be between 0.5 and 0.99, or null to follow desiredRetention");
   for (const k of ["minutesPerDay", "newPerDayMin", "newPerDayMax", "quickChecksPerDay"] as const)
     if (c[k] !== undefined && !(typeof c[k] === "number" && Number.isFinite(c[k]) && (c[k] as number) >= 0)) e.push(`${k} must be a non-negative number`);
   if (typeof c.newPerDayMin === "number" && typeof c.newPerDayMax === "number" && c.newPerDayMin > c.newPerDayMax) e.push("newPerDayMin can't be above newPerDayMax");
   for (const k of ["levelAdvanceAt", "levelMix"] as const)
     if (c[k] !== undefined && !(typeof c[k] === "number" && (c[k] as number) >= 0 && (c[k] as number) <= 1)) e.push(`${k} must be between 0 and 1`);
+  if (c.masteryStreak !== undefined && !(Number.isInteger(c.masteryStreak) && c.masteryStreak >= 1 && c.masteryStreak <= 20)) e.push("masteryStreak must be a whole number from 1 to 20");
+  if (c.masteryShare !== undefined && !(typeof c.masteryShare === "number" && c.masteryShare > 0 && c.masteryShare <= 1)) e.push("masteryShare must be above 0 and at most 1");
+  if (c.conceptsInProgress !== undefined && !(Number.isInteger(c.conceptsInProgress) && c.conceptsInProgress >= 0)) e.push("conceptsInProgress must be a whole number, 0 for no limit");
   if (
     c.levels !== undefined &&
     (!Array.isArray(c.levels) ||

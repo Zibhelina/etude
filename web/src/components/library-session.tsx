@@ -11,6 +11,8 @@ import { DeckIcon } from "@/components/deck-icon";
 import { hasPicture } from "@/lib/deck-icons";
 import { leafOf } from "@/components/move-deck";
 import cheer from "@/assets/library/minimi-cheer.webp";
+import { holidayArt } from "@/lib/holiday";
+import { HolidayTrim } from "@/components/holiday";
 
 const work = (d: DeckNode) => d.new + d.learning + d.review;
 const plural = (n: number, w: string) => `${n.toLocaleString()} ${w}${n === 1 ? "" : "s"}`;
@@ -56,7 +58,8 @@ function SessionRingsCard({ decks, stats }: { decks: DeckNode[]; stats: Stats | 
   const total = done + due;
   const pct = total ? Math.round((done / total) * 100) : 0;
   return (
-    <section aria-label="Today's session" className="lib-panel rounded-2xl p-6 sm:p-8">
+    <section aria-label="Today's session" className="lib-panel relative rounded-2xl p-6 sm:p-8">
+      <HolidayTrim />
       <div className="mx-auto w-full max-w-[24rem]">
         <div className="score-kicker font-semibold">Today’s session</div>
         <div className="mt-3 flex items-baseline justify-between gap-3">
@@ -124,7 +127,8 @@ function SessionBars({ decks, stats }: { decks: DeckNode[]; stats: Stats | null 
   const max = Math.max(1, ...shown.map(work));
   const done = stats?.today.reviews ?? t.done;
   return (
-    <section aria-label="Today's session" className={cn("lib-panel rounded-2xl p-6 sm:p-8", "@3xl:grid @3xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] @3xl:gap-10")}>
+    <section aria-label="Today's session" className={cn("lib-panel relative rounded-2xl p-6 sm:p-8", "@3xl:grid @3xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] @3xl:gap-10")}>
+      <HolidayTrim />
       <div className="min-w-0 @min-[36rem]:grid @min-[36rem]:grid-cols-[minmax(0,1fr)_minmax(13rem,16rem)] @min-[36rem]:items-center @min-[36rem]:gap-x-8 @3xl:block">
         <div className="min-w-0">
           <div className="score-kicker font-semibold">Today’s session</div>
@@ -331,7 +335,7 @@ export function StreakCelebration({ stats, onClose }: { stats: Stats; onClose():
           <>
             <div className="relative grid h-[12rem] w-[12rem] place-items-end sm:h-[13.5rem] sm:w-[13rem]">
               <span className="lib-burst" aria-hidden>{Array.from({ length: 14 }, (_, i) => <i key={i} style={{ ["--a" as string]: `${i * 26}deg`, animationDelay: `${(i % 4) * 80}ms` }} />)}</span>
-              <img src={cheer} alt="Minimi cheering" className="lib-cheer w-full" draggable={false} />
+              <img src={holidayArt(cheer)} alt="Minimi cheering" className="lib-cheer w-full" draggable={false} />
             </div>
             <p className="mt-6 text-[17px] font-semibold">{line(n)}</p>
           </>

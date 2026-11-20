@@ -4,7 +4,7 @@
 import { Hourglass, Layers } from "lucide-react";
 import { api, type ComingSoonEntry } from "@/lib/api";
 import { EtudeImg } from "@/lib/local-url";
-import { DetailLayout, paragraphs, type InfoCell } from "@/components/market-detail";
+import { AGE_CELL, DetailLayout, paragraphs, type InfoCell } from "@/components/market-detail";
 import { MediaGallery } from "@/components/market-gallery";
 
 /** "1,026 kanji · 6 grades": the first two facts, for a tile. */
@@ -33,11 +33,12 @@ export function SoonTile({ entry, onOpen }: { entry: ComingSoonEntry; onOpen(): 
   );
 }
 
-export function SoonDetail({ entry, onBack }: { entry: ComingSoonEntry; onBack(): void }) {
-  const info: InfoCell[] = entry.facts.map((f) => ({ label: f.label, value: f.value }));
+export function SoonDetail({ entry, menu, onBack }: { entry: ComingSoonEntry; menu?: React.ReactNode; onBack(): void }) {
+  const info: InfoCell[] = [AGE_CELL, ...entry.facts.map((f) => ({ label: f.label, value: f.value }))];
   return (
     <DetailLayout
       onBack={onBack}
+      menu={menu}
       head={
         <>
           <div className="mk-eyebrow">Deck · Coming soon</div>

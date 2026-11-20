@@ -150,6 +150,93 @@ test("Deny leaves the deck and tells the model", async () => {
   }
 });
 
+test("permissions: ask puts every change behind a yes, dangerous only the deletes, allow nothing", async () => {
+  const steps = () => [{ calls: [run_(["deck", "create", "Fresh"])] }, { calls: [run_(["deck", "delete", "Fresh"])] }, { text: "Done." }];
+  const fake = await fakeModel("chat", [...steps(), ...steps(), ...steps()]);
+  const { e } = await collection({ kind: "openai-chat", url: `${fake.base}/v1/chat/completions`, model: "m" });
+  try {
+    const a = agentFor(e);
+    const asked = async () => {
+      const conv = a.createConversation("custom:m");
+      const seen: string[] = [];
+      let turnId = "";
+      await a.send(conv.id, { text: "make and delete Fresh" }, (ev) => {
+        if (ev.type === "start") turnId = ev.turnId;
+        if (ev.type === "confirm") {
+          seen.push(ev.item.label);
+          assert.ok(ev.item.summary, "says what it would do");
+          setTimeout(() => a.confirm(turnId, ev.item.id, true), 5);
+        }
+      });
+      assert.equal(e.db.get("SELECT 1 AS x FROM decks WHERE name = 'Fresh'"), undefined, "made, then deleted");
+      return seen;
+    };
+    assert.deepEqual(await asked(), ["etude deck delete Fresh"], "dangerous (the default): the delete");
+    a.setPermission("ask");
+    assert.deepEqual(await asked(), ["etude deck create Fresh", "etude deck delete Fresh"], "ask: the create too");
+    a.setPermission("allow");
+    assert.deepEqual(await asked(), [], "allow: neither");
+  } finally {
+    e.close();
+    await fake.close();
+  }
+});
+
+test("Steer: words sent mid-reply reach the model with the next tool result and show where they landed", async () => {
+  const fake = await fakeModel("chat", [{ text: "Making it. ", calls: [run_(["deck", "create", "First"])] }, { text: "Switched to blue." }]);
+  const { e } = await collection({ kind: "openai-chat", url: `${fake.base}/v1/chat/completions`, model: "m" });
+  try {
+    const a = agentFor(e);
+    const conv = a.createConversation("custom:m");
+    let steered: Promise<boolean> | null = null;
+    const msg = await a.send(conv.id, { text: "make a deck" }, (ev) => {
+      // While the first step's command runs.
+      if (ev.type === "tool_start" && !steered) steered = a.steer(a.runningTurn(conv.id)!, "make it blue");
+    });
+    assert.equal(await steered, true);
+    const said = fake.bodies[1].messages;
+    assert.equal(said.at(-2).role, "tool");
+    assert.equal(said.at(-1).role, "user");
+    assert.match(said.at(-1).content, /sent this while you were working[\s\S]*make it blue/);
+    const c = msg.content as AssistantContent;
+    assert.deepEqual(c.items.map((i) => i.type), ["text", "tool", "steer", "text"]);
+    assert.equal(c.text, "Switched to blue.");
+    assert.equal(await a.steer("gone", "hello"), false);
+  } finally {
+    e.close();
+    await fake.close();
+  }
+});
+
+test("Steer: a picture sent mid-reply reaches the model as a picture and shows with the words", async () => {
+  const fake = await fakeModel("chat", [{ text: "Making it. ", calls: [run_(["deck", "create", "First"])] }, { text: "Like the picture." }]);
+  const { e } = await collection({ kind: "openai-chat", url: `${fake.base}/v1/chat/completions`, model: "m" });
+  try {
+    const a = agentFor(e);
+    const conv = a.createConversation("custom:m");
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+    const pic = a.addAttachment(conv.id, "look.png", png);
+    let steered: Promise<boolean> | null = null;
+    const msg = await a.send(conv.id, { text: "make a deck" }, (ev) => {
+      if (ev.type === "tool_start" && !steered) steered = a.steer(a.runningTurn(conv.id)!, "", [pic.id]);
+    });
+    assert.equal(await steered, true, "a picture alone is enough");
+    const last = fake.bodies[1].messages.at(-1);
+    assert.equal(last.role, "user");
+    const parts = last.content as any[];
+    assert.match(parts[0].text, /sent this while you were working[\s\S]*look\.png/);
+    assert.ok(parts.some((p) => p.type === "image_url" && p.image_url.url.startsWith("data:image/png;base64,")));
+    const c = msg.content as AssistantContent;
+    const s = c.items.find((i) => i.type === "steer") as any;
+    assert.equal(s.attachments[0].id, pic.id);
+    assert.equal(s.attachments[0].path, undefined, "no file path in the saved reply");
+    assert.equal(await a.steer(a.runningTurn(conv.id) ?? "gone", "", ["a-nope"]), false);
+  } finally {
+    e.close();
+    await fake.close();
+  }
+});
+
 test("Responses API tool loop with function_call / function_call_output, theme set", async () => {
   const fake = await fakeModel("responses", [{ calls: [run_(["theme", "set", "paper"])] }, { text: "Switched to Paper." }]);
   const { dir, e } = await collection({ kind: "chatgpt", model: "fake-gpt" });
@@ -407,6 +494,93 @@ test("round 2: pack import via the json argument opens its deck and ends in one 
     assert.match(fake.bodies[1].messages.find((m: any) => m.role === "tool").content, /don't navigate to it again/);
     assert.deepEqual(c.changes, ["created deck Cells"]);
     assert.equal(fake.bodies.length, 2);
+  } finally {
+    e.close();
+    await fake.close();
+  }
+});
+
+test("agent profiles: a model brain answers as the profile, on its model; Minimi stays Minimi", async () => {
+  const fake = await fakeModel("chat", [{ text: "Hi, I'm Tutor." }]);
+  const { e } = await collection({ kind: "openai-chat", url: `${fake.base}/v1/chat/completions`, model: "fake-chat" });
+  try {
+    const a = agentFor(e);
+    e.addAgentProfile({ name: "Tutor", personality: "A patient tutor who loves examples.", brain: { kind: "model", model: "custom:fake-chat" } }, { makeDefault: true });
+    const conv = a.createConversation();
+    assert.equal(conv.profile, "tutor");
+    await a.send(conv.id, { text: "who are you?" });
+    const sys = fake.bodies[0].messages[0].content as string;
+    assert.match(sys, /^You are Tutor/);
+    assert.match(sys, /<personality>\nA patient tutor who loves examples\.\n<\/personality>/);
+    assert.ok(!sys.includes("You are Minimi"));
+    // Minimi's chat keeps his own persona, with his personality from settings.minimi.
+    e.updateSettings({ minimi: "Speaks only in haiku." });
+    await a.send(a.createConversation(null, "minimi").id, { text: "hi" });
+    const mini = fake.bodies[1].messages[0].content as string;
+    assert.match(mini, /^You are Minimi/);
+    assert.match(mini, /Speaks only in haiku\./);
+  } finally {
+    e.close();
+    await fake.close();
+  }
+});
+
+test("screen tools: the view reaches the prompt, read_screen and screenshot ask the app, the picture follows as an image", async () => {
+  const fake = await fakeModel("chat", [
+    { calls: [{ name: "read_screen", args: {} }, { name: "screenshot", args: {} }] },
+    { text: "You're on Week 3." },
+  ]);
+  const { e } = await collection({ kind: "openai-chat", url: `${fake.base}/v1/chat/completions`, model: "fake-chat" });
+  try {
+    const a = agentFor(e);
+    const note = e.notes.create({ title: "Week 3" });
+    const conv = a.createConversation("custom:fake-chat");
+    const pixel = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+    let turnId = "";
+    const looks: string[] = [];
+    const msg = await a.send(
+      conv.id,
+      { text: "what am I looking at?", page: `/notes?id=${note.id}`, view: { lines: [`Notebook: showing "Week 3" (page, id ${note.id})`], selection: "optical flow" } },
+      (ev) => {
+        if (ev.type === "start") turnId = ev.turnId;
+        if (ev.type === "look") {
+          looks.push(ev.mode);
+          setTimeout(() => a.look(turnId, ev.id, ev.mode === "text" ? { text: "# Week 3\nLucas–Kanade" } : { image: pixel, width: 1, height: 1 }), 5);
+        }
+      },
+    );
+    const c = msg.content as AssistantContent;
+    assert.equal(c.error, undefined);
+    assert.deepEqual(looks.sort(), ["image", "text"]);
+    const sys = fake.bodies[0].messages[0].content as string;
+    assert.match(sys, /The user is looking at: \/notes\?id=.* \(note "Week 3", id /);
+    assert.match(sys, /Notebook: showing "Week 3"/);
+    assert.match(sys, /<selection>\noptical flow\n<\/selection>/);
+    const names = fake.bodies[0].tools.map((t: any) => t.function.name);
+    assert.ok(names.includes("read_screen") && names.includes("screenshot"));
+    const second = fake.bodies[1].messages;
+    assert.ok(second.some((m: any) => m.role === "tool" && /Lucas–Kanade/.test(m.content)));
+    const img = second.at(-1);
+    assert.equal(img.role, "user");
+    assert.equal(img.content[1].image_url.url, pixel);
+    // The picture isn't kept for later turns.
+    assert.ok(!JSON.stringify(c.llm).includes(pixel));
+    assert.ok(c.items.some((i) => i.type === "tool" && i.tool === "screenshot" && i.status === "done"));
+  } finally {
+    e.close();
+    await fake.close();
+  }
+});
+
+test("screen tools: offered only when the app sent the view", async () => {
+  const fake = await fakeModel("chat", [{ text: "hi" }]);
+  const { e } = await collection({ kind: "openai-chat", url: `${fake.base}/v1/chat/completions`, model: "fake-chat" });
+  try {
+    const a = agentFor(e);
+    await a.send(a.createConversation("custom:fake-chat").id, { text: "hi" });
+    const names = fake.bodies[0].tools.map((t: any) => t.function.name);
+    assert.ok(!names.includes("read_screen") && !names.includes("screenshot"));
+    assert.ok(!/What's on screen/.test(fake.bodies[0].messages[0].content));
   } finally {
     e.close();
     await fake.close();

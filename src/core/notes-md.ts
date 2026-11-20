@@ -184,13 +184,25 @@ function blocks(tokens: Token[], ctx: MdContext): DocNode[] {
         break;
       case "list": {
         const l = t as Tokens.List;
-        const task = l.items.some((i) => i.task);
-        const items = l.items.map((i) => {
+        // The editor can't mix to-dos and plain items in one list, so a list that mixes them becomes runs of each,
+        // in order: "- TODO:" followed by "- [ ] read" stays a bullet and a to-do, neither turns into the other.
+        let start = Number(l.start) || 1;
+        let run: { task: boolean; items: DocNode[] } | null = null;
+        const flush = () => {
+          if (!run) return;
+          out.push(run.task ? { type: "taskList", content: run.items } : l.ordered ? { type: "orderedList", attrs: { start }, content: run.items } : { type: "bulletList", content: run.items });
+          if (l.ordered) start += run.items.length;
+          run = null;
+        };
+        for (const i of l.items) {
           const body = blocks(i.tokens.filter((k) => k.type !== "checkbox"), ctx);
           const content = body.length && body[0].type === "paragraph" ? body : [{ type: "paragraph" }, ...body];
-          return task ? { type: "taskItem", attrs: { checked: !!i.checked }, content } : { type: "listItem", content };
-        });
-        out.push(task ? { type: "taskList", content: items } : l.ordered ? { type: "orderedList", attrs: { start: Number(l.start) || 1 }, content: items } : { type: "bulletList", content: items });
+          const task = !!i.task;
+          if (run && (run as { task: boolean }).task !== task) flush();
+          run ??= { task, items: [] };
+          run.items.push(task ? { type: "taskItem", attrs: { checked: !!i.checked }, content } : { type: "listItem", content });
+        }
+        flush();
         break;
       }
       case "table": {
@@ -278,6 +290,9 @@ function blockMd(n: DocNode, indent = ""): string {
       return `![${n.attrs?.alt ?? ""}](${n.attrs?.src})`;
     case "canvasEmbed":
       return n.attrs?.title ? `[[${n.attrs.title}]]` : "";
+    case "portal":
+    case "kanbanEmbed":
+      return n.attrs?.title ? `[[${n.attrs.title}]]` : "";
     case "mathBlock":
       return `$$\n${n.attrs?.latex ?? ""}\n$$`;
     case "htmlEmbed":
@@ -291,7 +306,10 @@ function blockMd(n: DocNode, indent = ""): string {
     case "details": {
       const sum = kids.find((k) => k.type === "detailsSummary");
       const body = kids.find((k) => k.type === "detailsContent");
-      return `<details>\n<summary>${inlineMd(sum?.content)}</summary>\n\n${(body?.content ?? []).map((k) => blockMd(k)).join("\n\n")}\n\n</details>`;
+      // A toggle heading's title is that heading inside the summary, as GitHub shows it.
+      const h = Number(sum?.attrs?.level) || 0;
+      const title = h ? `<h${h}>${inlineMd(sum?.content)}</h${h}>` : inlineMd(sum?.content);
+      return `<details>\n<summary>${title}</summary>\n\n${(body?.content ?? []).map((k) => blockMd(k)).join("\n\n")}\n\n</details>`;
     }
     case "table": {
       const rows = kids.map((r) => (r.content ?? []).map((c) => (c.content ?? []).map((p) => inlineMd(p.content)).join(" ").replace(/\|/g, "\\|")));
@@ -389,6 +407,10 @@ function blockHtml(n: DocNode): string {
       return `<img src="${esc(String(n.attrs?.src ?? ""))}" alt="${esc(String(n.attrs?.alt ?? ""))}">`;
     case "canvasEmbed":
       return `<p class="canvas">🎨 ${esc(String(n.attrs?.title || "Canvas"))}</p>`;
+    case "portal":
+      return `<p class="portal">◈ ${esc(String(n.attrs?.title || "Portal"))}</p>`;
+    case "kanbanEmbed":
+      return `<p class="portal">▥ ${esc(String(n.attrs?.title || "Board"))}</p>`;
     case "mathBlock":
       return `<div class="math">\\[${esc(String(n.attrs?.latex ?? ""))}\\]</div>`;
     case "htmlEmbed":
@@ -401,8 +423,10 @@ function blockHtml(n: DocNode): string {
       return `<aside class="callout ${esc(String(n.attrs?.kind ?? "note"))}">${inner()}</aside>`;
     case "details":
       return `<details open>${inner()}</details>`;
-    case "detailsSummary":
-      return `<summary>${inlineHtml(kids)}</summary>`;
+    case "detailsSummary": {
+      const h = Number(n.attrs?.level) || 0;
+      return h ? `<summary><h${h}>${inlineHtml(kids)}</h${h}></summary>` : `<summary>${inlineHtml(kids)}</summary>`;
+    }
     case "table":
       return `<table>${inner()}</table>`;
     case "tableRow":

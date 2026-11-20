@@ -35,6 +35,10 @@ export interface Ctx {
   dry: boolean;
   /** True when Ask Etude runs the command in-process rather than the user. */
   agent?: boolean;
+  /** True when `etude mcp` runs it for an outside agent. */
+  mcp?: boolean;
+  /** For Ask Etude: the attachment folder it is allowed to read local files from. */
+  attachmentDir?: string;
   /** Undeclared `--name value` pairs, for commands with `dynamicFlags`. */
   extra: [string, string][];
   /** The open collection. Throws for commands marked `noDb`. */

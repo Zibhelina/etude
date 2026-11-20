@@ -6,10 +6,14 @@ import { emptyCard } from "../scheduler.ts";
 /** Bump when the projection or the canonical replay changes what it writes, so every device rebuilds once. 2: FSRS replay keeps the deck's fuzz. 3: a script's random draws depend on the card. */
 export const VERSION = 3;
 
-/** What the relational view was last built against: this code and the shipped types and schedulers. */
-function fingerprint(db: Db) {
+/**
+ * What the relational view was last built against: this code, the tables it knows and the shipped types and schedulers.
+ * The tables are in it because an older version keeps the registers of a table it doesn't know without building it:
+ * the first run of a version that knows the table rebuilds the whole view, and the table appears.
+ */
+export function fingerprint(db: Db, tables: readonly string[] = TABLES) {
   const shipped = db.all("SELECT 't' k,id,updated FROM types WHERE builtin=1 UNION ALL SELECT 's',id,updated FROM schedulers WHERE builtin=1 ORDER BY 1,2");
-  return JSON.stringify([VERSION, shipped.map(r => [r.k, r.id, r.updated])]);
+  return JSON.stringify([VERSION, tables, shipped.map(r => [r.k, r.id, r.updated])]);
 }
 
 /** Inserts or replaces a row with every column set: values it lacks get the column default, as on a fresh insert. */
@@ -32,7 +36,7 @@ const itemTags = (r: Row) => Object.keys(r.tags ?? {}).filter(t => r.tags[t] ===
 function applySettings(e: Etude, r: Row) {
   // Provider URLs, key names and the Market catalog stay this device's own, and theme CSS is sanitized again.
   const incoming = safeSettings(clean(r.value));
-  for (const k of ["themes","theme","dayStartHour","learnAheadMinutes","typePrefs","fun","minimi","minimiFace","accent","avatar","banner","name","vim"]) {
+  for (const k of ["themes","theme","dayStartHour","learnAheadMinutes","typePrefs","fun","minimi","minimiFace","accent","avatar","banner","name","vim","sounds","holiday","holidayDecor","holidaySnow","agentProfiles","agentProfile","hiddenAuthors"]) {
     if (!(k in incoming)) continue;
     const v = incoming[k];
     if (k === "learnAheadMinutes" && !(typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 24 * 60)) continue;
@@ -41,6 +45,21 @@ function applySettings(e: Etude, r: Row) {
     if ((k === "minimi" || k === "name") && typeof v !== "string") continue;
     try { e.updateSettings({[k]:v}); } catch { /* an invalid value from another device is ignored */ }
   }
+}
+
+/**
+ * Notes from the registers. A note with no registers stays as it is (made before Sync carried notes and not sent yet,
+ * or in a shared space, which keeps its own); a deleted one goes, with what it holds. A note whose folder isn't here
+ * sits at the top until the folder comes.
+ */
+function projectNotes(e: Etude, keys: Iterable<string>, all: Map<string, Row> | null) {
+  const db = e.db, notes = e.notes;
+  for (const key of keys) {
+    const r = all ? all.get(key) ?? null : rowFor(db, "notes", key);
+    if (r) notes.writeFromSync(key, r);
+    else if (db.get("SELECT 1 FROM sync_deleted WHERE tbl='notes' AND key=?", key)) db.run("DELETE FROM notes WHERE id=?", key);
+  }
+  db.run("UPDATE notes SET parent_id=NULL WHERE parent_id IS NOT NULL AND parent_id NOT IN (SELECT id FROM notes)");
 }
 
 /** Dirty keys the projection handles: the tables, and cards whose schedule changed here. Media keys are the media step's. */
@@ -115,6 +134,8 @@ export function project(e: Etude) {
         insert("reviews",{...r,id:ids.get("reviews")!.get(k),sync_id:k,card_id:ids.get("cards")!.get(r.card_id),attempt_id:liveAttempts.has(r.attempt_id) ? ids.get("attempts")!.get(r.attempt_id) : null,state:0,card_before:"{}",due_after:r.ts});
       }
       for (const [key,r] of data.get("settings")!) if (key === "settings") applySettings(e, r);
+      const tombstoned = db.all("SELECT key FROM sync_deleted WHERE tbl='notes'").map(r => r.key as string);
+      projectNotes(e, [...data.get("notes")!.keys(), ...tombstoned], data.get("notes")!);
       const waiting: string[] = [];
       for (const [key,r] of data.get("type_assets")!) {
         const bytes = syncedBytes(db, r.hash) ?? own.get(r.hash);
@@ -288,6 +309,7 @@ export function projectDirty(e: Etude) {
       // Script schedulers see study days, which start at this hour.
       if (moved("settings", "settings") || e.settings().dayStartHour !== day) replayAll = true;
     }
+    if (dirty.get("notes")!.size) projectNotes(e, sorted("notes"), null);
     const waiting: string[] = [];
     for (const key of sorted("type_assets")) {
       const r = rowFor(db, "type_assets", key);

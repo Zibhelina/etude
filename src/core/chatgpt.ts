@@ -906,7 +906,9 @@ export function failureMessage(e: { code?: string; status?: number; detail?: str
     case "subscription_sharing_user_not_eligible":
       return "ChatGPT plan usage isn't available for this account (Plus or Pro is required, and the workspace or region may be restricted). Use another provider or a key in Settings → AI grading.";
     case "subscription_sharing_usage_limit_exceeded":
-      return `Your ChatGPT plan usage limit is reached. Check usage at ${CHATGPT_USAGE_URL}, or use another provider.`;
+      // OpenAI: don't read this as an empty plan; an app-specific limit applies too, and since Oct 2026 it also
+      // fires while the plan still has room (openai/codex#51043). Signing in again usually clears it.
+      return `ChatGPT refused Etude's request with its plan-sharing limit (subscription_sharing_usage_limit_exceeded). This isn't necessarily your whole plan: check Etude's limit at ${CHATGPT_USAGE_URL}, and if it still has room, sign out and sign in again here.`;
     case "subscription_sharing_usage_unavailable":
     case "subscription_sharing_user_unavailable":
       return "ChatGPT plan usage can't be checked right now. Try again in a moment.";
@@ -929,6 +931,12 @@ export function failureMessage(e: { code?: string; status?: number; detail?: str
   if (e.code) return `ChatGPT plan request failed (${e.code})${detail ? `: ${detail}` : ""}`;
   if (e.status) return `ChatGPT plan request failed: HTTP ${e.status}${detail ? `: ${detail}` : ""}`;
   return detail || "ChatGPT plan request failed";
+}
+
+/** A stream `error` event nests its fields under `error` ({type:"error", error:{code, message, param}}); older shapes put them at the top. */
+export function streamErrorFields(event: any): { code?: string; detail?: string; param?: string } {
+  const err = event?.error && typeof event.error === "object" ? event.error : (event ?? {});
+  return { code: err.code ?? undefined, detail: err.message ?? undefined, param: err.param ?? undefined };
 }
 
 async function readErrorBody(res: Response): Promise<ChatGptError> {
@@ -992,8 +1000,10 @@ export async function chatGptResponses(req: ResponsesRequest): Promise<Responses
         const err = event.response?.error ?? {};
         throw new ChatGptError(failureMessage({ code: err.code, detail: err.message, param: err.param }), err.code ?? "response_failed");
       }
-      case "error":
-        throw new ChatGptError(failureMessage({ code: event.code, detail: event.message, param: event.param }), event.code ?? "error");
+      case "error": {
+        const f = streamErrorFields(event);
+        throw new ChatGptError(failureMessage(f), f.code ?? "error");
+      }
       default:
         break;
     }

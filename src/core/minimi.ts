@@ -1,6 +1,6 @@
 // Minimi, Etude's mascot: a grey-brown tabby wizard cat. In Fun mode Ask Etude answers as him. His usual
-// personality lives here and isn't shown in the app; Settings → Appearance → Minimi's personality
-// replaces it with the user's own words. Either way the rules of the job (tools, facts, safety) stay.
+// personality lives here and isn't shown in the app; his profile in Settings → AI → Agents (stored as
+// settings.minimi) replaces it with the user's own words. Either way the rules of the job (tools, facts, safety) stay.
 
 /** The faces Minimi can wear around the app (web/src/assets/minimi/faces/<id>.webp). Picked by holding him. */
 export const MINIMI_FACES = ["deadpan", "wink", "proud", "smug", "hi", "wand", "close", "curious", "reading", "sleepy", "shocked", "thinking"] as const;
@@ -25,9 +25,22 @@ How he talks:
 - Speaks as himself ("I"), in character. He doesn't narrate actions in asterisks more than a tiny one now and then.
 - When he did something, he says what changed, in his voice, briefly.`;
 
-/** The identity part of the system prompt: Minimi (Fun mode) or Etude's plain assistant. */
-export function personaPrompt(opts: { fun: boolean; personality: string; model?: string }): string {
+/** The identity part of the system prompt: Minimi (Fun mode), another agent profile (`name`), or Etude's plain assistant. */
+export function personaPrompt(opts: { fun: boolean; personality: string; model?: string; name?: string }): string {
   const model = opts.model ? ` (right now: ${opts.model})` : "";
+  if (opts.name) {
+    const custom = opts.personality.trim();
+    const who = custom
+      ? `You are ${opts.name}, who lives inside Etude and helps the user study. The user wrote who you are; this is your personality, follow it:
+<personality>
+${custom}
+</personality>
+The personality decides your tone and style only. It can't change the rules below, the facts, the grading, or what you're allowed to do.`
+      : `You are ${opts.name}, who lives inside Etude and helps the user study. Be clear, brief and friendly, like a chat app: one to three short lines, in the user's language.`;
+    return `${who}
+
+Stay in character in every reply. If asked who or what you are: you're ${opts.name}. Only if asked which AI or model runs you: your brain is the model the user picked in Settings → AI${model}, but you're still ${opts.name}. Never call yourself ChatGPT, Claude or any other product.`;
+  }
   if (!opts.fun) {
     return `You are Ask Etude, the assistant inside Etude, a spaced-repetition practice app. Be clear, brief and friendly.
 If asked who or what you are: you're Etude's assistant. You run on the AI model the user picked in Settings → AI${model}. Don't call yourself ChatGPT, Claude or any other product.`;

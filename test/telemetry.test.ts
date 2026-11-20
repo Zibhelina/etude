@@ -41,7 +41,7 @@ test("telemetry: scrubs paths, emails, query strings, digits and quoted user tex
     scrub('Error: no deck named "Spanish verbs" for ana.costa@gmail.com at https://sync.etude.study/v1/x?token=SECRET (card 1234567)'),
     'Error: no deck named "…" for <email> at https://sync.etude.study/v1/x?… (card <n>)',
   );
-  assert.equal(scrub("at /Users/joao/.etude/x.js:1:2 / C:\\Users\\Joao\\AppData\\y / /home/ana/z"), "at ~/.etude/x.js:1:2 / ~\\AppData\\y / ~/z");
+  assert.equal(scrub("at /Users/alex/.etude/x.js:1:2 / C:\\Users\\Alex\\AppData\\y / /home/ana/z"), "at ~/.etude/x.js:1:2 / ~\\AppData\\y / ~/z");
   assert.equal(scrub("can't parse 'Kanji 漢字' or ‘x’ or “y” or `z`"), "can't parse '…' or ‘…’ or “…” or `…`");
   assert.equal(scrub("/var/mobile/Containers/Data/Application/1F2E3D4C-0000-1111-2222-333344445555/Documents/a"), "~/Documents/a");
 });
@@ -97,11 +97,11 @@ test("telemetry: error reports on by default, usage counts off by default, both 
     const srv = fakeServer();
     let clock = Date.parse("2026-11-04T08:00:00Z");
     const t = startTelemetry(e, { platform: "mac", os: "Darwin 25.1", fetch: srv.fetch, now: () => clock, server: "https://telemetry.test" });
-    assert.equal(t.report({ kind: "window.error", message: 'TypeError: card "Hola" broke', stack: "at f (/Users/joao/x.js:1:2)" }), true);
-    t.report({ kind: "window.error", message: 'TypeError: card "Hola" broke', stack: "at f (/Users/joao/x.js:1:2)" });
+    assert.equal(t.report({ kind: "window.error", message: 'TypeError: card "Hola" broke', stack: "at f (/Users/alex/x.js:1:2)" }), true);
+    t.report({ kind: "window.error", message: 'TypeError: card "Hola" broke', stack: "at f (/Users/alex/x.js:1:2)" });
     assert.equal(t.count("card.reviewed"), false); // usage off
     const queued = readFileSync(join(dir, "telemetry-queue.json"), "utf8");
-    assert.ok(!queued.includes("Hola") && !queued.includes("joao"), queued);
+    assert.ok(!queued.includes("Hola") && !queued.includes("alex"), queued);
     let r = await t.flush();
     assert.deepEqual(r, { sentErrors: 1, sentCounters: 0 });
     assert.equal(srv.got.length, 1);

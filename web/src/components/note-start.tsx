@@ -5,7 +5,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
-import { FileCode2, FilePlus2, FileText, Folder, FolderInput, FolderPlus, PenTool, Pin, Plus, Search } from "lucide-react";
+import { Code2, SquareKanban, FileCode2, FilePlus2, FileText, Folder, FolderInput, FolderPlus, Globe, PenTool, Pin, Plus, Search } from "lucide-react";
 import { api, type NoteDoc, type NotePreview, type NoteSummary } from "@/lib/api";
 import { useEtudeSrc } from "@/lib/local-url";
 import { useScheme } from "@/lib/theme";
@@ -16,6 +16,7 @@ import { NoteIcon } from "@/editor/note-icon";
 import { Preview as CanvasPreview } from "@/editor/note-canvas";
 import { pdfFirstPage } from "@/editor/note-embed";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { openDeckFinder } from "@/components/deck-finder";
 import "./note-start.css";
 
 // ---------------------------------------------------------------- the tab itself
@@ -53,7 +54,7 @@ export function startShortcut(e: KeyboardEvent): "page" | "canvas" | "file" | nu
 // ---------------------------------------------------------------- helpers
 
 const display = (n: { title: string; kind?: string }) =>
-  n.title.trim() || (n.kind === "folder" ? "New folder" : n.kind === "canvas" ? "Untitled canvas" : n.kind === "pdf" ? "Untitled PDF" : n.kind === "file" ? "untitled.txt" : "Untitled");
+  n.title.trim() || (n.kind === "folder" ? "New folder" : n.kind === "canvas" ? "Untitled canvas" : n.kind === "pdf" ? "Untitled PDF" : n.kind === "file" ? "untitled.txt" : n.kind === "web" ? "Untitled web file" : n.kind === "kanban" ? "Untitled board" : "Untitled");
 const fallbackIcon = (n: { kind?: string }) => (n.kind === "canvas" ? "🎨" : n.kind === "pdf" ? "📕" : "📄");
 
 function ago(iso: string | null | undefined): string {
@@ -74,17 +75,9 @@ function ago(iso: string | null | undefined): string {
 function KindIcon({ n, size = 18 }: { n: NoteSummary; size?: number }) {
   if (n.kind === "folder" && !n.icon) return <Folder style={{ width: size - 2, height: size - 2 }} />;
   if (n.kind === "file" && !n.icon) return <FileCode2 style={{ width: size - 2, height: size - 2 }} />;
+  if (n.kind === "web" && !n.icon) return <Code2 style={{ width: size - 2, height: size - 2 }} />;
+  if (n.kind === "kanban" && !n.icon) return <SquareKanban style={{ width: size - 2, height: size - 2 }} />;
   return <NoteIcon icon={n.icon} size={size} fallback={fallbackIcon(n)} />;
-}
-
-function Keys({ keys }: { keys: string[] }) {
-  return (
-    <span className="ns-kb" aria-hidden>
-      {keys.map((k) => (
-        <kbd key={k}>{k}</kbd>
-      ))}
-    </span>
-  );
 }
 
 /** Which letters of `title` match `q`, and how well (higher is better, below 0 is no match). Like the Ctrl K finder. */
@@ -228,10 +221,11 @@ function Block({ n }: { n: NoteDoc }) {
     case "horizontalRule":
       return <hr />;
     case "canvasEmbed":
+    case "portal":
     case "htmlEmbed":
     case "noteVideo":
     case "notePdf":
-      return <div className="ns-cardblock"><small>{n.type === "canvasEmbed" ? "Canvas" : n.type === "htmlEmbed" ? "Widget" : n.type === "noteVideo" ? "Video" : "PDF"}</small><div>{String(n.attrs?.title || n.attrs?.name || "")}</div></div>;
+      return <div className="ns-cardblock"><small>{n.type === "canvasEmbed" ? "Canvas" : n.type === "portal" ? "Portal" : n.type === "htmlEmbed" ? "HTML" : n.type === "noteVideo" ? "Video" : "PDF"}</small><div>{String(n.attrs?.title || n.attrs?.name || "")}</div></div>;
     default:
       return kids.length && kids.every((k) => k.type === "text") ? <p><Inline nodes={kids} /></p> : null;
   }
@@ -299,6 +293,28 @@ function Peek({ n, p }: { n: NoteSummary; p: NotePreview | undefined }) {
         {n.kind === "canvas" ? <CanvasPeek id={n.id} /> : <PdfPeek id={n.id} />}
       </>
     );
+  if (n.kind === "web")
+    return (
+      <div className="ns-top">
+        {head(true)}
+        {p?.head != null && <CodePeek code={p.head.split("\n").slice(0, 8).join("\n") || " "} lang="HTML" />}
+      </div>
+    );
+  if (n.kind === "kanban")
+    return (
+      <div className="ns-top">
+        <span className="ns-pic"><KindIcon n={n} size={30} /></span>
+        <div className="ns-ttl">{display(n)}</div>
+        {p?.head ? (
+          <div className="ns-kanban">
+            {p.head.split("\n").map((l, i) => {
+              const at = l.lastIndexOf(" · ");
+              return <span key={i}><b>{l.slice(0, at)}</b>{l.slice(at + 3)}</span>;
+            })}
+          </div>
+        ) : null}
+      </div>
+    );
   if (n.kind === "file")
     return (
       <div className="ns-top">
@@ -325,6 +341,10 @@ export interface StartActions {
   pdf(): void;
   importMd(): void;
   importVault(): void;
+  /** Open a folder from this computer, shown as it is (the desktop app and `etude serve`). */
+  openFolder?: () => void;
+  /** A web page in this tab (the desktop app only; without it there's no Web button). */
+  web?(): void;
 }
 
 export function NoteStart({ bar, list, phone, onOpen, onCreate, onPin, actions }: {
@@ -347,19 +367,6 @@ export function NoteStart({ bar, list, phone, onOpen, onCreate, onPin, actions }
   useLayoutEffect(() => {
     if (!phone) box.current?.focus({ preventScroll: true });
   }, [phone]);
-  // Ctrl/⌘+K here is this box (elsewhere it's the deck and page finder, which sees the key already taken).
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if (!((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k")) return;
-      if (document.querySelector("[role=dialog], [role=alertdialog]")) return;
-      e.preventDefault();
-      box.current?.focus();
-      box.current?.select();
-    };
-    document.addEventListener("keydown", h, true);
-    return () => document.removeEventListener("keydown", h, true);
-  }, []);
-
   const by = useMemo(() => new Map(list.map((n) => [n.id, n])), [list]);
   const pathOf = (n: NoteSummary) => {
     const out: string[] = [];
@@ -413,7 +420,7 @@ export function NoteStart({ bar, list, phone, onOpen, onCreate, onPin, actions }
 
   // The previews for the cards on screen, in one request; asked again when one of them changes.
   const cardNotes = useMemo(() => [...pinned, ...jump], [pinned, jump]);
-  const want = cardNotes.filter((n) => n.kind === "page" || n.kind === "file" || !n.kind);
+  const want = cardNotes.filter((n) => n.kind === "page" || n.kind === "file" || n.kind === "web" || n.kind === "kanban" || !n.kind);
   const key = want.map((n) => `${n.id}@${n.updated}`).join(",");
   const [previews, setPreviews] = useState<Map<string, NotePreview>>(new Map());
   // Dragging a card or an Earlier row into Pinned pins it; a pinned card dragged back down unpins it.
@@ -460,7 +467,7 @@ export function NoteStart({ bar, list, phone, onOpen, onCreate, onPin, actions }
     const isPinned = !!n.pinned;
     // Where it lives: the folder or page it's in (the whole path is in the Earlier rows and the results).
     const parent = n.parentId ? by.get(n.parentId) : undefined;
-    const where = parent ? display(parent) : "Notes";
+    const where = parent ? display(parent) : "Notebook";
     const when = ago(n.opened ?? n.updated);
     return (
       <div
@@ -495,11 +502,11 @@ export function NoteStart({ bar, list, phone, onOpen, onCreate, onPin, actions }
     );
   };
 
+  // Quiet chips under the box; the shortcut is in the tooltip (and still works anywhere on this page).
   const act = (label: string, icon: ReactNode, onClick: () => void, keys?: string[]) => (
-    <button type="button" className="ns-act" onClick={onClick}>
+    <button type="button" className="ns-act" onClick={onClick} title={keys ? `${label} · ${keys.join(" ")}` : label}>
       <span className="ns-act-ic" aria-hidden>{icon}</span>
       <span className="truncate">{label}</span>
-      {keys && <Keys keys={keys} />}
     </button>
   );
 
@@ -508,12 +515,20 @@ export function NoteStart({ bar, list, phone, onOpen, onCreate, onPin, actions }
       {bar}
       <div className="ns-scroll">
         <div className="ns-in">
+          <div className="ns-hero">
+            <h1 className="ns-title lib-title">Notebook</h1>
+            <p className="ns-date">{new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
+          </div>
           <label className={cn("ns-search", query && "is-typed")}>
             <Search className="size-5 shrink-0 text-muted-foreground" aria-hidden />
             <input
               ref={box}
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => {
+                // A ">" first is the app's commands: they live in the Ctrl/⌘K palette.
+                if (e.target.value.startsWith(">")) return (setQ(""), openDeckFinder(e.target.value));
+                setQ(e.target.value);
+              }}
               onKeyDown={onKey}
               placeholder="Find a page, or type a title for a new one"
               aria-label="Find a page, or type a title for a new one"
@@ -524,7 +539,6 @@ export function NoteStart({ bar, list, phone, onOpen, onCreate, onPin, actions }
               aria-controls="ns-results"
               aria-activedescendant={query ? `ns-r-${sel}` : undefined}
             />
-            <span className="ns-search-kb"><Keys keys={[MOD, "K"]} /></span>
             <span className="ns-search-ent" aria-hidden>↵ open</span>
           </label>
 
@@ -545,7 +559,7 @@ export function NoteStart({ bar, list, phone, onOpen, onCreate, onPin, actions }
                   <span className="ns-row-ic"><KindIcon n={h.n} /></span>
                   <span className="ns-row-t"><Marked text={display(h.n)} marks={h.marks} /></span>
                   <span className="ns-row-p">{h.path}</span>
-                  <span className="ns-row-w">{h.n.kind === "pdf" ? "PDF" : h.n.kind === "canvas" ? "Canvas" : h.n.kind === "folder" ? "Folder" : h.n.kind === "file" ? "File" : ""}</span>
+                  <span className="ns-row-w">{h.n.kind === "pdf" ? "PDF" : h.n.kind === "canvas" ? "Canvas" : h.n.kind === "folder" ? "Folder" : h.n.kind === "file" ? "File" : h.n.kind === "web" ? "Web" : h.n.kind === "kanban" ? "Kanban" : ""}</span>
                 </div>
               ))}
               <div
@@ -567,22 +581,23 @@ export function NoteStart({ bar, list, phone, onOpen, onCreate, onPin, actions }
           ) : (
             <>
               <div className="ns-acts">
-                {act("New page", <FilePlus2 className="size-4" />, actions.page, [MOD, ALT, "N"])}
-                {act("New canvas", <PenTool className="size-4" />, actions.canvas, [MOD, ALT, "C"])}
-                {act("New file", <FileCode2 className="size-4" />, actions.file, [MOD, ALT, "F"])}
-                {act("New folder", <FolderPlus className="size-4" />, actions.folder)}
-                {act("Add a PDF", <FileText className="size-4" />, actions.pdf)}
+                {act("Page", <FilePlus2 className="size-4" />, actions.page, [MOD, ALT, "N"])}
+                {act("Canvas", <PenTool className="size-4" />, actions.canvas, [MOD, ALT, "C"])}
+                {act("File", <FileCode2 className="size-4" />, actions.file, [MOD, ALT, "F"])}
+                {act("Folder", <FolderPlus className="size-4" />, actions.folder)}
+                {act("PDF", <FileText className="size-4" />, actions.pdf)}
+                {actions.web && act("Web", <Globe className="size-4" />, actions.web)}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button type="button" className="ns-act">
+                    <button type="button" className="ns-act" title="Import Markdown files or a vault">
                       <span className="ns-act-ic" aria-hidden><FolderInput className="size-4" /></span>
                       <span className="truncate">Import</span>
-                      <span className="ns-act-more">Markdown, vault</span>
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuContent align="center" className="w-64">
                     <DropdownMenuItem onSelect={actions.importMd}>Markdown, code or .excalidraw files…</DropdownMenuItem>
                     <DropdownMenuItem onSelect={actions.importVault}>A folder (Obsidian vault)…</DropdownMenuItem>
+                    {actions.openFolder && <DropdownMenuItem onSelect={actions.openFolder}>Open a folder where it is, without importing…</DropdownMenuItem>}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -594,7 +609,16 @@ export function NoteStart({ bar, list, phone, onOpen, onCreate, onPin, actions }
                   <section className={cn("ns-sec ns-drop", dragFrom === "recent" && "is-target", over === "pinned" && "is-over")} aria-label="Pinned" {...dropProps("pinned")}>
                     <div className="ns-lbl">Pinned</div>
                     {pinned.length ? (
-                      <div className="ns-shelf">{pinned.map(card)}</div>
+                      <div className="ns-shelf">
+                        {pinned.map(card)}
+                        {/* Empty slots close the last row (4 across, 2 when narrow), so Pinned lines up with Jump back in. */}
+                        {Array.from({ length: (4 - (pinned.length % 4)) % 4 }, (_, i) => (
+                          <div key={`ghost-${i}`} className={cn("ns-ghost", i >= (2 - (pinned.length % 2)) % 2 && "ns-ghost-wide")} aria-hidden>
+                            <Pin className="size-4" />
+                            <span>{dragFrom === "recent" ? "Drop it here to pin it" : "Drag a page here to pin it"}</span>
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <div className="ns-pinnone">
                         <Pin className="size-[18px] shrink-0" aria-hidden />

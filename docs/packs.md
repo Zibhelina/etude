@@ -33,7 +33,7 @@ Every key except `etude` is optional. Decks named by items but not listed are cr
 - `id`: required, stable, unique across all packs. Use lowercase dotted slugs (`course.unit.topic-n`). Never reuse an id for different content.
 - `type`: a built-in type id (below) or a type defined in the pack's `types`.
 - `deck`: full deck path; `::` separates levels.
-- `tags`: hierarchical with `::`. Searching `tag:net` matches every tag below it.
+- `tags`: hierarchical with `::`. Searching `tag:net` matches every tag below it. `concept::` and `needs::` tags order new cards by prerequisite on decks with prerequisites on (see [Prerequisites](schedulers.md#prerequisites)).
 - `fields`: the type's fields. Markdown fields support GitHub markdown, fenced code (highlighted for any language named after the fence), tables, images and KaTeX math (`$inline$`, `$$display$$`).
 - `source`: where the content comes from (shown after answering).
 

@@ -15,14 +15,17 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { CodeEditor } from "@/components/code-editor";
 import { AccentWheel } from "@/components/accent-wheel";
 import { BigSwitch, Block, Section } from "@/components/settings-ui";
+import { HolidayBlock } from "@/components/holiday";
 import { useMinimiFaces } from "@/components/minimi-faces";
 import { useMinimiFace } from "@/lib/minimi-face";
 import { setFunMode, useFunMode } from "@/lib/fun";
+import { playSound, setSounds, useSounds } from "@/lib/sounds";
 import { setMinimiHidden, useMinimiHidden } from "@/lib/minimi-hidden";
 import { ThemeMiniature, ThemeSample, ThemeSwatches } from "@/components/settings-theme-preview";
 import { api } from "@/lib/api";
 import { ACCENTS, accentColor, applyTheme, currentTheme, resolveTheme, setAccent, setPreviewing, toHex, useAccent, useScheme, type Theme } from "@/lib/theme";
 import { MINIMI_MAX } from "../../../src/core/minimi.ts";
+import { profilesApi } from "@/lib/agent-profiles";
 import { BUILTIN_THEMES, MAX_THEME_CSS, accentText, THEME_GROUPS, exportTheme, freeThemeId, normalizeTheme, parseThemeFile, sanitizeCss } from "../../../src/core/themes.ts";
 import { cn } from "@/lib/utils";
 
@@ -209,7 +212,9 @@ export function AppearanceSection() {
       )}
 
       {!editing && <FunBlock />}
+      {!editing && <HolidayBlock />}
       {!editing && <PersonalityBlock />}
+      {!editing && <SoundsBlock />}
 
       {themes && !editing && (
         <>
@@ -460,6 +465,27 @@ function FunBlock() {
   );
 }
 
+/** Sounds: the pop when a to-do is ticked and the chime when a list is done. Saved with the collection. */
+function SoundsBlock() {
+  const on = useSounds();
+  const flip = async (v: boolean) => {
+    try {
+      await setSounds(v);
+      if (v) playSound("tick");
+    } catch (e) {
+      setSounds(!v, { save: false });
+      toast.error("Couldn't save", { description: (e as Error).message });
+    }
+  };
+  return (
+    <Block
+      title="Sounds"
+      description="A little pop when you tick a to-do in a Notebook page, and a chime when the whole list is done."
+      aside={<BigSwitch id="sounds" checked={on} onCheckedChange={flip} aria-label="Sounds" />}
+    />
+  );
+}
+
 /** Minimi's personality: empty keeps his usual one (hidden); text here replaces it. Saved with the collection. */
 function PersonalityBlock() {
   const on = useFunMode();
@@ -480,6 +506,8 @@ function PersonalityBlock() {
       const r = await api.saveSettings({ minimi: v.trim() });
       setSaved(r.minimi ?? v.trim());
       setText(r.minimi ?? v.trim());
+      // The same text as Minimi's profile in AI → Agents.
+      void profilesApi.load().catch(() => {});
       toast.success(v.trim() ? "Minimi has a new personality" : "Minimi is back to his usual self");
     } catch (e) {
       toast.error("Couldn't save", { description: (e as Error).message });

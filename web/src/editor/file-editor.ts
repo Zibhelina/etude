@@ -43,6 +43,8 @@ export interface FileEditorOptions {
   onChange?(value: string): void;
   /** Ctrl/⌘+S, and :w in Vim. */
   onSave?(): void;
+  /** Shared with you as view only: you can read, select and copy, not type. */
+  readOnly?: boolean;
   /** Vim's mode as it changes ("normal", "insert", "visual", "visual line", "replace"), null with Vim off. */
   onVimMode?(mode: string | null): void;
 }
@@ -60,8 +62,8 @@ export interface FileEditorHandle {
 
 let vimModule: Promise<typeof import("@replit/codemirror-vim")> | null = null;
 /** What :w saves: the editor the command was typed in. */
-const saveOf = new WeakMap<EditorView, () => void>();
-function loadVim() {
+export const saveOf = new WeakMap<EditorView, () => void>();
+export function loadVim() {
   vimModule ??= import("@replit/codemirror-vim").then((m) => {
     // :w saves now (it saves on its own anyway); :wq and :x save too. Nothing to quit in a browser tab.
     const write = (cm: any) => saveOf.get(cm.cm6)?.();
@@ -167,6 +169,7 @@ export function createFileEditor(parent: HTMLElement, opts: FileEditorOptions): 
         wrapC.of(opts.wrap ? [EditorView.lineWrapping, hangingIndent] : []),
         selectionClass,
         lang.of([]),
+        opts.readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
         EditorView.updateListener.of((u) => {
           if (u.docChanged) opts.onChange?.(u.state.doc.toString());
         }),

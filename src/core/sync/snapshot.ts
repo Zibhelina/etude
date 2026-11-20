@@ -2,12 +2,10 @@
 // instead of replaying the whole log (docs/sync-snapshots.md). The registers are a state-based CRDT, so merging a
 // snapshot over registers that already hold some of its events changes nothing, and the events after it merge as usual.
 import type { Db } from "../db.ts";
-import { compare, tick, TABLES } from "./log.ts";
+import { compare, tick } from "./log.ts";
 
 /** Registers per part: about 8 MB of JSON for a typical collection, so a phone holds one part at a time. */
 export const PART_REGISTERS = 50_000;
-
-const ALLOWED = [...TABLES, "media", "blob"];
 
 /**
  * The parts' JSON texts. Read without a pause, so they agree with each other and with the cursor read beside them.
@@ -40,10 +38,8 @@ function newer(db: Db) {
 export function mergeSnapshotPart(db: Db, json: string): { part: number; last: boolean; registers: number } {
   const head = db.get("SELECT json_extract(?1,'$.v') v, json_extract(?1,'$.part') part, json_extract(?1,'$.last') last, json_array_length(?1,'$.registers') n", json);
   if (!head || head.v !== 1 || !Number.isInteger(head.part)) throw new Error("unsupported snapshot part");
-  // An older app refuses a table it doesn't know, as it does for an event.
-  const marks = ALLOWED.map(() => "?").join(",");
-  if (db.get(`SELECT 1 FROM json_each(?,'$.registers') WHERE json_extract(value,'$[0]') NOT IN (${marks}) UNION ALL SELECT 1 FROM json_each(?,'$.deleted') WHERE json_extract(value,'$[0]') NOT IN (${marks}) LIMIT 1`, json, ...ALLOWED, json, ...ALLOWED))
-    throw new Error("unsupported sync table in the snapshot");
+  // A table this version doesn't know goes into the registers too, as it does from an event: the projection leaves it
+  // alone, and a later version that knows it builds it from there.
   newer(db);
   // "WHERE true" lets SQLite tell the ON CONFLICT clause from a join.
   db.run(`INSERT INTO sync_registers(tbl,key,field,value,stamp) SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]'),json_extract(value,'$[2]'),json_extract(value,'$[3]'),json_extract(value,'$[4]') FROM json_each(?,'$.registers') WHERE true

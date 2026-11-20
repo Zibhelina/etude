@@ -22,7 +22,7 @@
   --popover-foreground: #1b1b1a;
   --primary: #2f9a41;
   --primary-foreground: #ffffff;
-  --primary-edge: #1e6b2b;
+  --primary-edge: color-mix(in oklab, var(--primary) 72%, black);
   --secondary: #f6f6f5;
   --secondary-foreground: #1b1b1a;
   --muted: #f6f6f5;
@@ -69,7 +69,7 @@
     --popover-foreground: #ededed;
     --primary: #3fae52;
     --primary-foreground: #ffffff;
-    --primary-edge: #2a7d39;
+    --primary-edge: color-mix(in oklab, var(--primary) 72%, black);
     --secondary: #2a2a2a;
     --secondary-foreground: #ededed;
     --muted: #222222;
@@ -215,6 +215,12 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
 .agent-panel-in { animation: agent-panel-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .agent-sheet-in { animation: agent-sheet-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .agent-rise { animation: agent-rise 200ms ease-out both; }
+/* An agent's banner on a new chat: it fades into the page on every side, so it sits on any theme. */
+.agent-banner { display: block; width: 100%; height: auto; max-height: 44vh; margin-inline: auto; object-fit: contain; user-select: none; mask-image: linear-gradient(to right, transparent, #000 8%, #000 90%, transparent), linear-gradient(to bottom, transparent, #000 14%, #000 78%, transparent); mask-composite: intersect; mask-repeat: no-repeat; }
+/* The banner's own ground takes the page's colour: on a dark theme only what is lighter than the page shows, on a light theme only what is darker. The blend sits on the wrapper, because its entrance animation makes it a layer of its own. */
+[data-agent-empty]:has(.agent-banner) { mix-blend-mode: multiply; }
+.dark [data-agent-empty]:has(.agent-banner) { mix-blend-mode: lighten; }
+.agent-empty-title { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-weight: 600; letter-spacing: -0.005em; }
 @keyframes agent-breathe { 50% { transform: scaleY(1.025) translateY(-1px); } }
 .agent-breathe { transform-origin: 50% 100%; animation: agent-breathe 3.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
@@ -225,11 +231,17 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
 .agent-prose ul, .agent-prose ol { padding-left: 1.15em; margin: 0.35em 0; }
 .agent-prose li { margin: 0.15em 0; }
 .agent-prose li::marker { color: var(--muted-foreground); }
-.agent-prose h1, .agent-prose h2, .agent-prose h3, .agent-prose h4 { font-size: 14px; font-weight: 600; margin: 0.9em 0 0.3em; }
+.agent-prose h1, .agent-prose h2, .agent-prose h3, .agent-prose h4 { font-size: 14px; font-weight: 600; margin: 0.9em 0 0.3em; line-height: 1.3; }
+.agent-prose h1 { font-size: 20px; }
+.agent-prose h2 { font-size: 17px; }
+.agent-prose h3 { font-size: 15px; }
 .agent-prose pre { font-size: 12.5px; padding: 0.6em 0.8em; border-radius: 10px; }
 .agent-prose code { overflow-wrap: anywhere; }
-.agent-prose table { display: block; max-width: 100%; overflow-x: auto; font-size: 13px; border-collapse: collapse; }
-.agent-prose th, .agent-prose td { border-bottom: 1px solid var(--border); padding: 0.3em 0.6em; text-align: left; }
+.agent-prose table { --tbl-line: color-mix(in oklab, var(--foreground) 10%, transparent); display: block; width: fit-content; max-width: 100%; overflow-x: auto; font-size: 13px; border-collapse: separate; border-spacing: 0; border: 1px solid var(--tbl-line); border-radius: 12px; font-variant-numeric: tabular-nums; }
+.agent-prose th, .agent-prose td { border-right: 1px solid var(--tbl-line); border-top: 1px solid var(--tbl-line); padding: 0.45em 0.8em; text-align: left; vertical-align: top; }
+.agent-prose tr > :last-child { border-right: 0; }
+.agent-prose thead tr:first-child > *, .agent-prose table > tr:first-child > *, .agent-prose tbody:first-child tr:first-child > * { border-top: 0; }
+.agent-prose th { background: color-mix(in oklab, var(--foreground) 4%, transparent); font-weight: 600; color: var(--muted-foreground); }
 .agent-prose .katex { font-size: 1.05em; }
 
 /* ---------------------------------------------------------------- Score: the phone language
@@ -267,6 +279,9 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
   pointer-events: none;
 }
 .score-island > * { position: relative; }
+/* While the on-screen keyboard is up in the phone apps (native-shell.ts sets data-keyboard), the tab island
+   steps aside: the page above the keyboard is short, and the island would sit right on the field. */
+html[data-keyboard="open"] [data-shell-tabs] { display: none; }
 .score-capsule {
   background: color-mix(in oklab, var(--card) 92%, transparent);
   backdrop-filter: blur(14px);
@@ -299,6 +314,11 @@ kbd { font-family: var(--font-mono); font-size: 0.72rem; }
 }
 /* The rail is 58 px: 5 px of edge and a 48 px column, icons centred in it (14 px in from each side). */
 .shell-sb[data-collapsed] { padding-left: 5px; padding-right: 5px; }
+/* No sidebar: it folds all the way to nothing, in the same motion. */
+.shell-sb[data-none] { padding-left: 0; padding-right: 0; }
+.shell-sb[data-none] > * { opacity: 0; transition: opacity 110ms ease; }
+.sb-edge { position: fixed; top: 0; bottom: 0; left: 0; z-index: 30; width: 6px; background: transparent; cursor: e-resize; transition: background-color 150ms; }
+.sb-edge:hover { background: color-mix(in oklab, var(--foreground) 14%, transparent); }
 .shell-sb .sb-nav { transition: margin var(--sb-dur) var(--sb-ease), padding var(--sb-dur) var(--sb-ease); }
 .shell-sb[data-collapsed] .sb-nav { margin-left: -5px; margin-right: -5px; padding-left: 5px; padding-right: 5px; }
 .shell-sb .sb-item { transition: padding var(--sb-dur) var(--sb-ease), background-color 150ms, color 150ms; }
@@ -382,11 +402,21 @@ html.embed-note body > #root > div > div:first-child > span:first-child { displa
 .live-md { background: color-mix(in oklab, var(--input) 30%, transparent); }
 
 /* ---------------------------------------------------------------- Minimi in the corner (Fun mode) */
-.minimi::after { content: ""; position: absolute; left: 14px; right: 10px; bottom: 4px; height: 10px; border-radius: 50%; background: radial-gradient(closest-side, rgb(40 30 10 / 0.32), transparent); z-index: -1; transition: opacity 0.12s; }
+.minimi::after { content: ""; position: absolute; left: calc(14px * var(--minimi-s, 1)); right: calc(10px * var(--minimi-s, 1)); bottom: calc(4px * var(--minimi-s, 1)); height: calc(10px * var(--minimi-s, 1)); border-radius: 50%; background: radial-gradient(closest-side, rgb(40 30 10 / 0.32), transparent); z-index: -1; transition: opacity 0.12s; }
 .dark .minimi::after { background: radial-gradient(closest-side, rgb(0 0 0 / 0.55), transparent); }
 .minimi-fr { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: bottom; opacity: 0; pointer-events: none; filter: drop-shadow(0 3px 4px rgb(40 30 10 / 0.18)); }
 .dark .minimi-fr { filter: drop-shadow(0 3px 5px rgb(0 0 0 / 0.5)); }
 .minimi-fr.on { opacity: 1; }
+/* Another agent profile's body: one picture, always shown (no reading frames to swap). */
+.minimi .minimi-btn .minimi-fr.minimi-body { opacity: 1; }
+/* With clips, the picture only shows until their first frame (and stays where they can't play). */
+.minimi .minimi-btn .minimi-fr.minimi-body.is-under { opacity: 0; }
+/* Settings → AI → Agents: a body shown at its real size on a faint checkerboard, so transparency reads. */
+.agent-body-well { background: repeating-conic-gradient(color-mix(in oklab, var(--foreground) 7%, transparent) 0 25%, transparent 0 50%) 0 0 / 12px 12px; box-shadow: inset 0 0 0 1px var(--border); }
+/* His holiday clips (minimi-clips.tsx): only the clip that's playing shows; the swap waits for its first frame. */
+.minimi-clip { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: bottom; visibility: hidden; pointer-events: none; filter: drop-shadow(0 3px 4px rgb(40 30 10 / 0.18)); }
+.dark .minimi-clip { filter: drop-shadow(0 3px 5px rgb(0 0 0 / 0.5)); }
+.minimi-clip.on { visibility: visible; }
 .minimi:hover .minimi-fr, .minimi.is-drag .minimi-fr { opacity: 0; }
 .minimi:hover .minimi-look, .minimi.is-drag .minimi-look { opacity: 1; }
 .minimi:hover .minimi-btn { animation: minimi-hop 0.28s steps(2); }
@@ -414,6 +444,18 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 .minimi.is-menu .minimi-tip { display: none; }
 .minimi.is-menu .minimi-fr { opacity: 0; }
 .minimi.is-menu .minimi-look { opacity: 1; }
+/* Resize (right-click → Resize): a dashed frame, a round handle on his top-left corner and his size above him. */
+.minimi.is-resize { cursor: default; }
+.minimi.is-resize .minimi-tip { display: none; }
+.minimi.is-resize .minimi-btn { animation: none; cursor: default; }
+.minimi-frame { outline: 1.5px dashed color-mix(in oklab, var(--primary) 70%, transparent); outline-offset: 3px; animation: minimi-frame-in 0.16s ease-out; }
+.minimi-grip { left: -9px; top: -9px; width: 16px; height: 16px; border-radius: 50%; background: var(--background); box-shadow: 0 0 0 2px var(--primary), 0 2px 6px rgb(0 0 0 / 0.2); cursor: nwse-resize; touch-action: none; transition: transform 0.12s; animation: minimi-grip-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.4); }
+.minimi-grip:hover, .minimi.is-grip .minimi-grip { transform: scale(1.2); }
+.minimi-size { bottom: calc(100% + 12px); transform: translateX(-50%); animation: minimi-frame-in 0.16s ease-out; }
+body.minimi-resizing, body.minimi-resizing * { cursor: nwse-resize !important; user-select: none; }
+@keyframes minimi-frame-in { from { opacity: 0; } }
+@keyframes minimi-grip-in { from { transform: scale(0); } }
+@media (prefers-reduced-motion: reduce) { .minimi-frame, .minimi-grip, .minimi-size { animation: none; } }
 .minimi.is-leave { opacity: 0; pointer-events: none; transition: opacity 0.2s ease-in; }
 .minimi.is-leave .minimi-btn { transform: translateY(14px) scale(0.55); transition: transform 0.2s ease-in; animation: none; }
 .minimi.is-pop .minimi-btn { animation: minimi-pop 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.25); transform-origin: 50% 90%; }
@@ -454,6 +496,175 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 /* The side panel in the same balloons (agent-panel.tsx), on the page's own background with no divider, so it reads as one surface. */
 .achat { --achat-bg: var(--background); --mchat-shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 8px 22px rgb(0 0 0 / 0.08); background: var(--achat-bg); }
 .dark .achat { --mchat-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 22px rgb(0 0 0 / 0.45); }
+/* Tabs: chats side by side in the panel (agent-panel.tsx). The one in front is a card; the rest are quiet. */
+.achat-tabs { scrollbar-width: none; padding: 3px 1px; scroll-padding-right: 36px; }
+.achat-tabs::-webkit-scrollbar { display: none; }
+.achat-tab { position: relative; display: flex; flex: 0 1 9.5rem; min-width: 2.75rem; height: 32px; align-items: center; border-radius: 12px; color: var(--muted-foreground); transition: background 0.12s, color 0.12s; }
+.achat-tab:hover { background: color-mix(in oklab, var(--accent) 70%, transparent); color: var(--foreground); }
+.achat-tab.is-on { flex-shrink: 0; background: var(--card); color: var(--foreground); box-shadow: inset 0 0 0 1px var(--border), 0 2px 6px rgb(0 0 0 / 0.05); }
+.achat-tab-main { display: flex; min-width: 0; flex: 1; height: 100%; align-items: center; gap: 6px; padding: 0 9px; border-radius: 12px; font-size: 12.5px; font-weight: 550; text-align: left; }
+.achat-tab-add { position: sticky; right: 0; display: grid; width: 30px; height: 30px; flex: none; place-items: center; border-radius: 10px; color: var(--muted-foreground); background: var(--achat-bg); transition: background 0.12s, color 0.12s; }
+.achat-tab-add:hover { background: var(--accent); color: var(--foreground); }
+.achat-tab-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--highlight); }
+.achat-tab-x { display: none; width: 20px; height: 20px; flex: none; margin: 0 5px 0 -5px; place-items: center; border-radius: 7px; color: var(--muted-foreground); }
+.achat-tab-x:hover { background: var(--accent); color: var(--foreground); }
+.achat-tab.is-on .achat-tab-x, .achat-tab:hover .achat-tab-x, .achat-tab:focus-within .achat-tab-x { display: grid; }
+@media (pointer: coarse) { .achat-tab { height: 36px; } .achat-tab:not(.is-on) .achat-tab-x { display: none; } }
+
+/* The chats' sidebar (chat-sidebar.tsx): beside the chat when there's room, over it with a scrim in a narrow pane.
+   Same background as the chat and its tabs, split by a hairline; quiet rows; the open chat is a soft fill, never a coloured band. */
+.csb { --csb-bg: var(--achat-bg, var(--background)); position: relative; display: flex; width: 264px; flex: none; flex-direction: column; min-height: 0; background: var(--csb-bg); color: var(--foreground); border-right: 1px solid color-mix(in oklab, var(--border) 70%, transparent); animation: csb-in 0.16s ease-out; }
+.csb.is-overlay { position: absolute; inset: 0 auto 0 0; z-index: 30; width: min(280px, 86%); box-shadow: 12px 0 32px rgb(0 0 0 / 0.28); }
+.csb-scrim { position: absolute; inset: 0; z-index: 29; background: rgb(0 0 0 / 0.35); animation: csb-fade 0.16s ease-out; }
+@keyframes csb-in { from { transform: translateX(-10px); opacity: 0; } }
+@keyframes csb-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .csb, .csb-scrim { animation: none; } }
+.csb-head { display: flex; height: 44px; flex: none; align-items: center; gap: 2px; padding: 0 8px; }
+.csb-brand { display: flex; min-width: 0; flex: 1; align-items: center; gap: 8px; padding-left: 6px; font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+.csb-icon { display: grid; width: 32px; height: 32px; flex: none; place-items: center; border-radius: 9px; color: var(--muted-foreground); transition: background 0.12s, color 0.12s; }
+.csb-icon:hover { background: color-mix(in oklab, var(--foreground) 6%, transparent); color: var(--foreground); }
+.csb-search { display: flex; min-width: 0; flex: 1; height: 34px; align-items: center; gap: 8px; padding: 0 2px 0 10px; border-radius: 10px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border); }
+.csb-search input { min-width: 0; flex: 1; background: transparent; font-size: 13.5px; outline: none; }
+.csb-search .csb-icon { width: 28px; height: 28px; }
+.csb-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 2px 8px 12px; }
+/* No scrollbar-width/-color here: in Chromium they replace the app's ::-webkit-scrollbar, which fades out at rest. */
+.csb-nav { display: flex; flex-direction: column; gap: 1px; padding-bottom: 8px; }
+.csb-nav-row { display: flex; height: 36px; align-items: center; gap: 10px; padding: 0 8px; border-radius: 10px; font-size: 13.5px; color: var(--foreground); text-align: left; transition: background 0.12s; }
+.csb-nav-row svg { color: var(--muted-foreground); }
+.csb-nav-row:hover { background: color-mix(in oklab, var(--foreground) 6%, transparent); }
+.csb-section { padding-top: 14px; }
+.csb-label { padding: 0 8px 4px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); }
+.csb-list { display: flex; flex-direction: column; gap: 1px; }
+.csb-row { position: relative; display: flex; align-items: center; border-radius: 10px; transition: background 0.12s; }
+.csb-row:hover, .csb-row:focus-within { background: color-mix(in oklab, var(--foreground) 6%, transparent); }
+.csb-row.is-on { background: color-mix(in oklab, var(--foreground) 9%, transparent); }
+.csb-row-main { display: flex; min-width: 0; flex: 1; min-height: 34px; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 10px; font-size: 13.5px; color: color-mix(in oklab, var(--foreground) 88%, transparent); text-align: left; }
+.csb-row.is-on .csb-row-main { color: var(--foreground); font-weight: 520; }
+.csb-row-face { opacity: 0.9; }
+.csb-row.has-snippet .csb-row-main { align-items: flex-start; }
+.csb-row.has-snippet .csb-row-face { margin-top: 1px; }
+.csb-snippet { display: -webkit-box; margin-top: 2px; overflow: hidden; font-size: 12px; line-height: 1.4; color: var(--muted-foreground); -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.csb-row b { font-weight: 650; color: var(--foreground); }
+.csb-who { color: color-mix(in oklab, var(--foreground) 70%, transparent); }
+.csb-count { font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--muted-foreground); transition: opacity 0.12s; }
+.csb-row:hover .csb-count, .csb-row:focus-within .csb-count { opacity: 0; }
+.csb-row-more { position: absolute; right: 4px; display: grid; width: 28px; height: 28px; place-items: center; border-radius: 8px; color: var(--muted-foreground); opacity: 0; transition: opacity 0.12s, background 0.12s; }
+.csb-row-more:hover { background: color-mix(in oklab, var(--foreground) 10%, transparent); color: var(--foreground); }
+.csb-row-more:disabled { opacity: 0 !important; }
+.csb-row:hover .csb-row-more, .csb-row:focus-within .csb-row-more, .csb-row-more[data-state="open"] { opacity: 1; }
+.csb-row:hover .csb-row-main, .csb-row:focus-within .csb-row-main { padding-right: 34px; }
+@media (pointer: coarse) { .csb-row-more { opacity: 1; } .csb-row-main { min-height: 40px; padding-right: 34px; } .csb-count { display: none; } }
+.csb-row.is-editing { padding: 3px; background: var(--card); box-shadow: inset 0 0 0 1px var(--ring); }
+.csb-row.is-editing input { width: 100%; height: 28px; padding: 0 6px; background: transparent; font-size: 13.5px; outline: none; }
+.csb-empty { padding: 14px 8px; font-size: 13px; color: var(--muted-foreground); }
+.csb-foot { display: flex; flex: none; align-items: center; gap: 10px; margin: 0 8px 8px; padding: 10px 8px; border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent); border-radius: 0 0 10px 10px; transition: background 0.12s; }
+/* Notes in the app sidebar: Pages or Chats, one list at a time (notes.tsx). The chats there are the same list, flat. */
+.nsb-switch { display: flex; gap: 2px; margin: 0 0 10px; padding: 3px; border-radius: 10px; background: color-mix(in oklab, var(--foreground) 3%, transparent); }
+.nsb-switch button { flex: 1; height: 26px; border-radius: 7px; font-size: 12.5px; font-weight: 550; color: var(--muted-foreground); transition: background 0.12s, color 0.12s; }
+.nsb-switch button:hover { color: var(--foreground); }
+.nsb-switch button.is-on { background: var(--sidebar-accent); color: var(--foreground); box-shadow: 0 1px 2px rgb(0 0 0 / 0.25); }
+/* Dark: near-invisible track, lighter active segment with a small drop shadow, quieter idle text. */
+.dark .nsb-switch { background: rgb(255 255 255 / 0.03); }
+.dark .nsb-switch button { color: rgb(101 101 101); }
+.dark .nsb-switch button:hover { color: rgb(170 170 170); }
+.dark .nsb-switch button.is-on { background: rgb(44 44 44); color: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 0.35); }
+.csb.is-embedded { width: auto; background: transparent; border: 0; animation: none; }
+.csb.is-embedded .csb-scroll { overflow: visible; padding: 0 0 8px; }
+.csb.is-embedded .csb-search { margin: 0 0 6px; }
+/* Lined up with the app sidebar's own rows (Library, Notebook): text 16 px in, icons on the same column. */
+.csb.is-embedded .csb-nav-row, .csb.is-embedded .csb-row-main { padding-left: 16px; }
+.csb.is-embedded .csb-nav-row { gap: 12px; }
+.csb.is-embedded .csb-label { padding-left: 16px; }
+.csb.is-embedded .csb-empty { padding-left: 16px; }
+.achat-bar { display: flex; height: 44px; flex: none; align-items: center; padding: 0 8px; }
+.csb-foot:hover { background: color-mix(in oklab, var(--foreground) 6%, transparent); border-radius: 10px; }
+
+/* The message box (agent-panel.tsx, agent-controls.tsx): the text on top, and under it who you talk to, the model,
+   the effort, the context ring and Send. */
+.achat-composer { display: flex; flex-direction: column; border-radius: 20px; padding: 0; }
+.achat-atts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 14px 0; }
+.achat-input { padding: 13px 16px 4px; min-height: 44px; }
+.achat-ctl { display: flex; min-width: 0; align-items: center; gap: 2px; padding: 4px 8px 8px; }
+.achat-ctl > button:last-child { margin-left: 8px; }
+/* Options under the box (the mini chat): the box keeps the text and Send, the pills get the full width below. */
+.achat-composer-below { display: flex; flex-direction: column; gap: 4px; }
+.achat-composer.is-below { border-radius: 22px; }
+.achat-composer.is-below .achat-input { min-height: 32px; padding: 6px 6px 5px; }
+.achat-ctl.is-below { padding: 0 2px; }
+.achat-ctl.is-below > button:last-child { margin-left: 0; }
+.achat-pill { display: flex; min-width: 0; height: 30px; flex: 0 1 auto; align-items: center; gap: 6px; padding: 0 7px 0 10px; border-radius: 10px; background: none; box-shadow: none; font-size: 13px; font-weight: 500; color: var(--muted-foreground); white-space: nowrap; transition: background 0.12s, color 0.12s; }
+.achat-pill:hover, .achat-pill[data-state="open"] { background: var(--accent); color: var(--foreground); }
+.achat-pill:disabled { opacity: 0.55; pointer-events: none; }
+.achat-pill[data-agent-switcher] { flex-shrink: 0; padding-left: 5px; color: var(--foreground); font-weight: 600; }
+.achat-pill[data-agent-switcher][data-bare] { padding-left: 10px; }
+.achat-pill[data-agent-switcher] [data-agent-avatar], .achat-pill[data-agent-switcher] img { width: 20px !important; height: 20px !important; }
+.achat-pill svg.lucide-chevron-down, .achat-pill-chev { width: 13px; height: 13px; flex: none; opacity: 0.6; }
+.achat-ring { display: grid; width: 30px; height: 30px; flex: none; place-items: center; border-radius: 10px; transition: background 0.12s; }
+.achat-ring:hover, .achat-ring[data-state="open"] { background: var(--accent); }
+.achat-h { margin: 0 0 6px; font-family: var(--nf-serif); font-size: 15px; font-weight: 650; letter-spacing: -0.005em; }
+.achat-seg { display: flex; gap: 3px; padding: 3px; border-radius: 11px; background: color-mix(in oklab, var(--muted-foreground) 14%, transparent); }
+.achat-seg button { flex: 1; height: 28px; border-radius: 8px; font-size: 12.5px; color: var(--muted-foreground); }
+.achat-seg button.is-on { background: var(--card); color: var(--foreground); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
+.achat-act { display: flex; height: 32px; align-items: center; gap: 9px; padding: 0 8px; border-radius: 9px; font-size: 13px; text-align: left; }
+.achat-act:hover { background: var(--accent); }
+.achat-act:disabled { opacity: 0.45; pointer-events: none; }
+.achat-act svg { width: 14px; height: 14px; color: var(--muted-foreground); }
+.achat-thought-row { align-self: stretch; margin: -4px 0; }
+.achat-thought-toggle { display: inline-flex; height: 22px; align-items: center; gap: 4px; border-radius: 6px; font-size: 12.5px; color: color-mix(in oklab, var(--muted-foreground) 70%, transparent); transition: color 0.12s; }
+.achat-thought-toggle:hover, .achat-thought-toggle[aria-expanded="true"] { color: var(--muted-foreground); }
+.achat-thought { margin: 2px 0 6px; font-size: 13px; line-height: 1.5; color: var(--muted-foreground); white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (pointer: coarse) { .achat-pill, .achat-ring { height: 34px; } }
+
+/* What a reply shows besides text (agent-rich.tsx): widgets, charts, note blocks, pictures, a voice player. */
+.achat-rich { min-width: 0; max-width: 100%; }
+/* Citations: [1](url) in a reply is a small numbered chip; the reply ends with its Sources. */
+.prose-etude a.achat-cite { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; margin: 0 1px; padding: 0 4px; vertical-align: 2px; border-radius: 5px; font-size: 10.5px; font-weight: 600; line-height: 1; color: var(--highlight); text-decoration: none; background: color-mix(in oklab, var(--highlight) 16%, transparent); transition: background 0.12s, color 0.12s; }
+.prose-etude a.achat-cite:hover { color: var(--highlight); background: color-mix(in oklab, var(--highlight) 30%, transparent); }
+.achat-sources { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 12.5px; }
+.achat-sources-h { margin-bottom: 4px; font-weight: 600; color: var(--muted-foreground); }
+.achat-sources ol { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.achat-sources a { display: flex; min-width: 0; align-items: center; gap: 8px; margin-left: -6px; padding: 3px 6px; border-radius: 6px; color: var(--foreground); text-decoration: none; transition: background 0.12s; }
+.achat-sources a:hover { background: var(--accent); }
+.achat-sources-n { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 5px; font-size: 10.5px; font-weight: 600; color: var(--highlight); background: color-mix(in oklab, var(--highlight) 16%, transparent); }
+.achat-sources-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.achat-sources-d { flex: none; color: var(--muted-foreground); }
+.achat-card { overflow: hidden; border-radius: 12px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border), var(--mchat-shadow, 0 1px 2px rgb(0 0 0 / 0.05)); }
+.achat-card-head { display: flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 12.5px; font-weight: 550; color: var(--muted-foreground); }
+.achat-picture { display: block; max-width: min(100%, 26rem); overflow: hidden; border-radius: 12px; cursor: zoom-in; box-shadow: inset 0 0 0 1px var(--border); }
+.achat-picture img { display: block; max-width: 100%; max-height: 26rem; height: auto; }
+.achat-sticker { display: block; width: auto; height: auto; max-width: 9.5rem; max-height: 9.5rem; user-select: none; animation: achat-sticker 0.32s cubic-bezier(0.3, 1.5, 0.5, 1) both; }
+@keyframes achat-sticker { from { transform: scale(0.6) rotate(-6deg); opacity: 0; } }
+.achat-video { display: block; width: 100%; max-height: 24rem; border-radius: 12px; background: #000; }
+.achat-file { display: flex; max-width: 100%; width: fit-content; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border); font-size: 13px; }
+.achat-voice { display: flex; width: min(100%, 19rem); align-items: center; gap: 10px; padding: 7px 12px 7px 7px; border-radius: 22px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border), var(--mchat-shadow, 0 1px 2px rgb(0 0 0 / 0.05)); }
+.achat-voice-play { display: grid; width: 34px; height: 34px; flex: none; place-items: center; border-radius: 50%; background: var(--highlight); color: var(--background); border-bottom: 3px solid color-mix(in oklab, var(--highlight) 72%, #000); transition: transform 0.08s, border-width 0.08s; }
+.achat-voice-play:active { transform: translateY(2px); border-bottom-width: 1px; }
+.achat-voice-wave { display: flex; min-width: 0; flex: 1; height: 26px; align-items: center; gap: 2px; cursor: pointer; touch-action: none; outline: none; }
+.achat-voice-wave i { flex: 1; min-width: 1.5px; border-radius: 2px; background: color-mix(in oklab, var(--muted-foreground) 38%, transparent); transition: background 0.1s; }
+.achat-voice-wave i.is-on { background: var(--highlight); }
+.achat-voice-time { flex: none; min-width: 2.2em; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+.achat-voice-speed { flex: none; min-width: 2.1rem; height: 22px; padding: 0 6px; border-radius: 8px; font-size: 11.5px; font-weight: 600; color: var(--muted-foreground); background: color-mix(in oklab, var(--accent) 80%, transparent); }
+.achat-voice-speed:hover { color: var(--foreground); }
+.achat-chart { padding: 12px 12px 10px; }
+.achat-chart-head { display: flex; min-height: 20px; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.achat-chart-title { font-family: var(--nf-serif); font-size: 15px; font-weight: 650; letter-spacing: -0.005em; }
+.achat-chart-read { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+.achat-chart-grid { stroke: color-mix(in oklab, var(--border) 70%, transparent); stroke-width: 1; }
+.achat-chart-zero { stroke: color-mix(in oklab, var(--muted-foreground) 55%, transparent); stroke-width: 1; }
+.achat-chart-tick { fill: var(--muted-foreground); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.achat-chart-tick.is-on { fill: var(--foreground); }
+.achat-chart-big { fill: var(--foreground); font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.achat-chart-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 12px; color: var(--muted-foreground); }
+.achat-chart-legend.is-list { min-width: 7rem; flex: 1; flex-direction: column; flex-wrap: nowrap; margin-top: 0; }
+.achat-chart-legend li { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.achat-chart-legend i { width: 8px; height: 8px; flex: none; border-radius: 3px; }
+.achat-chart-legend b { margin-left: auto; padding-left: 8px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--foreground); }
+/* Note blocks in a reply: the page's own look, without the page's margins. */
+.achat-note.note-sheet { max-width: none; margin: 0; padding: 10px 14px; border-radius: 12px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border), var(--mchat-shadow, 0 1px 2px rgb(0 0 0 / 0.05)); }
+.achat-note .note-editor .note-prose { min-height: 0; font-size: 14.5px; line-height: 1.55; }
+/* The empty line a page keeps at its end for typing has no use in a reply. */
+.achat-note .note-prose > p:last-child:not(:first-child):has(> br.ProseMirror-trailingBreak:only-child) { display: none; }
+@media (prefers-reduced-motion: reduce) { .achat-sticker { animation: none; } }
 @keyframes mchat-pop { from { opacity: 0; transform: scale(0.92) translateY(8px); } }
 @media (prefers-reduced-motion: reduce) { .mchat { animation: none; } }
 
@@ -467,8 +678,11 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
   --study-shadow: rgb(0 0 0 / 0.07);
   --study-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --minimi-ink: color-mix(in oklab, #8a5fc0 82%, var(--foreground));
+  /* Etude's purple, the same in every theme: the answer field on a phone and its Check. */
+  --etude-purple: #6d5bd0;
+  --etude-purple-foreground: #ffffff;
 }
-.dark { --study-shadow: rgb(0 0 0 / 0.45); }
+.dark { --study-shadow: rgb(0 0 0 / 0.45); --etude-purple: #a99cf0; --etude-purple-foreground: #141414; }
 
 .st-top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px; height: calc(64px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 16px 0 12px; background: var(--background); }
 .st-back { flex: 0 0 auto; max-width: 40%; display: inline-flex; align-items: center; gap: 4px; padding: 8px 6px; border-radius: 10px; font-weight: 600; font-size: 15px; color: var(--foreground); white-space: nowrap; min-width: 0; cursor: pointer; }
@@ -495,6 +709,8 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 .st-ib:disabled { opacity: 0.4; pointer-events: none; }
 
 .st-stage { flex: 1; display: flex; flex-direction: column; padding: 30px 36px; position: relative; }
+/* Focus mode: only the card, with less room around it (none on a phone, below). */
+.st-stage.st-bare { padding: 16px 32px 0; }
 .st-col { margin: auto; width: min(780px, 100%); display: flex; flex-direction: column; gap: 18px; }
 .st-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted-foreground); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 20px; }
 .st-eyebrow b { color: var(--foreground); font-weight: 700; }
@@ -627,10 +843,38 @@ body.minimi-dragging, body.minimi-dragging * { cursor: grabbing !important; user
 .st-backrate { align-self: center; font-size: 13px; color: var(--muted-foreground); padding: 2px 8px; cursor: pointer; }
 .st-backrate:hover { color: var(--foreground); }
 .st-serif { font-family: var(--study-serif); }
+/* A card's text field at the bottom of a phone screen, with Check in it (AnswerField in study-shell.tsx), in
+   Etude's purple whatever the theme, with the card's hint just above it when it's too long to fit inside. */
+.st-answer-wrap { flex: 1; min-width: 0; max-width: 560px; display: flex; flex-direction: column; gap: 6px; }
+.st-row:has(> .st-answer-wrap) { align-items: flex-end; }
+.st-answer-hint { padding: 0 4px; font: 500 13px/1.3 var(--font-sans); color: var(--muted-foreground); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.st-answer { width: 100%; height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 5px 0 16px; border-radius: 14px; background: var(--card); border: 1.5px solid var(--border); box-shadow: 0 3px 0 var(--border); transition: border-color 0.15s, box-shadow 0.15s; }
+.st-answer:focus-within { border-color: var(--etude-purple); box-shadow: 0 0 0 0.5px var(--etude-purple); }
+/* 16px: below that, iOS zooms the page into the field. */
+.st-answer input { flex: 1; min-width: 0; height: 100%; border: 0; background: transparent; color: var(--foreground); font: 16px var(--font-sans); outline: none; padding: 0; }
+.st-answer input::placeholder { color: var(--muted-foreground); }
+.st-answer button { flex: none; height: 40px; min-width: 76px; display: inline-flex; align-items: center; justify-content: center; padding: 0 16px; border-radius: 10px; background: var(--etude-purple); color: var(--etude-purple-foreground); font: 600 15px var(--font-sans); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.st-answer button:active { filter: brightness(0.92); }
+.st-answer button:disabled { opacity: 0.75; cursor: default; }
+/* While typing in it, the strip sits right on the keyboard: no room kept for the home bar under it, and no
+   fade over the card's picture just above. */
+html[data-keyboard="open"] .st-slot:has(.st-answer) { min-height: 0; padding-bottom: 10px; }
+.st-slot:has(.st-answer:focus-within)::before { display: none; }
+/* The iPhone shrinks the page only once its keyboard is up: until then the bottom strip rides up with the
+   keyboard (native-shell.ts sets these), with the keyboard's own timing. Gone at once when the page shrinks. */
+html[data-keyboard-lift] .st-slot { transform: translateY(calc(-1 * var(--keyboard-lift))); transition: transform 0.25s cubic-bezier(0.38, 0.7, 0.125, 1); }
+/* While typing a card's answer, its question pinned in place of the header (PinnedPrompt in study-shell.tsx). */
+.st-pin { position: fixed; top: 0; inset-inline: 0; z-index: 20; height: calc(64px + env(safe-area-inset-top)); box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: env(safe-area-inset-top) 8px 0 22px; background: var(--background); border-bottom: 1px solid var(--border); }
+.st-pin-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.st-pin-kicker { font: 700 11px/1.2 var(--font-sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-pin-q { font: 17px/1.25 var(--font-sans); color: var(--foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-pin-hide { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--card); color: var(--foreground); -webkit-tap-highlight-color: transparent; }
 
 @media (max-width: 767px) {
   .st-top { height: calc(54px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 10px 0 8px; gap: 4px; }
   .st-stage { padding: 18px 22px 24px; }
+  .st-stage.st-bare { padding: 0; }
+  .st-stage.st-bare .st-col > :not(.st-bare-card, .st-stack) { padding-inline: 22px; }
   .st-sheet { display: none; }
   .st-stack { margin-bottom: 0; }
   .st-paper { padding: 22px 22px 28px; min-height: 300px; gap: 16px; }
@@ -1095,6 +1339,10 @@ body.sb-dragging, body.sb-dragging * { cursor: col-resize !important; user-selec
 .note-sheet { max-width: 720px; margin: 0 auto; padding: 40px 32px 30vh; }
 .note-title { display: block; width: 100%; resize: none; overflow: hidden; border: 0; outline: none; background: transparent; color: var(--foreground); font: 700 2.5rem/1.15 var(--font-sans); letter-spacing: -0.025em; padding: 0; margin-bottom: 26px; }
 .note-title::placeholder { color: color-mix(in oklab, var(--muted-foreground) 55%, transparent); }
+/* A page kept as a file: its name on disk, shown faintly where the title goes until it has one (Tab takes it). */
+.note-title-box { position: relative; }
+.note-title-hint { position: absolute; inset: 0 0 auto 0; margin: 0; pointer-events: none; white-space: pre-wrap; overflow-wrap: break-word; color: color-mix(in oklab, var(--muted-foreground) 55%, transparent); }
+.note-title-typed { color: transparent; }
 .note-editor .note-prose { outline: none; font-size: 16.5px; line-height: 1.7; color: var(--foreground); caret-color: var(--foreground); min-height: 40vh; }
 .note-prose > * + * { margin-top: 0.35em; }
 .note-prose p { margin: 0.15em 0; }
@@ -1111,15 +1359,31 @@ body.sb-dragging, body.sb-dragging * { cursor: col-resize !important; user-selec
 .note-prose li::marker { color: var(--muted-foreground); }
 .note-prose ul[data-type=taskList] { list-style: none; padding-left: 0.15em; }
 .note-prose ul[data-type=taskList] > li { display: flex; align-items: flex-start; gap: 0.5em; margin: 0.1em 0; padding-left: 0; }
-.note-prose ul[data-type=taskList] > li > label { flex-shrink: 0; display: flex; align-items: center; height: 1.7em; user-select: none; }
+.note-prose ul[data-type=taskList] > li > label { flex-shrink: 0; display: flex; align-items: center; height: 1lh; padding: 0 0.1em; margin: 0.15em -0.1em 0; cursor: pointer; user-select: none; }
 .note-prose ul[data-type=taskList] > li > div { flex: 1; min-width: 0; }
-.note-prose ul[data-type=taskList] > li > label input[type=checkbox] { appearance: none; width: 1.05em; height: 1.05em; border: 1.5px solid color-mix(in oklab, var(--muted-foreground) 70%, transparent); border-radius: 4px; display: grid; place-content: center; cursor: pointer; transition: background-color 120ms, border-color 120ms; margin: 0; }
-.note-prose ul[data-type=taskList] > li > label input[type=checkbox]:checked { background: var(--primary); border-color: var(--primary); }
-.note-prose ul[data-type=taskList] > li > label input[type=checkbox]:checked::after { content: ""; width: 0.55em; height: 0.3em; border: 2px solid var(--primary-foreground); border-top: 0; border-right: 0; transform: translateY(-1px) rotate(-45deg); }
-.note-prose li[data-checked=true] > div > p { color: var(--muted-foreground); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--muted-foreground) 60%, transparent); }
+/* To-dos (round, with the pop in editor/note-todo.ts): ::before is the fill, ::after the check. */
+.note-prose ul[data-type=taskList] > li > label input[type=checkbox] { appearance: none; position: relative; width: 1.12em; height: 1.12em; border: 1.6px solid color-mix(in oklab, var(--muted-foreground) 70%, transparent); border-radius: 50%; display: grid; place-content: center; cursor: pointer; transition: border-color 150ms, transform 120ms; margin: 0; }
+.note-prose ul[data-type=taskList] > li > label input[type=checkbox]::before { content: ""; position: absolute; inset: -1.6px; border-radius: 50%; background: var(--primary); transform: scale(0); }
+.note-prose ul[data-type=taskList] > li > label input[type=checkbox]::after { content: ""; position: relative; width: 0.52em; height: 0.28em; border: 2px solid var(--primary-foreground); border-top: 0; border-right: 0; opacity: 0; transform: translateY(-1px) rotate(-45deg) scale(0); }
+.note-prose ul[data-type=taskList] > li > label:hover input[type=checkbox] { border-color: color-mix(in oklab, var(--foreground) 55%, transparent); }
+.note-prose ul[data-type=taskList] > li > label:hover input[type=checkbox]:not(:checked)::after { opacity: 0.45; border-color: var(--muted-foreground); transform: translateY(-1px) rotate(-45deg); }
+.note-prose ul[data-type=taskList] > li > label:active input[type=checkbox] { transform: scale(0.88); }
+.note-prose ul[data-type=taskList] > li > label input[type=checkbox]:checked { border-color: var(--primary); }
+.note-prose ul[data-type=taskList] > li > label input[type=checkbox]:checked::before { transform: none; }
+.note-prose ul[data-type=taskList] > li > label input[type=checkbox]:checked::after { opacity: 1; transform: translateY(-1px) rotate(-45deg); }
+/* Only a ticked to-do has the line: a transparent one on the others would show through a selection in Chromium. */
+.note-prose ul[data-type=taskList] > li[data-checked=true] > div > p { color: var(--muted-foreground); text-decoration: line-through color-mix(in oklab, var(--muted-foreground) 70%, transparent); text-decoration-thickness: 1.5px; }
+.note-prose .todo-count { display: inline-block; margin-left: 0.55em; padding: 0.05em 0.55em; border-radius: 99px; font-size: 0.72em; font-weight: 600; line-height: 1.5; vertical-align: 0.1em; font-variant-numeric: tabular-nums; color: var(--muted-foreground); background: color-mix(in oklab, var(--border) 70%, transparent); user-select: none; }
+.note-prose .todo-count.all { color: var(--primary); background: color-mix(in oklab, var(--primary) 14%, transparent); }
+.todo-fx { position: fixed; z-index: 60; pointer-events: none; }
+.todo-ring { border: 2px solid var(--primary); border-radius: 50%; }
+.todo-spark { border-radius: 50%; background: var(--primary); }
+.todo-spark.s1 { background: color-mix(in oklab, var(--primary) 35%, #f2b544); }
+.todo-spark.s2 { background: color-mix(in oklab, var(--primary) 35%, #a98bf0); }
+.todo-strike { border-radius: 1px; }
 .note-prose blockquote { border-left: 3px solid var(--foreground); padding-left: 1em; margin-left: 0.1em; color: color-mix(in oklab, var(--foreground) 85%, transparent); }
 .note-prose hr { border: 0; border-top: 1px solid var(--border); margin: 1.4em 0; }
-.note-prose hr.ProseMirror-selectednode { border-top-color: var(--highlight); }
+.note-prose.ProseMirror-focused hr.ProseMirror-selectednode { border-top-color: var(--highlight); }
 .note-prose a { color: var(--foreground); text-decoration: underline; text-decoration-color: color-mix(in oklab, var(--foreground) 35%, transparent); text-underline-offset: 3px; cursor: text; }
 .note-prose strong { font-weight: 650; }
 .note-prose code { font-family: var(--font-mono); font-size: 0.86em; background: var(--muted); color: color-mix(in oklab, var(--danger) 70%, var(--foreground)); padding: 0.12em 0.36em; border-radius: 5px; }
@@ -1149,7 +1413,7 @@ body.sb-dragging, body.sb-dragging * { cursor: col-resize !important; user-selec
 .note-link.is-missing > span { color: var(--muted-foreground); text-decoration-style: dashed; }
 .note-link.ProseMirror-selectednode > span { background: color-mix(in oklab, var(--highlight) 22%, transparent); }
 .note-prose img { display: block; max-width: 100%; height: auto; border-radius: 8px; margin: 0.6em 0; }
-.note-prose img.ProseMirror-selectednode { outline: 2px solid var(--highlight); outline-offset: 2px; }
+.ProseMirror-focused img.ProseMirror-selectednode { outline: 2px solid var(--highlight); outline-offset: 2px; }
 .note-backlinks { margin-top: 2.6em; border-top: 1px solid var(--border); padding-top: 1em; }
 .note-backlinks-head { font-size: 12px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 6px; padding: 0 8px; }
 .note-backlink { display: block; width: 100%; text-align: left; padding: 8px; border-radius: 9px; }
@@ -1181,10 +1445,13 @@ body.sb-dragging, body.sb-dragging * { cursor: col-resize !important; user-selec
 .note-callout-body { flex: 1; min-width: 0; }
 .note-callout-body > div > :first-child { margin-top: 0; }
 /* Notes: tables */
+/* Grade: the table hugs its content (up to the page width, then text wraps or the wrapper scrolls), a rounded box with soft lines both ways, a quiet tinted header. */
 .note-prose .tableWrapper { overflow-x: auto; margin: 0.8em 0; }
-.note-prose table { border-collapse: collapse; table-layout: fixed; width: 100%; overflow: hidden; }
-.note-prose td, .note-prose th { border: 1px solid var(--border); padding: 6px 10px; vertical-align: top; position: relative; min-width: 80px; box-sizing: border-box; }
-.note-prose th { background: var(--muted); font-weight: 600; text-align: left; }
+.note-prose table { --tbl-line: color-mix(in oklab, var(--foreground) 10%, transparent); border-collapse: separate; border-spacing: 0; table-layout: auto; width: auto; max-width: 100%; border: 1px solid var(--tbl-line); border-radius: 12px; overflow: hidden; font-variant-numeric: tabular-nums; }
+.note-prose td, .note-prose th { border: 0; border-right: 1px solid var(--tbl-line); border-top: 1px solid var(--tbl-line); padding: 8px 14px; line-height: 1.55; vertical-align: top; position: relative; min-width: 48px; box-sizing: border-box; text-align: left; }
+.note-prose tr > :last-child { border-right: 0; }
+.note-prose tr:first-child > * { border-top: 0; }
+.note-prose th { background: color-mix(in oklab, var(--foreground) 4%, transparent); font-weight: 600; font-size: 0.86em; color: var(--muted-foreground); white-space: nowrap; }
 .note-prose td > p, .note-prose th > p { margin: 0; }
 .note-prose .selectedCell::after { content: ""; position: absolute; inset: 0; background: color-mix(in oklab, var(--highlight) 16%, transparent); pointer-events: none; }
 .note-prose .column-resize-handle { position: absolute; right: -2px; top: 0; bottom: -2px; width: 4px; background: var(--highlight); pointer-events: none; }
@@ -1200,6 +1467,18 @@ body.sb-dragging, body.sb-dragging * { cursor: col-resize !important; user-selec
 .note-prose .note-toggle summary::-webkit-details-marker { display: none; }
 .note-prose .note-toggle [data-type=detailsContent] { padding-left: 2px; }
 .note-prose .note-toggle:not(.is-open) [data-type=detailsContent] { display: none; }
+/* Toggle headings: the title takes the heading's size and space, and the arrow sits on its first line. */
+.note-prose .note-toggle summary[data-level] { letter-spacing: -0.015em; }
+.note-prose .note-toggle:has(> div > summary[data-level="1"]) { margin-top: 1.1em; }
+.note-prose .note-toggle summary[data-level="1"] { font-size: 1.85em; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; }
+.note-prose .note-toggle:has(> div > summary[data-level="1"]) > button { height: calc(1.85em * 1.25); }
+.note-prose .note-toggle:has(> div > summary[data-level="2"]) { margin-top: 1em; }
+.note-prose .note-toggle summary[data-level="2"] { font-size: 1.45em; font-weight: 650; line-height: 1.3; }
+.note-prose .note-toggle:has(> div > summary[data-level="2"]) > button { height: calc(1.45em * 1.3); }
+.note-prose .note-toggle:has(> div > summary[data-level="3"]) { margin-top: 0.9em; }
+.note-prose .note-toggle summary[data-level="3"] { font-size: 1.2em; font-weight: 650; line-height: 1.35; letter-spacing: 0; }
+.note-prose .note-toggle:has(> div > summary[data-level="3"]) > button { height: calc(1.2em * 1.35); }
+.note-prose .note-toggle summary[data-level].is-empty::before { content: attr(data-placeholder); float: left; height: 0; pointer-events: none; color: color-mix(in oklab, var(--muted-foreground) 55%, transparent); }
 .note-prose .is-empty.has-focus::before { content: attr(data-placeholder); float: left; height: 0; pointer-events: none; color: color-mix(in oklab, var(--muted-foreground) 55%, transparent); }
 /* Notes: cards in a page */
 .note-cards { margin: 0.9em 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card); }
@@ -1234,12 +1513,19 @@ body.sb-dragging, body.sb-dragging * { cursor: col-resize !important; user-selec
   & .note-topbar { padding: 0 14px; }
   & .note-sheet { padding: 20px 18px 40vh; }
   /* above 16px, so iOS doesn't zoom; beats the inputs-at-16px rule that shrank the title */
-  & .note-sheet textarea.note-title { font-size: 2rem !important; }
+  & .note-sheet .note-title { font-size: 2rem !important; }
 }
 /* A narrow desktop window keeps the desktop Notes; the page only gives up some of its side padding. */
 @media (max-width: 767px) {
   [data-device="desktop"] .note-sheet { padding-left: 22px; padding-right: 22px; }
 }
+/* "/" menu pictures: a neutral picture with its accent parts painted in --primary, so they follow the user's accent.
+   The picked row's picture only gets an accent edge. */
+.note-slash-thumb { display: block; flex-shrink: 0; width: 42px; height: 42px; border-radius: 9px; box-shadow: 0 0 0 1px color-mix(in oklab, var(--border) 70%, transparent); transition: box-shadow 140ms ease; }
+.note-slash-thumb > span { position: relative; width: 100%; height: 100%; }
+.note-slash-thumb img { display: block; width: 100%; height: 100%; border-radius: 9px; user-select: none; }
+.note-slash-thumb i { position: absolute; inset: 0; background: var(--primary); mask-size: 100% 100%; -webkit-mask-size: 100% 100%; }
+.note-slash-thumb.is-on { box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--primary) 60%, transparent); }
 @media (prefers-reduced-motion: reduce) { .note-slash { animation: none; } }
 /* Notes: looks (M5). Colours are named and drawn from these, so a page reads in light and dark. */
 :root {
@@ -1294,7 +1580,10 @@ body.sb-dragging, body.sb-dragging * { cursor: col-resize !important; user-selec
 .note-page-icon:hover { background: color-mix(in oklab, var(--foreground) 6%, transparent); }
 .note-sheet.has-cover .note-page-icon { margin-top: -42px; position: relative; z-index: 1; }
 .note-addons { display: flex; gap: 2px; height: 30px; margin: 0 0 4px -8px; opacity: 0; transition: opacity 150ms; }
-.note-sheet:hover .note-addons, .note-addons:has([data-state=open]), .note-addons:focus-within { opacity: 1; }
+.note-page:has(.note-head:hover, .note-cover:hover, .note-topbar:hover, .note-crumbs-corner:hover) .note-addons, .note-addons:has([data-state=open]), .note-addons:focus-within { opacity: 1; }
+/* The head reaches up through the sheet's top padding, so "above the title" counts as near the top too. */
+.note-head { margin-top: -40px; padding-top: 40px; }
+.note-sheet.has-cover .note-head { margin-top: 0; padding-top: 0; }
 .note-sheet.has-cover:not(.has-icon) .note-addons { margin-top: 14px; }
 .note-sheet.has-icon.has-cover .note-addons, .note-sheet.has-icon .note-addons { margin-top: 0; }
 .note-addons:empty { display: none; }
@@ -1302,7 +1591,7 @@ body.sb-dragging, body.sb-dragging * { cursor: col-resize !important; user-selec
 .note-addon:hover { background: var(--accent); color: var(--foreground); }
 /* the block handle */
 .note-handle-host { position: relative; }
-.note-handle { position: absolute; left: 0; top: 0; z-index: 6; display: flex; align-items: center; gap: 1px; opacity: 0; pointer-events: none; transition: opacity 120ms, transform 90ms ease-out; }
+.note-handle { position: absolute; left: 0; top: 0; z-index: 6; display: flex; align-items: center; gap: 1px; opacity: 0; pointer-events: none; transition: opacity 90ms ease-out; }
 .note-handle.is-on { opacity: 1; pointer-events: auto; }
 .note-handle.is-drag { opacity: 0; }
 .note-handle button { display: flex; align-items: center; justify-content: center; height: 26px; border-radius: 6px; color: color-mix(in oklab, var(--muted-foreground) 80%, transparent); }
@@ -1313,7 +1602,15 @@ body.sb-dragging, body.sb-dragging * { cursor: col-resize !important; user-selec
 .note-drop-line { position: absolute; left: 0; top: 0; height: 3px; border-radius: 2px; background: color-mix(in oklab, var(--easy) 75%, transparent); opacity: 0; pointer-events: none; z-index: 6; transition: opacity 80ms; }
 .note-drop-line.is-on { opacity: 1; }
 .note-prose .note-dragging { opacity: 0.35; }
-.note-prose .ProseMirror-selectednode:not(img):not(hr):not(.note-cards):not(.note-link):not(.note-math-inline) { background: color-mix(in oklab, var(--highlight) 10%, transparent); border-radius: 6px; box-shadow: 0 0 0 3px color-mix(in oklab, var(--highlight) 10%, transparent); }
+/* several blocks selected: each one gets a soft tint, and the text highlight inside them steps back */
+.note-prose .note-block-sel { background: color-mix(in oklab, var(--highlight) 14%, transparent); border-radius: 4px; }
+/* list items in a row read as one band: the tint covers the small gap under each one, and only the ends are rounded */
+.note-prose li.note-block-sel { --bs: color-mix(in oklab, var(--highlight) 14%, var(--note-bg, var(--background))); background: var(--bs); box-shadow: 0 2px 0 var(--bs); }
+.note-prose li.note-block-sel:has(+ li.note-block-sel) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.note-prose li.note-block-sel + li.note-block-sel { border-top-left-radius: 0; border-top-right-radius: 0; }
+.note-prose .note-block-sel .note-block-sel { background: transparent; box-shadow: none; }
+.note-prose.has-block-sel .note-block-sel ::selection, .note-prose.has-block-sel .note-block-sel::selection { background: transparent; }
+.ProseMirror-focused .ProseMirror-selectednode:not(img):not(hr):not(.note-cards):not(.note-link):not(.note-math-inline) { background: color-mix(in oklab, var(--highlight) 10%, transparent); border-radius: 6px; box-shadow: 0 0 0 3px color-mix(in oklab, var(--highlight) 10%, transparent); }
 /* the selection bar's style picker */
 .note-fmt-anchor { position: relative; display: inline-flex; }
 .note-fmt-wrap { position: absolute; left: 50%; transform: translateX(-50%); z-index: 60; }
@@ -1446,7 +1743,7 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 
 /* Notes tabs (D, in the page bar): once two pages are open the tabs take the path's place in the top bar,
    and the path moves above the title. */
-.note-tabs { display: flex; flex: 0 1 auto; min-width: 0; align-items: center; gap: 2px; height: 48px; margin-left: -8px; overflow-x: auto; scrollbar-width: none; }
+.note-tabs { display: flex; flex: 0 1 auto; min-width: 0; align-items: center; gap: 4px; height: 48px; margin-left: -8px; overflow-x: auto; scrollbar-width: none; }
 .note-tabs::-webkit-scrollbar { display: none; }
 .note-tabs.fade-r { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); }
 .note-tabs.fade-l { -webkit-mask-image: linear-gradient(to right, transparent, #000 36px); mask-image: linear-gradient(to right, transparent, #000 36px); }
@@ -1462,12 +1759,60 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 /* On a hovered background tab the × covers the end of the name, with a short fade so it doesn't cut a letter. */
 .note-tab.is-fresh { animation: note-tab-in 0.3s cubic-bezier(.32,.72,0,1); }
 @keyframes note-tab-in { from { opacity: 0; transform: translateY(4px); } }
+/* Pinned tabs: just the icon, first in the strip, no ×. */
+.note-tab.is-pinned { flex: 0 0 36px; width: 36px; padding: 0; justify-content: center; }
+.note-tab.is-pinned .note-tab-title, .note-tab.is-pinned .note-tab-x { display: none; }
+.note-tab.is-pinned + .note-tab:not(.is-pinned), .note-tab.is-pinned + .note-tab-group { margin-left: 7px; }
+/* Tab groups: a label on the group's colour, then its tabs with a line of that colour under them. */
+.note-tab.in-group:not(:has(+ .note-tab.in-group)) { margin-right: 4px; }
+/* The line is one piece, drawn from the label under all of the group's tabs (--n of them, 180 wide, 4 apart), so it grows and draws back in a single movement (--tw long) however the tabs under it move. */
+.note-tab-group::after { content: ""; position: absolute; left: 0; top: calc(50% + 18px); width: calc(100% + 3px + var(--n, 0) * 184px); height: 2px; border-radius: 2px; background: var(--tg); pointer-events: none; transition: width calc(var(--tw, 240ms) * 0.92) cubic-bezier(.45,.5,.2,1); }
+.note-tab-group.is-folded::after { width: 0; transition: width var(--tw, 240ms) cubic-bezier(.4,.55,.3,1); }
+.note-tab.in-group.is-on { background: color-mix(in oklab, var(--tg) 15%, var(--sidebar-accent)); }
+.note-tab.in-group .note-tab-x { background: transparent; }
+.note-tab-group { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; height: 22px; max-width: 150px; margin: 0 3px 0 5px; padding: 0 8px; font-size: 12px; font-weight: 650; line-height: 1; color: var(--tgf, var(--background)); background: var(--tg); border-radius: 7px; cursor: default; user-select: none; transition: filter 120ms; }
+.note-tab-group:hover { filter: brightness(1.08); }
+.note-tab-group:active { filter: brightness(0.92); }
+.note-tab-group:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.note-tab-group.is-target { box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--tg); }
+.note-tab-group.is-dragging { opacity: 0.4; }
+.note-tab-group.is-bare { width: 14px; height: 14px; padding: 0; border-radius: 50%; }
+.note-tab-group.is-bare.is-folded { width: auto; height: 22px; padding: 0 8px; border-radius: 7px; }
+.note-tab-group-n { font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Folding: the group's tabs tuck into the label one by one, last first (--td is each one's wait); unfolding deals them back out. */
+.note-tab-group { position: relative; }
+.note-tab-group-n { display: inline-block; overflow: hidden; max-width: 0; margin-left: -5px; opacity: 0; visibility: hidden; transition: max-width 240ms cubic-bezier(.32,.72,0,1), margin-left 240ms cubic-bezier(.32,.72,0,1), opacity 180ms, visibility 0s 240ms; }
+.note-tab-group.is-folded .note-tab-group-n { max-width: 28px; margin-left: 0; opacity: 0.75; visibility: visible; transition-delay: 0s; }
+.note-tab-group.is-bare:not(.is-folded) .note-tab-group-n { display: none; }
+.note-tab.is-folding, .note-tab.is-unfolding { clip-path: inset(-20px -2px); pointer-events: none; animation: note-tab-fold 240ms cubic-bezier(.32,.72,0,1) var(--td, 0ms) both; }
+.note-tab.is-unfolding { animation-name: note-tab-unfold; }
+.note-tab.is-folding > span, .note-tab.is-folding > button, .note-tab.is-unfolding > span, .note-tab.is-unfolding > button { animation: note-tab-tuck 240ms cubic-bezier(.32,.72,0,1) var(--td, 0ms) both; }
+.note-tab.is-unfolding > span, .note-tab.is-unfolding > button { animation-name: note-tab-deal; }
+@keyframes note-tab-fold { to { flex-basis: 0; width: 0; padding-left: 0; padding-right: 0; margin-right: -2px; } }
+@keyframes note-tab-tuck { to { opacity: 0; transform: translateX(-14px) scale(0.94); } }
+@keyframes note-tab-unfold { from { flex-basis: 0; width: 0; padding-left: 0; padding-right: 0; margin-right: -2px; } }
+@keyframes note-tab-deal { from { opacity: 0; transform: translateX(-14px) scale(0.94); } }
+@media (prefers-reduced-motion: reduce) { .note-tab-group-n, .note-tab-group::after, .note-tab-group.is-folded::after { transition: none; } .note-tab.is-folding, .note-tab.is-unfolding, .note-tab.is-folding > *, .note-tab.is-unfolding > * { animation: none; } }
+.note-tab-swatch { width: 20px; height: 20px; border-radius: 50%; background: var(--tg); box-shadow: 0 0 0 2px var(--popover, var(--card)), 0 0 0 0 var(--tg); transition: box-shadow 120ms, transform 120ms; }
+.note-tab-swatch.is-own:not(.is-on) { background: conic-gradient(from 0deg, #e5604f, #ec8a3c, #e2b53a, #3fae52, #2fb3a6, #5b93f0, #9b7bf0, #ec6aa0, #e5604f); }
+.note-mix-wheel { position: relative; border-radius: 50%; cursor: crosshair; touch-action: none; }
+.note-mix-bar { position: relative; width: 100%; height: 12px; border-radius: 6px; cursor: ew-resize; touch-action: none; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 18%, transparent); }
+.note-mix-pin { position: absolute; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35), 0 1px 3px rgb(0 0 0 / 0.3); transform: translate(-50%, -50%); pointer-events: none; }
+.note-tab-swatch:hover { transform: scale(1.12); }
+.note-tab-swatch.is-on { box-shadow: 0 0 0 2px var(--popover, var(--card)), 0 0 0 4px var(--tg); }
+.note-tab-swatch:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; }
+.note-tab-dot { display: inline-block; flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; }
 .note-tab-plus { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; color: var(--muted-foreground); opacity: 0; transition: opacity 140ms, background 120ms, color 120ms; }
 .note-topbar:hover .note-tab-plus, .note-tab-plus:focus-visible { opacity: 1; }
 .note-tab-plus:hover { background: var(--sidebar-accent); color: var(--foreground); }
+/* After a group label the bar's 12px gap reads as a hole: the + sits 6px off it. */
+.note-tabs + .note-tab-plus { margin-left: -8px; }
+.note-tabs:has(> .note-tab-group:last-child) + .note-tab-plus { margin-left: -6px; }
 .note-page:has(.note-cover) .note-topbar > .note-tab-plus { padding: 0; border-radius: 8px; background: color-mix(in oklab, var(--background) 82%, transparent); }
 @media (hover: none) { .note-tab-plus { opacity: 1; } }
-.note-crumbs-above { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 0 0 6px -4px; font-size: 13px; color: var(--muted-foreground); }
+.note-page { position: relative; }
+.note-crumbs-corner { position: absolute; top: 54px; left: 20px; z-index: 4; display: flex; max-width: calc(100% - 40px); min-width: 0; align-items: center; gap: 2px; height: 26px; font-size: 13px; color: var(--muted-foreground); }
+.note-page:has(.note-cover) .note-crumbs-corner { top: 60px; padding: 0 6px 0 4px; border-radius: 8px; background: color-mix(in oklab, var(--background) 90%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / 0.18); }
 @media (prefers-reduced-motion: reduce) { .note-tab, .note-tab-x { transition: none; } .note-tab.is-fresh { animation: none; } }
 /* Notes: canvases (Excalidraw). A canvas note fills the screen under its top bar; in a page it's a block. */
 .note-canvas-page { display: flex; flex-direction: column; height: 100dvh; min-height: 0; }
@@ -1475,11 +1820,38 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 .notes-main:has(> .note-tabs) .note-canvas-page { height: calc(100dvh - 40px); }
 .note-canvas-page .note-topbar, .notes-main:has(> .note-tabs) .note-canvas-page .note-topbar { position: relative; top: 0; }
 .note-canvas-page .note-topbar { flex-shrink: 0; }
+/* A chat open as a tab fills its pane the same way; its messages keep a readable width in a wide one. */
+.note-chat-host { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+/* Beside the pages the side panel has a hairline on its edge, like the one between two panes. */
+.achat[data-agent-panel]:not(.fixed) { box-shadow: inset 1px 0 0 var(--border); }
+.achat-docked { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+.achat-docked [data-agent-scroll] > *, .achat-docked [data-agent-composer] { width: 100%; max-width: 46rem; margin-left: auto; margin-right: auto; }
+.achat-docked [data-agent-composer-wrap] { max-width: none; }
+.note-chat-slot { display: flex; align-items: center; }
+/* A web tab (desktop app): a bar with back, forward, reload and the address, then the page. The page is a <webview>
+   in .web-layer, set over .note-web-box every frame (lib/web-tabs.tsx). */
+.note-web-bar { display: flex; flex-shrink: 0; align-items: center; gap: 2px; height: 38px; padding: 0 8px; border-bottom: 1px solid var(--border); }
+.note-web-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: 7px; color: var(--muted-foreground); transition: background-color 120ms, color 120ms; }
+.note-web-btn:hover:not(:disabled) { background: var(--accent); color: var(--foreground); }
+.note-web-btn:disabled { opacity: 0.35; }
+.note-web-address { flex: 1; min-width: 0; height: 28px; margin: 0 4px; padding: 0 10px; border-radius: 7px; font-size: 13px; color: var(--foreground); background: color-mix(in oklab, var(--muted) 70%, transparent); border: 1px solid transparent; outline: none; text-overflow: ellipsis; }
+.note-web-address:focus { border-color: var(--border); background: var(--background); }
+.note-web-address::placeholder { color: var(--muted-foreground); }
+.note-web-box { position: relative; flex: 1; min-height: 0; }
+.note-web-box.is-blank { display: flex; align-items: center; justify-content: center; }
+.note-web-hint { font-size: 13px; color: var(--muted-foreground); }
+.web-layer { position: fixed; inset: 0; z-index: 4; pointer-events: none; }
+.web-layer > webview { position: fixed; pointer-events: auto; background: var(--background); }
+.web-layer.is-passing > webview { pointer-events: none; }
+.web-tab-favicon { width: 15px; height: 15px; border-radius: 3px; object-fit: contain; }
 .note-canvas-board { position: relative; width: 100%; height: 100%; min-height: 0; }
 .note-canvas-full { flex: 1; }
 .note-canvas-loading, .note-canvas-empty { display: flex; height: 100%; min-height: 120px; align-items: center; justify-content: center; font-size: 13.5px; color: var(--muted-foreground); }
 .note-canvas-rest { display: block; width: 100%; cursor: pointer; padding: 0; overflow: hidden; background: transparent; }
 .note-canvas-rest:hover { background: color-mix(in oklab, var(--foreground) 3%, transparent); }
+/* In a narrow pane the messages and the box get more room from the edges; a wide pane centres them anyway. */
+.achat-docked { container-type: inline-size; }
+@container (min-width: 440px) { .achat-docked [data-agent-scroll], .achat-docked [data-agent-composer-wrap] { padding-left: 2.25rem; padding-right: 2.25rem; } }
 .note-canvas-svg { display: flex; height: 100%; width: 100%; align-items: center; justify-content: center; padding: 10px; }
 .note-canvas-svg svg { max-width: 100%; max-height: 100%; width: auto; height: auto; }
 .note-canvas.is-editing { outline: 2px solid color-mix(in oklab, var(--highlight) 55%, transparent); outline-offset: 2px; }
@@ -1521,6 +1893,22 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 .note-canvas-board, .note-canvas-board .excalidraw-container { background: var(--background); }
 .note-canvas.is-embedded .note-canvas-board, .note-cards.note-canvas .note-canvas-board, .note-cards.note-canvas .note-canvas-board .excalidraw-container { background: var(--card); }
 .note-canvas.is-embedded .excalidraw .App-menu_top { padding-top: 6px; }
+/* Excalidraw's style panel (stroke, background, width, layers…) waits behind a small swatch button beside the ☰
+   menu instead of covering the drawing: it opens on a click or S/G and folds away when you touch the canvas.
+   The button only exists while Excalidraw has a panel to show (something selected or a drawing tool on). */
+.note-canvas-board:not(.exc-styles-open) .excalidraw .App-menu__left { display: none !important; }
+.note-canvas-board.exc-styles-open .excalidraw .App-menu__left { animation: exc-styles-in 0.16s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+@keyframes exc-styles-in { from { opacity: 0; transform: translateY(-6px); } }
+.note-canvas-board.exc-style-below .excalidraw .App-menu__left { margin-top: 28px; max-height: calc(var(--exc-board-h, 600px) - 194px) !important; }
+.exc-style-btn { position: absolute; z-index: 5; display: none; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border-radius: 12px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 2px 0 var(--border); cursor: pointer; transition: background 120ms; }
+.note-canvas-board:has(.App-menu__left) > .exc-style-btn { display: flex; }
+.note-canvas-board.exc-style-below:has(.dropdown-menu) > .exc-style-btn { display: none; }
+.exc-style-btn:hover, .exc-style-btn.is-open { background: var(--accent); }
+.exc-style-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.exc-style-swatch { position: relative; width: 20px; height: 20px; border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 25%, transparent); }
+.exc-style-swatch.is-clear { background: repeating-conic-gradient(color-mix(in oklab, var(--foreground) 20%, transparent) 0 25%, transparent 0 50%) 50% / 6px 6px; }
+.exc-style-swatch > i { position: absolute; inset: 0; border-radius: 50%; border: 3.5px solid; }
+@media (prefers-reduced-motion: reduce) { .note-canvas-board.exc-styles-open .excalidraw .App-menu__left { animation: none; } }
 /* While you draw in a page the board takes the side edges (Excalidraw's tools sit there); height still resizes. */
 .note-canvas.is-editing > .note-rs-l, .note-canvas.is-editing > .note-rs-r { display: none; }
 .note-canvas { margin-top: 1.1em; }
@@ -1543,8 +1931,8 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 
 /* An embedded canvas while drawing: the board owns every pointer (no page text selection, no block drag), and Full screen lifts it over the app. */
 .note-canvas.is-editing .note-cards-frame { user-select: none; -webkit-user-select: none; touch-action: none; overscroll-behavior: contain; }
-.note-canvas.is-full { position: fixed; inset: 12px; z-index: 80; width: auto !important; margin: 0; display: flex; flex-direction: column; box-shadow: 0 24px 80px -20px rgb(0 0 0 / 0.55); }
-.note-canvas.is-full > .note-cards-frame { flex: 1; height: auto; }
+.note-cards.note-canvas.is-full { position: fixed; inset: 12px; z-index: 80; width: auto !important; margin: 0; display: flex; flex-direction: column; box-shadow: 0 24px 80px -20px rgb(0 0 0 / 0.55); }
+.note-cards.note-canvas.is-full > .note-cards-frame { flex: 1; height: auto; }
 .note-canvas.is-full > .note-rs { display: none; }
 
 /* No Library and no ? help: Etude has neither, and they crowded the board. */
@@ -1614,7 +2002,7 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 @media (prefers-reduced-motion: reduce) { .note-run-out { animation: none; } }
 /* Notes: embeds (HTML / mini-game, video, PDF) */
 .note-embed { position: relative; margin: 0.9em auto; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card); }
-.note-embed.is-on { outline: 2px solid color-mix(in oklab, var(--highlight) 60%, transparent); outline-offset: 2px; }
+.ProseMirror-focused .note-embed.is-on { outline: 2px solid color-mix(in oklab, var(--highlight) 60%, transparent); outline-offset: 2px; }
 .note-embed:hover > .note-rs, .note-embed.is-resizing > .note-rs { opacity: 1; }
 .note-embed.is-resizing iframe, .note-embed.is-resizing video { pointer-events: none; }
 .note-embed-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 38px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; color: var(--muted-foreground); }
@@ -1690,7 +2078,7 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 .note-file-editor { flex: 1; min-height: 0; overflow: hidden; }
 .note-file-editor .cm-editor { height: 100%; }
 /* Everything on the left: the corner Minimi sits over the right end. */
-.note-file-status { flex-shrink: 0; display: flex; align-items: center; gap: 16px; height: 30px; padding: 0 20px 0 18px; border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent); color: var(--muted-foreground); font-size: 12px; }
+.note-file-status { flex-shrink: 0; display: flex; align-items: center; gap: 16px; height: 30px; padding: 0 20px 0 18px; color: var(--muted-foreground); font-size: 12px; }
 .note-vim-mode { display: inline-flex; align-items: center; height: 19px; padding: 0 7px; border-radius: 5px; font-family: var(--font-mono); font-size: 11px; font-weight: 650; letter-spacing: 0.04em; color: var(--foreground); background: color-mix(in oklab, var(--foreground) 9%, transparent); }
 .note-vim-mode.is-insert { color: var(--primary-foreground); background: var(--primary); }
 .note-vim-mode.is-visual, .note-vim-mode.is-replace { color: var(--background); background: var(--warning); }
@@ -1728,10 +2116,10 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 .note-row.is-sel, .note-row.is-sel:hover, .note-row.is-sel.is-on { background: color-mix(in oklab, var(--primary) 16%, transparent); color: var(--foreground); }
 .note-row.is-sel:has(+ .note-row.is-sel) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: 0; }
 .note-row.is-sel + .note-row.is-sel { border-top-left-radius: 0; border-top-right-radius: 0; margin-top: 0; }
-/* The top bar with the tabs takes the left sidebar's colour, so the two read as one frame around the page (desktop).
+/* The top bar with the tabs takes the page's own colour, so tabs and page read as one surface (Obsidian).
    Over a cover with a single tab it stays see-through, as before. */
 [data-device="desktop"] {
-  & .note-topbar, & .note-page.has-tabs:has(.note-cover) .note-topbar { background: var(--sidebar); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  & .note-topbar, & .note-page.has-tabs:has(.note-cover) .note-topbar { background: var(--background); backdrop-filter: none; -webkit-backdrop-filter: none; }
   & .note-page:not(.has-tabs):has(.note-cover) .note-topbar { background: transparent; }
 }
 /* Notes split view: up to four panes, each with its own tabs. One pane scrolls with the window as before;
@@ -1747,6 +2135,19 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 .notes-split.is-multi .note-topbar { padding: 0 12px 0 16px; }
 /* In a pane that isn't the one you're in, its open tab reads quieter. */
 .notes-split.is-multi .note-pane:not(.is-focus) .note-tab.is-on { background: color-mix(in oklab, var(--sidebar-accent) 55%, transparent); font-weight: 550; }
+/* A pane's own zoom (Ctrl/⌘ + −): what it shows grows or shrinks, its tab bar stays the app's size. */
+.note-pane { position: relative; }
+.note-pane[data-zoom] > :not(.pane-zoom-pill) { zoom: var(--pane-zoom); }
+.note-pane[data-zoom] .note-topbar { zoom: calc(1 / var(--pane-zoom)); }
+/* A view that fills its pane (a file, a board, a web file, a picture) stays as tall as the pane when the pane is
+   zoomed. Zoom scales a length like 100dvh, so the height is divided by it, or the view would end short of the
+   bottom (zoomed out) or run past it (zoomed in). A percentage isn't scaled: side by side, 100% is already right. */
+.note-pane[data-zoom] > .note-canvas-page { height: calc(100dvh / var(--pane-zoom)); }
+.notes-main:has(> .note-tabs) .note-pane[data-zoom] > .note-canvas-page { height: calc((100dvh - 40px) / var(--pane-zoom)); }
+[data-device="phone"] .note-pane[data-zoom] > .note-canvas-page { height: calc((100dvh - var(--tabbar-h, 0px) - 2.75rem - 0.75rem) / var(--pane-zoom)); }
+.notes-split.is-multi .note-pane[data-zoom] > .note-canvas-page { height: 100%; }
+.pane-zoom-pill { position: absolute; z-index: 30; top: 48px; right: 14px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--popover); color: var(--popover-foreground); font-size: 12px; font-variant-numeric: tabular-nums; box-shadow: 0 4px 14px rgb(0 0 0 / 0.25); animation: pane-zoom-pill 1.2s ease forwards; }
+@keyframes pane-zoom-pill { 0% { opacity: 0; transform: translateY(-3px); } 12%, 75% { opacity: 1; transform: none; } 100% { opacity: 0; } }
 .note-split-bar { position: absolute; z-index: 8; touch-action: none; }
 .note-split-bar.is-row { width: 9px; margin-left: -4px; cursor: col-resize; }
 .note-split-bar.is-col { height: 9px; margin-top: -4px; cursor: row-resize; }
@@ -1792,3 +2193,333 @@ body.note-tab-dragging, body.note-tab-dragging * { cursor: grabbing !important; 
   .note-page:not(.has-tabs):has(.note-cover) .note-topbar:focus-within > * { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) { .note-page:has(.note-cover) .note-topbar > * { transition: none; } }
+
+/* Notebook: a web file, open on its own (running big, its HTML beside it while editing) */
+.note-web-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr; overflow: hidden; }
+.note-web-body.has-code { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+.note-web-stage { min-height: 0; overflow: auto; padding: 24px clamp(16px, 4vw, 48px); }
+.note-web-stage > .note-web-frame { max-width: 1100px; margin: 0 auto; }
+.note-web-code { min-height: 0; overflow: auto; border-left: 1px solid var(--border); }
+.note-web-code .cm-editor { min-height: 100%; }
+.note-web-code .cm-scroller { font-size: 13px; }
+@media (max-width: 820px) { .note-web-body.has-code { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); } .note-web-code { border-left: 0; border-top: 1px solid var(--border); } }
+.note-row-act.is-on { color: var(--foreground); background: var(--accent); }
+.note-portal .note-embed-head > button { font: inherit; color: inherit; }
+
+/* Holidays (lib/holiday, components/holiday.tsx): trim on today's session, snow. */
+.holiday-holly { position: absolute; right: -16px; top: -20px; width: 66px; transform: rotate(12deg); pointer-events: none; user-select: none; z-index: 1; filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.12)); }
+.holiday-garland { position: absolute; left: -18px; top: -24px; width: min(200px, 60%); transform: rotate(-3deg); pointer-events: none; user-select: none; z-index: 1; }
+.holiday-snow { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 30; }
+.holiday-snow i { position: absolute; top: -12px; border-radius: 50%; background: #c9d6e6; opacity: 0; animation: holiday-fall linear infinite; }
+.dark .holiday-snow i { background: #fff; }
+@keyframes holiday-fall { 0% { transform: translate(0, 0); opacity: 0; } 10%, 90% { opacity: var(--o); } 100% { transform: translate(var(--dx), 105vh); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .holiday-snow { display: none; } }
+
+/* ================================================================ Notebook: kanban boards */
+:root {
+  --kb-grey: #8b8a84; --kb-red: #cf4f3c; --kb-orange: #d97a26; --kb-gold: #bf9418; --kb-green: #2f9a41; --kb-teal: #23958a; --kb-blue: #3b78c9; --kb-purple: #8560c2; --kb-pink: #cc4f93;
+  --kb-col: color-mix(in oklab, var(--foreground) 4.5%, var(--background));
+  --kb-card: var(--card);
+  --kb-line: color-mix(in oklab, var(--foreground) 9%, transparent);
+  --kb-shadow: 0 1px 1px rgb(40 35 20 / 0.06), 0 0 0 1px var(--kb-line);
+  --kb-lift: 0 6px 18px rgb(40 35 20 / 0.12), 0 0 0 1px var(--kb-line);
+}
+.dark {
+  --kb-grey: #a3a29b; --kb-red: #ec7a64; --kb-orange: #f0a35c; --kb-gold: #e8c060; --kb-green: #5cc56e; --kb-teal: #5cc6b9; --kb-blue: #7fb2ea; --kb-purple: #b79be0; --kb-pink: #ec8cc0;
+  --kb-col: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --kb-card: color-mix(in oklab, var(--foreground) 10%, var(--background));
+  --kb-line: color-mix(in oklab, var(--foreground) 8%, transparent);
+  --kb-shadow: 0 1px 1px rgb(0 0 0 / 0.3), 0 0 0 1px var(--kb-line);
+  --kb-lift: 0 8px 22px rgb(0 0 0 / 0.45), 0 0 0 1px var(--kb-line);
+}
+.kb-board { display: flex; align-items: flex-start; gap: 12px; overflow-x: auto; overflow-y: hidden; padding: 4px 20px 18px; flex: 1; min-height: 0; overscroll-behavior-x: contain; }
+.kb-page .kb-board { height: 100%; }
+.kb-board.is-compact { padding: 2px 12px 12px; max-height: 520px; }
+.kb-col { flex: none; width: 272px; max-height: 100%; display: flex; flex-direction: column; border-radius: 13px; background: var(--kb-col); position: relative; }
+.kb-board.is-compact .kb-col { width: 200px; max-height: 500px; }
+.kb-col.is-ph { background: color-mix(in oklab, var(--muted-foreground) 9%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--muted-foreground) 26%, transparent); }
+.kb-col.is-ph > * { visibility: hidden; }
+.kb-colhead { display: flex; align-items: center; gap: 7px; padding: 10px 8px 6px 13px; font-size: 13.5px; font-weight: 650; cursor: grab; user-select: none; -webkit-user-select: none; min-height: 40px; }
+.kb-board.is-filtered .kb-colhead { cursor: default; }
+.kb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--kc); flex: none; }
+.kb-colname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.kb-colname-in { all: unset; min-width: 0; flex: 1; font: inherit; padding: 1px 5px; border-radius: 6px; background: var(--background); box-shadow: 0 0 0 2px color-mix(in oklab, var(--highlight) 55%, transparent); cursor: text; }
+.kb-count { color: var(--muted-foreground); font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
+.kb-count.is-over { color: var(--kb-red); font-weight: 650; }
+.kb-donemark { display: grid; color: var(--highlight); }
+.kb-donemark svg { width: 14px; height: 14px; stroke-width: 2.6; }
+.kb-icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; color: var(--muted-foreground); flex: none; }
+.kb-icon:hover, .kb-icon.is-open { background: color-mix(in oklab, var(--foreground) 8%, transparent); color: var(--foreground); }
+.kb-colmenu { opacity: 0; transition: opacity 0.12s; }
+.kb-col:hover .kb-colmenu, .kb-colmenu.is-open, .kb-colmenu:focus-visible, [data-device="phone"] .kb-colmenu, .kb-board:not(:hover) .kb-colmenu:focus { opacity: 1; }
+@media (hover: none) { .kb-colmenu { opacity: 1; } }
+.kb-list { display: flex; flex-direction: column; gap: 8px; padding: 3px 8px 4px; min-height: 10px; overflow-y: auto; overscroll-behavior: contain; }
+.kb-card { position: relative; background: var(--kb-card); border-radius: 10px; box-shadow: var(--kb-shadow); padding: 9px 11px 10px; cursor: pointer; font-size: 13.5px; line-height: 1.42; outline: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: box-shadow 0.15s ease; overflow-wrap: anywhere; }
+.kb-card:hover { box-shadow: var(--kb-lift); }
+.kb-card:focus-visible { box-shadow: 0 0 0 2px var(--highlight); }
+.kb-card.is-ph { background: color-mix(in oklab, var(--muted-foreground) 9%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--muted-foreground) 28%, transparent); }
+.kb-card.is-ph > * { visibility: hidden; }
+.kb-card.is-hidden { display: none; }
+.kb-cover { height: 34px; margin: -9px -11px 9px; border-radius: 10px 10px 0 0; background: color-mix(in oklab, var(--kc) 72%, var(--kb-card)); }
+.kb-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
+.kb-label { font-size: 10.5px; font-weight: 650; line-height: 1.55; padding: 0 7px; border-radius: 99px; color: color-mix(in oklab, var(--kc) 80%, var(--foreground)); background: color-mix(in oklab, var(--kc) 15%, transparent); }
+.kb-untitled { color: var(--muted-foreground); }
+.kb-card.is-done .kb-title { color: var(--muted-foreground); }
+.kb-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px; margin-top: 6px; font-size: 11.5px; color: var(--muted-foreground); }
+.kb-badge { display: inline-flex; align-items: center; gap: 4px; line-height: 1.6; font-variant-numeric: tabular-nums; border-radius: 5px; }
+.kb-badge svg { width: 12px; height: 12px; stroke-width: 2; }
+.kb-due.is-soon, .kb-due.is-late, .kb-due.is-ok { padding: 0 6px; font-weight: 600; }
+.kb-due.is-soon { color: color-mix(in oklab, var(--kb-gold) 82%, var(--foreground)); background: color-mix(in oklab, var(--kb-gold) 15%, transparent); }
+.kb-due.is-late { color: color-mix(in oklab, var(--kb-red) 85%, var(--foreground)); background: color-mix(in oklab, var(--kb-red) 13%, transparent); }
+.kb-due.is-ok, .kb-badge.is-ok { color: var(--highlight); }
+.kb-due.is-ok { background: color-mix(in oklab, var(--highlight) 13%, transparent); }
+.kb-stamp { position: absolute; top: 8px; right: 8px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: var(--highlight); color: #fff; opacity: 0; transform: scale(0.4); pointer-events: none; }
+.kb-stamp svg { width: 11px; height: 11px; stroke-width: 3; }
+.kb-card.has-cover .kb-stamp { top: 42px; }
+.kb-card.is-done .kb-stamp { opacity: 1; transform: none; }
+.kb-card.is-done:has(.kb-labels) .kb-labels, .kb-card.is-done .kb-title { padding-right: 20px; }
+.kb-card.is-stamp .kb-stamp { animation: kb-stamp 0.42s cubic-bezier(0.3, 1.5, 0.5, 1); }
+.kb-card.is-stamp::after { content: ""; position: absolute; top: 17px; right: 17px; width: 0; height: 0; border-radius: 50%; box-shadow: 0 0 0 0 color-mix(in oklab, var(--highlight) 60%, transparent); animation: kb-ring 0.6s ease-out; pointer-events: none; }
+@keyframes kb-stamp { 0% { opacity: 0; transform: scale(0.3); } 60% { opacity: 1; transform: scale(1.25); } 100% { opacity: 1; transform: none; } }
+@keyframes kb-ring { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--highlight) 60%, transparent); } 100% { box-shadow: 0 0 0 22px color-mix(in oklab, var(--highlight) 0%, transparent); } }
+.kb-add { display: flex; align-items: center; gap: 6px; margin: 2px 8px 8px; padding: 7px 8px; border-radius: 8px; color: var(--muted-foreground); font-size: 13px; text-align: left; }
+.kb-add:hover { background: color-mix(in oklab, var(--foreground) 7%, transparent); color: var(--foreground); }
+.kb-addf { margin: 2px 8px 8px; }
+.kb-addf textarea, .kb-addcolf input { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 8px 10px; border-radius: 10px; background: var(--kb-card); box-shadow: 0 0 0 2px color-mix(in oklab, var(--highlight) 55%, transparent); font-size: 13.5px; line-height: 1.4; color: var(--foreground); white-space: pre-wrap; overflow-wrap: anywhere; }
+.kb-addf textarea { min-height: 56px; resize: none; }
+.kb-addf-row { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+.kb-key { margin-left: auto; font-size: 11.5px; color: var(--muted-foreground); }
+.kb-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 600; background: var(--primary); color: var(--primary-foreground); white-space: nowrap; }
+.kb-btn:disabled { opacity: 0.45; }
+.kb-btn.is-ghost { background: transparent; color: var(--muted-foreground); font-weight: 500; padding: 0 9px; }
+.kb-btn.is-ghost:hover { background: color-mix(in oklab, var(--foreground) 7%, transparent); color: var(--foreground); }
+.kb-addcol { flex: none; width: 272px; display: flex; align-items: center; gap: 6px; padding: 11px 14px; border-radius: 13px; color: var(--muted-foreground); font-size: 13.5px; background: color-mix(in oklab, var(--kb-col) 55%, transparent); }
+.kb-addcol:hover { background: var(--kb-col); color: var(--foreground); }
+.kb-addcolf { flex: none; width: 272px; padding: 10px; border-radius: 13px; background: var(--kb-col); }
+.kb-board.is-compact .kb-addcol, .kb-board.is-compact .kb-addcolf { width: 200px; }
+.kb-ghost-host { position: fixed; left: 0; top: 0; z-index: 70; pointer-events: none; will-change: transform; }
+.kb-ghost { box-shadow: var(--kb-lift), 0 18px 40px rgb(0 0 0 / 0.18) !important; opacity: 0.97; transform-origin: 30% 30%; }
+.kb-ghost.kb-col { --kc: var(--kb-grey); }
+body.kb-dragging, body.kb-dragging * { cursor: grabbing !important; user-select: none !important; }
+/* menus */
+.kb-pop { font-size: 13.5px; }
+.kb-pop-label { padding: 6px 8px 4px; font-size: 11px; font-weight: 650; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.05em; }
+.kb-pop-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 6px 8px; border-radius: 7px; text-align: left; }
+.kb-pop-item:not(.is-static):hover { background: var(--accent); }
+.kb-pop-item.is-danger { color: var(--danger); }
+.kb-pop-sep { height: 1px; margin: 5px 4px; background: var(--border); }
+.kb-pop-input { all: unset; box-sizing: border-box; width: 100%; height: 32px; padding: 0 10px; border-radius: 8px; background: var(--muted); font-size: 13.5px; color: var(--foreground); }
+.kb-pop-input:focus { box-shadow: 0 0 0 2px color-mix(in oklab, var(--highlight) 55%, transparent); }
+.kb-stepper { display: flex; align-items: center; gap: 8px; padding: 2px 8px 6px; }
+.kb-stepper button { width: 28px; height: 28px; border-radius: 7px; background: var(--muted); display: grid; place-items: center; }
+.kb-stepper button:hover { background: var(--accent); }
+.kb-stepper span { min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; }
+.kb-swatches { display: flex; flex-wrap: wrap; gap: 7px; padding: 2px 8px 6px; }
+.kb-props .kb-swatches { padding: 0; }
+.kb-swatch { width: 20px; height: 20px; border-radius: 50%; background: var(--kc); flex: none; }
+.kb-swatch.is-on { box-shadow: 0 0 0 2px var(--popover), 0 0 0 4px var(--kc); }
+.kb-swatch.is-none { background: none; box-shadow: inset 0 0 0 1.5px var(--border); }
+.kb-swatch.is-none.is-on { box-shadow: inset 0 0 0 1.5px var(--border), 0 0 0 2px var(--background), 0 0 0 4px var(--muted-foreground); }
+.kb-swatch.is-small { width: 12px; height: 12px; }
+.kb-toggle { position: relative; width: 30px; height: 18px; border-radius: 99px; background: var(--border); flex: none; transition: background 0.15s; }
+.kb-toggle::after { content: ""; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform 0.18s cubic-bezier(0.3, 1.4, 0.5, 1); }
+.kb-toggle.is-on { background: var(--highlight); }
+.kb-toggle.is-on::after { transform: translateX(12px); }
+.kb-link { font-size: 12.5px; color: var(--muted-foreground); }
+.kb-link:hover { color: var(--foreground); }
+.kb-link:disabled { opacity: 0.4; }
+.kb-muted { color: var(--muted-foreground); font-size: 12.5px; }
+.kb-archived { max-height: 320px; overflow-y: auto; }
+/* chips (labels on a card's sheet, filters) */
+.kb-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px 0 9px; border-radius: 99px; font-size: 12px; font-weight: 600; color: var(--muted-foreground); box-shadow: inset 0 0 0 1px var(--border); white-space: nowrap; transition: color 0.15s, background 0.15s, box-shadow 0.15s; }
+.kb-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--kc); }
+.kb-chip:hover { color: var(--foreground); }
+.kb-chip.is-on { color: color-mix(in oklab, var(--kc) 80%, var(--foreground)); background: color-mix(in oklab, var(--kc) 14%, transparent); box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--kc) 65%, transparent); }
+.kb-chip.is-add { padding: 0 9px; gap: 3px; }
+.kb-chip.is-add::before { display: none; }
+/* a board open on its own */
+.kb-page-head { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; padding: 2px 20px 12px; }
+.kb-page-title-box { position: relative; display: flex; flex: 1 1 260px; min-width: 0; }
+.kb-page-title-box > input.kb-page-title { flex: 1 1 auto; }
+.kb-page-title-hint { position: absolute; inset: 0; pointer-events: none; white-space: pre; overflow: hidden; color: color-mix(in oklab, var(--muted-foreground) 60%, transparent); }
+.kb-page-title { all: unset; flex: 1 1 260px; min-width: 0; font: 700 1.85rem/1.2 Inter, system-ui, sans-serif; letter-spacing: -0.02em; color: var(--foreground); }
+.kb-page-title::placeholder { color: color-mix(in oklab, var(--muted-foreground) 60%, transparent); }
+.kb-filter { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.kb-filter input { all: unset; box-sizing: border-box; width: 160px; height: 30px; padding: 0 10px; border-radius: 8px; background: var(--kb-col); font-size: 13px; color: var(--foreground); }
+.kb-filter input::placeholder { color: var(--muted-foreground); }
+.kb-filter input:focus { box-shadow: 0 0 0 2px color-mix(in oklab, var(--highlight) 45%, transparent); }
+[data-device="phone"] .kb-page-head { padding: 2px 14px 10px; }
+[data-device="phone"] .kb-page-title { font-size: 1.5rem; }
+[data-device="phone"] .kb-filter { width: 100%; }
+[data-device="phone"] .kb-filter input { flex: 1; width: auto; }
+[data-device="phone"] .kb-board { padding: 2px 14px 14px; scroll-snap-type: x mandatory; scroll-padding: 0 14px; }
+[data-device="phone"] .kb-col, [data-device="phone"] .kb-addcol, [data-device="phone"] .kb-addcolf { width: min(300px, calc(100vw - 56px)); scroll-snap-align: start; }
+[data-device="phone"] .kb-board.is-compact .kb-col { width: min(260px, calc(100vw - 72px)); }
+/* the portal in a page */
+.kb-embed { margin: 0.9em 0; border: 1px solid var(--border); border-radius: 14px; background: var(--background); overflow: hidden; }
+.kb-embed.is-on { border-color: color-mix(in oklab, var(--highlight) 55%, var(--border)); }
+.kb-embed-inner { display: flex; flex-direction: column; }
+.kb-embed-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 6px 14px; font-size: 13px; line-height: 1.3; min-width: 0; }
+.kb-embed-head b { font-weight: 650; }
+.kb-embed-icon { color: var(--highlight); flex: none; }
+.kb-embed-empty { padding: 18px; font-size: 13.5px; color: var(--muted-foreground); }
+.kb-embed .kb-board { font-size: 13.5px; line-height: 1.42; }
+.kb-embed .kb-card p, .kb-embed .kb-board p { margin: 0; }
+/* the /kanban prompt */
+.kb-setup { padding: 14px 16px 12px; font-size: 14px; line-height: 1.4; }
+.kb-setup-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.kb-setup-head b { flex: 1; font-size: 15px; font-weight: 700; }
+.kb-tabs { display: flex; padding: 3px; border-radius: 9px; background: var(--kb-col); }
+.kb-tabs button { padding: 4px 10px; border-radius: 7px; font-size: 12.5px; color: var(--muted-foreground); }
+.kb-tabs button.is-on { background: var(--background); color: var(--foreground); font-weight: 600; box-shadow: 0 1px 3px rgb(0 0 0 / 0.12); }
+.kb-setup-body { display: flex; flex-direction: column; }
+.kb-field { margin: 12px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted-foreground); }
+.kb-input { all: unset; box-sizing: border-box; width: 100%; height: 38px; padding: 0 12px; border-radius: 9px; background: var(--kb-col); font-size: 14px; color: var(--foreground); }
+.kb-input:focus { box-shadow: 0 0 0 2px color-mix(in oklab, var(--highlight) 50%, transparent); }
+.kb-folders { display: flex; flex-direction: column; padding: 4px; border: 1px solid var(--border); border-radius: 10px; max-height: 210px; overflow-y: auto; }
+.kb-folder { display: flex; align-items: center; gap: 8px; min-height: 31px; padding: 0 10px; border-radius: 7px; font-size: 13.5px; text-align: left; color: var(--foreground); }
+.kb-folder svg { color: var(--muted-foreground); flex: none; }
+.kb-folder:hover { background: var(--accent); }
+.kb-folder.is-on { color: var(--highlight); font-weight: 600; }
+.kb-folder.is-on svg { color: var(--highlight); }
+.kb-folder-tag { margin-left: auto; padding-left: 8px; font-size: 11.5px; font-weight: 500; color: var(--muted-foreground); white-space: nowrap; }
+.kb-folder.is-on .kb-folder-tag { color: var(--highlight); font-weight: 700; }
+.kb-tpls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.kb-tpl { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 9px 9px; border-radius: 10px; border: 1px solid var(--border); text-align: left; font-size: 12.5px; }
+.kb-tpl:hover { border-color: color-mix(in oklab, var(--muted-foreground) 50%, transparent); }
+.kb-tpl.is-on { border-color: var(--highlight); box-shadow: 0 0 0 1px var(--highlight); }
+.kb-tpl-mini { display: flex; gap: 3px; width: 100%; height: 30px; margin-bottom: 6px; }
+.kb-tpl-mini i { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 3px; border-radius: 4px; background: var(--kb-col); }
+.kb-tpl-mini i b { height: 4px; border-radius: 2px; background: color-mix(in oklab, var(--muted-foreground) 32%, transparent); }
+.kb-tpl-mini.is-empty { border: 1.5px dashed var(--border); border-radius: 5px; }
+.kb-tpl-name { font-weight: 600; }
+.kb-tpl-hint { font-size: 11.5px; color: var(--muted-foreground); }
+.kb-setup-foot { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.kb-path { flex: 1; min-width: 0; font-size: 12px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-path b { color: var(--foreground); font-weight: 600; }
+.kb-existing { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.kb-exrow { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.kb-exrow svg { color: var(--highlight); flex: none; }
+.kb-exrow:hover { border-color: var(--highlight); }
+[data-device="phone"] .kb-tpls { grid-template-columns: 1fr; }
+/* a card, open */
+.kb-scrim { position: fixed; inset: 0; z-index: 45; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgb(10 8 4 / 0.34); animation: kb-fade 0.16s ease-out; }
+.dark .kb-scrim { background: rgb(0 0 0 / 0.58); }
+@keyframes kb-fade { from { opacity: 0; } }
+.kb-sheet { display: flex; flex-direction: column; width: min(720px, 100%); max-height: min(88dvh, 900px); border-radius: 16px; background: var(--background); box-shadow: 0 30px 80px rgb(0 0 0 / 0.3), 0 0 0 1px var(--border); overflow: hidden; animation: kb-in 0.22s cubic-bezier(0.2, 1.1, 0.4, 1); }
+@keyframes kb-in { from { opacity: 0; transform: translateY(10px) scale(0.985); } }
+.kb-sheet-cover { flex: none; height: 64px; background: color-mix(in oklab, var(--kc) 72%, var(--background)); }
+.kb-sheet-head { display: flex; align-items: flex-start; gap: 8px; padding: 18px 14px 2px 26px; }
+.kb-sheet-title { all: unset; flex: 1; min-width: 0; font: 700 1.5rem/1.25 Inter, system-ui, sans-serif; letter-spacing: -0.015em; color: var(--foreground); white-space: pre-wrap; overflow-wrap: anywhere; resize: none; }
+.kb-sheet-title::placeholder { color: color-mix(in oklab, var(--muted-foreground) 60%, transparent); }
+.kb-sheet-sub { display: flex; align-items: center; gap: 6px; padding: 2px 26px 10px; font-size: 12.5px; color: var(--muted-foreground); min-width: 0; }
+.kb-sheet-sub select { padding: 1px 6px; border-radius: 6px; background: var(--kb-col); color: var(--foreground); font-weight: 600; font-size: 12.5px; border: 0; outline: none; cursor: pointer; }
+.kb-sheet-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 26px 10px; }
+.kb-props { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 9px 10px; align-items: center; margin: 4px 0 12px; font-size: 13px; }
+.kb-prop { color: var(--muted-foreground); }
+.kb-lrow { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.kb-due-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.kb-due-row input { padding: 3px 8px; border-radius: 7px; background: var(--kb-col); color: var(--foreground); font-size: 13px; border: 0; outline: none; color-scheme: light; }
+.dark .kb-due-row input { color-scheme: dark; }
+.kb-progress { display: flex; align-items: center; gap: 10px; margin: 4px 0 2px; }
+.kb-progress-n { font-size: 12px; font-weight: 600; color: var(--muted-foreground); font-variant-numeric: tabular-nums; min-width: 32px; }
+.kb-progress-n.is-ok { color: var(--highlight); }
+.kb-progress-bar { flex: 1; height: 5px; border-radius: 99px; background: var(--kb-col); overflow: hidden; }
+.kb-progress-bar i { display: block; height: 100%; border-radius: 99px; background: var(--highlight); transition: width 0.35s cubic-bezier(0.2, 0.9, 0.3, 1); }
+.kb-sheet-page { min-height: 120px; margin-top: 4px; }
+.kb-sheet-page .ProseMirror { min-height: 110px; padding-bottom: 24px; }
+.kb-sheet-foot { flex: none; display: flex; align-items: center; gap: 6px; padding: 9px 14px 12px 18px; border-top: 1px solid var(--border); }
+[data-device="phone"] .kb-scrim { padding: 0; align-items: stretch; }
+[data-device="phone"] .kb-sheet { width: 100%; max-height: none; border-radius: 0; padding-bottom: env(safe-area-inset-bottom); }
+[data-device="phone"] .kb-sheet-head { padding: 14px 10px 2px 18px; }
+[data-device="phone"] .kb-sheet-sub, [data-device="phone"] .kb-sheet-body { padding-left: 18px; padding-right: 18px; }
+[data-device="phone"] .kb-sheet-foot .kb-key { display: none; }
+.ns-kanban { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; font-size: 12.5px; color: var(--muted-foreground); }
+.ns-kanban span { display: flex; justify-content: space-between; gap: 10px; }
+.ns-kanban b { font-weight: 600; color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .kb-card.is-stamp .kb-stamp, .kb-card.is-stamp::after, .kb-sheet, .kb-scrim { animation: none; } }
+/* The command palette's "where does it open" map (place-picker.tsx). */
+.place-pane { background: color-mix(in oklab, var(--foreground) 4%, transparent); box-shadow: inset 0 0 0 1px var(--border); cursor: pointer; transition: box-shadow 0.1s, background-color 0.1s; }
+.place-pane.is-here { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--primary) 70%, transparent); }
+.place-tab { max-width: 9em; padding: 1px 6px; border-radius: 4px 4px 0 0; font-size: 10px; line-height: 14px; color: var(--muted-foreground); background: color-mix(in oklab, var(--foreground) 5%, transparent); }
+.place-tab.is-front { color: var(--foreground); background: color-mix(in oklab, var(--foreground) 10%, transparent); }
+.place-tab.is-new { color: var(--primary-foreground, #000); background: var(--primary); animation: deck-finder-row 0.14s ease-out both; }
+.place-pane.is-here:has(.place-tab.is-new) > div:last-child { background: color-mix(in oklab, var(--primary) 9%, transparent); }
+.place-ghost { background: color-mix(in oklab, var(--primary) 22%, transparent); box-shadow: inset 0 0 0 1.5px var(--primary); border-radius: 6px; color: var(--foreground); animation: deck-finder-fade 0.12s ease-out both; }
+.place-ghost.is-left { left: 3px; top: 3px; bottom: 3px; width: calc(50% - 4px); }
+.place-ghost.is-right { right: 3px; top: 3px; bottom: 3px; width: calc(50% - 4px); }
+.place-ghost.is-top { left: 3px; right: 3px; top: 3px; height: calc(50% - 4px); }
+.place-ghost.is-bottom { left: 3px; right: 3px; bottom: 3px; height: calc(50% - 4px); }
+.place-panel.is-here { background: color-mix(in oklab, var(--primary) 18%, transparent); }
+.place-rest.is-left { left: 0; top: 0; bottom: 0; width: 50%; }
+.place-rest.is-right { right: 0; top: 0; bottom: 0; width: 50%; }
+.place-rest.is-top { left: 0; right: 0; top: 0; height: 50%; }
+.place-rest.is-bottom { left: 0; right: 0; bottom: 0; height: 50%; }
+/* The palette's place step drawn on the real Notebook, like a dragged tab's drop zone. */
+.deck-finder[data-placing-live] { padding: 0; }
+.deck-finder[data-placing-live] .deck-finder-box, .deck-finder[data-placing-live] .deck-finder-veil { display: none; }
+.place-live { z-index: 1; cursor: default; }
+/* Where in the strip the tab lands, the same mark a dragged tab shows. */
+.place-live-tabline { z-index: 61; transition: left 90ms cubic-bezier(.32,.72,0,1); }
+@media (prefers-reduced-motion: reduce) { .place-live-tabline { transition: none; } }
+.place-live-zone { display: flex; align-items: center; justify-content: center; }
+.place-live-zone > span { max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 10px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--foreground); background: color-mix(in oklab, var(--popover) 88%, transparent); box-shadow: inset 0 0 0 1px var(--border); }
+.place-live-n { position: fixed; z-index: 61; pointer-events: none; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 6px; font-size: 11.5px; line-height: 20px; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted-foreground); background: var(--popover); box-shadow: inset 0 0 0 1px var(--border); }
+.place-live-n.is-here { color: var(--primary-foreground, #000); background: var(--primary); box-shadow: none; }
+.place-live-bar { position: fixed; z-index: 62; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 18px; max-width: min(760px, calc(100vw - 32px)); padding: 9px 14px; border-radius: 12px; font-size: 12.5px; background: var(--popover); color: var(--popover-foreground); box-shadow: inset 0 0 0 1px var(--border), 0 18px 50px -12px rgb(0 0 0 / 0.5); animation: place-live-bar 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.15) both; }
+@keyframes place-live-bar { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.place-live-bar .text-muted-foreground { font-size: 11.5px; }
+
+/* Folders on this computer, open in the Notebook */
+.note-row.is-missing { opacity: 0.55; }
+/* A Markdown file: the live preview fills the pane like a page, the status line stays at the bottom. */
+.note-md-editor .cm-editor { height: 100%; }
+.note-md-editor .cm-search { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 14px; font-size: 12.5px; }
+/* A table and a to-do box in a Markdown file are a page's (.note-prose table, and its task list's box). */
+.note-md-editor .cm-md-table-view table { --tbl-line: color-mix(in oklab, var(--foreground) 10%, transparent); border-collapse: separate; border-spacing: 0; width: auto; max-width: 100%; border: 1px solid var(--tbl-line); border-radius: 12px; overflow: hidden; font-variant-numeric: tabular-nums; }
+.note-md-editor .cm-md-table-view th, .note-md-editor .cm-md-table-view td { border: 0; border-right: 1px solid var(--tbl-line); border-top: 1px solid var(--tbl-line); padding: 8px 14px; line-height: 1.55; text-align: left; vertical-align: top; min-width: 48px; }
+.note-md-editor .cm-md-table-view tr > :last-child { border-right: 0; }
+.note-md-editor .cm-md-table-view tr:first-child > * { border-top: 0; }
+.note-md-editor .cm-md-table-view th { background: color-mix(in oklab, var(--foreground) 4%, transparent); font-weight: 600; font-size: 0.86em; color: var(--muted-foreground); white-space: nowrap; }
+.note-md-editor .cm-md-table-view td > p, .note-md-editor .cm-md-table-view th > p { margin: 0; }
+.note-md-editor input.cm-md-check { appearance: none; position: relative; display: inline-block; width: 1.12em; height: 1.12em; margin: 0 0.38em 0 0.15em; vertical-align: -0.22em; border: 1.6px solid color-mix(in oklab, var(--muted-foreground) 70%, transparent); border-radius: 50%; cursor: pointer; transition: border-color 150ms, transform 120ms; }
+.note-md-editor input.cm-md-check::before { content: ""; position: absolute; inset: -1.6px; border-radius: 50%; background: var(--primary); transform: scale(0); transition: transform 150ms; }
+.note-md-editor input.cm-md-check::after { content: ""; position: absolute; left: 50%; top: 50%; width: 0.52em; height: 0.28em; margin: -0.2em 0 0 -0.26em; box-sizing: border-box; border: 2px solid var(--primary-foreground); border-top: 0; border-right: 0; opacity: 0; transform: rotate(-45deg) scale(0); transition: opacity 120ms, transform 150ms; }
+.note-md-editor input.cm-md-check:hover { border-color: color-mix(in oklab, var(--foreground) 55%, transparent); }
+.note-md-editor input.cm-md-check:active { transform: scale(0.88); }
+.note-md-editor input.cm-md-check:checked { border-color: var(--primary); }
+.note-md-editor input.cm-md-check:checked::before { transform: none; }
+.note-md-editor input.cm-md-check:checked::after { opacity: 1; transform: rotate(-45deg); }
+.local-file-page .local-media { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 20px; overflow: auto; }
+.local-media img, .local-media video { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+.local-media[data-type="image"] img { background: repeating-conic-gradient(color-mix(in oklab, var(--foreground) 6%, transparent) 0% 25%, transparent 0% 50%) 50% / 18px 18px; }
+.local-audio { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.local-audio audio { width: min(28rem, 80vw); }
+.local-other { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; }
+.local-other-name { font-size: 1.15rem; font-weight: 650; overflow-wrap: anywhere; }
+.local-other-path { max-width: 100%; font-family: var(--font-mono); font-size: 12.5px; color: var(--muted-foreground); overflow-wrap: anywhere; text-align: inherit; border-radius: 6px; padding: 2px 6px; }
+.local-other-path:hover { color: var(--foreground); background: color-mix(in oklab, var(--foreground) 6%, transparent); }
+.note-folder-head .local-other-path { margin-top: 4px; padding-left: 0; }
+/* A portal without its card: the web file blends into the page; the toolbar floats in on hover. */
+.note-embed.note-portal.is-bare { border-color: transparent; background: transparent; overflow: visible; }
+.note-portal.is-bare > .note-embed-head { position: absolute; top: -30px; right: 0; z-index: 2; height: 30px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); opacity: 0; pointer-events: none; transition: opacity 120ms; }
+.note-portal.is-bare > .note-embed-head > button:first-child { max-width: 220px; }
+.note-portal.is-bare:hover > .note-embed-head, .ProseMirror-focused .note-portal.is-bare.is-on > .note-embed-head, .note-portal.is-bare:focus-within > .note-embed-head { opacity: 1; pointer-events: auto; }
+/* A widget's room in a page. Too narrow for it, the block shows the widget at the width it needs, scaled down, under a ▶ that opens it full screen; full screen (the browser's, or our own over the app where there's none) gives it the whole screen under its toolbar. */
+.note-widget-box { position: relative; }
+.note-widget-box.is-thumb { overflow: hidden; border-radius: 12px; }
+.note-portal.is-bare .note-widget-box.is-thumb { box-shadow: inset 0 0 0 1px var(--border); }
+.note-widget-thumb { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: color-mix(in oklab, var(--background) 52%, transparent); transition: background 160ms; }
+.note-widget-thumb:hover { background: color-mix(in oklab, var(--background) 38%, transparent); }
+.note-widget-play { display: grid; place-items: center; width: 54px; height: 54px; padding-left: 3px; border-radius: 50%; background: var(--primary); color: var(--primary-foreground); box-shadow: 0 8px 28px -8px rgb(0 0 0 / 0.55); transition: transform 140ms ease; }
+.note-widget-play:hover { transform: scale(1.06); }
+.note-widget-play:active { transform: scale(0.96); }
+.note-widget-here { padding: 2px 10px; border-radius: 7px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); background: color-mix(in oklab, var(--background) 70%, transparent); }
+.note-widget-here:hover { color: var(--foreground); }
+.note-embed.note-html:fullscreen, .note-embed.note-html.is-full { display: flex; flex-direction: column; width: auto !important; margin: 0; border: 0; border-radius: 0; background: var(--background); overflow: hidden; }
+.note-embed.note-html.is-full { position: fixed; inset: 0; z-index: 90; }
+.note-embed.note-html:fullscreen::backdrop { background: var(--background); }
+.note-embed.note-html:is(:fullscreen, .is-full) > .note-widget-box { flex: 1; min-height: 0; }
+.note-embed.note-html:is(:fullscreen, .is-full) > .note-rs { display: none; }
+.note-portal.is-bare:is(:fullscreen, .is-full) > .note-embed-head { position: static; height: 38px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; opacity: 1; pointer-events: auto; }
+.note-portal.is-bare:is(:fullscreen, .is-full) > .note-embed-head > button:first-child { max-width: none; }

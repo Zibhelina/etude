@@ -7,16 +7,18 @@
 //   entries/decks/<id>.json            { ..., kind: "deck", content: pack/1 }
 //   entries/types/<id>.json            { ..., kind: "type", content: pack/1 with types (+ example items) }
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { EtudeError, plainLabel, type Etude } from "./engine.ts";
 import { BUILTIN_THEMES, THEME_ID, ThemeError, freeThemeId, normalizeTheme, type Theme } from "./themes.ts";
-import { validateType } from "./types.ts";
+import { ITEM_ID, validateType } from "./types.ts";
 import type { CardTypeDef } from "./model.ts";
+import { deletedKeys } from "./sync/log.ts";
+import { checkPlugin, loadPluginDir, pluginHash, pluginsFor, type PluginPackage } from "./plugins.ts";
 
 export const MARKET_REPO = "Zibhelina/etude-market";
 export const DEFAULT_MARKET = { url: `https://raw.githubusercontent.com/${MARKET_REPO}/main`, repo: MARKET_REPO };
-export const MARKET_KINDS = ["theme", "deck", "type"] as const;
+export const MARKET_KINDS = ["theme", "deck", "type", "plugin"] as const;
 export type MarketKind = (typeof MARKET_KINDS)[number];
 /** Largest entry file the app will download or publish. */
 export const MAX_ENTRY_BYTES = 32 * 1024 * 1024;
@@ -48,7 +50,8 @@ export interface MarketFile extends MarketMeta {
 export type MarketSummary =
   | { theme: Theme }
   | { decks: string[]; items: number; cardTypes: Record<string, number>; types: { id: string; name: string }[]; watch: boolean; samples: string[] }
-  | { types: { id: string; name: string; description: string; grader: string; fields: string[]; assets?: { files: number; bytes: number } }[]; items: number; samples: string[] };
+  | { types: { id: string; name: string; description: string; grader: string; fields: string[]; assets?: { files: number; bytes: number } }[]; items: number; samples: string[] }
+  | { plugin: { id: string; version: string; permissions: string[]; platforms: string[]; hash: string; files: number } };
 
 /** A one-line label for an item, from its first text-like field. */
 function sampleOf(item: any): string {
@@ -185,6 +188,14 @@ export function checkEntry(file: any): string[] {
     }
     if (file.kind === "deck" && !(c.items ?? []).length) errors.push("a deck needs at least one item");
     if (file.kind === "type" && !(c.types ?? []).length) errors.push("a card type entry needs at least one type in content.types");
+  } else if (file.kind === "plugin") {
+    const pe = checkPlugin(c);
+    if (pe.length) errors.push(...pe.map((x) => `plugin: ${x}`));
+    else if (c.manifest.id !== file.id) errors.push(`plugin manifest.id "${c.manifest.id}" must match entry id "${file.id}"`);
+    if (c.hash !== undefined && typeof c.hash === "string" && pe.length === 0) {
+      const actual = pluginHash(c as PluginPackage);
+      if (c.hash !== actual) errors.push(`plugin hash mismatch (manifest/files changed since hash was computed)`);
+    }
   }
   return errors;
 }
@@ -206,6 +217,19 @@ export function metaOf(file: MarketFile): MarketMeta {
 export function summarize(file: MarketFile): MarketSummary {
   const c = file.content;
   if (file.kind === "theme") return { theme: normalizeTheme(c).theme };
+  if (file.kind === "plugin") {
+    const pkg = c as PluginPackage;
+    return {
+      plugin: {
+        id: pkg.manifest.id,
+        version: pkg.manifest.version,
+        permissions: pkg.manifest.permissions,
+        platforms: pkg.manifest.platforms,
+        hash: pluginHash(pkg),
+        files: Object.keys(pkg.files).length,
+      },
+    };
+  }
   const items: any[] = c.items ?? [];
   const types: any[] = c.types ?? [];
   if (file.kind === "type") {
@@ -236,7 +260,7 @@ export const MAX_COVER_BYTES = 600 * 1024;
 const COVER_TYPE: Record<string, string> = { webp: "image/webp", png: "image/png", jpg: "image/jpeg" };
 
 /** Only catalog-owned image/video paths can be served. No external URLs or traversal. */
-export const MARKET_MEDIA_PATH = /^media\/(themes|decks|types)\/[a-z0-9-]+\/[a-z0-9-]+\.(webp|png|jpg|mp4|webm)$/;
+export const MARKET_MEDIA_PATH = /^media\/(themes|decks|types|plugins)\/[a-z0-9-]+\/[a-z0-9-]+\.(webp|png|jpg|mp4|webm)$/;
 export const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
 export async function fetchMarketMedia(url: string, path: string): Promise<{ body: Buffer; type: string }> {
   const m = MARKET_MEDIA_PATH.exec(path);
@@ -258,7 +282,7 @@ export async function fetchMarketMedia(url: string, path: string): Promise<{ bod
 
 /** An entry's cover image, as bytes and a content type. */
 export async function fetchCover(url: string, cover: string): Promise<{ body: Buffer; type: string }> {
-  const m = /^covers\/(themes|decks|types)\/[a-z0-9-]+\.(webp|png|jpg)$/.exec(cover);
+  const m = /^covers\/(themes|decks|types|plugins)\/[a-z0-9-]+\.(webp|png|jpg)$/.exec(cover);
   if (!m) throw new MarketError(`unexpected cover path ${cover}`);
   let body: Buffer;
   if (!isRemote(url)) {
@@ -421,7 +445,7 @@ export async function fetchIndex(url: string, opts: { refresh?: boolean } = {}):
 
 export async function fetchEntry(url: string, entry: Pick<IndexEntry, "kind" | "id" | "path">): Promise<MarketFile> {
   const path = entry.path || entryPath(entry.kind, entry.id);
-  if (!/^entries\/(themes|decks|types)\/[a-z0-9-]+\.json$/.test(path)) throw new MarketError(`unexpected entry path ${path}`);
+  if (!/^entries\/(themes|decks|types|plugins)\/[a-z0-9-]+\.json$/.test(path)) throw new MarketError(`unexpected entry path ${path}`);
   const { text } = await readMarketFile(url, path);
   const file = parseJson(text, path);
   const errors = checkEntry(file);
@@ -444,8 +468,10 @@ export interface InstalledEntry {
   listing?: string;
   items?: string[];
   types?: string[];
-  /** Paid decks the server says were refunded or disputed: when, why, and the cards this suspended (to restore them). */
+  /** Paid decks that 3.1.2 to 3.2.0 locked after a refund or dispute: when, why, and the cards it suspended (to restore them). Newer versions take the deck out instead (`removeInstalledDeck`). */
   locked?: { at: string; reason: string; cards: number[] };
+  /** Pack items installed under another id because Sync had deleted theirs (pack id → id here). See `packItemIds`. */
+  remap?: Record<string, string>;
 }
 
 export function installedEntries(e: Etude): Record<string, InstalledEntry> {
@@ -475,11 +501,107 @@ export function forgetInstall(e: Etude, id: string): boolean {
   return true;
 }
 
-/** "installed", "update" (the market has a newer version), or null. */
+/** The items an installed deck put here: the ones its record lists, or for records that don't list them, those in the decks it made. */
+export function installedItems(e: Etude, rec: InstalledEntry): string[] {
+  if (rec.items) return rec.items;
+  return (rec.ids ?? []).flatMap((n) => e.db.all("SELECT i.id FROM items i JOIN decks d ON d.id = i.deck_id WHERE d.name = ? OR d.name LIKE ? ESCAPE '\\'", n, n.replace(/[\\%_]/g, "\\$&") + "::%").map((r) => r.id as string));
+}
+
+/**
+ * Takes a bought deck out of this collection, as after a refund or dispute: its items with their cards and history,
+ * the card types it brought that nothing else uses (with their assets), the media files only its items named, the
+ * decks it left empty, and its install record, so the Market offers it again. Buying it again installs it afresh
+ * (under fresh ids where Sync deleted these). Sync carries the items, types and decks away from other devices too;
+ * it doesn't delete media files, so a synced device may get those back, named by nothing.
+ */
+export function removeInstalledDeck(e: Etude, id: string): { items: number; types: number; media: number } | null {
+  const rec = installedEntries(e)[id];
+  if (!rec) return null;
+  const items = installedItems(e, rec).filter((i) => e.db.get("SELECT 1 FROM items WHERE id = ?", i));
+  const files = new Set<string>();
+  for (const i of items) for (const m of String(e.db.get("SELECT fields FROM items WHERE id = ?", i)?.fields ?? "").matchAll(/\/media\/(files\/[0-9a-f]{64}\.[a-z0-9]+)/g)) files.add(m[1]);
+  e.deleteItems(items);
+  let types = 0;
+  for (const t of rec.types ?? []) {
+    if (!e.db.get("SELECT 1 FROM types WHERE id = ? AND NOT builtin", t) || e.typeUsage(t).items) continue;
+    e.deleteType(t);
+    types++;
+  }
+  let media = 0;
+  for (const f of files) {
+    if (e.db.get("SELECT 1 FROM items WHERE instr(fields, ?) > 0", `/media/${f}`)) continue;
+    const path = join(e.mediaDir, f);
+    if (!existsSync(path)) continue;
+    rmSync(path, { force: true });
+    media++;
+  }
+  for (const deck of rec.ids ?? []) {
+    try {
+      if (!e.deckUsage(deck).items) e.deleteDeck(deck);
+    } catch {
+      // Already gone, or holds something of the person's: it stays.
+    }
+  }
+  forgetInstall(e, id);
+  return { items: items.length, types, media };
+}
+
+/** "installed", "update" (the market has a newer version), or null (also when Sync deleted the deck: see `installGone`). */
 export function installState(e: Etude, entry: MarketMeta, installed = installedEntries(e)): "installed" | "update" | null {
   const rec = installed[entry.id];
-  if (!rec || rec.kind !== entry.kind) return null;
+  if (!rec || rec.kind !== entry.kind || installGone(e, rec)) return null;
   return rec.version !== entry.version || (entry.updated && rec.updated !== entry.updated) ? "update" : "installed";
+}
+
+/** An id through a map, reading only the map's own keys (an item may be called "constructor"). */
+const mapped = (map: Record<string, string> | undefined, id: string) => (map && Object.hasOwn(map, id) ? map[id] : id);
+
+/**
+ * Whether a synced collection has none of an installed deck's items left: deleted here or on another device, they can't
+ * come back under the same ids. The Market then offers the deck again, and installing it gives the items fresh ids.
+ * Always false without Sync, where a deck you deleted still reads as installed.
+ */
+export function installGone(e: Etude, rec: InstalledEntry): boolean {
+  if (rec.kind !== "deck") return false;
+  const dead = deletedKeys(e.db, "items");
+  if (!dead) return false;
+  const live = (id: string) => !dead(id) && !!e.db.get("SELECT 1 FROM items WHERE id = ?", id);
+  if (Array.isArray(rec.items) && rec.items.length) return !rec.items.some((id) => live(String(id)));
+  // Records that don't list their items: whatever is in the decks they made.
+  const tops = rec.ids ?? [];
+  return tops.length > 0 && !tops.some((top) =>
+    e.db.all("SELECT i.id FROM items i JOIN decks d ON d.id = i.deck_id WHERE d.name = ? OR d.name LIKE ? ESCAPE '\\'", top, top.replace(/[\\%_]/g, "\\$&") + "::%").some((r) => !dead(r.id as string)),
+  );
+}
+
+/** The n-th id tried for an item whose id Sync deleted, cut to fit the 200 characters an item id may have. */
+const freshItemId = (id: string, n: number) => id.slice(0, 200 - `.r${n}`.length) + `.r${n}`;
+
+/**
+ * The ids a pack's items get here, as the ones that differ (pack id → id here). Sync never shows an item again under
+ * an id it deleted (docs/sync.md), so such an item is installed as the first of `<id>.r1`, `<id>.r2`, … that Sync
+ * hasn't deleted and the pack doesn't use. That depends only on the pack and the tombstones, which every device ends up
+ * with, so devices that install the same pack pick the same ids and their items merge. `prev`, the entry's earlier
+ * map, is kept while its ids live, so an update writes the same items. Without Sync, or with nothing deleted, it's empty.
+ */
+export function packItemIds(e: Etude, items: any[], prev?: Record<string, string>): Record<string, string> {
+  const dead = deletedKeys(e.db, "items") ?? (() => false);
+  const ids = [...new Set(items.map((it) => it?.id).filter((id): id is string => typeof id === "string" && ITEM_ID.test(id)))];
+  const inPack = new Set(ids);
+  const used = new Set<string>();
+  const out: Record<string, string> = {};
+  for (const id of ids) {
+    const before = mapped(prev, id);
+    const keep = before !== id && typeof before === "string" && ITEM_ID.test(before) && !dead(before) && !used.has(before);
+    let to = keep ? before : !dead(id) && !used.has(id) ? id : "";
+    for (let n = 1; !to; n++) {
+      const next = freshItemId(id, n);
+      if (!dead(next) && !used.has(next) && !inPack.has(next)) to = next;
+    }
+    used.add(to);
+    if (to !== id) out[id] = to;
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ install
@@ -494,15 +616,21 @@ export async function installEntry(e: Etude, id: string, opts: { url?: string; d
   return installFile(e, file, { dryRun: opts.dryRun });
 }
 
-/** Adds an entry file to the collection. Installing the same entry again updates it in place. */
+/**
+ * Adds an entry file to the collection. Installing the same entry again updates it in place. Items whose ids Sync
+ * deleted get fresh ones (`remap`, kept in the install record so updates follow it).
+ */
 export function installFile(e: Etude, file: MarketFile, opts: { dryRun?: boolean } = {}) {
   const errors = checkEntry(file);
   if (errors.length) throw new MarketError(`invalid market entry: ${errors.join("; ")}`);
   const meta = metaOf(file);
   const prev = installedEntries(e)[meta.id];
+  // A deck Sync took away is installed afresh.
+  const had = !!prev && !(prev.kind === file.kind && installGone(e, prev));
   let result: "created" | "updated" | "unchanged";
   let ids: string[];
   let report: any;
+  let remap: Record<string, string> = {};
 
   if (file.kind === "theme") {
     const custom = e.settings().themes;
@@ -519,20 +647,40 @@ export function installFile(e: Etude, file: MarketFile, opts: { dryRun?: boolean
     if (!opts.dryRun && result !== "unchanged") e.saveTheme(next);
     ids = [themeId];
     report = { theme: themeId };
+  } else if (file.kind === "plugin") {
+    const pkg = file.content as PluginPackage & { hash?: string };
+    const store = pluginsFor(e);
+    const existing = store.get(pkg.manifest.id);
+    if (opts.dryRun) {
+      const h = pluginHash(pkg);
+      result = !existing ? "created" : existing.hash === h ? "unchanged" : "updated";
+      ids = [pkg.manifest.id];
+      report = { plugin: pkg.manifest.id, hash: h, permissions: pkg.manifest.permissions };
+    } else {
+      const res = store.install(pkg, { source: "market", expectedHash: typeof pkg.hash === "string" ? pkg.hash : undefined, enable: !existing });
+      result = res.status === "installed" ? "created" : res.status;
+      ids = [res.plugin.id];
+      report = { plugin: res.plugin.id, hash: res.plugin.hash, pausedForPermissions: res.pausedForPermissions, pendingPermissions: res.plugin.pendingPermissions };
+    }
   } else {
     const pack = file.content;
-    const r = e.importPack(pack, { dryRun: opts.dryRun });
+    remap = packItemIds(e, pack.items ?? [], prev?.kind === file.kind ? prev.remap : undefined);
+    const r = e.importPack(pack, { dryRun: opts.dryRun, ids: remap });
     report = r;
     const changed = r.items.created + r.items.updated + r.types.created + r.types.updated + r.assets.created + r.assets.updated + r.assets.removed;
-    result = prev ? (changed ? "updated" : "unchanged") : "created";
+    result = had ? (changed ? "updated" : "unchanged") : "created";
     ids =
       file.kind === "type"
         ? (pack.types ?? []).map((t: any) => t.id)
         : [...new Set(([...(pack.decks ?? []).map((d: any) => d.name), ...(pack.items ?? []).map((i: any) => i.deck)] as string[]).filter(Boolean).map((n) => n.split("::")[0].trim()))];
   }
-  if (!opts.dryRun) recordInstall(e, meta.id, { kind: meta.kind, name: meta.name, version: meta.version, updated: meta.updated, at: new Date().toISOString(), ids });
-  return { entry: meta, result, ids, dryRun: !!opts.dryRun, report };
+  const moved = Object.keys(remap).length > 0;
+  if (!opts.dryRun) recordInstall(e, meta.id, { kind: meta.kind, name: meta.name, version: meta.version, updated: meta.updated, at: new Date().toISOString(), ids, ...(moved ? { remap } : {}) });
+  return { entry: meta, result, ids, dryRun: !!opts.dryRun, report, ...(moved ? { remap } : {}) };
 }
+
+/** The ids a pack's items have in this collection, after an install's `remap`. */
+export const installedItemIds = (items: any[], remap?: Record<string, string>) => items.map((it) => mapped(remap, String(it?.id)));
 
 // ------------------------------------------------------------------ publish
 
@@ -577,6 +725,15 @@ export function buildSubmission(e: Etude, input: SubmissionInput): MarketFile {
     delete content.exported;
     name ||= d.name.split("::").pop()!;
     description ||= d.description ?? "";
+  } else if (kind === "plugin") {
+    const store = pluginsFor(e);
+    const installed = store.packageOf(ref);
+    const pkg: PluginPackage = installed ? { manifest: installed.manifest, files: installed.files } : loadPluginDir(ref);
+    const pe = checkPlugin(pkg);
+    if (pe.length) throw new MarketError(`plugin check failed: ${pe.join("; ")}`);
+    content = { manifest: pkg.manifest, files: pkg.files, hash: pluginHash(pkg) };
+    name ||= pkg.manifest.name;
+    description ||= pkg.manifest.description;
   } else {
     const def = e.typeWithAssets(ref) as CardTypeDef & { builtin?: boolean };
     def.builtin = e.type(ref).builtin;

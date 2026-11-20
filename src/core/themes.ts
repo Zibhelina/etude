@@ -52,9 +52,6 @@ export const THEME_GROUPS: { title: string; vars: { name: string; label: string;
   {
     title: "Controls",
     vars: [
-      { name: "--primary", label: "Primary button" },
-      { name: "--primary-foreground", label: "Primary button text" },
-      { name: "--primary-edge", label: "Primary button edge" },
       { name: "--border", label: "Borders" },
       { name: "--input", label: "Input borders" },
       { name: "--ring", label: "Focus ring" },
@@ -64,7 +61,7 @@ export const THEME_GROUPS: { title: string; vars: { name: string; label: string;
   {
     title: "Accent and status",
     vars: [
-      { name: "--highlight", label: "Accent" },
+      { name: "--highlight", label: "Accent (buttons, links, selection)" },
       { name: "--card-highlight", label: "Card accent" },
       { name: "--success", label: "Success" },
       { name: "--warning", label: "Warning" },
@@ -142,7 +139,6 @@ function complete(v: Record<string, string>): Record<string, string> {
   // What cards point at (a target box, a point to drag, the chord to play). Kept apart from the app's accent so
   // a green app doesn't turn every target the colour of "correct".
   o["--card-highlight"] ??= o["--highlight"];
-  o["--primary-edge"] ??= `color-mix(in oklab, ${o["--primary"]} 72%, black)`;
   o["--radius"] ??= "0.75rem";
   o["--font-sans"] ??= SANS;
   o["--font-mono"] ??= MONO;
@@ -156,7 +152,6 @@ const SNOW = complete({
   "--popover": "#ffffff",
   "--primary": "#2f9a41",
   "--primary-foreground": "#ffffff",
-  "--primary-edge": "#1e6b2b",
   "--secondary": "#f6f6f5",
   "--muted": "#f6f6f5",
   "--muted-foreground": "#6b6b68",
@@ -194,7 +189,6 @@ const NIGHT = complete({
   "--popover": "#222222",
   "--primary": "#3fae52",
   "--primary-foreground": "#ffffff",
-  "--primary-edge": "#2a7d39",
   "--secondary": "#2a2a2a",
   "--muted": "#222222",
   "--muted-foreground": "#a3a3a3",
@@ -486,7 +480,8 @@ export function resolveTheme(t: Theme, prefersDark: boolean): Theme {
 
 /**
  * Accent colors: Settings → Appearance paints the app's accent (primary buttons, the selected tab, links,
- * charts' first series) on top of whatever theme is in use. `null` keeps the theme's own. A preset has a
+ * charts' first series) on top of whatever theme is in use. `null` paints the theme's own (its --highlight, the
+ * color Settings shows for "Theme's own"), so the buttons are never a different color from the one shown. A preset has a
  * light and a dark shade so it reads on both; a custom one is any #rrggbb, used as is.
  * Status colors (Again/Hard/Good/Easy, correct/wrong) never change: green keeps meaning "right".
  */
@@ -520,21 +515,37 @@ function luminance(hex: string): number {
   return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
 }
 
-/** Text on an accent fill: white, or near-black when the accent is light (amber, a pale custom color). */
-export const accentText = (hex: string) => (1.05 / (luminance(hex) + 0.05) >= 2.6 ? "#ffffff" : "#1b1b1a");
+/** Luminance of a theme color: #rgb/#rrggbb, or oklch()/oklab() through L³. Null for anything else (a name, var()). */
+function luminanceOf(color: string): number | null {
+  const c = color.trim().toLowerCase();
+  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])(?:[0-9a-f])?$/.exec(c);
+  if (short) return luminance(`#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`);
+  if (/^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/.test(c)) return luminance(c.slice(0, 7));
+  const ok = /^okl(?:ch|ab)\(\s*([\d.]+)(%?)/.exec(c);
+  if (ok) {
+    const l = Number(ok[1]) / (ok[2] ? 100 : 1);
+    return Number.isFinite(l) ? Math.min(1, Math.max(0, l)) ** 3 : null;
+  }
+  return null;
+}
 
-/** The theme with the accent painted over it. The same theme back when the accent is the theme's own. */
+const textOn = (lum: number) => (1.05 / (lum + 0.05) >= 2.6 ? "#ffffff" : "#1b1b1a");
+
+/** Text on an accent fill: white, or near-black when the accent is light (amber, a pale custom color). */
+export const accentText = (hex: string) => textOn(luminance(hex));
+
+/** The theme with the accent painted over it; with no accent set, the theme's own (--highlight) is the one painted. */
 export function withAccent(t: Theme, accent: string | null | undefined): Theme {
-  const c = accentColor(accent, t.scheme);
-  if (!c) return t;
-  const fg = accentText(c);
+  const c = accentColor(accent, t.scheme) ?? t.vars["--highlight"];
+  const lum = c ? luminanceOf(c) : null;
+  if (!c || lum === null) return t;
+  const fg = textOn(lum);
   return {
     ...t,
     vars: {
       ...t.vars,
       "--primary": c,
       "--primary-foreground": fg,
-      "--primary-edge": `color-mix(in oklab, ${c} 72%, black)`,
       "--highlight": c,
       "--chart-1": c,
       "--sidebar-primary": c,
@@ -622,8 +633,12 @@ export function normalizeTheme(input: unknown): { theme: Theme; removed: string[
 }
 
 /** The stylesheet for a theme. `html:root` beats the app's own `:root` defaults wherever they load. */
+/** The ledge under a primary button, always a shade of the button itself. Derived here and never stored, so a
+ * theme saved with an old edge (or another theme's) can't leave a green ledge under a cream button. */
+const PRIMARY_EDGE = "color-mix(in oklab, var(--primary) 72%, black)";
+
 export function themeCss(t: Theme): string {
-  const vars = Object.entries(t.vars)
+  const vars = Object.entries({ ...t.vars, "--primary-edge": PRIMARY_EDGE })
     .filter(([k]) => VAR_NAME.test(k))
     .map(([k, v]) => `  ${k}: ${v};`)
     .join("\n");

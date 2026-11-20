@@ -237,6 +237,7 @@ These work on every command, before or after the command words.
   - [`deck unset`](#deck-unset) Remove this deck's own overrides so the values are inherited again.
   - [`deck optimize`](#deck-optimize) Fit the FSRS weights this deck uses to the history of every deck sharing them (Anki's Optimize).
   - [`deck preset`](#deck-preset) Attach a preset to a deck, or detach it with `none`.
+  - [`deck home`](#deck-home) Show or set a deck's recursive Deck Home (queue, catalog, a card type's home, or custom HTML/CSS/JS).
 - **preset**: Presets: named settings shared by several decks (`etude preset` alone runs `list`)
   - [`preset list`](#preset-list) Every preset with the decks that use it.
   - [`preset show`](#preset-show) A preset: its own values, the full settings it produces on a top-level deck, and its decks.
@@ -287,8 +288,18 @@ These work on every command, before or after the command words.
 - **note**: Notes (beta): pages you write in, in a tree of their own (`etude note` alone runs `list`)
   - [`note list`](#note-list) Every page, in tree order (parents before their pages).
   - [`note show`](#note-show) A page (its title, plain text and document tree) or a canvas (its title, text and Excalidraw scene).
-  - [`note new`](#note-new) Make a page, or with --folder a folder that only holds pages, or with --file a code or text file (main.py, notes.tex) opened in a plain editor.
-  - [`note edit`](#note-edit) Change a page's title, icon, body or look (cover, width, font, text size), or turn it into a folder and back.
+  - [`note new`](#note-new) Make a page, or with --folder a folder that only holds pages, with --file a code or text file (main.py, notes.tex) opened in a plain editor, or with --web a web file (HTML, CSS and JavaScript) you can open through a portal in any page.
+  - [`note edit`](#note-edit) Change a note's title, icon, look (cover, width, font, text size) or whole body, or turn a page into a folder and back. For part of a page use note patch or note append.
+  - [`note tree`](#note-tree) The notes as an indented tree, one per line: title, a mark for its kind (folders end in /) and the start of its id. Any id start, title or path works wherever a command takes a note.
+  - [`note read`](#note-read) A note to read: a line with its path, kind, id and last change, then a page as Markdown, a file's or web file's text, a kanban board, a canvas's elements, a PDF's place in the media, or what's in a folder.
+  - [`note append`](#note-append) Add to a page or file without touching what's there: Markdown (or block JSON) to a page, text to a file or web file. At the end, at the top, under a heading or before a block or line.
+  - [`note patch`](#note-patch) Replace a piece of a page or file, like find-and-replace: on a page's Markdown (what `note read` shows), only the blocks it touches change; on a file or web file, the exact text.
+  - [`note block`](#note-block) One top-level block of a page as JSON (the editor's own node: columns, toggles, portals, colours and all), or change it: replace it with JSON or Markdown, move it, or delete it.
+  - [`note canvas`](#note-canvas) Every element on a canvas, back to front: id, type, box (x, y, width, height), its words (or its label), what an arrow connects, colours.
+  - [`note canvas add`](#note-canvas-add) Draw on a canvas: a rectangle, ellipse, diamond, text, arrow, line, picture or frame. Shapes take a label with --text; arrows connect two elements with --from and --to.
+  - [`note canvas edit`](#note-canvas-edit) Change an element: its words, colours, size, place (--x/--y, or --dx/--dy to nudge), ends (arrows), or bring it to the front or send it to the back. A shape's label and the arrows tied to it follow.
+  - [`note canvas delete`](#note-canvas-delete) Remove elements from a canvas, with their labels; arrows that pointed at them stay, let go.
+  - [`note portal`](#note-portal) Open a portal in a page: a window onto a web file (live), a canvas or a kanban board, at the end of the page or at --at. Edits to the note show through every portal to it.
   - [`note move`](#note-move) Put a page inside another page, or at the top level with --top.
   - [`note archive`](#note-archive) Archive a page and the pages inside it. Nothing is deleted.
   - [`note unarchive`](#note-unarchive) Bring an archived page back, with the pages inside it.
@@ -296,13 +307,64 @@ These work on every command, before or after the command words.
   - [`note search`](#note-search) Pages whose title or text has every word, title matches first.
   - [`note import`](#note-import) Import markdown files or a whole folder (an Obsidian vault) as pages, PDFs as PDF notes, code and text files (.py, .tex, …) as files, and .excalidraw drawings as canvases.
   - [`note tutorial`](#note-tutorial) Add the Notes tutorial: a folder of pages that shows what Notes can do, each with a short Try it yourself, and the deck Notes::Notes showcase with its cards.
-  - [`note export`](#note-export) A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file; a file as its own text.
+  - [`note export`](#note-export) A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file; a kanban board as Markdown Obsidian's Kanban plugin opens; a file as its own text.
   - [`note pin`](#note-pin) Pin a page to the start page (a New tab in Notes). Pins show in the order they were made.
   - [`note unpin`](#note-unpin) Take a page off the start page.
   - [`note pinned`](#note-pinned) The pages pinned to the start page, in pin order (archived ones left out).
   - [`note recent`](#note-recent) What the app opened last, newest first: the start page's Jump back in (folders left out).
   - [`note graph`](#note-graph) Every page as a point and every [[link]] between pages as a line (what the graph view draws).
   - [`note backlinks`](#note-backlinks) The pages that link to a page.
+  - [`note kanban`](#note-kanban) A kanban board at a glance: each column with its cards (id, title, due day, labels, to-dos done).
+  - [`note kanban add`](#note-kanban-add) Add a card to a board: at the end of a column (the first by default), with a due day, labels, a cover and a page.
+  - [`note kanban move`](#note-kanban-move) Move a card to a column (and a place in it); an archived card comes back this way too.
+  - [`note kanban edit`](#note-kanban-edit) Change a card: its title, due day, labels, cover or page.
+  - [`note kanban card`](#note-kanban-card) One card: its column, due day, labels, cover, and its page as Markdown.
+  - [`note kanban archive`](#note-kanban-archive) Archive a card (it keeps its page, out of every column), or with --restore bring it back to the first column.
+  - [`note kanban column`](#note-kanban-column) Add a column (when no column has this name) or change one: rename it, colour it, give it a limit, make its cards count as done, move it, or remove it (its cards go to the archive).
+- **folder**: Folders on this computer, open in the Notebook: read and changed where they are, nothing copied. Each file keeps its format: Markdown and text as text, a page as a .etude file (`etude folder` alone runs `list`)
+  - [`folder list`](#folder-list) The folders open in the Notebook.
+  - [`folder open`](#folder-open) Open a folder on this computer in the Notebook. Its files stay where they are; Markdown opens in a live editor, .etude pages in the page editor, code and text in the file editor, PDFs and pictures as themselves.
+  - [`folder edit`](#folder-edit) Change what the Notebook calls an open folder, where its removed files go, or whether dot-names show.
+  - [`folder close`](#folder-close) Take a folder out of the Notebook. The folder and everything in it stay on disk.
+  - [`folder ls`](#folder-ls) What's right inside a folder: folders first, then files by name.
+  - [`folder read`](#folder-read) A file's text exactly as it is on disk, after a line with its place, id and last change. A page (.etude) reads as Markdown, the way `note read` shows one.
+  - [`folder write`](#folder-write) Replace a file's text on disk. Line ends and a byte-order mark stay as the file had them. A page (.etude) takes its body as Markdown (--md), which drops what Markdown can't say (columns, portals): for a small change use `folder patch`.
+  - [`folder patch`](#folder-patch) Find-and-replace in a file's text on disk, or in a page's (.etude) Markdown, touching only the blocks it changes. The text to find must be there exactly once unless --all.
+  - [`folder new`](#folder-new) A new page, canvas, kanban board, web file, file or folder inside a folder on this computer. A name with an extension (notes.md, main.py) makes that file; a name without one makes an Etude page (Name.etude). --kind canvas or kanban makes that kind of .etude file, --kind web an .html file.
+  - [`folder rename`](#folder-rename) Give a file or folder a new name where it is. A Markdown file or a page keeps its extension when the new name leaves it out.
+  - [`folder move`](#folder-move) Move a file or folder into another folder on this computer, keeping its name. With --index it goes at that place among what's there, which also works in the folder it's already in: that puts a folder's files in an order of your own (a disk has none, so Etude keeps it for this computer; `folder sort` goes back to names).
+  - [`folder sort`](#folder-sort) Put what's in a folder back in the order of its names (folders first), dropping the order it was given by hand.
+  - [`folder trash`](#folder-trash) Move a file or folder to its folder's trash (.trash unless changed). Nothing is deleted.
+  - [`folder restore`](#folder-restore) Put something back from a folder's trash where it was.
+  - [`folder search`](#folder-search) Files in the open folders by name, then Markdown and text files by the words in them.
+  - [`folder where`](#folder-where) The id the Notebook uses for a path on disk (for `etude view open`), or null when no open folder holds it.
+  - [`folder take`](#folder-take) Move a note of the collection, with what's under it, into a folder on this computer as files: a page, a canvas and a kanban board each become Name.etude, a web file Name.html, a file note the file it names, a PDF note its PDF, a folder a directory (a note with notes under it gets a directory of its name and sits inside; a folder goes into a directory of its name that's already there). Every file is read back before anything changes in the collection; then links to what moved follow it, and the notes that moved are archived (they come back from the Archive).
+  - [`folder bring`](#folder-bring) Move files of a folder on this computer into the collection as notes, the other way of `folder take`: a .etude file becomes the page, canvas or board it holds, a Markdown or text file a file note, an .html file a web file, a PDF a PDF note, a directory a folder note with what's in it. Images, sound, video and other binary files have no note kind: a move that holds one is refused before anything changes. The notes are made and read back first; then links to the files follow them and the files go to their folder's trash.
+  - [`folder sync list`](#folder-sync-list) The folders Sync carries to your other devices: the ones with a place on this computer (`here`), and the ones other devices carry that aren't on this computer yet (`elsewhere`).
+  - [`folder sync on`](#folder-sync-on) Start carrying a folder of this computer to your other devices through Sync. Every file in it travels as it is (not dot-names, the trash, or files over 100 MB). This computer becomes the folder's home: when one file changes in two places, its version keeps the name. --dry-run says how much would travel.
+  - [`folder sync link`](#folder-sync-link) Give a folder another device carries a place on this computer. The directory is made when it isn't there and opened in the Notebook; the files come on the sync that follows. Files already in it stay: one that differs from the vault's is kept beside it as a (conflict …) copy.
+  - [`folder sync off`](#folder-sync-off) Stop carrying a folder on this computer. Its files stay on disk as they are, here and on the other devices. --everywhere ends it for every device and takes it out of the vault's list.
+  - [`folder sync go`](#folder-sync-go) Let through the removals Sync is holding back for a folder (a lot of its files went missing here at once, so the other devices kept theirs). They go on the sync that follows.
+- **view**: What the open app shows, and changing it like a person would: tabs, panes, groups, sidebar, Ask panel (`etude view` alone runs `show`)
+  - [`view show`](#view-show) What the open app shows: the screen, its Notebook panes (numbered from 1) with their tabs, groups, pins and sizes, and the sidebar, Notes' pages and the Ask panel.
+  - [`view open`](#view-open) Open a note in the app (or, with no note, a New tab): in a pane of its own beside another (right, left, top, bottom), as a new tab, or in place of the front page. An open tab moves there.
+  - [`view close`](#view-close) Close a tab in the app, or with --pane every tab in that pane.
+  - [`view close-others`](#view-close-others) Close every other tab in that tab's pane. Pinned tabs stay, like in a browser.
+  - [`view focus`](#view-focus) Bring a tab to the front in its pane, or focus a pane.
+  - [`view pin`](#view-pin) Pin a tab (small, at the start of its strip, kept by Close other tabs), or unpin it with --off.
+  - [`view icon`](#view-icon) A pinned tab's own icon (an emoji, or a page icon like emoji:🧪, art:…, media:…), or the page's own again with --clear.
+  - [`view move`](#view-move) Move a tab: into a pane's tabs (before another tab, or at the end), with --side to that side of a pane as a pane of its own, or an Ask chat with --to panel back to the side panel.
+  - [`view group`](#view-group) Put tabs in a tab group: a new one (with --name and --color), or an existing one with --into. The tabs must be in one pane.
+  - [`view group-edit`](#view-group-edit) Rename, recolour, fold or unfold a tab group.
+  - [`view ungroup`](#view-ungroup) Dissolve a tab group (its tabs stay open), or with --tab take one tab out of its group.
+  - [`view group-close`](#view-group-close) Close a tab group and every tab in it.
+  - [`view group-move`](#view-group-move) Move a whole tab group: along its strip (before a tab) or into another pane's tabs.
+  - [`view resize`](#view-resize) How much of its split a pane takes: 0.5 is half, 0.7 makes it bigger than the pane beside it.
+  - [`view zoom`](#view-zoom) A pane's own zoom, like Ctrl/⌘ + and − in it: a step in or out, reset to 100%, or a size like 125%. The rest of the window stays as it is.
+  - [`view sidebar`](#view-sidebar) The app's sidebar: open wide, folded to its icons (rail), or hidden (none).
+  - [`view pages`](#view-pages) Show or hide Notes' page tree under the Notes row in the sidebar.
+  - [`view panel`](#view-panel) Open or close the Ask side panel.
+  - [`view go`](#view-go) Go to another screen of the app: notes, library, study (with ?deck=…), browse, stats, market, settings, or any path.
 - **type**: Card types: fields, template (HTML/CSS/JS), prepare script and grader (`etude type` alone runs `list`)
   - [`type list`](#type-list) Card types with their grader, item count and whether they are shipped, edited or custom.
   - [`type decks`](#type-decks) Where a type is used: each deck holding its items (archived ones left out), with item and card counts, most cards first.
@@ -341,12 +403,20 @@ These work on every command, before or after the command words.
   - [`study answer`](#study-answer) Submit and rate in one step: grades the answer, then applies the suggested rating (or the one you give).
   - [`study undo`](#study-undo) Undo the most recent review made on this device (any card): the card returns exactly to its previous state, and the graded answer is discarded.
   - [`study watch`](#study-watch) Watch mode: the cards of a scope in order, one per item, each with an example answer and its grade. Records nothing.
-- **stats**: Statistics: overview, forecast, recall per tag, adaptive skills (`etude stats` alone runs `overview`)
+- **stats**: Statistics: overview, forecast, recall per tag, adaptive skills, concepts (`etude stats` alone runs `overview`)
   - [`stats overview`](#stats-overview) Everything the Stats page shows for a scope: card states, retention, recall, daily activity, forecast, ratings, verdicts, streak, deadline.
   - [`stats forecast`](#stats-forecast) Cards due per day for the next 30 days (overdue counts on today).
   - [`stats skills`](#stats-skills) On an adaptive deck: estimated skills, levels, placement and today's adaptive pace.
+  - [`stats concepts`](#stats-concepts) Concepts in a deck from `concept::` and `needs::` tags: what each needs, how many of its cards are mastered, and whether it's locked.
   - [`stats tags`](#stats-tags) Predicted recall per tag (with parent tags), weakest first.
   - [`stats weak`](#stats-weak) Cards most likely forgotten or most often lapsed: candidates for rewording, splitting or suspending.
+- **activity**: Your own activity in the app (time and typing per page, file, chat and screen), for Stats. Off unless you turn it on (`etude activity` alone runs `status`)
+  - [`activity status`](#activity-status) Whether Activity is on, how long it's kept, and how much is recorded.
+  - [`activity on`](#activity-on) Start recording your activity on this device.
+  - [`activity off`](#activity-off) Stop recording. What was recorded stays unless --delete.
+  - [`activity keep`](#activity-keep) How many days of activity to keep: 30, 90, 365, or forever.
+  - [`activity show`](#activity-show) What Stats shows: time and typing per day, per kind and hour, and the pages, files and chats you spent the most time in.
+  - [`activity clear`](#activity-clear) Delete everything Activity recorded. Recording goes on if it's on.
 - **settings**: App settings: AI providers and models, day start, learn-ahead, ChatGPT sign-in (`etude settings` alone runs `get`)
   - [`settings get`](#settings-get) Current settings, or one dotted key. Key values are never printed: only whether each key's env var is set.
   - [`settings set`](#settings-set) Change settings with dotted key=value pairs (JSON values when they parse).
@@ -357,6 +427,9 @@ These work on every command, before or after the command words.
   - [`settings banner set`](#settings-banner-set) Set your banner: a preset, an image of your own, or match (follow your picture).
   - [`settings test-ai`](#settings-test-ai) Grade a fixed sample answer with the configured providers, to check keys and models. Costs a fraction of a cent.
   - [`settings onboarding`](#settings-onboarding) Whether first-run setup would show (not done and no decks yet), and the comfort level picked there.
+  - [`settings consent list`](#settings-consent-list) Who AI grading and Ask send to with the current settings, and whether you agreed to each. Only the iPhone app asks.
+  - [`settings consent agree`](#settings-consent-agree) Agree to send to an AI provider: cards and answers for grading, messages for Ask. Only the iPhone app asks for it.
+  - [`settings consent withdraw`](#settings-consent-withdraw) Take back your OK for an AI provider: in the iPhone app nothing more goes to it until you agree again.
   - [`settings key set`](#settings-key-set) Save one API key to $ETUDE_HOME/.env (owner-only), read from stdin so it never appears in the shell history.
   - [`settings key unset`](#settings-key-unset) Remove one API key from $ETUDE_HOME/.env.
   - [`settings chatgpt login`](#settings-chatgpt-login) Sign in with ChatGPT, so grading uses the user's ChatGPT Plus or Pro plan instead of an API key.
@@ -375,6 +448,20 @@ These work on every command, before or after the command words.
   - [`sync unprotect`](#sync-unprotect) Remove the Sync password: the server keeps the vault key, so it's no longer end-to-end.
   - [`sync now`](#sync-now) Push pending encrypted changes and merge remote changes.
   - [`sync off`](#sync-off) Sign out and remove this device's saved Sync key; keep local content.
+- **share**: Share Notebook folders and pages with other Etude accounts, end-to-end encrypted (`etude share` alone runs `list`)
+  - [`share list`](#share-list) Shared spaces on this device and invites waiting for you.
+  - [`share create`](#share-create) Share a folder or page: everything under it syncs with the people you invite.
+  - [`share invite`](#share-invite) Invite someone by email to view or edit a shared space.
+  - [`share members`](#share-members) The people in a shared space and their roles.
+  - [`share role`](#share-role) Change someone's role (owner only).
+  - [`share remove`](#share-remove) Remove someone from a shared space (owner only); the key is replaced so they can't read what comes next.
+  - [`share accept`](#share-accept) Accept an invite: the shared folder appears in your Notes and syncs.
+  - [`share decline`](#share-decline) Decline an invite.
+  - [`share leave`](#share-leave) Leave a shared space; its notes stay here as your own. Also drops a removed copy's link.
+  - [`share stop`](#share-stop) Stop sharing (owner): the space is deleted from the server for everyone; your notes stay here.
+  - [`share sync`](#share-sync) Sync every shared space now: pull what others changed, send what changed here.
+  - [`share who`](#share-who) Who's in your shared spaces right now, and on which page.
+  - [`share activity`](#share-activity) How active each person in a shared space is: last seen, last edit, edits this week and month, and a 14-day strip.
 - **account**: Etude account: sign-in, devices, Sync subscription, purchased decks and selling on the paid Market (`etude account` alone runs `status`)
   - [`account status`](#account-status) Server, sign-in state, account, Sync plan and storage.
   - [`account server`](#account-server) Show or change the Etude server this install uses (default https://sync.etude.study, or $ETUDE_CLOUD_URL).
@@ -401,7 +488,7 @@ These work on every command, before or after the command words.
   - [`account billing`](#account-billing) A link to manage the Sync subscription (cancel, card, invoices).
   - [`account market`](#account-market) Paid decks on the server's Market, with price and whether you own them.
   - [`account buy`](#account-buy) A checkout link for a paid deck. Open it in a browser.
-  - [`account library`](#account-library) Decks you bought, with the latest approved version and whether it's installed here.
+  - [`account library`](#account-library) Decks you bought, with the latest approved version and whether it's installed here (with Sync, not when its items were deleted: install it again). Decks that were refunded or disputed are listed apart and leave this collection: their items, cards, history, card types and media.
   - [`account install`](#account-install) Install or update a purchased deck in this collection.
   - [`account creator`](#account-creator) Your seller profile on the paid Market, or null.
   - [`account sell`](#account-sell) Start selling (or set up again): creates your own Stripe account, the one you sell through, and returns the Stripe onboarding link.
@@ -416,6 +503,7 @@ These work on every command, before or after the command words.
   - [`account review`](#account-review) Admins: listings waiting for review (new decks, versions and page changes). Review page changes on the server's /account/admin/review screen.
   - [`account approve`](#account-approve) Admins: approve a listing's pending versions; it goes live.
   - [`account reject`](#account-reject) Admins: turn down a listing's pending versions with a reason.
+  - [`account apple-product`](#account-apple-product) Admins: sell a deck Etude sells itself in the iPhone app too, as this App Store non-consumable product.
 - **theme**: Themes: pick the app's colors, or make your own with CSS variables and extra CSS (`etude theme` alone runs `list`)
   - [`theme list`](#theme-list) Every theme, built-in first, with which one is selected.
   - [`theme show`](#theme-show) A theme's variables and extra CSS. Without an id, the selected theme.
@@ -437,13 +525,16 @@ These work on every command, before or after the command words.
   - [`media path`](#media-path) Show the collection's media folder.
   - [`media prune`](#media-prune) Delete media files nothing in the collection names any more.
   - [`media add`](#media-add) Copy an image, audio or video file into the collection's media folder.
-- **market**: Market: browse, install and publish shared themes, decks and card types (`etude market` alone runs `list`)
-  - [`market list`](#market-list) Entries in the market, newest first, with whether each is installed here.
+- **market**: Market: browse, install and publish shared themes, decks, card types and plugins (`etude market` alone runs `list`)
+  - [`market list`](#market-list) Entries in the market, newest first, with whether each is installed here. Entries by authors you hid are left out.
   - [`market coming-soon`](#market-coming-soon) Decks the catalog lists as coming soon: names, descriptions and previews, nothing to install yet.
   - [`market show`](#market-show) One entry: its details from the index and what it contains.
   - [`market install`](#market-install) Add an entry to your collection. Installing again updates it; decks keep your scheduling.
   - [`market installed`](#market-installed) What you installed from the market, with what each put in your collection.
   - [`market forget`](#market-forget) Stop tracking an installed entry. What it added stays in your collection; delete that with `theme delete`, `deck delete` or `type delete`.
+  - [`market hide-author`](#market-hide-author) Hide everything from one author: their entries leave every Market list, in the app and in `market list`. Synced with your settings.
+  - [`market show-author`](#market-show-author) Show an author's entries in the Market again.
+  - [`market hidden-authors`](#market-hidden-authors) The Market authors you hid, oldest first.
   - [`market publish`](#market-publish) Share a theme, deck or card type: opens a pull request on the market repository with your GitHub account.
   - [`market check`](#market-check) Validate market entry files without a database. Exits 4 on problems.
   - [`market index`](#market-index) For the market repository: check every file under entries/ (each deck and type is dry-run imported) and write index.json.
@@ -457,14 +548,33 @@ These work on every command, before or after the command words.
   - [`market block`](#market-block) Stop seeing someone's comments (by the author id a comment shows). Only you stop seeing them.
   - [`market unblock`](#market-unblock) See someone's comments again.
   - [`market blocks`](#market-blocks) People whose comments you blocked.
+- **plugin**: Plugins: sandboxed extensions for Desktop and Web (install, check, permissions, scaffold) (`etude plugin` alone runs `list`)
+  - [`plugin list`](#plugin-list) Installed plugins and bundled free plugins ready to install.
+  - [`plugin show`](#plugin-show) Details, granted permissions and hash of one installed plugin.
+  - [`plugin check`](#plugin-check) Validate a plugin folder or JSON package (manifest, permissions, static safety checks, SHA-256).
+  - [`plugin new`](#plugin-new) Create a starter plugin folder with plugin.json, main.js and a floating view.
+  - [`plugin install`](#plugin-install) Install a plugin from a folder, JSON package, or bundled free plugin id (user-only).
+  - [`plugin enable`](#plugin-enable) Enable an installed plugin (user-only).
+  - [`plugin disable`](#plugin-disable) Disable an installed plugin without deleting its data (user-only).
+  - [`plugin permissions`](#plugin-permissions) Grant or revoke permissions for an installed plugin (user-only).
+  - [`plugin uninstall`](#plugin-uninstall) Uninstall a plugin and remove its collection storage (user-only).
 - **agent**: The in-app assistant: ask it to change your collection, list and manage its conversations (`etude agent` alone runs `list`)
   - [`agent ask`](#agent-ask) Send a message to the assistant and wait for its reply. It can run Etude commands on the collection.
   - [`agent list`](#agent-list) Conversations with the assistant, newest first.
   - [`agent show`](#agent-show) One conversation with all its messages, the commands run and their output.
   - [`agent rename`](#agent-rename) Give a conversation your own title. Automatic titles stop for it.
-  - [`agent delete`](#agent-delete) Delete a conversation and its attachments. Changes it made to the collection stay.
+  - [`agent delete`](#agent-delete) Delete a conversation and its attachments, and its session in the agent's own history when the agent keeps one (Hermes). Changes it made to the collection stay.
   - [`agent undo`](#agent-undo) Put the collection back as it was before one of the assistant's replies (default: its latest reply that changed something). Changes made after it are undone too.
   - [`agent models`](#agent-models) Models the assistant can use, from every configured provider (ChatGPT plan, OpenRouter tool-capable models, a custom endpoint).
+- **agents**: Who you talk to in Ask: agent profiles with a name, a picture, a body, a personality and a brain (`etude agents` alone runs `list`)
+  - [`agents list`](#agents-list) Your agent profiles, Minimi first, with the default one marked.
+  - [`agents show`](#agents-show) One agent profile.
+  - [`agents add`](#agents-add) Add someone to talk to in Ask: a name, pictures, a personality and a brain.
+  - [`agents edit`](#agents-edit) Change an agent profile: its name, pictures, clips, banner, personality or brain. Minimi too.
+  - [`agents duplicate`](#agents-duplicate) Copy an agent profile under a new name.
+  - [`agents remove`](#agents-remove) Remove an agent profile. Minimi can't be removed. Its chats stay and continue with Minimi.
+  - [`agents permission`](#agents-permission) How much Ask asks before it acts: before every change, only before what could do harm, or never.
+  - [`agents default`](#agents-default) Make a profile the default: new chats start with it and its body sits in the corner.
 - **db**: The database file: path, backups, integrity, schema version
   - [`db path`](#db-path) Which database and media directory the CLI uses, and how it was chosen.
   - [`db backup`](#db-backup) Copy the database consistently (SQLite online backup; safe while the server runs).
@@ -472,6 +582,7 @@ These work on every command, before or after the command words.
   - [`db info`](#db-info) Schema version, SQLite version, journal mode, sizes and row counts.
   - [`db restore`](#db-restore) Replace the database with a backup. The current file is backed up first. Stop the server before restoring.
 - **top level**
+  - [`mcp`](#mcp) Serve the collection to an AI agent over the Model Context Protocol (stdio): tools to find, read, create and edit notes, plus etude_help and etude_run for every other command.
   - [`serve`](#serve) Run the web app and HTTP API.
   - [`update`](#update) Update this copy of Etude from its GitHub repo: fetch, fast-forward, install dependencies, rebuild the web app.
   - [`search`](#search) Find cards with the search language (one row per card). Same as `etude card list`.
@@ -878,7 +989,7 @@ etude deck instructions "Networks" --file notes.md
 
 Override settings on this deck (they win over its preset and parents).
 
-Values are JSON when they parse, text otherwise. Steps accept "1m 10m" or '["1m","10m"]'. Dates accept anything Date can read. Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, newPerFace, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, scheduler, schedulerOptions, adaptiveChallenge, adaptivePace, targetSuccess, minutesPerDay, newPerDayMin, newPerDayMax, levels, levelAdvanceAt, levelMix, quickChecksPerDay, weights; also autoRate.good and autoRate.hard, and newPerFace.<face>=N for a face's own new-card limit (null drops an inherited one; see `etude deck faces`).
+Values are JSON when they parse, text otherwise. Steps accept "1m 10m" or '["1m","10m"]'. Dates accept anything Date can read. Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, newPerFace, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, scheduler, schedulerOptions, adaptiveChallenge, adaptivePace, targetSuccess, minutesPerDay, newPerDayMin, newPerDayMax, levels, levelAdvanceAt, levelMix, quickChecksPerDay, prerequisites, masteryStreak, masteryShare, conceptsInProgress, implicitReviews, weights; also autoRate.good and autoRate.hard, and newPerFace.<face>=N for a face's own new-card limit (null drops an inherited one; see `etude deck faces`).
 
 ```
 etude deck set <deck> <pairs...> [flags]
@@ -998,6 +1109,43 @@ etude deck preset "Networks" exam
 etude deck preset "Networks" none
 ```
 
+### etude deck home
+
+<a id="deck-home"></a>
+
+Show or set a deck's recursive Deck Home (queue, catalog, a card type's home, or custom HTML/CSS/JS).
+
+Each deck or subdeck chooses its own home (never inherited from parent decks). Without flags, prints the deck's resolved home, direct subdecks and cards.
+
+```
+etude deck home <deck> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `deck` | Deck name. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--mode <VALUE>` | string | Built-in mode: "queue" (default) or "catalog". |
+| `--type <VALUE>` | string | Use this card type's custom home view. |
+| `--html <VALUE>` | string | Custom home HTML (`-` reads stdin). |
+| `--html-file <PATH>` | string | Read custom home HTML from a file. |
+| `--css-file <PATH>` | string | Read custom home CSS from a file. |
+| `--js-file <PATH>` | string | Read custom home JS from a file. |
+| `--clear` | boolean | Remove the deck's own home override (falls back to its card type or queue). |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { deck, subdecks, cards, stats }
+
+```sh
+etude deck home "Piano Hero"
+etude deck home "Piano Hero" --mode catalog
+etude deck home "Piano Hero::Rock" --type piano-hero
+```
+
 ## preset
 
 Presets: named settings shared by several decks.
@@ -1073,7 +1221,7 @@ etude preset create net --from-deck "Networks" --apply
 
 Change settings in a preset. Every deck using it is affected.
 
-Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, newPerFace, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, scheduler, schedulerOptions, adaptiveChallenge, adaptivePace, targetSuccess, minutesPerDay, newPerDayMin, newPerDayMax, levels, levelAdvanceAt, levelMix, quickChecksPerDay, weights; also autoRate.good / autoRate.hard. Use `--name` to rename.
+Keys: desiredRetention, learningSteps, relearningSteps, maximumInterval, enableFuzz, enableShortTerm, newPerDay, newPerFace, reviewsPerDay, newOrder, reviewOrder, newMix, deadline, deadlineMargin, autoRate, autoApply, burySiblings, mode, scheduler, schedulerOptions, adaptiveChallenge, adaptivePace, targetSuccess, minutesPerDay, newPerDayMin, newPerDayMax, levels, levelAdvanceAt, levelMix, quickChecksPerDay, prerequisites, masteryStreak, masteryShare, conceptsInProgress, implicitReviews, weights; also autoRate.good / autoRate.hard. Use `--name` to rename.
 
 ```
 etude preset set <id> [pairs...] [flags]
@@ -2244,7 +2392,7 @@ etude note show <note> [flags]
 
 | Argument | Description |
 | --- | --- |
-| `note` | Page id, or its exact title. |
+| `note` | Id (or its start), exact title, or path (Folder/Page). |
 
 | Flag | Type | Description |
 | --- | --- | --- |
@@ -2256,7 +2404,7 @@ Output: { id, kind, parentId, title, icon, look, …, text, doc, scene } (or the
 
 <a id="note-new"></a>
 
-Make a page, or with --folder a folder that only holds pages, or with --file a code or text file (main.py, notes.tex) opened in a plain editor.
+Make a page, or with --folder a folder that only holds pages, with --file a code or text file (main.py, notes.tex) opened in a plain editor, or with --web a web file (HTML, CSS and JavaScript) you can open through a portal in any page.
 
 ```
 etude note new <title> [flags]
@@ -2270,7 +2418,7 @@ etude note new <title> [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
-| `--parent <VALUE>` | string | Put it inside this page or folder (id or exact title). |
+| `--parent <VALUE>` | string | Put it inside this page or folder (id, title or path). |
 | `--folder` | boolean | Make a folder: it holds pages and has no body of its own. |
 | `--icon <VALUE>` | string | One emoji. |
 | `--canvas` | boolean | Make a canvas (a whiteboard you draw on) instead of a page. |
@@ -2278,13 +2426,18 @@ etude note new <title> [flags]
 | `--scene <JSON>` | string | A canvas's drawing as Excalidraw JSON ({ elements, appState, files }, or a whole .excalidraw file). `-` reads stdin. |
 | `--scene-file <PATH>` | string | Read the canvas's drawing from a .excalidraw file. |
 | `--file` | boolean | Make a file: plain text kept exactly as written, highlighted by the extension in its title (main.py, report.tex). |
-| `--content <TEXT>` | string | A file's text, exactly as written. `-` reads stdin. |
-| `--content-file <PATH>` | string | Read a file's text from this file on disk. |
+| `--web` | boolean | Make a web file: your own HTML, CSS and JavaScript, run sandboxed. It opens on its own, and live inside any page through a portal (`--content` is its HTML). |
+| `--kanban` | boolean | Make a kanban board (columns of cards, like Trello). It opens on its own, and live inside any page through a portal. Starts with To do · Doing · Done unless --columns says otherwise. |
+| `--columns <LIST>` | string | A new board's columns, comma separated ("Backlog,This week,Done"); "week" for Mon to Weekend, "none" for no columns. |
+| `--content <TEXT>` | string | A file's text exactly as written, or a web file's HTML. `-` reads stdin. |
+| `--content-file <PATH>` | string | Read a file's text (or a web file's HTML) from this file on disk. |
+| `--md <MARKDOWN>` | string | Body as Markdown: headings, lists, `- [ ]` to-dos, tables, code, `$math$`, callouts, [[links]]. `-` reads stdin. |
+| `--md-file <PATH>` | string | Read the Markdown body from a file. |
 | `--text <VALUE>` | string | Body as plain text: one paragraph per line, `# ` headings, `- ` bullets, `- [ ] ` tasks. `-` reads stdin. |
 | `--text-file <PATH>` | string | Read the plain-text body from a file. |
 | `--doc <VALUE>` | string | Body as a document tree (ProseMirror JSON, as `note show` prints it). `-` reads stdin. |
 | `--doc-file <PATH>` | string | Read the document tree from a file. |
-| `--cover <VALUE>` | string | Cover across the top: a preset (sky, teal, plum, mustard, brick, moss, rose, night, dawn, sea, paper, ink), image:files/<sha>.<ext>[:y], or none. |
+| `--cover <VALUE>` | string | Cover across the top: a preset (sky, teal, plum, mustard, brick, moss, rose, night, dawn, sea, paper, ink), a picture file on disk (copied into the media), image:files/<sha>.<ext>[:y], or none. |
 | `--width <VALUE>` | string | Page width: normal, wide or full. |
 | `--font <VALUE>` | string | Page font: sans, serif or mono. |
 | `--size <VALUE>` | string | Text size: small, normal or large. |
@@ -2294,17 +2447,18 @@ etude note new <title> [flags]
 Output: the new page, as `note show` prints it
 
 ```sh
-etude note new "CMPT 307" --icon 📘
+etude note new "Algorithms" --icon 📘
+etude note new "Week 1" --parent "Fall 2026/Algorithms" --md "# Greedy\n\n- exchange argument\n- [ ] problem set 1"
+etude note new "Term timeline" --web --content-file timeline.html
 etude note new "Fall 2026" --folder
 etude note new main.py --file --content-file ./main.py
-etude note new "Week 1" --parent "CMPT 307" --text "# Greedy\n- exchange argument"
 ```
 
 ### etude note edit
 
 <a id="note-edit"></a>
 
-Change a page's title, icon, body or look (cover, width, font, text size), or turn it into a folder and back.
+Change a note's title, icon, look (cover, width, font, text size) or whole body, or turn a page into a folder and back. For part of a page use note patch or note append.
 
 ```
 etude note edit <note> [flags]
@@ -2314,7 +2468,7 @@ etude note edit <note> [flags]
 
 | Argument | Description |
 | --- | --- |
-| `note` | Page id, or its exact title. |
+| `note` | Id (or its start), exact title, or path (Folder/Page). |
 
 | Flag | Type | Description |
 | --- | --- | --- |
@@ -2323,13 +2477,15 @@ etude note edit <note> [flags]
 | `--icon <VALUE>` | string | One emoji; empty to remove. |
 | `--scene <JSON>` | string | A canvas's new drawing as Excalidraw JSON. `-` reads stdin. |
 | `--scene-file <PATH>` | string | Read a canvas's new drawing from a .excalidraw file. |
-| `--content <TEXT>` | string | A file's text, exactly as written. `-` reads stdin. |
-| `--content-file <PATH>` | string | Read a file's text from this file on disk. |
+| `--content <TEXT>` | string | A file's text exactly as written, or a web file's HTML. `-` reads stdin. |
+| `--content-file <PATH>` | string | Read a file's text (or a web file's HTML) from this file on disk. |
+| `--md <MARKDOWN>` | string | Body as Markdown: headings, lists, `- [ ]` to-dos, tables, code, `$math$`, callouts, [[links]]. `-` reads stdin. |
+| `--md-file <PATH>` | string | Read the Markdown body from a file. |
 | `--text <VALUE>` | string | Body as plain text: one paragraph per line, `# ` headings, `- ` bullets, `- [ ] ` tasks. `-` reads stdin. |
 | `--text-file <PATH>` | string | Read the plain-text body from a file. |
 | `--doc <VALUE>` | string | Body as a document tree (ProseMirror JSON, as `note show` prints it). `-` reads stdin. |
 | `--doc-file <PATH>` | string | Read the document tree from a file. |
-| `--cover <VALUE>` | string | Cover across the top: a preset (sky, teal, plum, mustard, brick, moss, rose, night, dawn, sea, paper, ink), image:files/<sha>.<ext>[:y], or none. |
+| `--cover <VALUE>` | string | Cover across the top: a preset (sky, teal, plum, mustard, brick, moss, rose, night, dawn, sea, paper, ink), a picture file on disk (copied into the media), image:files/<sha>.<ext>[:y], or none. |
 | `--width <VALUE>` | string | Page width: normal, wide or full. |
 | `--font <VALUE>` | string | Page font: sans, serif or mono. |
 | `--size <VALUE>` | string | Text size: small, normal or large. |
@@ -2341,8 +2497,362 @@ Output: the page after the change
 ```sh
 etude note edit main.py --content-file ./main.py
 etude note edit "Week 1" --title "Week 1 · Greedy"
-etude note edit "Week 1" --text-file week1.txt
+etude note edit "Week 1" --md-file week1.md
 etude note edit "Week 1" --cover dawn --font serif --width wide
+```
+
+### etude note tree
+
+<a id="note-tree"></a>
+
+The notes as an indented tree, one per line: title, a mark for its kind (folders end in /) and the start of its id. Any id start, title or path works wherever a command takes a note.
+
+```
+etude note tree [note] [flags]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `note` (optional) | Only this folder or page and what's inside it: id, title or path. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--depth <N>` | number | Show at most this many levels. |
+| `--paths` | boolean | A list of { path, id, kind } instead, with each note's full path (Folder/Page). |
+
+Output: the tree as text (or array of { path, id, kind, updated } with --paths)
+
+```sh
+etude note tree
+etude note tree Main --depth 2
+etude note tree --paths
+```
+
+### etude note read
+
+<a id="note-read"></a>
+
+A note to read: a line with its path, kind, id and last change, then a page as Markdown, a file's or web file's text, a kanban board, a canvas's elements, a PDF's place in the media, or what's in a folder.
+
+```
+etude note read <note> [flags]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `note` | Id (or its start), exact title, or path (Folder/Page). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--blocks` | boolean | A page's top-level blocks numbered, each as Markdown, marked * when Markdown can't hold it whole (what `note block`, `note append --at` and `note patch` work with). |
+| `--lines` | boolean | A file's or web file's text with line numbers (for `note append --at`). |
+
+Output: text
+
+```sh
+etude note read "Journal/2026-11-08"
+etude note read 31259d4a --blocks
+etude note read main.py --lines
+```
+
+### etude note append
+
+<a id="note-append"></a>
+
+Add to a page or file without touching what's there: Markdown (or block JSON) to a page, text to a file or web file. At the end, at the top, under a heading or before a block or line.
+
+Pictures in the Markdown (`![a cat](~/Pictures/cat.png)`) are copied into the collection's media; [[Title]] links to the note of that title. For a block Markdown can't say (columns, a portal, coloured text), give its JSON with --json (`note block` prints real ones to copy).
+
+```
+etude note append <note> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `note` | The page or file: id (or its start), exact title, or path (Folder/Page). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--md <MARKDOWN>` | string | What to add, as Markdown (a page) or plain text (a file). `-` reads stdin. |
+| `--md-file <PATH>` | string | Read what to add from a file. |
+| `--json <JSON>` | string | Pages: blocks to add as JSON (one node, a list of them or a doc). `-` reads stdin. |
+| `--under <HEADING>` | string | Pages: at the end of the section under this heading (before the next heading of its level or higher). Exact text, any case, or the start of it. |
+| `--at <N>` | number | Pages: before top-level block N (0 = the very top; `note read --blocks` numbers them). Files: before line N (1 = the first; `note read --lines`). |
+| `--top` | boolean | At the very top. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, title, path, at, added, markdown } for a page (markdown: the blocks added); { id, title, path, line } for a file
+
+```sh
+etude note append "Journal/2026-11-08" --md "- [ ] Lab 2 · Q7"
+etude note append Journal --under "TODO" --md-file todo.md
+etude note append Journal --top --md "> [!note] read me first"
+etude note append main.py --md "print('done')"
+etude note append Journal --json '{"type":"callout","attrs":{"kind":"tip"},"content":[{"type":"paragraph","content":[{"type":"text","text":"hi"}]}]}'
+```
+
+### etude note patch
+
+<a id="note-patch"></a>
+
+Replace a piece of a page or file, like find-and-replace: on a page's Markdown (what `note read` shows), only the blocks it touches change; on a file or web file, the exact text.
+
+`--old` must appear exactly once unless `--all`. On a page it can span several blocks (a heading and the list under it). Ticking a to-do is `--old "- [ ] Lab 2" --new "- [x] Lab 2"`; an empty `--new` removes the text. A block Markdown can't hold whole (a portal, columns, coloured text, a toggle) isn't rewritten: when the text sits inside one run of its text, it's swapped in place and the formatting stays; otherwise the change is refused unless `--force` (or change that block with `note block`).
+
+```
+etude note patch <note> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `note` | The page or file: id (or its start), exact title, or path (Folder/Page). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--old <TEXT>` | string | The text to replace, as it reads in the page's Markdown or the file. |
+| `--old-file <PATH>` | string | Read the text to replace from a file. |
+| `--new <TEXT>` | string | What goes in its place (Markdown on a page). Empty to remove. `-` reads stdin. |
+| `--new-file <PATH>` | string | Read what goes in its place from a file. |
+| `--all` | boolean | Replace every place it appears. |
+| `--force` | boolean | Pages: rewrite blocks Markdown can't hold whole, losing what Markdown can't say. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: page: { id, title, path, replaced, blocks, mode: markdown|text|mixed, notice?, markdown } (markdown: the blocks after the change; notice: when a block changed kind); file: { id, title, path, replaced, lines }
+
+```sh
+etude note patch Journal --old "- [ ] Networking - Lab 2" --new "- [x] Networking - Lab 2"
+etude note patch "Main/Ideas" --old "teh" --new "the" --all
+etude note patch main.py --old "range(10)" --new "range(n)"
+```
+
+### etude note block
+
+<a id="note-block"></a>
+
+One top-level block of a page as JSON (the editor's own node: columns, toggles, portals, colours and all), or change it: replace it with JSON or Markdown, move it, or delete it.
+
+Blocks are numbered from 0 as `note read --blocks` shows them. Without a change it prints the block, which is the way to see how a column layout, a callout, a coloured run or an embed is written before making one. `--to N` moves it (with `--count` the blocks after it too) to sit before block N of the page as it is now.
+
+```
+etude note block <note> <n> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `note` | The page: id (or its start), exact title, or path (Folder/Page). |
+| `n` | The block's number (0 = first). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--set <JSON>` | string | Replace it with this JSON (one node, or a list to put several in its place). `-` reads stdin. |
+| `--md <MARKDOWN>` | string | Replace it with this Markdown. `-` reads stdin. |
+| `--to <N>` | number | Move it before block N (the page's length moves it to the end). |
+| `--delete` | boolean | Delete it. |
+| `--count <K>` | number | With --to or --delete: this many blocks from N. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: the block's JSON; after a change { id, title, path, blocks: [{ n, type, markdown }] } (the page's blocks around it)
+
+```sh
+etude note block Journal 3
+etude note block Journal 3 --to 0
+etude note block Journal 5 --delete --count 2
+etude note block Journal 2 --set -  < block.json
+```
+
+### etude note canvas
+
+<a id="note-canvas"></a>
+
+Every element on a canvas, back to front: id, type, box (x, y, width, height), its words (or its label), what an arrow connects, colours.
+
+```
+etude note canvas <canvas>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `canvas` | The canvas: id (or its start), exact title, or path. |
+
+Output: array of { id, type, x, y, width, height, text?, from?, to?, color?, background?, frame?, link? }
+
+```sh
+etude note canvas "Study loop · canvas"
+```
+
+### etude note canvas add
+
+<a id="note-canvas-add"></a>
+
+Draw on a canvas: a rectangle, ellipse, diamond, text, arrow, line, picture or frame. Shapes take a label with --text; arrows connect two elements with --from and --to.
+
+```
+etude note canvas add <canvas> <type> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `canvas` | The canvas: id (or its start), exact title, or path. |
+| `type` | rectangle, ellipse, diamond, text, arrow, line, image or frame. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--x <N>` | number | Left edge (canvas units; the canvas grows to fit). |
+| `--y <N>` | number | Top edge. |
+| `--width <N>` | number | Width. |
+| `--height <N>` | number | Height. |
+| `--text <VALUE>` | string | A text element's words, or the label inside a shape or on an arrow (a frame's name). `-` reads stdin. |
+| `--color <VALUE>` | string | Line and text colour: #rrggbb or black, gray, red, pink, grape, violet, indigo, blue, cyan, teal, green, lime, yellow, orange. |
+| `--background <VALUE>` | string | Fill: #rrggbb, transparent, or a name (the toolbar's light shade of it). |
+| `--fill <VALUE>` | string | solid, hachure, cross-hatch or zigzag. |
+| `--stroke-width <N>` | number | Line width (1 thin, 2, 4 bold). |
+| `--stroke-style <VALUE>` | string | solid, dashed or dotted. |
+| `--roughness <N>` | number | 0 clean lines, 1 hand-drawn, 2 sketchy. |
+| `--opacity <N>` | number | 0 to 100. |
+| `--font-size <N>` | number | Text size (20 by default). |
+| `--font <VALUE>` | string | hand, normal or code. |
+| `--align <VALUE>` | string | left, center or right. |
+| `--from <ID>` | string | Arrows and lines: start at this element (it follows when the element moves). |
+| `--to <ID>` | string | Arrows and lines: end at this element. |
+| `--points <JSON>` | string | Arrows and lines: the points it runs through, relative to x,y, as JSON ([[0,0],[120,40],[200,0]]). |
+| `--head <VALUE>` | string | Arrows: arrow, triangle, dot, bar, or none. |
+| `--link <VALUE>` | string | A link it opens (a URL). |
+| `--frame <ID>` | string | Put it inside this frame (id); empty to take it out. |
+| `--file <PATH>` | string | A picture (image): this file, copied into the collection's media. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, label?, element } (element: the new one, as `note canvas list` shows it)
+
+```sh
+etude note canvas add Board rectangle --x 0 --y 0 --text "Encode" --background blue
+etude note canvas add Board arrow --from k3Fh2 --to Qp81a --text "retrieve"
+etude note canvas add Board text --x 0 --y -60 --text "The study loop" --font-size 28
+etude note canvas add Board image --file diagram.png --x 300 --y 0
+```
+
+### etude note canvas edit
+
+<a id="note-canvas-edit"></a>
+
+Change an element: its words, colours, size, place (--x/--y, or --dx/--dy to nudge), ends (arrows), or bring it to the front or send it to the back. A shape's label and the arrows tied to it follow.
+
+```
+etude note canvas edit <canvas> <element> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `canvas` | The canvas: id (or its start), exact title, or path. |
+| `element` | The element's id (or its first 4+ characters), from `note canvas list`. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--x <N>` | number | Left edge (canvas units; the canvas grows to fit). |
+| `--y <N>` | number | Top edge. |
+| `--width <N>` | number | Width. |
+| `--height <N>` | number | Height. |
+| `--text <VALUE>` | string | A text element's words, or the label inside a shape or on an arrow (a frame's name). `-` reads stdin. |
+| `--color <VALUE>` | string | Line and text colour: #rrggbb or black, gray, red, pink, grape, violet, indigo, blue, cyan, teal, green, lime, yellow, orange. |
+| `--background <VALUE>` | string | Fill: #rrggbb, transparent, or a name (the toolbar's light shade of it). |
+| `--fill <VALUE>` | string | solid, hachure, cross-hatch or zigzag. |
+| `--stroke-width <N>` | number | Line width (1 thin, 2, 4 bold). |
+| `--stroke-style <VALUE>` | string | solid, dashed or dotted. |
+| `--roughness <N>` | number | 0 clean lines, 1 hand-drawn, 2 sketchy. |
+| `--opacity <N>` | number | 0 to 100. |
+| `--font-size <N>` | number | Text size (20 by default). |
+| `--font <VALUE>` | string | hand, normal or code. |
+| `--align <VALUE>` | string | left, center or right. |
+| `--from <ID>` | string | Arrows and lines: start at this element (it follows when the element moves). |
+| `--to <ID>` | string | Arrows and lines: end at this element. |
+| `--points <JSON>` | string | Arrows and lines: the points it runs through, relative to x,y, as JSON ([[0,0],[120,40],[200,0]]). |
+| `--head <VALUE>` | string | Arrows: arrow, triangle, dot, bar, or none. |
+| `--link <VALUE>` | string | A link it opens (a URL). |
+| `--frame <ID>` | string | Put it inside this frame (id); empty to take it out. |
+| `--dx <N>` | number | Move it right by this much (negative: left). |
+| `--dy <N>` | number | Move it down by this much. |
+| `--front` | boolean | Bring it in front of everything. |
+| `--back` | boolean | Send it behind everything. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, element }
+
+```sh
+etude note canvas edit Board k3Fh2 --text "Encode (week 1)"
+etude note canvas edit Board k3Fh2 --dx 120 --background green
+etude note canvas edit Board Qp81a --front
+```
+
+### etude note canvas delete
+
+<a id="note-canvas-delete"></a>
+
+Remove elements from a canvas, with their labels; arrows that pointed at them stay, let go.
+
+```
+etude note canvas delete <canvas> <elements...> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `canvas` | The canvas: id (or its start), exact title, or path. |
+| `elements...` | Element ids (or their first 4+ characters). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { removed: [ids] }
+
+```sh
+etude note canvas delete Board k3Fh2 Qp81a
+```
+
+### etude note portal
+
+<a id="note-portal"></a>
+
+Open a portal in a page: a window onto a web file (live), a canvas or a kanban board, at the end of the page or at --at. Edits to the note show through every portal to it.
+
+```
+etude note portal <note> <page> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `note` | The web file, canvas or kanban board: id (or its start), exact title, or path. |
+| `page` | The page the portal goes in: id (or its start), exact title, or path. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--at <N>` | string | Put the portal before the page's top-level block number N (0 = at the very top). The end by default. |
+| `--height <PX>` | string | The portal's height in px (80 to 4000). A web file sizes itself to its content by default. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: the page after the change, as `note show` prints it
+
+```sh
+etude note portal "Term timeline" "Journal"
+etude note portal "Term timeline" "Journal" --at 0
 ```
 
 ### etude note move
@@ -2359,8 +2869,8 @@ etude note move <note> [parent] [flags]
 
 | Argument | Description |
 | --- | --- |
-| `note` | Page to move (id or exact title). |
-| `parent` (optional) | New parent page. Leave out with --top. |
+| `note` | The note to move: id (or its start), exact title, or path. |
+| `parent` (optional) | The folder or page it goes into (id, title or path). Leave out with --top. |
 
 | Flag | Type | Description |
 | --- | --- | --- |
@@ -2384,7 +2894,7 @@ etude note archive <note> [flags]
 
 | Argument | Description |
 | --- | --- |
-| `note` | Page id, or its exact title. |
+| `note` | Id (or its start), exact title, or path (Folder/Page). |
 
 | Flag | Type | Description |
 | --- | --- | --- |
@@ -2406,7 +2916,7 @@ etude note unarchive <note> [flags]
 
 | Argument | Description |
 | --- | --- |
-| `note` | Page id, or its exact title. |
+| `note` | Id (or its start), exact title, or path (Folder/Page). |
 
 | Flag | Type | Description |
 | --- | --- | --- |
@@ -2428,7 +2938,7 @@ etude note delete <note> [flags]
 
 | Argument | Description |
 | --- | --- |
-| `note` | Page id. |
+| `note` | Id (or its start), exact title, or path (Folder/Page). |
 
 | Flag | Type | Description |
 | --- | --- | --- |
@@ -2486,7 +2996,7 @@ Output: { pages, folders, files, links, unresolved, pdfs, root, ids, media, canv
 
 ```sh
 etude note import ~/vault
-etude note import week1.md week2.md --parent "CMPT 307"
+etude note import week1.md week2.md --parent "Algorithms"
 etude note import board.excalidraw
 ```
 
@@ -2520,7 +3030,7 @@ etude note tutorial --if-new
 
 <a id="note-export"></a>
 
-A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file; a file as its own text.
+A page as Markdown (with [[links]]) or as a standalone HTML file; a canvas as a .excalidraw file; a kanban board as Markdown Obsidian's Kanban plugin opens; a file as its own text.
 
 ```
 etude note export <note> [flags]
@@ -2530,7 +3040,7 @@ etude note export <note> [flags]
 
 | Argument | Description |
 | --- | --- |
-| `note` | Page id, or its exact title. |
+| `note` | Id (or its start), exact title, or path (Folder/Page). |
 
 | Flag | Type | Description |
 | --- | --- | --- |
@@ -2553,12 +3063,12 @@ etude note pin <note>
 
 | Argument | Description |
 | --- | --- |
-| `note` | Page id, or its exact title. |
+| `note` | Id (or its start), exact title, or path (Folder/Page). |
 
 Output: { id, title, …, pinned }
 
 ```sh
-etude note pin "CMPT 361"
+etude note pin "Graphics"
 ```
 
 ### etude note unpin
@@ -2575,7 +3085,7 @@ etude note unpin <note>
 
 | Argument | Description |
 | --- | --- |
-| `note` | Page id, or its exact title. |
+| `note` | Id (or its start), exact title, or path (Folder/Page). |
 
 Output: { id, title, …, pinned: null }
 
@@ -2639,9 +3149,1289 @@ etude note backlinks <note>
 
 | Argument | Description |
 | --- | --- |
-| `note` | Page id, or its exact title. |
+| `note` | Id (or its start), exact title, or path (Folder/Page). |
 
 Output: array of { id, title, …, snippet }
+
+### etude note kanban
+
+<a id="note-kanban"></a>
+
+A kanban board at a glance: each column with its cards (id, title, due day, labels, to-dos done).
+
+```
+etude note kanban <board> [flags]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `board` | The board: id (or its start), exact title, or path. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--full` | boolean | The whole board: every card's page, labels, colours, archived cards. |
+
+Output: { id, title, columns: [{ id, name, limit?, done?, cards: [{ id, title, due?, labels?, todos? }] }], archived? } (or the note with its board, with --full)
+
+```sh
+etude note kanban "Sprint"
+etude note kanban "Sprint" --full
+```
+
+### etude note kanban add
+
+<a id="note-kanban-add"></a>
+
+Add a card to a board: at the end of a column (the first by default), with a due day, labels, a cover and a page.
+
+```
+etude note kanban add <board> <title> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `board` | The board: id (or its start), exact title, or path. |
+| `title` | The card's title. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--column <COLUMN>` | string | The column: its name, id or number (1 = first). |
+| `--at <N>` | number | Its place in the column (0 = top). The bottom by default. |
+| `--due <DAY>` | string | Due day: YYYY-MM-DD, today, tomorrow, or none to clear it. |
+| `--label <NAME> (repeatable)` | string | A label by name (made if the board doesn't have it; name:colour picks its colour). Repeat for more. |
+| `--cover <COLOUR>` | string | A colour across the top: grey, red, orange, gold, green, teal, blue, purple, pink, or none. |
+| `--text <VALUE>` | string | The card's page as plain text: one paragraph per line, `# ` headings, `- ` bullets, `- [ ] ` to-dos (they show as n/m on the card). `-` reads stdin. |
+| `--md <MARKDOWN>` | string | The card's page as Markdown (headings, - [ ] to-dos, tables, pictures, [[links]]). `-` reads stdin. |
+| `--doc <VALUE>` | string | The card's page as a document tree (ProseMirror JSON). `-` reads stdin. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { card, column, board } (the board in short)
+
+```sh
+etude note kanban add "Sprint" "Lab 2 · DNS" --column Doing --due 2026-11-08 --label "Networking:blue" --text "- [ ] traces\n- [ ] Q1–Q9"
+```
+
+### etude note kanban move
+
+<a id="note-kanban-move"></a>
+
+Move a card to a column (and a place in it); an archived card comes back this way too.
+
+```
+etude note kanban move <board> <card> <column> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `board` | The board: id (or its start), exact title, or path. |
+| `card` | The card: id, or its exact title. |
+| `column` | The column: its name, id or number (1 = first). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--at <N>` | number | Its place in the column (0 = top). The bottom by default. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: the board in short, as `note kanban` prints it
+
+```sh
+etude note kanban move "Sprint" "Lab 2 · DNS" Done
+etude note kanban move "Sprint" a1b2c3d4 2 --at 0
+```
+
+### etude note kanban edit
+
+<a id="note-kanban-edit"></a>
+
+Change a card: its title, due day, labels, cover or page.
+
+```
+etude note kanban edit <board> <card> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `board` | The board: id (or its start), exact title, or path. |
+| `card` | The card: id, or its exact title. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--title <VALUE>` | string | New title. |
+| `--no-labels` | boolean | Take every label off. |
+| `--due <DAY>` | string | Due day: YYYY-MM-DD, today, tomorrow, or none to clear it. |
+| `--label <NAME> (repeatable)` | string | A label by name (made if the board doesn't have it; name:colour picks its colour). Repeat for more. |
+| `--cover <COLOUR>` | string | A colour across the top: grey, red, orange, gold, green, teal, blue, purple, pink, or none. |
+| `--text <VALUE>` | string | The card's page as plain text: one paragraph per line, `# ` headings, `- ` bullets, `- [ ] ` to-dos (they show as n/m on the card). `-` reads stdin. |
+| `--md <MARKDOWN>` | string | The card's page as Markdown (headings, - [ ] to-dos, tables, pictures, [[links]]). `-` reads stdin. |
+| `--doc <VALUE>` | string | The card's page as a document tree (ProseMirror JSON). `-` reads stdin. |
+| `--old <TEXT>` | string | Find-and-replace in the card's page: the text to replace, as `note kanban card` shows it (with --new). |
+| `--new <TEXT>` | string | What goes in place of --old (Markdown; empty removes it). |
+| `--all` | boolean | With --old: every place it appears. |
+| `--append <MARKDOWN>` | string | Add Markdown at the end of the card's page. `-` reads stdin. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { card, board } (the board in short)
+
+```sh
+etude note kanban edit "Sprint" "Lab 2 · DNS" --due tomorrow --label Urgent
+etude note kanban edit "Sprint" "Lab 2 · DNS" --old "- [ ] Q1–Q9" --new "- [x] Q1–Q9"
+etude note kanban edit "Sprint" "Lab 2 · DNS" --append "- [ ] write-up"
+```
+
+### etude note kanban card
+
+<a id="note-kanban-card"></a>
+
+One card: its column, due day, labels, cover, and its page as Markdown.
+
+```
+etude note kanban card <board> <card>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `board` | The board: id (or its start), exact title, or path. |
+| `card` | The card: id, or its exact title. |
+
+Output: { id, title, column, due, labels, cover, archived, markdown }
+
+```sh
+etude note kanban card "Sprint" "Lab 2 · DNS"
+```
+
+### etude note kanban archive
+
+<a id="note-kanban-archive"></a>
+
+Archive a card (it keeps its page, out of every column), or with --restore bring it back to the first column.
+
+```
+etude note kanban archive <board> <card> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `board` | The board: id (or its start), exact title, or path. |
+| `card` | The card: id, or its exact title. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--restore` | boolean | Bring an archived card back. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: the board in short, as `note kanban` prints it
+
+### etude note kanban column
+
+<a id="note-kanban-column"></a>
+
+Add a column (when no column has this name) or change one: rename it, colour it, give it a limit, make its cards count as done, move it, or remove it (its cards go to the archive).
+
+```
+etude note kanban column <board> <column> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `board` | The board: id (or its start), exact title, or path. |
+| `column` | The column's name or id (a new name adds a column). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--rename <NAME>` | string | New name. |
+| `--color <COLOUR>` | string | grey, red, orange, gold, green, teal, blue, purple or pink. |
+| `--limit <N>` | number | How many cards it should hold at most (shown, not enforced); 0 for none. |
+| `--done` | boolean | Its cards count as done. |
+| `--not-done` | boolean | Its cards don't count as done. |
+| `--at <N>` | number | Move it to this place (0 = first). |
+| `--remove` | boolean | Remove the column; its cards go to the archive. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: the board in short, as `note kanban` prints it
+
+```sh
+etude note kanban column "Sprint" Review --at 2 --color purple
+etude note kanban column "Sprint" Doing --limit 3
+etude note kanban column "Sprint" Done --done
+```
+
+## folder
+
+Folders on this computer, open in the Notebook: read and changed where they are, nothing copied. Each file keeps its format: Markdown and text as text, a page as a .etude file.
+
+### etude folder list
+
+<a id="folder-list"></a>
+
+The folders open in the Notebook.
+
+```
+etude folder list
+```
+
+*read-only*
+
+Output: array of { id, name, path, trash, hidden, created, missing, elsewhere }
+
+### etude folder open
+
+<a id="folder-open"></a>
+
+Open a folder on this computer in the Notebook. Its files stay where they are; Markdown opens in a live editor, .etude pages in the page editor, code and text in the file editor, PDFs and pictures as themselves.
+
+```
+etude folder open <path> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `path` | The folder's path. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--name <VALUE>` | string | What the Notebook calls it (default: the folder's own name). |
+| `--trash <DIR>` | string | Where removed files go, inside the folder (default: .trash). |
+| `--hidden` | boolean | Show names that start with a dot. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, name, path, trash, hidden, created, missing, elsewhere }
+
+```sh
+etude folder open ~/Notes
+etude folder open ~/vault --name Vault --trash trash
+```
+
+### etude folder edit
+
+<a id="folder-edit"></a>
+
+Change what the Notebook calls an open folder, where its removed files go, or whether dot-names show.
+
+```
+etude folder edit <folder> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `folder` | The folder's name or id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--name <VALUE>` | string | A new name in the Notebook (the folder on disk keeps its own). |
+| `--trash <DIR>` | string | Where removed files go, inside the folder. |
+| `--hidden <show\|hide>` | string | Show names that start with a dot: show or hide. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, name, path, trash, hidden, created, missing, elsewhere }
+
+### etude folder close
+
+<a id="folder-close"></a>
+
+Take a folder out of the Notebook. The folder and everything in it stay on disk.
+
+```
+etude folder close <folder> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `folder` | The folder's name or id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, name, path, … } (the folder that was closed)
+
+### etude folder ls
+
+<a id="folder-ls"></a>
+
+What's right inside a folder: folders first, then files by name.
+
+```
+etude folder ls [file]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `file` (optional) | A folder: "Folder name/path/inside", its path on disk, or its fs: id. Without it, the open folders. |
+
+Output: array of { id, kind, type, name, path, size, updated, children? }
+
+```sh
+etude folder ls
+etude folder ls Notes/Journal
+```
+
+### etude folder read
+
+<a id="folder-read"></a>
+
+A file's text exactly as it is on disk, after a line with its place, id and last change. A page (.etude) reads as Markdown, the way `note read` shows one.
+
+```
+etude folder read <file> [flags]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `file` | A file or folder: "Folder name/path/inside", its path on disk, or its fs: id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--lines` | boolean | With line numbers. |
+
+Output: text
+
+```sh
+etude folder read Notes/Journal/Monday.md
+```
+
+### etude folder write
+
+<a id="folder-write"></a>
+
+Replace a file's text on disk. Line ends and a byte-order mark stay as the file had them. A page (.etude) takes its body as Markdown (--md), which drops what Markdown can't say (columns, portals): for a small change use `folder patch`.
+
+```
+etude folder write <file> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `file` | A file or folder: "Folder name/path/inside", its path on disk, or its fs: id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--content <TEXT>` | string | The text. `-` reads stdin. |
+| `--content-file <PATH>` | string | Read the text from this file. |
+| `--md <MARKDOWN>` | string | A page's body as Markdown: headings, lists, `- [ ]` to-dos, tables, code, `$math$`, callouts. `-` reads stdin. |
+| `--md-file <PATH>` | string | Read the page's Markdown body from a file. |
+| `--base <STAMP>` | string | The `updated` you read: the write is refused if the file changed on disk since. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, path, updated, bytes }
+
+### etude folder patch
+
+<a id="folder-patch"></a>
+
+Find-and-replace in a file's text on disk, or in a page's (.etude) Markdown, touching only the blocks it changes. The text to find must be there exactly once unless --all.
+
+```
+etude folder patch <file> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `file` | A file or folder: "Folder name/path/inside", its path on disk, or its fs: id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--old <TEXT>` | string | The text to find, exactly as it is in the file. |
+| `--new <TEXT>` | string | What replaces it. |
+| `--all` | boolean | Replace every place it appears. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, path, replaced, lines, updated } (a page: blocks, the top-level blocks rewritten, instead of lines)
+
+### etude folder new
+
+<a id="folder-new"></a>
+
+A new page, canvas, kanban board, web file, file or folder inside a folder on this computer. A name with an extension (notes.md, main.py) makes that file; a name without one makes an Etude page (Name.etude). --kind canvas or kanban makes that kind of .etude file, --kind web an .html file.
+
+```
+etude folder new <file> [name] [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `file` | The folder it goes in: "Folder name/path/inside", its path on disk, or its fs: id. |
+| `name` (optional) | Its name. Without one: Untitled.etude, or New folder. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--kind <page\|canvas\|kanban\|web\|file\|folder>` | string | page, canvas or kanban (each a .etude file), web (an .html file), file (any name) or folder. Left out: by the name, as above. |
+| `--content <TEXT>` | string | A file's text. `-` reads stdin. |
+| `--content-file <PATH>` | string | Read a file's text from this file. |
+| `--md <MARKDOWN>` | string | A page's body as Markdown: headings, lists, `- [ ]` to-dos, tables, code, `$math$`, callouts. `-` reads stdin. |
+| `--md-file <PATH>` | string | Read the page's Markdown body from a file. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, kind, type, name, path, size, updated }
+
+```sh
+etude folder new Notes/Journal "Tuesday"
+etude folder new Notes/Journal Tuesday.md --content "# Tuesday"
+etude folder new Notes "Reading list" --md "- [ ] Chapter 1"
+etude folder new Notes Drafts --kind folder
+```
+
+### etude folder rename
+
+<a id="folder-rename"></a>
+
+Give a file or folder a new name where it is. A Markdown file or a page keeps its extension when the new name leaves it out.
+
+```
+etude folder rename <file> <name> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `file` | A file or folder: "Folder name/path/inside", its path on disk, or its fs: id. |
+| `name` | The new name. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, kind, type, name, path, size, updated }
+
+### etude folder move
+
+<a id="folder-move"></a>
+
+Move a file or folder into another folder on this computer, keeping its name. With --index it goes at that place among what's there, which also works in the folder it's already in: that puts a folder's files in an order of your own (a disk has none, so Etude keeps it for this computer; `folder sort` goes back to names).
+
+```
+etude folder move <file> <to> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `file` | A file or folder: "Folder name/path/inside", its path on disk, or its fs: id. |
+| `to` | The folder it goes into (same ways to name it). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--index <N>` | number | Its place among what's in the folder, 0 first. Left out: where its name puts it, or the end in a folder with an order of its own. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, kind, type, name, path, size, updated }
+
+```sh
+etude folder move Notes/draft.md Notes/Archive
+etude folder move Notes/Journal Notes --index 0
+```
+
+### etude folder sort
+
+<a id="folder-sort"></a>
+
+Put what's in a folder back in the order of its names (folders first), dropping the order it was given by hand.
+
+```
+etude folder sort <file>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `file` | A file or folder: "Folder name/path/inside", its path on disk, or its fs: id. |
+
+Output: { id, name, arranged }
+
+```sh
+etude folder sort Notes/Journal
+```
+
+### etude folder trash
+
+<a id="folder-trash"></a>
+
+Move a file or folder to its folder's trash (.trash unless changed). Nothing is deleted.
+
+```
+etude folder trash <file> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `file` | A file or folder: "Folder name/path/inside", its path on disk, or its fs: id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { ids, archived, trashed } (trashed: where it went, inside the open folder)
+
+### etude folder restore
+
+<a id="folder-restore"></a>
+
+Put something back from a folder's trash where it was.
+
+```
+etude folder restore <file> <trashed> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `file` | Where it goes back to: "Folder name/path/inside". |
+| `trashed` | Where it is now, as `folder trash` printed it (.trash/name). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, kind, type, name, path, size, updated }
+
+### etude folder search
+
+<a id="folder-search"></a>
+
+Files in the open folders by name, then Markdown and text files by the words in them.
+
+```
+etude folder search <query> [flags]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `query` | Words in the name, or text in the file. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--limit <N>` | number | At most this many (default 20). Default `20`. |
+
+Output: array of { id, kind, type, name, path, size, updated, folder, snippet }
+
+### etude folder where
+
+<a id="folder-where"></a>
+
+The id the Notebook uses for a path on disk (for `etude view open`), or null when no open folder holds it.
+
+```
+etude folder where <path>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `path` | A path on this computer. |
+
+Output: { id } (null when the path isn't in an open folder)
+
+### etude folder take
+
+<a id="folder-take"></a>
+
+Move a note of the collection, with what's under it, into a folder on this computer as files: a page, a canvas and a kanban board each become Name.etude, a web file Name.html, a file note the file it names, a PDF note its PDF, a folder a directory (a note with notes under it gets a directory of its name and sits inside; a folder goes into a directory of its name that's already there). Every file is read back before anything changes in the collection; then links to what moved follow it, and the notes that moved are archived (they come back from the Archive).
+
+```
+etude folder take <note> <file> [flags]
+```
+
+*writes · `--dry-run` · needs `--yes`*
+
+| Argument | Description |
+| --- | --- |
+| `note` | The note: its id, title or path in the Notebook. |
+| `file` | The folder it goes into: "Folder name/path/inside", a path on disk inside an open folder, or an fs: id. Made when it isn't there. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--keep` | boolean | Copy only: the notes stay in the collection as they are. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { from, to, moved: [{ id, kind, title, path, file }], links, relinked: { files, notes }, archived }
+
+```sh
+etude folder take "Journal" Notes/Journal --dry-run
+etude folder take "Journal" Notes --yes
+etude folder take "Reading list" ~/Notes --keep --yes
+```
+
+### etude folder bring
+
+<a id="folder-bring"></a>
+
+Move files of a folder on this computer into the collection as notes, the other way of `folder take`: a .etude file becomes the page, canvas or board it holds, a Markdown or text file a file note, an .html file a web file, a PDF a PDF note, a directory a folder note with what's in it. Images, sound, video and other binary files have no note kind: a move that holds one is refused before anything changes. The notes are made and read back first; then links to the files follow them and the files go to their folder's trash.
+
+```
+etude folder bring <file...> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `file...` | The file or directory: "Folder name/path/inside" or an fs: id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--into <VALUE>` | string | The note it goes under (id, title or path in the Notebook). Left out: the top level. |
+| `--index <N>` | number | Its place among the notes there (left out: the end). |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { from, to, moved: [{ file, id, kind, title, path }], links, relinked: { files, notes }, trashed: [{ file, trashed }] }
+
+```sh
+etude folder bring "Notes/Plan.etude" --into "Courses"
+etude folder bring "Notes/Plan.etude" --dry-run
+```
+
+### etude folder sync list
+
+<a id="folder-sync-list"></a>
+
+The folders Sync carries to your other devices: the ones with a place on this computer (`here`), and the ones other devices carry that aren't on this computer yet (`elsewhere`).
+
+```
+etude folder sync list
+```
+
+*read-only*
+
+Output: { configured, here: [{ syncId, name, id, path, isHome, files, bytes, missing, paused, last }], elsewhere: [{ syncId, name, files, bytes, home }] }
+
+```sh
+etude folder sync list
+```
+
+### etude folder sync on
+
+<a id="folder-sync-on"></a>
+
+Start carrying a folder of this computer to your other devices through Sync. Every file in it travels as it is (not dot-names, the trash, or files over 100 MB). This computer becomes the folder's home: when one file changes in two places, its version keeps the name. --dry-run says how much would travel.
+
+```
+etude folder sync on <file> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `file` | The folder: "Folder name/path/inside", its path on disk, or its fs: id. An open folder itself, or one inside it. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--name <NAME>` | string | What the other devices call it. Left out: the folder's own name. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { syncId, name, id, path, isHome } (--dry-run: { dryRun, id, path, files, bytes, tooBig })
+
+```sh
+etude folder sync on Notes --dry-run
+etude folder sync on Notes/Journal
+etude sync now
+```
+
+### etude folder sync link
+
+<a id="folder-sync-link"></a>
+
+Give a folder another device carries a place on this computer. The directory is made when it isn't there and opened in the Notebook; the files come on the sync that follows. Files already in it stay: one that differs from the vault's is kept beside it as a (conflict …) copy.
+
+```
+etude folder sync link <folder> <dest>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `folder` | The synced folder: its name or its syncId (etude folder sync list). |
+| `dest` | Where it goes on this computer. |
+
+Output: { syncId, name, id, path, isHome }
+
+```sh
+etude folder sync link Notes ~/Notes
+etude sync now
+```
+
+### etude folder sync off
+
+<a id="folder-sync-off"></a>
+
+Stop carrying a folder on this computer. Its files stay on disk as they are, here and on the other devices. --everywhere ends it for every device and takes it out of the vault's list.
+
+```
+etude folder sync off <folder> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `folder` | The synced folder: its name, its syncId, or where it is on this computer. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--everywhere` | boolean | End it for every device, not only this computer. |
+
+Output: { syncId, name, everywhere, path }
+
+```sh
+etude folder sync off Notes
+etude folder sync off Notes --everywhere
+```
+
+### etude folder sync go
+
+<a id="folder-sync-go"></a>
+
+Let through the removals Sync is holding back for a folder (a lot of its files went missing here at once, so the other devices kept theirs). They go on the sync that follows.
+
+```
+etude folder sync go <folder>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `folder` | The synced folder: its name, its syncId, or where it is on this computer. |
+
+Output: { syncId, name, paused }
+
+```sh
+etude folder sync go Notes
+etude sync now
+```
+
+## view
+
+What the open app shows, and changing it like a person would: tabs, panes, groups, sidebar, Ask panel.
+
+### etude view show
+
+<a id="view-show"></a>
+
+What the open app shows: the screen, its Notebook panes (numbered from 1) with their tabs, groups, pins and sizes, and the sidebar, Notes' pages and the Ask panel.
+
+```
+etude view show
+```
+
+*read-only*
+
+Output: { live, at, route, shell: { sidebar, pages, panel }, panes: [{ n, focused, box, front, tabs: [{ id, kind, title, pinned?, icon?, group? }], groups: [{ id, name, color, collapsed, tabs }] }] }
+
+```sh
+etude view
+etude view show
+```
+
+### etude view open
+
+<a id="view-open"></a>
+
+Open a note in the app (or, with no note, a New tab): in a pane of its own beside another (right, left, top, bottom), as a new tab, or in place of the front page. An open tab moves there.
+
+```
+etude view open [note] [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `note` (optional) | Id (or its start), exact title, or path. Leave out for a New tab. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--where <tab\|replace\|right\|left\|top\|bottom>` | string | right, left, top or bottom: a pane of its own on that side; tab: a new tab; replace: in place of the page in front. Default `"tab"`. |
+| `--beside <PANE>` | string | The pane it goes beside or into: its number (as `view show` counts), a tab open there, or chat for the pane with an Ask chat. The focused pane by default. |
+| `--before <TAB>` | string | As a tab: the tab it goes in front of, or end for the end of the strip. Next to the page in front when left out. |
+
+Output: { done, view } with what the app shows after
+
+```sh
+etude view open
+etude view open --before end
+etude view open "Week 3" --before "Week 1"
+etude view open "Cleópatra VII" --where right
+etude view open "Week 3" --where bottom --beside 2
+etude view open lecture.pdf --where right --beside chat
+```
+
+### etude view close
+
+<a id="view-close"></a>
+
+Close a tab in the app, or with --pane every tab in that pane.
+
+```
+etude view close [tab] [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `tab` (optional) | A tab: a note (id or its start, title, path), or a chat:… / new:… tab as `view show` lists it. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--pane <N>` | string | Close this whole pane instead (its number, or chat). |
+
+Output: { done, view }
+
+```sh
+etude view close "Cleópatra VII"
+etude view close --pane 2
+```
+
+### etude view close-others
+
+<a id="view-close-others"></a>
+
+Close every other tab in that tab's pane. Pinned tabs stay, like in a browser.
+
+```
+etude view close-others <tab>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `tab` | A tab: a note (id or its start, title, path), or a chat:… / new:… tab as `view show` lists it. |
+
+Output: { done, view }
+
+```sh
+etude view close-others "Week 3"
+```
+
+### etude view focus
+
+<a id="view-focus"></a>
+
+Bring a tab to the front in its pane, or focus a pane.
+
+```
+etude view focus <tab>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `tab` | An open tab, a pane number, or chat. |
+
+Output: { done, view }
+
+```sh
+etude view focus "Week 3"
+etude view focus 2
+```
+
+### etude view pin
+
+<a id="view-pin"></a>
+
+Pin a tab (small, at the start of its strip, kept by Close other tabs), or unpin it with --off.
+
+```
+etude view pin <tab> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `tab` | A tab: a note (id or its start, title, path), or a chat:… / new:… tab as `view show` lists it. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--off` | boolean | Unpin it. |
+
+Output: { done, view }
+
+```sh
+etude view pin "Scratchpad"
+etude view pin "Scratchpad" --off
+```
+
+### etude view icon
+
+<a id="view-icon"></a>
+
+A pinned tab's own icon (an emoji, or a page icon like emoji:🧪, art:…, media:…), or the page's own again with --clear.
+
+```
+etude view icon <tab> [icon] [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `tab` | A tab: a note (id or its start, title, path), or a chat:… / new:… tab as `view show` lists it. |
+| `icon` (optional) | The icon. An emoji alone is taken as emoji:… |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--clear` | boolean | Go back to the page's own icon. |
+
+Output: { done, view }
+
+```sh
+etude view icon "Scratchpad" 🧰
+etude view icon "Scratchpad" --clear
+```
+
+### etude view move
+
+<a id="view-move"></a>
+
+Move a tab: into a pane's tabs (before another tab, or at the end), with --side to that side of a pane as a pane of its own, or an Ask chat with --to panel back to the side panel.
+
+```
+etude view move <tab> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `tab` | A tab: a note (id or its start, title, path), or a chat:… / new:… tab as `view show` lists it. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--to <PANE>` | string | The pane: its number, a tab open there, chat, or panel (an Ask chat back to the side panel). Its own pane by default (to reorder). |
+| `--before <TAB>` | string | The tab it goes in front of. At the end when left out. |
+| `--side <right\|left\|top\|bottom>` | string | A pane of its own on that side of --to. |
+
+Output: { done, view }
+
+```sh
+etude view move "Week 3" --to 2
+etude view move "Week 3" --before "Week 1"
+etude view move "Week 3" --to chat --side bottom
+```
+
+### etude view group
+
+<a id="view-group"></a>
+
+Put tabs in a tab group: a new one (with --name and --color), or an existing one with --into. The tabs must be in one pane.
+
+```
+etude view group <tabs...> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `tabs...` | The tabs. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--into <GROUP>` | string | An existing group (id or name). |
+| `--name <VALUE>` | string | A new group's name. |
+| `--color <VALUE>` | string | A new group's colour: gray, blue, red, yellow, green, pink, purple, orange, or #rrggbb. |
+
+Output: { done, view } (the new group's id is in view.panes[].groups)
+
+```sh
+etude view group "Week 1" "Week 2" --name "Graphics" --color blue
+etude view group "Week 3" --into "Graphics"
+```
+
+### etude view group-edit
+
+<a id="view-group-edit"></a>
+
+Rename, recolour, fold or unfold a tab group.
+
+```
+etude view group-edit <group> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `group` | The group: its id or its name. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--name <VALUE>` | string | Its new name (empty for none). |
+| `--color <VALUE>` | string | Its colour: gray, blue, red, yellow, green, pink, purple, orange, or #rrggbb. |
+| `--fold` | boolean | Fold it into its label. |
+| `--unfold` | boolean | Show its tabs again. |
+
+Output: { done, view }
+
+```sh
+etude view group-edit "Graphics" --color red
+etude view group-edit "Graphics" --fold
+etude view group-edit g1 --name "Midterm"
+```
+
+### etude view ungroup
+
+<a id="view-ungroup"></a>
+
+Dissolve a tab group (its tabs stay open), or with --tab take one tab out of its group.
+
+```
+etude view ungroup [group] [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `group` (optional) | The group: its id or its name. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--tab <TAB>` | string | Take just this tab out of its group. |
+
+Output: { done, view }
+
+```sh
+etude view ungroup "Graphics"
+etude view ungroup --tab "Week 3"
+```
+
+### etude view group-close
+
+<a id="view-group-close"></a>
+
+Close a tab group and every tab in it.
+
+```
+etude view group-close <group>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `group` | The group: its id or its name. |
+
+Output: { done, view }
+
+```sh
+etude view group-close "Graphics"
+```
+
+### etude view group-move
+
+<a id="view-group-move"></a>
+
+Move a whole tab group: along its strip (before a tab) or into another pane's tabs.
+
+```
+etude view group-move <group> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `group` | The group: its id or its name. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--to <PANE>` | string | The pane: its number, a tab open there, or chat. Its own pane by default. |
+| `--before <TAB>` | string | The tab it goes in front of. At the end when left out. |
+
+Output: { done, view }
+
+```sh
+etude view group-move "Graphics" --to 2
+etude view group-move "Graphics" --before "Week 1"
+```
+
+### etude view resize
+
+<a id="view-resize"></a>
+
+How much of its split a pane takes: 0.5 is half, 0.7 makes it bigger than the pane beside it.
+
+```
+etude view resize <pane> <size>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `pane` | A pane number, a tab open there, or chat. |
+| `size` | Its share, 0.05 to 0.95 (or a percentage like 70%). |
+
+Output: { done, view }
+
+```sh
+etude view resize 2 0.3
+etude view resize chat 40%
+```
+
+### etude view zoom
+
+<a id="view-zoom"></a>
+
+A pane's own zoom, like Ctrl/⌘ + and − in it: a step in or out, reset to 100%, or a size like 125%. The rest of the window stays as it is.
+
+```
+etude view zoom <pane> <zoom>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `pane` | A pane number, a tab open there, or chat. |
+| `zoom` | in, out, reset, or a size: 1.25 or 125% (50% to 300%). |
+
+Output: { done, view }
+
+```sh
+etude view zoom 2 in
+etude view zoom 1 150%
+etude view zoom chat reset
+```
+
+### etude view sidebar
+
+<a id="view-sidebar"></a>
+
+The app's sidebar: open wide, folded to its icons (rail), or hidden (none).
+
+```
+etude view sidebar <mode>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `mode` | open, rail or none. |
+
+Output: { done, view }
+
+```sh
+etude view sidebar rail
+etude view sidebar none
+etude view sidebar open
+```
+
+### etude view pages
+
+<a id="view-pages"></a>
+
+Show or hide Notes' page tree under the Notes row in the sidebar.
+
+```
+etude view pages <state>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `state` | show or hide. |
+
+Output: { done, view }
+
+```sh
+etude view pages hide
+etude view pages show
+```
+
+### etude view panel
+
+<a id="view-panel"></a>
+
+Open or close the Ask side panel.
+
+```
+etude view panel <state>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `state` | open or close. |
+
+Output: { done, view }
+
+```sh
+etude view panel close
+etude view panel open
+```
+
+### etude view go
+
+<a id="view-go"></a>
+
+Go to another screen of the app: notes, library, study (with ?deck=…), browse, stats, market, settings, or any path.
+
+```
+etude view go <route>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `route` | A screen name or a path like /study?deck=CMPT%20371. |
+
+Output: { done, view }
+
+```sh
+etude view go stats
+etude view go notes
+etude view go "/browse?q=tag:week3"
+```
 
 ## type
 
@@ -3582,7 +5372,7 @@ etude study watch --query "type:chess"
 
 ## stats
 
-Statistics: overview, forecast, recall per tag, adaptive skills.
+Statistics: overview, forecast, recall per tag, adaptive skills, concepts.
 
 ### etude stats overview
 
@@ -3652,6 +5442,30 @@ Output: { deck, adaptive, root?, settings?, skills?: [{ skill, answers, success,
 etude stats skills "Course"
 ```
 
+### etude stats concepts
+
+<a id="stats-concepts"></a>
+
+Concepts in a deck from `concept::` and `needs::` tags: what each needs, how many of its cards are mastered, and whether it's locked.
+
+Each item's `concept::<path>` tags say what it teaches and `needs::<path>` tags what it requires; a need is met by its concept and every concept below it. A concept is mastered when `masteryShare` of its cards are in review with their last `masteryStreak` answers passed. Rows come needs first (by depth). `cycles` lists concepts that need each other (treated as met among themselves); `danglingNeeds` lists needs no active card teaches (treated as met). With `prerequisites` off on the deck nothing is gated, but the map is still reported.
+
+```
+etude stats concepts <deck>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `deck` | Deck name. |
+
+Output: { deck, prerequisites, concepts: [{ concept, depth, needs, cards, mastered, inProgress, state: mastered|in-progress|unlocked|locked, missing }], cycles: string[][], danglingNeeds: string[] }
+
+```sh
+etude stats concepts "Algorithms"
+```
+
 ### etude stats tags
 
 <a id="stats-tags"></a>
@@ -3703,6 +5517,124 @@ Output: { total, rows: [card rows as in `card list`] }
 etude stats weak --deck "Networks" --lapses 3
 ```
 
+## activity
+
+Your own activity in the app (time and typing per page, file, chat and screen), for Stats. Off unless you turn it on.
+
+### etude activity status
+
+<a id="activity-status"></a>
+
+Whether Activity is on, how long it's kept, and how much is recorded.
+
+Activity is off unless you turn it on. While on, the app's window counts how long you're active in each page, file, PDF, canvas, board, web page, Ask chat and screen (it stops after 2 minutes without input, or when the window is in the background), and how many characters you type, paste and delete there, and how many words you start. It keeps only those counts, per hour and per note id or screen; never the text, the keys or what you pasted. It stays in this collection on this device: Sync doesn't carry it, shared folders and the Sync server never see it, and it isn't part of Etude's telemetry. Backups of the collection include it.
+
+```
+etude activity status
+```
+
+*read-only*
+
+Output: { on, keepDays, rows, since }
+
+### etude activity on
+
+<a id="activity-on"></a>
+
+Start recording your activity on this device.
+
+Activity is off unless you turn it on. While on, the app's window counts how long you're active in each page, file, PDF, canvas, board, web page, Ask chat and screen (it stops after 2 minutes without input, or when the window is in the background), and how many characters you type, paste and delete there, and how many words you start. It keeps only those counts, per hour and per note id or screen; never the text, the keys or what you pasted. It stays in this collection on this device: Sync doesn't carry it, shared folders and the Sync server never see it, and it isn't part of Etude's telemetry. Backups of the collection include it.
+
+```
+etude activity on
+```
+
+*writes*
+
+Output: { on, keepDays, rows, since }
+
+### etude activity off
+
+<a id="activity-off"></a>
+
+Stop recording. What was recorded stays unless --delete.
+
+```
+etude activity off [flags]
+```
+
+*writes*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--delete` | boolean | Also delete everything recorded. |
+
+Output: { on, keepDays, rows, since }
+
+### etude activity keep
+
+<a id="activity-keep"></a>
+
+How many days of activity to keep: 30, 90, 365, or forever.
+
+```
+etude activity keep <days>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `days` | 30, 90, 365, or forever. |
+
+Output: { on, keepDays, rows, since }
+
+```sh
+etude activity keep 90
+etude activity keep forever
+```
+
+### etude activity show
+
+<a id="activity-show"></a>
+
+What Stats shows: time and typing per day, per kind and hour, and the pages, files and chats you spent the most time in.
+
+```
+etude activity show [flags]
+```
+
+*read-only*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--days <N>` | number | Days to cover, today included (1 to 366). Default `30`. |
+| `--top <N>` | number | How many pages, files and chats to list. Default `25`. |
+
+Output: { on, keepDays, today, days: [{ day, ms, typed, words, pasted }], totals: { ms, typed, pasted, deleted, words }, kinds: [{ kind, ms, typed, words }], screens: [{ screen, ms }], hours: [{ hour, ms, typed }], top: [{ kind, ref, title, path?, missing?, ms, typed, words, pasted, last }] }
+
+```sh
+etude activity show --days 7
+```
+
+### etude activity clear
+
+<a id="activity-clear"></a>
+
+Delete everything Activity recorded. Recording goes on if it's on.
+
+```
+etude activity clear [flags]
+```
+
+*writes · needs `--yes`*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { deleted }
+
 ## settings
 
 App settings: AI providers and models, day start, learn-ahead, ChatGPT sign-in.
@@ -3738,7 +5670,7 @@ etude settings get ai.feedback.model
 
 Change settings with dotted key=value pairs (JSON values when they parse).
 
-Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words; empty keeps his usual one), minimiFace (the face he wears: deadpan, wink, proud, smug, hi, wand, close, curious, reading, sleepy, shocked or thinking), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own), avatar (your picture: {kind:"char",id}, {kind:"emoji",e,bg}, {kind:"photo",media}, or null for your initial; see `etude settings avatar`), banner (the cover behind your picture: a preset id like sky or night, image:files/<sha>.<ext>[:y], or null to match your picture; see `etude settings banner`), name (your name in the app, up to 40 characters; empty uses the account's), vim (true turns on Vim keys in Notes' file editor). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.
+Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words, the same text as his profile's in `etude agents`; empty keeps his usual one), agentProfiles and agentProfile (who you talk to in Ask and the default one; easier with `etude agents`), minimiFace (the face he wears: deadpan, wink, proud, smug, hi, wand, close, curious, reading, sleepy, shocked or thinking), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own), avatar (your picture: {kind:"char",id}, {kind:"emoji",e,bg}, {kind:"photo",media}, or null for your initial; see `etude settings avatar`), banner (the cover behind your picture: a preset id like sky or night, image:files/<sha>.<ext>[:y], or null to match your picture; see `etude settings banner`), name (your name in the app, up to 40 characters; empty uses the account's), vim (true turns on Vim keys in Notes' file editor), sounds (false silences the pop when you tick a to-do and the chime when a list is done), holiday (auto puts Minimi in his Christmas outfit with the extras from Dec 1 to Jan 6; on or off forces it), holidayDecor (none, few for a garland and a holly sprig on today's session, or cozy for a warm glow too), holidaySnow (true lets a few slow flakes fall outside the study screen), ai.agents (the external agents Ask Etude can use over ACP: a JSON list of { id, name, command, args, env?, cwd? }; only you can set it, never the assistant or `etude mcp`). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.
 
 ```
 etude settings set <pairs...> [flags]
@@ -3762,6 +5694,7 @@ etude settings set ai.feedback.model=deepseek/deepseek-v4.1-flash-1017
 etude settings set ai.decision=null
 etude settings set accent=blue
 etude settings set banner=night
+etude settings set 'ai.agents=[{"id":"mine","name":"Mine","command":"my-agent","args":["--acp"]}]'
 ```
 
 ### etude settings unset
@@ -3923,6 +5856,73 @@ Output: { done, level, show, decks }
 etude settings onboarding
 etude settings set onboarding.level=tinker
 etude settings set onboarding.done=false
+```
+
+### etude settings consent list
+
+<a id="settings-consent-list"></a>
+
+Who AI grading and Ask send to with the current settings, and whether you agreed to each. Only the iPhone app asks.
+
+The consent is only asked for in the iPhone app: there, nothing goes to a provider until the person agrees to it, once per provider and for everything Etude sends it: grading, feedback, the AI test and AI card edits (cards and answers), and Ask (messages, and what the assistant reads in Etude). Everywhere else, the CLI included, grading and Ask send as before whatever this says (`required` is false), and these commands only edit the setting. `for` says what uses each provider (grading, assistant: Ask's default profile), and `ready` whether it can send now (its key is set, or ChatGPT is signed in). The iPhone app asks during first-run setup, and once at launch for a provider that's ready but not agreed to. A model on this machine (127.0.0.1, localhost) never needs an OK. The agreements stay on this device; Sync doesn't carry them.
+
+```
+etude settings consent list
+```
+
+*read-only*
+
+Output: { required, providers: [{ id, name, for: (grading|assistant)[], ready, agreed: date|null }], agreed: { [provider]: date } }
+
+```sh
+etude settings consent list
+```
+
+### etude settings consent agree
+
+<a id="settings-consent-agree"></a>
+
+Agree to send to an AI provider: cards and answers for grading, messages for Ask. Only the iPhone app asks for it.
+
+It matters where the iPhone app opens this collection; elsewhere grading and Ask don't wait for it. Only you can give it: Ask Etude and `etude mcp` are refused.
+
+```
+etude settings consent agree <provider>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `provider` | chatgpt, or the provider's host: openrouter.ai, api.openai.com… |
+
+Output: { required, providers: [{ id, name, for, ready, agreed }], agreed }
+
+```sh
+etude settings consent agree openrouter.ai
+etude settings consent agree chatgpt
+```
+
+### etude settings consent withdraw
+
+<a id="settings-consent-withdraw"></a>
+
+Take back your OK for an AI provider: in the iPhone app nothing more goes to it until you agree again.
+
+```
+etude settings consent withdraw <provider>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `provider` | chatgpt, or the provider's host: openrouter.ai, api.openai.com… |
+
+Output: { required, providers: [{ id, name, for, ready, agreed }], agreed }
+
+```sh
+etude settings consent withdraw openrouter.ai
 ```
 
 ### etude settings key set
@@ -4284,6 +6284,275 @@ etude sync off
 *writes*
 
 Output: Sync status
+
+## share
+
+Share Notebook folders and pages with other Etude accounts, end-to-end encrypted.
+
+### etude share list
+
+<a id="share-list"></a>
+
+Shared spaces on this device and invites waiting for you.
+
+Reads the server's list first when signed in (new invites, roles, removed access), without syncing notes. A space whose access was removed stays here as a read-only copy (`status` "removed") until you leave it.
+
+```
+etude share list
+```
+
+*read-only*
+
+Output: { signedIn, email, server, waiting, received, spaces: [{ id, rootId, name, role, status, owner, lastSync, error, pending }], invites: [{ spaceId, memberId, role, owner, name, created }] }
+
+### etude share create
+
+<a id="share-create"></a>
+
+Share a folder or page: everything under it syncs with the people you invite.
+
+Needs Etude Sync on your account (the people you invite don't). Shared folders don't nest. Makes this account's sharing identity on first use; nothing to save or type.
+
+```
+etude share create <note>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `note` | The folder or page (id or path). |
+
+Output: { space }
+
+```sh
+etude share create 'Algorithms'
+```
+
+### etude share invite
+
+<a id="share-invite"></a>
+
+Invite someone by email to view or edit a shared space.
+
+They get an email and see the invite at the top of Notes once they sign in with that address. Owners and editors can invite.
+
+```
+etude share invite <space> <email> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `space` | Shared space id (spc_…), or a note in it (id or path). |
+| `email` | Their email address. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--role <VALUE>` | string | edit (default) or view. |
+
+Output: { member: { id, email, role, status, hasKey } }
+
+```sh
+etude share invite 'Algorithms' alex@example.com --role view
+```
+
+### etude share members
+
+<a id="share-members"></a>
+
+The people in a shared space and their roles.
+
+```
+etude share members <space>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `space` | Shared space id (spc_…), or a note in it (id or path). |
+
+Output: { members: [{ id, email, name, role, status, hasKey }] }
+
+### etude share role
+
+<a id="share-role"></a>
+
+Change someone's role (owner only).
+
+```
+etude share role <space> <email> <role>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `space` | Shared space id (spc_…), or a note in it (id or path). |
+| `email` | Their email address (or member id). |
+| `role` | edit or view. |
+
+Output: { member }
+
+### etude share remove
+
+<a id="share-remove"></a>
+
+Remove someone from a shared space (owner only); the key is replaced so they can't read what comes next.
+
+```
+etude share remove <space> <email>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `space` | Shared space id (spc_…), or a note in it (id or path). |
+| `email` | Their email address (or member id). |
+
+Output: { ok, removed }
+
+### etude share accept
+
+<a id="share-accept"></a>
+
+Accept an invite: the shared folder appears in your Notes and syncs.
+
+```
+etude share accept <space> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `space` | The invite's space id (spc_…), from `share list`. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--parent <VALUE>` | string | Put it inside this folder (id or path) instead of at the top. |
+
+Output: { space, rootId }
+
+### etude share decline
+
+<a id="share-decline"></a>
+
+Decline an invite.
+
+```
+etude share decline <space>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `space` | The invite's space id (spc_…). |
+
+Output: { ok }
+
+### etude share leave
+
+<a id="share-leave"></a>
+
+Leave a shared space; its notes stay here as your own. Also drops a removed copy's link.
+
+```
+etude share leave <space>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `space` | Shared space id (spc_…), or a note in it (id or path). |
+
+Output: { ok, rootId }
+
+### etude share stop
+
+<a id="share-stop"></a>
+
+Stop sharing (owner): the space is deleted from the server for everyone; your notes stay here.
+
+```
+etude share stop <space>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `space` | Shared space id (spc_…), or a note in it (id or path). |
+
+Output: { ok, rootId }
+
+### etude share sync
+
+<a id="share-sync"></a>
+
+Sync every shared space now: pull what others changed, send what changed here.
+
+```
+etude share sync
+```
+
+*writes*
+
+Output: share list's status
+
+### etude share who
+
+<a id="share-who"></a>
+
+Who's in your shared spaces right now, and on which page.
+
+Other people's devices that said they were here in the last 40 seconds (your own device is left out). With a note, only its space, and `here` marks the people on that very note; with a space id, that space; with nothing, every space. What page they're on travels encrypted; the server only knows they're in the space.
+
+```
+etude share who [ref]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `ref` (optional) | A note (id or path) or a space id (spc_…). |
+
+Output: { people: [{ space, email, name, color, note, title, kind, sel, block, typing, at, here }] }
+
+```sh
+etude share who
+etude share who 'Algorithms/Week 1'
+```
+
+### etude share activity
+
+<a id="share-activity"></a>
+
+How active each person in a shared space is: last seen, last edit, edits this week and month, and a 14-day strip.
+
+Counted by the server from when and by whom changes were sent (it can't read them). An edit is one change sent; typing a paragraph is a few. `days` are UTC days, oldest first, each with edits per account id.
+
+```
+etude share activity <space>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `space` | Shared space id (spc_…), or a note in it (id or path). |
+
+Output: { members: [{ memberId, accountId, email, name, color, lastSeen, lastEdit, edits7d, edits30d, editsTotal }], days: [{ day, edits }] }
+
+```sh
+etude share activity 'Algorithms'
+```
 
 ## account
 
@@ -4763,15 +7032,15 @@ Output: { url, id, price, fee, currency }
 
 <a id="account-library"></a>
 
-Decks you bought, with the latest approved version and whether it's installed here.
+Decks you bought, with the latest approved version and whether it's installed here (with Sync, not when its items were deleted: install it again). Decks that were refunded or disputed are listed apart and leave this collection: their items, cards, history, card types and media.
 
 ```
 etude account library
 ```
 
-*read-only*
+*writes*
 
-Output: { library: [{ listing, slug, name, version, installed }] }
+Output: { library: [{ listing, slug, name, version, installed: installed|update|null }], revoked: [{ listing, slug, name, reason, at }], changes: { removed: [name], unlocked: [name] } }
 
 ### etude account install
 
@@ -4794,7 +7063,7 @@ etude account install <listing> [flags]
 | `--immediate-access` | boolean | Needed for the first download of a deck sold by Etude: you want it delivered now and understand that, once it's delivered, you can no longer cancel the purchase where the law allows that (as in the EU and the UK). |
 | `--dry-run` | boolean | Show what would change without writing anything. |
 
-Output: { entry, result, ids, report }
+Output: { entry, result, ids, report, remap? }
 
 ### etude account creator
 
@@ -5052,6 +7321,32 @@ etude account reject <listing> [flags]
 
 Output: the listing
 
+### etude account apple-product
+
+<a id="account-apple-product"></a>
+
+Admins: sell a deck Etude sells itself in the iPhone app too, as this App Store non-consumable product.
+
+Create the non-consumable in App Store Connect first; the App Store sets its price. Only decks Etude sells itself qualify, and each product id goes to one deck. `none` stops selling the deck in the iPhone app. Like approve, it needs a recent sign-in.
+
+```
+etude account apple-product <listing> <product>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `listing` | Listing id. |
+| `product` | App Store product id, or none. |
+
+Output: { listing, appleProductId }
+
+```sh
+etude account apple-product lst_… study.etude.deck.pharmacology
+etude account apple-product lst_… none
+```
+
 ## theme
 
 Themes: pick the app's colors, or make your own with CSS variables and extra CSS.
@@ -5132,7 +7427,7 @@ etude theme set paper
 
 Make a custom theme from an existing one, changing variables and adding CSS.
 
-Starts from --from (default: the selected theme) and applies --var pairs and --css on top. Variables: --background, --card, --popover, --muted, --secondary, --accent, --foreground, --card-foreground, --popover-foreground, --muted-foreground, --secondary-foreground, --accent-foreground, --primary, --primary-foreground, --primary-edge, --border, --input, --ring, --destructive, --highlight, --card-highlight, --success, --warning, --danger, --again, --hard, --good, --easy, --new, --learn, --review, --chart-1, --chart-2, --chart-3, --chart-4, --chart-5, --sidebar, --sidebar-foreground, --sidebar-accent, --sidebar-accent-foreground, --sidebar-border, --sidebar-primary, --sidebar-primary-foreground, --sidebar-ring, --radius, --font-sans, --font-mono. Any other --name is accepted too and can be used from the extra CSS.
+Starts from --from (default: the selected theme) and applies --var pairs and --css on top. Variables: --background, --card, --popover, --muted, --secondary, --accent, --foreground, --card-foreground, --popover-foreground, --muted-foreground, --secondary-foreground, --accent-foreground, --border, --input, --ring, --destructive, --highlight, --card-highlight, --success, --warning, --danger, --again, --hard, --good, --easy, --new, --learn, --review, --chart-1, --chart-2, --chart-3, --chart-4, --chart-5, --sidebar, --sidebar-foreground, --sidebar-accent, --sidebar-accent-foreground, --sidebar-border, --sidebar-primary, --sidebar-primary-foreground, --sidebar-ring, --radius, --font-sans, --font-mono. Any other --name is accepted too and can be used from the extra CSS.
 
 ```
 etude theme create [id] [flags]
@@ -5495,7 +7790,7 @@ etude media path
 
 Delete media files nothing in the collection names any more.
 
-A file counts as used when any field, template, deck or tag text, setting, past attempt or conversation mentions its name. Hidden files, files without an extension, names starting with `_` (Anki's mark for files a template loads itself) and files changed in the last hour are kept. Deleted files can't be restored from database backups; preview with --dry-run.
+A file counts as used when any field, template, deck or tag text, setting, past attempt or conversation mentions its name, or a page, Markdown or web file in a folder the Notebook opens on this computer does (its trash included). While one of those folders isn't there (a drive not plugged in), nothing is pruned. Hidden files, files without an extension, names starting with `_` (Anki's mark for files a template loads itself) and files changed in the last hour are kept. On a synced collection the files also go from your other devices at their next sync, unless one of them still uses a file: then it comes back here. Deleted files can't be restored from database backups; preview with --dry-run.
 
 ```
 etude media prune [flags]
@@ -5546,13 +7841,13 @@ etude media add ./pronunciation.mp3 --dry-run
 
 ## market
 
-Market: browse, install and publish shared themes, decks and card types.
+Market: browse, install and publish shared themes, decks, card types and plugins.
 
 ### etude market list
 
 <a id="market-list"></a>
 
-Entries in the market, newest first, with whether each is installed here.
+Entries in the market, newest first, with whether each is installed here. Entries by authors you hid are left out.
 
 ```
 etude market list [flags]
@@ -5562,9 +7857,10 @@ etude market list [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
-| `--kind <theme\|deck\|type>` | string | theme, deck or type. |
+| `--kind <theme\|deck\|type\|plugin>` | string | theme, deck, type or plugin. |
 | `--query <WORDS>` | string | Only entries whose name, description, author or tags contain these words. Also `--q`. |
 | `--refresh` | boolean | Skip the one-minute cache of the index. |
+| `--all` | boolean | Include entries by authors you hid (`market hide-author`). |
 | `--url <URL>` | string | Read the market from this URL or folder instead of the configured one (`settings set market.url=…`). |
 
 Output: array of { id, kind, name, description, author, tags, version, updated, bytes, installed: installed|update|null }
@@ -5619,7 +7915,7 @@ etude market show <id> [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
-| `--kind <theme\|deck\|type>` | string | theme, deck or type. |
+| `--kind <theme\|deck\|type\|plugin>` | string | theme, deck, type or plugin. |
 | `--url <URL>` | string | Read the market from this URL or folder instead of the configured one (`settings set market.url=…`). |
 | `--content` | boolean | Download the entry and print the whole file. |
 
@@ -5636,7 +7932,7 @@ etude market show morse-code --content
 
 Add an entry to your collection. Installing again updates it; decks keep your scheduling.
 
-A theme becomes a custom theme (it gets a new id if yours already uses the published one). A deck or card type is imported as a pack: items match by id, so reinstalling updates content and keeps review history. With --file, installs a local entry file instead of one from the market.
+A theme becomes a custom theme (it gets a new id if yours already uses the published one). A deck or card type is imported as a pack: items match by id, so reinstalling updates content and keeps review history. With Sync, an item whose id was deleted (you deleted the deck, here or on another device) comes back under a fresh id, `<id>.r1` or the next free one: `remap` lists them, and the install record keeps them so updates follow. With --file, installs a local entry file instead of one from the market.
 
 ```
 etude market install [id] [flags]
@@ -5650,13 +7946,13 @@ etude market install [id] [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
-| `--kind <theme\|deck\|type>` | string | theme, deck or type. |
+| `--kind <theme\|deck\|type\|plugin>` | string | theme, deck, type or plugin. |
 | `--url <URL>` | string | Read the market from this URL or folder instead of the configured one (`settings set market.url=…`). |
 | `--file <FILE>` | string | Install this entry file (`-` for stdin). |
 | `--use` | boolean | Themes: also select it. |
 | `--dry-run` | boolean | Show what would change without writing anything. |
 
-Output: { entry, result: created|updated|unchanged, ids, dryRun, report }
+Output: { entry, result: created|updated|unchanged, ids, dryRun, report, remap?: { packId: id } }
 
 ```sh
 etude market install dusk-rose --use
@@ -5676,7 +7972,7 @@ etude market installed
 
 *read-only*
 
-Output: array of { id, kind, name, version, updated, at, ids }
+Output: array of { id, kind, name, version, updated, at, ids, remap? }
 
 ### etude market forget
 
@@ -5695,6 +7991,74 @@ etude market forget <id>
 | `id` | Entry id. |
 
 Output: { forgot: id }
+
+### etude market hide-author
+
+<a id="market-hide-author"></a>
+
+Hide everything from one author: their entries leave every Market list, in the app and in `market list`. Synced with your settings.
+
+Installed entries stay installed and keep showing under Yours. `market show-author` undoes it; Settings → Privacy lists who you hid.
+
+```
+etude market hide-author <author...> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `author...` | The author's name, as their entries show it (any case). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { author, hidden: true, hiddenAuthors: string[] }
+
+```sh
+etude market hide-author "Jane Doe"
+```
+
+### etude market show-author
+
+<a id="market-show-author"></a>
+
+Show an author's entries in the Market again.
+
+```
+etude market show-author <author...> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `author...` | The author's name, as their entries show it (any case). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { author, hidden: false, hiddenAuthors: string[] }
+
+```sh
+etude market show-author "Jane Doe"
+```
+
+### etude market hidden-authors
+
+<a id="market-hidden-authors"></a>
+
+The Market authors you hid, oldest first.
+
+```
+etude market hidden-authors
+```
+
+*read-only*
+
+Output: { hiddenAuthors: [{ author, since }] }
 
 ### etude market publish
 
@@ -5716,7 +8080,7 @@ etude market publish <ref> [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
-| `--kind <theme\|deck\|type>` | string | theme, deck or type. |
+| `--kind <theme\|deck\|type\|plugin>` | string | theme, deck or type. |
 | `--id <SLUG>` | string | Entry id in the market (default: from the name). |
 | `--name <TEXT>` | string | Name shown in the market (default: the theme's, deck's or type's). |
 | `--description <TEXT>` | string | A few lines on what it is and who it's for. |
@@ -5992,6 +8356,218 @@ etude market blocks
 
 Output: { blocks: [{ authorId, name, created }] }
 
+## plugin
+
+Plugins: sandboxed extensions for Desktop and Web (install, check, permissions, scaffold).
+
+### etude plugin list
+
+<a id="plugin-list"></a>
+
+Installed plugins and bundled free plugins ready to install.
+
+```
+etude plugin list
+```
+
+*read-only*
+
+Output: { installed: [...], bundled: [...] }
+
+```sh
+etude plugin list
+```
+
+### etude plugin show
+
+<a id="plugin-show"></a>
+
+Details, granted permissions and hash of one installed plugin.
+
+```
+etude plugin show <id>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Plugin id. |
+
+Output: installed plugin metadata
+
+```sh
+etude plugin show pomodoro
+```
+
+### etude plugin check
+
+<a id="plugin-check"></a>
+
+Validate a plugin folder or JSON package (manifest, permissions, static safety checks, SHA-256).
+
+```
+etude plugin check <path>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `path` | Plugin directory, JSON package, or bundled plugin id. |
+
+Output: { ok, id, version, hash, permissions, errors }
+
+```sh
+etude plugin check ./examples/plugins/pomodoro
+```
+
+### etude plugin new
+
+<a id="plugin-new"></a>
+
+Create a starter plugin folder with plugin.json, main.js and a floating view.
+
+```
+etude plugin new <id> [flags]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Lowercase slug id for the plugin. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dir <DIR>` | string | Target directory (default: ./<id>). |
+| `--name <VALUE>` | string | Display name. |
+| `--author <VALUE>` | string | Author name. |
+
+Output: { dir, files }
+
+```sh
+etude plugin new my-timer --dir ./my-timer
+```
+
+### etude plugin install
+
+<a id="plugin-install"></a>
+
+Install a plugin from a folder, JSON package, or bundled free plugin id (user-only).
+
+```
+etude plugin install <source> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `source` | Folder path, JSON file, or bundled id (e.g. pomodoro). |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--enable` | boolean | Grant declared permissions and enable immediately. |
+| `--hash <SHA256>` | string | Expected SHA-256 hash to verify before installing. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { plugin, status, pausedForPermissions }
+
+```sh
+etude plugin install pomodoro --enable
+etude plugin install ./my-plugin --enable
+```
+
+### etude plugin enable
+
+<a id="plugin-enable"></a>
+
+Enable an installed plugin (user-only).
+
+```
+etude plugin enable <id>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Plugin id. |
+
+```sh
+etude plugin enable pomodoro
+```
+
+### etude plugin disable
+
+<a id="plugin-disable"></a>
+
+Disable an installed plugin without deleting its data (user-only).
+
+```
+etude plugin disable <id>
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Plugin id. |
+
+```sh
+etude plugin disable pomodoro
+```
+
+### etude plugin permissions
+
+<a id="plugin-permissions"></a>
+
+Grant or revoke permissions for an installed plugin (user-only).
+
+```
+etude plugin permissions <id> [flags]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Plugin id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--grant <VALUE> (repeatable)` | string | Permission to grant. |
+| `--revoke <VALUE> (repeatable)` | string | Permission to revoke. |
+
+```sh
+etude plugin permissions pomodoro --revoke notify
+```
+
+### etude plugin uninstall
+
+<a id="plugin-uninstall"></a>
+
+Uninstall a plugin and remove its collection storage (user-only).
+
+```
+etude plugin uninstall <id> [flags]
+```
+
+*writes · needs `--yes`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Plugin id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+```sh
+etude plugin uninstall pomodoro --yes
+```
+
 ## agent
 
 The in-app assistant: ask it to change your collection, list and manage its conversations.
@@ -6017,11 +8593,12 @@ etude agent ask <message...> [flags]
 | Flag | Type | Description |
 | --- | --- | --- |
 | `-c, --conversation <ID>` | string | Continue this conversation. |
-| `-m, --model <REF>` | string | Model ref: chatgpt:<model>, openrouter:<model> or custom:<model>. Default: the conversation's, then the last used, then the agent setting, then the feedback model. |
+| `-p, --profile <ID>` | string | Who to talk to, a profile id from `etude agents` (default: the default profile). Only for a new conversation. |
+| `-m, --model <REF>` | string | Model ref for a profile whose brain is a model: chatgpt:<model>, openrouter:<model> or custom:<model>. Default: the conversation's, then the profile's, then the last used, then the agent setting, then the feedback model. |
 | `--attach <FILE> (repeatable)` | string | Attach a file (image, PDF, text, .apkg). Repeat for several. |
 | `-y, --yes` | boolean | Allow destructive commands without asking. |
 
-Output: { conversation, reply, commands: [{ command, status, exit }], changed, canUndo, model, ms, error? }
+Output: { conversation, profile, reply, commands: [{ command, status, exit }], changed, canUndo, model, ms, error? }
 
 ```sh
 etude agent ask "make a deck from these notes" --attach notes.md
@@ -6041,7 +8618,7 @@ etude agent list
 
 *read-only*
 
-Output: array of { id, title, model, created, updated }
+Output: array of { id, title, model, profile, created, updated }
 
 ### etude agent show
 
@@ -6059,7 +8636,7 @@ etude agent show <id>
 | --- | --- |
 | `id` | Conversation id. |
 
-Output: { id, title, model, created, updated, messages: [{ id, role, content, created, snapshot, undone, canUndo }] }
+Output: { id, title, model, profile, created, updated, messages: [{ id, role, content, created, snapshot, undone, canUndo }] }
 
 ### etude agent rename
 
@@ -6084,7 +8661,7 @@ Output: { id, title, autoTitle, model, created, updated }
 
 <a id="agent-delete"></a>
 
-Delete a conversation and its attachments. Changes it made to the collection stay.
+Delete a conversation and its attachments, and its session in the agent's own history when the agent keeps one (Hermes). Changes it made to the collection stay.
 
 ```
 etude agent delete <id> [flags]
@@ -6100,7 +8677,7 @@ etude agent delete <id> [flags]
 | --- | --- | --- |
 | `-y, --yes` | boolean | Confirm a destructive operation. |
 
-Output: { deleted }
+Output: { deleted, agentSession?: { id, deleted, error? } }
 
 ### etude agent undo
 
@@ -6142,6 +8719,241 @@ etude agent models [flags]
 | `--search <TEXT>` | string | Only models whose ref or name contains this. |
 
 Output: { configured, default, groups: [{ provider, label, models: [{ ref, name, vision }], error? }] }
+
+## agents
+
+Who you talk to in Ask: agent profiles with a name, a picture, a body, a personality and a brain.
+
+### etude agents list
+
+<a id="agents-list"></a>
+
+Your agent profiles, Minimi first, with the default one marked.
+
+An external agent's profile is `available: false` on a device where that agent isn't set up (the agents list itself never syncs).
+
+```
+etude agents list
+```
+
+*read-only*
+
+Output: { default, profiles: [{ id, name, avatar, body, clips: { read, lookUp, look, lookDown } | null, banner, personality, brain: { kind: model, model, effort? } | { kind: external, agent, via?, hermes?, harnesses?: [{ agent, name }] }, default, available, note?, agentName?, setup?: { command, args, env?, via } }] }
+
+```sh
+etude agents
+etude agents list
+```
+
+### etude agents show
+
+<a id="agents-show"></a>
+
+One agent profile.
+
+```
+etude agents show <id>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Profile id (minimi, tutor…). |
+
+Output: { id, name, avatar, body, clips: { read, lookUp, look, lookDown } | null, banner, personality, brain: { kind: model, model, effort? } | { kind: external, agent, via?, hermes?, harnesses?: [{ agent, name }] }, default, available, note?, agentName?, setup?: { command, args, env?, via } }
+
+### etude agents add
+
+<a id="agents-add"></a>
+
+Add someone to talk to in Ask: a name, pictures, a personality and a brain.
+
+The id comes from the name unless --id is given. Brains: --hermes <profile> (Hermes on this computer; the command it runs stays on this device and never syncs), --provider chatgpt|openrouter|custom --model <m> [--effort <e>], or --external <agent id>. Without any, the default assistant model.
+
+```
+etude agents add <name> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `name` | What the chat calls it, up to 40 characters. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id <ID>` | string | Its id (lowercase letters, digits, dashes). |
+| `--avatar <FILE>` | string | The round picture in the chat. A local image (copied into the collection's media, so Sync carries it), `minimi` for Minimi's own art, or `none`. |
+| `--body <FILE>` | string | The figure in the corner, a transparent PNG (shown at Minimi's size). A local image (copied into the collection's media, so Sync carries it), `minimi` for Minimi's own art, or `none`. Without one the corner shows the avatar in a round button. |
+| `--clips <DIR>` | string | Animate the body like Minimi's Christmas clips: a folder with read-loop, look-up, look-loop and look-down, each as -248.webm and -533.webm (or one .webm), VP9 with alpha, at most 4 MB each. The body picture shows until they play and where they can't (Safari, reduced motion). `none` removes them. |
+| `--banner <FILE>` | string | What a new chat with it shows before the first message, in place of the greeting and ideas: a local image (copied into the collection's media, so Sync carries it), or `none` for the usual start. |
+| `--personality <TEXT>` | string | Who it is, in your words. For an external agent these go to it as your notes with each message. |
+| `--personality-file <FILE>` | string | Read the personality from a file (- for stdin). |
+| `--model <REF>` | string | Brain: a chat model Etude runs with its own tools (chatgpt:<model>, openrouter:<model>, custom:<model>, or just the model with --provider), or `default` for the default assistant model. |
+| `--provider <PROVIDER>` | string | Brain: which provider --model is from: chatgpt, openrouter or custom. |
+| `--effort <EFFORT>` | string | How long a model brain thinks before acting: default, minimal, low, medium or high. |
+| `--hermes <PROFILE>` | string | Brain: Hermes with one of its profiles, run on this computer as `hermes -p <profile> acp`. Personality and memory come from Hermes. |
+| `--external <AGENT>` | string | Brain: an existing entry in this computer's ai.agents, by id (advanced; --hermes sets one up for you). |
+| `--harness <NAME=AGENT> (repeatable)` | string | For an external brain: a harness it can also run in, as Name=agent (an entry in ai.agents), picked per chat in the message box. Repeat for several, list its own agent too to name it (Hermes=tutor), or `none` to keep only its own agent. |
+| `--default` | boolean | Make it the default for new chats and the corner. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, name, avatar, body, clips: { read, lookUp, look, lookDown } | null, banner, personality, brain: { kind: model, model, effort? } | { kind: external, agent, via?, hermes?, harnesses?: [{ agent, name }] }, default, available, note?, agentName?, setup?: { command, args, env?, via } }
+
+```sh
+etude agents add Tutor --avatar ~/tutor.png --body ~/tutor-body.png --clips ~/tutor-clips --hermes tutor --personality-file notes.md --default
+etude agents add Coach --provider openrouter --model deepseek/deepseek-v4.1-flash-1017 --effort low --personality "A patient tutor."
+```
+
+### etude agents edit
+
+<a id="agents-edit"></a>
+
+Change an agent profile: its name, pictures, clips, banner, personality or brain. Minimi too.
+
+A new --body that isn't a picture (none, minimi) takes the clips away too; clips need a body picture.
+
+```
+etude agents edit <id> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Profile id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--name <NAME>` | string | A new name. |
+| `--avatar <FILE>` | string | The round picture in the chat. A local image (copied into the collection's media, so Sync carries it), `minimi` for Minimi's own art, or `none`. |
+| `--body <FILE>` | string | The figure in the corner, a transparent PNG (shown at Minimi's size). A local image (copied into the collection's media, so Sync carries it), `minimi` for Minimi's own art, or `none`. Without one the corner shows the avatar in a round button. |
+| `--clips <DIR>` | string | Animate the body like Minimi's Christmas clips: a folder with read-loop, look-up, look-loop and look-down, each as -248.webm and -533.webm (or one .webm), VP9 with alpha, at most 4 MB each. The body picture shows until they play and where they can't (Safari, reduced motion). `none` removes them. |
+| `--banner <FILE>` | string | What a new chat with it shows before the first message, in place of the greeting and ideas: a local image (copied into the collection's media, so Sync carries it), or `none` for the usual start. |
+| `--personality <TEXT>` | string | Who it is, in your words. For an external agent these go to it as your notes with each message. |
+| `--personality-file <FILE>` | string | Read the personality from a file (- for stdin). |
+| `--model <REF>` | string | Brain: a chat model Etude runs with its own tools (chatgpt:<model>, openrouter:<model>, custom:<model>, or just the model with --provider), or `default` for the default assistant model. |
+| `--provider <PROVIDER>` | string | Brain: which provider --model is from: chatgpt, openrouter or custom. |
+| `--effort <EFFORT>` | string | How long a model brain thinks before acting: default, minimal, low, medium or high. |
+| `--hermes <PROFILE>` | string | Brain: Hermes with one of its profiles, run on this computer as `hermes -p <profile> acp`. Personality and memory come from Hermes. |
+| `--external <AGENT>` | string | Brain: an existing entry in this computer's ai.agents, by id (advanced; --hermes sets one up for you). |
+| `--harness <NAME=AGENT> (repeatable)` | string | For an external brain: a harness it can also run in, as Name=agent (an entry in ai.agents), picked per chat in the message box. Repeat for several, list its own agent too to name it (Hermes=tutor), or `none` to keep only its own agent. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, name, avatar, body, clips: { read, lookUp, look, lookDown } | null, banner, personality, brain: { kind: model, model, effort? } | { kind: external, agent, via?, hermes?, harnesses?: [{ agent, name }] }, default, available, note?, agentName?, setup?: { command, args, env?, via } }
+
+```sh
+etude agents edit minimi --personality "Speaks only in haiku."
+etude agents edit tutor --avatar ~/tutor-v2.png
+etude agents edit tutor --clips ~/tutor-clips
+etude agents edit tutor --clips none
+etude agents edit tutor --banner ~/tutor-banner.png
+etude agents edit coach --model default
+etude agents edit tutor --provider openrouter --model deepseek/deepseek-v4.1-flash-1017
+etude agents edit tutor --hermes tutor
+etude agents edit minimi --effort medium
+etude agents edit tutor --harness Hermes=tutor --harness Antigravity=tutor-agy
+```
+
+### etude agents duplicate
+
+<a id="agents-duplicate"></a>
+
+Copy an agent profile under a new name.
+
+```
+etude agents duplicate <id> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Profile id to copy. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--name <NAME>` | string | The copy's name (default: "<name> copy"). |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { id, name, avatar, body, clips: { read, lookUp, look, lookDown } | null, banner, personality, brain: { kind: model, model, effort? } | { kind: external, agent, via?, hermes?, harnesses?: [{ agent, name }] }, default, available, note?, agentName?, setup?: { command, args, env?, via } }
+
+### etude agents remove
+
+<a id="agents-remove"></a>
+
+Remove an agent profile. Minimi can't be removed. Its chats stay and continue with Minimi.
+
+```
+etude agents remove <id> [flags]
+```
+
+*writes · `--dry-run` · needs `--yes`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Profile id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+Output: { removed, default }
+
+### etude agents permission
+
+<a id="agents-permission"></a>
+
+How much Ask asks before it acts: before every change, only before what could do harm, or never.
+
+`ask`: every change waits for a yes. `dangerous` (the default): only deletes, resets and, for an external agent, commands, deletes and edits to sensitive files. `allow`: nothing is asked. It covers every chat on this collection. An external agent (Hermes, Claude Code) only asks about what it treats as needing a yes itself; Etude answers those for you under `dangerous` and `allow`. Without a level, prints the current one.
+
+```
+etude agents permission [level]
+```
+
+*writes*
+
+| Argument | Description |
+| --- | --- |
+| `level` (optional) | ask, dangerous or allow. |
+
+Output: { permission }
+
+```sh
+etude agents permission
+etude agents permission ask
+etude agents permission allow
+```
+
+### etude agents default
+
+<a id="agents-default"></a>
+
+Make a profile the default: new chats start with it and its body sits in the corner.
+
+```
+etude agents default <id> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Profile id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { default }
+
+```sh
+etude agents default tutor
+etude agents default minimi
+```
 
 ## db
 
@@ -6246,6 +9058,31 @@ etude db restore ~/.etude/backups/etude-20261020-190000.db --yes
 
 ## Top-level commands
 
+### etude mcp
+
+<a id="mcp"></a>
+
+Serve the collection to an AI agent over the Model Context Protocol (stdio): tools to find, read, create and edit notes, plus etude_help and etude_run for every other command.
+
+Add it to an agent's MCP servers as the command `etude mcp --db <collection>` (or with ETUDE_DB set). Each tool call opens the collection, runs one command and closes it, so the app can stay open: a page open in it takes the change live. With --read-only, tools that write are left out and etude_run refuses commands that write. serve, update, agent, db restore, key or sign-in commands and changes to agent profiles (`etude agents add`, `edit`…) aren't available.
+
+```
+etude mcp [flags]
+```
+
+*read-only · no database*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--read-only` | boolean | Only tools that read. |
+
+Output: JSON-RPC messages on stdout until stdin closes
+
+```sh
+etude mcp --db ~/Etude/etude.db
+claude mcp add etude -- etude mcp --db ~/Etude/etude.db
+```
+
 ### etude serve
 
 <a id="serve"></a>
@@ -6280,7 +9117,7 @@ etude serve --host 0.0.0.0 --token $(openssl rand -hex 16)
 
 Update this copy of Etude from its GitHub repo: fetch, fast-forward, install dependencies, rebuild the web app.
 
-Only works in a git checkout with no local changes. A running server keeps the old code until it restarts; the Update button in the app restarts it for you. Package installs (npm, the Mac app) get the latest release's version and a link instead.
+Only works in a git checkout. Local changes are kept: they're set aside and put back on the new code (the ones the update already has just go); if they clash with it, or an untracked file is in the way of one it adds, nothing changes. A running server keeps the old code until it restarts; the Update button in the app restarts it for you. Package installs (npm, the Mac app) get the latest release's version and a link instead.
 
 ```
 etude update [flags]
@@ -6292,7 +9129,7 @@ etude update [flags]
 | --- | --- | --- |
 | `--check` | boolean | Only check for new commits; change nothing. |
 
-Output: --check: { kind: git|package, version, commit, behind, incoming: [{ sha, date, subject }], blocked? } · otherwise { result: updated|current, from, to, commits, steps }
+Output: --check: { kind: git|package, version, commit, behind, incoming: [{ sha, date, subject }], dirty, kept, clash, blocked? } · otherwise { result: updated|current, from, to, commits, steps }
 
 ```sh
 etude update --check

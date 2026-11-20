@@ -22,14 +22,28 @@ export function samePath(a: string, b: string, platform: string = process.platfo
 export type Probe = { kind: "free" } | { kind: "etude"; db: string; version: string } | { kind: "other" };
 
 /** What answers on this port: nothing, an Etude engine (and which collection it has open), or anything else. */
-export async function probe(port: number, token?: string): Promise<Probe> {
+export const probe = (port: number, token?: string): Promise<Probe> => probeAt(`http://127.0.0.1:${port}`, token);
+
+/** The same at any address: another computer's Etude too (`remote` in desktop.json, or $ETUDE_REMOTE). */
+export async function probeAt(origin: string, token?: string): Promise<Probe> {
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/api/settings`, { headers: token ? { authorization: `Bearer ${token}` } : {}, signal: AbortSignal.timeout(2000) });
+    const res = await fetch(`${origin}/api/settings`, { headers: token ? { authorization: `Bearer ${token}` } : {}, signal: AbortSignal.timeout(origin.startsWith("http://127.0.0.1:") ? 2000 : 6000) });
     if (!res.ok) return { kind: "other" };
     const body = (await res.json().catch(() => null)) as { dbPath?: unknown; version?: unknown } | null;
     return typeof body?.dbPath === "string" ? { kind: "etude", db: body.dbPath, version: String(body.version ?? "") } : { kind: "other" };
   } catch (e) {
     return (e as { cause?: { code?: string } }).cause?.code === "ECONNREFUSED" ? { kind: "free" } : { kind: "other" };
+  }
+}
+
+/** An Etude on another computer to open instead of starting one here: an http(s) origin, or null. */
+export function remoteOrigin(v: unknown): string | null {
+  if (typeof v !== "string" || !v.trim()) return null;
+  try {
+    const u = new URL(v.trim());
+    return u.protocol === "https:" || u.protocol === "http:" ? u.origin : null;
+  } catch {
+    return null;
   }
 }
 

@@ -366,3 +366,47 @@ command({
     return out;
   },
 });
+
+command({
+  name: "deck home",
+  summary: "Show or set a deck's recursive Deck Home (queue, catalog, a card type's home, or custom HTML/CSS/JS).",
+  description: "Each deck or subdeck chooses its own home (never inherited from parent decks). Without flags, prints the deck's resolved home, direct subdecks and cards.",
+  args: [{ name: "deck", description: "Deck name.", required: true }],
+  flags: [
+    { name: "mode", type: "string", description: 'Built-in mode: "queue" (default) or "catalog".' },
+    { name: "type", type: "string", description: "Use this card type's custom home view." },
+    { name: "html", type: "string", description: "Custom home HTML (`-` reads stdin)." },
+    { name: "html-file", type: "string", description: "Read custom home HTML from a file.", placeholder: "PATH" },
+    { name: "css-file", type: "string", description: "Read custom home CSS from a file.", placeholder: "PATH" },
+    { name: "js-file", type: "string", description: "Read custom home JS from a file.", placeholder: "PATH" },
+    { name: "clear", type: "boolean", description: "Remove the deck's own home override (falls back to its card type or queue)." },
+  ],
+  writes: true,
+  dryRun: true,
+  examples: ['etude deck home "Piano Hero"', 'etude deck home "Piano Hero" --mode catalog', 'etude deck home "Piano Hero::Rock" --type piano-hero'],
+  output: "{ deck, subdecks, cards, stats }",
+  run(ctx) {
+    const e = ctx.e;
+    const d = e.deck(ctx.args.deck);
+    const html = textInput(ctx, ctx.flags.html, ctx.flags["html-file"]);
+    const css = textInput(ctx, undefined, ctx.flags["css-file"]);
+    const js = textInput(ctx, undefined, ctx.flags["js-file"]);
+    const mutating = !!(ctx.flags.clear || ctx.flags.mode || ctx.flags.type || html !== undefined || css !== undefined || js !== undefined);
+    if (!mutating) return e.deckHome(d.name);
+    const next = { ...d.config };
+    if (ctx.flags.clear) delete next.home;
+    else if (ctx.flags.mode) {
+      if (ctx.flags.mode !== "queue" && ctx.flags.mode !== "catalog") throw new CliError('--mode must be "queue" or "catalog"', "usage");
+      next.home = ctx.flags.mode;
+    } else if (ctx.flags.type) {
+      e.type(ctx.flags.type);
+      next.home = { type: ctx.flags.type };
+    } else if (html !== undefined) {
+      next.home = { html, ...(css ? { css } : {}), ...(js ? { js } : {}) };
+    } else {
+      throw new CliError("custom home needs --html or --html-file", "usage");
+    }
+    e.updateDeck(d.name, { config: next });
+    return e.deckHome(d.name);
+  },
+});

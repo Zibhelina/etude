@@ -7,7 +7,7 @@ import "./shims/globals.ts";
 import { allReady, existsSync, filesUnder, flush, mkdirSync, mountOpfs, readFileSync, ready as readyFiles, rmSync, takeMissed, writeFileSync } from "./shims/vfs.ts";
 import { zipSync, type Zippable } from "fflate";
 import { Buffer } from "buffer";
-import { localFrame } from "./frame-local.ts";
+import { localFrame, localPluginFrame } from "./frame-local.ts";
 import { readBackup } from "./backup-zip.ts";
 import { keyNameProblem } from "../core/env-names.ts";
 
@@ -123,6 +123,8 @@ const nat = {
   // The page's first message says whether it brought a native host; every later message waits for it.
   ready: Promise.resolve(),
 };
+/** Settings the page's first message gives the engine (which platform it runs on); every later message waits for them. */
+let hostReady: Promise<void> = Promise.resolve();
 function nativeCall<T = unknown>(op: string, args: unknown = {}): Promise<T> {
   const n = ++nat.nid;
   return new Promise<T>((resolve, reject) => {
@@ -195,9 +197,12 @@ async function http(id: number, r: { method: string; url: string; headers: Recor
     return;
   }
   let body = await res.arrayBuffer();
-  // Card frames: make them self-contained (see frame-local.ts).
-  if (res.ok && r.method === "GET" && path.startsWith("/frame/")) {
+  // Card, deck-home and plugin frames: make them self-contained (see frame-local.ts).
+  if (res.ok && r.method === "GET" && (path.startsWith("/frame/") || path.startsWith("/frame-home/"))) {
     body = new TextEncoder().encode(localFrame(new TextDecoder().decode(body))).buffer as ArrayBuffer;
+    delete headers["content-length"];
+  } else if (res.ok && r.method === "GET" && path.startsWith("/frame-plugin/")) {
+    body = new TextEncoder().encode(localPluginFrame(new TextDecoder().decode(body))).buffer as ArrayBuffer;
     delete headers["content-length"];
   } else if (res.ok && r.method === "POST" && path === "/api/frame") {
     const j = JSON.parse(new TextDecoder().decode(body));
@@ -224,6 +229,9 @@ async function handle(ev: MessageEvent) {
     if (ev.data.hello.native) nat.ready = installNativeHost().catch((e) => console.warn("native host:", e));
     // Before any request is answered, so the app's first look at /api/telemetry sees it running.
     telemetryStarted = startWorkerTelemetry(ev.data.hello);
+    // The iPhone app sends cards to an AI provider only once the person agreed to it (App Review 5.1.2(i)).
+    const ios = ev.data.hello.platform === "ios";
+    hostReady = ready.then(() => void (etude.requireAiConsent = ios));
     return;
   }
   const { id, method } = ev.data ?? {};
@@ -233,6 +241,7 @@ async function handle(ev: MessageEvent) {
     const info = await ready;
     await nat.ready;
     await telemetryStarted;
+    await hostReady;
     if (ev.data?.http) return await http(id, ev.data.http);
     const args: unknown[] = (ev.data?.args ?? []).map(revive);
     let value: unknown;

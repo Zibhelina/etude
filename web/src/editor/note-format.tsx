@@ -4,6 +4,11 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Editor } from "@tiptap/react";
+import type { ChainedCommands } from "@tiptap/core";
+import { turnBlock } from "./note-list-turn";
+import { setToggleAt, turnLineToToggle, untoggle } from "./note-toggle";
+import { toggleLevel, type ToggleLevel } from "./toggle-turn.ts";
+import type { TurnKind } from "./list-turn";
 import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { AlignCenter, AlignJustify, AlignLeft, AlignRight, ChevronDown, Columns2, Copy, Trash2 } from "lucide-react";
 import { COLORS, FONTS, SIZES } from "./note-style";
@@ -144,17 +149,32 @@ export function AlignButton({ editor }: { editor: Editor }) {
 // ---------------------------------------------------------------- the block menu
 
 type PMNode = NonNullable<ReturnType<Editor["state"]["doc"]["nodeAt"]>>;
-const TURN_INTO: { id: string; label: string; glyph: string; run(e: Editor): void; on(n: PMNode): boolean }[] = [
-  { id: "p", label: "Text", glyph: "¶", run: (e) => e.chain().focus().setParagraph().run(), on: (n) => n.type.name === "paragraph" },
-  { id: "h1", label: "Heading 1", glyph: "H1", run: (e) => e.chain().focus().setHeading({ level: 1 }).run(), on: (n) => n.type.name === "heading" && n.attrs.level === 1 },
-  { id: "h2", label: "Heading 2", glyph: "H2", run: (e) => e.chain().focus().setHeading({ level: 2 }).run(), on: (n) => n.type.name === "heading" && n.attrs.level === 2 },
-  { id: "h3", label: "Heading 3", glyph: "H3", run: (e) => e.chain().focus().setHeading({ level: 3 }).run(), on: (n) => n.type.name === "heading" && n.attrs.level === 3 },
-  { id: "ul", label: "Bulleted list", glyph: "•", run: (e) => e.chain().focus().toggleBulletList().run(), on: (n) => n.type.name === "bulletList" },
-  { id: "ol", label: "Numbered list", glyph: "1.", run: (e) => e.chain().focus().toggleOrderedList().run(), on: (n) => n.type.name === "orderedList" },
-  { id: "todo", label: "To-do list", glyph: "☐", run: (e) => e.chain().focus().toggleTaskList().run(), on: (n) => n.type.name === "taskList" },
-  { id: "quote", label: "Quote", glyph: "❝", run: (e) => e.chain().focus().toggleBlockquote().run(), on: (n) => n.type.name === "blockquote" },
-  { id: "code", label: "Code", glyph: "</>", run: (e) => e.chain().focus().toggleCodeBlock().run(), on: (n) => n.type.name === "codeBlock" },
+type Cmd = (c: ChainedCommands) => ChainedCommands;
+/**
+ * `kind` is what a list item becomes; text kinds (`then`) first make the item plain text, in place. `toggle` marks the
+ * toggles: a line becomes one taking in its section (a heading's), a toggle just changes size.
+ */
+const TURN_INTO: { id: string; label: string; glyph: string; kind: TurnKind; cmd: Cmd; then?: Cmd; toggle?: ToggleLevel; on(n: PMNode): boolean }[] = [
+  { id: "p", label: "Text", glyph: "¶", kind: "text", cmd: (c) => c.setParagraph(), on: (n) => n.type.name === "paragraph" },
+  ...([1, 2, 3] as const).map((level) => ({ id: `h${level}`, label: `Heading ${level}`, glyph: `H${level}`, kind: "text" as const, cmd: (c: ChainedCommands) => c.setHeading({ level }), then: (c: ChainedCommands) => c.setHeading({ level }), on: (n: PMNode) => n.type.name === "heading" && n.attrs.level === level })),
+  { id: "ul", label: "Bulleted list", glyph: "•", kind: "bulletList", cmd: (c) => c.toggleBulletList(), on: (n) => n.type.name === "bulletList" },
+  { id: "ol", label: "Numbered list", glyph: "1.", kind: "orderedList", cmd: (c) => c.toggleOrderedList(), on: (n) => n.type.name === "orderedList" },
+  { id: "todo", label: "To-do list", glyph: "☐", kind: "taskList", cmd: (c) => c.toggleTaskList(), on: (n) => n.type.name === "taskList" },
+  { id: "quote", label: "Quote", glyph: "❝", kind: "text", cmd: (c) => c.toggleBlockquote(), then: (c) => c.toggleBlockquote(), on: (n) => n.type.name === "blockquote" },
+  { id: "code", label: "Code", glyph: "</>", kind: "text", cmd: (c) => c.toggleCodeBlock(), then: (c) => c.toggleCodeBlock(), on: (n) => n.type.name === "codeBlock" },
+  { id: "toggle", label: "Toggle", glyph: "▸", kind: "text", cmd: (c) => c, toggle: null, on: (n) => n.type.name === "details" && !toggleLevel(n) },
+  ...([1, 2, 3] as const).map((level) => ({ id: `th${level}`, label: `Toggle heading ${level}`, glyph: `▸H${level}`, kind: "text" as const, cmd: (c: ChainedCommands) => c, toggle: level, on: (n: PMNode) => n.type.name === "details" && toggleLevel(n) === level })),
 ];
+
+/** "Turn into" on a toggle, or into one: a toggle changes size or lets its title out as a line first. */
+function turnToggle(editor: Editor, pos: number, node: PMNode, t: (typeof TURN_INTO)[number]) {
+  if (node.type.name === "details") {
+    if (t.toggle !== undefined) return setToggleAt(editor, pos, t.toggle);
+    if (!untoggle(editor, pos)) return;
+    return turnBlock(editor, t.kind, t.cmd, undefined, t.then);
+  }
+  turnLineToToggle(editor, t.toggle ?? null);
+}
 
 /** Puts the cursor inside the block at `pos` (text blocks) so the turn-into commands act on it. */
 function selectInside(editor: Editor, pos: number) {
@@ -212,7 +232,13 @@ export function BlockMenu({ editor }: { editor: Editor }) {
   if (!at) return null;
   const node = editor.state.doc.nodeAt(at.pos);
   if (!node) return null;
-  const textish = (node.isTextblock && node.type.name !== "codeBlock") || ["bulletList", "orderedList", "taskList", "blockquote"].includes(node.type.name);
+  // A list item's grip: "Turn into" changes that item alone, and shows the kind of list it's in.
+  const isItem = node.type.name === "listItem" || node.type.name === "taskItem";
+  const kindOf = isItem ? editor.state.doc.resolve(at.pos).parent : node;
+  const isToggle = node.type.name === "details";
+  const textish = isItem || isToggle || (node.isTextblock && node.type.name !== "codeBlock") || ["bulletList", "orderedList", "taskList", "blockquote"].includes(node.type.name);
+  // Toggles turn from and into lines of text (and each other), not lists or quotes.
+  const turns = TURN_INTO.filter((t) => t.toggle === undefined || isToggle || (node.isTextblock && !isItem));
   const inColumns = editor.state.doc.resolve(at.pos).parent.type.name === "column";
   const done = () => setAt(null);
   const run = (f: () => void) => () => {
@@ -230,10 +256,10 @@ export function BlockMenu({ editor }: { editor: Editor }) {
         <>
           <div className="note-fmt-head">Turn into</div>
           <div className="note-bm-grid">
-            {TURN_INTO.map((t) => {
-              const on = t.on(node);
+            {turns.map((t) => {
+              const on = t.on(kindOf);
               return (
-                <button key={t.id} type="button" title={t.label} aria-pressed={on} onMouseDown={stop} onClick={run(() => (selectInside(editor, at.pos), on ? undefined : t.run(editor)))} className={cn("note-bm-turn", on && "is-on")}>
+                <button key={t.id} type="button" title={t.label} aria-pressed={on} onMouseDown={stop} onClick={run(() => (selectInside(editor, at.pos), on ? undefined : isToggle || t.toggle !== undefined ? turnToggle(editor, at.pos, node, t) : node.isTextblock || isItem ? turnBlock(editor, t.kind, t.cmd, undefined, t.then) : t.cmd(editor.chain().focus()).run()))} className={cn("note-bm-turn", on && "is-on")}>
                   <span className="note-bm-glyph">{t.glyph}</span>
                   <span className="truncate">{t.label}</span>
                 </button>
@@ -277,7 +303,7 @@ export function BlockMenu({ editor }: { editor: Editor }) {
           <div className="note-bm-sep" />
         </>
       )}
-      {!inColumns && node.type.name !== "columns" &&
+      {!inColumns && !isItem && node.type.name !== "columns" &&
         item("Put in two columns", Columns2, () => {
           const tr = editor.state.tr;
           const s = editor.state.schema;

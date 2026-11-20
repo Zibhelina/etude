@@ -1,0 +1,154 @@
+/* Sharing in the Notebook: the Share button, the dialog, invites in the sidebar. Theme tokens only (light and dark). */
+
+/* top bar */
+.share-btn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: 7px; font: 550 13px/1 var(--font-sans); color: var(--foreground); flex-shrink: 0; transition: background-color 120ms; }
+.share-btn:hover { background: color-mix(in oklab, var(--foreground) 8%, transparent); }
+.share-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+/* The icon is grey like the ⋯ beside it (shared or not); the accent colour looked loud there. */
+.share-btn svg { color: var(--muted-foreground); }
+.share-btn:hover svg { color: var(--foreground); }
+.share-pill { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px; font: 600 11.5px/1 var(--font-sans); color: var(--muted-foreground); border: 1px solid var(--border); white-space: nowrap; flex-shrink: 0; }
+
+/* tree */
+.note-row-shared { flex-shrink: 0; margin-left: 4px; width: 13px; height: 13px; color: var(--muted-foreground); opacity: 0.85; }
+.note-row-shared.is-waiting { opacity: 0.45; }
+.note-row:hover .note-row-shared, .note-row:focus-within .note-row-shared { display: none; }
+
+/* invites at the top of the pages */
+.share-invites { display: flex; flex-direction: column; gap: 8px; margin: 2px 6px 10px; }
+.sb-pages .share-invites { margin: 2px 0 8px; }
+.share-invite { display: flex; flex-direction: column; gap: 10px; padding: 11px 12px; border-radius: 10px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 1px 0 var(--border); animation: share-in 0.28s cubic-bezier(0.32, 0.72, 0, 1); }
+@keyframes share-in { from { opacity: 0; transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) { .share-invite { animation: none; } }
+.share-invite.is-waiting { border-style: dashed; box-shadow: none; color: var(--muted-foreground); }
+.share-invite-text { display: flex; gap: 8px; align-items: flex-start; }
+.share-invite-text p { margin: 0; font-size: 13px; line-height: 1.4; color: var(--foreground); overflow-wrap: anywhere; }
+.share-invite-text strong { font-weight: 650; }
+.share-invite-icon { flex-shrink: 0; width: 15px; height: 15px; margin-top: 2px; color: var(--primary); }
+.share-invite-role { color: var(--muted-foreground); }
+.share-invite-acts { display: flex; justify-content: flex-end; gap: 6px; }
+.share-accept { height: 30px; padding: 0 12px; border-radius: 8px; font: 600 13px/1 var(--font-sans); }
+.share-quiet { height: 30px; padding: 0 10px; border-radius: 8px; font: 550 13px/1 var(--font-sans); color: var(--muted-foreground); }
+.share-quiet:hover:not(:disabled) { background: color-mix(in oklab, var(--foreground) 8%, transparent); color: var(--foreground); }
+.share-quiet:focus-visible, .share-accept:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.share-invite button:disabled { opacity: 0.55; }
+
+/* dialog */
+.share-dialog { gap: 14px; }
+.share-title { font-size: 17px; font-weight: 650; padding-right: 28px; display: flex; min-width: 0; }
+.share-title-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-desc { font-size: 13px; line-height: 1.45; margin-top: -6px; }
+.share-signin { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+.share-invite-row { display: flex; gap: 8px; align-items: center; }
+.share-invite-ctl { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.share-email { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--foreground); font: 400 14px/1 var(--font-sans); outline: none; }
+.share-email::placeholder { color: color-mix(in oklab, var(--muted-foreground) 80%, transparent); }
+.share-email.is-bad, .share-email.is-bad:focus { border-color: var(--danger); box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 16%, transparent); }
+.share-email:focus:not(.is-bad) { border-color: color-mix(in oklab, var(--primary) 65%, var(--border)); box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 18%, transparent); }
+.share-primary { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 16px; border-radius: 10px; font: 600 14px/1 var(--font-sans); white-space: nowrap; }
+.share-primary:disabled { opacity: 0.5; }
+.share-role { display: inline-flex; align-items: center; gap: 3px; height: 32px; padding: 0 6px 0 9px; border-radius: 8px; font: 500 13px/1 var(--font-sans); color: var(--muted-foreground); white-space: nowrap; }
+.share-invite-ctl .share-role { height: 40px; }
+.share-role:hover, .share-role[data-state="open"] { background: color-mix(in oklab, var(--foreground) 7%, transparent); color: var(--foreground); }
+.share-role:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.share-error { margin: -4px 0 0; font-size: 13px; line-height: 1.4; color: var(--danger); }
+.share-warn { margin: -4px 0 0; font-size: 12.5px; line-height: 1.4; color: var(--muted-foreground); }
+
+.share-label { font: 600 12px/1 var(--font-sans); color: var(--muted-foreground); margin-bottom: 6px; }
+.share-people ul { list-style: none; margin: 0 -8px; padding: 0; }
+.share-person { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; }
+/* not in yet: a dashed ring and a quieter letter */
+.share-person.is-invited [data-avatar] { background: transparent; color: var(--muted-foreground); outline: 1.5px dashed color-mix(in oklab, var(--muted-foreground) 55%, transparent); outline-offset: -1.5px; }
+.share-person.is-invited .share-person-name { font-weight: 500; }
+.share-person-text { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
+.share-person-name { font-size: 14px; font-weight: 550; color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-person-sub { font-size: 12px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-person-role { padding: 0 23px 0 9px; font-size: 13px; color: var(--muted-foreground); white-space: nowrap; }
+.share-empty { margin: 0; padding: 4px 0; font-size: 13px; color: var(--muted-foreground); }
+
+.share-foot { display: flex; align-items: flex-start; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.share-lock { display: flex; flex: 1; gap: 6px; margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted-foreground); }
+.share-lock svg { margin-top: 2px; }
+.share-link-danger { flex-shrink: 0; height: 26px; padding: 0 8px; margin: -3px -8px 0 0; border-radius: 7px; font: 550 12.5px/1 var(--font-sans); color: var(--danger); white-space: nowrap; }
+.share-link-danger:hover { background: color-mix(in oklab, var(--danger) 10%, transparent); }
+.share-confirm { display: flex; flex: 1; flex-direction: column; gap: 10px; }
+.share-confirm p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--foreground); }
+.share-danger { height: 30px; padding: 0 12px; border-radius: 8px; font: 600 13px/1 var(--font-sans); background: var(--danger); color: white; }
+.share-danger:disabled { opacity: 0.55; }
+.share-danger:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+/* phones: the email gets the whole line, role and Invite go under it */
+@media (max-width: 520px) {
+  .share-invite-row { flex-wrap: wrap; }
+  .share-email { flex-basis: 100%; height: 44px; font-size: 16px; }
+  .share-invite-ctl { width: 100%; justify-content: space-between; }
+  .share-invite-ctl .share-role, .share-primary { height: 44px; }
+  .share-invite-ctl .share-primary { flex: 1; margin-left: 6px; }
+  .share-foot { flex-direction: column; gap: 8px; }
+  .share-link-danger { margin: 0 0 0 -8px; }
+}
+
+/* a board shared with you as view only: cards open to read, nothing to add or rearrange */
+.kb-board.is-readonly .kb-add, .kb-board.is-readonly .kb-addcol, .kb-board.is-readonly .kb-colmenu { display: none; }
+.share-inline-link { font-weight: 600; color: var(--foreground); text-decoration: underline; text-underline-offset: 2px; }
+.share-inline-link:hover { color: var(--primary); }
+/* a narrow window: the pill keeps its eye, the words go to its tooltip, so the page title keeps its room */
+@media (max-width: 600px) {
+  .share-pill { padding: 0 6px; }
+  .share-pill-text { display: none; }
+}
+
+/* presence: who's here, in the top bar (left of Share) */
+.presence-stack { display: inline-flex; align-items: center; height: 28px; padding: 0 4px; border-radius: 7px; flex-shrink: 0; }
+.presence-stack:hover { background: color-mix(in oklab, var(--foreground) 6%, transparent); }
+.presence-stack:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.presence-stack-item { position: relative; display: inline-flex; }
+.presence-stack-item + .presence-stack-item { margin-left: -6px; }
+.presence-face { display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--who); color: var(--who-ink, #fff); font-family: var(--font-sans); font-weight: 650; line-height: 1; box-shadow: 0 0 0 2px var(--background); user-select: none; }
+.presence-face.has-ring { box-shadow: 0 0 0 1.5px var(--background), 0 0 0 3px var(--who); }
+.presence-online { position: absolute; right: -1px; bottom: -1px; width: 8px; height: 8px; border-radius: 999px; background: #2fb350; box-shadow: 0 0 0 2px var(--background); }
+.presence-online.is-inline { position: static; display: inline-block; width: 7px; height: 7px; box-shadow: none; margin-right: 2px; vertical-align: 0; }
+.presence-more { margin-left: 4px; font: 600 11.5px/1 var(--font-sans); color: var(--muted-foreground); }
+
+/* tree: a dot on a page someone else has open */
+.presence-dots { display: inline-flex; gap: 2px; flex-shrink: 0; margin-left: 4px; }
+.presence-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--who); }
+
+/* page: "Edited by Victor · 3 min ago" by Saved */
+.note-edited-by { font: 500 12px/1 var(--font-sans); color: color-mix(in oklab, var(--foreground) 68%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 26ch; }
+@media (max-width: 900px) { .note-edited-by { max-width: 20ch; } .note-edited-by-lead { display: none; } }
+@media (max-width: 560px) { .note-edited-by { display: none; } }
+
+/* the dialog: online and activity */
+.share-person-sub.is-online { color: var(--foreground); }
+.share-activity { margin-top: -4px; }
+.share-activity-toggle { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 6px 0 2px; margin-left: -2px; border-radius: 7px; font: 600 12px/1 var(--font-sans); color: var(--muted-foreground); }
+.share-activity-toggle:hover { color: var(--foreground); background: color-mix(in oklab, var(--foreground) 6%, transparent); }
+.share-activity-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.share-activity-sum { font-weight: 500; margin-left: 4px; }
+.share-activity-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.share-activity-row { display: flex; align-items: center; gap: 12px; font-size: 12.5px; }
+.share-activity-name { width: 7.5rem; flex-shrink: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--foreground); }
+/* width 0 + flex-grow: the strip takes the row's free space, never its own 300 px default. */
+.share-activity-bars { flex: 1 1 0; width: 0; min-width: 0; display: block; overflow: visible; }
+.share-activity-zero { fill: color-mix(in oklab, var(--foreground) 12%, transparent); }
+.share-activity-axis { display: flex; gap: 12px; font-size: 11px; color: var(--muted-foreground); }
+.share-activity-axis::before { content: ""; width: 7.5rem; flex-shrink: 0; }
+.share-activity-axis > span { flex: 1; display: flex; justify-content: space-between; }
+.share-activity-axis::after { content: ""; width: 4ch; flex-shrink: 0; }
+.share-activity-n { width: 4ch; text-align: right; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+
+/* other people's cursors in a page */
+.note-presence-host { position: relative; }
+.note-presence-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+.note-presence-caret { position: absolute; left: 0; top: 0; width: 2px; height: 20px; margin-left: -1px; border-radius: 1px; background: var(--who); transition: transform 120ms ease-out, height 120ms ease-out; will-change: transform; }
+.note-presence-caret.is-new { transition: none; }
+.note-presence-label { position: absolute; left: -1px; bottom: 100%; margin-bottom: 0; padding: 1px 5px 2px; border-radius: 4px 4px 4px 0; background: var(--who); color: var(--who-ink, #fff); font: 600 10.5px/1.1 var(--font-sans); letter-spacing: 0.01em; white-space: nowrap; transform-origin: 0 100%; transition: transform 160ms ease-out, opacity 160ms ease-out, border-radius 160ms; }
+/* still for 3 s: the name folds into a small dot on top of the caret */
+.note-presence-caret::before { content: ""; position: absolute; left: -3px; top: -7px; width: 8px; height: 8px; border-radius: 999px; background: var(--who); opacity: 0; transition: opacity 160ms ease-out; }
+.note-presence-caret.is-idle .note-presence-label { transform: scale(0.2); opacity: 0; }
+.note-presence-caret.is-idle::before { opacity: 1; }
+.note-presence-sel { background: color-mix(in srgb, var(--who) 24%, transparent); border-radius: 2px; }
+.dark .note-presence-sel { background: color-mix(in srgb, var(--who) 38%, transparent); }
+@media (prefers-reduced-motion: reduce) { .note-presence-caret, .note-presence-label { transition: none; } }
+@media (max-width: 560px) { .share-activity-name, .share-activity-axis::before { width: 6rem; } }

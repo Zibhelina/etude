@@ -56,8 +56,16 @@ const GROUPS: { title: string; description?: string; rows: Row[] }[] = [
     rows: [{ keys: [`${mod}+S`], what: "Save" }],
   },
   {
+    title: "Notebook pages",
+    rows: [
+      { keys: [`${mod}+Enter`], what: "Tick or untick the to-do you're on" },
+      { keys: ["Tab", "Shift+Tab"], what: "Indent, outdent (several lines at once when they're selected)" },
+      { keys: [`${mod}+Shift+↑`, `${mod}+Shift+↓`], what: "Move the selected blocks up or down" },
+    ],
+  },
+  {
     title: "Notes files",
-    description: "Code and text files in Notes (main.py, report.tex).",
+    description: "Code and text files in the Notebook (main.py, report.tex).",
     rows: [
       { keys: [`${mod}+S`], what: "Save now (it also saves on its own)" },
       { keys: [`${mod}+F`], what: "Find and replace" },
@@ -70,7 +78,11 @@ const GROUPS: { title: string; description?: string; rows: Row[] }[] = [
   },
   {
     title: "Anywhere",
-    rows: [{ keys: [`${mod}+[`, "["], what: "Collapse or expand the sidebar" }],
+    rows: [
+      { keys: [`${mod}+[`, "["], what: "Fold the sidebar to its icons" },
+      { keys: [`${mod}+]`, "]"], what: "Open the sidebar wide" },
+      { keys: [`${mod}+<`], what: "Switch between the icons and no sidebar" },
+    ],
   },
 ];
 
@@ -104,7 +116,7 @@ function VimBlock() {
       title="Vim keys"
       description={
         <>
-          Edit code and text files in Notes the Vim way: normal, insert and visual modes, motions, operators, counts, registers, <Kbd>.</Kbd>, <Kbd>/</Kbd> search and <Kbd>:</Kbd> commands (<Kbd>:w</Kbd> saves). The mode shows under the file. Pages keep the usual editor.
+          Edit code and text files in the Notebook the Vim way: normal, insert and visual modes, motions, operators, counts, registers, <Kbd>.</Kbd>, <Kbd>/</Kbd> search and <Kbd>:</Kbd> commands (<Kbd>:w</Kbd> saves). The mode shows under the file. Pages keep the usual editor.
         </>
       }
       aside={<BigSwitch id="vim-keys" checked={on} onCheckedChange={flip} aria-label="Vim keys" />}
@@ -117,7 +129,7 @@ export function ShortcutsSection() {
     <Section id="keys" title="Keyboard">
       {/* Notes and its file editor aren't on phones yet. */}
       {!isPhone() && <VimBlock />}
-      {GROUPS.filter((g) => !isPhone() || g.title !== "Notes files").map((g) => (
+      {GROUPS.filter((g) => !isPhone() || g.title !== "Notes files" && g.title !== "Notebook pages").map((g) => (
         <Block key={g.title} title={g.title} description={g.description}>
           <dl className="flex flex-col">
             {g.rows.map((r, i) => (

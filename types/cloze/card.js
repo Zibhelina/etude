@@ -1,10 +1,31 @@
 const { view } = etude;
-// Render the markdown with placeholders, then swap each placeholder for an input.
-// Placeholders inside math are rendered as \text{} boxes by KaTeX, so replace them before rendering math.
-const marker = (i) => `ETUDEBLANK${i}X`;
-let html = etude.md(view.text.replace(/⟦(\d+)⟧/g, (_, i) => marker(i)));
-html = html.replace(/ETUDEBLANK(\d+)X/g, (_, i) => {
+// Encode blank index using letters only (A..Z) so KaTeX keeps \text{ETUDEBLANK...X} in one literal text node
+// instead of splitting digits and letters into separate spans.
+const encodeIdx = (i) => {
+  let n = Number(i), s = "";
+  do { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1; } while (n >= 0);
+  return s;
+};
+const decodeIdx = (s) => {
+  let n = 0;
+  for (let k = 0; k < s.length; k++) n = n * 26 + (s.charCodeAt(k) - 64);
+  return n - 1;
+};
+const marker = (i) => `ETUDEBLANK${encodeIdx(i)}X`;
+const CODE_RE = /(^|\n)(`{3,}|~{3,})[^\n]*\n[\s\S]*?(\n\2[ \t]*(?=\n|$)|$)|(?<!`)(`+)(?!`)[^\n]*?(?<!`)\4(?!`)/g;
+const MATH_RE = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|(?<![\\$\w])\$(?!\s)(?:\\.|[^$\n\\])+?(?<!\s)\$(?!\d))/g;
+// Wrap placeholders inside LaTeX math in {\text{...}} so KaTeX renders them as a single literal span.
+const codeStash = [];
+const prepared = view.text
+  .replace(CODE_RE, (m) => `\u0002${codeStash.push(m) - 1}\u0002`)
+  .replace(MATH_RE, (m) => m.replace(/⟦(\d+)⟧/g, (_, i) => `{\\text{${marker(i)}}}`))
+  .replace(/\u0002(\d+)\u0002/g, (_, i) => codeStash[Number(i)])
+  .replace(/⟦(\d+)⟧/g, (_, i) => marker(i));
+let html = etude.md(prepared);
+html = html.replace(/ETUDEBLANK([A-Z]+)X/g, (_, letters) => {
+  const i = decodeIdx(letters);
   const b = view.blanks[i];
+  if (!b) return "";
   // Wide enough for the answer or the hint, in the field's proportional font.
   const size = Math.min(40, Math.max(3, Math.ceil(b.size * 0.75), b.hint ? Math.ceil(b.hint.length * 0.8) : 0));
   return `<span class="blank"><input class="e-input mono" data-i="${i}" size="${size}" autocomplete="off" spellcheck="false" placeholder="${etude.escape(b.hint)}"><span class="fix only-result"></span></span>`;

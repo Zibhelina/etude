@@ -2,6 +2,9 @@
 // The HTTP server and the CLI are thin layers over this class.
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { Notes } from "./notes.ts";
+import { Folders } from "./folders.ts";
+import { FolderFiles } from "./sync/folder-files.ts";
+import { installShareGuard } from "./share/local.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
@@ -12,6 +15,7 @@ import {
   type CardRow,
   type CardTypeDef,
   type Deck,
+  type DeckHomeSpec,
   type MetricSpec,
   type SchedulerDef,
   type Grade,
@@ -22,6 +26,7 @@ import {
   type PresetConfig,
   type Rating,
   type RetrySpec,
+  type Template,
   type Verdict,
 } from "./model.ts";
 import { initSandbox, runScript, ScriptError } from "./sandbox.ts";
@@ -44,9 +49,13 @@ import {
 import { fitWeights, MIN_REVIEWS, OptimizerMissing, type Fit } from "./optimize.ts";
 import type { Learner } from "./learner.ts";
 import { Adaptive, annotateVariants, placementSession, variantPrior, type AdaptContext } from "./adaptive.ts";
-import { deckParts, hashString, interleave, parse } from "./util.ts";
+import { Prereqs } from "./prereqs.ts";
+import { deckParts, hashString, interleave, parse, sameAuthor } from "./util.ts";
 import { compile, isMediaRef, itemSearchText, QueryError, stripHtml, type Compiled } from "./query.ts";
-import { AGENT_EFFORTS, aiEditFields, aiFeedback, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type GradingContext } from "./ai.ts";
+import { checkAgents, type AcpAgentDef } from "./acp-agents.ts";
+import { checkProfile, checkProfiles, clipFiles, clipProblem, isModelRef, MINIMI_PROFILE, MINIMI_PROFILE_ID, pickToBrain, ProfileError, profileId, viaOf, type AgentClips, type AgentProfile } from "./agent-profiles.ts";
+import { AGENT_EFFORTS, aiEditFields, aiFeedback, aiProviderId, aiProviderName, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type ChatProvider, type GradingContext } from "./ai.ts";
+import { AI_PROVIDER_ID } from "./ai-providers.ts";
 import {
   beginChatGptLogin,
   chatGptEndpoints,
@@ -69,7 +78,7 @@ import { collectFileNames, MAX_MEDIA_BYTES, mediaType } from "./media.ts";
 import { decodeAssets, hashBytes, type AssetInfo } from "./assets.ts";
 import { imagePixels, normalizeBoxes, OcclusionError } from "./occlusion.ts";
 import { DEFAULT_PRIVACY, type Privacy } from "./telemetry.ts";
-import { muted } from "./sync/log.ts";
+import { mediaDeleted, muted } from "./sync/log.ts";
 import { MINIMI_FACE_DEFAULT, MINIMI_FACES, MINIMI_MAX, type MinimiFace } from "./minimi.ts";
 import { AvatarError, normalizeAvatar, type Avatar } from "./avatar.ts";
 import { BannerError, normalizeBanner, type Banner } from "./banner.ts";
@@ -171,6 +180,22 @@ export interface Settings {
   name: string;
   /** Vim keys (normal/insert/visual modes, motions, operators) in Notes' file editor. Off by default. */
   vim: boolean;
+  /** Sounds: a pop when you tick a to-do in a Notebook page and a chime when a whole list is done. On by default. */
+  sounds: boolean;
+  /** Holidays: Minimi's Christmas outfit and the extras. auto = Dec 1 to Jan 6, on/off force it. */
+  holiday: "auto" | "on" | "off";
+  /** Holiday decorations: none, few (a garland and a holly sprig on today's session) or cozy (plus a warm glow). */
+  holidayDecor: "none" | "few" | "cozy";
+  /** Snow while the holidays are on (never on the study screen). Off by default. */
+  holidaySnow: boolean;
+  /** Who you talk to in Ask (src/core/agent-profiles.ts). Minimi first, always; his personality is `minimi`. */
+  agentProfiles: AgentProfile[];
+  /** The profile new chats and the corner use. */
+  agentProfile: string;
+  /** Market authors whose entries you hid (an entry's menu → Hide everything from…): their name as entries show it → when. Synced. */
+  hiddenAuthors: Record<string, string>;
+  /** AI providers you agreed to send cards and answers to (aiProviderId → when). In the iPhone app nothing goes to any other (requireAiConsent). This device's own, like `ai`. */
+  aiConsent: Record<string, string>;
 }
 
 export const ONBOARDING_LEVELS = ["simple", "standard", "tinker"] as const;
@@ -179,7 +204,43 @@ export interface Onboarding {
   level: (typeof ONBOARDING_LEVELS)[number];
 }
 
-export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" }, privacy: DEFAULT_PRIVACY, fun: true, minimi: "", minimiFace: MINIMI_FACE_DEFAULT, accent: null, avatar: null, banner: null, name: "", vim: false };
+export const DEFAULT_SETTINGS: Settings = { ai: DEFAULT_AI, dayStartHour: 4, learnAheadMinutes: 20, theme: DEFAULT_THEME, themes: [], market: { url: "", repo: "" }, typePrefs: {}, onboarding: { done: false, level: "standard" }, privacy: DEFAULT_PRIVACY, fun: true, minimi: "", minimiFace: MINIMI_FACE_DEFAULT, accent: null, avatar: null, banner: null, name: "", vim: false, sounds: true, holiday: "auto", holidayDecor: "few", holidaySnow: false, agentProfiles: [MINIMI_PROFILE], agentProfile: MINIMI_PROFILE_ID, hiddenAuthors: {}, aiConsent: {} };
+
+const plainRecord = (v: unknown): Record<string, string> => (v && typeof v === "object" && !Array.isArray(v) ? { ...(v as Record<string, string>) } : {});
+
+/** Hidden Market authors: names as long as an entry's author can be, and a generous cap on how many. */
+export const HIDDEN_AUTHOR_MAX = 100;
+export const HIDDEN_AUTHORS_MAX = 500;
+
+/** A Market author's name as it's kept: spaces collapsed, trimmed, 1 to HIDDEN_AUTHOR_MAX characters. */
+export function authorName(v: unknown): string {
+  const s = typeof v === "string" ? v.replace(/\s+/g, " ").trim() : "";
+  if (!s || [...s].length > HIDDEN_AUTHOR_MAX) throw new EtudeError(`an author's name is 1 to ${HIDDEN_AUTHOR_MAX} characters`);
+  return s;
+}
+
+/** Checks hidden authors: name → when, one per name whatever its case. */
+export function checkHiddenAuthors(v: unknown): Record<string, string> {
+  if (!v || typeof v !== "object" || Array.isArray(v)) throw new EtudeError("hiddenAuthors must be an object of author name → when");
+  const out: Record<string, string> = {};
+  for (const [k, when] of Object.entries(v as Record<string, unknown>)) {
+    const name = authorName(k);
+    if (typeof when !== "string") throw new EtudeError(`hiddenAuthors.${name} must be a date`);
+    if (!Object.keys(out).some((x) => sameAuthor(x, name))) out[name] = when;
+  }
+  if (Object.keys(out).length > HIDDEN_AUTHORS_MAX) throw new EtudeError(`at most ${HIDDEN_AUTHORS_MAX} hidden authors`);
+  return out;
+}
+
+/** Checks AI consent: provider id → when. */
+export function checkAiConsent(v: unknown): Record<string, string> {
+  if (!v || typeof v !== "object" || Array.isArray(v)) throw new EtudeError("aiConsent must be an object of provider → when");
+  for (const [k, when] of Object.entries(v as Record<string, unknown>)) {
+    if (!AI_PROVIDER_ID.test(k)) throw new EtudeError(`aiConsent: "${k.slice(0, 40)}" isn't a provider (chatgpt or a host name such as openrouter.ai)`);
+    if (typeof when !== "string") throw new EtudeError(`aiConsent.${k} must be a date`);
+  }
+  return { ...(v as Record<string, string>) };
+}
 
 /** Card preferences: short keys, and a few KB per type, since they ride along in the synced settings. */
 export const TYPE_PREF_KEY = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -268,6 +329,8 @@ export interface StudyCard {
   grader: string;
   /** Show the verdict and feedback after an answer (the type's `showVerdict`). */
   showVerdict: boolean;
+  /** The card fills one screen, like a game (the type's `fitScreen`): study shows it in focus mode. */
+  fitScreen: boolean;
   generated: boolean;
   /** One-line plain-text label (for lists and summaries). */
   title: string;
@@ -276,6 +339,8 @@ export interface StudyCard {
   /** The placement session this card was shown for. */
   placement?: string;
   quickCheck?: boolean;
+  /** Scheduler-computed progress for this card (`cards.sched_state`), replayed from its attempt log. */
+  progress?: unknown;
 }
 
 const TEX_SYMBOLS: Record<string, string> = { times: "×", cdot: "·", div: "÷", pm: "±", le: "≤", leq: "≤", ge: "≥", geq: "≥", ne: "≠", neq: "≠", approx: "≈", equiv: "≡", to: "→", rightarrow: "→", Rightarrow: "⇒", iff: "⇔", infty: "∞", partial: "∂", nabla: "∇", in: "∈", forall: "∀", exists: "∃", cup: "∪", cap: "∩", sum: "Σ", prod: "Π", int: "∫", sqrt: "√", ldots: "…", dots: "…", cdots: "⋯", circ: "°", deg: "°", flat: "♭", sharp: "♯", natural: "♮" };
@@ -404,8 +469,32 @@ export class Etude {
   private notesStore: Notes | null = null;
   /** Notes (beta): pages in a tree of their own. */
   get notes(): Notes {
-    return (this.notesStore ??= new Notes(this.db));
+    if (!this.notesStore) {
+      this.notesStore = new Notes(this.db);
+      // View-only shared folders refuse the user's writes, from the app, the CLI or an agent alike.
+      installShareGuard(this.notesStore, this.db);
+    }
+    return this.notesStore;
   }
+  private foldersStore: Folders | null = null;
+  /** Folders on this computer that the Notebook shows, read where they are (desktop and `etude serve`). */
+  get folders(): Folders {
+    if (!this.foldersStore) {
+      const f = (this.foldersStore = new Folders(this.db, { mediaDir: this.mediaDir }));
+      const sync = (this.folderSyncStore = new FolderFiles(this.db, f));
+      f.syncState = (id) => sync.stateOf(id);
+      f.beforeClose = (id) => sync.assertNoneIn(id);
+      f.afterMove = (from, to) => sync.moved(from, to);
+    }
+    return this.foldersStore;
+  }
+  private folderSyncStore: FolderFiles | null = null;
+  /** The folders on this computer that Sync carries to the other devices, file by file (src/core/sync/folder-files.ts). */
+  get folderSync(): FolderFiles {
+    void this.folders;
+    return this.folderSyncStore!;
+  }
+  private readonly prereqs: Prereqs;
 
   private constructor(db: Db, mediaDir: string, path: string, home: string) {
     this.db = db;
@@ -422,14 +511,20 @@ export class Etude {
       deckName: (deck) => this.deckRow(deck).name,
       dayStart: (at) => this.dayStart(at),
     });
+    this.prereqs = new Prereqs({
+      db,
+      configFor: (deck) => this.configFor(deck),
+      deckExists: (name) => !!db.get("SELECT 1 FROM decks WHERE name = ?", name),
+    });
   }
 
-  static async open(path: string, opts: { builtinTypesDir?: string; builtinSchedulersDir?: string; home?: string } = {}): Promise<Etude> {
+  static async open(path: string, opts: { builtinTypesDir?: string; builtinSchedulersDir?: string; home?: string; requireAiConsent?: boolean } = {}): Promise<Etude> {
     await initSandbox();
     const db = await Db.open(path);
     const media = path === ":memory:" ? join(process.env.TMPDIR ?? "/tmp", `etude-media-${process.pid}`) : join(dirname(path), "media");
     const home = resolve(opts.home ?? process.env.ETUDE_HOME ?? join(homedir(), ".etude"));
     const e = new Etude(db, media, path, home);
+    e.requireAiConsent = !!opts.requireAiConsent;
     if (path !== ":memory:") keepPrivate([path, `${path}-wal`, `${path}-shm`], [home, media]);
     e.syncBuiltinTypes(opts.builtinTypesDir ?? BUILTIN_TYPES_DIR);
     e.syncBuiltinSchedulers(opts.builtinSchedulersDir ?? BUILTIN_SCHEDULERS_DIR);
@@ -596,9 +691,9 @@ export class Etude {
 
   /**
    * Files in the media folder that nothing in the collection names: no field, template, deck or tag
-   * text, setting, past attempt or conversation. Hidden files, files without an extension, names
-   * starting with `_` (Anki's mark for files a template loads itself) and files changed in the last hour
-   * (a paste whose card isn't saved yet) are always kept.
+   * text, setting, past attempt or conversation, and no page in a folder the Notebook opens. Hidden files,
+   * files without an extension, names starting with `_` (Anki's mark for files a template loads itself) and
+   * files changed in the last hour (a paste whose card isn't saved yet) are always kept.
    */
   unusedMedia(): { path: string; bytes: number }[] {
     if (!existsSync(this.mediaDir)) return [];
@@ -607,15 +702,53 @@ export class Etude {
       .map((d) => relative(this.mediaDir, join(d.parentPath, d.name)))
       .filter((rel) => !rel.split(/[\\/]/).some((part) => part.startsWith(".")) && extname(rel).length > 1 && !basename(rel).startsWith("_"));
     if (!files.length) return [];
-    const exts = new Set(files.map((f) => extname(f).slice(1).toLowerCase()));
-    const named = new Set<string>();
+    const used = this.mediaInUse(files);
+    if (!used) return [];
     const recent = Date.now() - 3600_000;
+    return files
+      .filter((f) => !used(f))
+      .map((f) => ({ f, stat: statSync(join(this.mediaDir, f)) }))
+      .filter(({ stat }) => stat.mtimeMs < recent)
+      .map(({ f, stat }) => ({ path: f.split("\\").join("/"), bytes: stat.size }))
+      .sort((a, b) => a.path.localeCompare(b.path));
+  }
+
+  /**
+   * Which of these media files (paths inside the media folder) something here names: any row of the collection,
+   * or a page, Markdown or web file in a folder the Notebook opens (its trash too). Null while one of those
+   * folders can't be read (a drive not plugged in): its pages are unknown, so nothing may count as unused.
+   */
+  mediaInUse(files: string[]): ((file: string) => boolean) | null {
+    const exts = new Set(files.map((f) => extname(f).slice(1).toLowerCase()).filter(Boolean));
+    const named = new Set<string>();
+    // A file in a folder of its own also counts when something names that folder, one above it, or a file in it: the
+    // literal path after `media/`, up to where a template or script goes on building it (`img/${piece}.webp`), gives
+    // the folder. Not `files/` or `anki/`, where every page or card names its files one by one.
+    const FLAT = new Set(["files", "anki"]);
+    const above = (file: string) => {
+      const parts = file.split(/[\\/]/).slice(0, -1);
+      if (!parts.length || FLAT.has(parts[0])) return [];
+      return parts.map((_, i) => parts.slice(0, i + 1).join("/"));
+    };
+    const deep = files.some((f) => above(f).length);
+    const namedFolders = new Set<string>();
+    const PATH = /media\/([^"'`<>()\s$\\{}|?#*]+)/g;
+    const look = (text: string) => {
+      collectFileNames(text, exts, named);
+      if (!deep || !text.includes("media/")) return;
+      for (const m of text.matchAll(PATH)) {
+        let p = m[1];
+        try { p = decodeURIComponent(p); } catch {}
+        const folder = p.slice(0, p.lastIndexOf("/") + 1).replace(/\/+$/, "");
+        if (folder && !FLAT.has(folder.split("/")[0])) namedFolders.add(folder);
+      }
+    };
     const tables = this.db.all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").map((t) => t.name);
-    // Sync's own tables are most of a synced collection and say nothing new: its registers hold the
-    // same values as the rows above, its events are the change history, and its media copies are
-    // encrypted; its list of file hashes names every file on disk. The names of the media files it
-    // keeps still count.
-    const skip = new Set(["sync_registers", "sync_events", "sync_media_hashes", "sync_blobs.bytes"]);
+    // Sync's own tables are most of a synced collection and say nothing new: its registers hold the same values
+    // as the rows above, its events are the change history, and its media copies are encrypted; its lists of
+    // media files (hashes on disk, the version last in step, the keys a sync still has to look at) name every
+    // file it knows. The names of the media files it keeps still count.
+    const skip = new Set(["sync_registers", "sync_events", "sync_media_hashes", "sync_media_seen", "sync_dirty", "sync_blobs.bytes"]);
     for (const t of tables) {
       if (skip.has(t)) continue;
       const cols = this.db.all<{ name: string }>(`SELECT name FROM pragma_table_info(?)`, t).map((c) => c.name).filter((c) => !skip.has(`${t}.${c}`));
@@ -623,22 +756,28 @@ export class Etude {
       const list = cols.map((c) => `"${c.replace(/"/g, '""')}"`).join(", ");
       for (const row of this.db.sql.prepare(`SELECT ${list} FROM "${t.replace(/"/g, '""')}"`).all() as Record<string, unknown>[])
         for (const v of Object.values(row)) {
-          if (typeof v === "string") collectFileNames(v, exts, named);
-          else if (v instanceof Uint8Array) collectFileNames(Buffer.from(v).toString("latin1"), exts, named);
+          if (typeof v === "string") look(v);
+          else if (v instanceof Uint8Array) look(Buffer.from(v).toString("latin1"));
         }
     }
-    return files
-      .filter((f) => !named.has(basename(f).toLowerCase()))
-      .map((f) => ({ f, stat: statSync(join(this.mediaDir, f)) }))
-      .filter(({ stat }) => stat.mtimeMs < recent)
-      .map(({ f, stat }) => ({ path: f.split("\\").join("/"), bytes: stat.size }))
-      .sort((a, b) => a.path.localeCompare(b.path));
+    // Pages, Markdown and web files in the folders the Notebook opens show the collection's media too, by its URLs
+    // (`/media/<top folder or file>/…`, maybe URL-encoded).
+    const tops = [...new Set(files.map((f) => f.split(/[\\/]/)[0]))];
+    const needles = tops.length > 200 ? ["/media/"] : [...new Set(tops.flatMap((t) => [`/media/${t}`, `/media/${encodeURIComponent(t)}`]))];
+    if (!this.folders.mediaMentions(needles, look)) return null;
+    return (file) => named.has(basename(file).toLowerCase()) || above(file).some((d) => namedFolders.has(d));
   }
 
-  /** Deletes the media files `unusedMedia` finds. Nothing can bring them back: they aren't in database backups. */
+  /**
+   * Deletes the media files `unusedMedia` finds. Nothing can bring them back: they aren't in database backups. On a
+   * synced collection each one is also marked deleted for the other devices, which delete their copy unless they
+   * still use it (then it comes back here).
+   */
   deleteUnusedMedia(): { files: number; bytes: number } {
     const doomed = this.unusedMedia();
     for (const f of doomed) rmSync(join(this.mediaDir, f.path), { force: true });
+    // The files go first: a deletion recorded for a file still on disk would read as this device adding it again.
+    if (doomed.length) mediaDeleted(this.db, doomed.map((f) => f.path));
     return { files: doomed.length, bytes: doomed.reduce((n, f) => n + f.bytes, 0) };
   }
 
@@ -669,6 +808,17 @@ export class Etude {
 
   settings(): Settings {
     const s = this.db.setting<Partial<Settings>>("settings", {});
+    const minimi = typeof s.minimi === "string" ? s.minimi : "";
+    let profiles: AgentProfile[];
+    try {
+      profiles = checkProfiles(s.agentProfiles).map((p) => ({ ...p, personality: p.id === MINIMI_PROFILE_ID ? minimi : (p.personality ?? "") }));
+    } catch {
+      profiles = [{ ...MINIMI_PROFILE, personality: minimi }];
+    }
+    // Before agents had their own brains, Minimi ran on `ai.agent.model` (and its effort): that's his brain still.
+    const old = s.ai?.agent;
+    const mb = profiles[0].brain;
+    if (mb.kind === "model" && mb.model === null && mb.effort === undefined && isModelRef(old?.model)) profiles[0] = { ...profiles[0], brain: { kind: "model", model: old.model, ...(old.effort ? { effort: old.effort } : {}) } };
     return {
       ...DEFAULT_SETTINGS,
       ...s,
@@ -677,6 +827,10 @@ export class Etude {
       typePrefs: { ...(s.typePrefs ?? {}) },
       onboarding: { ...DEFAULT_SETTINGS.onboarding, ...(s.onboarding ?? {}) },
       privacy: { ...DEFAULT_PRIVACY, ...(s.privacy ?? {}) },
+      hiddenAuthors: plainRecord(s.hiddenAuthors),
+      aiConsent: plainRecord(s.aiConsent),
+      agentProfiles: profiles,
+      agentProfile: profiles.some((p) => p.id === s.agentProfile) ? s.agentProfile! : MINIMI_PROFILE_ID,
     };
   }
 
@@ -689,9 +843,28 @@ export class Etude {
     if (typeof next.minimi !== "string") throw new EtudeError("minimi must be text");
     if (next.minimi.length > MINIMI_MAX) throw new EtudeError(`minimi is too long (at most ${MINIMI_MAX} characters)`);
     if (!MINIMI_FACES.includes(next.minimiFace)) throw new EtudeError(`minimiFace must be one of ${MINIMI_FACES.join(", ")}`);
+    // Agent profiles. Minimi's personality lives in `minimi`: an explicit `minimi` change wins, else an edit of his profile's.
+    let profiles: ReturnType<typeof checkProfiles>;
+    try {
+      profiles = checkProfiles(next.agentProfiles);
+    } catch (e) {
+      if (e instanceof ProfileError) throw new EtudeError(e.message);
+      throw e;
+    }
+    const minimiPersonality = profiles[0].personality;
+    if ((patch.minimi === undefined || patch.minimi === cur.minimi) && minimiPersonality !== undefined) next.minimi = minimiPersonality;
+    next.agentProfiles = profiles.map((p) => ({ ...p, personality: p.id === MINIMI_PROFILE_ID ? next.minimi : (p.personality ?? "") }));
+    if (typeof next.agentProfile !== "string" || !profiles.some((p) => p.id === next.agentProfile)) {
+      if (patch.agentProfile !== undefined) throw new EtudeError(`no agent "${String(patch.agentProfile)}" (agents: ${profiles.map((p) => p.id).join(", ")})`, 404);
+      next.agentProfile = MINIMI_PROFILE_ID;
+    }
     if (typeof next.accent === "string") next.accent = next.accent.trim().toLowerCase() || null;
     if (!isAccent(next.accent)) throw new EtudeError(`accent must be null (the theme's own), one of ${ACCENTS.map((a) => a.id).join(", ")}, or a #rrggbb color`);
     if (typeof next.vim !== "boolean") throw new EtudeError("vim must be true or false");
+    if (typeof next.sounds !== "boolean") throw new EtudeError("sounds must be true or false");
+    if (!["auto", "on", "off"].includes(next.holiday)) throw new EtudeError("holiday must be auto, on or off");
+    if (!["none", "few", "cozy"].includes(next.holidayDecor)) throw new EtudeError("holidayDecor must be none, few or cozy");
+    if (typeof next.holidaySnow !== "boolean") throw new EtudeError("holidaySnow must be true or false");
     if (typeof next.name !== "string") throw new EtudeError("name must be text");
     next.name = next.name.replace(/\s+/g, " ").trim();
     if ([...next.name].length > 40) throw new EtudeError("name is too long (at most 40 characters)");
@@ -714,13 +887,209 @@ export class Etude {
     if (!(next.dayStartHour >= 0 && next.dayStartHour < 24)) throw new EtudeError("dayStartHour must be 0 to 23");
     const effort = next.ai.agent?.effort;
     if (effort !== undefined && !AGENT_EFFORTS.includes(effort)) throw new EtudeError(`ai.agent.effort must be one of ${AGENT_EFFORTS.join(", ")}`);
+    try {
+      next.ai = { ...next.ai, agents: checkAgents(next.ai.agents) };
+    } catch (e) {
+      throw new EtudeError((e as Error).message);
+    }
     if (patch.themes !== undefined) next.themes = this.checkThemes(patch.themes);
     if (patch.theme !== undefined || patch.themes !== undefined) {
       if (typeof next.theme !== "string" || !this.findTheme(next.theme, next.themes)) throw new EtudeError(`unknown theme "${next.theme}"`, 404);
     }
     if (patch.typePrefs !== undefined) next.typePrefs = checkTypePrefs(patch.typePrefs);
-    this.db.setSetting("settings", next);
+    if (patch.hiddenAuthors !== undefined) next.hiddenAuthors = checkHiddenAuthors(patch.hiddenAuthors);
+    if (patch.aiConsent !== undefined) next.aiConsent = checkAiConsent(patch.aiConsent);
+    // Stored without Minimi's personality (that's `minimi`), so a list synced from elsewhere can't overwrite it.
+    this.db.setSetting("settings", { ...next, agentProfiles: next.agentProfiles.map(({ personality, ...p }) => (p.id === MINIMI_PROFILE_ID ? p : { ...p, personality })) });
     return next;
+  }
+
+  // ---------------------------------------------------------------- agent profiles
+
+  /** Who you can talk to in Ask, Minimi first, and the default one. */
+  agentProfiles(): { profiles: AgentProfile[]; default: string } {
+    const s = this.settings();
+    return { profiles: s.agentProfiles, default: s.agentProfile };
+  }
+
+  agentProfile(id: string): AgentProfile {
+    const p = this.settings().agentProfiles.find((x) => x.id === String(id ?? "").trim());
+    if (!p) throw new EtudeError(`no agent "${id}" (see \`etude agents list\`)`, 404);
+    return p;
+  }
+
+  /** Adds a profile. The id comes from the name unless given; `makeDefault` also makes it the default. */
+  addAgentProfile(input: Partial<AgentProfile>, opts: { makeDefault?: boolean; clipsChecked?: boolean } = {}): AgentProfile {
+    const s = this.settings();
+    const id = input.id ? String(input.id).trim() : profileId(String(input.name ?? ""), s.agentProfiles.map((p) => p.id));
+    if (s.agentProfiles.some((p) => p.id === id)) throw new EtudeError(`an agent with the id "${id}" already exists`, 409);
+    const p = { id, name: input.name ?? "", avatar: input.avatar ?? null, body: input.body ?? null, clips: input.clips ?? null, banner: input.banner ?? null, personality: input.personality ?? "", brain: input.brain ?? { kind: "model", model: null } };
+    const checked = this.checkedProfile(p);
+    if (!opts.clipsChecked) this.checkClipMedia(checked.clips);
+    const next = this.updateSettings({ agentProfiles: [...s.agentProfiles, p as AgentProfile], ...(opts.makeDefault ? { agentProfile: id } : {}) });
+    return next.agentProfiles.find((x) => x.id === id)!;
+  }
+
+  /** Changes a profile's name, pictures, clips, banner, personality or brain. The id stays. `clipsChecked`: the caller already checked the clip files (a dry run, which stores none). */
+  editAgentProfile(id: string, patch: Partial<Omit<AgentProfile, "id">>, opts: { clipsChecked?: boolean } = {}): AgentProfile {
+    const cur = this.agentProfile(id);
+    const s = this.settings();
+    const known = ["name", "avatar", "body", "clips", "banner", "personality", "brain"];
+    const clean: Record<string, unknown> = Object.fromEntries(Object.entries(patch ?? {}).filter(([k, v]) => known.includes(k) && v !== undefined));
+    // Clips play over a body picture: taking the picture away (or back to Minimi's) takes them too.
+    if (clean.body !== undefined && clean.clips === undefined && !(typeof clean.body === "string" && /^(media:|\/media\/)?files\//.test(clean.body))) clean.clips = null;
+    const edited = { ...cur, ...clean, id: cur.id };
+    if (clean.clips) {
+      const checked = this.checkedProfile(edited);
+      if (!opts.clipsChecked) this.checkClipMedia(checked.clips);
+    }
+    const after = s.agentProfiles.map((p) => (p.id === cur.id ? (edited as AgentProfile) : p));
+    // The card's own agent entry follows its name; one it stops using goes.
+    const agents = this.prunedAgents(s.agentProfiles, after, s.ai.agents ?? []).map((a) => (a.id === cur.id && typeof clean.name === "string" ? { ...a, name: edited.name } : a));
+    const next = this.updateSettings({ agentProfiles: after, ai: { ...s.ai, agents } });
+    return next.agentProfiles.find((x) => x.id === cur.id)!;
+  }
+
+  /**
+   * Sets a profile's brain from its card: a model (and effort), Hermes with one of its profiles, or another ACP
+   * agent. Hermes and agents get the card's own entry in this device's `ai.agents` (id = the profile's id, never
+   * synced); the profile keeps which kind it is, so another device can offer to set it up. An entry the card
+   * stops using is removed.
+   */
+  setAgentBrain(id: string, pick: unknown): AgentProfile {
+    const cur = this.agentProfile(id);
+    const s = this.settings();
+    let made: ReturnType<typeof pickToBrain>;
+    try {
+      made = pickToBrain(cur.id, cur.name, pick);
+    } catch (e) {
+      if (e instanceof ProfileError) throw new EtudeError(e.message);
+      throw e;
+    }
+    // A new external brain keeps the profile's harnesses (the other programs it can run in) unless it names its own.
+    const keep = cur.brain.kind === "external" && cur.brain.harnesses?.length && made.brain.kind === "external" && !made.brain.harnesses ? { harnesses: cur.brain.harnesses } : {};
+    const after = s.agentProfiles.map((p) => (p.id === cur.id ? { ...p, brain: { ...made.brain, ...keep } as AgentProfile["brain"] } : p));
+    let agents = this.prunedAgents(s.agentProfiles, after, s.ai.agents ?? []);
+    if (made.agent) {
+      const def = made.agent;
+      agents = agents.some((a) => a.id === def.id) ? agents.map((a) => (a.id === def.id ? def : a)) : [...agents, def];
+    }
+    const next = this.updateSettings({ agentProfiles: after, ai: { ...s.ai, agents } });
+    return next.agentProfiles.find((x) => x.id === cur.id)!;
+  }
+
+  /**
+   * Sets the harnesses an external profile can run in (Hermes, Antigravity…): each an entry in this device's
+   * `ai.agents`, with the name its picker shows. An empty list leaves only the profile's own agent.
+   */
+  setAgentHarnesses(id: string, harnesses: { agent: string; name: string }[]): AgentProfile {
+    const cur = this.agentProfile(id);
+    if (cur.brain.kind !== "external") throw new EtudeError(`${cur.name} runs on a chat model; harnesses are for an external agent (--hermes or --external)`);
+    const s = this.settings();
+    const ids = new Set((s.ai.agents ?? []).map((a) => a.id));
+    for (const h of harnesses) if (!ids.has(h.agent)) throw new EtudeError(`no agent "${h.agent}" in this computer's ai.agents (Settings → AI → Agents)`, 404);
+    const brain = this.checkedProfile({ ...cur, brain: { ...cur.brain, harnesses } }).brain;
+    const after = s.agentProfiles.map((p) => (p.id === cur.id ? { ...p, brain } : p));
+    const next = this.updateSettings({ agentProfiles: after, ai: { ...s.ai, agents: this.prunedAgents(s.agentProfiles, after, s.ai.agents ?? []) } });
+    return next.agentProfiles.find((x) => x.id === cur.id)!;
+  }
+
+  /**
+   * Turns a second harness (Antigravity or Hermes) on or off for an external profile, creating or pruning
+   * its `ai.agents` entry on this device automatically so the chat's harness picker works in one click.
+   */
+  toggleAgentHarness(id: string, harness: "hermes" | "antigravity", opts: { enabled: boolean; hermesProfile?: string }): AgentProfile {
+    const cur = this.agentProfile(id);
+    if (cur.brain.kind !== "external") throw new EtudeError(`${cur.name} runs on a chat model; harnesses are for an external agent`);
+    const curBrain = cur.brain;
+    const s = this.settings();
+    const curAgents = s.ai.agents ?? [];
+    const ownDef = curAgents.find((a) => a.id === curBrain.agent);
+    const ownVia = ownDef ? viaOf(ownDef) : curBrain.via;
+    if (ownVia === harness) throw new EtudeError(`${cur.name} already runs in ${harness === "hermes" ? "Hermes" : "Antigravity"} as its main harness`);
+    const ownLabel = ownVia === "hermes" ? "Hermes" : ownVia === "antigravity" ? "Antigravity" : curBrain.agent;
+    const targetLabel = harness === "hermes" ? "Hermes" : "Antigravity";
+    const baseHarnesses = curBrain.harnesses?.length ? [...curBrain.harnesses] : [{ agent: curBrain.agent, name: ownLabel }];
+    const suffix = harness === "antigravity" ? "agy" : "hermes";
+    const desiredId = `${cur.id.slice(0, 32 - suffix.length - 1)}-${suffix}`;
+    const existing = baseHarnesses.find((h) => {
+      if (h.agent === curBrain.agent) return false;
+      const d = curAgents.find((a) => a.id === h.agent);
+      return (d ? viaOf(d) : null) === harness || h.name.toLowerCase() === targetLabel.toLowerCase();
+    });
+    let nextAgents = [...curAgents];
+    let nextHarnesses = baseHarnesses.filter((h) => h.agent !== existing?.agent);
+    if (opts.enabled) {
+      const agentId = existing?.agent ?? desiredId;
+      const def: AcpAgentDef =
+        harness === "antigravity"
+          ? { id: agentId, name: cur.name, command: "agy", args: ["acp"], preset: "antigravity" }
+          : { id: agentId, name: cur.name, command: "hermes", args: ["-p", (opts.hermesProfile ?? "").trim() || cur.id, "acp"], preset: "hermes" };
+      nextAgents = nextAgents.some((a) => a.id === agentId) ? nextAgents.map((a) => (a.id === agentId ? def : a)) : [...nextAgents, def];
+      if (!nextHarnesses.some((h) => h.agent === curBrain.agent)) nextHarnesses.unshift({ agent: curBrain.agent, name: ownLabel });
+      nextHarnesses.push({ agent: agentId, name: targetLabel });
+    }
+    // If only the primary harness remains, clear harnesses so no single-option picker appears.
+    if (nextHarnesses.length <= 1) nextHarnesses = [];
+    const brain = this.checkedProfile({ ...cur, brain: { ...curBrain, harnesses: nextHarnesses } }).brain;
+    const after = s.agentProfiles.map((p) => (p.id === cur.id ? { ...p, brain } : p));
+    const next = this.updateSettings({ agentProfiles: after, ai: { ...s.ai, agents: this.prunedAgents(s.agentProfiles, after, nextAgents) } });
+    return next.agentProfiles.find((x) => x.id === cur.id)!;
+  }
+
+  /** This device's agents after a profile change: an entry the profiles used before and don't now goes with them. */
+  private prunedAgents(before: AgentProfile[], after: AgentProfile[], agents: AcpAgentDef[]): AcpAgentDef[] {
+    const used = (ps: AgentProfile[]) => new Set(ps.flatMap((p) => (p.brain.kind === "external" ? [p.brain.agent, ...(p.brain.harnesses ?? []).map((h) => h.agent)] : [])));
+    const was = used(before);
+    const now = used(after);
+    return agents.filter((a) => !(was.has(a.id) && !now.has(a.id)));
+  }
+
+  /** Removes a profile; Minimi stays. Its chats stay too and continue with Minimi. Its agent entry on this device goes too. */
+  removeAgentProfile(id: string): { removed: string; default: string } {
+    const cur = this.agentProfile(id);
+    if (cur.id === MINIMI_PROFILE_ID) throw new EtudeError("Minimi is built in: he can be changed, not removed");
+    const s = this.settings();
+    const after = s.agentProfiles.filter((p) => p.id !== cur.id);
+    const next = this.updateSettings({ agentProfiles: after, agentProfile: s.agentProfile === cur.id ? MINIMI_PROFILE_ID : s.agentProfile, ai: { ...s.ai, agents: this.prunedAgents(s.agentProfiles, after, s.ai.agents ?? []) } });
+    return { removed: cur.id, default: next.agentProfile };
+  }
+
+  private checkedProfile(p: unknown) {
+    try {
+      return checkProfile(p);
+    } catch (e) {
+      if (e instanceof ProfileError) throw new EtudeError(e.message);
+      throw e;
+    }
+  }
+
+  /** Each clip is in the media, a VP9 WebM with alpha, at most 4 MiB. Checked when a profile's clips are set, not when a synced list arrives. */
+  private checkClipMedia(clips: AgentClips | null | undefined) {
+    for (const f of clipFiles(clips)) {
+      const data = this.readMediaFile(f);
+      if (!data) throw new EtudeError(`clip ${f} isn't in the media`, 404);
+      const why = clipProblem(data);
+      if (why) throw new EtudeError(`clip ${f}: ${why}`);
+    }
+  }
+
+  setDefaultAgentProfile(id: string): { default: string } {
+    const p = this.agentProfile(id);
+    return { default: this.updateSettings({ agentProfile: p.id }).agentProfile };
+  }
+
+  /** A copy of a profile under a new name ("<name> copy" unless given), with a new id. An external brain gets its own copy of the agent entry here. */
+  duplicateAgentProfile(id: string, name?: string): AgentProfile {
+    const p = this.agentProfile(id);
+    const n = (name ?? "").trim() || `${p.name} copy`.slice(0, 40);
+    if (p.brain.kind !== "external") return this.addAgentProfile({ ...p, id: undefined, name: n });
+    const s = this.settings();
+    const nid = profileId(n, s.agentProfiles.map((x) => x.id));
+    const def = (s.ai.agents ?? []).find((a) => a.id === (p.brain as { agent: string }).agent);
+    const copy = def && !(s.ai.agents ?? []).some((a) => a.id === nid);
+    if (copy) this.updateSettings({ ai: { ...s.ai, agents: [...(s.ai.agents ?? []), { ...def, id: nid, name: n }] } });
+    return this.addAgentProfile({ ...p, id: nid, name: n, brain: { ...p.brain, agent: copy ? nid : p.brain.agent } });
   }
 
   /**
@@ -775,6 +1144,90 @@ export class Etude {
     delete all[typeId];
     this.updateSettings({ typePrefs: all });
     return {};
+  }
+
+  // ---------------------------------------------------------------- Market authors you hid
+
+  /** Market authors whose entries you hid, oldest first. */
+  hiddenAuthors(): { author: string; since: string }[] {
+    return Object.entries(this.settings().hiddenAuthors)
+      .map(([author, since]) => ({ author, since }))
+      .sort((a, b) => a.since.localeCompare(b.since));
+  }
+
+  /** Hides every Market entry by this author (the name their entries show), in every Market list. Synced. */
+  hideAuthor(name: unknown): { author: string; hidden: boolean; hiddenAuthors: string[] } {
+    const author = authorName(name);
+    const all = this.settings().hiddenAuthors;
+    if (!Object.keys(all).some((k) => sameAuthor(k, author))) this.updateSettings({ hiddenAuthors: { ...all, [author]: iso() } });
+    return { author, hidden: true, hiddenAuthors: this.hiddenAuthors().map((h) => h.author) };
+  }
+
+  /** Shows this author's Market entries again. */
+  showAuthor(name: unknown): { author: string; hidden: boolean; hiddenAuthors: string[] } {
+    const author = authorName(name);
+    const all = this.settings().hiddenAuthors;
+    const rest = Object.fromEntries(Object.entries(all).filter(([k]) => !sameAuthor(k, author)));
+    if (Object.keys(rest).length !== Object.keys(all).length) this.updateSettings({ hiddenAuthors: rest });
+    return { author, hidden: false, hiddenAuthors: this.hiddenAuthors().map((h) => h.author) };
+  }
+
+  // ---------------------------------------------------------------- your OK for AI providers
+
+  /**
+   * Whether AI calls go only to providers in settings.aiConsent. The host decides: the iPhone app's worker turns it on
+   * (src/browser/worker-core.ts); everywhere else it stays off and grading sends as it always did.
+   */
+  requireAiConsent = false;
+
+  /**
+   * Who AI grading sends cards and answers to with these settings, and Ask (`ask`: the provider its default profile
+   * uses, from src/core/agent.ts), with what each is for, whether it can send now (`ready`: its key is set, or ChatGPT
+   * is signed in) and when you agreed to it (null: not yet). One OK covers both.
+   */
+  aiConsentStatus(ask: (ChatProvider | null)[] = []): { required: boolean; providers: { id: string; name: string; for: ("grading" | "assistant")[]; ready: boolean; agreed: string | null }[]; agreed: Record<string, string> } {
+    const s = this.settings();
+    const grading = [s.ai.decision?.kind === "openrouter-decisions" ? s.ai.decision : null, s.ai.feedback, s.ai.vision].filter((p) => !!p) as { kind: string; url?: string; apiKeyEnv?: string }[];
+    const assistant = ask.filter((p): p is ChatProvider => !!p);
+    let signedIn: boolean | null = null;
+    const live = (p: { kind: string; apiKeyEnv?: string }) => (p.kind === "chatgpt" ? (signedIn ??= this.chatgptSignedIn()) : !p.apiKeyEnv || !!process.env[p.apiKeyEnv]);
+    const ids = [...new Set([...grading, ...assistant].map(aiProviderId).filter((x): x is string => !!x))];
+    const uses = (id: string) => [...(grading.some((p) => aiProviderId(p) === id) ? ["grading" as const] : []), ...(assistant.some((p) => aiProviderId(p) === id) ? ["assistant" as const] : [])];
+    const ready = (id: string) => [...grading, ...assistant].some((p) => aiProviderId(p) === id && live(p));
+    return { required: this.requireAiConsent, providers: ids.map((id) => ({ id, name: aiProviderName(id), for: uses(id), ready: ready(id), agreed: s.aiConsent[id] ?? null })), agreed: s.aiConsent };
+  }
+
+  private chatgptSignedIn(): boolean {
+    try {
+      return !!this.chatgptStatus().signedIn;
+    } catch {
+      return false;
+    }
+  }
+
+  /** You agree to send cards and your answers to this provider (chatgpt or a host such as openrouter.ai). Kept until withdrawn. */
+  agreeToAi(provider: unknown) {
+    const id = String(provider ?? "").trim().toLowerCase();
+    if (!AI_PROVIDER_ID.test(id)) throw new EtudeError(`"${id.slice(0, 40)}" isn't a provider: chatgpt or a host name such as openrouter.ai`);
+    const all = this.settings().aiConsent;
+    if (!all[id]) this.updateSettings({ aiConsent: { ...all, [id]: iso() } });
+    return this.aiConsentStatus();
+  }
+
+  /** Takes your OK back: nothing more goes to that provider until you agree again. */
+  withdrawAiConsent(provider: unknown) {
+    const id = String(provider ?? "").trim().toLowerCase();
+    const all = { ...this.settings().aiConsent };
+    if (id in all) {
+      delete all[id];
+      this.updateSettings({ aiConsent: all });
+    }
+    return this.aiConsentStatus();
+  }
+
+  /** How the AI calls run: this engine's home and, where the host asks for it, only to providers you agreed to. */
+  private aiRun(extra: { vision?: boolean } = {}) {
+    return { ...extra, home: this.home, ...(this.requireAiConsent ? { consent: this.settings().aiConsent } : {}) };
   }
 
   // ------------------------------------------------------------------ themes
@@ -1266,11 +1719,14 @@ export class Etude {
       ...(def.titleField ? { titleField: def.titleField } : {}),
       ...(def.prepare ? { prepare: def.prepare } : {}),
       template: { html: def.template.html, css: def.template.css ?? "", js: def.template.js ?? "" },
+      ...(def.home !== undefined ? { home: def.home === "catalog" ? "catalog" : { html: def.home.html, css: def.home.css ?? "", js: def.home.js ?? "" } } : {}),
       grader: def.grader,
       ...(def.instructions ? { instructions: def.instructions } : {}),
       ...(def.demo ? { demo: def.demo } : {}),
       ...(def.metrics?.length ? { metrics: def.metrics } : {}),
       ...(def.showVerdict === false ? { showVerdict: false } : {}),
+      ...(def.fitScreen ? { fitScreen: true } : {}),
+      ...(def.leadFaces?.length ? { leadFaces: def.leadFaces } : {}),
       ...(def.scheduler ? { scheduler: def.scheduler } : {}),
       ...(def.scheduler && def.schedulerOptions && Object.keys(def.schedulerOptions).length ? { schedulerOptions: def.schedulerOptions } : {}),
       ...(def.skills && Object.keys(def.skills).length ? { skills: def.skills } : {}),
@@ -1812,9 +2268,17 @@ export class Etude {
       const own = i === parts.length;
       if (r.preset_id && !(own && opts.excludePreset)) {
         const p = this.db.get("SELECT config FROM presets WHERE id = ?", r.preset_id);
-        if (p) layers.push(parse(p.config, {}));
+        if (p) {
+          const parsed = parse<Partial<PresetConfig>>(p.config, {});
+          if (!own) delete parsed.home;
+          layers.push(parsed);
+        }
       }
-      if (!(own && opts.excludeOwn)) layers.push(parse(r.config, {}));
+      if (!(own && opts.excludeOwn)) {
+        const parsed = parse<Partial<PresetConfig>>(r.config, {});
+        if (!own) delete parsed.home;
+        layers.push(parsed);
+      }
     }
     return layers;
   }
@@ -1911,7 +2375,7 @@ export class Etude {
     const before = structuredClone(input);
     const def = this.type(item.type);
     try {
-      const proposal = await aiEditFields(this.settings().ai, def, before, instruction.trim(), { home: this.home });
+      const proposal = await aiEditFields(this.settings().ai, def, before, instruction.trim(), this.aiRun());
       const allowed = new Set([...def.fields.map((f) => f.name), ...Object.keys(before), "generator"]);
       let fields = { ...before };
       for (const [name, value] of Object.entries(proposal.changes)) {
@@ -2416,6 +2880,12 @@ export class Etude {
     return this.adaptive.learnerSummary(deck);
   }
 
+  /** Concepts used in a deck tree with their needs and mastery, needs first, plus cycles and needs nothing teaches. */
+  conceptMap(deck: string) {
+    const name = this.deckRow(deck).name;
+    return this.prereqs.conceptMap(name, this.configFor(name));
+  }
+
   /** The queue for a deck or search right now: learning, due reviews and today's new cards, in order. */
   /**
    * `src`: the deck tree's one read of every card and of today's answers, for a deck scope. Without it the
@@ -2460,21 +2930,45 @@ export class Etude {
     const root = scope.deck ? this.adaptive.adaptiveRoot(scope.deck) : null;
     if (scope.placement) {
       const pick = this.adaptive.placementPick(root, rows, dayStart, placementSession(scope.placement));
-      return { learning: [] as typeof rows, reviews: [] as typeof rows, news: pick ? [pick] : [], doneNew, doneRev, cfg, nowIso, nextLater: null as string | null, ahead: false };
+      return { learning: [] as typeof rows, reviews: [] as typeof rows, news: pick ? [pick] : [], doneNew, doneRev, cfg, nowIso, nextLater: null as string | null, ahead: false, locked: 0, credited: 0, unlockWith: [] as string[] };
     }
+
+    // Prerequisites: new cards whose needed concepts aren't mastered wait; see prereqs.ts.
+    const prereqOn = new Map<string, boolean>();
+    const onDeck = (deck: string) => {
+      if (!prereqOn.has(deck)) prereqOn.set(deck, this.configFor(deck).prerequisites);
+      return prereqOn.get(deck)!;
+    };
+    const gated = rows.some((c) => onDeck(c.deck));
+    const gateRoot = gated && cfg.prerequisites && scope.deck ? this.prereqs.root(scope.deck) : null;
+    let locked = 0, credited = 0, unlockWith: string[] = [];
+    const gate = <T extends CardRow & { ord: number; deck: string }>(news: T[]): T[] => {
+      if (!gated || !news.length) return news;
+      const plan = this.prereqs.plan(news, onDeck, gateRoot, gateRoot ? cfg : this.configFor(news.find((c) => onDeck(c.deck))?.deck ?? news[0].deck));
+      locked = plan.locked.size;
+      unlockWith = plan.lockedBy.slice(0, 3);
+      const open = news.filter((c) => !plan.locked.has(c.id) && !plan.held.has(c.id));
+      return gateRoot ? plan.sortNew(open) : open;
+    };
 
     if (scope.ahead) {
       // Study ahead: everything in scope, soonest due first, no daily limits. FSRS scales the gain for an early review.
       const byDue = (a: CardRow, b: CardRow) => a.due.localeCompare(b.due);
       const learning = rows.filter((c) => c.state === 1 || c.state === 3).sort(byDue);
       const reviews = rows.filter((c) => c.state === 2).sort(byDue);
-      const news = rows.filter((c) => c.state === 0).sort((a, b) => a.ord - b.ord || a.id - b.id);
-      return { learning, reviews, news, doneNew, doneRev, cfg, nowIso, nextLater: null as string | null, ahead: true };
+      const news = this.leadFirst(gate(rows.filter((c) => c.state === 0).sort((a, b) => a.ord - b.ord || a.id - b.id)));
+      return { learning, reviews, news, doneNew, doneRev, cfg, nowIso, nextLater: null as string | null, ahead: true, locked, credited, unlockWith };
     }
     const learning = rows.filter((c) => (c.state === 1 || c.state === 3) && c.due <= aheadIso).sort((a, b) => a.due.localeCompare(b.due));
     const byDay = src?.byDay ?? new Map<string, boolean>();
     const reviewDue = (c: QueueRow) => (this.dueByDay(c.deck, c.type, byDay) ? c.due < tomorrowIso : c.due <= nowIso);
     let reviews = rows.filter((c) => c.state === 2 && reviewDue(c));
+    if (gated && cfg.implicitReviews) {
+      // A passing answer to a card that needs this card's concept, after it fell due, stands in for its review.
+      const skip = this.prereqs.credited(reviews, onDeck, cfg, nowIso);
+      credited = skip.size;
+      if (skip.size) reviews = reviews.filter((c) => !skip.has(c.id));
+    }
     if (cfg.reviewOrder === "retrievability") {
       // Cards on a script scheduler have no predicted recall; they sort after the weakest FSRS cards, by due.
       const cfgs = new Map<string, PresetConfig>();
@@ -2507,10 +3001,12 @@ export class Etude {
       news.sort((a, b) => hashString(day + a.id) - hashString(day + b.id));
     } else if (cfg.newOrder === "deck") news.sort((a, b) => a.deck.localeCompare(b.deck) || a.ord - b.ord || a.id - b.id);
     else news.sort((a, b) => a.ord - b.ord || a.id - b.id);
+    news = gate(news);
     // Adaptive decks: the day's pace, quick checks after a placement (on top of the limits), and the level frontier.
     let firsts = answered.filter((r) => r.state === 0);
     let quick: typeof news = [];
     if (root) ({ cfg, news, quick, firsts } = this.adaptive.newCards(root, cfg, news, firsts));
+    news = this.leadFirst(news);
     let room = Math.max(0, cfg.newPerDay - firsts.length);
     if (Object.keys(cfg.newPerFace).length) {
       // Faces with their own limit take what's left of it today, in the same order; the rest share newPerDay.
@@ -2535,7 +3031,37 @@ export class Etude {
       .filter((c) => (c.state === 2 ? !reviewDue(c) : c.state !== 0 ? c.due > aheadIso : c.due > nowIso))
       .map((c) => (c.state === 2 && this.dueByDay(c.deck, c.type, byDay) ? iso(this.dayStart(new Date(c.due), hour)) : c.due))
       .reduce<string | null>((m, due) => (!m || due < m ? due : m), null);
-    return { learning, reviews, news, doneNew, doneRev, cfg, nowIso, nextLater, ahead: false };
+    return { learning, reviews, news, doneNew, doneRev, cfg, nowIso, nextLater, ahead: false, locked, credited, unlockWith };
+  }
+
+  /**
+   * New cards less those waiting for their item's lead face (the type's `leadFaces`): while the item has a card
+   * on one of those faces that is new and not suspended (buried or not), its other faces' new cards wait.
+   */
+  private leadFirst<T extends { id: number; item_id: string; face: string; type: string }>(news: T[]): T[] {
+    const leads = new Map<string, string[]>();
+    const leadOf = (type: string) => {
+      if (!leads.has(type)) {
+        let f: string[] = [];
+        try {
+          f = this.type(type).leadFaces ?? [];
+        } catch {}
+        leads.set(type, f);
+      }
+      return leads.get(type)!;
+    };
+    const waiting = news.filter((c) => { const f = leadOf(c.type); return f.length > 0 && !f.includes(c.face); });
+    if (!waiting.length) return news;
+    const items = [...new Set(waiting.map((c) => c.item_id))], open = new Set<string>();
+    for (let k = 0; k < items.length; k += 500) {
+      const chunk = items.slice(k, k + 500);
+      const rows = this.db.all<{ item_id: string; face: string; type: string }>(
+        `SELECT c.item_id, c.face, i.type FROM cards c JOIN items i ON i.id = c.item_id WHERE c.state = 0 AND c.suspended = 0 AND c.item_id IN (${chunk.map(() => "?").join(",")})`,
+        ...chunk,
+      );
+      for (const r of rows) if (leadOf(r.type).includes(r.face)) open.add(r.item_id);
+    }
+    return open.size ? news.filter((c) => !(open.has(c.item_id) && !leadOf(c.type).includes(c.face))) : news;
   }
 
   /**
@@ -2567,7 +3093,10 @@ export class Etude {
   }
 
   counts(scope: StudyScope, src?: QueueSource) {
-    const q = this.queue(scope, src);
+    return this.countsOf(this.queue(scope, src));
+  }
+
+  private countsOf(q: ReturnType<Etude["queue"]>) {
     return {
       new: q.news.length,
       learning: q.ahead ? q.learning.length : q.learning.filter((c) => c.due <= q.nowIso).length,
@@ -2575,20 +3104,19 @@ export class Etude {
       review: q.reviews.length,
       doneToday: q.doneNew + q.doneRev,
       nextDue: q.nextLater,
+      /** New cards waiting for a needed concept to be mastered (prerequisites on). */
+      locked: q.locked,
+      /** Due reviews left out today because a dependent card's correct answer exercised them. */
+      credited: q.credited,
+      /** The unmet concepts holding back the most locked cards, up to three. */
+      ...(q.locked ? { unlockWith: q.unlockWith } : {}),
     };
   }
 
   /** Chooses the next card. `exclude` avoids showing the card that was just answered twice in a row. */
   next(scope: StudyScope, opts: { exclude?: number } = {}): { card: StudyCard | null; counts: ReturnType<Etude["counts"]> } {
     const q = this.queue(scope);
-    const counts = {
-      new: q.news.length,
-      learning: q.ahead ? q.learning.length : q.learning.filter((c) => c.due <= q.nowIso).length,
-      learningSoon: q.learning.length,
-      review: q.reviews.length,
-      doneToday: q.doneNew + q.doneRev,
-      nextDue: q.nextLater,
-    };
+    const counts = this.countsOf(q);
     const not = (list: CardRow[]) => list.filter((c) => c.id !== opts.exclude);
     const learningNow = not(q.ahead ? q.learning : q.learning.filter((c) => c.due <= q.nowIso));
     const reviews = not(q.reviews);
@@ -2640,9 +3168,184 @@ export class Etude {
       ...this.previewFor(c, this.cardConfig(c.deck, c.type), now()),
       grader: p.selfGraded ? "self" : def.grader.kind,
       showVerdict: def.showVerdict !== false,
+      fitScreen: def.fitScreen === true,
       generated: typeof p.fields.generator === "string" || typeof parse<Record<string, unknown>>(this.db.get("SELECT fields FROM items WHERE id = ?", c.item_id)!.fields, {}).generator === "string",
       title: this.titleOf(c.type, p.fields),
+      progress: parse(c.sched_state ?? null, null),
       ...(adapt ? { asOf, ...(adapt.session ? { placement: adapt.session } : {}), ...(adapt.learner.quickCheck ? { quickCheck: true } : {}) } : {}),
+    };
+  }
+
+  /**
+   * Grades and records a practice/game run in one step (`etude.record()` inside a card): stores the
+   * attempt, folds the scheduler state into `cards.sched_state`, logs the review, and returns the
+   * updated progress so the card can stay open.
+   */
+  async recordRun(
+    cardId: number,
+    seed: number,
+    answer: unknown,
+    opts: { durationMs?: number; practice?: boolean; asOf?: string } = {},
+  ): Promise<{ attemptId: number | null; reviewId: number | null; grade: Grade; progress: unknown; due: string; state: number; retry?: { hint: string; view: Record<string, unknown> } | null }> {
+    const sub = await this.submit(cardId, seed, answer, { practice: opts.practice, asOf: opts.asOf });
+    if (sub.retry || sub.attemptId == null) {
+      const c = this.cardWithDeck(cardId);
+      return { attemptId: null, reviewId: null, grade: sub.grade, progress: parse(c.sched_state ?? null, null), due: c.due, state: c.state, retry: sub.retry };
+    }
+    const c = this.cardWithDeck(cardId);
+    const cfg = this.cardConfig(c.deck, c.type);
+    const script = this.scriptFor(cfg);
+    const rating: Rating | 0 = script && script.ratings === false ? 0 : ((sub.grade.suggested ?? 3) as Rating);
+    const rated = this.rate(cardId, rating, { attemptId: sub.attemptId, durationMs: opts.durationMs, practice: opts.practice });
+    const updated = this.db.get<{ sched_state: string | null }>("SELECT sched_state FROM cards WHERE id = ?", cardId);
+    return {
+      attemptId: sub.attemptId,
+      reviewId: rated.reviewId,
+      grade: sub.grade,
+      progress: parse(updated?.sched_state ?? null, null),
+      due: rated.due,
+      state: rated.state,
+    };
+  }
+
+  /**
+   * Resolves a deck's own Deck Home (never inherited from parent decks so recursion stays clean).
+   * Explicit deck config wins; otherwise a single card type in the deck that declares `home` provides the default.
+   */
+  resolveDeckHome(deckName: string): { kind: "queue" | "catalog" | "custom"; spec: DeckHomeSpec; typeId: string | null; source: "deck" | "type" | "default" } {
+    const row = this.deckRow(deckName);
+    const own = parse<Partial<PresetConfig>>(row.config, {}).home;
+    if (own !== undefined) {
+      if (own === "queue") return { kind: "queue", spec: "queue", typeId: null, source: "deck" };
+      if (own === "catalog") return { kind: "catalog", spec: "catalog", typeId: null, source: "deck" };
+      if ("type" in own) {
+        try {
+          const def = this.type(own.type);
+          if (def.home === "catalog") return { kind: "catalog", spec: "catalog", typeId: def.id, source: "deck" };
+          if (def.home && typeof def.home === "object") return { kind: "custom", spec: { type: def.id }, typeId: def.id, source: "deck" };
+        } catch {}
+        return { kind: "queue", spec: "queue", typeId: null, source: "deck" };
+      }
+      return { kind: "custom", spec: own, typeId: null, source: "deck" };
+    }
+    const types = this.db
+      .all<{ type: string }>("SELECT DISTINCT type FROM items WHERE deck_id = ? AND archived = 0", row.id)
+      .map((r) => r.type);
+    if (types.length === 1) {
+      try {
+        const def = this.type(types[0]);
+        if (def.home === "catalog") return { kind: "catalog", spec: "catalog", typeId: def.id, source: "type" };
+        if (def.home && typeof def.home === "object") return { kind: "custom", spec: { type: def.id }, typeId: def.id, source: "type" };
+      } catch {}
+    }
+    return { kind: "queue", spec: "queue", typeId: null, source: "default" };
+  }
+
+  /** Returns the custom home template and optional type assets for a deck, or null if not custom. */
+  deckHomeTemplate(deckName: string): { template: Template; typeId: string | null } | null {
+    const res = this.resolveDeckHome(deckName);
+    if (res.kind !== "custom") return null;
+    if (typeof res.spec === "object" && "html" in res.spec) return { template: res.spec, typeId: null };
+    if (typeof res.spec === "object" && "type" in res.spec) {
+      const def = this.type(res.spec.type);
+      if (def.home && typeof def.home === "object") return { template: def.home, typeId: def.id };
+    }
+    return null;
+  }
+
+  /**
+   * Read-only Deck Home data for a deck or subdeck: its direct subdecks (with counts and home kind),
+   * its direct cards (public fields only, never private fields) with replayable `progress` (`sched_state`),
+   * and summary stats.
+   */
+  deckHome(deckName: string) {
+    const row = this.deckRow(deckName);
+    const d = this.deckFromRow(row);
+    const resolved = this.resolveDeckHome(d.name);
+    const cfg = this.configFor(d.name);
+    const tree = this.deckTree({ archived: d.archived });
+    const selfNode = tree.find((n) => n.name === d.name);
+    const prefix = d.name + "::";
+    const subdecks = tree
+      .filter((n) => n.name.startsWith(prefix) && !n.name.slice(prefix.length).includes("::"))
+      .map((n) => ({
+        name: n.name,
+        title: deckParts(n.name).pop()!,
+        icon: n.icon,
+        description: n.description,
+        home: n.home,
+        mode: n.mode,
+        cards: n.cards,
+        unseen: n.unseen,
+        new: n.new,
+        learning: n.learning,
+        review: n.review,
+        doneToday: n.doneToday,
+      }));
+    const nowIso = iso(now());
+    const cardRows = this.db.all<CardRow & { type: string; fields: string; tags: string; title: string }>(
+      "SELECT c.*, i.type, i.fields, i.tags, i.title FROM cards c JOIN items i ON i.id = c.item_id WHERE i.deck_id = ? AND i.archived = 0 ORDER BY i.ord, c.id",
+      row.id,
+    );
+    const typeCache = new Map<string, Set<string>>();
+    const privateFieldsOf = (typeId: string) => {
+      let priv = typeCache.get(typeId);
+      if (!priv) {
+        priv = new Set<string>();
+        try {
+          for (const f of this.type(typeId).fields) if (f.private) priv.add(f.name);
+        } catch {}
+        typeCache.set(typeId, priv);
+      }
+      return priv;
+    };
+    const cards = cardRows.map((c) => {
+      const raw = parse<Record<string, unknown>>(c.fields, {});
+      const priv = privateFieldsOf(c.type);
+      const pub: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(raw)) if (!priv.has(k) && k !== "generator" && k !== "demo" && k !== "demoGrade") pub[k] = v;
+      return {
+        cardId: c.id,
+        itemId: c.item_id,
+        face: c.face,
+        type: c.type,
+        title: c.title || this.titleOf(c.type, raw),
+        fields: pub,
+        tags: parse<string[]>(c.tags, []),
+        state: c.state,
+        due: c.due,
+        reps: c.reps,
+        lapses: c.lapses,
+        lastReview: c.last_review,
+        progress: parse(c.sched_state ?? null, null),
+        suspended: !!c.suspended,
+        buried: !!(c.buried_until && c.buried_until > nowIso),
+      };
+    });
+    const parts = deckParts(d.name);
+    return {
+      deck: {
+        name: d.name,
+        title: parts.pop()!,
+        parent: parts.length ? parts.join("::") : null,
+        description: d.description,
+        icon: d.icon,
+        mode: cfg.mode,
+        home: resolved.kind,
+        homeSource: resolved.source,
+        typeId: resolved.typeId,
+      },
+      subdecks,
+      cards,
+      stats: {
+        totalCards: selfNode?.cards ?? cards.length,
+        dueCount: (selfNode?.new ?? 0) + (selfNode?.learning ?? 0) + (selfNode?.review ?? 0),
+        newCount: selfNode?.new ?? 0,
+        learningCount: selfNode?.learning ?? 0,
+        reviewCount: selfNode?.review ?? 0,
+        doneToday: selfNode?.doneToday ?? 0,
+        totalReps: cards.reduce((n, c) => n + c.reps, 0),
+      },
     };
   }
 
@@ -2821,7 +3524,7 @@ export class Etude {
         grade = { score: null, verdict: "ungraded", suggested: null, grader: { kind: "ai" } };
       } else {
         const ctx = this.gradingContext(c, prep, answer);
-        const v = await aiVerdict(this.settings().ai, ctx, { vision: !!(g as { vision?: boolean }).vision, home: this.home });
+        const v = await aiVerdict(this.settings().ai, ctx, this.aiRun({ vision: !!(g as { vision?: boolean }).vision }));
         grade = {
           score: v.retry ? null : v.score,
           verdict: v.verdict,
@@ -2890,7 +3593,7 @@ export class Etude {
     ctx.score = grade.score;
     let out;
     try {
-      out = await aiFeedback(this.settings().ai, ctx, { home: this.home });
+      out = await aiFeedback(this.settings().ai, ctx, this.aiRun());
     } catch (e) {
       if (e instanceof AiError) throw new EtudeError(`feedback failed: ${e.message}`, 502);
       throw e;
@@ -2915,7 +3618,7 @@ export class Etude {
     const ai = this.settings().ai;
     const out: Record<string, unknown> = {};
     try {
-      const v = await aiVerdict(ai, ctx, { home: this.home });
+      const v = await aiVerdict(ai, ctx, this.aiRun());
       out.verdict = v;
       ctx.verdict = v.verdict;
       ctx.score = v.score;
@@ -2923,7 +3626,7 @@ export class Etude {
       out.verdictError = (e as Error).message;
     }
     try {
-      out.feedback = await aiFeedback(ai, ctx, { home: this.home });
+      out.feedback = await aiFeedback(ai, ctx, this.aiRun());
     } catch (e) {
       out.feedbackError = (e as Error).message;
     }
@@ -3351,9 +4054,9 @@ export class Etude {
         cards += Number(tt?.cards ?? 0);
         unseen += Number(tt?.new ?? 0);
       }
-      const counts = cards ? this.counts({ deck: d.name }, (src ??= this.queueSource())) : { new: 0, learning: 0, learningSoon: 0, review: 0, doneToday: 0, nextDue: null };
+      const counts = cards ? this.counts({ deck: d.name }, (src ??= this.queueSource())) : { new: 0, learning: 0, learningSoon: 0, review: 0, doneToday: 0, nextDue: null, locked: 0, credited: 0 };
       const cfg = this.configFor(d.name);
-      return { ...this.deckFromRow(d), depth: deckParts(d.name).length - 1, cards, unseen, ...counts, deadline: cfg.deadline ?? null, mode: cfg.mode, at: iso(t) };
+      return { ...this.deckFromRow(d), depth: deckParts(d.name).length - 1, cards, unseen, ...counts, deadline: cfg.deadline ?? null, mode: cfg.mode, home: this.resolveDeckHome(d.name).kind, at: iso(t) };
     });
   }
 
@@ -3926,8 +4629,10 @@ export class Etude {
     return out;
   }
 
-  importPack(pack: any, opts: { dryRun?: boolean } = {}) {
+  /** `ids` imports some of the pack's items under another id (pack id → id here); the Market uses it for ids Sync deleted. */
+  importPack(pack: any, opts: { dryRun?: boolean; ids?: Record<string, string> } = {}) {
     if (!pack || pack.etude !== "pack/1") throw new EtudeError('not an Etude pack (expected "etude": "pack/1")');
+    const idOf = (id: string) => (opts.ids && typeof id === "string" && Object.hasOwn(opts.ids, id) ? opts.ids[id] : id);
     const report = {
       presets: 0,
       decks: 0,
@@ -3969,7 +4674,7 @@ export class Etude {
       (pack.items ?? []).forEach((it: any, i: number) => {
         try {
           const fields = this.unpackMedia(it.fields ?? {}, !!opts.dryRun);
-          const r = this.upsertItem({ id: it.id, type: it.type, deck: it.deck, fields, tags: it.tags ?? [], source: it.source ?? "", notes: it.notes ?? "", archived: !!it.archived }, { ord: base + i });
+          const r = this.upsertItem({ id: idOf(it.id), type: it.type, deck: it.deck, fields, tags: it.tags ?? [], source: it.source ?? "", notes: it.notes ?? "", archived: !!it.archived }, { ord: base + i });
           report.items[r]++;
         } catch (e) {
           report.errors.push(`${it?.id ?? `item #${i}`}: ${(e as Error).message}`);

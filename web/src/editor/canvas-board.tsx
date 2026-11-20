@@ -120,6 +120,10 @@ export interface CanvasBoardProps {
   embedded?: boolean;
   /** Called with Excalidraw's API once it's up (exports, fit to content). */
   onApi?(api: any): void;
+  /** Shared with you as view only: Excalidraw's view mode (pan and zoom, no drawing). */
+  readOnly?: boolean;
+  /** In a shared folder: the note id, for others' pointers. */
+  presenceNote?: string;
 }
 
 /** The board, with a quiet placeholder while Excalidraw loads. */
@@ -140,7 +144,7 @@ export function CanvasBoard(props: CanvasBoardProps) {
   const loading = (w: string) => <div className="note-canvas-loading" data-wait={w}>Loading the canvas…</div>;
   return (
     <div className={cn("note-canvas-board", props.embedded && "is-embedded", props.className)} data-canvas-board="">
-      {data && Board ? <Board initial={data} theme={scheme} name={props.name} embedded={!!props.embedded} onChange={saver} onApi={props.onApi} /> : loading(Board ? "scene" : "chunk")}
+      {data && Board ? <Board initial={data} theme={scheme} name={props.name} embedded={!!props.embedded} readOnly={!!props.readOnly} onChange={props.readOnly ? () => {} : saver} onApi={props.onApi} presenceNote={props.presenceNote} /> : loading(Board ? "scene" : "chunk")}
     </div>
   );
 }

@@ -163,6 +163,75 @@ test("unused media: only files nothing names, whatever the form of the reference
   assert.ok(AGENT_DENY.includes("media prune"), "the assistant's undo can't bring files back");
 });
 
+test("unused media: a picture only a page on disk shows is kept, the trash included, and nothing goes while a folder is away", async (t) => {
+  const { e, dir, cli } = await setup(t);
+  const old = new Date(Date.now() - 2 * 3600_000);
+  const put = (rel: string) => {
+    const p = join(e.mediaDir, rel);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, "x".repeat(10));
+    utimesSync(p, old, old);
+  };
+  const shown = ["files/page.png", "files/in trash.png", "files/hidden trash.webp", "files/notes.png", "files/web.png", "files/deep.pdf"];
+  const unused = ["files/nobody.png", "files/in-node-modules.png"];
+  for (const f of [...shown, ...unused]) put(f);
+
+  const vault = join(dir, "Vault");
+  const page = (doc: object) => JSON.stringify({ etude: 1, kind: "page", doc: { type: "doc", content: [doc] } }, null, 1);
+  const files: Record<string, string> = {
+    "Journal/Monday.etude": page({ type: "image", attrs: { src: "/media/files/page.png" } }),
+    "trash/Old.etude": page({ type: "image", attrs: { src: "/media/files/in%20trash.png" } }),
+    "Notes.md": "![](/media/files/notes.png)",
+    "Site/index.html": '<img src="/media/files/web.png">',
+    "a/b/c/d/Deep.etude": page({ type: "notePdf", attrs: { src: "/media/files/deep.pdf", name: "deep.pdf" } }),
+    // dependencies are never pages
+    "app/node_modules/pkg/README.md": "![](/media/files/in-node-modules.png)",
+  };
+  for (const [rel, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(vault, rel)), { recursive: true });
+    writeFileSync(join(vault, rel), text);
+  }
+  e.folders.open(vault, { trash: "trash" });
+  // A second folder whose trash is a dot-name the Notebook doesn't show.
+  const other = join(dir, "Other");
+  mkdirSync(join(other, ".trash"), { recursive: true });
+  writeFileSync(join(other, ".trash", "Gone.etude"), page({ type: "image", attrs: { src: "/media/files/hidden%20trash.webp" } }));
+  e.folders.open(other);
+
+  assert.deepEqual(e.unusedMedia().map((f) => f.path), unused.slice().sort());
+  assert.equal((await cli("media", "prune", "--yes")).json.count, 2);
+  assert.ok(shown.every((f) => existsSync(join(e.mediaDir, f))), "every picture a page shows is still there");
+
+  // The page goes for good: its picture is unused now.
+  rmSync(join(vault, "Journal/Monday.etude"));
+  assert.deepEqual(e.unusedMedia().map((f) => f.path), ["files/page.png"]);
+
+  // A folder that isn't there (a drive not plugged in) may hold pages that show anything: nothing counts as unused.
+  rmSync(other, { recursive: true });
+  assert.deepEqual(e.unusedMedia(), []);
+  assert.equal((await cli("media", "prune", "--yes")).json.count, 0);
+  assert.ok(existsSync(join(e.mediaDir, "files/page.png")));
+});
+
+test("unused media: a web file or template that names a folder of the media uses what's in it", async (t) => {
+  const { e } = await setup(t);
+  const old = new Date(Date.now() - 2 * 3600_000);
+  const put = (rel: string) => {
+    const p = join(e.mediaDir, rel);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, "x");
+    utimesSync(p, old, old);
+  };
+  const lab = ["design-lab/site-01/img/bk.webp", "design-lab/site-01/img/wk.webp", "design-lab/site-01/img/deep/sub.png", "design lab 2/hero/a.png"];
+  const other = ["design-lab/site-02/img/old.webp", "files/loose.png", "anki/loose.mp3"];
+  for (const f of [...lab, ...other]) put(f);
+  // A prototype builds its piece names in JavaScript: only the folder is in its text.
+  e.notes.create({ title: "Site", kind: "web", content: '<script>for (const p of ["bk","wk"]) img.src = `media/design-lab/site-01/img/${p}.webp`;</script><img src="media/design%20lab%202/hero/a.png">' } as any);
+  // Every page names /media/files/ and /media/anki/: that alone keeps nothing there.
+  e.upsertItem({ id: "x", type: "basic", deck: "D", fields: { front: "![](/media/files/other.png) /media/anki/", back: "b" } });
+  assert.deepEqual(e.unusedMedia().map((f) => f.path), other.slice().sort());
+});
+
 test("is:leftover finds exactly the cards a prune would delete, and follows edits", async (t) => {
   const { e, cli, http } = await setup(t);
   const vocab: CardTypeDef = { ...twoWay, id: "vocab", faces: ["t0", "t1", "t2", "t3"], fields: [...twoWay.fields, { name: "layout", kind: "text", default: "mrgp" }] };

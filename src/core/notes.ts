@@ -1,40 +1,20 @@
 // Notes (beta): pages you write in, in a tree of their own beside the decks.
 // A page's body is a document tree (ProseMirror JSON, what the editor works in), never raw HTML, so it can be
 // rendered safely, searched and later merged across devices. `text` is the plain text, for search and previews.
-// Not synced yet (the notes table isn't in sync/log.ts TABLES); that comes with the Sync milestone.
-import { randomUUID } from "node:crypto";
+// Sync carries notes between one account's devices (sync/log.ts TABLES); shared spaces carry their own.
+import { createHash, randomUUID } from "node:crypto";
 import { isTextFile } from "./text-files.ts";
 export { isTextFile, TEXT_FILE_EXTENSIONS } from "./text-files.ts";
 import type { Db } from "./db.ts";
+import { ensureNotesSchema } from "./notes-schema.ts";
+export { NOTES_SCHEMA } from "./notes-schema.ts";
 import { EtudeError, deckIcon } from "./engine.ts";
 import { docLinks, markdownToDoc, resolveLinks, frontMatter } from "./notes-md.ts";
 import { BANNER_PRESETS } from "./banner.ts";
 import { dropEmptyText } from "./doc-clean.ts";
+import { findByPath } from "./notes-edit.ts";
+import { boardDocs, boardText, checkBoard, emptyBoard, type KanbanBoard, type KanbanTemplate } from "./kanban.ts";
 
-export const NOTES_SCHEMA = `
-CREATE TABLE IF NOT EXISTS notes (
-  id        TEXT PRIMARY KEY,
-  parent_id TEXT REFERENCES notes(id) ON DELETE CASCADE,
-  title     TEXT NOT NULL DEFAULT '',
-  icon      TEXT,
-  doc       TEXT NOT NULL DEFAULT '{"type":"doc","content":[]}',
-  text      TEXT NOT NULL DEFAULT '',
-  position  INTEGER NOT NULL DEFAULT 0,
-  archived  INTEGER NOT NULL DEFAULT 0,
-  created   TEXT NOT NULL,
-  updated   TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS notes_parent ON notes(parent_id, position);
--- [[links]] between pages: to_id when the target exists, to_title always (an unresolved link resolves when a page gets that title).
-CREATE TABLE IF NOT EXISTS note_links (
-  from_id  TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
-  to_id    TEXT,
-  to_title TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS note_links_from ON note_links(from_id);
-CREATE INDEX IF NOT EXISTS note_links_to ON note_links(to_id);
-CREATE INDEX IF NOT EXISTS note_links_title ON note_links(to_title COLLATE NOCASE);
-`;
 
 /** A document node as the editor stores it. */
 export interface DocNode {
@@ -46,7 +26,7 @@ export interface DocNode {
 }
 
 /** A page you write in, or a folder that only holds pages (it has no body of its own). */
-export type NoteKind = "page" | "folder" | "canvas" | "pdf" | "file";
+export type NoteKind = "page" | "folder" | "canvas" | "pdf" | "file" | "web" | "kanban";
 
 export interface NoteSummary {
   id: string;
@@ -68,7 +48,22 @@ export interface NoteSummary {
   pinned: string | null;
   /** When the app last opened it (null if never); the start page's Jump back in. Folders don't count. */
   opened: string | null;
+  /** Set on every note inside a shared space (docs/sharing.md): which, your role there, whether this note is its root. */
+  share?: NoteShare;
 }
+/** A shared note: `readonly` when you can only view it, or your access was removed. */
+export interface NoteShare {
+  space: string;
+  role: "owner" | "edit" | "view";
+  root: boolean;
+  readonly: boolean;
+  /** Your access was removed: this is a read-only copy, no longer syncing. */
+  removed?: boolean;
+  /** Who changed it last and when: a member's email and name, or `you` for this account's own change. */
+  lastEdit?: { email: string | null; name: string | null; at: string; you?: boolean } | null;
+}
+/** What a write does to the notes it names, for the share guard. */
+export type WriteOp = "write" | "archive" | "delete";
 export interface Note extends NoteSummary {
   doc: DocNode;
   text: string;
@@ -76,8 +71,10 @@ export interface Note extends NoteSummary {
   scene: CanvasScene | null;
   /** A PDF note's file in the collection's media (files/<sha256>.pdf); null on everything else. */
   file: string | null;
-  /** A file's text, exactly as written (null unless kind is "file"). */
+  /** A file's text, exactly as written, or a web file's HTML (null on everything else). */
   content: string | null;
+  /** A kanban board's columns and cards (null on everything else). */
+  board: KanbanBoard | null;
 }
 
 /**
@@ -229,6 +226,25 @@ const lookOf = (s: unknown): NoteLook => {
 
 const MAX_DOC_BYTES = 5 * 1024 * 1024;
 const MAX_TITLE = 300;
+
+/** What a new web file starts as: a small thing that shows how one works (the app's colours, a script). */
+export const WEB_STARTER = `<div class="box">
+  <p>Clicks: <b id="n">0</b></p>
+  <button id="b">Click me</button>
+</div>
+
+<style>
+  .box { padding: 18px; text-align: center; font-family: var(--font-sans); }
+  button { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--foreground); cursor: pointer; }
+</style>
+
+<script>
+  let clicks = 0;
+  document.getElementById("b").onclick = () => {
+    document.getElementById("n").textContent = ++clicks;
+  };
+</script>
+`;
 const BLOCKS = new Set(["image", "mathBlock", "detailsSummary", "tableCell", "tableHeader", "paragraph", "heading", "blockquote", "codeBlock", "bulletList", "orderedList", "listItem", "taskList", "taskItem", "horizontalRule"]);
 
 /** The plain text of a document: blocks on their own lines. */
@@ -240,7 +256,7 @@ export function docText(doc: DocNode): string {
     if (n.type === "noteLink") return void line.push(String(n.attrs?.label || n.attrs?.title || ""));
     if (n.type === "mathInline") return void line.push(String(n.attrs?.latex ?? ""));
     if (n.type === "mathBlock") return void out.push(String(n.attrs?.latex ?? ""));
-    if (n.type === "canvasEmbed") return void (n.attrs?.title && out.push(String(n.attrs.title)));
+    if (n.type === "canvasEmbed" || n.type === "portal" || n.type === "kanbanEmbed") return void (n.attrs?.title && out.push(String(n.attrs.title)));
     const kids = n.content ?? [];
     if (BLOCKS.has(n.type) && kids.every((k) => k.type === "text" || k.type === "hardBreak" || !BLOCKS.has(k.type))) {
       const l: string[] = [];
@@ -322,9 +338,13 @@ function checkKind(k: unknown): NoteKind {
   if (k === "canvas") return "canvas";
   if (k === "pdf") return "pdf";
   if (k === "file") return "file";
-  throw new EtudeError('a note is a "page", a "folder", a "canvas", a "pdf" or a "file"');
+  if (k === "web") return "web";
+  if (k === "kanban") return "kanban";
+  throw new EtudeError('a note is a "page", a "folder", a "canvas", a "pdf", a "file", a "web" or a "kanban"');
 }
-const kindOf = (k: unknown): NoteKind => (k === "folder" ? "folder" : k === "canvas" ? "canvas" : k === "pdf" ? "pdf" : k === "file" ? "file" : "page");
+const kindOf = (k: unknown): NoteKind => (k === "folder" ? "folder" : k === "canvas" ? "canvas" : k === "pdf" ? "pdf" : k === "file" ? "file" : k === "web" ? "web" : k === "kanban" ? "kanban" : "page");
+/** Notes whose body is text kept exactly as written: a file (code, LaTeX) and a web file (its HTML). */
+const hasContent = (k: NoteKind) => k === "file" || k === "web";
 const PDF_FILE = /^files\/[0-9a-f]{64}\.pdf$/;
 /** A PDF note's file: a PDF already in the collection's media ("files/<sha>.pdf" or its "/media/…" URL). */
 function checkPdfFile(f: unknown): string {
@@ -358,16 +378,26 @@ const row = (r: any): NoteSummary => ({
 
 export class Notes {
   private readonly db: Db;
+  /** Runs before the user's own writes with the notes they touch; throws to refuse (sharing installs it: view-only spaces). */
+  writeGuard: ((ids: string[], op: WriteOp) => void) | null = null;
+  /** Which notes sit in a shared space (all of them with null). */
+  shareOf: ((ids: string[] | null) => Map<string, NoteShare>) | null = null;
   constructor(db: Db) {
     this.db = db;
-    db.sql.exec(NOTES_SCHEMA);
-    const cols = db.all("PRAGMA table_info(notes)").map((c) => c.name);
-    if (!cols.includes("look")) db.sql.exec("ALTER TABLE notes ADD COLUMN look TEXT");
-    if (!cols.includes("kind")) db.sql.exec("ALTER TABLE notes ADD COLUMN kind TEXT NOT NULL DEFAULT 'page'");
-    if (!cols.includes("scene")) db.sql.exec("ALTER TABLE notes ADD COLUMN scene TEXT");
-    if (!cols.includes("file")) db.sql.exec("ALTER TABLE notes ADD COLUMN file TEXT");
-    if (!cols.includes("pinned")) db.sql.exec("ALTER TABLE notes ADD COLUMN pinned TEXT");
-    if (!cols.includes("opened")) db.sql.exec("ALTER TABLE notes ADD COLUMN opened TEXT");
+    ensureNotesSchema(db);
+  }
+
+  /**
+   * A fingerprint of the tree as the sidebar draws it (which notes, where, their titles, icons and pins), so an open
+   * window can notice a note made, moved, renamed or deleted somewhere else (the CLI, an agent) without refetching the
+   * list. Edits to a page's body don't change it.
+   */
+  treeStamp(): string {
+    const r = this.db.get(
+      `SELECT COUNT(*) AS n, COALESCE(group_concat(id || '|' || IFNULL(parent_id,'') || '|' || title || '|' || IFNULL(icon,'') || '|' || kind || '|' || position || '|' || archived || '|' || IFNULL(pinned,'') || '|' || IFNULL(look,''), '\n'), '') AS t
+         FROM (SELECT * FROM notes ORDER BY id)`,
+    );
+    return `${r?.n ?? 0}:${createHash("sha1").update(String(r?.t ?? "")).digest("hex").slice(0, 16)}`;
   }
 
   /** Every page, in tree order (parents before children, siblings by position). */
@@ -378,6 +408,7 @@ export class Notes {
          FROM notes n WHERE n.archived = ? ORDER BY n.position, n.created`,
       opts.archived ? 1 : 0,
     ).map(row);
+    this.annotate(rows, null);
     if (opts.archived) return rows;
     const by = new Map<string | null, NoteSummary[]>();
     const ids = new Set(rows.map((r) => r.id));
@@ -403,7 +434,7 @@ export class Notes {
       id,
     );
     if (!r) throw new EtudeError(`no note "${id}"`, 404);
-    return { ...row(r), doc: JSON.parse(r.doc), text: r.text, scene: r.kind === "canvas" ? (r.scene ? JSON.parse(r.scene) : emptyScene()) : null, file: r.kind === "pdf" ? (r.file ?? null) : null, content: r.kind === "file" ? String(r.text ?? "") : null };
+    return { ...this.annotate([row(r)])[0], doc: JSON.parse(r.doc), text: r.text, scene: r.kind === "canvas" ? (r.scene ? JSON.parse(r.scene) : emptyScene()) : null, file: r.kind === "pdf" ? (r.file ?? null) : null, content: hasContent(kindOf(r.kind)) ? String(r.text ?? "") : null, board: r.kind === "kanban" ? (r.scene ? JSON.parse(r.scene) : emptyBoard()) : null };
   }
 
   /** Pins a page (or canvas, PDF, file, folder) to the start page. Pinning it again keeps its place. */
@@ -421,7 +452,7 @@ export class Notes {
 
   /** The pinned pages in the order they were pinned. Archived ones are left out (their pin comes back with them). */
   pinnedList(): NoteSummary[] {
-    return this.db.all("SELECT * FROM notes WHERE pinned IS NOT NULL AND archived = 0 ORDER BY pinned, created").map(row);
+    return this.annotate(this.db.all("SELECT * FROM notes WHERE pinned IS NOT NULL AND archived = 0 ORDER BY pinned, created").map(row));
   }
 
   /** Marks that the app opened it, for the start page's Jump back in. Folders don't count; nothing else changes (not even its updated time). */
@@ -434,7 +465,7 @@ export class Notes {
   /** What was opened last, newest first (folders and archived ones left out). */
   recent(limit = 10): NoteSummary[] {
     const n = Math.max(1, Math.min(200, Math.floor(Number(limit) || 10)));
-    return this.db.all("SELECT * FROM notes WHERE opened IS NOT NULL AND archived = 0 AND kind != 'folder' ORDER BY opened DESC, id LIMIT ?", n).map(row);
+    return this.annotate(this.db.all("SELECT * FROM notes WHERE opened IS NOT NULL AND archived = 0 AND kind != 'folder' ORDER BY opened DESC, id LIMIT ?", n).map(row));
   }
 
   /**
@@ -447,8 +478,20 @@ export class Notes {
       const r = this.db.get("SELECT id, kind, doc, text FROM notes WHERE id = ?", id);
       if (!r) continue;
       const kind = kindOf(r.kind);
-      if (kind === "file") {
+      if (hasContent(kind)) {
         out.push({ id, kind, blocks: [], head: String(r.text ?? "").split("\n").slice(0, 10).map((l: string) => l.slice(0, 160)).join("\n") });
+        continue;
+      }
+      if (kind === "kanban") {
+        const r2 = this.db.get("SELECT scene FROM notes WHERE id = ?", id);
+        let head = "";
+        try {
+          const b = JSON.parse(r2?.scene ?? "null") as KanbanBoard | null;
+          head = (b?.columns ?? []).slice(0, 8).map((c) => `${c.name} · ${c.cards.length}`).join("\n");
+        } catch {
+          head = "";
+        }
+        out.push({ id, kind, blocks: [], head });
         continue;
       }
       let blocks: DocNode[] = [];
@@ -466,7 +509,22 @@ export class Notes {
 
   private summary(id: string): NoteSummary {
     const r = this.db.get("SELECT n.*, (SELECT COUNT(*) FROM notes c WHERE c.parent_id = n.id AND c.archived = 0) AS children FROM notes n WHERE n.id = ?", id);
-    return row(r);
+    return this.annotate([row(r)])[0];
+  }
+
+  /** Adds `share` to the notes inside a shared space. `ids` null: look the whole tree up once (a list). */
+  private annotate<T extends NoteSummary>(rows: T[], ids: string[] | null = rows.map((r) => r.id)): T[] {
+    if (!this.shareOf || !rows.length) return rows;
+    const m = this.shareOf(ids);
+    if (m.size) for (const r of rows) {
+      const s = m.get(r.id);
+      if (s) r.share = s;
+    }
+    return rows;
+  }
+  private guard(ids: (string | null | undefined)[], op: WriteOp = "write") {
+    const x = ids.filter((i): i is string => !!i);
+    if (this.writeGuard && x.length) this.writeGuard(x, op);
   }
 
   /** Finds a page by id, or by exact title when exactly one page has it. */
@@ -474,14 +532,24 @@ export class Notes {
     if (this.db.get("SELECT 1 FROM notes WHERE id = ?", ref)) return this.get(ref);
     const hits = this.db.all("SELECT id FROM notes WHERE title = ? AND archived = 0", ref);
     if (hits.length === 1) return this.get(hits[0].id);
-    if (hits.length > 1) throw new EtudeError(`${hits.length} notes are called "${ref}": use the id`, 409);
+    if (hits.length > 1) throw new EtudeError(`${hits.length} notes are called "${ref}": use the id or its path (Folder/Page)`, 409);
+    // A path through the tree ("Journal/2026-11-08"), or the start of an id.
+    const live = this.list();
+    const byPath = findByPath(live, ref);
+    if (byPath.length === 1) return this.get(byPath[0].id);
+    if (byPath.length > 1) throw new EtudeError(`${byPath.length} notes have the path "${ref}": use the id`, 409);
+    if (/^[0-9a-f-]{6,}$/i.test(ref)) {
+      const pre = live.filter((n) => n.id.startsWith(ref.toLowerCase()));
+      if (pre.length === 1) return this.get(pre[0].id);
+    }
     throw new EtudeError(`no note "${ref}"`, 404);
   }
 
-  create(input: { title?: string; parentId?: string | null; doc?: unknown; icon?: string | null; look?: unknown; after?: string | null; kind?: NoteKind; scene?: unknown; file?: unknown; content?: unknown } = {}): Note {
+  create(input: { title?: string; parentId?: string | null; doc?: unknown; icon?: string | null; look?: unknown; after?: string | null; kind?: NoteKind; scene?: unknown; file?: unknown; content?: unknown; board?: unknown; template?: KanbanTemplate | string[] } = {}): Note {
     return this.db.tx(() => {
       const parent = input.parentId || null;
       if (parent) this.get(parent);
+      this.guard([parent]);
       const kind = checkKind(input.kind);
       if (kind === "folder" && input.doc !== undefined) throw new EtudeError("a folder holds pages; it has no body of its own");
       if (kind === "canvas" && input.doc !== undefined) throw new EtudeError("a canvas has a scene, not a doc");
@@ -490,9 +558,13 @@ export class Notes {
       if (kind !== "pdf" && input.file !== undefined) throw new EtudeError('only a PDF note has a file (make it with kind "pdf")');
       const file = kind === "pdf" ? checkPdfFile(input.file) : null;
       if (kind === "file" && input.doc !== undefined) throw new EtudeError("a file has text content, not a doc");
-      if (kind !== "file" && input.content !== undefined) throw new EtudeError('only a file has content (make it with kind "file")');
-      const content = kind === "file" ? (input.content === undefined ? "" : checkContent(input.content)) : null;
+      if (kind === "web" && input.doc !== undefined) throw new EtudeError("a web file is its HTML (content), not a doc");
+      if (!hasContent(kind) && input.content !== undefined) throw new EtudeError('only a file or a web file has content (make it with kind "file" or "web")');
+      const content = hasContent(kind) ? (input.content === undefined ? (kind === "web" ? WEB_STARTER : "") : checkContent(input.content)) : null;
       const scene = kind === "canvas" ? (input.scene === undefined ? emptyScene() : checkScene(input.scene)) : null;
+      if (kind === "kanban" && input.doc !== undefined) throw new EtudeError("a kanban board has a board (columns and cards), not a doc");
+      if (kind !== "kanban" && input.board !== undefined) throw new EtudeError('only a kanban board has a board (make it with kind "kanban")');
+      const board = kind === "kanban" ? (input.board === undefined ? emptyBoard(input.template) : checkBoard(input.board, checkDoc)) : null;
       const doc = input.doc === undefined ? { type: "doc", content: [] } : checkDoc(input.doc);
       const id = randomUUID();
       const t = now();
@@ -504,25 +576,40 @@ export class Notes {
       } else position = (this.db.get("SELECT MAX(position) AS p FROM notes WHERE parent_id IS ?", parent)?.p ?? -1) + 1;
       this.db.run(
         "INSERT INTO notes (id, kind, parent_id, title, icon, look, doc, scene, file, text, position, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        id, kind, parent, cleanTitle(input.title ?? ""), cleanIcon(input.icon ?? null), lookJson(input.look), JSON.stringify(doc), scene ? JSON.stringify(scene) : null, file, content !== null ? content : scene ? sceneText(scene) : docText(doc as DocNode), position, t, t,
+        id, kind, parent, cleanTitle(input.title ?? ""), cleanIcon(input.icon ?? null), lookJson(input.look), JSON.stringify(doc), scene ? JSON.stringify(scene) : board ? JSON.stringify(board) : null, file, content !== null ? content : scene ? sceneText(scene) : board ? boardText(board, docText) : docText(doc as DocNode), position, t, t,
       );
-      this.writeLinks(id, doc as DocNode);
+      this.writeLinks(id, board ? boardDocs(board) : (doc as DocNode));
       this.claimLinks(id);
       return this.get(id);
     });
   }
 
-  update(id: string, patch: { title?: string; doc?: unknown; icon?: string | null; look?: unknown; kind?: NoteKind; scene?: unknown; content?: unknown }): Note {
+  /**
+   * `base` is the `updated` time the writer last read. With a body change, a page that was saved by
+   * someone else since (the CLI, an agent, another window) refuses with 409, so the open editor can
+   * merge instead of writing over it. Without `base` the change always goes in, as before.
+   */
+  update(id: string, patch: { title?: string; doc?: unknown; icon?: string | null; look?: unknown; kind?: NoteKind; scene?: unknown; content?: unknown; board?: unknown; base?: unknown }): Note {
     return this.db.tx(() => {
       const cur = this.get(id);
+      this.guard([id]);
+      if (patch.base !== undefined && patch.base !== null && typeof patch.base !== "string") throw new EtudeError("base must be the page's updated time");
+      if (typeof patch.base === "string" && (patch.doc !== undefined || patch.scene !== undefined || patch.content !== undefined || patch.board !== undefined) && patch.base !== cur.updated) {
+        throw Object.assign(new EtudeError("this page was changed somewhere else since it was opened", 409), { code: "changed" });
+      }
       if (patch.scene !== undefined && cur.kind !== "canvas") throw new EtudeError("only a canvas has a scene");
       if (patch.doc !== undefined && cur.kind === "canvas") throw new EtudeError("a canvas has a scene, not a doc");
       if (patch.kind !== undefined && (cur.kind === "canvas") !== (patch.kind === "canvas")) throw new EtudeError("a canvas stays a canvas");
       if (patch.kind !== undefined && (cur.kind === "pdf") !== (patch.kind === "pdf")) throw new EtudeError("a PDF note stays a PDF");
       if (patch.doc !== undefined && cur.kind === "pdf") throw new EtudeError("a PDF note is its file; it has no body of its own");
       if (patch.kind !== undefined && (cur.kind === "file") !== (patch.kind === "file")) throw new EtudeError("a file stays a file");
-      if (patch.content !== undefined && cur.kind !== "file") throw new EtudeError("only a file has content");
+      if (patch.kind !== undefined && (cur.kind === "web") !== (patch.kind === "web")) throw new EtudeError("a web file stays a web file");
+      if (patch.content !== undefined && !hasContent(cur.kind)) throw new EtudeError("only a file or a web file has content");
+      if (patch.kind !== undefined && (cur.kind === "kanban") !== (patch.kind === "kanban")) throw new EtudeError("a kanban board stays a kanban board");
+      if (patch.board !== undefined && cur.kind !== "kanban") throw new EtudeError("only a kanban board has a board");
+      if (patch.doc !== undefined && cur.kind === "kanban") throw new EtudeError("a kanban board has a board (columns and cards), not a doc");
       if (patch.doc !== undefined && cur.kind === "file") throw new EtudeError("a file has text content, not a doc");
+      if (patch.doc !== undefined && cur.kind === "web") throw new EtudeError("a web file is its HTML (content), not a doc");
       const sets: string[] = [];
       const vals: any[] = [];
       if (patch.kind !== undefined) {
@@ -549,11 +636,18 @@ export class Notes {
         sets.push("scene = ?", "text = ?");
         vals.push(JSON.stringify(scene), sceneText(scene));
       }
+      let board: KanbanBoard | null = null;
+      if (patch.board !== undefined) {
+        board = checkBoard(patch.board, checkDoc);
+        sets.push("scene = ?", "text = ?");
+        vals.push(JSON.stringify(board), boardText(board, docText));
+      }
       if (!sets.length) return this.get(id);
       sets.push("updated = ?");
       vals.push(now());
       this.db.run(`UPDATE notes SET ${sets.join(", ")} WHERE id = ?`, ...vals, id);
       if (patch.doc !== undefined) this.writeLinks(id, JSON.parse(this.db.get("SELECT doc FROM notes WHERE id = ?", id)!.doc));
+      if (board) this.writeLinks(id, boardDocs(board));
       if (patch.title !== undefined) this.claimLinks(id);
       return this.get(id);
     });
@@ -564,6 +658,7 @@ export class Notes {
     return this.db.tx(() => {
       const n = this.get(id);
       const parent = parentId || null;
+      this.guard([id, parent]);
       if (parent) {
         for (let p: string | null = parent; p; p = this.db.get("SELECT parent_id FROM notes WHERE id = ?", p)?.parent_id ?? null)
           if (p === id) throw new EtudeError("a page can't go inside itself");
@@ -583,6 +678,7 @@ export class Notes {
     return this.db.tx(() => {
       const n = this.get(id);
       const ids = [id, ...this.descendants(id)];
+      this.guard(ids, "archive");
       for (const x of ids) this.db.run("UPDATE notes SET archived = ? WHERE id = ?", archived ? 1 : 0, x);
       // Back from the archive under a parent that's still archived: it comes back at the top level.
       if (!archived && n.parentId && this.db.get("SELECT archived FROM notes WHERE id = ?", n.parentId)?.archived) this.db.run("UPDATE notes SET parent_id = NULL WHERE id = ?", id);
@@ -595,8 +691,36 @@ export class Notes {
     return this.db.tx(() => {
       this.get(id);
       const ids = [id, ...this.descendants(id)];
+      this.guard(ids, "delete");
       this.db.run("DELETE FROM notes WHERE id = ?", id);
       return { ids };
+    });
+  }
+
+  /**
+   * Opens a portal inside a page: a window onto another note, a web file (live, sandboxed) or a canvas (a picture
+   * of the drawing, live when clicked). It goes at the end, or right after the top-level block number `at` says (0 = first).
+   */
+  portal(pageId: string, targetId: string, opts: { at?: number; height?: number | null } = {}): Note {
+    return this.db.tx(() => {
+      const page = this.get(pageId);
+      this.guard([pageId]);
+      const target = this.get(targetId);
+      if (page.kind !== "page") throw new EtudeError("only a page can hold a portal");
+      if (target.kind !== "web" && target.kind !== "canvas" && target.kind !== "kanban") throw new EtudeError("a portal opens onto a web file, a canvas or a kanban board (pages are linked with [[links]])");
+      if (target.archived) throw new EtudeError(`"${target.title}" is archived`);
+      if (target.id === page.id) throw new EtudeError("a page can't hold a portal to itself");
+      const attrs: Record<string, unknown> = { id: target.id, title: target.title };
+      if (opts.height != null) {
+        const h = Math.round(Number(opts.height));
+        if (!(h >= 80 && h <= 4000)) throw new EtudeError("height is 80 to 4000 px");
+        attrs.height = h;
+      }
+      const block: DocNode = { type: target.kind === "web" ? "portal" : target.kind === "kanban" ? "kanbanEmbed" : "canvasEmbed", attrs };
+      const content = [...(page.doc.content ?? [])];
+      const at = opts.at === undefined ? content.length : Math.max(0, Math.min(content.length, Math.floor(opts.at)));
+      content.splice(at, 0, block);
+      return this.update(page.id, { doc: { ...page.doc, content } });
     });
   }
 
@@ -608,14 +732,16 @@ export class Notes {
     const cond = words.map(() => "(lower(title) LIKE ? ESCAPE '\\' OR lower(text) LIKE ? ESCAPE '\\')").join(" AND ");
     const rows = this.db.all(`SELECT id, kind, parent_id, title, icon, look, position, archived, created, updated, pinned, opened, text FROM notes WHERE archived = 0 AND kind != 'folder' AND ${cond}`, ...words.flatMap((w) => [like(w), like(w)]));
     const score = (r: any) => words.filter((w) => r.title.toLowerCase().includes(w)).length;
-    return rows
-      .sort((a, b) => score(b) - score(a) || b.updated.localeCompare(a.updated))
-      .slice(0, limit)
-      .map((r) => {
-        const t = String(r.text);
-        const at = Math.max(0, t.toLowerCase().indexOf(words[0]) - 40);
-        return { ...row(r), snippet: (at ? "…" : "") + t.slice(at, at + 140).replace(/\s+/g, " ") };
-      });
+    return this.annotate(
+      rows
+        .sort((a, b) => score(b) - score(a) || b.updated.localeCompare(a.updated))
+        .slice(0, limit)
+        .map((r) => {
+          const t = String(r.text);
+          const at = Math.max(0, t.toLowerCase().indexOf(words[0]) - 40);
+          return { ...row(r), snippet: (at ? "…" : "") + t.slice(at, at + 140).replace(/\s+/g, " ") };
+        }),
+    );
   }
 
   /** Records the [[links]] a page's document holds. */
@@ -623,8 +749,8 @@ export class Notes {
     this.db.run("DELETE FROM note_links WHERE from_id = ?", id);
     const walk = (n: DocNode) => {
       if (n.type === "noteLink") this.db.run("INSERT INTO note_links (from_id, to_id, to_title) VALUES (?, ?, ?)", id, (n.attrs?.id as string) || null, String(n.attrs?.title ?? ""));
-      // An embedded canvas counts as a link, so the canvas lists the pages it's in.
-      if (n.type === "canvasEmbed" && typeof n.attrs?.id === "string" && n.attrs.id) this.db.run("INSERT INTO note_links (from_id, to_id, to_title) VALUES (?, ?, ?)", id, n.attrs.id, String(n.attrs?.title ?? ""));
+      // A portal counts as a link, so a web file or canvas lists the pages it shows in.
+      if ((n.type === "canvasEmbed" || n.type === "portal" || n.type === "kanbanEmbed") && typeof n.attrs?.id === "string" && n.attrs.id) this.db.run("INSERT INTO note_links (from_id, to_id, to_title) VALUES (?, ?, ?)", id, n.attrs.id, String(n.attrs?.title ?? ""));
       n.content?.forEach(walk);
     };
     walk(doc);
@@ -635,9 +761,24 @@ export class Notes {
     const title = this.db.get("SELECT title FROM notes WHERE id = ?", id)?.title;
     if (!title) return;
     const from = this.db.all<{ from_id: string }>("SELECT DISTINCT from_id FROM note_links WHERE to_id IS NULL AND to_title = ? COLLATE NOCASE", title);
+    // A shared page only takes links to notes in its own space: this collection's other ids mean nothing to its members.
+    const shared = this.shareOf?.([...from.map((f) => f.from_id), id]) ?? new Map<string, NoteShare>();
     for (const { from_id } of from) {
-      const r = this.db.get("SELECT doc FROM notes WHERE id = ?", from_id);
+      const s = shared.get(from_id);
+      if (s && (s.readonly || shared.get(id)?.space !== s.space)) continue;
+      const r = this.db.get("SELECT kind, doc, scene FROM notes WHERE id = ?", from_id);
       if (!r) continue;
+      // A board's links are on its cards' pages.
+      if (r.kind === "kanban" && r.scene) {
+        const board = JSON.parse(r.scene) as KanbanBoard;
+        let changed = false;
+        for (const c of Object.values(board.cards)) if (resolveLinks(c.doc, (t) => (t.toLowerCase() === title.toLowerCase() ? id : null))) changed = true;
+        if (changed) {
+          this.db.run("UPDATE notes SET scene = ? WHERE id = ?", JSON.stringify(board), from_id);
+          this.writeLinks(from_id, boardDocs(board));
+        }
+        continue;
+      }
       const doc = JSON.parse(r.doc) as DocNode;
       if (resolveLinks(doc, (t) => (t.toLowerCase() === title.toLowerCase() ? id : null))) {
         this.db.run("UPDATE notes SET doc = ? WHERE id = ?", JSON.stringify(doc), from_id);
@@ -679,7 +820,7 @@ export class Notes {
     const degree = new Map<string, number>();
     for (const l of links) if (l.kind === "link") for (const e of [l.from, l.to]) degree.set(e, (degree.get(e) ?? 0) + 1);
     const nodes = [
-      ...pages.map((p) => ({ id: p.id as string, kind: kindOf(p.kind), title: String(p.title), icon: (p.icon as string) ?? null, parentId: p.parent_id && ids.has(p.parent_id) ? (p.parent_id as string) : null, links: degree.get(p.id) ?? 0, created: (p.created as string) ?? null, tags: kindOf(p.kind) === "file" ? [] : tagsOf(p.text as string) })),
+      ...pages.map((p) => ({ id: p.id as string, kind: kindOf(p.kind), title: String(p.title), icon: (p.icon as string) ?? null, parentId: p.parent_id && ids.has(p.parent_id) ? (p.parent_id as string) : null, links: degree.get(p.id) ?? 0, created: (p.created as string) ?? null, tags: hasContent(kindOf(p.kind)) ? [] : tagsOf(p.text as string) })),
       ...[...ghosts.values()].map((id) => ({ id, kind: "ghost" as const, title: id.slice(6), icon: null, parentId: null, links: degree.get(id) ?? 0, created: null, tags: [] as string[] })),
     ];
     return { nodes, links };
@@ -717,6 +858,7 @@ export class Notes {
     return this.db.tx(() => {
       const parent = opts.parentId || null;
       if (parent) this.get(parent);
+      this.guard([parent]);
       const md = files.filter((f) => (/\.(md|markdown|txt)$/i.test(f.path) || isTextFile(f.path)) && !f.path.split("/").some((p) => p.startsWith(".")));
       const pdfs = (opts.pdfs ?? []).filter((f) => /\.pdf$/i.test(f.path) && !f.path.split("/").some((p) => p.startsWith(".")));
       if (!md.length && !pdfs.length) throw new EtudeError("no markdown or code files to import");
@@ -803,6 +945,62 @@ export class Notes {
       }
       return { pages: made.length, folders: ids.length - pageIds.size - codeFiles, links, unresolved, pdfs: pdfs.length, root: root ? rootId : null, ids, files: codeFiles };
     });
+  }
+
+  /**
+   * Writes a note as it arrived from a shared space: made when missing, checked like any input, its links redone and
+   * `updated` bumped (so an open editor's stamp poll merges it). Skips the share guard, which is for the user's own
+   * writes. `parentId` or `position` undefined keep the note's own (a space root sits where each member put it).
+   */
+  writeSynced(id: string, s: { kind: NoteKind; parentId?: string | null; position?: number; title: string; icon: string | null; look: unknown; archived: boolean; doc: unknown; scene: unknown; content: string | null; file: string | null }): void {
+    const kind = checkKind(s.kind);
+    const doc = kind === "page" && s.doc != null ? checkDoc(s.doc) : { type: "doc", content: [] };
+    const scene = kind === "canvas" ? (s.scene == null ? emptyScene() : checkScene(s.scene)) : null;
+    const board = kind === "kanban" ? (s.scene == null ? emptyBoard() : checkBoard(s.scene, checkDoc)) : null;
+    const content = hasContent(kind) ? checkContent(s.content ?? "") : null;
+    const file = kind === "pdf" ? checkPdfFile(s.file) : null;
+    const text = content !== null ? content : scene ? sceneText(scene) : board ? boardText(board, docText) : docText(doc as DocNode);
+    const cols = { kind, title: cleanTitle(s.title), icon: cleanIcon(s.icon), look: lookJson(s.look), archived: s.archived ? 1 : 0, doc: JSON.stringify(doc), scene: scene ? JSON.stringify(scene) : board ? JSON.stringify(board) : null, file, text, updated: now() };
+    if (this.db.get("SELECT 1 FROM notes WHERE id = ?", id)) {
+      const set: Record<string, string | number | null> = { ...cols, ...(s.parentId !== undefined ? { parent_id: s.parentId } : {}), ...(s.position !== undefined ? { position: Math.trunc(s.position) || 0 } : {}) };
+      this.db.run(`UPDATE notes SET ${Object.keys(set).map((k) => `${k} = ?`).join(", ")} WHERE id = ?`, ...Object.values(set), id);
+    } else {
+      const parent = s.parentId ?? null;
+      const position = s.position ?? (this.db.get("SELECT MAX(position) AS p FROM notes WHERE parent_id IS ?", parent)?.p ?? -1) + 1;
+      this.db.run(
+        "INSERT INTO notes (id, kind, parent_id, title, icon, look, doc, scene, file, text, position, archived, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        id, kind, parent, cols.title, cols.icon, cols.look, cols.doc, cols.scene, file, text, Math.trunc(position) || 0, cols.archived, cols.updated, cols.updated,
+      );
+    }
+    this.writeLinks(id, board ? boardDocs(board) : (doc as DocNode));
+  }
+
+  /**
+   * Writes a note as Sync's registers hold it, from another device of the same account: its place, pin and stamps as
+   * they came, checked like any input, with its search text and links worked out here. When this device last opened
+   * it stays this device's. A body that fails the checks leaves the note as it was and returns false.
+   */
+  writeFromSync(id: string, r: Record<string, any>): boolean {
+    let cols: Record<string, string | number | null>, links: DocNode;
+    try {
+      const kind = checkKind(r.kind ?? "page");
+      const doc = kind === "page" && r.doc != null ? checkDoc(typeof r.doc === "string" ? JSON.parse(r.doc) : r.doc) : { type: "doc", content: [] };
+      const raw = typeof r.scene === "string" ? JSON.parse(r.scene) : r.scene;
+      const scene = kind === "canvas" ? (raw == null ? emptyScene() : checkScene(raw)) : null;
+      const board = kind === "kanban" ? (raw == null ? emptyBoard() : checkBoard(raw, checkDoc)) : null;
+      const content = hasContent(kind) ? checkContent(r.text ?? "") : null;
+      const file = kind === "pdf" ? checkPdfFile(r.file) : null;
+      const text = content !== null ? content : scene ? sceneText(scene) : board ? boardText(board, docText) : docText(doc as DocNode);
+      const stamp = (v: unknown) => (typeof v === "string" && v ? v : now());
+      cols = { kind, parent_id: typeof r.parent_id === "string" ? r.parent_id : null, title: cleanTitle(r.title), icon: cleanIcon(r.icon), look: lookJson(typeof r.look === "string" ? JSON.parse(r.look) : r.look), doc: JSON.stringify(doc), scene: scene ? JSON.stringify(scene) : board ? JSON.stringify(board) : null, file, text, position: Math.trunc(Number(r.position)) || 0, archived: r.archived ? 1 : 0, created: stamp(r.created), updated: stamp(r.updated), pinned: typeof r.pinned === "string" ? r.pinned : null };
+      links = board ? boardDocs(board) : (doc as DocNode);
+    } catch {
+      return false;
+    }
+    const names = Object.keys(cols);
+    this.db.run(`INSERT INTO notes (id, ${names.join(", ")}) VALUES (?, ${names.map(() => "?").join(", ")}) ON CONFLICT(id) DO UPDATE SET ${names.map((k) => `${k} = excluded.${k}`).join(", ")}`, id, ...Object.values(cols));
+    this.writeLinks(id, links);
+    return true;
   }
 
   private descendants(id: string): string[] {

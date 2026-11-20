@@ -57,7 +57,7 @@ function setMeta(name: string, content: string) {
 }
 
 /** Puts a theme on the page. `persist: false` is for live previews that may be thrown away; `pure` shows the
- * theme without the user's accent (the theme editor and Market try-on, where its own accent is the point). A
+ * theme with its own accent instead of the user's (the theme editor and Market try-on, where its own is the point). A
  * theme that follows the device (System) paints its light or dark half and repaints when the device switches. */
 export function applyTheme(t: Theme, opts: { persist?: boolean; pure?: boolean } = {}) {
   if (isEmbed()) return;
@@ -67,7 +67,7 @@ export function applyTheme(t: Theme, opts: { persist?: boolean; pure?: boolean }
     style.id = "etude-theme";
     document.head.appendChild(style);
   }
-  const paint = (x: Theme) => (opts.pure ? x : withAccent(x, accent));
+  const paint = (x: Theme) => withAccent(x, opts.pure ? null : accent);
   const shown = paint(resolveTheme(t, prefersDark()));
   const css = themeCss(shown);
   if (style.textContent !== css) style.textContent = css;

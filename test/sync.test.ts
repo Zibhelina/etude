@@ -8,6 +8,7 @@ import { syncFor, writeAtomic } from "../src/core/sync/client.ts";
 import { compare, tick, rows, drain, receive, type Change } from "../src/core/sync/log.ts";
 import { project } from "../src/core/sync/project.ts";
 import { generateVaultKey, encryptBlob, decryptBlob, encryptEvent, decryptEvent, fromB64, syncKeys } from "../src/core/sync/crypto.ts";
+import { installFile, installState, installedEntries, metaOf, type MarketFile } from "../src/core/market.ts";
 
 const temp=()=>mkdtempSync(join((process.env.TMPDIR ?? tmpdir()),"sync-test-"));
 const password="a test Sync password";
@@ -210,6 +211,57 @@ test("media: a sync with nothing new skips the files; new files, remote changes 
     assert.equal(syncFor(b).status().error,null);
   }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
 });
+test("a pruned media file goes from the other devices too, unless one still uses it; added again, it lives again",async()=>{
+  const dir=temp();for(const d of ["a","b"])mkdirSync(join(dir,d));
+  const a=await Etude.open(join(dir,"a","a.db"),{home:join(dir,"ha")}),b=await Etude.open(join(dir,"b","b.db"),{home:join(dir,"hb")});
+  try {
+    const folder=join(dir,"shared");for(const e of [a,b]){syncFor(e).setup({folder});await syncFor(e).unlock({password});}
+    const sync=async(...es:Etude[])=>{for(const e of es)await syncFor(e).now({waitMedia:true});};
+    const has=(e:Etude,f:string)=>existsSync(join(e.mediaDir,"anki",f));
+    mkdirSync(join(a.mediaDir,"anki"),{recursive:true});
+    for(const f of ["unused.png","card.png","page.png","later.png"])writeFileSync(join(a.mediaDir,"anki",f),f);
+    a.upsertItem({id:"pic",deck:"Test",type:"basic",fields:{front:'<img src="/media/anki/card.png">',back:"b"},tags:[]});
+    await sync(a,b,a);
+    assert.ok(["unused.png","card.png","page.png","later.png"].every(f=>has(b,f)));
+    // b has a page on its disk that shows page.png; a doesn't.
+    const vault=join(dir,"b-vault");mkdirSync(vault);
+    writeFileSync(join(vault,"Page.etude"),JSON.stringify({etude:1,kind:"page",doc:{type:"doc",content:[{type:"image",attrs:{src:"/media/anki/page.png"}}]}}));
+    b.folders.open(vault);
+    // Synced, every file is in Sync's own lists: those don't count as use.
+    const old=new Date(Date.now()-2*3600_000);for(const f of readdirSync(join(a.mediaDir,"anki")))utimesSync(join(a.mediaDir,"anki",f),old,old);
+    assert.deepEqual(a.unusedMedia().map(f=>f.path),["anki/later.png","anki/page.png","anki/unused.png"]);
+    assert.equal(a.deleteUnusedMedia().files,3);
+    assert.ok(!has(a,"unused.png")&&!has(a,"page.png")&&has(a,"card.png"));
+    // The deletion is one register; the hash an older Etude reads stays as it was.
+    const before=rows(b.db,"media").get("anki/unused.png")!.hash;
+    // b's second opened folder isn't there right now: what b uses can't be known, so it keeps everything for now.
+    const away=join(dir,"b-drive");mkdirSync(away);b.folders.open(away);rmSync(away,{recursive:true});
+    await sync(a,b);
+    assert.equal(rows(b.db,"media").get("anki/unused.png")!.deleted,true);assert.equal(rows(b.db,"media").get("anki/unused.png")!.hash,before);
+    assert.ok(has(b,"unused.png")&&has(b,"page.png"),"nothing goes while an opened folder is away");
+    assert.ok(!has(a,"unused.png"),"a doesn't download what it deleted");
+    // The folder is back: b deletes what it doesn't use, and sends back page.png, which its page shows.
+    mkdirSync(away);(syncFor(b) as any).scanned=0;
+    await sync(b);
+    assert.ok(!has(b,"unused.png"),"deleted on b too");assert.ok(has(b,"page.png")&&has(b,"card.png"));
+    assert.equal(rows(b.db,"media").get("anki/page.png")!.deleted,false);
+    await sync(a);
+    assert.equal(readFileSync(join(a.mediaDir,"anki","page.png"),"utf8"),"page.png","b still uses it, so it came back to a");
+    assert.ok(!has(a,"unused.png")&&!has(a,"later.png"));
+    // Nothing is fetched again or deleted on later syncs.
+    for(const e of [a,b])(syncFor(e) as any).scanned=0;
+    await sync(a,b,a);
+    assert.ok(!has(a,"unused.png")&&!has(b,"unused.png")&&has(a,"page.png")&&has(b,"page.png"));
+    // The same name added again (another device's deletion is older): it lives again, everywhere.
+    writeFileSync(join(a.mediaDir,"anki","unused.png"),"unused.png, back");
+    await sync(a,b);
+    assert.equal(readFileSync(join(b.mediaDir,"anki","unused.png"),"utf8"),"unused.png, back");
+    assert.equal(rows(b.db,"media").get("anki/unused.png")!.deleted,false);
+    // A collection that never synced prunes as before, with nothing to tell.
+    for(const e of [a,b])assert.equal(syncFor(e).status().error,null);
+    assert.equal(syncFor(a).status().media.error,null);
+  }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
+});
 test("media bytes kept by an earlier version are dropped; type asset bytes stay",async()=>{
   const dir=temp();const file=join(dir,"a.db");let e=await Etude.open(file,{home:join(dir,"home")});
   try {
@@ -344,6 +396,50 @@ async function property(kind:"folder"|"cloud") {
 }
 test(`seed 0x${SEED.toString(16)}: 3 offline devices converge through encrypted folder (240 rounds)`,()=>property("folder"));
 test(`seed 0x${SEED.toString(16)}: 3 offline devices converge through real etude-cloud HTTP (240 rounds)`,{skip:!process.env.ETUDE_SYNC_TEST_SERVER},()=>property("cloud"));
+test("a Market deck deleted on one device installs again under fresh item ids, the same ones on every device, and updates follow them",async()=>{
+  const dir=temp();const a=await Etude.open(join(dir,"a.db"),{home:join(dir,"ha")}),b=await Etude.open(join(dir,"b.db"),{home:join(dir,"hb")});
+  const entry=(version:string,items:any[]):MarketFile=>({etudeMarket:1,kind:"deck",id:"pharm",name:"Pharm",description:"",author:"ana",tags:[],version,updated:"",content:{etude:"pack/1",decks:[{name:"Pharm"},{name:"Pharm::Renal"}],items}});
+  const p1={id:"p1",type:"basic",deck:"Pharm",fields:{front:"ACE inhibitor ending",back:"-pril"}},p2={id:"p2",type:"basic",deck:"Pharm::Renal",fields:{front:"Loop diuretic",back:"furosemide"}};
+  const v1=entry("1",[p1,p2]),v2=entry("2",[{...p1,fields:{...p1.fields,back:"-pril (ACE inhibitors)"}},p2,{id:"p3",type:"basic",deck:"Pharm::Renal",fields:{front:"Thiazide",back:"hydrochlorothiazide"}}]);
+  const ids=(e:Etude)=>e.db.all("SELECT id FROM items ORDER BY id").map(r=>r.id as string);
+  const cards=(e:Etude)=>e.db.all("SELECT item_id,face FROM cards ORDER BY item_id,face").map(r=>`${r.item_id}/${r.face}`);
+  const faces=(list:string[])=>list.map(c=>c.split("/")[1]);
+  try {
+    const folder=join(dir,"shared");for(const e of [a,b]){syncFor(e).setup({folder});await syncFor(e).unlock({password});}
+    const sync=async(e:Etude)=>{await syncFor(e).now({waitMedia:true});assert.deepEqual(relational(e),await rebuilt(e,dir));};
+    // Installed on one device, then on the other, which already has its items through Sync.
+    assert.equal(installFile(a,v1).remap,undefined);await sync(a);await sync(b);
+    assert.equal(installFile(b,v1).remap,undefined);await sync(b);await sync(a);
+    for(const e of [a,b])assert.deepEqual(ids(e),["p1","p2"]);
+    const before=cards(a);
+    // Deleted on one device: tombstoned everywhere, and each device's Market offers it again.
+    a.deleteDeck("Pharm",{items:true});await sync(a);await sync(b);
+    for(const e of [a,b]){assert.deepEqual(ids(e),[]);assert.equal(installState(e,metaOf(v1)),null);}
+    // Both install it again before hearing from each other, and pick the same ids.
+    for(const e of [a,b]){const r=installFile(e,v1);assert.equal(r.result,"created");assert.deepEqual(r.remap,{p1:"p1.r1",p2:"p2.r1"});assert.deepEqual(installedEntries(e).pharm.remap,{p1:"p1.r1",p2:"p2.r1"});}
+    for(let n=0;n<2;n++)for(const e of [a,b])await sync(e);
+    for(const e of [a,b]){
+      assert.deepEqual(ids(e),["p1.r1","p2.r1"]);
+      assert.deepEqual(faces(cards(e)),faces(before),"one card per face, no duplicates");
+      assert.deepEqual(cards(e).map(c=>c.split("/")[0]),before.map(c=>c.split("/")[0]+".r1"));
+      assert.equal(installState(e,metaOf(v1)),"installed");
+    }
+    assert.deepEqual(canonical(a),canonical(b));
+    // An update writes the remapped items; a new item keeps its own id.
+    const up=installFile(a,v2);
+    assert.equal(up.result,"updated");assert.deepEqual(up.remap,{p1:"p1.r1",p2:"p2.r1"});assert.equal(up.report.items.created,1,"only the new item is created");
+    await sync(a);await sync(b);
+    for(const e of [a,b]){assert.deepEqual(ids(e),["p1.r1","p2.r1","p3"]);assert.equal(e.item("p1.r1").fields.back,"-pril (ACE inhibitors)");}
+    // The other device updates too: nothing new.
+    assert.equal(installFile(b,v2).report.items.created,0);await sync(b);await sync(a);
+    // Deleted again, from the other device: the next ids along, again the same everywhere.
+    b.deleteDeck("Pharm",{items:true});await sync(b);await sync(a);
+    assert.deepEqual(installFile(a,v2).remap,{p1:"p1.r2",p2:"p2.r2",p3:"p3.r1"});
+    for(let n=0;n<2;n++)for(const e of [a,b])await sync(e);
+    for(const e of [a,b])assert.deepEqual(ids(e),["p1.r2","p2.r2","p3.r1"]);
+    assert.deepEqual(canonical(a),canonical(b));
+  }finally{a.close();b.close();rmSync(dir,{recursive:true,force:true});}
+});
 test("undo takes this device's last review, not one that arrived from another device after it",async()=>{
   const dir=temp();const [a,b]=await Promise.all(["a","b"].map(n=>Etude.open(join(dir,`${n}.db`),{home:join(dir,"h"+n)})));
   try {

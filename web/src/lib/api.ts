@@ -1,5 +1,6 @@
 // Typed client for the Etude API.
 import { apiToken, etudeFetch } from "./transport";
+import type { NoteShare } from "./share";
 
 export type Rating = 1 | 2 | 3 | 4;
 export type Verdict = "correct" | "partial" | "incorrect" | "ungraded";
@@ -40,6 +41,8 @@ export interface PresetConfig {
   burySiblings: boolean;
   /** "watch": a tour deck, shown card by card with example answers and never scheduled. */
   mode: "study" | "watch";
+  /** Own deck home ("queue" default, "catalog", `{ type }`, or custom template). Never inherited from parent decks. */
+  home?: DeckHomeSpec;
   /** Who decides when cards come back: "fsrs" or a scheduler id. */
   scheduler: string;
   schedulerOptions: Record<string, unknown>;
@@ -54,6 +57,30 @@ export interface PresetConfig {
   levelAdvanceAt: number;
   levelMix: number;
   quickChecksPerDay: number;
+  prerequisites: boolean;
+  masteryStreak: number;
+  masteryShare: number;
+  conceptsInProgress: number;
+  implicitReviews: boolean;
+}
+
+export interface ConceptRow {
+  concept: string;
+  depth: number;
+  needs: string[];
+  cards: number;
+  mastered: number;
+  inProgress: boolean;
+  state: "mastered" | "in-progress" | "unlocked" | "locked";
+  missing: string[];
+}
+
+export interface ConceptMap {
+  deck: string;
+  prerequisites: boolean;
+  concepts: ConceptRow[];
+  cycles: string[][];
+  danglingNeeds: string[];
 }
 
 export interface LevelState {
@@ -140,6 +167,64 @@ export interface PracticeCard {
   days: { day: string; sessions: number }[];
 }
 
+export type DeckHomeSpec = "queue" | "catalog" | { type: string } | { html: string; css?: string; js?: string };
+
+export interface DeckHomeSubdeck {
+  name: string;
+  title: string;
+  icon: string | null;
+  description: string;
+  home: "queue" | "catalog" | "custom";
+  mode: "study" | "watch";
+  cards: number;
+  unseen: number;
+  new: number;
+  learning: number;
+  review: number;
+  doneToday: number;
+}
+
+export interface DeckHomeData {
+  deck: {
+    name: string;
+    title: string;
+    parent: string | null;
+    description: string;
+    icon: string | null;
+    mode: "study" | "watch";
+    home: "queue" | "catalog" | "custom";
+    homeSource: "deck" | "type" | "default";
+    typeId: string | null;
+  };
+  subdecks: DeckHomeSubdeck[];
+  cards: {
+    cardId: number;
+    itemId: string;
+    face: string;
+    type: string;
+    title: string;
+    fields: Record<string, unknown>;
+    tags: string[];
+    state: number;
+    due: string;
+    reps: number;
+    lapses: number;
+    lastReview: string | null;
+    progress: unknown;
+    suspended: boolean;
+    buried: boolean;
+  }[];
+  stats: {
+    totalCards: number;
+    dueCount: number;
+    newCount: number;
+    learningCount: number;
+    reviewCount: number;
+    doneToday: number;
+    totalReps: number;
+  };
+}
+
 export interface DeckNode {
   id: number;
   name: string;
@@ -160,6 +245,7 @@ export interface DeckNode {
   nextDue: string | null;
   deadline: string | null;
   mode: "study" | "watch";
+  home?: "queue" | "catalog" | "custom";
   /** `art:<id>`, `emoji:<emoji>` or null. */
   icon: string | null;
 }
@@ -185,6 +271,12 @@ export interface Counts {
   review: number;
   doneToday: number;
   nextDue: string | null;
+  /** New cards waiting for a needed concept (prerequisites on). */
+  locked?: number;
+  /** Due reviews left out because a dependent card's right answer exercised them. */
+  credited?: number;
+  /** The unmet concepts holding back the most locked cards. */
+  unlockWith?: string[];
 }
 
 export interface WatchEntry {
@@ -211,6 +303,8 @@ export interface StudyCard {
   scheduler: { id: string; name: string; ratings: boolean; next: string | null };
   grader: string;
   showVerdict: boolean;
+  /** The card fills one screen, like a game (the type's `fitScreen`): study shows it in focus mode. */
+  fitScreen?: boolean;
   generated: boolean;
   title: string;
   /** Adaptive decks: when the learner estimates were taken; sent back on submit. */
@@ -218,6 +312,8 @@ export interface StudyCard {
   /** The placement session this card was shown for. */
   placement?: string;
   quickCheck?: boolean;
+  /** Scheduler-computed progress (`cards.sched_state`), replayed from its attempt log. */
+  progress?: unknown;
 }
 
 export interface FieldSpec {
@@ -268,6 +364,10 @@ export interface CardType {
   grader: { kind: "self" } | { kind: "script"; code: string } | { kind: "ai"; vision?: boolean; instructions?: string } | { kind: "hybrid"; code: string; vision?: boolean; instructions?: string };
   instructions?: string;
   showVerdict?: boolean;
+  /** The card fills one screen, like a game: study shows it in focus mode. */
+  fitScreen?: boolean;
+  /** Faces whose new card comes first: the item's other new cards wait for it. */
+  leadFaces?: string[];
   /** Body of the script that makes watch mode's example answer. */
   demo?: string;
   /** Grader numbers worth tracking over time. */
@@ -450,6 +550,30 @@ export class ApiError extends Error {
   }
 }
 
+/** A change to the Notebook or the app around it, asked from outside (`etude view`, an agent over MCP). Same shapes as src/core/view-remote.ts. */
+export type ViewTarget = { pane: number } | { note: string } | { chat: true } | { panel: true };
+type ViewSide = "left" | "right" | "top" | "bottom";
+export type ViewCommand =
+  | { action: "open"; note?: string; where: ViewSide | "tab" | "replace"; beside?: ViewTarget; before?: string | null }
+  | { action: "close"; target: ViewTarget }
+  | { action: "close-others"; tab: string }
+  | { action: "focus"; target: ViewTarget }
+  | { action: "pin"; tab: string; on: boolean }
+  | { action: "icon"; tab: string; icon: string | null }
+  | { action: "move"; tab: string; to: ViewTarget; before?: string | null; side?: ViewSide }
+  | { action: "group"; tabs: string[]; group?: string; name?: string; color?: string }
+  | { action: "group-edit"; group: string; name?: string; color?: string; collapsed?: boolean }
+  | { action: "ungroup"; group?: string; tab?: string }
+  | { action: "group-close"; group: string }
+  | { action: "group-move"; group: string; to: ViewTarget; before?: string | null }
+  | { action: "resize"; target: ViewTarget; size: number }
+  | { action: "zoom"; target: ViewTarget; zoom: "in" | "out" | "reset" | number }
+  | { action: "sidebar"; mode: "open" | "rail" | "none" }
+  | { action: "pages"; open: boolean }
+  | { action: "panel"; open: boolean }
+  | { action: "go"; route: string };
+export type ViewShell = { sidebar: "open" | "rail" | "none"; pages: boolean; panel: boolean };
+
 async function call<T>(method: string, path: string, body?: unknown, raw?: Blob): Promise<T> {
   // The server takes changes only as JSON (or bytes for uploads), so a change without a body sends {}.
   const json = raw || body !== undefined || method === "GET" || method === "HEAD" ? body : {};
@@ -473,6 +597,22 @@ const qs = (o: Record<string, string | number | undefined | null>) => {
   const s = p.toString();
   return s ? `?${s}` : "";
 };
+
+/** Activity (src/core/activity.ts): counts per hour and note id or screen; never text. */
+export type ActivityKind = "page" | "file" | "pdf" | "canvas" | "kanban" | "web" | "chat" | "screen";
+export interface ActivityEntry { kind: ActivityKind; ref: string; hour: number; ms: number; typed: number; pasted: number; deleted: number; words: number }
+export interface ActivityStatus { on: boolean; keepDays: number; rows: number; since: string | null }
+export interface ActivitySummary {
+  on: boolean;
+  keepDays: number;
+  today: string;
+  days: { day: string; ms: number; typed: number; words: number; pasted: number }[];
+  totals: { ms: number; typed: number; pasted: number; deleted: number; words: number };
+  kinds: { kind: ActivityKind; ms: number; typed: number; words: number }[];
+  screens: { screen: string; ms: number }[];
+  hours: { hour: number; ms: number; typed: number }[];
+  top: { kind: ActivityKind; ref: string; title: string; path?: string; missing?: boolean; ms: number; typed: number; words: number; pasted: number; last: string }[];
+}
 
 export interface AnkiImportReport {
   format: "new" | "legacy";
@@ -533,7 +673,7 @@ export interface NoteSummary {
   /** A page you write in, a canvas you draw on, or a folder of pages. */
   id: string;
   /** A folder only holds pages; it has no body of its own. */
-  kind?: "page" | "folder" | "canvas" | "pdf" | "file";
+  kind?: "page" | "folder" | "canvas" | "pdf" | "file" | "web" | "kanban";
   parentId: string | null;
   title: string;
   icon: string | null;
@@ -548,7 +688,42 @@ export interface NoteSummary {
   pinned?: string | null;
   /** When the app last opened it (null: never). */
   opened?: string | null;
+  /** Set for every note inside a shared folder or page. */
+  share?: NoteShare;
+  /** Set when it's a file or folder on this computer, in a folder open in the Notebook (its id starts "fs:"). */
+  local?: LocalInfo;
 }
+/** Where a note that is a file on disk lives. Same shape as src/core/folders.ts. */
+export interface LocalInfo {
+  folder: string;
+  /** Its path inside the open folder, with forward slashes ("" for the folder itself). */
+  path: string;
+  /** Its name on disk (a Markdown file's title leaves the extension out). */
+  name: string;
+  type: "dir" | "markdown" | "etude" | "web" | "text" | "pdf" | "image" | "audio" | "video" | "other";
+  size: number;
+  /** On the open folder's own row. */
+  root?: { path: string; missing: boolean; /** Names that start with a dot show. */ hidden?: boolean };
+  /** Text that can only be read here: too big to edit, or not UTF-8. */
+  locked?: "large" | "encoding";
+  /** A .etude file that couldn't be read as a page (why); it opens as its text. */
+  broken?: string;
+  /** A .etude file's own title, when the user gave it one (its name on disk is apart). Only on a note that was read whole. */
+  pageTitle?: string;
+  /** Sync carries it to the other devices: "root" on the folder that was marked, "inside" on what's in it. */
+  synced?: "root" | "inside";
+  /** On a folder: what's in it was put in an order by hand (it lists by name otherwise). */
+  arranged?: true;
+}
+/** A folder Sync carries to the other devices, file by file. */
+export interface SyncedFolder { syncId: string; name: string; home: string; created: string; files: number; bytes: number }
+/** A synced folder that has a place on this computer. */
+export interface FolderLink extends SyncedFolder { id: string; path: string; isHome: boolean; missing: boolean; paused: string | null }
+/** A folder on this computer that the Notebook shows. */
+export interface LocalFolder { id: string; name: string; path: string; trash: string; hidden: boolean; created: string; missing: boolean; elsewhere: boolean }
+export interface FolderStamps { roots: string; dirs: Record<string, string>; /** Changes when a folder's own order does. */ order?: string; /** The synced folders here, as ids. */ synced?: string; /** Removals Sync is holding back, with why. */ held?: { syncId: string; name: string; why: string }[] }
+/** True for the id of a file or folder on this computer. */
+export const isFsId = (id: string | null | undefined): id is string => !!id && id.startsWith("fs:");
 /** What a start-page card shows: a page's first blocks or a file's first lines (canvases and PDFs draw themselves). */
 export interface NotePreview { id: string; kind: NonNullable<NoteSummary["kind"]>; blocks: NoteDoc[]; head: string | null }
 export interface NoteLook {
@@ -562,21 +737,38 @@ export interface NoteLook {
 export interface NoteDoc { type: string; attrs?: Record<string, unknown>; content?: NoteDoc[]; text?: string; marks?: { type: string; attrs?: Record<string, unknown> }[] }
 /** Notes as a graph: pages (and ghosts for links to pages that don't exist yet) and the lines between them. */
 export interface NoteGraph {
-  nodes: { id: string; kind: "page" | "folder" | "canvas" | "pdf" | "file" | "ghost"; title: string; icon: string | null; parentId: string | null; links: number; created: string | null; tags: string[] }[];
+  nodes: { id: string; kind: "page" | "folder" | "canvas" | "pdf" | "file" | "web" | "kanban" | "ghost"; title: string; icon: string | null; parentId: string | null; links: number; created: string | null; tags: string[] }[];
   links: { from: string; to: string; kind: "link" | "parent" }[];
 }
-export interface Note extends NoteSummary { doc: NoteDoc; text: string; scene: CanvasScene | null; /** A PDF note's file in the media (files/<sha>.pdf). */ file: string | null; content: string | null }
+export interface Note extends NoteSummary { /** A file on this computer: where its bytes are served from. */ src?: string | null; doc: NoteDoc; text: string; scene: CanvasScene | null; /** A PDF note's file in the media (files/<sha>.pdf). */ file: string | null; content: string | null; /** A kanban board's columns and cards. */ board?: KanbanBoard | null }
+export type KanbanColor = "grey" | "red" | "orange" | "gold" | "green" | "teal" | "blue" | "purple" | "pink";
+export const KANBAN_COLORS: KanbanColor[] = ["grey", "red", "orange", "gold", "green", "teal", "blue", "purple", "pink"];
+export interface KanbanLabel { id: string; name: string; color: KanbanColor }
+export interface KanbanColumn { id: string; name: string; color: KanbanColor; limit: number | null; done: boolean; cards: string[] }
+export interface KanbanCard { id: string; title: string; labels: string[]; due: string | null; cover: KanbanColor | null; doc: NoteDoc; created: string; updated: string }
+export interface KanbanBoard { type: "kanban"; version: 1; columns: KanbanColumn[]; cards: Record<string, KanbanCard>; labels: KanbanLabel[]; archived: string[] }
 
 export const api = {
   notes: (archived = false) => call<NoteSummary[]>("GET", `/api/notes${qs({ archived: archived ? 1 : undefined })}`),
+  viewCommands: (after?: number) => call<{ seq: number; commands: (ViewCommand & { seq: number })[]; owner?: string | null }>("GET", `/api/view/commands${qs({ after })}`),
+  /** This window was used last, of all the windows on every computer showing this collection. */
+  viewOwner: (who: string) => call<{ owner: string }>("PUT", "/api/view/owner", { who }),
+  viewState: (state: { route: string; panes: unknown[]; applied?: number; shell?: ViewShell; failed?: { seq: number; error: string } }) => call<{ ok: true }>("PUT", "/api/view/state", state),
   note: (id: string) => call<Note>("GET", `/api/notes/${encodeURIComponent(id)}`),
   searchNotes: (q: string, limit = 20) => call<(NoteSummary & { snippet: string })[]>("GET", `/api/notes/search${qs({ q, limit })}`),
-  createNote: (input: { title?: string; parentId?: string | null; doc?: NoteDoc; icon?: string | null; after?: string | null; kind?: "page" | "folder" | "canvas" | "pdf" | "file"; scene?: CanvasScene; file?: string; content?: string }) => call<Note>("POST", "/api/notes", input),
-  updateNote: (id: string, patch: { title?: string; doc?: NoteDoc; icon?: string | null; look?: NoteLook; kind?: "page" | "folder"; scene?: CanvasScene; content?: string }) => call<Note>("PATCH", `/api/notes/${encodeURIComponent(id)}`, patch),
+  createNote: (input: { /** In a folder on this computer: a name already taken gets a number instead of an error. */ unique?: boolean; title?: string; parentId?: string | null; doc?: NoteDoc; icon?: string | null; after?: string | null; kind?: "page" | "folder" | "canvas" | "pdf" | "file" | "web" | "kanban"; scene?: CanvasScene; file?: string; content?: string; board?: KanbanBoard; template?: "basic" | "week" | "empty" }) => call<Note>("POST", "/api/notes", input),
+  /** With `base` (the `updated` it last read), a body change refuses with 409 when the page was saved somewhere else since. */
+  updateNote: (id: string, patch: { title?: string; pageTitle?: string | null; doc?: NoteDoc; icon?: string | null; look?: NoteLook; kind?: "page" | "folder"; scene?: CanvasScene; content?: string; board?: KanbanBoard; base?: string }) => call<Note>("PATCH", `/api/notes/${encodeURIComponent(id)}`, patch),
+  noteStamp: (id: string) => call<{ updated: string }>("GET", `/api/notes/${encodeURIComponent(id)}/stamp`),
+  /** The web app build the server hands out now (its entry script), to notice a new one. */
+  notesTreeStamp: () => call<{ stamp: string }>("GET", "/api/notes/tree-stamp"),
+  appBuild: () => call<{ entry: string | null }>("GET", "/api/app-build"),
+  /** Opens a portal to a web file or canvas in a page (at the end, or before top-level block `at`). */
+  addPortal: (pageId: string, note: string, opts: { at?: number; height?: number } = {}) => call<Note>("POST", `/api/notes/${encodeURIComponent(pageId)}/portal`, { note, ...opts }),
   /** A .excalidraw file (its text) as a new canvas. */
   importExcalidraw: (data: string, title: string, parentId: string | null = null) => call<Note>("POST", "/api/notes/import-excalidraw", { data, title, parentId }),
   moveNote: (id: string, parentId: string | null, index?: number) => call<Note>("POST", `/api/notes/${encodeURIComponent(id)}/move`, { parentId, index }),
-  setNoteArchived: (id: string, archived: boolean) => call<{ ids: string[]; archived: boolean }>("POST", `/api/notes/${encodeURIComponent(id)}/archive`, { archived }),
+  setNoteArchived: (id: string, archived: boolean) => call<{ ids: string[]; archived: boolean; /** A file on this computer: where it went in its folder's trash. */ trashed?: string }>("POST", `/api/notes/${encodeURIComponent(id)}/archive`, { archived }),
   noteGraph: () => call<NoteGraph>("GET", "/api/notes/graph"),
   noteBacklinks: (id: string) => call<(NoteSummary & { snippet: string })[]>("GET", `/api/notes/${encodeURIComponent(id)}/backlinks`),
   importNotes: (files: { path: string; text: string }[], media: Record<string, string>, parentId: string | null = null, pdfs: { path: string; file: string }[] = []) =>
@@ -584,9 +776,41 @@ export const api = {
   noteExportUrl: (id: string, format: "md" | "html") => `/api/notes/${encodeURIComponent(id)}/export?format=${format}`,
   pinNote: (id: string, pinned: boolean) => call<NoteSummary>("POST", `/api/notes/${encodeURIComponent(id)}/pin`, { pinned }),
   noteOpened: (id: string) => call<NoteSummary>("POST", `/api/notes/${encodeURIComponent(id)}/opened`),
+  /** What's pinned and what was opened last: the collection's notes and the files of folders on this computer. */
+  pinnedNotes: () => call<NoteSummary[]>("GET", "/api/notes/pinned"),
+  recentNotes: (limit = 10) => call<NoteSummary[]>("GET", `/api/notes/recent${qs({ limit })}`),
   notePreviews: (ids: string[]) => call<NotePreview[]>("GET", `/api/notes/previews${qs({ ids: ids.join(",") })}`),
   notesTutorial: (ifNew = false) => call<{ added: boolean; reason?: "seen" | "exists"; root: string | null; start: string | null; notes: number; items: number }>("POST", "/api/notes/tutorial", { ifNew }),
   deleteNote: (id: string) => call<{ ids: string[] }>("DELETE", `/api/notes/${encodeURIComponent(id)}`),
+  // Folders on this computer, open in the Notebook (the desktop app and `etude serve`).
+  folders: () => call<{ available: boolean; folders: LocalFolder[] }>("GET", "/api/folders"),
+  openFolder: (path: string, opts: { name?: string; trash?: string; hidden?: boolean } = {}) => call<LocalFolder>("POST", "/api/folders", { path, ...opts }),
+  editFolder: (id: string, patch: { name?: string; trash?: string; hidden?: boolean }) => call<LocalFolder>("PATCH", `/api/folders/${encodeURIComponent(id)}`, patch),
+  closeFolder: (id: string) => call<LocalFolder>("DELETE", `/api/folders/${encodeURIComponent(id)}`),
+  /** The open folders' rows, and what's right inside each of `dirs` (null for one that's gone). */
+  folderEntries: (dirs: string[]) => call<{ available: boolean; roots: NoteSummary[]; dirs: Record<string, NoteSummary[] | null>; stamps: FolderStamps }>("POST", "/api/folders/entries", { dirs }),
+  folderStamps: (dirs: string[]) => call<FolderStamps>("POST", "/api/folders/stamps", { dirs }),
+  /** Files and folders on this computer, each into its folder and at its place there (`index` counts without the ones being placed). */
+  /** Notes of the collection into a folder on this computer, as files (they go to the Archive). */
+  takeNotes: (ids: string[], parentId: string) => call<{ moved: { id: string; title: string; kind: string; file: string }[] }>("POST", "/api/folders/take", { ids, parentId }),
+  /** Files of a folder on this computer into the collection, as notes (the files go to their folder's trash). */
+  bringFiles: (ids: string[], parentId: string | null, index?: number) =>
+    call<{ moved: { file: string; id: string; title: string; kind: string }[]; trashed: { file: string; trashed: string }[] }>("POST", "/api/folders/bring", { ids, parentId, index }),
+  placeFiles: (items: { id: string; parentId: string; index?: number }[]) => call<{ from: string; id: string }[]>("POST", "/api/folders/place", { items }),
+  /** A folder's files back in the order of their names. */
+  sortFolder: (id: string) => call<NoteSummary>("POST", "/api/folders/sort", { id }),
+  /** The folders Sync carries: the ones with a place on this computer, and the ones other devices carry that aren't here yet. */
+  folderSync: () => call<{ available: boolean; configured: boolean; here: FolderLink[]; elsewhere: SyncedFolder[] }>("GET", "/api/folders/sync"),
+  /** What marking a folder would send. */
+  folderSyncEstimate: (id: string) => call<{ id: string; path: string; files: number; bytes: number; tooBig: number }>("POST", "/api/folders/sync", { id, estimate: true }),
+  folderSyncOn: (id: string) => call<FolderLink>("POST", "/api/folders/sync", { id }),
+  /** Gives a folder another device carries a place on this computer. */
+  folderSyncLink: (syncId: string, path: string) => call<FolderLink>("POST", "/api/folders/sync/link", { syncId, path }),
+  folderSyncOff: (id: string, everywhere = false) => call<{ syncId: string; name: string; everywhere: boolean; path: string | null }>("POST", "/api/folders/sync/off", { id, everywhere }),
+  /** Lets through the removals Sync held back. */
+  folderSyncGo: (syncId: string) => call<FolderLink>("POST", "/api/folders/sync/go", { syncId }),
+  resolveFolderLink: (from: string, target: string) => call<{ id: string | null }>("GET", `/api/folders/resolve${qs({ from, target })}`),
+  restoreFromTrash: (id: string, trashed: string) => call<NoteSummary>("POST", "/api/folders/restore", { id, trashed }),
   uploadMedia: (file: File) => call<StoredMedia>("POST", `/api/media${qs({ name: file.name })}`, undefined, file),
   importMedia: (path: string) => call<StoredMedia>("POST", "/api/media/import", { path }),
   decks: (archived = false) => call<DeckNode[]>("GET", `/api/decks${qs({ archived: archived ? 1 : undefined })}`),
@@ -594,6 +818,7 @@ export const api = {
   deckUsage: (name: string) => call<{ items: number; cards: number }>("GET", `/api/deck/usage${qs({ name })}`),
   setDeckArchived: (name: string, archived: boolean) => call<{ decks: string[]; archived: boolean }>("POST", `/api/deck/archive${qs({ name })}`, { archived, subdecks: true }),
   deck: (name: string) => call<DeckDetail>("GET", `/api/deck${qs({ name })}`),
+  deckHome: (name: string) => call<DeckHomeData>("GET", `/api/decks/${encodeURIComponent(name)}/home`),
   /** The faces of the cards in a deck and its subdecks, with the types that make each and how many are new. */
   deckFaces: (name: string) => call<DeckFace[]>("GET", `/api/deck/faces${qs({ name })}`),
   createDeck: (name: string) => call("POST", "/api/decks", { name }),
@@ -658,6 +883,15 @@ export const api = {
       asOf: card.asOf,
       placement: card.placement,
     }),
+  recordRun: (cardId: number, seed: number, answer: unknown, opts: { durationMs?: number; practice?: boolean; asOf?: string } = {}) =>
+    call<{ attemptId: number | null; reviewId: number | null; grade: Grade; progress: unknown; due: string; state: number }>("POST", "/api/study/record", {
+      cardId,
+      seed,
+      answer,
+      durationMs: opts.durationMs,
+      practice: !!opts.practice,
+      asOf: opts.asOf,
+    }),
   feedback: (attemptId: number) => call<{ feedback: string; model?: string; ms?: number }>("POST", "/api/study/feedback", { attemptId }),
   rate: (cardId: number, rating: Rating | 0, opts: { attemptId?: number; durationMs?: number; practice?: boolean } = {}) =>
     call<{ reviewId: number; due: string; state: number }>("POST", "/api/study/rate", { cardId, rating, ...opts }),
@@ -670,6 +904,7 @@ export const api = {
 
   stats: (s: Scope, days = 30) => call<Stats>("GET", `/api/stats${qs({ deck: s.deck, q: s.q, days })}`),
   skills: (deck: string) => call<LearnerSummary>("GET", `/api/stats/skills${qs({ deck })}`),
+  concepts: (deck: string) => call<ConceptMap>("GET", `/api/stats/concepts${qs({ deck })}`),
   tags: () => call<{ tag: string; items: number; instructions: string | null; description: string | null }[]>("GET", "/api/tags"),
   saveTag: (tag: string, instructions: string, description = "") => call("PUT", "/api/tags", { tag, instructions, description }),
   renameTag: (from: string, to: string) => call("POST", "/api/tags/rename", { from, to }),
@@ -688,9 +923,19 @@ export const api = {
   telemetry: () => call<{ active: boolean; allowed: boolean; forced: boolean; prefs: { errorReports: boolean; usageStats: boolean }; pending: { errors: number; counters: number } }>("GET", "/api/telemetry"),
   telemetryReport: (r: { kind: string; message: string; stack?: string }) => call<{ queued: boolean }>("POST", "/api/telemetry/report", r),
   telemetryEvent: (name: string) => call<{ counted: boolean }>("POST", "/api/telemetry/event", { name }),
+  /** Your own activity for Stats (Settings → Privacy → Activity): off unless turned on, kept on this device only. */
+  activity: () => call<ActivityStatus>("GET", "/api/activity"),
+  saveActivity: (p: { on?: boolean; keepDays?: number; deleteAll?: boolean }) => call<{ on: boolean; keepDays: number }>("PATCH", "/api/activity", p),
+  recordActivity: (entries: ActivityEntry[]) => call<{ on: boolean; recorded: number }>("POST", "/api/activity", { entries }),
+  clearActivity: () => call<{ deleted: number }>("DELETE", "/api/activity"),
+  activitySummary: (days = 30) => call<ActivitySummary>("GET", `/api/activity/summary${qs({ days })}`),
   defaults: () => call<PresetConfig>("GET", "/api/defaults"),
   schedulers: () => call<SchedulerSummary[]>("GET", "/api/schedulers"),
   testAi: () => call<any>("POST", "/api/ai/test", {}),
+  /** Your OK for each AI provider: grading sends nothing to one you haven't agreed to. */
+  aiConsent: () => call<AiConsentStatus>("GET", "/api/ai/consent"),
+  agreeToAi: (provider: string) => call<AiConsentStatus>("POST", "/api/ai/consent", { provider }),
+  withdrawAiConsent: (provider: string) => call<AiConsentStatus>("POST", "/api/ai/consent/withdraw", { provider }),
   saveSettings: (patch: unknown) => call<any>("PATCH", "/api/settings", patch),
   /** Writes one API key to $ETUDE_HOME/.env on the server; the reply never carries the key. Empty removes it. */
   saveKey: (name: string, value: string) => call<{ name: string; set: boolean }>("POST", "/api/settings/key", { name, value }),
@@ -715,8 +960,26 @@ export const api = {
   /** Coming soon pictures: "cover" or a preview's position. */
   comingSoonUrl: (id: string, slot: "cover" | number) => `/api/market/coming-soon/${encodeURIComponent(id)}/${slot}${apiToken() ? `?token=${encodeURIComponent(apiToken()!)}` : ""}`,
   marketForget: (id: string) => call<{ forgot: boolean }>("POST", "/api/market/forget", { id }),
+  /** Authors whose entries you hid: kept in your settings and synced. */
+  hiddenAuthors: () => call<{ hiddenAuthors: { author: string; since: string }[] }>("GET", "/api/market/hidden-authors"),
+  hideAuthor: (author: string) => call<{ author: string; hidden: boolean; hiddenAuthors: string[] }>("POST", "/api/market/hide-author", { author }),
+  showAuthor: (author: string) => call<{ author: string; hidden: boolean; hiddenAuthors: string[] }>("POST", "/api/market/show-author", { author }),
   publishStatus: () => call<{ ok: boolean; login?: string; reason?: string; repo: string }>("GET", "/api/market/publish/status"),
   publish: (input: PublishInput & { dryRun?: boolean; full?: boolean }) => call<PublishResult>("POST", "/api/market/publish", input),
+
+  plugins: () => call<{ plugins: InstalledPluginInfo[]; bundled: BundledPluginInfo[] }>("GET", "/api/plugins"),
+  installBundledPlugin: (id: string, grant?: string[]) =>
+    call<{ plugin: InstalledPluginInfo; status: string; pausedForPermissions: boolean }>("POST", "/api/plugins/install-bundled", { id, ...(grant ? { grant } : {}) }),
+  updatePlugin: (id: string, patch: { enabled?: boolean; granted?: string[] }) =>
+    call<InstalledPluginInfo>("PATCH", `/api/plugins/${encodeURIComponent(id)}`, patch),
+  uninstallPlugin: (id: string) => call<{ removed: string }>("DELETE", `/api/plugins/${encodeURIComponent(id)}`),
+  pluginKvGetAll: (id: string) => call<{ kv: Record<string, unknown> }>("GET", `/api/plugins/${encodeURIComponent(id)}/kv`),
+  pluginKvGet: (id: string, key: string) => call<{ key: string; value: unknown }>("GET", `/api/plugins/${encodeURIComponent(id)}/kv/${encodeURIComponent(key)}`),
+  pluginKvSet: (id: string, key: string, value: unknown) => call<{ key: string; value: unknown }>("PUT", `/api/plugins/${encodeURIComponent(id)}/kv/${encodeURIComponent(key)}`, { value }),
+  pluginListEvents: (id: string, opts: { kind?: string; after?: number; limit?: number } = {}) =>
+    call<{ events: { id: number; pluginId: string; ts: string; kind: string; payload: unknown }[] }>("GET", `/api/plugins/${encodeURIComponent(id)}/events${qs(opts)}`),
+  pluginAppendEvent: (id: string, kind: string, payload: unknown) =>
+    call<{ id: number; pluginId: string; ts: string; kind: string; payload: unknown }>("POST", `/api/plugins/${encodeURIComponent(id)}/events`, { kind, payload }),
 };
 
 export interface UpdateCommit {
@@ -726,13 +989,49 @@ export interface UpdateCommit {
 }
 
 export type UpdateStatus = { canRestart: boolean; checked: string | null; checkError?: string; version: string } & (
-  | { kind: "git"; branch: string | null; upstream: string | null; commit: string; incoming: UpdateCommit[]; behind: number; ahead: number; dirty: string[]; blocked?: string }
+  | { kind: "git"; branch: string | null; upstream: string | null; commit: string; incoming: UpdateCommit[]; behind: number; ahead: number; dirty: string[]; kept?: string[]; clash?: string[]; blocked?: string }
   | { kind: "package"; latest: string | null; url: string }
   // The desktop app's own updates (see DesktopUpdateState); `ready` once a "self" update is downloaded.
   | { kind: "desktop"; mode: "self" | "link" | "system"; latest: string | null; ready: boolean; percent: number | null; url: string }
 );
 
-export type MarketKind = "theme" | "deck" | "type";
+export type MarketKind = "theme" | "deck" | "type" | "plugin";
+
+export interface PluginManifestInfo {
+  etude: "plugin/1";
+  id: string;
+  name: string;
+  version: string;
+  author: string;
+  description: string;
+  main: string;
+  views?: Record<string, string>;
+  permissions: string[];
+  platforms: ("desktop" | "web")[];
+}
+
+export interface InstalledPluginInfo {
+  id: string;
+  manifest: PluginManifestInfo;
+  hash: string;
+  enabled: boolean;
+  granted: string[];
+  pendingPermissions: string[];
+  source: "local" | "market" | "bundled";
+  installedAt: string;
+  updatedAt: string;
+  bytes: number;
+  fileCount: number;
+  permissionLabels?: Record<string, string>;
+}
+
+export interface BundledPluginInfo {
+  id: string;
+  manifest: PluginManifestInfo;
+  hash: string;
+  installed: boolean;
+  permissionLabels?: Record<string, string>;
+}
 
 export interface MarketMeta {
   id: string;
@@ -748,7 +1047,8 @@ export interface MarketMeta {
 export type MarketSummary =
   | { theme: ThemeData }
   | { decks: string[]; items: number; cardTypes: Record<string, number>; types: { id: string; name: string }[]; watch: boolean; samples: string[] }
-  | { types: { id: string; name: string; description: string; grader: string; fields: string[] }[]; items: number; samples: string[] };
+  | { types: { id: string; name: string; description: string; grader: string; fields: string[] }[]; items: number; samples: string[] }
+  | { plugin: { id: string; version: string; permissions: string[]; platforms: string[]; hash: string; files: number } };
 
 export interface MarketEntry extends MarketMeta {
   path: string;
@@ -768,6 +1068,17 @@ export interface MarketListing {
   entries: MarketEntry[];
   /** Decks being made (the catalog's coming-soon.json); missing from older servers. */
   comingSoon?: ComingSoonEntry[];
+  /** Authors you hid: the lists leave their entries out. Missing from older servers. */
+  hiddenAuthors?: string[];
+}
+
+/** Who AI grading and Ask send to with the saved settings, and when you agreed to each (src/core/engine.ts aiConsentStatus). */
+export interface AiConsentStatus {
+  /** Whether this engine holds grading back until you agree: only in the iPhone app. */
+  required: boolean;
+  /** `for`: what uses the provider now (grading, the assistant's default profile). One OK covers both. `ready`: it can send now (key set, ChatGPT signed in). */
+  providers: { id: string; name: string; for: ("grading" | "assistant")[]; ready: boolean; agreed: string | null }[];
+  agreed: Record<string, string>;
 }
 
 /** A deck on the Coming soon shelf: pictures and words, nothing to install or buy (src/core/market.ts). */

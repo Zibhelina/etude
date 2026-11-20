@@ -4,6 +4,7 @@ import { marked } from "./vendor/marked.js";
 import katex from "./vendor/katex.js";
 import math from "./mathexpr.js";
 import { cardAudio } from "./audio.js";
+import { installDock } from "./dock.js";
 
 // Sound: etude.play(), and in Chromium every <audio> routed through Web Audio (see audio.js for why).
 const audio = cardAudio(window);
@@ -76,6 +77,9 @@ function createApi(init, assets = { type: "", files: {} }) {
   const assetNames = Object.keys(assets.files ?? {}).sort();
   let resultHandlers = [];
   let screenHandlers = [];
+  let progressHandlers = [];
+  const pendingRecords = new Map();
+  let recordSeq = 0;
   let submitted = false;
   let ready = true;
   const api = {
@@ -83,6 +87,35 @@ function createApi(init, assets = { type: "", files: {} }) {
     mode: init.mode ?? "answer", // "answer" | "result" | "preview"
     answer: init.answer ?? null,
     result: init.result ?? null,
+    /** Scheduler-computed progress for this card (`cards.sched_state`), replayed from its attempt log. */
+    progress: init.progress ?? null,
+    /** Called whenever `etude.record()` updates `etude.progress`. */
+    onProgress(fn) {
+      progressHandlers.push(fn);
+    },
+    /**
+     * Records a practice/game run into the card's attempt log and folds the scheduler state,
+     * updating `etude.progress` without leaving the card.
+     */
+    record(run, opts = {}) {
+      const req = ++recordSeq;
+      return new Promise((resolve, reject) => {
+        pendingRecords.set(req, { resolve, reject });
+        const durationMs = typeof opts?.durationMs === "number" && Number.isFinite(opts.durationMs) ? Math.max(0, Math.round(opts.durationMs)) : undefined;
+        send("record", { req, answer: run, durationMs });
+      });
+    },
+    _recordResult(req, ok, value, error) {
+      const w = pendingRecords.get(req);
+      if (!w) return;
+      pendingRecords.delete(req);
+      if (!ok) return w.reject(new Error(String(error ?? "couldn't record run")));
+      if (value && "progress" in value) {
+        api.progress = value.progress;
+        for (const fn of progressHandlers) fn(api.progress, value);
+      }
+      w.resolve(value);
+    },
     root: document.getElementById("card"),
     /** Names of the files the card type ships with. */
     assets: assetNames,
@@ -154,6 +187,10 @@ function createApi(init, assets = { type: "", files: {} }) {
     onScreen(fn) {
       screenHandlers.push(fn);
     },
+    /** Asks the app to leave focus mode: a game's own way out, where the app shows no button over it. */
+    leaveFocus() {
+      send("leave-focus");
+    },
     _screen(height) {
       api.screen = { height: typeof height === "number" && height > 0 ? Math.round(height) : null };
       setScreenVar(api.screen.height);
@@ -172,8 +209,9 @@ function createApi(init, assets = { type: "", files: {} }) {
       return strings.reduce((out, s, i) => out + s + (i < values.length ? escapeHtml(values[i]) : ""), "");
     },
   };
-  api._collect = () => {
-    if (ready) api.submit();
+  // `anyway`: the learner pressed Check in the app's field with nothing to say (see dock.js): an empty answer.
+  api._collect = (anyway = false) => {
+    if (ready || anyway) api.submit();
   };
   api._result = (result) => {
     api.mode = "result";
@@ -333,9 +371,68 @@ function setScreenVar(height) {
 }
 
 function observeSize() {
-  const report = () => send("size", { height: Math.ceil(document.body.getBoundingClientRect().height) });
+  const report = () => {
+    send("size", { height: Math.ceil(document.body.getBoundingClientRect().height) });
+    tellField(false);
+  };
   new ResizeObserver(report).observe(document.body);
   report();
+}
+
+// The inputs an answer is typed into (the others are pickers: checkboxes, ranges, dates).
+const TEXT_INPUTS = ["text", "number", "search", "tel", "url", "email", "password"];
+const typesIn = (el) =>
+  (el instanceof HTMLTextAreaElement && !el.readOnly) || (el instanceof HTMLInputElement && TEXT_INPUTS.includes(el.type) && !el.readOnly) || (el instanceof HTMLElement && el.isContentEditable);
+
+// ---------- the field being typed in stays on screen ----------
+// The frame is as tall as its card and the page around it scrolls, so the app is what brings a field on
+// screen, above the on-screen keyboard and the bars over the page (web/src/lib/field-on-screen.ts). The
+// frame tells it where the focused field is: when it gets the focus, to show it, and when the card's
+// layout or scrolling moves it, to know.
+let field = null;
+// The field kept the focus while the window lost it (another window, the app around the card).
+let away = false;
+
+function tellField(reveal) {
+  if (!field) return;
+  const r = field.getBoundingClientRect();
+  send("field", { top: r.top, bottom: r.bottom, left: r.left, right: r.right, reveal });
+}
+
+// What focus() does unless told not to, short of the page: boxes in the card that scroll bring the field
+// into their view. Not the frame's own document: the frame grows to its card, so it only scrolls until then.
+function scrollToField(el) {
+  for (let box = el.parentElement; box && box !== document.body; box = box.parentElement) {
+    if (box.scrollHeight <= box.clientHeight || !/auto|scroll/.test(getComputedStyle(box).overflowY)) continue;
+    const r = el.getBoundingClientRect();
+    const b = box.getBoundingClientRect();
+    if (r.bottom > b.bottom) box.scrollTop += Math.min(r.bottom - b.bottom, r.top - b.top);
+    else if (r.top < b.top) box.scrollTop -= b.top - r.top;
+  }
+}
+
+function watchFields() {
+  document.addEventListener("focusin", (e) => {
+    // Coming back from another window to the same field leaves the page where the reader left it.
+    const back = away && e.target === field;
+    away = false;
+    field = typesIn(e.target) ? e.target : null;
+    if (!field) return send("field", {});
+    if (!back) scrollToField(field);
+    tellField(!back);
+  });
+  // Leaving for another window keeps the field (focus comes back to it); a blur inside the card drops it.
+  document.addEventListener("focusout", () =>
+    setTimeout(() => {
+      if (!field) return;
+      if (document.activeElement === field) away = !document.hasFocus();
+      else {
+        field = null;
+        send("field", {});
+      }
+    }),
+  );
+  addEventListener("scroll", () => tellField(false), { capture: true, passive: true });
 }
 
 function focusCard(root) {
@@ -344,8 +441,9 @@ function focusCard(root) {
     for (const el of root.querySelectorAll(selector)) {
       if (el.matches(":disabled, [readonly]") || el.closest("[inert]") || !el.getClientRects().length || getComputedStyle(el).visibility !== "visible") continue;
       if (el.hasAttribute("contenteditable") && !el.isContentEditable) continue;
-      if (!selector.startsWith("[autofocus]") && el instanceof HTMLInputElement && !["text", "number", "search", "tel", "url", "email", "password"].includes(el.type)) continue;
-      el.focus();
+      if (!selector.startsWith("[autofocus]") && el instanceof HTMLInputElement && !TEXT_INPUTS.includes(el.type)) continue;
+      // A field doesn't scroll the page to itself: the app places it (watchFields), when there is one.
+      el.focus(parent !== window && typesIn(el) ? { preventScroll: true } : undefined);
       if (document.activeElement === el) return;
     }
   }
@@ -422,6 +520,8 @@ export function boot(main, templateHtml, assets) {
   document.documentElement.lang ||= "en";
   audio.install();
   let api = null;
+  // On a phone the app may show the card's one text field at the bottom of the screen instead (dock.js).
+  let dock = null;
   let blocks = [];
   const fillResultSlots = (data) => {
     for (const slot of api.root.querySelectorAll("[data-result-slot]")) {
@@ -533,6 +633,7 @@ export function boot(main, templateHtml, assets) {
       watchCodeBlocks(api.root);
       const showResult = api._result;
       api._result = (result, opts = {}) => {
+        dock?.stop();
         // Leaves before the result goes on, so the change can be animated (see morph()).
         const before = opts.morph !== false && api.morph !== false && !motionReduced() ? morphLeaves(api.root) : null;
         if (result?.preview) document.body.dataset.preview = "1";
@@ -545,6 +646,115 @@ export function boot(main, templateHtml, assets) {
       };
       if (msg.result?.preview) document.body.dataset.preview = "1";
       if (msg.result) fillResultSlots({ ...api.view, ...(msg.result.key ?? {}), grade: msg.result.grade });
+      if (msg.dock && api.mode === "answer") dock = installDock(api, send);
+      try {
+        await main(api);
+      } catch (err) {
+        api.root.insertAdjacentHTML("beforeend", `<pre class="e-error">${escapeHtml(err?.stack ?? err)}</pre>`);
+        send("error", { message: String(err?.message ?? err) });
+      }
+      dock?.check();
+      observeSize();
+      // Handed over from another frame showing the same card (Watch filling in an example answer):
+      // animate from where that frame's pieces were.
+      if (Array.isArray(msg.morphFrom) && api.morph !== false) morph(msg.morphFrom, api.root);
+      send("mounted");
+      // A preview (a gallery thumbnail, the inspector's card) never takes the focus: it would scroll the page to itself.
+      // Nor does one whose field the app shows: the next thing to focus would be some button in the card.
+      if (msg.mode !== "result" && msg.mode !== "preview" && msg.focus !== false && !dock?.docked) focusCard(api.root);
+    } else if (msg.type === "collect") api?._collect(msg.anyway === true && !!dock?.docked);
+    else if (msg.type === "result") api?._result(msg.result, { morph: msg.morph });
+    else if (msg.type === "snapshot") send("snapshot", { req: msg.req, leaves: api && api.morph !== false && !motionReduced() ? serializeLeaves(morphLeaves(api.root)) : null });
+    else if (msg.type === "theme") applyTheme(msg.theme);
+    else if (msg.type === "screen") api?._screen(msg.height);
+    else if (msg.type === "focus") {
+      if (!dock?.docked) focusCard(api?.root);
+    } else if (msg.type === "dock-input") dock?.setValue(msg.value);
+    else if (msg.type === "dock-stage") dock?.stage(typeof msg.height === "number" ? msg.height : null);
+    else if (msg.type === "record-result") api?._recordResult(msg.req, !!msg.ok, msg.result, msg.error);
+    else if (msg.type === "media") retryMedia();
+    else if (msg.type === "media-state") setMediaPending(!!msg.pending);
+  });
+  forwardKeys();
+  watchFields();
+  send("loaded");
+}
+
+/**
+ * Boots a sandboxed Deck Home frame (`home.html` / `home.css` / `home.js`).
+ * Receives read-only deck summary (`deck`, `subdecks`, `cards`, `stats`) and sends
+ * `openDeck`, `openCard`, `study`, and `setPref` back to the host.
+ */
+export function bootHome(main, templateHtml, assets) {
+  let api = null;
+  let updateHandlers = [];
+  const assetNames = Object.keys(assets?.files ?? {}).sort();
+  function createHomeApi(init) {
+    const root = document.getElementById("home");
+    const h = {
+      deck: init.deck ?? null,
+      subdecks: init.subdecks ?? [],
+      cards: init.cards ?? [],
+      stats: init.stats ?? {},
+      prefs: { ...(init.prefs ?? {}) },
+      root,
+      assets: assetNames,
+      asset(name) {
+        const hash = assets?.files?.[name];
+        if (hash === undefined) throw new Error(`unknown asset "${name}"`);
+        return new URL(`type-assets/${encodeURIComponent(assets.type)}/${encodeURIComponent(name)}?h=${hash}`, document.baseURI).href;
+      },
+      md,
+      mdInline: (s) => md(s, { inline: true }),
+      tex: (src, display = false) => renderMath(String(src ?? ""), display),
+      escape: escapeHtml,
+      play: (url) => audio.play(url),
+      setPref(key, value) {
+        if (typeof key !== "string" || !/^[A-Za-z0-9_.-]{1,64}$/.test(key)) throw new Error("a preference key is 1 to 64 letters, digits, '_', '.' or '-'");
+        const v = value === undefined ? null : JSON.parse(JSON.stringify(value));
+        if (v === null) delete h.prefs[key];
+        else h.prefs[key] = v;
+        send("set-pref", { key, value: v });
+      },
+      openDeck(name) {
+        if (typeof name !== "string" || !name.trim()) return;
+        send("open-deck", { deck: name });
+      },
+      openCard(cardId) {
+        const id = Number(cardId);
+        if (!Number.isInteger(id) || id <= 0) return;
+        send("open-card", { cardId: id });
+      },
+      study(opts = {}) {
+        send("study", { deck: typeof opts?.deck === "string" ? opts.deck : undefined, q: typeof opts?.q === "string" ? opts.q : undefined, ahead: opts?.ahead === true });
+      },
+      onUpdate(fn) {
+        updateHandlers.push(fn);
+      },
+      $(sel) {
+        return root.querySelector(sel);
+      },
+      $$(sel) {
+        return [...root.querySelectorAll(sel)];
+      },
+      html(strings, ...values) {
+        return strings.reduce((out, s, i) => out + s + (i < values.length ? escapeHtml(values[i]) : ""), "");
+      },
+    };
+    return h;
+  }
+  window.addEventListener("message", async (e) => {
+    if (e.source !== parent) return;
+    const msg = e.data;
+    if (!msg || msg.etude !== 1) return;
+    if (msg.type === "init") {
+      applyTheme(msg.theme);
+      updateHandlers = [];
+      api = createHomeApi(msg);
+      const tpl = document.createElement("template");
+      tpl.innerHTML = expand(templateHtml, { deck: api.deck ?? {}, stats: api.stats ?? {} });
+      api.root.replaceChildren(tpl.content);
+      watchCodeBlocks(api.root);
       try {
         await main(api);
       } catch (err) {
@@ -552,22 +762,17 @@ export function boot(main, templateHtml, assets) {
         send("error", { message: String(err?.message ?? err) });
       }
       observeSize();
-      // Handed over from another frame showing the same card (Watch filling in an example answer):
-      // animate from where that frame's pieces were.
-      if (Array.isArray(msg.morphFrom) && api.morph !== false) morph(msg.morphFrom, api.root);
       send("mounted");
-      // A preview (a gallery thumbnail, the inspector's card) never takes the focus: it would scroll the page to itself.
-      if (msg.mode !== "result" && msg.mode !== "preview" && msg.focus !== false) focusCard(api.root);
-    } else if (msg.type === "collect") api?._collect();
-    else if (msg.type === "result") api?._result(msg.result, { morph: msg.morph });
-    else if (msg.type === "snapshot") send("snapshot", { req: msg.req, leaves: api && api.morph !== false && !motionReduced() ? serializeLeaves(morphLeaves(api.root)) : null });
-    else if (msg.type === "theme") applyTheme(msg.theme);
-    else if (msg.type === "screen") api?._screen(msg.height);
-    else if (msg.type === "focus") focusCard(api?.root);
-    else if (msg.type === "media") retryMedia();
-    else if (msg.type === "media-state") setMediaPending(!!msg.pending);
+    } else if (msg.type === "update" && api) {
+      api.deck = msg.deck ?? api.deck;
+      api.subdecks = msg.subdecks ?? api.subdecks;
+      api.cards = msg.cards ?? api.cards;
+      api.stats = msg.stats ?? api.stats;
+      for (const fn of updateHandlers) fn({ deck: api.deck, subdecks: api.subdecks, cards: api.cards, stats: api.stats });
+    } else if (msg.type === "theme") {
+      applyTheme(msg.theme);
+    }
   });
-  forwardKeys();
   send("loaded");
 }
 

@@ -1,6 +1,6 @@
 // Client for /api/account/*: the Etude account, Sync plan, purchased decks and selling.
 import { etudeFetch } from "./transport";
-import { storeSafeMessage } from "./platform";
+import { desktopApp, isNativeApp, storeSafeMessage } from "./platform";
 
 export class AccountApiError extends Error {
   status: number;
@@ -92,8 +92,8 @@ export interface PaidEntry {
   needsDeliveryConfirmation?: boolean;
   installed: "installed" | "update" | null;
 }
-/** A deck no longer on the account (refunded or disputed). `locked`: its cards here are suspended until it's bought again. */
-export interface RevokedItem { listing: string; slug: string; name: string; cover: string | null; reason: "refunded" | "disputed" | "revoked"; at: string | null; locked: boolean }
+/** A deck no longer on the account (refunded or disputed); its cards leave the collection until it's bought again. */
+export interface RevokedItem { listing: string; slug: string; name: string; cover: string | null; reason: "refunded" | "disputed" | "revoked"; at: string | null }
 export interface LibraryItem { listing: string; slug: string; name: string; cover: string | null; version: string | null; bytes: number | null; changelog: string; ownedSince: string; installed: "installed" | "update" | null; installedVersion: string | null; /** A deck sold by Etude not downloaded yet: confirm immediate delivery before the first install. */ needsDeliveryConfirmation?: boolean }
 export interface Listing {
   id: string;
@@ -183,7 +183,7 @@ export const account = {
   googlePurchase: (purchaseToken: string) => call<import("./storekit").GoogleResult>("POST", "/api/account/billing/google/purchase", { purchaseToken }),
   market: () => call<{ entries: PaidEntry[]; server: string }>("GET", "/api/account/market"),
   buy: (listing: string) => call<{ url: string; price: number; fee: number }>("POST", "/api/account/market/checkout", { listing }),
-  library: () => call<{ library: LibraryItem[]; revoked?: RevokedItem[]; changes?: { locked: string[]; unlocked: string[] } }>("GET", "/api/account/library"),
+  library: () => call<{ library: LibraryItem[]; revoked?: RevokedItem[]; changes?: { removed: string[]; unlocked: string[] } }>("GET", "/api/account/library"),
   install: (listing: string, immediateAccess = false) => call<{ result: string; ids: string[]; report: any }>("POST", "/api/account/library/install", { listing, ...(immediateAccess ? { immediateAccess: true } : {}) }),
   creator: () => call<{ creator: Creator | null }>("GET", "/api/account/creator"),
   becomeCreator: (country: string, displayName?: string) => call<Creator>("POST", "/api/account/creator", { country, displayName }),
@@ -251,6 +251,15 @@ export const bytes = (b: number) => (b < 1024 ** 2 ? `${Math.max(0, Math.round(b
 /** Opens a page outside Etude (checkout, billing, Stripe onboarding) in the browser. */
 export function openOutside(url: string) {
   window.open(url, "_blank", "noopener,noreferrer");
+}
+
+/**
+ * Opens a mailto: link in the email app. The phone apps (Capacitor) and the desktop app (its window-open handler) hand
+ * a new window's address to the system; a browser opens the email app from the page itself, with no empty tab.
+ */
+export function openMail(url: string) {
+  if (isNativeApp() || desktopApp()) openOutside(url);
+  else window.location.href = url;
 }
 
 // ── WebAuthn: the options JSON from the server ↔ the browser's binary API ──

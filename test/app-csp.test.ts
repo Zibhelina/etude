@@ -28,3 +28,23 @@ test("app page has a strict CSP; card documents (saved and unsaved) are sandboxe
   assert.equal(await doc.text(), "<p>draft</p>");
   assert.equal((await app.request("/frame-doc/nope")).status, 404);
 });
+
+test("app-build names the entry script the server hands out now, and notices a new build", async (t) => {
+  const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-build-"));
+  const e = await Etude.open(join(dir, "etude.db"));
+  t.after(() => { e.close(); rmSync(dir, { recursive: true, force: true }); });
+  const dist = join(dir, "dist");
+  mkdirSync(join(dist, "assets"), { recursive: true });
+  const page = (h: string) => `<!doctype html><script src="/theme-boot.js"></script><script type="module" crossorigin src="/assets/index-${h}.js"></script>`;
+  writeFileSync(join(dist, "index.html"), page("AAA"));
+  const app = createApp(e, { webDist: dist });
+  const entry = async () => ((await (await app.request("/api/app-build")).json()) as { entry: string | null }).entry;
+  assert.equal(await entry(), "/assets/index-AAA.js");
+  // A rebuild writes a new index.html; the next look sees it (mtime changes, so bump it for a fast test).
+  writeFileSync(join(dist, "index.html"), page("BBB"));
+  const { utimesSync } = await import("node:fs");
+  utimesSync(join(dist, "index.html"), new Date(), new Date(Date.now() + 5000));
+  assert.equal(await entry(), "/assets/index-BBB.js");
+  assert.equal((await app.request("/api/app-build")).headers.get("cache-control"), "no-store");
+  assert.equal(((await (await createApp(e, { webDist: null }).request("/api/app-build")).json()) as any).entry, null);
+});

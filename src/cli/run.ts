@@ -191,7 +191,8 @@ export function errorCode(e: unknown): CliError {
   if (e instanceof EtudeError) {
     const m = e.message;
     if (e.status === 404) return new CliError(m, "not_found");
-    if (e.status === 409 || /is used by|already (exists|rated)|holds \d+ item|can't be deleted|inside itself/.test(m)) return new CliError(m, "conflict");
+    // 403: a view-only shared note (docs/sharing.md), which clashes with what's there rather than being bad input.
+    if (e.status === 409 || e.status === 403 || /is used by|already (exists|rated)|holds \d+ item|can't be deleted|inside itself/.test(m)) return new CliError(m, "conflict");
     if (e.status === 502 || /^feedback failed/.test(m)) return new CliError(m, "external");
     return new CliError(m, "validation");
   }
@@ -249,14 +250,50 @@ export interface RunOptions {
   etude?: Etude;
   /** Ask Etude is running the command, not the user: commands that weigh trust (settings set) see `ctx.agent`. */
   agent?: boolean;
+  /** `etude mcp` is running the command for an outside agent: it may not change what Etude runs (`ai.agents`). */
+  mcp?: boolean;
+  /** For Ask Etude: the attachment folder it may read local files from. */
+  attachmentDir?: string;
+}
+
+/**
+ * True when argv asks for help (`--help` / `-h` as an actual flag, never after `--` and never as the
+ * value of another flag like `--title --help`).
+ */
+export function wantsHelp(argv: string[], cmd?: CommandSpec): boolean {
+  const allFlags = [...GLOBAL_FLAGS, ...(cmd?.flags ?? [])];
+  const byName = new Map<string, FlagSpec>();
+  const byShort = new Map<string, FlagSpec>();
+  for (const f of allFlags) {
+    byName.set(f.name, f);
+    for (const a of f.alias ?? []) byName.set(a, f);
+    if (f.short) byShort.set(f.short, f);
+  }
+  const dynamic = !!cmd?.dynamicFlags;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--") return false;
+    if (a === "--help" || a === "-h") return true;
+    if (!a.startsWith("-") || a === "-") continue;
+    if (a.startsWith("--")) {
+      if (a.includes("=")) continue;
+      const name = a.slice(2);
+      const spec = byName.get(name);
+      if ((spec && spec.type !== "boolean") || (!spec && dynamic)) i++;
+    } else if (a.length === 2) {
+      const spec = byShort.get(a[1]);
+      if (spec && spec.type !== "boolean") i++;
+    }
+  }
+  return false;
 }
 
 /** The command an argv names with its parsed flags and arguments, exactly as `run` would parse them. Throws CliError on bad arguments. */
-export function parseInvocation(argv: string[]): { cmd: CommandSpec; values: Record<string, any>; named: Record<string, any> } | null {
+export function parseInvocation(argv: string[]): { cmd: CommandSpec; values: Record<string, any>; named: Record<string, any>; extra: [string, string][] } | null {
   const loc = locate(argv);
   if (!loc.cmd) return null;
-  const { values, named } = parse(loc.cmd, loc.rest, loc.pre);
-  return { cmd: loc.cmd, values, named };
+  const { values, named, extra } = parse(loc.cmd, loc.rest, loc.pre);
+  return { cmd: loc.cmd, values, named, extra };
 }
 
 /** Runs one invocation. Returns the exit code; the collection stays open only for `serve`. */
@@ -267,14 +304,13 @@ export async function run(argv: string[], io: Io = defaultIo(), opts: RunOptions
   let pretty = io.isTTY;
   try {
     const loc = locate(argv);
-    const wantsHelp = argv.includes("--help") || argv.includes("-h");
     if (loc.unknown) throw new CliError(`unknown command "${loc.unknown}". Run \`etude --help\` or \`etude commands\`.`);
     if (!loc.cmd) {
       io.stdout(loc.group ? groupHelp(loc.group) : topHelp(VERSION));
       return 0;
     }
     const cmd = loc.cmd;
-    if (wantsHelp && !argv.slice(0, argv.indexOf("--help") >= 0 ? argv.indexOf("--help") : argv.indexOf("-h")).includes("--")) {
+    if (wantsHelp(argv, cmd)) {
       io.stdout(commandHelp(cmd));
       return 0;
     }
@@ -301,6 +337,8 @@ export async function run(argv: string[], io: Io = defaultIo(), opts: RunOptions
       env: io.env,
       dry: !!values["dry-run"],
       agent: !!opts.agent,
+      mcp: !!opts.mcp,
+      attachmentDir: opts.attachmentDir,
       get e() {
         if (!etude) throw new Error(`${cmd.name} has no database open`);
         return etude;

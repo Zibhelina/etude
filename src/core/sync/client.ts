@@ -42,10 +42,11 @@ const MEDIA_RESCAN_MS=10*60_000;
 const STORED="SELECT hash FROM sync_blobs WHERE bytes IS NOT NULL";
 
 /**
- * Blob transfers run this many at a time: most media files are small, so each costs about a round trip.
- * etude-cloud takes 100 requests a second per device; at ~250 ms each, 16 stay under it.
+ * Blob transfers run this many at a time: most media files are small, so each costs about a round trip. More than a
+ * few streams at once on one HTTP/2 connection made Caddy refuse them (NGHTTP2_ENHANCE_YOUR_CALM) and fail every
+ * request on it; 4 keeps a first sync of hundreds of files steady, and the transport retries a dropped one.
  */
-const BLOB_CONCURRENCY=16;
+const BLOB_CONCURRENCY=4;
 /** Runs fn over items a few at a time. The first failure rejects, and the other runners stop after their current item. */
 async function pool<T>(items:T[],limit:number,fn:(item:T)=>Promise<void>) {
   let next=0,failed=false;
@@ -102,6 +103,8 @@ export class SyncClient {
   private mediaError:string|null=null;
   /** New media arrived while the task ran: it makes one more pass. */
   private mediaAgain=false;
+  /** A sync was asked for while the task ran: the synced folders get one more pass. */
+  private folderAgain=false;
   private mediaStop:AbortController|null=null;
   /** Media files written from other devices since this process started; open cards ask again for what they lacked. */
   private mediaReceived=0;
@@ -264,9 +267,11 @@ export class SyncClient {
   private async stopMedia() {const task=this.mediaTask;if(!task)return;this.mediaStop?.abort();await task;}
   /** Starts the media task, or asks the one running for another pass when new media came in. */
   private startMedia(t:Transport,key:SyncKeys,news:boolean,quiet:boolean) {
-    if(this.mediaTask){if(news)this.mediaAgain=true;return;}
-    const stop=new AbortController();this.mediaStop=stop;this.mediaAgain=false;this.mediaError=null;
-    const passes=async()=>{let force=news;do{this.mediaAgain=false;await this.media(t,key,stop.signal,force);force=true;}while(this.mediaAgain&&!stop.signal.aborted);};
+    // A sync that comes while the task runs: the media passes again when media came in, and the synced folders are
+    // looked at once more either way (a file may have changed on disk after the pass under way listed it).
+    if(this.mediaTask){if(news)this.mediaAgain=true;this.folderAgain=true;return;}
+    const stop=new AbortController();this.mediaStop=stop;this.mediaAgain=false;this.folderAgain=false;this.mediaError=null;
+    const passes=async()=>{let force=news,media=true;do{if(media){this.mediaAgain=false;await this.media(t,key,stop.signal,force);force=true;}this.folderAgain=false;await this.folderFiles(t,key,stop.signal);media=this.mediaAgain;}while((this.mediaAgain||this.folderAgain)&&!stop.signal.aborted);};
     this.mediaTask=passes().then(()=>{this.mediaError=null;},e=>{
       // The next sync looks at every file again.
       this.scanned=0;
@@ -456,6 +461,31 @@ export class SyncClient {
     }
     await pool(jobs,BLOB_CONCURRENCY,run=>run());
   }
+  /**
+   * Folders on this computer that Sync carries (folder-files.ts): each file against the registers, bytes moved as
+   * blobs like media, then this pass's events sent. After the media, in the same background task.
+   */
+  private async folderFiles(t:Transport,key:SyncKeys,stop:AbortSignal) {
+    const ff=this.e.folderSync,m=this.mediaMeter;
+    if(!ff.active()&&!ff.hasGarbage())return;
+    await ff.pass({stop,
+      put:async bytes=>{if(m.progress?.step!=="upload")this.step("upload",null,m);const b=await encryptBlob(key,bytes);await t.putBlob(b.hash,b.ciphertext,stop);this.moved(b.ciphertext.length,m);return b.hash;},
+      get:async name=>{if(m.progress?.step!=="download")this.step("download",null,m);const ciphertext=await t.getBlob(name,stop);this.moved(ciphertext.length,m);return decryptBlob(key,ciphertext,name);}});
+    await this.push(t,key,m);
+    // Old versions of synced files that nothing is any more leave the vault: their registers first (sent before
+    // the blobs go, so no device is told of a blob that isn't there), then the blobs.
+    if(!t.deleteBlob)return;
+    const old=ff.garbage();
+    if(!old.length)return;
+    await this.push(t,key,m);
+    const gone:string[]=[];
+    for(const o of old) {
+      if(stop.aborted)break;
+      // One that's already gone is done; one the server couldn't be reached for is tried again next time.
+      try {await t.deleteBlob(o.name);gone.push(o.hash);} catch(e) {if((e as any)?.code==="not_found")gone.push(o.hash);}
+    }
+    ff.cleared(gone);
+  }
   /** When this process last looked at every media file. */
   private scanned=0;
   /**
@@ -520,10 +550,18 @@ export class SyncClient {
       const real=await sha256Hex(new Uint8Array(await readFile(p)));
       if(real!==hash){onDisk.set(relative,real);if(local.get(hash)===p)local.delete(hash);local.set(real,p);}
     }
-    const edited=(file:string)=>onDisk.has(file)&&onDisk.get(file)!==media.get(file)?.hash&&onDisk.get(file)!==seen.get(file);
+    // A file deleted on purpose somewhere (`media prune`: its `/deleted` register). The copy here goes too when it is
+    // the version last in step and nothing here uses it; one something here still uses is sent back, which brings it
+    // back everywhere. While what this device uses can't be known (an opened folder not there), it waits.
+    const gone=(file:string)=>media.get(file)?.deleted===true;
+    const goneHere=[...media.keys()].filter(f=>gone(f)&&safeMediaPath(f)&&onDisk.has(f)&&onDisk.get(f)===seen.get(f));
+    const inUse=goneHere.length?this.e.mediaInUse(goneHere):null;
+    const keep=new Set(inUse?goneHere.filter(f=>inUse(f)):[]),drop=inUse?goneHere.filter(f=>!keep.has(f)):[];
+    // A file of a deleted name that isn't the version last in step was added here since: it lives again.
+    const edited=(file:string)=>onDisk.has(file)&&(gone(file)?onDisk.get(file)!==seen.get(file)||keep.has(file):onDisk.get(file)!==media.get(file)?.hash&&onDisk.get(file)!==seen.get(file));
     // Media files to fetch, by blob, written as soon as their blob arrives.
     const root=resolve(this.e.mediaDir),wanted=new Map<string,string[]>();
-    for(const [file,r] of media) if(safeMediaPath(file)&&resolve(root,file).startsWith(root+sep)&&onDisk.get(file)!==r.hash&&!edited(file))wanted.set(r.hash,[...wanted.get(r.hash)??[],file]);
+    for(const [file,r] of media) if(!gone(file)&&safeMediaPath(file)&&resolve(root,file).startsWith(root+sep)&&onDisk.get(file)!==r.hash&&!edited(file))wanted.set(r.hash,[...wanted.get(r.hash)??[],file]);
     const write=(file:string,hash:string,bytes:Uint8Array)=>{const path=join(this.e.mediaDir,file);mkdirSync(dirname(path),{recursive:true});writeAtomic(path,bytes);onDisk.set(file,hash);};
     // A file whose blob event hasn't arrived waits for a later sync.
     const fetch=new Map<string,string>();let waiting=false;
@@ -554,10 +592,19 @@ export class SyncClient {
       sent.set(hash,real);
     });
     go();
-    db.tx(()=>{for(const [,relative] of changed){const hash=sent.get(onDisk.get(relative)!)!;onDisk.set(relative,hash);localEvent(db,"media",relative,{"/hash":hash});mine.push(["media",relative]);}});
+    db.tx(()=>{for(const [,relative] of changed){const hash=sent.get(onDisk.get(relative)!)!;localEvent(db,"media",relative,{"/hash":hash,...(gone(relative)?{"/deleted":false}:{})});onDisk.set(relative,hash);mine.push(["media",relative]);}});
     drain(db);
+    // The copies of files deleted elsewhere that nothing here uses, unless the file changed since it was read.
+    for(const file of drop) {
+      go();
+      const p=join(this.e.mediaDir,file);
+      try{if(await sha256Hex(new Uint8Array(await readFile(p)))!==seen.get(file))continue;rmSync(p,{force:true});}catch{continue;}
+      onDisk.delete(file);
+    }
     db.tx(()=>{
-      for(const [file,r] of rows(db,"media"))if(onDisk.get(file)===r.hash && seen.get(file)!==r.hash)db.run("INSERT INTO sync_media_seen VALUES(?,?) ON CONFLICT(file) DO UPDATE SET hash=excluded.hash",file,r.hash);
+      for(const [file,r] of rows(db,"media"))if(r.deleted!==true&&onDisk.get(file)===r.hash && seen.get(file)!==r.hash)db.run("INSERT INTO sync_media_seen VALUES(?,?) ON CONFLICT(file) DO UPDATE SET hash=excluded.hash",file,r.hash);
+      // A deleted file this device no longer has: nothing is left in step with it.
+      for(const [file,r] of rows(db,"media"))if(r.deleted===true&&!onDisk.has(file)&&seen.has(file))db.run("DELETE FROM sync_media_seen WHERE file=?",file);
       // Everything that came in is on disk now, unless a blob's event is still on its way.
       if(!waiting)for(const r of marked)db.run("DELETE FROM sync_dirty WHERE tbl=? AND key=? AND field=?",r.tbl,r.key,r.field);
       for(const [tbl,key] of mine)db.run("DELETE FROM sync_dirty WHERE tbl=? AND key=?",tbl,key);

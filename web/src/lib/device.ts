@@ -85,6 +85,13 @@ export const useDevice = (): Device => device;
 export const usePhone = (): boolean => device === "phone";
 
 /**
+ * Fired on window when the part of the on-screen keyboard the page hasn't shrunk for yet changes (the iPhone
+ * app shrinks it only once the keyboard is up): CSS `--keyboard-lift` on <html>, which bars along the bottom
+ * rise by. Set by src/browser/native-shell.ts, which spells out the same name.
+ */
+export const KEYBOARD_LIFT_EVENT = "etude:keyboard-lift";
+
+/**
  * Content that adapts to room, not to the device: true while the window is narrower than `px`
  * (a card's padding, a chart's density). The shell never uses this.
  */

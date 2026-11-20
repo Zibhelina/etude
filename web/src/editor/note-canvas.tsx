@@ -171,7 +171,7 @@ function CanvasView({ node, updateAttributes, deleteNode, selected, extension }:
   const makeNew = async () => {
     const page = (extension.options as CanvasEmbedOptions).page();
     try {
-      const n = await api.createNote({ kind: "canvas", title: page?.title ? `${page.title} · canvas` : "Canvas", parentId: page?.id ?? null });
+      const n = await api.createNote({ unique: true, kind: "canvas", title: page?.title ? `${page.title} · canvas` : "Canvas", parentId: page?.id ?? null });
       window.dispatchEvent(new Event("etude:notes-changed"));
       updateAttributes({ id: n.id, title: n.title });
       setNote(n);

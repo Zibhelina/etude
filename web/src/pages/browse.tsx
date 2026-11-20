@@ -17,6 +17,7 @@ import { useNarrow } from "@/lib/device";
 import { PhoneBrowseNav } from "@/components/phone-shell";
 import { cn } from "@/lib/utils";
 import { track } from "@/lib/telemetry";
+import { useScreenLines } from "@/lib/screen";
 
 const PAGE = 200;
 /** iPad widths, landscape included, and narrower desktop windows (phones have their own Browse). */
@@ -319,6 +320,7 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
 
   // The row the arrow keys are on. The drawer opens with Enter or a click and then follows it.
   const [cursor, setCursor] = useState<string | null>(openItem);
+  useScreenLines("browse", [`Browse${query ? ` searching "${query}"` : ""}${selected ? `, item ${selected} open in the editor` : ""}`]);
 
   const toggle = (id: string) => {
     setSelecting(true);

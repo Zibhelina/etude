@@ -1,6 +1,8 @@
 // Likes, dislikes, downloads and comments on Market entries (lib/market-social.ts talks to the account server).
 // Votes and comments need an Etude account; counts are public. Every comment can be reported, and its author blocked:
 // three reports hide a comment until an admin looks at it.
+// The iPhone app shows no comments (neither the list nor the count): App Review guideline 1.2 asks apps with posts
+// from other people for a content filter, prompt action on reports and accepted terms, which comments don't have yet.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Flag, Loader2, MessageCircle, MoreHorizontal, Pencil, ThumbsDown, ThumbsUp, Trash2, UserX } from "lucide-react";
 import { toast } from "sonner";
@@ -13,6 +15,10 @@ import { account } from "@/lib/account";
 import { Input } from "@/components/ui/input";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
+import { isIOSApp } from "@/lib/platform";
+
+/** Whether comments show here: everywhere but the iPhone app (see the top of this file). */
+export const showComments = () => !isIOSApp();
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : "The request failed.");
 const signIn = () => navigate("/settings#account");
@@ -89,16 +95,23 @@ export function TileCounts({ c }: { c?: EntryCounts }) {
 export function socialCells(s: EntryStats | null) {
   const share = approval(s);
   const votes = (s?.likes ?? 0) + (s?.dislikes ?? 0);
-  return [
+  const cells = [
     { key: "likes", label: votes ? `${compact(votes)} ${votes === 1 ? "vote" : "votes"}` : "No votes yet", value: share ? <><ThumbsUp className="size-4" strokeWidth={2.3} />{share}</> : "–" },
     { key: "downloads", label: "Downloads", value: s ? compact(s.downloads) : "–" },
     { key: "comments", label: "Comments", value: s ? <a href="#market-comments" className="hover:underline" onClick={(e) => (e.preventDefault(), document.getElementById("market-comments")?.scrollIntoView({ behavior: "smooth", block: "start" }))}>{compact(s.comments)}</a> : "–" },
   ];
+  return showComments() ? cells : cells.filter((c) => c.key !== "comments");
 }
 
 // ------------------------------------------------------------------ comments
 
-export function Comments({ k, signedIn, onCount }: { k: string; signedIn: boolean; onCount?(d: number): void }) {
+type CommentsProps = { k: string; signedIn: boolean; onCount?(d: number): void };
+
+export function Comments(props: CommentsProps) {
+  return showComments() ? <CommentList {...props} /> : null;
+}
+
+function CommentList({ k, signedIn, onCount }: CommentsProps) {
   const [list, setList] = useState<MarketComment[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState(false);

@@ -1,0 +1,99 @@
+/* Typography an agent can use in its Ask replies: <span lang="TOKENS">text</span>, tokens space-separated
+   and combinable (fonts, sizes, weights, colours, motion). For anything outside the vocabulary, a span can
+   carry a sanitized style= with typographic properties only (see lib/sanitize.ts). Fonts are OFL, from
+   @fontsource, served from /fonts/agent-type/. */
+@font-face { font-family: "Etude Caveat"; src: url("/fonts/agent-type/caveat-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Etude Caveat"; src: url("/fonts/agent-type/caveat-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Etude Marker"; src: url("/fonts/agent-type/permanent-marker.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Etude Playfair"; src: url("/fonts/agent-type/playfair-italic-400.woff2") format("woff2"); font-style: italic; font-weight: 400; font-display: swap; }
+@font-face { font-family: "Etude Playfair"; src: url("/fonts/agent-type/playfair-italic-700.woff2") format("woff2"); font-style: italic; font-weight: 700; font-display: swap; }
+@font-face { font-family: "Etude Fraktur"; src: url("/fonts/agent-type/unifraktur.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Etude Typewriter"; src: url("/fonts/agent-type/special-elite.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Etude Script"; src: url("/fonts/agent-type/dancing-script-700.woff2") format("woff2"); font-display: swap; }
+@font-face { font-family: "Etude Bebas"; src: url("/fonts/agent-type/bebas-neue.woff2") format("woff2"); font-display: swap; }
+
+/* fonts */
+.agent-prose span[lang~="hand"] { font-family: "Etude Caveat", cursive; font-size: 1.3em; line-height: 1; }
+.agent-prose span[lang~="marker"] { font-family: "Etude Marker", cursive; letter-spacing: 0.02em; }
+.agent-prose span[lang~="serif"] { font-family: "Etude Playfair", Georgia, serif; font-style: italic; }
+.agent-prose span[lang~="cm"] { font-family: KaTeX_Main, "Latin Modern Roman", "CMU Serif", serif; font-size: 1.12em; }
+.agent-prose span[lang~="goth"] { font-family: "Etude Fraktur", serif; font-size: 1.15em; }
+.agent-prose span[lang~="type"] { font-family: "Etude Typewriter", monospace; }
+.agent-prose span[lang~="script"] { font-family: "Etude Script", cursive; font-size: 1.25em; }
+.agent-prose span[lang~="loud"] { font-family: "Etude Bebas", Impact, sans-serif; letter-spacing: 0.04em; font-size: 1.25em; }
+.agent-prose span[lang~="mono"] { font-family: var(--font-mono), ui-monospace, monospace; font-size: 0.92em; }
+
+/* sizes, on top of the font's own size */
+.agent-prose span[lang~="xs"] { font-size: 0.72em; }
+.agent-prose span[lang~="s"] { font-size: 0.85em; }
+.agent-prose span[lang~="l"] { font-size: 1.35em; }
+.agent-prose span[lang~="xl"] { font-size: 1.8em; line-height: 1.1; }
+.agent-prose span[lang~="xxl"] { font-size: 2.5em; line-height: 1.05; }
+.agent-prose span[lang~="huge"] { font-size: 3.4em; line-height: 1; }
+
+/* weight and style */
+.agent-prose span[lang~="b"] { font-weight: 700; }
+.agent-prose span[lang~="thin"] { font-weight: 300; }
+.agent-prose span[lang~="i"] { font-style: italic; }
+.agent-prose span[lang~="u"] { text-decoration: underline; text-underline-offset: 0.18em; }
+.agent-prose span[lang~="strike"] { text-decoration: line-through; }
+.agent-prose span[lang~="caps"] { text-transform: uppercase; letter-spacing: 0.06em; }
+.agent-prose span[lang~="smallcaps"] { font-variant: small-caps; letter-spacing: 0.03em; }
+.agent-prose span[lang~="wide"] { letter-spacing: 0.22em; }
+
+/* colours */
+.agent-prose span[lang~="pink"] { color: #f4a9c6; }
+.agent-prose span[lang~="red"] { color: #ff6b6b; }
+.agent-prose span[lang~="blue"] { color: #8ab4ff; }
+.agent-prose span[lang~="green"] { color: #8fd694; }
+.agent-prose span[lang~="gold"] { color: #e8c36a; }
+.agent-prose span[lang~="purple"] { color: #c3a6ff; }
+.agent-prose span[lang~="dim"] { opacity: 0.55; }
+.agent-prose span[lang~="glow"] { text-shadow: 0 0 0.35em currentColor; }
+
+/* motion */
+.agent-prose span[lang~="shake"], .agent-prose span[lang~="wobble"], .agent-prose span[lang~="pulse"], .agent-prose span[lang~="tilt"] { display: inline-block; }
+.agent-prose span[lang~="tilt"] { transform: rotate(-4deg); }
+.agent-prose span[lang~="shake"] { animation: agent-type-shake 0.5s linear 3; }
+.agent-prose span[lang~="wobble"] { animation: agent-type-wobble 1.6s ease-in-out infinite; }
+.agent-prose span[lang~="pulse"] { animation: agent-type-pulse 1.4s ease-in-out infinite; }
+@keyframes agent-type-shake { 0%, 100% { transform: translate(0, 0) rotate(0); } 20% { transform: translate(-2px, 1px) rotate(-2deg); } 40% { transform: translate(2px, -1px) rotate(2deg); } 60% { transform: translate(-1px, -1px) rotate(-1deg); } 80% { transform: translate(1px, 1px) rotate(1deg); } }
+@keyframes agent-type-wobble { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+@keyframes agent-type-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { .agent-prose span[lang] { animation: none !important; } }
+
+/* columns side by side in a reply (:::row … :::col … :::), stacked when the chat is narrow */
+.achat-row-wrap { container-type: inline-size; }
+.achat-row { display: grid; gap: 18px; align-items: start; }
+.achat-aside .achat-row { gap: 10px; }
+.achat-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.achat-col > .agent-prose > :first-child { margin-top: 0; }
+/* columns stack only when each would get too thin to read: about 130px a column */
+@container (max-width: 200px) { .achat-row[data-cols="2"] { grid-template-columns: minmax(0, 1fr) !important; } }
+@container (max-width: 420px) { .achat-row[data-cols="3"] { grid-template-columns: minmax(0, 1fr) !important; } }
+@container (max-width: 560px) { .achat-row:not([data-cols="2"]):not([data-cols="3"]) { grid-template-columns: minmax(0, 1fr) !important; } }
+
+/* a floated box with the reply wrapping around it (:::aside … :::), like an encyclopedia's infobox */
+.achat-wrap { container-type: inline-size; width: 100%; margin-top: 0.5em; }
+.achat-flow { display: flow-root; }
+.achat-flow > * + * { margin-top: 0.6em; }
+.achat-flow hr { overflow: hidden; }
+.achat-aside { float: right; display: flex; flex-direction: column; gap: 8px; min-width: 0; max-width: 60%; margin: 2px 0 12px 20px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
+.achat-aside.achat-aside-left { float: left; margin: 2px 20px 12px 0; }
+.achat-aside + * { margin-top: 0 !important; }
+.achat-aside img { max-width: 100%; height: auto; }
+.achat-aside .agent-prose { font-size: 12.5px; line-height: 1.4; }
+.achat-aside .agent-prose table { display: table; width: 100%; font-size: 12.5px; }
+.achat-aside .agent-prose td:first-child, .achat-aside .agent-prose th:first-child { white-space: nowrap; font-weight: 600; padding-left: 0; vertical-align: top; }
+.achat-aside .agent-prose thead tr:not(:has(th:not(:empty))) { display: none; }
+@container (max-width: 340px) { .achat-aside, .achat-aside.achat-aside-left { float: none; width: auto !important; max-width: none; margin: 0 0 12px; } }
+
+/* a widget without its card (```widget seamless, or "frame": "none"): it sits on the chat itself */
+.achat-bare { overflow: hidden; }
+
+/* a chart on the chat itself (the default; "frame": "card" puts it in a card) */
+.achat-chart.is-bare { padding: 6px 0 2px; }
+
+/* a PDF or a video takes the reply's width, even where pictures and stickers keep their own size */
+.achat-rich:has(> .achat-pdf, > .achat-video) { align-self: stretch; width: 100%; }
+.achat-pdf { width: 100%; }

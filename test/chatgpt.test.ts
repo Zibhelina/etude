@@ -101,7 +101,7 @@ async function fakeOpenAi(): Promise<Fake> {
         exp: Math.floor(Date.now() / 1000) + 3600,
         iat: Math.floor(Date.now() / 1000),
         nonce,
-        email: "joao@example.com",
+        email: "user@example.com",
         "https://api.openai.com/auth": { chatgpt_plan_type: "plus" },
       }),
       token_type: "Bearer",
@@ -275,13 +275,13 @@ test("the authorize URL carries every documented parameter", () => {
       hostId: "urn:uuid:11111111-1111-1111-1111-111111111111",
       clientId: "oaiapp_saved",
       idTokenHint: "id-token",
-      emailHint: "joao@example.com",
+      emailHint: "user@example.com",
     }),
   ).searchParams;
   assert.equal(returning.get("client_id"), "oaiapp_saved");
   assert.equal(returning.get("agent_name_hint"), null);
   assert.equal(returning.get("id_token_hint"), "id-token");
-  assert.equal(returning.get("login_hint"), "joao@example.com");
+  assert.equal(returning.get("login_hint"), "user@example.com");
 });
 
 test("sign-in exchanges the code, validates the ID token and stores 0600 credentials", async () => {
@@ -298,7 +298,7 @@ test("sign-in exchanges the code, validates the ID token and stores 0600 credent
     assert.equal(await callback(session, { code, state, client_id: "oaiapp_test" }), 200);
 
     const creds = await session.wait;
-    assert.equal(creds.email, "joao@example.com");
+    assert.equal(creds.email, "user@example.com");
     assert.equal(creds.client_id, "oaiapp_test");
     assert.equal(creds.subject, "user-abc");
     assert.equal(creds.plan_type, "plus");
@@ -325,7 +325,7 @@ test("sign-in exchanges the code, validates the ID token and stores 0600 credent
     assert.equal(q2.get("agent_name_hint"), null);
     // The URL is printed and opened, so it must not carry the retained ID token.
     assert.equal(q2.get("id_token_hint"), null);
-    assert.equal(q2.get("login_hint"), "joao@example.com");
+    assert.equal(q2.get("login_hint"), "user@example.com");
     assert.equal(q2.get("ext_agent_host_id"), creds.ext_agent_host_id);
     again.cancel();
     await assert.rejects(again.wait, /cancelled/);
@@ -473,7 +473,7 @@ test("plan errors become plain messages", async () => {
   try {
     await signIn(fake, home);
     fake.mode = "usage-limit";
-    await assert.rejects(chatGptResponses({ home, model: "m", instructions: "i", input: "x", endpoints: fake.endpoints }), /usage limit/i);
+    await assert.rejects(chatGptResponses({ home, model: "m", instructions: "i", input: "x", endpoints: fake.endpoints }), /plan-sharing limit/i);
     fake.mode = "not-eligible";
     await assert.rejects(chatGptResponses({ home, model: "m", instructions: "i", input: "x", endpoints: fake.endpoints }), /Plus or Pro/);
     fake.mode = "no-completed";
@@ -676,7 +676,7 @@ test("phone apps: sign-in runs on the app's own listener and browser sheet, toke
     n.hit("/auth/callback", { code, state, client_id: "oaiapp_phone" });
     const creds = await session.wait;
     assert.equal(creds.client_id, "oaiapp_phone");
-    assert.equal(creds.email, "joao@example.com");
+    assert.equal(creds.email, "user@example.com");
     assert.ok(n.log.includes("POST /token"), "the code exchange went through the native HTTP");
     assert.ok(n.log.includes("GET /jwks"), "the signing keys came through the native HTTP");
     await new Promise((r) => setTimeout(r, 10));

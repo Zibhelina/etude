@@ -212,6 +212,20 @@ test("showVerdict: false reaches the study card and survives a save", async (t) 
   assert.throws(() => e.saveType({ ...def, showVerdict: "no" as any }), /showVerdict/);
 });
 
+test("fitScreen reaches the study card, survives a save and goes out with the type", async (t) => {
+  const e = await open(t);
+  const def = { ...loadTypeDir(TYPING), fitScreen: true };
+  e.saveType(def);
+  assert.equal(e.type("typing").fitScreen, true);
+  e.upsertItem({ id: "ty", type: "typing", deck: "T", fields: {} });
+  assert.equal(e.next({ deck: "T" }).card!.fitScreen, true);
+  const pack = e.exportPack({ deck: "T" }) as any;
+  assert.equal(pack.types.find((x: any) => x.id === "typing").fitScreen, true);
+  e.upsertItem({ id: "b", type: "basic", deck: "B", fields: { front: "b", back: "B" } });
+  assert.equal(e.next({ deck: "B" }).card!.fitScreen, false);
+  assert.throws(() => e.saveType({ ...def, fitScreen: "yes" as any }), /fitScreen/);
+});
+
 test("stats keep each scheduler's numbers apart: FSRS memory, Leitner boxes, drills ready", async (t) => {
   const e = await open(t);
   e.saveType(loadTypeDir(TYPING));

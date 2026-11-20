@@ -2,7 +2,7 @@
 // Only a git checkout can update itself. Package installs (npm, the Mac app) get the latest
 // release's version and a link instead.
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync } from "node:fs";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -35,8 +35,12 @@ export type UpdateStatus =
       incoming: Commit[];
       behind: number;
       ahead: number;
-      /** Tracked files with local changes; updating refuses while there are any. */
+      /** Tracked files with local changes. Updating keeps them: they're set aside, and put back on the new code. */
       dirty: string[];
+      /** The local changes that will still be local changes after the update (the rest are already in it). */
+      kept: string[];
+      /** Untracked files the update would replace with something else; updating refuses while there are any. */
+      clash: string[];
       checked: string | null;
       checkError?: string;
       /** Why one click can't update right now, if it can't. */
@@ -172,17 +176,67 @@ export async function updateStatus(opts: Opts = {}): Promise<UpdateStatus> {
   }
   // Raw: porcelain lines start with a status column that may be a space.
   const dirty = git(root, ["status", "--porcelain", "--untracked-files=no"], 60_000, true).split("\n").filter(Boolean).map((l) => l.slice(3));
+  const plan = upstream && behind ? localPlan(root) : { kept: changedPaths(root), clash: [], same: [] };
   const blocked = !branch
     ? "Not on a branch (detached HEAD)."
     : !upstream
       ? `Branch ${branch} doesn't track a remote branch.`
-      : dirty.length
-        ? `${dirty.length} file${dirty.length === 1 ? " has" : "s have"} local changes.`
+      : plan.clash.length
+        ? `The update would replace ${plan.clash.length === 1 ? "an untracked file" : `${plan.clash.length} untracked files`}: ${plan.clash.slice(0, 3).join(", ")}${plan.clash.length > 3 ? "…" : ""}`
         : ahead && behind
           ? `This copy has ${ahead} commit${ahead === 1 ? "" : "s"} the repo doesn't, so it can't fast-forward.`
           : undefined;
   const c = lastCheck.get(root);
-  return { kind: "git", version, branch, upstream, commit, incoming, behind, ahead, dirty, checked: c?.at ?? null, ...(c?.error ? { checkError: c.error } : {}), ...(blocked ? { blocked } : {}) };
+  return { kind: "git", version, branch, upstream, commit, incoming, behind, ahead, dirty, kept: plan.kept, clash: plan.clash, checked: c?.at ?? null, ...(c?.error ? { checkError: c.error } : {}), ...(blocked ? { blocked } : {}) };
+}
+
+const lines = (out: string) => out.split("\n").filter(Boolean);
+
+/** Tracked paths whose working copy differs from HEAD (staged or not). */
+const changedPaths = (root: string) => lines(git(root, ["diff", "--name-only", "--no-renames", "HEAD"]));
+
+/** Blob ids of `paths` in a commit; a path it doesn't have is missing from the map. */
+function blobsAt(root: string, rev: string, paths: string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!paths.length) return out;
+  for (const l of lines(git(root, ["ls-tree", "-r", rev, "--", ...paths]))) {
+    const m = l.match(/^\d+ blob ([0-9a-f]+)\t(.+)$/);
+    if (m) out.set(m[2], m[1]);
+  }
+  return out;
+}
+
+/** What the working copy holds for `paths` (null: the file isn't there). */
+function blobsHere(root: string, paths: string[]): Map<string, string | null> {
+  const out = new Map<string, string | null>(paths.map((p) => [p, null]));
+  const present = paths.filter((p) => existsSync(join(root, p)));
+  if (present.length) git(root, ["hash-object", "--", ...present]).split("\n").forEach((h, i) => out.set(present[i], h.trim()));
+  return out;
+}
+
+/**
+ * How the local changes meet the update: tracked changes the update already has (`same`) or doesn't (`kept`), and
+ * untracked files it would add: the same file (`same`, set aside while it updates) or a different one (`clash`).
+ */
+function localPlan(root: string): { kept: string[]; clash: string[]; same: string[] } {
+  const tracked = changedPaths(root);
+  const added = lines(git(root, ["diff", "--name-only", "--no-renames", "--diff-filter=A", "HEAD", "@{u}"]));
+  const untracked = added.length ? lines(git(root, ["ls-files", "--others", "--exclude-standard", "--", ...added])) : [];
+  const up = blobsAt(root, "@{u}", [...tracked, ...untracked]);
+  const here = blobsHere(root, [...tracked, ...untracked]);
+  const isSame = (p: string) => (up.get(p) ?? null) === here.get(p);
+  return {
+    kept: tracked.filter((p) => !isSame(p)),
+    clash: untracked.filter((p) => !isSame(p)),
+    same: [...tracked.filter(isSame), ...untracked.filter(isSame)],
+  };
+}
+
+/** Takes the update's stash out of the stash list once its changes are back where they were. */
+function dropStash(root: string, sha: string) {
+  if (!sha) return;
+  const i = lines(git(root, ["stash", "list", "--format=%H"])).indexOf(sha);
+  if (i >= 0) git(root, ["stash", "drop", "--quiet", `stash@{${i}}`]);
 }
 
 /** npm next to the node that runs Etude, run through that same node (no PATH lookup, no shebang). */
@@ -238,7 +292,7 @@ export async function applyUpdate(opts: Omit<Opts, "fetch"> = {}): Promise<Updat
     if (st.kind !== "git" && process.versions.electron) throw new UpdateError("This etude came with the Etude desktop app, which updates itself.", 409);
     if (st.kind !== "git") throw new UpdateError(st.latest ? `This install can't update itself: get ${st.latest} from ${st.url}` : "This install can't update itself (it isn't a git checkout).", 409);
     if (st.checkError) throw new UpdateError(`Couldn't reach the repo: ${st.checkError}`, 502);
-    if (st.blocked) throw new UpdateError(st.blocked, 409, { dirty: st.dirty });
+    if (st.blocked) throw new UpdateError(st.blocked, 409, { dirty: st.dirty, clash: st.clash });
     const steps: { step: string; ms: number }[] = [];
     const time = (step: string, f: () => void) => {
       const t = Date.now();
@@ -248,7 +302,52 @@ export async function applyUpdate(opts: Omit<Opts, "fetch"> = {}): Promise<Updat
     const from = git(root, ["rev-parse", "HEAD"]);
     if (!st.behind) return { result: "current", from: from.slice(0, 7), to: from.slice(0, 7), commits: [], steps: [{ step: "fetch", ms: 0 }] };
 
-    time("pull", () => git(root, ["merge", "--ff-only", "--quiet", "@{u}"]));
+    // Local changes go aside (a stash, kept until the end) and come back on the new code; untracked files the update
+    // brings exactly as they are wait in .git until it's done. Anything that goes wrong puts it all back as it was.
+    const tracked = new Set(changedPaths(root));
+    const untrackedSame = localPlan(root).same.filter((p) => !tracked.has(p));
+    // In .git (a worktree's .git is a file pointing at its own folder), out of the way of the working copy.
+    const aside = join(git(root, ["rev-parse", "--absolute-git-dir"]), "etude-update", String(Date.now()));
+    const moved: string[] = [];
+    let stash = "";
+    const putBack = () => {
+      git(root, ["reset", "--hard", "--quiet", from]);
+      if (stash) git(root, ["stash", "apply", "--quiet", stash]);
+      for (const p of moved) {
+        mkdirSync(dirname(join(root, p)), { recursive: true });
+        renameSync(join(aside, p), join(root, p));
+      }
+      rmSync(aside, { recursive: true, force: true });
+      dropStash(root, stash);
+    };
+    time("pull", () => {
+      try {
+        for (const p of untrackedSame) {
+          mkdirSync(dirname(join(aside, p)), { recursive: true });
+          renameSync(join(root, p), join(aside, p));
+          moved.push(p);
+        }
+        stash = git(root, ["stash", "create", `etude update from ${from.slice(0, 7)}`]);
+        if (stash) {
+          // Recorded in the stash list too, so it survives whatever happens next.
+          git(root, ["stash", "store", "--quiet", "-m", `etude update from ${from.slice(0, 7)}`, stash]);
+          git(root, ["reset", "--hard", "--quiet"]);
+        }
+        git(root, ["merge", "--ff-only", "--quiet", "@{u}"]);
+      } catch (e) {
+        putBack();
+        throw e;
+      }
+      if (stash) {
+        try {
+          git(root, ["stash", "apply", "--quiet", stash]);
+        } catch {
+          const clashing = lines(git(root, ["diff", "--name-only", "--diff-filter=U"]));
+          putBack();
+          throw new UpdateError(`Your local changes clash with the update${clashing.length ? ` in ${clashing.slice(0, 3).join(", ")}${clashing.length > 3 ? "…" : ""}` : ""}. Nothing changed.`, 409, { clash: clashing });
+        }
+      }
+    });
     const to = git(root, ["rev-parse", "HEAD"]);
     const changed = git(root, ["diff", "--name-only", from, to]).split("\n").filter(Boolean);
     try {
@@ -259,12 +358,14 @@ export async function applyUpdate(opts: Omit<Opts, "fetch"> = {}): Promise<Updat
       }
       if (existsSync(join(root, "web", "vite.config.ts"))) time("build", () => buildWeb(root));
     } catch (e) {
-      // Leave the code as it was; the live web build was never touched.
+      // Leave the code as it was, local changes included; the live web build was never touched.
       try {
-        git(root, ["reset", "--keep", "--quiet", from]);
+        putBack();
       } catch {}
       throw e;
     }
+    rmSync(aside, { recursive: true, force: true });
+    dropStash(root, stash);
     return { result: "updated", from: from.slice(0, 7), to: to.slice(0, 7), commits: st.incoming, steps };
   } finally {
     busy = false;

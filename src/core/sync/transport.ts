@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rename
 import { join, dirname } from "node:path";
 import type { VaultKeys } from "./crypto.ts";
 import { AccountError } from "../account.ts";
+import { retryTransient } from "../net-retry.ts";
 
 export type WireEvent = {id:string;ciphertext:string};
 const toB64Url=(b:Uint8Array)=>btoa(String.fromCharCode(...b)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
@@ -77,6 +78,7 @@ export class FolderTransport implements Transport {
   }
   private blob(name:string) { if (!/^[a-f0-9]{64}$/.test(name)) throw new Error("invalid blob name"); return join(this.folder,"blobs",name); }
   async getBlob(name:string) { return new Uint8Array(readFileSync(this.blob(name))); }
+  async deleteBlob(name:string) { rmSync(this.blob(name),{force:true}); }
 }
 export class CloudTransport implements Transport {
   readonly server:string;
@@ -89,7 +91,9 @@ export class CloudTransport implements Transport {
     for (let attempt=1;;attempt++) {
       opts.signal?.throwIfAborted();
       const timeout=AbortSignal.timeout(60_000);
-      res=await fetch(this.server+path,{...opts,headers,signal:opts.signal&&AbortSignal.any?AbortSignal.any([opts.signal,timeout]):timeout});
+      // A dropped connection or refused stream gets a few more tries on a fresh one (net-retry.ts); every request here
+      // is safe to repeat (events and blobs are keyed by id or hash).
+      res=await retryTransient(()=>fetch(this.server+path,{...opts,headers,signal:opts.signal&&AbortSignal.any?AbortSignal.any([opts.signal,timeout]):timeout}),{signal:opts.signal});
       if (res.status!==429 || attempt>=RATE_LIMIT_ATTEMPTS) break;
       // The server limits requests per client address; wait as long as it says, with jitter so parallel transfers spread out.
       await res.body?.cancel();

@@ -8,6 +8,9 @@ import StarterKit from "@tiptap/starter-kit";
 import CodeBlock from "@tiptap/extension-code-block";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
+import { TodoPop } from "./note-todo";
+import { ListTurn } from "./note-list-turn";
+import { DividerDashes } from "./note-divider";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
 import { NoteLink, type NoteLinkOptions } from "./note-link";
@@ -16,9 +19,12 @@ import { Callout } from "./note-callout";
 import { CardMark, NoteCards } from "./note-cards";
 import { NoteCard } from "./note-card";
 import { CanvasEmbed } from "./note-canvas";
+import { Portal } from "./note-portal";
+import { KanbanEmbed } from "./note-kanban";
 import { NoteEmbeds } from "./note-embed";
 import { TableKit } from "@tiptap/extension-table";
-import { Details, DetailsContent, DetailsSummary } from "@tiptap/extension-details";
+import { Details, DetailsContent } from "@tiptap/extension-details";
+import { NoteDetailsSummary, ToggleTurn } from "./note-toggle";
 import FileHandler from "@tiptap/extension-file-handler";
 import { api } from "@/lib/api";
 import { localBlobUrl, ownPath } from "@/lib/local-url";
@@ -45,8 +51,10 @@ import { runCode, runLanguage } from "./note-run";
 import { NoteCodeHighlight } from "./note-code-highlight";
 import { NoteStyle } from "./note-style";
 import { BlockHandle } from "./note-handle";
+import { BlockSelection } from "./note-blocksel";
 import { AlignButton, BlockMenu, StyleButton } from "./note-format";
 import { TableControls } from "./note-table-ui";
+import { NotePresence } from "./note-presence";
 import { SlashCommand } from "./slash-menu";
 import { languageName } from "./highlight";
 import { dropEmptyText } from "../../../src/core/doc-clean.ts";
@@ -291,6 +299,12 @@ export interface NoteEditorHandle {
   focusStart(): void;
   /** The cursor at the end, on a new line when the page ends in a block you can't type after. */
   focusEnd(): void;
+  /** The page as it is in the editor now. */
+  json(): NoteDoc;
+  /** A saved page in the form the editor writes it, so it compares block by block with json(). */
+  normalize(doc: NoteDoc): NoteDoc;
+  /** Puts a newer page in without a save of its own: only the blocks that differ change, so the cursor stays where it was. */
+  replace(doc: NoteDoc): void;
 }
 
 function focusEnd(editor: Editor) {
@@ -303,8 +317,15 @@ function focusEnd(editor: Editor) {
   editor.commands.scrollIntoView();
 }
 
-export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page }: {
+/** Marks a change that came from a save made somewhere else: it's shown, not saved again. */
+const EXTERNAL = "etude-external";
+
+export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page, editable = true, shared = false }: {
+  /** In a shared folder: others' cursors show here and this one's goes to them. */
+  shared?: boolean;
   doc: NoteDoc;
+  /** False for a page shared with you as view only: it reads like the page, nothing types into it. */
+  editable?: boolean;
   /** The page being edited, for making cards from it. */
   page?: { id: string; title: string };
   /** Where [[links]] find, make and open pages. */
@@ -318,29 +339,36 @@ export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page }
   change.current = onChange;
   const pageRef = useRef(page);
   pageRef.current = page;
+  const sharedRef = useRef(shared);
+  sharedRef.current = shared;
   const linkRef = useRef(links);
   linkRef.current = links;
   const up = useRef(onEscapeUp);
   up.current = onEscapeUp;
   const editor = useEditor({
+    editable,
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
         codeBlock: false,
-        link: { openOnClick: false, autolink: true, HTMLAttributes: { rel: "noopener noreferrer nofollow", target: "_blank" } },
+        link: { openOnClick: true, autolink: true, HTMLAttributes: { rel: "noopener noreferrer nofollow", target: "_blank" } },
       }),
       CodeBlockWithLang,
       TaskList,
       TaskItem.configure({ nested: true }),
+      TodoPop,
+      ListTurn,
+      DividerDashes,
       Placeholder.configure({
         includeChildren: false,
-        placeholder: ({ node }) => (node.type.name === "heading" ? `Heading ${node.attrs.level}` : node.type.name === "detailsSummary" ? "Toggle" : node.type.name === "paragraph" ? "Write, or type / for blocks" : ""),
+        placeholder: ({ node }) => (node.type.name === "heading" ? `Heading ${node.attrs.level}` : node.type.name === "detailsSummary" ? (node.attrs.level ? `Toggle heading ${node.attrs.level}` : "Toggle") : node.type.name === "paragraph" ? "Write, or type / for blocks" : ""),
       }),
       NoteCodeHighlight,
       ...NoteStyle,
       BlockHandle,
+      BlockSelection,
       SlashCommand,
       MathInline,
       MathBlock,
@@ -348,12 +376,15 @@ export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page }
       CardMark,
       NoteCard.configure({ page: () => pageRef.current ?? null }),
       CanvasEmbed.configure({ page: () => pageRef.current ?? null }),
+      Portal.configure({ page: () => pageRef.current ?? null }),
+      KanbanEmbed.configure({ page: () => pageRef.current ?? null, links: () => linkRef.current ?? null }),
       ...NoteEmbeds,
       Callout,
       TableKit.configure({ table: { resizable: true, cellMinWidth: 80 } }),
       Details.configure({ persist: true, HTMLAttributes: { class: "note-toggle" } }),
+      ToggleTurn,
       // Enter on a toggle's title opens it and goes into its content, like Notion.
-      DetailsSummary.extend({
+      NoteDetailsSummary.extend({
         addKeyboardShortcuts() {
           return {
             Enter: ({ editor: e }) => {
@@ -389,6 +420,7 @@ export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page }
           return ["img", isLocal() && ownPath(src) ? { ...HTMLAttributes, src: undefined, "data-etude-src": src } : HTMLAttributes];
         },
       }).configure({ inline: false }),
+      NotePresence.configure({ page: () => (sharedRef.current ? (pageRef.current ?? null) : null) }),
       NoteLink.configure({
         pages: (q: string) => linkRef.current.pages(q),
         create: (t: string) => linkRef.current.create(t),
@@ -420,7 +452,10 @@ export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page }
         return false;
       },
     },
-    onUpdate: ({ editor: e }) => change.current(e.getJSON() as NoteDoc),
+    onUpdate: ({ editor: e, transaction }) => {
+      if (transaction.getMeta(EXTERNAL)) return;
+      change.current(e.getJSON() as NoteDoc);
+    },
   });
   // "/" → Image picks files outside the editor; they come back here.
   useEffect(() => {
@@ -438,9 +473,29 @@ export function NoteEditor({ doc, onChange, editorRef, onEscapeUp, links, page }
         editor.commands.setTextSelection(1);
       },
       focusEnd: () => editor && focusEnd(editor),
+      json: () => editor.getJSON() as NoteDoc,
+      normalize: (d) => editor.schema.nodeFromJSON(dropEmptyText(d as any)).toJSON() as NoteDoc,
+      replace: (d) => {
+        const next = editor.schema.nodeFromJSON(dropEmptyText(d as any));
+        const cur = editor.state.doc;
+        const start = cur.content.findDiffStart(next.content);
+        if (start == null) return;
+        const end = cur.content.findDiffEnd(next.content)!;
+        // Overlapping ends (a repeated block) would cross over; keep them in order.
+        let a = end.a;
+        let b = end.b;
+        if (a < start) b += start - a, a = start;
+        if (b < start) a += start - b, b = start;
+        const tr = editor.state.tr.replace(start, a, next.slice(start, b)).setMeta(EXTERNAL, true).setMeta("addToHistory", false);
+        editor.view.dispatch(tr);
+      },
     };
     return () => void (editorRef.current = null);
   }, [editor, editorRef]);
+  // The role can change while the page is open (the owner made you a viewer, or an editor).
+  useEffect(() => {
+    if (editor && editor.isEditable !== editable) editor.setEditable(editable, false);
+  }, [editor, editable]);
   if (!editor) return null;
   return (
     <>

@@ -13,7 +13,7 @@ export const SB_FOLD = 150;
 const WIDTH_KEY = "etude.sidebar.width";
 const PAGES_KEY = "etude.notes.pagesOpen";
 
-export type NotesAction = "new" | "new-canvas" | "new-file" | "new-folder" | "add-pdf" | "import-md" | "import-vault" | "fold-all" | "tutorial";
+export type NotesAction = "new" | "new-canvas" | "new-web" | "new-kanban" | "new-file" | "new-folder" | "add-pdf" | "import-md" | "import-vault" | "open-folder" | "fold-all" | "tutorial";
 
 const clampW = (w: number) => Math.max(SB_MIN, Math.min(SB_MAX, Math.round(w)));
 const readW = () => {
@@ -71,4 +71,24 @@ export function runNotesAction(a: NotesAction): boolean {
   }
   state.pending = a;
   return false;
+}
+
+/** What Notes shows in the app sidebar: its pages, or the Ask chats. A chat tab coming to the front picks Chats. */
+export type NotesView = "pages" | "chats";
+const VIEW_KEY = "etude.notes.view";
+let view: NotesView = typeof localStorage !== "undefined" && localStorage.getItem(VIEW_KEY) === "chats" ? "chats" : "pages";
+export function setNotesView(v: NotesView) {
+  if (view === v) return;
+  view = v;
+  localStorage.setItem(VIEW_KEY, v);
+  emit();
+}
+export const useNotesView = () => useSyncExternalStore(sub, () => view);
+
+/** Opens the app sidebar with Notes' chats in it (from a chat whose sidebar is folded away). App listens. */
+export const SHOW_CHATS_EVENT = "etude:show-chats";
+export function showNotesChats() {
+  setNotesPagesOpen(true);
+  setNotesView("chats");
+  window.dispatchEvent(new Event(SHOW_CHATS_EVENT));
 }

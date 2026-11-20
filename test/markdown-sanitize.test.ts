@@ -114,3 +114,11 @@ test("markdown sanitize: KaTeX output is put back only in text, never inside an 
   assert.doesNotMatch(html, /href="[^"]*katex/);
   assert.equal((html.match(/class="katex"/g) ?? []).length, 1);
 });
+
+test("markdown sanitize: a span keeps typographic style only, within limits", () => {
+  const ok = md(`<span lang="hand xl pink" style="color:#ff0; font-size:2em; font-family:Georgia">hi</span>`);
+  assert.match(ok, /<span lang="hand xl pink" style="color: rgb\(255, 255, 0\); font-size: 2em; font-family: Georgia">hi<\/span>/);
+  const bad = md(`<span style="position:fixed; inset:0; z-index:9999; width:100vw; background-image:url(https://x.example/a.png); font-size:50em; opacity:0">x</span>`);
+  assert.doesNotMatch(bad, /position|inset|z-index|width|url\(|50em|opacity/);
+  assert.doesNotMatch(md(`<div style="color:red">x</div>`), /style=/);
+});

@@ -21,9 +21,10 @@ function fixture() {
   sh(dev, ...ident, "commit", "--quiet", "-m", "first");
   sh(dev, "push", "--quiet", "origin", "main");
   sh(dir, "clone", "--quiet", "-c", "core.autocrlf=false", origin, app);
-  const push = (msg: string, text: string) => {
-    writeFileSync(join(dev, "notes.txt"), text);
-    sh(dev, ...ident, "commit", "--quiet", "-am", msg);
+  const push = (msg: string, text: string, file = "notes.txt") => {
+    writeFileSync(join(dev, file), text);
+    sh(dev, "add", file);
+    sh(dev, ...ident, "commit", "--quiet", "-m", msg);
     sh(dev, "push", "--quiet", "origin", "main");
   };
   return { dir, app, dev, push, done: () => rmSync(dir, { recursive: true, force: true }) };
@@ -57,16 +58,49 @@ test("update: sees new commits on the upstream and fast-forwards to them", async
   }
 });
 
-test("update: refuses to touch local changes or a diverged branch", async () => {
+test("update: keeps local changes, drops the ones already in the update, refuses a clash or a diverged branch", async () => {
   const f = fixture();
   try {
+    f.push("other file", "a\n", "other.txt");
+    sh(f.app, "pull", "--quiet");
     f.push("upstream change", "upstream\n");
-    writeFileSync(join(f.app, "notes.txt"), "my edit\n");
+    f.push("a new file", "new\n", "added.txt");
+    const status = sh.bind(null, f.app, "status", "--porcelain");
+
+    // A local change the update doesn't have stays; one it already has, and an untracked copy of a file it adds, go.
+    writeFileSync(join(f.app, "other.txt"), "a\nmine\n");
+    writeFileSync(join(f.app, "notes.txt"), "upstream\n");
+    writeFileSync(join(f.app, "added.txt"), "new\n");
     let st = await updateStatus({ root: f.app, fetch: true, force: true });
-    assert.match(String(st.kind === "git" && st.blocked), /local changes/);
-    assert.deepEqual(st.kind === "git" && st.dirty, ["notes.txt"]);
-    await assert.rejects(applyUpdate({ root: f.app }), /local changes/);
-    assert.equal(readFileSync(join(f.app, "notes.txt"), "utf8"), "my edit\n");
+    assert.equal(st.kind === "git" && st.blocked, undefined);
+    assert.deepEqual(st.kind === "git" && st.kept, ["other.txt"]);
+    assert.deepEqual(st.kind === "git" && st.dirty.sort(), ["notes.txt", "other.txt"]);
+    const out = await applyUpdate({ root: f.app });
+    assert.equal(out.result, "updated");
+    assert.equal(readFileSync(join(f.app, "other.txt"), "utf8"), "a\nmine\n");
+    assert.equal(readFileSync(join(f.app, "notes.txt"), "utf8"), "upstream\n");
+    assert.equal(readFileSync(join(f.app, "added.txt"), "utf8"), "new\n");
+    assert.equal(status(), "M other.txt");
+    assert.equal(sh(f.app, "stash", "list"), "", "no stash left behind");
+
+    // An untracked file the update would replace with something else: refused, nothing touched.
+    f.push("another new file", "theirs\n", "later.txt");
+    writeFileSync(join(f.app, "later.txt"), "mine\n");
+    st = await updateStatus({ root: f.app, fetch: true, force: true });
+    assert.match(String(st.kind === "git" && st.blocked), /would replace an untracked file: later\.txt/);
+    await assert.rejects(applyUpdate({ root: f.app }), /later\.txt/);
+    assert.equal(readFileSync(join(f.app, "later.txt"), "utf8"), "mine\n");
+    rmSync(join(f.app, "later.txt"));
+    await applyUpdate({ root: f.app });
+
+    // A local change that clashes with the update: everything stays as it was.
+    f.push("upstream edits other", "a\ntheirs\n", "other.txt");
+    const before = sh(f.app, "rev-parse", "HEAD");
+    await assert.rejects(applyUpdate({ root: f.app }), /clash with the update in other\.txt\. Nothing changed/);
+    assert.equal(sh(f.app, "rev-parse", "HEAD"), before);
+    assert.equal(readFileSync(join(f.app, "other.txt"), "utf8"), "a\nmine\n");
+    assert.equal(status(), "M other.txt");
+    assert.equal(sh(f.app, "stash", "list"), "");
 
     sh(f.app, ...ident, "commit", "--quiet", "-am", "mine");
     st = await updateStatus({ root: f.app, fetch: true, force: true });

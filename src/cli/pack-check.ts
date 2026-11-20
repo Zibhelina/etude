@@ -6,6 +6,7 @@ import { loadBuiltinTypes, validateType, ITEM_ID } from "../core/types.ts";
 import { loadBuiltinSchedulers, validateScheduler } from "../core/schedulers.ts";
 import { runScript } from "../core/sandbox.ts";
 import { sigmoid, toLogit, type Learner } from "../core/learner.ts";
+import { buildGraph, CONCEPT, NEEDS, under } from "../core/prereqs.ts";
 import math from "../../runtime/mathexpr.js";
 
 type Json = any;
@@ -327,7 +328,31 @@ export function checkPack(pack: Json, file = "pack", opts: { knownTypes?: string
         }
     }
   }
+  checkPrereqs(pack.items ?? [], file, warnings);
   out.items = ids.size;
   out.ok = !errors.length;
   return out;
+}
+
+/** `needs::` tags no `concept::` in the pack teaches, and concepts that need each other. Warnings only. */
+function checkPrereqs(items: Json[], file: string, warnings: string[]) {
+  const norm = (t: string) => t.trim().replace(/\s+/g, "-").split("::").filter(Boolean).join("::");
+  const concepts = new Map<string, string[]>(), needs = new Map<string, string[]>();
+  for (const [i, item] of items.entries()) {
+    if (!Array.isArray(item?.tags)) continue;
+    const id = isStr(item.id) ? item.id : `#${i}`;
+    for (const raw of item.tags) {
+      if (!isStr(raw)) continue;
+      const t = norm(raw);
+      for (const [prefix, m] of [[CONCEPT, concepts], [NEEDS, needs]] as const)
+        if (t.startsWith(prefix) && t.length > prefix.length) (m.get(id) ?? m.set(id, []).get(id)!).push(t.slice(prefix.length));
+    }
+  }
+  if (!needs.size) return;
+  const all = [...new Set([...concepts.values()].flat())];
+  const dangling = new Set<string>();
+  for (const list of needs.values()) for (const n of list) if (!all.some((c) => under(c, n))) dangling.add(n);
+  for (const n of [...dangling].sort())
+    warnings.push(`${file}: needs::${n} has no matching concept:: in this pack (it may exist in the collection where you import; if not, it's treated as met)`);
+  for (const cycle of buildGraph(concepts, needs).cycles) warnings.push(`${file}: concepts need each other (${cycle.join(" ↔ ")}); prerequisites treat these needs as met`);
 }

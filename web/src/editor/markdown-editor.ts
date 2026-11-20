@@ -1,7 +1,7 @@
 // Markdown with live preview, the way Obsidian edits: formatting renders in place, math renders
 // with KaTeX, code blocks are highlighted, and the raw markup comes back only where the cursor is.
 // Framework-free so card frames can use it; the app wraps it in a React component.
-import { Compartment, EditorSelection, EditorState, Prec, StateEffect, StateField, type Extension, type Range } from "@codemirror/state";
+import { Compartment, EditorSelection, EditorState, Facet, Prec, StateEffect, StateField, type Extension, type Range, type Text } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType, drawSelection, keymap, placeholder as placeholderExt, type DecorationSet } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { ensureSyntaxTree, syntaxHighlighting, syntaxTree } from "@codemirror/language";
@@ -10,6 +10,7 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { classHighlighter } from "@lezer/highlight";
 import type { BlockContext, InlineContext, Line, MarkdownConfig } from "@lezer/markdown";
+import type { SyntaxNodeRef } from "@lezer/common";
 import { editorTheme, leaveModEnter, type EditorHandle } from "./code-editor";
 
 /** The parts of KaTeX the editor needs; passed in so card frames can share the copy they already load. */
@@ -28,7 +29,27 @@ export interface MarkdownEditorOptions {
   katex: Katex;
   onChange?(value: string): void;
   extensions?: Extension[];
+  /** More Markdown grammar (the file editor adds [[links]], ==marks== and the like); drawn by `mdNodes` handlers. */
+  syntax?: MarkdownConfig[];
 }
+
+/** What a handler for extra syntax gets while the live preview is built. */
+export interface MdBuild {
+  state: EditorState;
+  doc: Text;
+  /** Add decorations. */
+  push(...d: Range<Decoration>[]): void;
+  /** The cursor or a selection touches this range (and the editor has focus): show its markup. */
+  touches(from: number, to: number): boolean;
+  /** The same, for the whole line at `pos`. */
+  lineActive(pos: number): boolean;
+  focused: boolean;
+}
+/**
+ * Extra drawing for the live preview, node by node. A handler returns false to skip the node's children, true when
+ * it drew the node itself (the built-in drawing is skipped, children still visited), or nothing to leave it alone.
+ */
+export const mdNodes = Facet.define<(node: SyntaxNodeRef, cx: MdBuild) => boolean | void>();
 
 // ---------------------------------------------------------------- math in the markdown grammar
 
@@ -231,11 +252,18 @@ function build(state: EditorState): DecorationSet {
   const head = state.selection.main.head;
   const out: Range<Decoration>[] = [];
   const tree = ensureSyntaxTree(state, doc.length, 100) ?? syntaxTree(state);
+  const extra = state.facet(mdNodes);
+  const cx: MdBuild = { state, doc, push: (...d) => void out.push(...d), touches, lineActive, focused };
 
   tree.iterate({
     enter(node) {
       const { from, to } = node;
       const name = node.name;
+      for (const h of extra) {
+        const r = h(node, cx);
+        if (r === false) return false;
+        if (r === true) return undefined;
+      }
       const parent = node.node.parent;
       switch (name) {
         case "ATXHeading1": case "ATXHeading2": case "ATXHeading3": case "ATXHeading4": case "ATXHeading5": case "ATXHeading6":
@@ -424,7 +452,7 @@ export function createMarkdownEditor(parent: HTMLElement, opts: MarkdownEditorOp
         history(),
         drawSelection(),
         EditorView.lineWrapping,
-        markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [mathSyntax], addKeymap: true }),
+        markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [mathSyntax, ...(opts.syntax ?? [])], addKeymap: true }),
         markdownLanguage.data.of({ closeBrackets: { brackets: ["(", "[", "{"] } }),
         closeBrackets(),
         Prec.high(keymap.of([{ key: "Mod-b", run: wrap("**") }, { key: "Mod-i", run: wrap("*") }])),

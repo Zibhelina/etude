@@ -21,6 +21,7 @@ const plural = (n: number, w: string) => `${n.toLocaleString()} ${w}${n === 1 ? 
 
 export function practiceUrl(d: DeckNode) {
   if (d.mode === "watch") return `/watch?deck=${enc(d.name)}`;
+  if (d.home && d.home !== "queue") return `/home?deck=${enc(d.name)}`;
   return `/study?deck=${enc(d.name)}${work(d) ? "" : "&ahead=1"}`;
 }
 

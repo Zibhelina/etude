@@ -20,6 +20,14 @@ export function localFrame(html: string): string {
   let out = html.replace(/<link rel="stylesheet" href="[^"]*runtime\/[^"]*">\n?/g, () => "");
   out = out.replace("</head>", () => `<style>${css}</style>\n</head>`);
   out = out.replace(`import { boot } from "${base}runtime/runtime.js";`, () => "const { boot } = globalThis.EtudeRuntime;");
+  out = out.replace(`import { bootHome } from "${base}runtime/runtime.js";`, () => "const { bootHome } = globalThis.EtudeRuntime;");
   out = out.replace('<script type="module">', () => `${script(shim)}\n${script(runtime)}\n<script type="module" ${FRAME_NONCE}>`);
   return out;
+}
+
+/** Stamps the serverless page nonce onto inline scripts inside a sandboxed plugin frame. */
+export function localPluginFrame(html: string): string {
+  return html.replace(/<script(\s[^>]*)?>/gi, (tag, attrs = "") =>
+    /\bnonce=/i.test(attrs) ? tag : `<script ${FRAME_NONCE}${attrs}>`,
+  );
 }

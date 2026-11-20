@@ -44,6 +44,7 @@ const LABELS: Record<Key, string> = {
   autoApply: "Apply suggested rating",
   burySiblings: "Bury siblings",
   mode: "Mode",
+  home: "Deck home",
   scheduler: "Schedule with",
   schedulerOptions: "Scheduler settings",
   adaptiveChallenge: "Adaptive challenge",
@@ -56,6 +57,11 @@ const LABELS: Record<Key, string> = {
   levelAdvanceAt: "Open the next level at",
   levelMix: "Next-level share",
   quickChecksPerDay: "Quick checks per day",
+  prerequisites: "Prerequisite order",
+  masteryStreak: "Mastery streak",
+  masteryShare: "Mastered share",
+  conceptsInProgress: "Concepts at once",
+  implicitReviews: "Implicit reviews",
 };
 
 /** Levels as text: one per line, the level's tag, then optionally the tag of its level check. */
@@ -512,6 +518,16 @@ export function DeckOptions({ deck, decks, presets, onChanged }: { deck: DeckFul
             {row("levelMix", <NumberField value={Math.round(value("levelMix") * 100)} min={0} max={100} onChange={(v) => set("levelMix", v / 100)} suffix="%" ariaLabel="Next-level share" />, "Share of new cards taken from the next level once it opens.")}
           </>}
           {row("quickChecksPerDay", <NumberField value={value("quickChecksPerDay")} min={0} onChange={(v) => set("quickChecksPerDay", v)} suffix="cards" ariaLabel="Quick checks per day" />, "After a placement, earlier cards it judged known come up as quick checks, on top of the new cards.")}
+        </>}
+      </Group>
+
+      <Group title="Prerequisites" description="Items tagged needs::<concept> wait until the items tagged concept::<concept> are mastered.">
+        {row("prerequisites", <Switch checked={value("prerequisites")} onCheckedChange={(v) => set("prerequisites", v)} aria-label="Prerequisite order" />, "New cards come in prerequisite order: what you started first, then what you just unlocked, simplest first.", { inline: true })}
+        {value("prerequisites") && <>
+          {row("masteryStreak", <NumberField value={value("masteryStreak")} min={1} max={20} onChange={(v) => set("masteryStreak", Math.max(1, Math.round(v)))} suffix="right in a row" ariaLabel="Mastery streak" />, "A card counts as mastered once it graduated and you got it right this many times in a row.")}
+          {row("masteryShare", <NumberField value={Math.round(value("masteryShare") * 100)} min={1} max={100} onChange={(v) => set("masteryShare", Math.max(0.01, v / 100))} suffix="% of cards" ariaLabel="Mastered share" />, "How much of a concept has to be mastered before what needs it opens.")}
+          {row("conceptsInProgress", <NumberField value={value("conceptsInProgress")} min={0} onChange={(v) => set("conceptsInProgress", Math.max(0, Math.round(v)))} suffix="concepts" ariaLabel="Concepts at once" />, "New cards stay inside this many started concepts until one is mastered (0 = no limit).")}
+          {row("implicitReviews", <Switch checked={value("implicitReviews")} onCheckedChange={(v) => set("implicitReviews", v)} aria-label="Implicit reviews" />, "Skip a due review when you just answered a card that builds on it correctly.", { inline: true })}
         </>}
       </Group>
 

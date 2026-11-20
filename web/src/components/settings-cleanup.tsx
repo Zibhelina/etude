@@ -99,7 +99,7 @@ export function CleanupSection() {
       </Block>
       <Block
         title="Unused media"
-        description="Files in the media folder that no card, type, deck, tag, setting or past answer names. Files added in the last hour and names starting with _ (which templates may load themselves) are kept."
+        description="Files in the media folder that no card, type, deck, tag, setting or past answer names, and no page in a folder opened in the Notebook shows. Files added in the last hour and names starting with _ (which templates may load themselves) are kept, and nothing counts as unused while an opened folder isn't there. With Sync on, they also go from your other devices, unless one of them still uses a file."
         stackAside
         aside={media && deleteButton("Delete", media.count, () => setConfirm({ media: true }))}
       >
@@ -133,7 +133,7 @@ export function CleanupSection() {
                   : target.cards === 1
                     ? `Its review history (${count(target.reviews, "review")}) is deleted with it.`
                     : `Their review history (${count(target.reviews, "review")}) is deleted with them.`
-                : "They're removed from the media folder, and database backups don't include media."}{" "}
+                : "They're removed from the media folder, and from your other devices if Sync is on. Database backups don't include media."}{" "}
               This can't be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -1,7 +1,7 @@
-// AI grading settings: providers, presets, key status and a live test.
-import { useEffect, useState } from "react";
-import { agentApi, type ModelGroup } from "@/lib/agent";
+// Settings → AI: grading (providers, presets, key status and a live test), then Ask's agents and their providers.
+import { useState } from "react";
 import { CircleAlert, CircleCheck, FlaskConical, Loader2 } from "lucide-react";
+import { AskSettings } from "@/components/settings-agents";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Markdown } from "@/components/markdown";
@@ -12,12 +12,15 @@ import { chatGptSignInHere, saveApiKey, serverless } from "@/lib/native";
 import { cn } from "@/lib/utils";
 import { BigSwitch, Block, Disclosure, Field, Group, NumberField, Section, TextField } from "@/components/settings-ui";
 import { ChatGptBlock } from "@/components/settings-chatgpt";
+import { AiConsentBlocks, useAiConsent } from "@/components/ai-consent";
 import {
+  aiProvidersOf,
   isChatGpt,
   isOpenAiChat,
   keyVars,
   matchPreset,
   presetAi,
+  providersForKey,
   usesDecisionModel,
   type AiSettings,
   type ChatGptProvider,
@@ -95,6 +98,7 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
             />
           )}
           <KeysBlock ai={ai} saved={saved} />
+          <AiConsentBlocks savedAi={saved.ai} />
         </Group>
 
         <Group title="Feedback">
@@ -119,10 +123,6 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
               />
             </div>
           </Block>
-        </Group>
-
-        <Group title="Ask Etude">
-          <AgentBlock ai={ai} onChange={(patch) => set({ agent: { model: ai.agent?.model ?? null, effort: ai.agent?.effort ?? "low", ...patch } })} />
         </Group>
 
         <Group title="Try it">
@@ -248,65 +248,16 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
             </Block>
           </Group>
         </Disclosure>
+
+        <AskSettings saved={saved} />
       </div>
     </Section>
   );
 }
 
-const EFFORTS: { value: string; label: string }[] = [
-  { value: "low", label: "Low (fastest useful)" },
-  { value: "minimal", label: "Minimal" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High (slowest)" },
-  { value: "default", label: "The model's default" },
-];
-
-function AgentBlock({ ai, onChange }: { ai: AiSettings; onChange(patch: { model?: string | null; effort?: string }): void }) {
-  const [groups, setGroups] = useState<ModelGroup[] | null>(null);
-  useEffect(() => {
-    agentApi.models().then((m) => setGroups(m.groups)).catch(() => setGroups([]));
-  }, []);
-  const value = ai.agent?.model ?? "";
-  const known = (groups ?? []).some((g) => g.models.some((m) => m.ref === value));
-  return (
-    <Block title="Assistant" description="The model Ask Etude starts new chats with, and how long it thinks before acting. You can switch the model per chat; the last one you picked is remembered. Lower effort answers much faster.">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Default model">
-          <Select value={value || "__feedback"} onValueChange={(v) => onChange({ model: v === "__feedback" ? null : v })}>
-            <SelectTrigger className="phone:h-10 w-full h-9"><SelectValue /></SelectTrigger>
-            <SelectContent className="max-h-80">
-              <SelectItem value="__feedback">Same as the feedback model</SelectItem>
-              {value && !known && <SelectItem value={value}>{value}</SelectItem>}
-              {(groups ?? []).map((g) =>
-                g.models.slice(0, g.provider === "openrouter" ? 60 : 50).map((m) => (
-                  <SelectItem key={m.ref} value={m.ref}>
-                    {g.label} · {m.name}
-                  </SelectItem>
-                )),
-              )}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label="Reasoning effort">
-          <Select value={ai.agent?.effort ?? "low"} onValueChange={(v) => onChange({ effort: v })}>
-            <SelectTrigger className="phone:h-10 w-full h-9"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {EFFORTS.map((e) => (
-                <SelectItem key={e.value} value={e.value}>
-                  {e.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-      </div>
-    </Block>
-  );
-}
-
 function KeysBlock({ ai, saved }: { ai: AiSettings; saved: SettingsResponse }) {
   const vars = keyVars(ai);
-  if (serverless()) return <LocalKeysBlock vars={vars.length ? vars : [{ name: "OPENROUTER_API_KEY", usedBy: ["feedback"] }]} saved={saved} />;
+  if (serverless()) return <LocalKeysBlock ai={ai} vars={vars.length ? vars : [{ name: "OPENROUTER_API_KEY", usedBy: ["feedback"] }]} saved={saved} />;
   if (!vars.length)
     return (
       <Block title="API keys">
@@ -315,6 +266,7 @@ function KeysBlock({ ai, saved }: { ai: AiSettings; saved: SettingsResponse }) {
     );
   return (
     <LocalKeysBlock
+      ai={ai}
       vars={vars}
       saved={saved}
       description={
@@ -328,10 +280,13 @@ function KeysBlock({ ai, saved }: { ai: AiSettings; saved: SettingsResponse }) {
 }
 
 /** No server here (browser build, phone apps): keys are pasted in and kept in the app's private storage. */
-function LocalKeysBlock({ vars, saved, description }: { vars: { name: string; usedBy: string[] }[]; saved: SettingsResponse; description?: React.ReactNode }) {
+function LocalKeysBlock({ ai, vars, saved, description }: { ai: AiSettings; vars: { name: string; usedBy: string[] }[]; saved: SettingsResponse; description?: React.ReactNode }) {
   const [status, setStatus] = useState<Record<string, boolean>>(saved.keyStatus);
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const consent = useAiConsent();
+  // A new key turns grading on with its provider: in the iPhone app the person agrees to that provider first.
+  const saveKey = (name: string, value: string) => consent.confirm(providersForKey(ai, name), () => void save(name, value));
   const save = async (name: string, value: string) => {
     setBusy(name);
     try {
@@ -367,7 +322,7 @@ function LocalKeysBlock({ vars, saved, description }: { vars: { name: string; us
                 value={values[v.name] ?? ""}
                 onChange={(e) => setValues((x) => ({ ...x, [v.name]: e.target.value }))}
               />
-              <Button size="sm" className="phone:h-10 h-9" disabled={busy === v.name || !(values[v.name] ?? "").trim()} onClick={() => save(v.name, values[v.name] ?? "")}>
+              <Button size="sm" className="phone:h-10 h-9" disabled={busy === v.name || !(values[v.name] ?? "").trim()} onClick={() => saveKey(v.name, values[v.name] ?? "")}>
                 Save
               </Button>
               {status[v.name] && (
@@ -379,6 +334,7 @@ function LocalKeysBlock({ vars, saved, description }: { vars: { name: string; us
           </li>
         ))}
       </ul>
+      {consent.dialog}
     </Block>
   );
 }
@@ -388,6 +344,7 @@ function TestBlock({ ai, saved }: { ai: AiSettings; saved: SettingsResponse }) {
   const [result, setResult] = useState<TestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const unsaved = JSON.stringify(ai) !== JSON.stringify(saved.ai);
+  const consent = useAiConsent();
   const run = async () => {
     setRunning(true);
     setError(null);
@@ -411,12 +368,13 @@ function TestBlock({ ai, saved }: { ai: AiSettings; saved: SettingsResponse }) {
       description={<>Grades the answer “hypertext transfer protocol” to “What does HTTP stand for?” with the saved settings{unsaved ? ". Save first to test your edits" : ""}.</>}
       stackAside
       aside={
-        <Button size="sm" variant="outline" className="phone:h-10 gap-1.5 h-8" onClick={run} disabled={running || unsaved}>
+        <Button size="sm" variant="outline" className="phone:h-10 gap-1.5 h-8" onClick={() => consent.confirm(aiProvidersOf(saved.ai), () => void run())} disabled={running || unsaved}>
           {running ? <Loader2 className="size-4 animate-spin" /> : <FlaskConical className="size-4" />}
           {running ? "Testing…" : "Run test"}
         </Button>
       }
     >
+      {consent.dialog}
       {error && <p className="text-sm text-destructive">{error}</p>}
       {result && sameError && (
         <div className="flex gap-3 rounded-lg border border-destructive/40 px-3.5 py-3 text-sm">

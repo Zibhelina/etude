@@ -136,6 +136,44 @@ Changing the scheduler doesn't lose anything. Every answer stays in the review l
 - to a script scheduler: the script runs again, answer by answer;
 - back to FSRS: rated answers replay as they were; a drill's unrated answers count as the rating their score suggests (the deck's `autoRate` thresholds).
 
+## Prerequisites
+
+A scheduler decides when a card you've seen comes back. Prerequisites decide which *new* cards you're allowed to see, and in what order. Turn them on for a deck (`etude deck set "Course" prerequisites=true`, or **Prerequisites** in the deck's Options) and new cards that build on something wait until you've mastered that something.
+
+You say what each item teaches and what it needs with two tags:
+
+- `concept::<path>`: the concept the item teaches or exercises. Usually one, sometimes several.
+- `needs::<path>`: a concept the item requires. An item can need several.
+
+A need is met by its concept and everything below it: `needs::cmpt307::modexp` is met by items tagged `concept::cmpt307::modexp` and `concept::cmpt307::modexp::table`. Concepts count across the whole collection, so namespace them (`course::chapter::idea`). A need nothing teaches is treated as met, and `etude pack check` warns about it.
+
+Four settings tune it:
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `masteryStreak` | 1 | A card is mastered when it has graduated to review and its last this-many answers passed. With learning steps `1m 10m`, graduating already takes two right answers. |
+| `masteryShare` | 1 | Share of a concept's cards that must be mastered for the concept to count as mastered. |
+| `conceptsInProgress` | 2 | How many concepts you work on at once. A concept is in progress once you've answered some of its cards and it isn't mastered. While this many are in progress, new cards only come from them (and from what they need). 0 means no limit. Items without a `concept::` tag aren't limited. |
+| `implicitReviews` | off | See below. |
+
+New cards then come in this order: first the concepts you've already started, so you finish what you began; then the concepts that unlocked most recently, so you follow the chain you just opened like a lesson; then shallower concepts before deeper ones; then the deck's order. This replaces `newOrder`. The daily new-card limit still applies.
+
+Mastery isn't permanent. If you forget a prerequisite card (Again on a review), new cards that need it wait again until it's back. Cards you've already seen keep their schedule.
+
+**Implicit reviews.** Answering a card that needs a concept exercises that concept too. With `implicitReviews` on, a due review card is left out of today's queue when, after it fell due, you correctly answered a card that needs its concept. The credit lasts one of the card's intervals from that answer; then it comes back as usual. Nothing is written to the review log, so FSRS's history stays exactly what you answered. The study counts show these as `credited`.
+
+When the queue is empty because everything left is waiting, the counts say `locked` and `unlockWith` names the concepts to master. `etude stats concepts "Course"` lists every concept in the deck, needs first, with what it needs and how many of its cards are mastered. Concepts that need each other (a cycle) don't block each other, and are reported.
+
+A small example: three items in a chain.
+
+```json
+{ "id": "gcd",    "type": "basic", "deck": "Algo", "tags": ["concept::algo::gcd"], "fields": { "front": "gcd(84, 36)?", "back": "12" } }
+{ "id": "inv",    "type": "basic", "deck": "Algo", "tags": ["concept::algo::inverse", "needs::algo::gcd"], "fields": { "front": "3⁻¹ mod 7?", "back": "5" } }
+{ "id": "rsa",    "type": "basic", "deck": "Algo", "tags": ["concept::algo::rsa", "needs::algo::inverse"], "fields": { "front": "d for e = 3, φ = 20?", "back": "7" } }
+```
+
+You see `gcd` first. Once it graduates, `inv` opens, then `rsa`.
+
 ## What stays FSRS-only
 
 Some features only make sense with FSRS and skip decks on another scheduler: the weights optimizer, exam deadlines, desired retention and learning steps, recall predictions, the forgetting curve, memory strength and true retention. Daily limits and ordering still apply to every scheduler.

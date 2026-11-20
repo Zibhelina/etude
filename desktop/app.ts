@@ -1,16 +1,19 @@
-// The Etude desktop app: one window showing the engine (`etude serve` from this folder), plus the few
-// things a browser tab can't do. Card frames keep exactly the access they have in a browser.
+// The Etude desktop app: windows showing the engine (`etude serve` from this folder), plus the few things a browser
+// tab can't do. The first window is the main one (its size and place are kept, errors show there); New window
+// (File, Ctrl+Shift+N, the page's right-click menu) opens more, each with its own tabs (web/src/lib/window-store.ts).
+// Card frames keep exactly the access they have in a browser.
 import { app, BrowserWindow, dialog, ipcMain, Menu, screen, session, shell, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from "electron";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { commandState, installCommand, refreshAppImageCommand } from "./command.ts";
 import { Engine } from "./engine.ts";
-import { probe } from "./find.ts";
-import { offerAppMenuEntry, offerApplicationsFolder } from "./integrate.ts";
+import { probeAt, remoteOrigin } from "./find.ts";
+import { offerAppMenuEntry, offerApplicationsFolder, remoteSetting } from "./integrate.ts";
 import { log, logDir, logEngine } from "./log.ts";
 import { loginShellEnv } from "./shell-env.ts";
 import { checkForUpdates, restartToUpdate, startUpdates, updateState } from "./updates.ts";
+import { focusedWebTab, followScheme, holdWebTabs, openWebOutside, protectWeb } from "./web.ts";
 
 const HERE = import.meta.dirname;
 const ROOT = join(HERE, "..");
@@ -21,21 +24,33 @@ const isMac = process.platform === "darwin";
 /** What Etude's own pages may use. Everything else (camera, microphone, location, notifications…) is refused. */
 const PERMISSIONS = new Set(["clipboard-read", "clipboard-sanitized-write", "fullscreen"]);
 
+/** The main window. */
 let win: BrowserWindow | null = null;
+/** The windows opened after it. */
+const extras = new Set<BrowserWindow>();
+const allWindows = () => [win, ...extras].filter((w): w is BrowserWindow => !!w && !w.isDestroyed());
+/** The window in front (the menu's commands act on it). */
+const front = (): BrowserWindow | null => {
+  const f = BrowserWindow.getFocusedWindow();
+  return f && allWindows().includes(f) ? f : (win ?? allWindows()[0] ?? null);
+};
 let engine: Engine | null = null;
 let env: Record<string, string | undefined> = process.env;
 let bg = DEFAULT_BG;
 let booting = false;
 let lastCrash = 0;
 let watching: NodeJS.Timeout | null = null;
+/** Whether the page in each window (by its webContents id) opens web links as Notebook tabs (it says so through the bridge). */
+const webLinks = new Map<number, boolean>();
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on("second-instance", () => {
-    if (!win) return;
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
+    const w = front();
+    if (!w) return;
+    if (w.isMinimized()) w.restore();
+    w.show();
+    w.focus();
   });
   app.on("window-all-closed", () => app.quit());
   app.on("before-quit", stopEngine);
@@ -55,7 +70,7 @@ else {
       log(`took PATH and ${Object.keys(shellEnv).length - 1} other settings from the login shell`);
     }
     await boot();
-    startUpdates((s) => win?.webContents.send("etude:update", s));
+    startUpdates((s) => allWindows().forEach((w) => w.webContents.send("etude:update", s)));
     // Niceties: if one fails, Etude still works.
     try {
       refreshAppImageCommand();
@@ -77,10 +92,12 @@ async function boot(path = "/") {
   try {
     if (!app.isPackaged && !existsSync(join(ROOT, "web", "dist", "index.html")))
       throw new Error(`The web app isn't built yet. Run \`npm run build\` in ${ROOT}, then try again.`);
-    engine = await Engine.start({ root: ROOT, env, log, output: logEngine });
+    engine = await Engine.start({ root: ROOT, env, log, output: logEngine, remote: remoteOrigin(env.ETUDE_REMOTE ?? remoteSetting()) });
     engine.onExit = stopped;
-    log(engine.owned ? `engine ${engine.version} ready at ${engine.origin}` : `using the engine already running at ${engine.origin} (${engine.version}) for the same collection`);
+    log(engine.owned ? `engine ${engine.version} ready at ${engine.origin}` : engine.remote ? `using the Etude at ${engine.origin} (${engine.version}, ${engine.collection})` : `using the engine already running at ${engine.origin} (${engine.version}) for the same collection`);
     if (!engine.owned) watch(engine);
+    // The other windows come back to where they were, with their tabs (the engine may be at a new address).
+    for (const w of extras) if (!w.isDestroyed()) void w.loadURL(engine.url(withWindow(currentPath(w), "extra"))).catch(() => {});
     await win?.loadURL(engine.url(path));
   } catch (e) {
     log(`couldn't start: ${(e as Error).message}`);
@@ -138,13 +155,16 @@ function stopped(code: number) {
   showError("Etude stopped.", `It stopped twice in a minute (exit code ${code}). The logs say why.`);
 }
 
-/** An engine started in a terminal can stop at any time; show it instead of a page that no longer answers. */
+/** An engine started in a terminal (or on another computer) can stop at any time; show it instead of a page that no longer answers. */
 function watch(e: Engine) {
-  const port = Number(new URL(e.origin).port);
+  let misses = 0;
   watching = setInterval(async () => {
-    if ((await probe(port)).kind === "etude") return;
+    if ((await probeAt(e.origin)).kind === "etude") return void (misses = 0);
+    // Another computer gets a few tries: a network that blinks shouldn't close the window.
+    if (e.remote && ++misses < 3) return;
     stopEngine();
-    showError("The Etude engine stopped.", "This window was using the engine started in a terminal (etude serve), which stopped. Try again starts one here.");
+    if (e.remote) showError(`${new URL(e.origin).hostname.split(".")[0]} doesn't answer.`, `This window was showing the Etude at ${e.origin}. Try again opens it again when it answers, or this computer's own collection while it doesn't.`);
+    else showError("The Etude engine stopped.", "This window was using the engine started in a terminal (etude serve), which stopped. Try again starts one here.");
   }, 5000);
 }
 
@@ -180,17 +200,32 @@ function loadState(): WindowState {
   }
 }
 
-function saveState() {
-  if (!win) return;
+function saveState(w: BrowserWindow) {
+  if (w !== win) return;
   try {
-    writeFileSync(statePath(), JSON.stringify({ ...win.getNormalBounds(), maximized: win.isMaximized(), bg }));
+    writeFileSync(statePath(), JSON.stringify({ ...w.getNormalBounds(), maximized: w.isMaximized(), bg }));
   } catch {}
 }
 
-function createWindow() {
-  const state = loadState();
-  bg = state.bg ?? DEFAULT_BG;
-  win = new BrowserWindow({
+/** `path` with ?window=: "new" starts that window empty, "extra" keeps what it had (web/src/lib/window-store.ts). */
+function withWindow(path: string, kind: "new" | "extra"): string {
+  const u = new URL(path, "http://etude");
+  u.searchParams.set("window", kind);
+  return u.pathname + u.search + u.hash;
+}
+
+/** Another window showing `path` in the engine, a little below and right of the one in front, the same size. */
+function openWindow(path: string) {
+  if (!win) return createWindow();
+  createWindow(path);
+}
+
+function createWindow(extraPath?: string) {
+  const extra = extraPath !== undefined;
+  const from = extra ? front()?.getNormalBounds() : undefined;
+  const state: WindowState = from ? { x: from.x + 32, y: from.y + 32, width: from.width, height: from.height } : loadState();
+  if (!extra) bg = state.bg ?? DEFAULT_BG;
+  const w = new BrowserWindow({
     x: state.x,
     y: state.y,
     width: state.width,
@@ -212,14 +247,26 @@ function createWindow() {
       spellcheck: false,
       // Listening cards play their audio as the card appears.
       autoplayPolicy: "no-user-gesture-required",
+      // Web pages in Notebook tabs (web.ts keeps each one an ordinary, separate browser page).
+      webviewTag: true,
     },
   });
-  if (state.maximized) win.maximize();
-  win.once("ready-to-show", () => win?.show());
-  win.on("close", saveState);
-  win.on("closed", () => (win = null));
+  if (extra) extras.add(w);
+  else win = w;
+  if (state.maximized) w.maximize();
+  w.once("ready-to-show", () => w.show());
+  w.on("close", () => saveState(w));
+  const wc = w.webContents;
+  const id = wc.id;
+  w.on("closed", () => {
+    webLinks.delete(id);
+    extras.delete(w);
+    if (win !== w) return;
+    // The main window closed with others still open: the oldest of them becomes the main one.
+    win = [...extras][0] ?? null;
+    if (win) extras.delete(win);
+  });
 
-  const wc = win.webContents;
   // The window's renderer crashing (out of memory, a GPU fault) is kept for an anonymous report too.
   wc.on("render-process-gone", (_e, d) => {
     if (d.reason !== "clean-exit") keepForReport("desktop.renderer", { message: `the window stopped (${d.reason}, exit code ${d.exitCode})` });
@@ -227,12 +274,17 @@ function createWindow() {
   wc.on("did-change-theme-color", (_e, color) => {
     if (color && /^#[0-9a-f]{6}$/i.test(color)) bg = color;
   });
-  // Etude's pages stay in the window; every other link opens in the browser.
+  // Etude's pages stay in the window. A web link goes to the Notebook as a web tab (which may hand it back to the
+  // browser: Settings, or no Notebook to show it); anything else opens outside.
   wc.setWindowOpenHandler(({ url }) => {
     if (engine?.contains(url)) void wc.loadURL(url);
+    else if (webLinks.get(wc.id) && /^https?:\/\//i.test(url) && engine?.contains(wc.getURL())) wc.send("etude:web-open", { url, guest: null });
     else openOutside(url);
     return { action: "deny" };
   });
+  // The page says when it takes web links (a Notebook that can show them, Settings allowing); a new page hasn't yet.
+  wc.on("did-navigate", () => webLinks.set(wc.id, false));
+  holdWebTabs(w, (url) => !!engine?.contains(url) || url.startsWith(PAGES), openOutside);
   const keepInside = (e: { preventDefault(): void }, url: string) => {
     if (isOwnPage(url)) return;
     e.preventDefault();
@@ -247,22 +299,24 @@ function createWindow() {
     e.preventDefault();
     log(`stopped a card frame navigating away (${e.url.split(":")[0]}:)`);
   });
-  showPage("starting.html");
+  if (extra && engine) void w.loadURL(engine.url(withWindow(extraPath, "new"))).catch(() => {});
+  else showPage("starting.html", {}, w);
 }
 
-function showPage(name: string, params: Record<string, string> = {}) {
-  void win?.loadURL(PAGES + name + "?" + new URLSearchParams({ bg, ...params })).catch(() => {});
+function showPage(name: string, params: Record<string, string> = {}, w: BrowserWindow | null = win) {
+  void w?.loadURL(PAGES + name + "?" + new URLSearchParams({ bg, ...params })).catch(() => {});
 }
 
+/** In every window: none of them can show Etude without the engine. */
 function showError(title: string, detail: string) {
-  showPage("error.html", { title, detail });
+  for (const w of allWindows()) showPage("error.html", { title, detail }, w);
 }
 
 const isOwnPage = (url: string) => url.startsWith(PAGES) || !!engine?.contains(url);
 
-/** Where the window is in the engine, without the password, to come back to after a restart. */
-function currentPath(): string {
-  const url = win?.webContents.getURL() ?? "";
+/** Where a window is in the engine, without the password, to come back to after a restart. */
+function currentPath(w: BrowserWindow | null = win): string {
+  const url = w?.webContents.getURL() ?? "";
   if (!engine?.contains(url)) return "/";
   const u = new URL(url);
   u.searchParams.delete("token");
@@ -283,15 +337,17 @@ function openOutside(url: string) {
 // ---------------------------------------------------------------- permissions and the bridge
 
 function protect() {
+  protectWeb();
   const ses = session.defaultSession;
   ses.setPermissionRequestHandler((_wc, permission, done, details) => done(PERMISSIONS.has(permission) && details.isMainFrame && !!engine?.contains(details.requestingUrl)));
   // Card frames are on the engine's address too, so "top frame only" is what keeps them out.
   ses.setPermissionCheckHandler((_wc, permission, origin, details) => PERMISSIONS.has(permission) && details.isMainFrame && !!engine?.contains(details.requestingUrl || origin));
 }
 
-/** The requests in preload.cjs, taken only from this window's top frame showing Etude or the app's own pages. */
+/** The requests in preload.cjs, taken only from a window's top frame showing Etude or the app's own pages. */
 function answer() {
-  const fromWindow = (e: IpcMainInvokeEvent) => !!win && e.sender === win.webContents && e.senderFrame === win.webContents.mainFrame && isOwnPage(e.senderFrame.url);
+  const fromWindow = (e: IpcMainInvokeEvent): BrowserWindow | null =>
+    allWindows().find((w) => e.sender === w.webContents && e.senderFrame === w.webContents.mainFrame && isOwnPage(e.senderFrame.url)) ?? null;
   // What keepForReport kept, handed over once (and cleared) when the page starts.
   ipcMain.handle("etude:telemetry-pending", (e) => {
     if (!fromWindow(e)) return [];
@@ -321,25 +377,58 @@ function answer() {
       return { ...commandState(env), error: (err as Error).message };
     }
   });
+  ipcMain.handle("etude:web-links", (e, on: unknown) => {
+    if (fromWindow(e)) webLinks.set(e.sender.id, on === true);
+  });
+  // Pages in web tabs show their dark or light look with Etude's theme (Google, GitHub… read prefers-color-scheme).
+  ipcMain.handle("etude:web-scheme", (e, s: unknown) => {
+    if (fromWindow(e) && (s === "light" || s === "dark" || s === "system")) followScheme(s);
+  });
+  ipcMain.handle("etude:web-outside", (e, url: unknown) => {
+    if (fromWindow(e)) openWebOutside(url);
+  });
+  // Another window, showing an address in the engine ("/notes?id=…").
+  ipcMain.handle("etude:new-window", (e, path: unknown) => {
+    if (fromWindow(e) && typeof path === "string" && /^\/(?!\/)/.test(path) && path.length < 4000) openWindow(path);
+  });
   ipcMain.handle("etude:pick-folder", async (e) => {
-    if (!fromWindow(e) || !win) return null;
-    const r = await dialog.showOpenDialog(win, { properties: ["openDirectory", "createDirectory"] });
+    const w = fromWindow(e);
+    if (!w) return null;
+    // A folder picked here is this computer's, and the collection is on the other one.
+    if (engine?.remote) {
+      await dialog.showMessageBox(w, { type: "info", message: "Folders open on the computer the collection is on.", detail: `This window shows the Etude at ${engine.origin}. Open the folder there, or type its path on that computer.` });
+      return null;
+    }
+    const r = await dialog.showOpenDialog(w, { properties: ["openDirectory", "createDirectory"] });
     return r.canceled ? null : (r.filePaths[0] ?? null);
   });
 }
 
 // ---------------------------------------------------------------- menus
 
-/** Shows an Etude screen: inside the running app when it's open, else by loading it. */
+/** Shows an Etude screen in the window in front: inside the running app when it's open, else by loading it. */
 function go(path: string) {
+  const win = front();
   if (!win || !engine) return;
   if (engine.contains(win.webContents.getURL())) void win.webContents.executeJavaScript(`history.pushState(null, "", ${JSON.stringify(path)}); dispatchEvent(new PopStateEvent("popstate"))`);
   else void win.loadURL(engine.url(path));
 }
 
 function reload() {
+  const win = front();
   if (win && engine?.contains(win.webContents.getURL())) win.webContents.reload();
   else void boot();
+}
+
+/** Zoom: the Notebook's focused pane when the page takes it, else the whole window (Chromium's zoom levels). */
+async function zoom(by: 1 | -1 | 0, whole = false) {
+  const wc = front()?.webContents;
+  if (!wc) return;
+  if (!whole && engine?.contains(wc.getURL())) {
+    const done = await wc.executeJavaScript(`globalThis.etudePaneZoom ? globalThis.etudePaneZoom(${by}) : false`).catch(() => false);
+    if (done === true) return;
+  }
+  wc.setZoomLevel(by === 0 ? 0 : Math.min(9, Math.max(-8, wc.getZoomLevel() + by * 0.5)));
 }
 
 function menu(): Menu {
@@ -351,8 +440,11 @@ function menu(): Menu {
     {
       label: "File",
       submenu: [
-        { label: "Open in Browser", accelerator: "CmdOrCtrl+Shift+O", click: () => engine && void shell.openExternal(engine.url(currentPath())) },
-        { label: "Show Collection Folder", click: () => engine && shell.showItemInFolder(engine.collection) },
+        // The Notebook starts empty in it (a New tab); other screens open as they are.
+        { label: "New Window", accelerator: "CmdOrCtrl+Shift+N", click: () => openWindow(currentPath(front()).startsWith("/notes") ? "/notes" : currentPath(front()).split("?")[0]) },
+        { type: "separator" },
+        { label: "Open in Browser", accelerator: "CmdOrCtrl+Shift+O", click: () => engine && void shell.openExternal(engine.url(currentPath(front()))) },
+        { label: "Show Collection Folder", enabled: !engine?.remote, click: () => engine && !engine.remote && shell.showItemInFolder(engine.collection) },
         ...(isMac ? [] : ([{ type: "separator" }, settings] as MenuItemConstructorOptions[])),
         { type: "separator" },
         isMac ? { role: "close" } : { role: "quit" },
@@ -362,14 +454,24 @@ function menu(): Menu {
     {
       label: "View",
       submenu: [
-        { label: "Reload", accelerator: "CmdOrCtrl+R", click: reload },
-        { label: "Back", accelerator: isMac ? "Cmd+[" : "Alt+Left", click: () => win?.webContents.navigationHistory.goBack() },
-        { label: "Forward", accelerator: isMac ? "Cmd+]" : "Alt+Right", click: () => win?.webContents.navigationHistory.goForward() },
+        // With a web tab's page in front (it has the keyboard), these act on the page.
+        { label: "Reload", accelerator: "CmdOrCtrl+R", click: () => (focusedWebTab() ? focusedWebTab()!.reload() : reload()) },
+        { label: "Back", accelerator: isMac ? "Cmd+[" : "Alt+Left", click: () => (focusedWebTab() ?? front()?.webContents)?.navigationHistory.goBack() },
+        { label: "Forward", accelerator: isMac ? "Cmd+]" : "Alt+Right", click: () => (focusedWebTab() ?? front()?.webContents)?.navigationHistory.goForward() },
         { type: "separator" },
-        { role: "resetZoom" },
-        { role: "zoomIn" },
-        { role: "zoomIn", accelerator: "CmdOrCtrl+=", visible: false },
-        { role: "zoomOut" },
+        // In the Notebook these zoom the pane you're in; elsewhere (and with the App items) the whole window.
+        { label: "Actual Size", accelerator: "CmdOrCtrl+0", click: () => void zoom(0) },
+        { label: "Zoom In", accelerator: "CmdOrCtrl+Plus", click: () => void zoom(1) },
+        { label: "Zoom In", accelerator: "CmdOrCtrl+=", visible: false, click: () => void zoom(1) },
+        { label: "Zoom Out", accelerator: "CmdOrCtrl+-", click: () => void zoom(-1) },
+        {
+          label: "Zoom the Whole App",
+          submenu: [
+            { label: "Actual Size", accelerator: "CmdOrCtrl+Alt+0", click: () => void zoom(0, true) },
+            { label: "Zoom In", accelerator: "CmdOrCtrl+Alt+=", click: () => void zoom(1, true) },
+            { label: "Zoom Out", accelerator: "CmdOrCtrl+Alt+-", click: () => void zoom(-1, true) },
+          ],
+        },
         { type: "separator" },
         { role: "togglefullscreen" },
         { type: "separator" },

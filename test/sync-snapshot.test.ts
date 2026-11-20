@@ -32,7 +32,8 @@ function cloud() {
     /** Changes the pointer a device reads (the server lying), without changing the stored one. */
     serve: (p: NonNullable<typeof pointer>) => p,
     /** Drops the connection on these blob downloads, once each. */
-    cut: new Set<string>(),
+    /** Blob names whose next N requests get the connection dropped. */
+    cut: new Map<string, number>(),
     /** Another device's snapshot lands between this device's read and its write. */
     raceOnce: false,
     get pointer() { return pointer; },
@@ -92,7 +93,12 @@ function cloud() {
         if (pointer?.parts.includes(name)) return err(409, "in_snapshot");
         return blobs.delete(name) ? send(200, { ok: true }) : err(404, "not_found");
       }
-      if (c.cut.delete(name)) return req.socket.destroy();
+      const cuts = c.cut.get(name);
+      if (cuts) {
+        if (cuts > 1) c.cut.set(name, cuts - 1);
+        else c.cut.delete(name);
+        return req.socket.destroy();
+      }
       return blobs.has(name) ? (res.writeHead(200), res.end(blobs.get(name))) : err(404, "not_found");
     }
     return err(404, "not_found");
@@ -217,7 +223,10 @@ test("parts merged into another collection give the same registers; a newer regi
   // The clock is past every merged stamp.
   const c = b.db.get("SELECT wall FROM sync_control")!;
   assert.ok(c.wall >= JSON.parse(later)[0]);
-  assert.throws(() => b.db.tx(() => mergeSnapshotPart(b.db, JSON.stringify({ v: 1, part: 0, last: true, registers: [["future_table", "k", "/f", "1", later]], deleted: [] }))), /unsupported sync table/);
+  // A table this version doesn't know is kept, for the version that does.
+  b.db.tx(() => mergeSnapshotPart(b.db, JSON.stringify({ v: 1, part: 0, last: true, registers: [["future_table", "k", "/f", "1", later]], deleted: [["future_table", "gone", later]] })));
+  assert.equal(b.db.get("SELECT value FROM sync_registers WHERE tbl='future_table' AND key='k' AND field='/f'")!.value, "1");
+  assert.ok(b.db.get("SELECT 1 FROM sync_deleted WHERE tbl='future_table' AND key='gone'"));
 });
 
 test("a new device starts from the snapshot, pulls only the events after it, and ends where replaying the whole log ends", async (t) => {
@@ -301,7 +310,8 @@ test("a sync cut off in the middle of the snapshot goes on from the next part", 
   fill(a.e, 30);
   await withEnv({ ETUDE_SYNC_SNAPSHOT_EVERY: "1", ETUDE_SYNC_SNAPSHOT_PART: "40" }, a.twice);
   const p = c.pointer!;
-  c.cut.add(p.parts[2]);
+  // More drops in a row than the transport retries (one dropped connection is just tried again).
+  c.cut.set(p.parts[2], 4);
   const b = await device("b");
   await assert.rejects(b.sync(), /fetch failed|network|socket|terminated/i);
   assert.deepEqual(JSON.parse(b.e.db.get("SELECT value FROM sync_meta WHERE key='snapshot_progress'")!.value), { id: p.id, done: 2 });

@@ -16,17 +16,18 @@ command({
   args: [{ name: "message", description: "What to ask.", required: true, variadic: true }],
   flags: [
     { name: "conversation", type: "string", short: "c", description: "Continue this conversation.", placeholder: "ID" },
-    { name: "model", type: "string", short: "m", description: "Model ref: chatgpt:<model>, openrouter:<model> or custom:<model>. Default: the conversation's, then the last used, then the agent setting, then the feedback model.", placeholder: "REF" },
+    { name: "profile", type: "string", short: "p", description: "Who to talk to, a profile id from `etude agents` (default: the default profile). Only for a new conversation.", placeholder: "ID" },
+    { name: "model", type: "string", short: "m", description: "Model ref for a profile whose brain is a model: chatgpt:<model>, openrouter:<model> or custom:<model>. Default: the conversation's, then the profile's, then the last used, then the agent setting, then the feedback model.", placeholder: "REF" },
     { name: "attach", type: "string", multiple: true, description: "Attach a file (image, PDF, text, .apkg). Repeat for several.", placeholder: "FILE" },
     { name: "yes", type: "boolean", short: "y", description: "Allow destructive commands without asking." },
   ],
   writes: true,
   examples: ['etude agent ask "make a deck from these notes" --attach notes.md', 'etude agent ask -c 1a2b3c4d "now move it under Languages"', 'etude agent ask --model openrouter:deepseek/deepseek-v4.1-flash-1017 "switch to the Nord theme"'],
-  output: "{ conversation, reply, commands: [{ command, status, exit }], changed, canUndo, model, ms, error? }",
+  output: "{ conversation, profile, reply, commands: [{ command, status, exit }], changed, canUndo, model, ms, error? }",
   async run(ctx) {
     const a = agentFor(ctx.e);
     try {
-      const conv = ctx.flags.conversation ? a.conversation(ctx.flags.conversation) : a.createConversation(ctx.flags.model ?? null);
+      const conv = ctx.flags.conversation ? a.conversation(ctx.flags.conversation) : a.createConversation(ctx.flags.model ?? null, ctx.flags.profile ?? null);
       const ids: string[] = [];
       for (const f of ctx.flags.attach ?? []) ids.push((await a.addAttachmentFile(conv.id, f)).id);
       const msg = await a.send(conv.id, { text: ctx.args.message.join(" "), attachments: ids, model: ctx.flags.model ?? undefined, autoConfirm: ctx.flags.yes ? true : "deny" }, (e: AgentEvent) => {
@@ -36,6 +37,7 @@ command({
       const c = msg.content as AssistantContent;
       return {
         conversation: conv.id,
+        profile: conv.profile,
         reply: c.text,
         commands: c.items.filter((i) => i.type === "tool" && i.tool === "etude_run").map((i: any) => ({ command: i.label, status: i.status, exit: i.exit ?? null })),
         changed: c.changed,
@@ -53,7 +55,7 @@ command({
 command({
   name: "agent list",
   summary: "Conversations with the assistant, newest first.",
-  output: "array of { id, title, model, created, updated }",
+  output: "array of { id, title, model, profile, created, updated }",
   run: (ctx) => agentFor(ctx.e).listConversations(),
 });
 
@@ -61,7 +63,7 @@ command({
   name: "agent show",
   summary: "One conversation with all its messages, the commands run and their output.",
   args: [{ name: "id", description: "Conversation id.", required: true }],
-  output: "{ id, title, model, created, updated, messages: [{ id, role, content, created, snapshot, undone, canUndo }] }",
+  output: "{ id, title, model, profile, created, updated, messages: [{ id, role, content, created, snapshot, undone, canUndo }] }",
   run(ctx) {
     try {
       return agentFor(ctx.e).conversation(ctx.args.id);
@@ -91,14 +93,14 @@ command({
 
 command({
   name: "agent delete",
-  summary: "Delete a conversation and its attachments. Changes it made to the collection stay.",
+  summary: "Delete a conversation and its attachments, and its session in the agent's own history when the agent keeps one (Hermes). Changes it made to the collection stay.",
   args: [{ name: "id", description: "Conversation id.", required: true }],
   writes: true,
   confirm: true,
-  output: "{ deleted }",
-  run(ctx) {
+  output: "{ deleted, agentSession?: { id, deleted, error? } }",
+  async run(ctx) {
     try {
-      return agentFor(ctx.e).deleteConversation(ctx.args.id);
+      return await agentFor(ctx.e).deleteConversation(ctx.args.id);
     } catch (e) {
       throw agentError(e);
     }

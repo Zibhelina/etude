@@ -8,6 +8,8 @@
 .blank .e-input { width: auto; min-width: 2.5em; display: inline-block; font: 400 0.82em/1.35 var(--font-sans); color: var(--foreground); background: var(--accent); border: 0; border-bottom: 2px solid var(--muted-foreground); border-radius: 6px 6px 2px 2px; padding: 1px 6px; margin: 0 2px; text-align: center; vertical-align: 2px; box-shadow: none; }
 .blank .e-input:focus { border-bottom-color: var(--foreground); background: var(--card, var(--background)); box-shadow: none; }
 .blank .e-input::placeholder { color: var(--muted-foreground); opacity: 0.7; font-size: 0.8em; }
+.katex .blank .e-input { font-size: 0.78em; vertical-align: baseline; padding: 0 5px; }
+.katex .czr { font-size: 0.9em; }
 [data-mode="result"] .blank .e-input { display: none; }
 .czr { font-weight: 600; padding: 0 3px; border-radius: 5px; animation: czr-in 0.3s ease both; }
 .czr.ok { color: var(--success); background: color-mix(in oklab, var(--good, var(--success)) 12%, transparent); }

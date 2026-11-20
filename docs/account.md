@@ -26,7 +26,7 @@ Signing in to the account also signs Sync in when Sync uses the same server, so 
 
 ## Market
 
-The Market has three tabs. Browse shows paid listings from `GET /v1/market/paid-index.json` above the free GitHub catalog. Library lists purchased decks (`GET /v1/library`); Install fetches `/v1/listings/:id/pack` and imports it with the normal pack import, so updates keep scheduling. When a new version is approved the button reads Update.
+The Market has three tabs. Browse shows paid listings from `GET /v1/market/paid-index.json` above the free GitHub catalog. Library lists purchased decks (`GET /v1/library`); Install fetches `/v1/listings/:id/pack` and imports it with the normal pack import, so updates keep scheduling. When a new version is approved the button reads Update. A bought deck whose items Sync deleted reads Install again; installing it gives them fresh ids ([Market](market.md#installing)), and the install record lists those, so exports leave them out and a refund or dispute takes them out of the collection (`removeInstalledDeck`: items with their cards and history, the card types the pack brought that nothing else uses, the media only its items named, the decks it left empty and the install record).
 
 ## Selling
 

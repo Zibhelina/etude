@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { EmptyState, Page } from "@/components/page";
 import { childrenOf, clashes, leafOf, moveDeck, MoveDeckDialog, parentOf } from "@/components/move-deck";
 import { usePhone } from "@/lib/phone";
+import { isIOSApp } from "@/lib/platform";
 import { PhoneDecks } from "@/components/phone-decks";
 import { DeckContextMenu, type DeckMenuEntry, useDeckActions } from "@/components/deck-actions";
 import { Mark } from "@/components/phone-shell";
@@ -333,7 +334,7 @@ function DesktopDecks() {
               const target = drag?.drop?.kind === "into" && drag.drop.parent === d.name && !isNoop(drag.name, drag.drop);
               const targetBlocked = target && blocked(drag!.name, drag!.drop!);
               const open = d.hasChildren && !collapsed.has(d.name);
-              const study = () => navigate(watch ? `/watch?deck=${enc(d.name)}` : `/study?deck=${enc(d.name)}${w ? "" : "&ahead=1"}`);
+              const study = () => navigate(watch ? `/watch?deck=${enc(d.name)}` : d.home && d.home !== "queue" ? `/home?deck=${enc(d.name)}` : `/study?deck=${enc(d.name)}${w ? "" : "&ahead=1"}`);
               const note = d.kids ? plural(d.kids, "subdeck") : sub ? plural(d.cards, "card") : undefined;
               const menu = { name: d.name, archived: false, disabled: deckActions.busy, onArchive: () => deckActions.archive(d.name, true), onDelete: () => deckActions.requestDelete(d.name), extra: menuFor(d) };
               return (
@@ -459,7 +460,7 @@ function LibraryHeader({ onImport, onNew, hasDecks }: { onImport(): void; onNew(
       </div>
       <div className="flex items-center gap-2">
         {hasDecks && (
-          <button className="flex size-10 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent hover:text-foreground" onClick={openDeckFinder} aria-label="Find a deck" title={`Find a deck (${FINDER_KEY})`}>
+          <button className="flex size-10 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => openDeckFinder()} aria-label="Find a deck" title={`Find a deck (${FINDER_KEY})`}>
             <Search className="size-[18px]" />
           </button>
         )}
@@ -515,7 +516,9 @@ export function useImportPicker(onDone: () => void) {
   const pick = () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".json,.apkg,.colpkg,application/json";
+    // iOS Safari and WKWebView grey out .apkg/.colpkg when accept lists unknown extensions, so leave accept open on iOS.
+    const ios = isIOSApp() || (typeof navigator !== "undefined" && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)));
+    if (!ios) input.accept = ".json,.apkg,.colpkg,application/json";
     input.multiple = true;
     input.onchange = async () => {
       for (const f of Array.from(input.files ?? [])) {

@@ -1,27 +1,33 @@
 // HTTP API, card frames, the card runtime and the web app.
 import { syncRoutes } from "./sync.ts";
+import { shareRoutes } from "./share.ts";
 import { accountRoutes } from "./account.ts";
 import { pingFreeInstall } from "../core/account.ts";
 import { syncFor } from "../core/sync/client.ts";
 import { Hono, type Context } from "hono";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from "node:fs";
+import { viewCommandsAfter, viewDir, viewQueueStamp, writeViewState, type ViewPane, type ViewShell } from "../core/view-remote.ts";
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { DEFAULT_SETTINGS, Etude, EtudeError, type StudyScope } from "../core/engine.ts";
+import { isFsId } from "../core/folders.ts";
+import { folderRoutes } from "./folders.ts";
 import { ScriptError } from "../core/sandbox.ts";
 import { chatProviderKeyEnv } from "../core/ai.ts";
 import { chatGptNativeHost, readChatGptHostId } from "../core/chatgpt.ts";
 import { DEFAULT_PRESET, type Rating } from "../core/model.ts";
 import { MAX_MEDIA_BYTES, mediaType } from "../core/media.ts";
-import { cardFrame } from "./frame.ts";
+import { cardFrame, deckHomeFrame, pluginControllerFrame, pluginViewFrame } from "./frame.ts";
+import { bundledPlugin, bundledPlugins, describePermission, pluginsFor, type PluginPackage } from "../core/plugins.ts";
 import { runFrameHtml } from "../core/run-frame.ts";
 import { pyodideFile } from "./pyodide.ts";
 import { ASSET_NAME, assetMime } from "../core/assets.ts";
-import { agentFor, AgentError, AGENT_MAX_ATTACHMENT_BYTES, type AgentEvent } from "../core/agent.ts";
+import { agentFor, AgentError, AGENT_MAX_ATTACHMENT_BYTES, cleanView, type AgentEvent } from "../core/agent.ts";
 import { streamSSE } from "hono/streaming";
 import { applyUpdate, updateStatus, UpdateError } from "../core/update.ts";
 import { isEventName, telemetryAllowed, telemetryFor, usageEventFor } from "../core/telemetry.ts";
+import { activityFor } from "../core/activity.ts";
 import { buildSubmission, fetchComingSoon, fetchComingSoonAsset, fetchMarketMedia, fetchCover, fetchEntry, fetchIndex, ghStatus, installEntry, installState, installedEntries, manualPublishUrl, marketSettings, publishFile, summarize, entryPath, entryJson, forgetInstall, type MarketKind } from "../core/market.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -38,6 +44,7 @@ const MIME: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".webp": "image/webp",
+  ".mp3": "audio/mpeg",
   ".woff2": "font/woff2",
   ".woff": "font/woff",
   ".ttf": "font/ttf",
@@ -92,9 +99,9 @@ function withAppCsp(res: Response, path: string): Response {
   return res;
 }
 
-function sendFile(c: Context, path: string, opts: { cors?: boolean; cache?: string; mime?: string } = {}) {
+function sendFile(c: Context, path: string, opts: { cors?: boolean; cache?: string; mime?: string; headers?: Record<string, string> } = {}) {
   if (!existsSync(path) || !statSync(path).isFile()) return c.text("not found", 404);
-  const headers: Record<string, string> = { "Content-Type": opts.mime ?? MIME[extname(path)] ?? "application/octet-stream", "Cache-Control": opts.cache ?? "no-cache" };
+  const headers: Record<string, string> = { "Content-Type": opts.mime ?? MIME[extname(path)] ?? "application/octet-stream", "Cache-Control": opts.cache ?? "no-cache", ...(opts.headers ?? {}) };
   // Card frames have an opaque origin, so everything they load is a cross-origin request.
   if (opts.cors) headers["Access-Control-Allow-Origin"] = "*";
   return c.body(readFileSync(path), 200, headers);
@@ -185,7 +192,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
       const code = (err as { code?: unknown }).code;
       return c.json(typeof code === "string" ? { error: err.message, code } : { error: err.message }, err.status as 400);
     }
-    if (err instanceof AgentError) return c.json({ error: err.message }, err.status as 400);
+    if (err instanceof AgentError) return c.json({ error: err.message, ...(err.code ? { code: err.code, provider: err.provider } : {}) }, err.status as 400);
     if (err instanceof UpdateError) return c.json({ error: err.message, details: err.details }, err.status as 400);
     // A card type's own script failing (prepare, a generator, a grader) is the deck's problem, not a bug in Etude, and
     // its message carries the card's ids and text: answered, never sent as an error report.
@@ -259,6 +266,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   const scopeOf = (c: Context): StudyScope => ({ deck: c.req.query("deck") || undefined, query: c.req.query("q") || undefined, ahead: c.req.query("ahead") === "1" || undefined, placement: c.req.query("placement") || undefined });
 
   syncRoutes(app, etude);
+  shareRoutes(app as any, etude);
   accountRoutes(app as any, etude);
 
   app.post("/api/media", async (c) => {
@@ -303,15 +311,76 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
 
   // ------------------------------------------------------------- decks
   // Notes (beta): pages with a document body.
+  // The Notebook's panes, for `etude view` (the CLI, `etude mcp`): the page says what it shows, and waits here
+  // for commands to open, close or focus a note. No `after`: just the newest number, to start from.
+  // Of all the windows showing this collection (several on one computer, or on several computers through one
+  // engine), the one used last carries out the commands; it says so here and renews it while it's open.
+  let viewOwner: { who: string; at: number } | null = null;
+  const owner = () => (viewOwner && Date.now() - viewOwner.at < 60_000 ? viewOwner.who : null);
+  app.put("/api/view/owner", async (c) => {
+    const b = await body(c);
+    const who = typeof b.who === "string" ? b.who.slice(0, 40) : "";
+    if (!who) return c.json({ error: "who is a window id" }, 400);
+    viewOwner = { who, at: Date.now() };
+    return c.json({ owner: who });
+  });
+  app.get("/api/view/commands", async (c) => {
+    const dir = viewDir(etude.home, etude.path);
+    const raw = c.req.query("after");
+    if (raw === undefined) return c.json({ seq: viewCommandsAfter(dir, Infinity).seq, commands: [], owner: owner() });
+    const after = Number(raw) || 0;
+    const until = Date.now() + 20_000;
+    let stamp = -1;
+    while (true) {
+      const now = viewQueueStamp(dir);
+      if (now !== stamp) {
+        stamp = now;
+        const r = viewCommandsAfter(dir, after);
+        if (r.commands.length || Date.now() >= until) return c.json({ ...r, owner: owner() }, 200, { "Cache-Control": "no-store" });
+      }
+      if (Date.now() >= until || c.req.raw.signal?.aborted) return c.json({ seq: after, commands: [], owner: owner() }, 200, { "Cache-Control": "no-store" });
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  });
+  app.put("/api/view/state", async (c) => {
+    const b = (await c.req.json()) as { route?: unknown; panes?: unknown; applied?: unknown; shell?: unknown; failed?: unknown };
+    if (!Array.isArray(b.panes)) return c.json({ error: "panes is a list" }, 400);
+    const f = b.failed as { seq?: unknown; error?: unknown } | undefined;
+    writeViewState(viewDir(etude.home, etude.path), {
+      route: String(b.route ?? ""),
+      panes: b.panes as ViewPane[],
+      applied: typeof b.applied === "number" ? b.applied : undefined,
+      shell: b.shell && typeof b.shell === "object" ? (b.shell as ViewShell) : undefined,
+      failed: f && typeof f.seq === "number" ? { seq: f.seq, error: String(f.error ?? "") } : undefined,
+    });
+    return c.json({ ok: true });
+  });
+
+  folderRoutes(app, etude, body);
   app.get("/api/notes", (c) => c.json(etude.notes.list({ archived: c.req.query("archived") === "1" })));
   app.get("/api/notes/graph", (c) => c.json(etude.notes.graph()));
-  app.get("/api/notes/pinned", (c) => c.json(etude.notes.pinnedList()));
-  app.get("/api/notes/recent", (c) => c.json(etude.notes.recent(Number(c.req.query("limit") ?? 10) || 10)));
-  app.get("/api/notes/previews", (c) => c.json(etude.notes.previews(String(c.req.query("ids") ?? "").split(",").filter(Boolean))));
-  app.get("/api/notes/search", (c) => c.json(etude.notes.search(c.req.query("q") ?? "", Number(c.req.query("limit") ?? 20) || 20)));
+  app.get("/api/notes/tree-stamp", (c) => c.json({ stamp: etude.notes.treeStamp() }, 200, { "Cache-Control": "no-store" }));
+  // Pins, Jump back in and search take in the files of folders open on this computer, beside the collection's notes.
+  app.get("/api/notes/pinned", (c) => c.json([...etude.notes.pinnedList(), ...etude.folders.marked("pinned")].sort((a, b) => String(a.pinned).localeCompare(String(b.pinned)))));
+  app.get("/api/notes/recent", (c) => {
+    const limit = Number(c.req.query("limit") ?? 10) || 10;
+    return c.json([...etude.notes.recent(limit), ...etude.folders.marked("opened", limit)].sort((a, b) => String(b.opened).localeCompare(String(a.opened))).slice(0, Math.max(1, Math.min(200, limit))));
+  });
+  app.get("/api/notes/previews", (c) => {
+    const ids = String(c.req.query("ids") ?? "").split(",").filter(Boolean);
+    return c.json([...etude.notes.previews(ids.filter((i) => !isFsId(i))), ...etude.folders.previews(ids.filter(isFsId))]);
+  });
+  app.get("/api/notes/search", async (c) => {
+    const q = c.req.query("q") ?? "";
+    const limit = Number(c.req.query("limit") ?? 20) || 20;
+    const own = etude.notes.search(q, limit);
+    return c.json([...own, ...(await etude.folders.search(q, Math.max(5, limit - Math.min(own.length, Math.floor(limit / 2)))))].slice(0, Math.max(limit, own.length)));
+  });
   app.post("/api/notes", async (c) => {
     const b = await body(c);
-    return c.json(etude.notes.create({ title: b.title, parentId: b.parentId ?? null, doc: b.doc, icon: b.icon, look: b.look, after: b.after ?? null, kind: b.kind, scene: b.scene, file: b.file, content: b.content }));
+    // Made inside a folder on this computer: a file or folder on disk.
+    if (isFsId(b.parentId)) return c.json(etude.folders.create(b.parentId, { title: b.title, kind: b.kind, content: b.content, doc: b.doc, scene: b.scene, board: b.board, template: b.template, icon: b.icon, look: b.look, unique: !b.title || b.unique === true || b.title === "New folder" }));
+    return c.json(etude.notes.create({ title: b.title, parentId: b.parentId ?? null, doc: b.doc, icon: b.icon, look: b.look, after: b.after ?? null, kind: b.kind, scene: b.scene, file: b.file, content: b.content, board: b.board, template: b.template }));
   });
   // A .excalidraw file as a canvas (its inline pictures go into the media).
   app.post("/api/notes/import-excalidraw", async (c) => {
@@ -343,6 +412,8 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     return c.json(await addNotesTutorial(etude, { ifNew: b?.ifNew === true }));
   });
   app.get("/api/notes/:id", (c) => c.json(etude.notes.get(c.req.param("id"))));
+  // When the page last changed, so an open editor can notice a save made somewhere else without reading the whole page.
+  app.get("/api/notes/:id/stamp", (c) => c.json({ updated: etude.notes.get(c.req.param("id")).updated }));
   app.get("/api/notes/:id/backlinks", (c) => c.json(etude.notes.backlinks(c.req.param("id"))));
   app.get("/api/notes/:id/export", async (c) => {
     const { docToHtml, docToMarkdown } = await import("../core/notes-md.ts");
@@ -354,10 +425,19 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
       if (!data) throw new EtudeError("this PDF's file is missing from the media", 404);
       return new Response(new Uint8Array(data), { headers: { "content-type": "application/pdf", "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name.replace(/\.pdf$/i, ""))}.pdf` } });
     }
+    // A web file downloads as the HTML page it is.
+    if (n.kind === "web") {
+      return new Response(n.content ?? "", { headers: { "content-type": "text/html; charset=utf-8", "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name.replace(/\.html?$/i, ""))}.html` } });
+    }
     // A file downloads as itself, under its own name (it already has its extension).
     if (n.kind === "file") {
       const file = (n.title.trim() || "untitled.txt").replace(/[\\/:*?"<>|]+/g, " ").trim();
       return new Response(n.content ?? "", { headers: { "content-type": "text/plain; charset=utf-8", "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file)}` } });
+    }
+    // A board downloads as Markdown that Obsidian's Kanban plugin opens.
+    if (n.kind === "kanban") {
+      const { boardToMarkdown } = await import("../core/kanban.ts");
+      return new Response(boardToMarkdown(n.board!, (d) => docToMarkdown(d)), { headers: { "content-type": "text/markdown; charset=utf-8", "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}.md` } });
     }
     if (n.kind === "canvas") {
       const { sceneToExcalidraw } = await import("../core/notes.ts");
@@ -371,7 +451,11 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   });
   app.patch("/api/notes/:id", async (c) => {
     const b = await body(c);
-    return c.json(etude.notes.update(c.req.param("id"), { title: b.title, doc: b.doc, icon: b.icon, look: b.look, kind: b.kind, scene: b.scene, content: b.content }));
+    return c.json(etude.notes.update(c.req.param("id"), { title: b.title, doc: b.doc, icon: b.icon, look: b.look, kind: b.kind, scene: b.scene, content: b.content, board: b.board, base: b.base }));
+  });
+  app.post("/api/notes/:id/portal", async (c) => {
+    const b = await body(c);
+    return c.json(etude.notes.portal(c.req.param("id"), String(b.note ?? ""), { at: b.at, height: b.height }));
   });
   app.post("/api/notes/:id/pin", async (c) => {
     const b = await c.req.json().catch(() => ({}));
@@ -519,12 +603,22 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   });
 
   // ------------------------------------------------------------- study
+  app.get("/api/decks/:name/home", (c) => c.json(etude.deckHome(decodeURIComponent(c.req.param("name"))), 200, { "Cache-Control": "no-store" }));
   app.get("/api/study/counts", (c) => c.json(etude.counts(scopeOf(c))));
   app.get("/api/study/next", (c) => c.json(etude.next(scopeOf(c), { exclude: c.req.query("exclude") ? Number(c.req.query("exclude")) : undefined })));
   app.get("/api/study/card/:cardId", (c) => c.json(etude.present(Number(c.req.param("cardId")), c.req.query("seed") ? Number(c.req.query("seed")) : undefined)));
   app.post("/api/study/submit", async (c) => {
     const b = await body(c);
     return c.json(await etude.submit(Number(b.cardId), Number(b.seed), b.answer ?? null, { practice: !!b.practice, asOf: typeof b.asOf === "string" ? b.asOf : undefined, placement: typeof b.placement === "string" ? b.placement : !!b.placement }));
+  });
+  app.post("/api/study/record", async (c) => {
+    const b = await body(c);
+    const cardId = Number(b.cardId);
+    const seed = Number(b.seed);
+    if (!Number.isInteger(cardId) || cardId <= 0) throw new EtudeError("cardId must be a positive integer");
+    if (!Number.isInteger(seed)) throw new EtudeError("seed must be an integer");
+    const durationMs = typeof b.durationMs === "number" && Number.isFinite(b.durationMs) ? Math.max(0, Math.round(b.durationMs)) : undefined;
+    return c.json(await etude.recordRun(cardId, seed, b.answer ?? null, { durationMs, practice: !!b.practice, asOf: typeof b.asOf === "string" ? b.asOf : undefined }));
   });
   app.post("/api/study/feedback", async (c) => c.json(await etude.feedback(Number((await body(c)).attemptId))));
   app.post("/api/study/rate", async (c) => {
@@ -559,6 +653,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   // ------------------------------------------------- stats, tags, packs
   app.get("/api/stats", (c) => c.json(etude.stats(scopeOf(c), Number(c.req.query("days") ?? 30) || 30)));
   app.get("/api/stats/skills", (c) => c.json(etude.learnerSummary(c.req.query("deck") ?? "")));
+  app.get("/api/stats/concepts", (c) => c.json(etude.conceptMap(c.req.query("deck") ?? "")));
   app.get("/api/tags", (c) => c.json(etude.listTags()));
   app.put("/api/tags", async (c) => {
     const b = await body(c);
@@ -586,7 +681,8 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   app.get("/api/export", (c) => c.json(etude.exportPack({ ...scopeOf(c), name: c.req.query("name") || undefined })));
   app.get("/api/settings", (c) => {
     const s = etude.settings();
-    const keys = [s.ai.decision?.apiKeyEnv, chatProviderKeyEnv(s.ai.feedback), chatProviderKeyEnv(s.ai.vision)].filter(Boolean) as string[];
+    // OpenRouter's key is also asked for by Settings → AI → Providers (agents' models), used for grading or not.
+    const keys = [...new Set([s.ai.decision?.apiKeyEnv, chatProviderKeyEnv(s.ai.feedback), chatProviderKeyEnv(s.ai.vision), "OPENROUTER_API_KEY"].filter(Boolean) as string[])];
     return c.json({
       ...s,
       keyStatus: Object.fromEntries(keys.map((k) => [k, !!process.env[k]])),
@@ -598,6 +694,12 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   });
   app.get("/api/defaults", (c) => c.json(DEFAULT_PRESET));
   app.post("/api/ai/test", async (c) => c.json(await etude.testAi()));
+  // Your OK for each AI provider, for grading and Ask: in the iPhone app nothing goes to one you haven't agreed to.
+  const askProviders = () => [agentFor(etude).askProvider()];
+  // `ready` per provider (a key set, ChatGPT signed in) lets the iPhone app ask at launch only where AI is set up.
+  app.get("/api/ai/consent", (c) => c.json(etude.aiConsentStatus(askProviders())));
+  app.post("/api/ai/consent", async (c) => (etude.agreeToAi((await body(c)).provider), c.json(etude.aiConsentStatus(askProviders()))));
+  app.post("/api/ai/consent/withdraw", async (c) => (etude.withdrawAiConsent((await body(c)).provider), c.json(etude.aiConsentStatus(askProviders()))));
   app.patch("/api/settings", async (c) => {
     const next = etude.updateSettings(await body(c));
     // A Privacy toggle turned off drops what was waiting to be sent, at once.
@@ -620,6 +722,20 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     return c.json({ counted: telemetryFor(etude).count(b.name) });
   });
   app.post("/api/telemetry/flush", async (c) => c.json(await telemetryFor(etude).flush()));
+  // Your own activity, for Stats (Settings → Privacy → Activity; src/core/activity.ts): off unless turned on, kept in
+  // this collection on this device, never synced or sent. Recording is refused while it's off.
+  const chatTitle = () => {
+    let map: Map<string, string> | null = null;
+    return (id: string) => {
+      map ??= new Map(agentFor(etude).listConversations().map((x) => [x.id, x.title ?? ""]));
+      return map.has(id) ? map.get(id)! : null;
+    };
+  };
+  app.get("/api/activity", (c) => c.json(activityFor(etude).status(), 200, { "Cache-Control": "no-store" }));
+  app.patch("/api/activity", async (c) => c.json(activityFor(etude).setPrefs(await body(c))));
+  app.post("/api/activity", async (c) => c.json(activityFor(etude).record(await body(c))));
+  app.delete("/api/activity", (c) => c.json(activityFor(etude).clear()));
+  app.get("/api/activity/summary", (c) => c.json(activityFor(etude).summary(Number(c.req.query("days") ?? 30) || 30, { chatTitle: chatTitle() }), 200, { "Cache-Control": "no-store" }));
   // One API key into $ETUDE_HOME/.env. The answer says whether it is set, never what it is.
   app.post("/api/settings/key", async (c) => {
     const b = await body<{ name?: unknown; value?: unknown }>(c);
@@ -692,15 +808,116 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   // ------------------------------------------------------------- agent
   const agent = agentFor(etude);
   app.get("/api/agent/models", async (c) => c.json(await agent.models(c.req.query("force") === "1")));
-  app.get("/api/agent/conversations", (c) => c.json({ conversations: agent.listConversations(), running: agent.listConversations().filter((x) => agent.runningTurn(x.id)).map((x) => x.id) }));
-  app.post("/api/agent/conversations", async (c) => c.json(agent.createConversation((await body(c)).model ?? null)));
-  app.get("/api/agent/conversations/:id", (c) => c.json({ ...agent.conversation(c.req.param("id")), running: agent.runningTurn(c.req.param("id")) }));
-  app.delete("/api/agent/conversations/:id", (c) => c.json(agent.deleteConversation(c.req.param("id"))));
+  app.get("/api/agent/conversations/search", (c) => c.json({ results: agent.searchConversations(c.req.query("q") ?? "") }));
+  app.get("/api/agent/conversations", (c) => {
+    const conversations = agent.listConversations();
+    return c.json({
+      conversations,
+      running: conversations.filter((x) => agent.runningTurn(x.id)).map((x) => x.id),
+      background: conversations.filter((x) => agent.backgroundTasks(x.id).length > 0).map((x) => x.id),
+    });
+  });
+  app.post("/api/agent/conversations", async (c) => {
+    const b = await body(c);
+    return c.json(agent.createConversation(b.model ?? null, typeof b.profile === "string" ? b.profile : null));
+  });
+  // Agent profiles (who you talk to). The server is the user's own app; the assistant goes through the CLI guard.
+  app.get("/api/agent/profiles", async (c) => c.json(agent.profiles()));
+  app.post("/api/agent/profiles", async (c) => {
+    const b = await body(c);
+    const p = b.duplicate ? etude.duplicateAgentProfile(String(b.duplicate), b.name) : etude.addAgentProfile(b, { makeDefault: !!b.makeDefault });
+    return c.json({ ...(agent.profiles()), created: p.id });
+  });
+  app.patch("/api/agent/profiles/:id", async (c) => {
+    etude.editAgentProfile(c.req.param("id"), await body(c));
+    return c.json(agent.profiles());
+  });
+  app.delete("/api/agent/profiles/:id", async (c) => {
+    etude.removeAgentProfile(c.req.param("id"));
+    return c.json(agent.profiles());
+  });
+  app.post("/api/agent/profiles/:id/default", async (c) => {
+    etude.setDefaultAgentProfile(c.req.param("id"));
+    return c.json(agent.profiles());
+  });
+  // The brain picked on an agent's card; Hermes and other agents get the card's own entry in this device's ai.agents.
+  app.put("/api/agent/profiles/:id/brain", async (c) => {
+    etude.setAgentBrain(c.req.param("id"), await body(c));
+    return c.json(agent.profiles());
+  });
+  // Harnesses an external profile can switch between in the chat message box (Hermes, Antigravity).
+  app.put("/api/agent/profiles/:id/harnesses", async (c) => {
+    const b = await body(c);
+    if (b.toggle === "hermes" || b.toggle === "antigravity") {
+      etude.toggleAgentHarness(c.req.param("id"), b.toggle, { enabled: !!b.enabled, hermesProfile: typeof b.hermesProfile === "string" ? b.hermesProfile : undefined });
+    } else if (Array.isArray(b.harnesses)) {
+      etude.setAgentHarnesses(c.req.param("id"), b.harnesses);
+    } else {
+      throw new EtudeError("give { toggle: 'hermes'|'antigravity', enabled } or { harnesses: [...] }", 400);
+    }
+    return c.json(agent.profiles());
+  });
+  app.get("/api/agent/hermes", (c) => c.json(agent.hermes()));
+  app.get("/api/agent/conversations/:id", (c) => {
+    const id = c.req.param("id");
+    return c.json({ ...agent.conversation(id), running: agent.runningTurn(id), tasks: agent.backgroundTasks(id) });
+  });
+  app.get("/api/agent/conversations/:id/tasks", (c) => {
+    const id = c.req.param("id");
+    agent.conversation(id);
+    return c.json({ tasks: agent.backgroundTasks(id) });
+  });
+  app.get("/api/agent/conversations/:id/tasks/events", (c) => {
+    const id = c.req.param("id");
+    agent.conversation(id);
+    return streamSSE(c, async (sse) => {
+      const queue: unknown[] = [];
+      let wake: (() => void) | null = null;
+      let gone = false;
+      const stop = agent.followTasks(id, (tasks) => {
+        queue.push({ type: "tasks", tasks });
+        wake?.();
+      });
+      sse.onAbort(() => {
+        gone = true;
+        wake?.();
+      });
+      try {
+        while (!gone) {
+          while (queue.length && !gone) {
+            const ev = queue.shift()!;
+            await sse.writeSSE({ event: "tasks", data: JSON.stringify(ev) });
+          }
+          if (gone) break;
+          const woke = await new Promise<boolean>((r) => {
+            const t = setTimeout(() => r(false), 25_000);
+            t.unref?.();
+            wake = () => (clearTimeout(t), r(true));
+          });
+          wake = null;
+          if (!woke && !gone) await sse.write(": ping\n\n");
+        }
+      } catch {
+        // Window closed.
+      } finally {
+        stop();
+      }
+    });
+  });
+  app.delete("/api/agent/conversations/:id", async (c) => c.json(await agent.deleteConversation(c.req.param("id"))));
   app.patch("/api/agent/conversations/:id", async (c) => {
     const b = await body(c);
     if (typeof b.model === "string") agent.setConversationModel(c.req.param("id"), b.model);
     if (typeof b.title === "string") agent.renameConversation(c.req.param("id"), b.title);
+    if (typeof b.pinned === "boolean") agent.pinConversation(c.req.param("id"), b.pinned);
     return c.json(agent.conversation(c.req.param("id")));
+  });
+  // A chat's pickers besides who it's with (model, effort, speed) and how full its context is. `warm=1` may start the agent to ask.
+  app.post("/api/agent/controls/refresh", async (c) => c.json(await agent.refreshControls(c.req.query("conv") || null, c.req.query("profile") || null)));
+  app.get("/api/agent/controls", async (c) => c.json(await agent.controls(c.req.query("conv") || null, c.req.query("profile") || null, c.req.query("warm") === "1", c.req.query("harness") || null)));
+  app.put("/api/agent/conversations/:id/controls/:control", async (c) => {
+    const b = await body(c);
+    return c.json(await agent.setControl(c.req.param("id"), c.req.param("control"), String(b.value ?? ""), b.confirmed === true));
   });
   app.post("/api/agent/conversations/:id/attachments", async (c) => {
     const id = c.req.param("id");
@@ -729,13 +946,39 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   });
   app.get("/api/agent/conversations/:id/attachments/:att", (c) => {
     const m = agent.attachment(c.req.param("id"), c.req.param("att"));
-    return sendFile(c, m.path, { mime: m.mime });
+    return sendFile(c, m.path, { mime: m.mime, headers: { "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox" } });
+  });
+  // A file on this computer that a reply pointed at. Served as data only: `sandbox` keeps an SVG or anything
+  // else opened on its own from running as the app.
+  app.get("/api/agent/conversations/:id/shown", (c) => {
+    const m = agent.shownFile(c.req.param("id"), c.req.query("path") ?? "", Number(c.req.query("m")) || undefined);
+    const size = statSync(m.path).size;
+    const headers: Record<string, string> = { "Content-Type": m.mime, "Cache-Control": "private, max-age=3600", "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'", "X-Content-Type-Options": "nosniff", "Accept-Ranges": "bytes" };
+    // Audio and video ask for ranges to seek.
+    const range = /^bytes=(\d*)-(\d*)$/.exec(c.req.header("range") ?? "");
+    if (range && (range[1] || range[2]) && size > 0) {
+      const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+      const end = range[1] && range[2] ? Math.min(size - 1, Number(range[2])) : size - 1;
+      if (start > end || start >= size) return c.body(null, 416, { "Content-Range": `bytes */${size}` });
+      const buf = Buffer.alloc(end - start + 1);
+      const fd = openSync(m.path, "r");
+      try {
+        readSync(fd, buf, 0, buf.length, start);
+      } finally {
+        closeSync(fd);
+      }
+      return c.body(buf, 206, { ...headers, "Content-Range": `bytes ${start}-${end}/${size}` });
+    }
+    return c.body(readFileSync(m.path), 200, headers);
   });
   app.post("/api/agent/conversations/:id/messages", async (c) => {
     const id = c.req.param("id");
     const b = await body(c);
     agent.conversation(id);
     if (agent.runningTurn(id)) throw new AgentError("the agent is still working on this conversation", 409);
+    // The iPhone app: a provider not agreed to yet gets nothing; the app asks and sends the same message again.
+    const need = agent.consentNeeded(id, typeof b.model === "string" ? b.model : null);
+    if (need) return c.json({ error: need.message, code: "ai_consent", provider: need.provider }, 409);
     return streamSSE(c, async (sse) => {
       const queue: AgentEvent[] = [];
       let wake: (() => void) | null = null;
@@ -745,7 +988,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
         wake?.();
       };
       const turn = agent
-        .send(id, { text: String(b.text ?? ""), attachments: Array.isArray(b.attachments) ? b.attachments.map(String) : [], model: b.model ?? undefined, page: typeof b.page === "string" ? b.page : undefined }, push)
+        .send(id, { text: String(b.text ?? ""), attachments: Array.isArray(b.attachments) ? b.attachments.map(String) : [], model: b.model ?? undefined, effort: typeof b.effort === "string" ? b.effort : undefined, controls: b.controls && typeof b.controls === "object" ? Object.fromEntries(Object.entries(b.controls).filter(([, v]) => typeof v === "string").slice(0, 8)) as Record<string, string> : undefined, page: typeof b.page === "string" ? b.page : undefined, view: cleanView(b.view) }, push)
         .catch((e) => push({ type: "error", error: (e as Error).message }))
         .finally(() => {
           finished = true;
@@ -766,16 +1009,89 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   });
   app.post("/api/agent/turns/:turn/confirm", async (c) => {
     const b = await body(c);
-    if (!agent.confirm(c.req.param("turn"), String(b.callId ?? ""), !!b.allow)) throw new AgentError("nothing is waiting for that confirmation", 404);
+    if (!agent.confirm(c.req.param("turn"), String(b.callId ?? ""), !!b.allow, typeof b.optionId === "string" ? b.optionId : undefined)) throw new AgentError("nothing is waiting for that confirmation", 404);
+    return c.json({ ok: true });
+  });
+  // The app's answer when the model asked to see the screen (read_screen, screenshot).
+  app.post("/api/agent/turns/:turn/look", async (c) => {
+    const b = await body(c);
+    const r = { text: typeof b.text === "string" ? b.text : undefined, image: typeof b.image === "string" ? b.image : undefined, width: Number(b.width) || undefined, height: Number(b.height) || undefined, error: typeof b.error === "string" ? b.error.slice(0, 300) : undefined };
+    if (!agent.look(c.req.param("turn"), String(b.callId ?? ""), r)) throw new AgentError("nothing is waiting for that look", 404);
     return c.json({ ok: true });
   });
   app.post("/api/agent/turns/:turn/stop", (c) => c.json({ stopped: agent.stop(c.req.param("turn")) }));
+  // A turn that's still going, from another connection (the window reloaded): what it did so far, then the rest live.
+  app.get("/api/agent/turns/:turn/events", (c) => {
+    const id = c.req.param("turn");
+    const queue: { e: AgentEvent; replay: boolean }[] = [];
+    let wake: (() => void) | null = null;
+    const stopFollowing = agent.follow(id, (e, replay) => {
+      queue.push({ e, replay });
+      wake?.();
+    });
+    if (!stopFollowing) throw new AgentError("that turn is over", 404);
+    return streamSSE(c, async (sse) => {
+      let gone = false;
+      sse.onAbort(() => {
+        gone = true;
+        wake?.();
+      });
+      let idle = 0;
+      try {
+        for (;;) {
+          while (queue.length) {
+            const { e, replay } = queue.shift()!;
+            await sse.writeSSE({ event: e.type, data: JSON.stringify(replay ? { ...e, replay } : e) });
+            if (e.type === "done") return;
+          }
+          if (gone) return;
+          // A ping every 15 s; a turn that died without `done` ends the stream on the second quiet one.
+          const woke = await new Promise<boolean>((r) => {
+            const t = setTimeout(() => r(false), 15_000);
+            wake = () => (clearTimeout(t), r(true));
+          });
+          wake = null;
+          if (woke) idle = 0;
+          else {
+            await sse.write(": ping\n\n");
+            if (!agent.turnOpen(id) && ++idle >= 2) return;
+          }
+        }
+      } catch {
+        // The window went away.
+      } finally {
+        stopFollowing();
+      }
+    });
+  });
+  // Steer: words for the reply being written; the model reads them after the step it's on.
+  app.post("/api/agent/turns/:turn/steer", async (c) => {
+    const b = await body(c);
+    return c.json({ steered: await agent.steer(c.req.param("turn"), String(b.text ?? ""), Array.isArray(b.attachments) ? b.attachments.map(String) : []) });
+  });
+  // How much Ask asks before acting: ask (every change), dangerous (only what could do harm), allow (never).
+  app.get("/api/agent/permission", (c) => c.json({ permission: agent.permission() }));
+  app.put("/api/agent/permission", async (c) => c.json({ permission: agent.setPermission(String((await body(c)).permission ?? "")) }));
   app.post("/api/agent/conversations/:id/undo", async (c) => {
     const b = await body(c);
     return c.json(agent.undo(c.req.param("id"), b.messageId ? Number(b.messageId) : undefined));
   });
 
   // ------------------------------------------------------------- update
+  // Which web app this server is handing out right now: the entry script index.html loads (its name carries a hash of
+  // the build). An open window compares it with its own and reloads itself on a new build (web/src/lib/live-reload.ts).
+  let built: { at: number; entry: string | null } = { at: 0, entry: null };
+  app.get("/api/app-build", (c) => {
+    if (!opts.webDist) return c.json({ entry: null }, 200, { "Cache-Control": "no-store" });
+    const index = join(opts.webDist, "index.html");
+    try {
+      const at = statSync(index).mtimeMs;
+      if (at !== built.at) built = { at, entry: /<script[^>]+src="([^"]*\/assets\/[^"]+\.js)"/.exec(readFileSync(index, "utf8"))?.[1] ?? null };
+    } catch {
+      built = { at: 0, entry: null };
+    }
+    return c.json({ entry: built.entry }, 200, { "Cache-Control": "no-store" });
+  });
   // `?check=1` asks the remote (at most every 10 min unless `force=1`); without it, the last known state.
   app.get("/api/update", async (c) =>
     c.json({ ...(await updateStatus({ fetch: c.req.query("check") === "1", force: c.req.query("force") === "1" })), canRestart: !!opts.onRestart }),
@@ -794,8 +1110,12 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const refresh = c.req.query("refresh") === "1";
     const [index, soon] = await Promise.all([fetchIndex(cfg.url, { refresh }), fetchComingSoon(cfg.url, { refresh })]);
     const installed = installedEntries(etude);
-    return c.json({ ...cfg, generated: index.generated, comingSoon: soon.entries, entries: index.entries.map((x) => ({ ...x, installed: installState(etude, x, installed), installedIds: installed[x.id]?.kind === x.kind ? installed[x.id].ids : [] })), selectedTheme: etude.currentTheme().id });
+    // Every entry, with the authors you hid: the lists leave theirs out, Yours and a direct link still reach them.
+    return c.json({ ...cfg, generated: index.generated, comingSoon: soon.entries, entries: index.entries.map((x) => ({ ...x, installed: installState(etude, x, installed), installedIds: installed[x.id]?.kind === x.kind ? installed[x.id].ids : [] })), selectedTheme: etude.currentTheme().id, hiddenAuthors: etude.hiddenAuthors().map((h) => h.author) });
   });
+  app.get("/api/market/hidden-authors", (c) => c.json({ hiddenAuthors: etude.hiddenAuthors() }));
+  app.post("/api/market/hide-author", async (c) => c.json(etude.hideAuthor((await body(c)).author)));
+  app.post("/api/market/show-author", async (c) => c.json(etude.showAuthor((await body(c)).author)));
   app.get("/api/market/entry/:kind/:id", async (c) => {
     const kind = c.req.param("kind") as MarketKind;
     const file = await fetchEntry(marketSettings(etude).url, { kind, id: c.req.param("id"), path: entryPath(kind, c.req.param("id")) });
@@ -806,7 +1126,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const hit = (await fetchIndex(url)).entries.find((x) => x.kind === c.req.param("kind") && x.id === c.req.param("id"));
     if (!hit?.cover) return c.json({ error: "no cover" }, 404);
     const { body, type } = await fetchCover(url, hit.cover);
-    return c.body(new Uint8Array(body), 200, { "Content-Type": type, "Cache-Control": "max-age=600" });
+    return c.body(new Uint8Array(body), 200, { "Content-Type": type, "Cache-Control": "max-age=600", "X-Content-Type-Options": "nosniff" });
   });
   app.get("/api/market/media/:kind/:id/:index", async (c) => {
     const url = marketSettings(etude).url;
@@ -857,6 +1177,97 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const def = etude.type(c.req.param("type"));
     const base = publicBase(c);
     return c.body(cardFrame(def, base, frameAssets(def.id)), 200, FRAME_HEADERS);
+  });
+  app.get("/frame-home/:name", (c) => {
+    const deckName = decodeURIComponent(c.req.param("name"));
+    const tpl = etude.deckHomeTemplate(deckName);
+    if (!tpl) return c.text("this deck has no custom home", 404);
+    const base = publicBase(c);
+    return c.body(deckHomeFrame(tpl.template, base, tpl.typeId ? frameAssets(tpl.typeId) : undefined), 200, FRAME_HEADERS);
+  });
+
+  // ------------------------------------------------------------- plugins
+  const plugins = pluginsFor(etude);
+  app.get("/api/plugins", (c) => {
+    const installed = plugins.list();
+    const installedIds = new Set(installed.map((p) => p.id));
+    const bundled = bundledPlugins().map((b) => ({
+      id: b.manifest.id,
+      manifest: b.manifest,
+      hash: b.hash,
+      installed: installedIds.has(b.manifest.id),
+      permissionLabels: Object.fromEntries(b.manifest.permissions.map((p) => [p, describePermission(p)])),
+    }));
+    return c.json({
+      plugins: installed.map((p) => ({
+        ...p,
+        permissionLabels: Object.fromEntries(p.manifest.permissions.map((perm) => [perm, describePermission(perm)])),
+      })),
+      bundled,
+    });
+  });
+  app.post("/api/plugins/install-bundled", async (c) => {
+    const b = await body(c);
+    const id = String(b.id ?? "");
+    const found = bundledPlugin(id);
+    if (!found) throw new EtudeError(`unknown bundled plugin "${id}"`, 404);
+    const grant = Array.isArray(b.grant) ? b.grant.map(String) : found.manifest.permissions;
+    const res = plugins.install({ manifest: found.manifest, files: found.files }, { source: "bundled", expectedHash: found.hash, enable: b.enable !== false, grant });
+    return c.json(res);
+  });
+  app.post("/api/plugins/install", async (c) => {
+    const b = await body(c);
+    const pkg = b.package as PluginPackage | undefined;
+    if (!pkg || typeof pkg !== "object") throw new EtudeError("package is required", 400);
+    const grant = Array.isArray(b.grant) ? b.grant.map(String) : undefined;
+    const res = plugins.install(pkg, {
+      source: b.source === "market" ? "market" : "local",
+      expectedHash: typeof b.expectedHash === "string" ? b.expectedHash : undefined,
+      enable: b.enable !== false,
+      grant,
+    });
+    return c.json(res);
+  });
+  app.patch("/api/plugins/:id", async (c) => {
+    const id = c.req.param("id");
+    const b = await body(c);
+    let out = plugins.get(id);
+    if (!out) throw new EtudeError(`unknown plugin "${id}"`, 404);
+    if (Array.isArray(b.granted)) out = plugins.setPermissions(id, b.granted.map(String));
+    if (typeof b.enabled === "boolean") out = plugins.setEnabled(id, b.enabled);
+    return c.json(out);
+  });
+  app.delete("/api/plugins/:id", (c) => c.json(plugins.uninstall(c.req.param("id"))));
+  app.get("/api/plugins/:id/kv", (c) => c.json({ kv: plugins.kvGetAll(c.req.param("id")) }));
+  app.get("/api/plugins/:id/kv/:key", (c) => c.json({ key: c.req.param("key"), value: plugins.kvGet(c.req.param("id"), c.req.param("key")) }));
+  app.put("/api/plugins/:id/kv/:key", async (c) => {
+    const b = await body(c);
+    return c.json(plugins.kvSet(c.req.param("id"), c.req.param("key"), b.value));
+  });
+  app.get("/api/plugins/:id/events", (c) => {
+    const kind = c.req.query("kind") || undefined;
+    const after = c.req.query("after") ? Number(c.req.query("after")) : undefined;
+    const limit = c.req.query("limit") ? Number(c.req.query("limit")) : undefined;
+    return c.json({ events: plugins.listEvents(c.req.param("id"), { kind, after, limit }) });
+  });
+  app.post("/api/plugins/:id/events", async (c) => {
+    const b = await body(c);
+    return c.json(plugins.appendEvent(c.req.param("id"), String(b.kind ?? ""), b.payload));
+  });
+  app.get("/frame-plugin/:id/main", (c) => {
+    const pkg = plugins.packageOf(c.req.param("id"));
+    if (!pkg || !pkg.enabled) return c.text("plugin not enabled", 404);
+    const mainJs = pkg.files[pkg.manifest.main];
+    if (typeof mainJs !== "string") return c.text("plugin entry missing", 404);
+    return c.body(pluginControllerFrame(pkg.manifest.id, mainJs, pkg.granted), 200, FRAME_HEADERS);
+  });
+  app.get("/frame-plugin/:id/view/:view", (c) => {
+    const pkg = plugins.packageOf(c.req.param("id"));
+    if (!pkg || !pkg.enabled) return c.text("plugin not enabled", 404);
+    const viewId = c.req.param("view");
+    const rel = pkg.manifest.views?.[viewId];
+    if (!rel || typeof pkg.files[rel] !== "string") return c.text("plugin view not found", 404);
+    return c.body(pluginViewFrame(pkg.manifest.id, viewId, pkg.files[rel], pkg.granted), 200, FRAME_HEADERS);
   });
   // Unsaved previews (type editor, Market) as a served document: a srcdoc frame would inherit the
   // app page's Content-Security-Policy, which doesn't allow a card's inline scripts.

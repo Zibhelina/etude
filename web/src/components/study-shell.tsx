@@ -2,11 +2,11 @@
 // the result layer (verdict, Minimi's feedback, the follow-up chat) and the bottom strip whose one main
 // button changes its verb. Styles are the `st-*` block in index.css.
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Plus, SendHorizontal } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Plus, SendHorizontal } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { humanInterval, RATING_LABEL, type Rating, type StudyCard } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { CardFrameHandle, CardResult } from "@/components/card-frame";
+import type { CardFrameHandle, CardResult, DockField } from "@/components/card-frame";
 import { faceSrc, minimiFaceId, useMinimiFace } from "@/lib/minimi-face";
 import sitBlink from "@/assets/minimi/sit-up-blink.webp";
 import sitLeft from "@/assets/minimi/sit-up-L.webp";
@@ -14,6 +14,7 @@ import sitLegL from "@/assets/minimi/sit-legL.webp";
 import sitLegR from "@/assets/minimi/sit-legR.webp";
 import sitNeutral from "@/assets/minimi/sit-up-n.webp";
 import sitRight from "@/assets/minimi/sit-up-R.webp";
+import { useHolidayArt } from "@/lib/holiday";
 
 /** The face Minimi wears right now (a snapshot; components that need live updates use useMinimiFace). */
 export const minimiFace = () => faceSrc(minimiFaceId());
@@ -21,7 +22,7 @@ export const reducedMotion = () => typeof matchMedia === "function" && matchMedi
 export const modKey = () => (typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl");
 
 /** Where the card sits below what you're studying: the card's deck with the studied deck's path removed.
- *  Studying "University::CMPT 371", a card in "University::CMPT 371::Week 1::01 Delay" gives ["Week 1", "01 Delay"];
+ *  Studying "University::Networking", a card in "University::Networking::Week 1::01 Delay" gives ["Week 1", "01 Delay"];
  *  studying everything (or a search) gives the whole path. */
 export function crumbPath(cardDeck: string | undefined, scopeDeck?: string): string[] {
   if (!cardDeck) return [];
@@ -174,13 +175,14 @@ export function Verdict({ verdict, score, prefix, late }: { verdict?: string | n
 /** Minimi sitting on the feedback bubble: four drawn upper-body frames (neutral, blink, looking left,
  *  looking right) swap instantly on a 4.8 s loop while his hind legs swing; CSS only (`st-sit`). */
 function SittingMinimi() {
+  const art = useHolidayArt();
   return (
     <div className="st-sit" aria-hidden>
       <div className="up">
-        <img className="fn" src={sitNeutral} alt="" />
-        <img className="fk" src={sitBlink} alt="" />
-        <img className="fL" src={sitLeft} alt="" />
-        <img className="fR" src={sitRight} alt="" />
+        <img className="fn" src={art(sitNeutral)} alt="" />
+        <img className="fk" src={art(sitBlink)} alt="" />
+        <img className="fL" src={art(sitLeft)} alt="" />
+        <img className="fR" src={art(sitRight)} alt="" />
       </div>
       <img className="lL" src={sitLegL} alt="" />
       <img className="lR" src={sitLegR} alt="" />
@@ -278,6 +280,97 @@ export function Composer({ fun, chips, busy, onSend, onAttach, attached, onBack,
         </button>
       </form>
       <button className="st-backrate" onClick={onBack}>Back to rating</button>
+    </div>
+  );
+}
+
+const sameWords = (a: string, b: string) => {
+  const norm = (s: string) => s.toLowerCase().replace(/[\s.?!:;…]+$/, "").replace(/\s+/g, " ").trim();
+  return norm(a) === norm(b);
+};
+
+/**
+ * A card's one text field, shown on a phone at the bottom of the screen instead of in the card, with Check in
+ * it: there it stays in view above the keyboard. The card hides its own and takes what is typed here
+ * (runtime/dock.js), so it grades and shows the answer as usual. Check works with the field empty too, for
+ * when you don't know. The card's hint goes just above the field when it's too long to read inside it.
+ */
+export function AnswerField({ field, value, onChange, onCheck, onTyping, checking, pinned, inputRef }: {
+  field: DockField;
+  value: string;
+  onChange(value: string): void;
+  onCheck(): void;
+  /** The field took or lost the focus: the keyboard is coming up or going away. */
+  onTyping(on: boolean): void;
+  checking: boolean;
+  /** The question shown pinned at the top while typing: a hint that only says it again isn't shown. */
+  pinned?: string;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+}) {
+  const hint = field.placeholder;
+  const [long, setLong] = useState(false);
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    if (!input || !hint) return setLong(false);
+    const ink = document.createElement("canvas").getContext("2d");
+    const fit = () => {
+      if (!ink || !input.clientWidth) return;
+      const cs = getComputedStyle(input);
+      ink.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      setLong(ink.measureText(hint).width > input.clientWidth);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(input);
+    return () => ro.disconnect();
+  }, [hint, inputRef]);
+  const above = long && !(pinned && sameWords(pinned, hint));
+  return (
+    <div className="st-answer-wrap">
+      {above && <div className="st-answer-hint" id="st-answer-hint">{hint}</div>}
+      <form className="st-answer" data-above-keyboard onSubmit={(e) => { e.preventDefault(); onCheck(); }}>
+        <input
+          ref={inputRef}
+          type={field.type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => onTyping(true)}
+          onBlur={() => onTyping(false)}
+          placeholder={hint && !long ? hint : "Your answer"}
+          aria-label={field.label || hint || "Your answer"}
+          aria-describedby={above ? "st-answer-hint" : undefined}
+          inputMode={(field.inputMode || undefined) as React.HTMLAttributes<HTMLInputElement>["inputMode"]}
+          autoCapitalize={field.autocapitalize || undefined}
+          autoComplete={field.autocomplete || "off"}
+          autoCorrect={field.spellcheck ? undefined : "off"}
+          spellCheck={field.spellcheck}
+          maxLength={field.maxLength ?? undefined}
+          enterKeyHint="send"
+          readOnly={checking}
+        />
+        <button type="submit" disabled={checking} aria-label={checking ? "Checking" : undefined}>
+          {checking ? <Loader2 className="size-4 animate-spin" /> : "Check"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * While you type a card's answer on a phone, its question pinned to the top of the screen in place of the
+ * header, over the card's picture, with a button that puts the keyboard away.
+ */
+export function PinnedPrompt({ kicker, kickerColor, question, onHide }: { kicker: string; kickerColor: string; question: string; onHide(): void }) {
+  return (
+    <div className="st-pin">
+      <div className="st-pin-text">
+        {kicker && <div className="st-pin-kicker" style={kickerColor ? { color: kickerColor } : undefined}>{kicker}</div>}
+        <div className="st-pin-q">{question}</div>
+      </div>
+      {/* Pressed, it mustn't take the focus first: the field would lose it and the screen change under the tap. */}
+      <button type="button" className="st-pin-hide" aria-label="Hide keyboard" onPointerDown={(e) => e.preventDefault()} onClick={onHide}>
+        <ChevronDown className="size-5" />
+      </button>
     </div>
   );
 }

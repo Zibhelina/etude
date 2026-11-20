@@ -29,10 +29,18 @@ export function loadTypeDir(dir: string, opts: { assets?: boolean } = {}): CardT
   const grader: GraderSpec = { ...(meta.grader ?? { kind: "self" }) };
   if (grade && (grader.kind === "script" || grader.kind === "hybrid")) (grader as { code: string }).code = grade;
   const assets = opts.assets === false ? undefined : readAssetDir(dir);
+  const homeHtml = read(dir, "home.html");
+  const homeCss = read(dir, "home.css");
+  const homeJs = read(dir, "home.js");
+  const home =
+    homeHtml !== undefined
+      ? { html: homeHtml, css: homeCss ?? (typeof meta.home === "object" ? meta.home?.css : "") ?? "", js: homeJs ?? (typeof meta.home === "object" ? meta.home?.js : "") ?? "" }
+      : meta.home;
   return {
     ...meta,
     prepare: read(dir, "prepare.js") ?? meta.prepare,
     ...((read(dir, "demo.js") ?? meta.demo) ? { demo: read(dir, "demo.js") ?? meta.demo } : {}),
+    ...(home !== undefined ? { home } : {}),
     template: {
       html: read(dir, "template.html") ?? meta.template?.html ?? "",
       css: read(dir, "style.css") ?? meta.template?.css ?? "",
@@ -103,6 +111,11 @@ export function validateType(def: unknown): string[] {
   }
   errors.push(...validateAssets(t.assets));
   if (t.showVerdict !== undefined && typeof t.showVerdict !== "boolean") errors.push("showVerdict must be true or false");
+  if (t.fitScreen !== undefined && typeof t.fitScreen !== "boolean") errors.push("fitScreen must be true or false");
+  if (t.leadFaces !== undefined) {
+    if (!Array.isArray(t.leadFaces) || t.leadFaces.some((f) => typeof f !== "string" || !/^[\w-]+$/.test(f))) errors.push("leadFaces must be a list of face names");
+    else if (!t.faces?.length || t.leadFaces.some((f) => !t.faces!.includes(f))) errors.push("leadFaces must name faces in the type's faces list");
+  }
   if (t.metrics !== undefined) {
     if (!Array.isArray(t.metrics)) errors.push("metrics must be an array");
     else
@@ -113,6 +126,19 @@ export function validateType(def: unknown): string[] {
   }
   if (t.scheduler !== undefined && (typeof t.scheduler !== "string" || !TYPE_ID.test(t.scheduler))) errors.push('scheduler must be a scheduler id ("fsrs", "drill", ...)');
   if (t.schedulerOptions !== undefined && (!t.schedulerOptions || typeof t.schedulerOptions !== "object" || Array.isArray(t.schedulerOptions))) errors.push("schedulerOptions must be an object");
+  if (t.home !== undefined && t.home !== "catalog") {
+    const h = t.home as any;
+    if (!h || typeof h !== "object" || Array.isArray(h) || typeof h.html !== "string") errors.push('home must be "catalog" or { html, css?, js? }');
+    else if ((h.css !== undefined && typeof h.css !== "string") || (h.js !== undefined && typeof h.js !== "string")) errors.push("home.css and home.js must be strings");
+    else if (h.html.length + (h.css?.length ?? 0) + (h.js?.length ?? 0) > 512 * 1024) errors.push("home template is too large (max 512 KB)");
+    else if (h.js) {
+      try {
+        new Function(`return async function (etude) {\n${h.js}\n}`);
+      } catch (e) {
+        errors.push(`${t.id}/home.js: ${(e as Error).message}`);
+      }
+    }
+  }
   if (g && "code" in g && g.code) {
     const e = checkSyntax(g.code, ["answer", "view", "key", "fields"], `${t.id}/grade`);
     if (e) errors.push(e);

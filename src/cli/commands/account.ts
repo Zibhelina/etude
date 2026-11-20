@@ -130,8 +130,8 @@ command({ name: "account subscribe", summary: "A checkout link for Etude Sync (U
 command({ name: "account billing", summary: "A link to manage the Sync subscription (cancel, card, invoices).", output: "{ url }", run: (c) => call(() => a(c).billingPortal()) });
 command({ name: "account market", summary: "Paid decks on the server's Market, with price and whether you own them.", output: "{ entries: [{ id, name, price, currency, listing, owned, installed }] }", run: (c) => call(() => a(c).paidIndex()) });
 command({ name: "account buy", summary: "A checkout link for a paid deck. Open it in a browser.", args: [LISTING], writes: true, output: "{ url, id, price, fee, currency }", run: (c) => call(() => a(c).checkout(c.args.listing)) });
-command({ name: "account library", summary: "Decks you bought, with the latest approved version and whether it's installed here.", output: "{ library: [{ listing, slug, name, version, installed }] }", run: (c) => call(() => a(c).library()) });
-command({ name: "account install", summary: "Install or update a purchased deck in this collection.", args: [LISTING], flags: [{ name: "immediate-access", type: "boolean", description: "Needed for the first download of a deck sold by Etude: you want it delivered now and understand that, once it's delivered, you can no longer cancel the purchase where the law allows that (as in the EU and the UK)." }], writes: true, dryRun: "self", output: "{ entry, result, ids, report }", run: (c) => call(() => a(c).install(c.args.listing, { dryRun: c.dry, immediateAccess: c.flags["immediate-access"] === true })) });
+command({ name: "account library", summary: "Decks you bought, with the latest approved version and whether it's installed here (with Sync, not when its items were deleted: install it again). Decks that were refunded or disputed are listed apart and leave this collection: their items, cards, history, card types and media.", writes: true, output: "{ library: [{ listing, slug, name, version, installed: installed|update|null }], revoked: [{ listing, slug, name, reason, at }], changes: { removed: [name], unlocked: [name] } }", run: (c) => call(() => a(c).library()) });
+command({ name: "account install", summary: "Install or update a purchased deck in this collection.", args: [LISTING], flags: [{ name: "immediate-access", type: "boolean", description: "Needed for the first download of a deck sold by Etude: you want it delivered now and understand that, once it's delivered, you can no longer cancel the purchase where the law allows that (as in the EU and the UK)." }], writes: true, dryRun: "self", output: "{ entry, result, ids, report, remap? }", run: (c) => call(() => a(c).install(c.args.listing, { dryRun: c.dry, immediateAccess: c.flags["immediate-access"] === true })) });
 command({ name: "account creator", summary: "Your seller profile on the paid Market, or null.", output: "{ country, displayName, stripeAccount, chargesEnabled, payoutsEnabled, detailsSubmitted, setupRequired } | null (setupRequired: set up again with `account sell`)", run: (c) => call(() => a(c).creator()) });
 command({
   name: "account sell",
@@ -206,3 +206,16 @@ command({ name: "account sales", summary: "Your sales and earnings (after Etude'
 command({ name: "account review", summary: "Admins: listings waiting for review (new decks, versions and page changes). Review page changes on the server's /account/admin/review screen.", output: "{ queue }", run: (c) => call(() => a(c).reviewQueue()) });
 command({ name: "account approve", summary: "Admins: approve a listing's pending versions; it goes live.", args: [{ name: "listing", description: "Listing id.", required: true }], flags: [{ name: "notes", type: "string", description: "Note to the creator." }], writes: true, output: "the listing", run: (c) => call(() => a(c).approve(c.args.listing, c.flags.notes)) });
 command({ name: "account reject", summary: "Admins: turn down a listing's pending versions with a reason.", args: [{ name: "listing", description: "Listing id.", required: true }], flags: [{ name: "notes", type: "string", description: "Why (sent to the creator)." }], writes: true, output: "the listing", run: (c) => call(() => a(c).reject(c.args.listing, c.flags.notes ?? "")) });
+command({
+  name: "account apple-product",
+  summary: "Admins: sell a deck Etude sells itself in the iPhone app too, as this App Store non-consumable product.",
+  description: "Create the non-consumable in App Store Connect first; the App Store sets its price. Only decks Etude sells itself qualify, and each product id goes to one deck. `none` stops selling the deck in the iPhone app. Like approve, it needs a recent sign-in.",
+  args: [
+    { name: "listing", description: "Listing id.", required: true },
+    { name: "product", description: "App Store product id, or none.", required: true },
+  ],
+  writes: true,
+  examples: ["etude account apple-product lst_… study.etude.deck.pharmacology", "etude account apple-product lst_… none"],
+  output: "{ listing, appleProductId }",
+  run: (c) => call(() => a(c).appleProduct(c.args.listing, c.args.product === "none" ? null : c.args.product)),
+});

@@ -24,10 +24,19 @@ test("the stylesheet defaults are Snow, and Night when the device is dark", () =
     const t = BUILTIN_THEMES.find((x) => x.id === id)!;
     const seen = [...root.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)];
     assert.ok(seen.length > 30, `${id}: no variables found`);
-    for (const m of seen) assert.equal(t.vars[m[1]], m[2].trim(), `${id}: ${m[1]} differs from index.css`);
+    // The button edge isn't theme data: it's always a shade of --primary (see themeCss).
+    for (const m of seen) if (m[1] !== "--primary-edge") assert.equal(t.vars[m[1]], m[2].trim(), `${id}: ${m[1]} differs from index.css`);
   };
   check("snow", block(0));
   check("night", block(css.indexOf("@media (prefers-color-scheme: dark)")));
+});
+
+test("the primary button's edge follows the button, even in a theme saved with a stale one", () => {
+  const night = BUILTIN_THEMES.find((t) => t.id === "night")!;
+  const stale = { ...night, id: "tokyo", vars: { ...night.vars, "--primary": "#c0caf5", "--primary-edge": "#2a7d39" } };
+  const css = themeCss(stale);
+  assert.ok(css.includes("--primary-edge: color-mix(in oklab, var(--primary) 72%, black);"));
+  assert.ok(!css.includes("#2a7d39"));
 });
 
 test("System follows the device: Snow in light, Night in dark", () => {
@@ -188,7 +197,16 @@ test("accent: paints over any theme, validated, synced key, previews can skip it
   const { ACCENTS, accentColor, accentText, withAccent } = await import("../src/core/themes.ts");
   const snow = BUILTIN_THEMES.find((t) => t.id === "snow")!;
   const night = BUILTIN_THEMES.find((t) => t.id === "night")!;
-  assert.equal(withAccent(snow, null), snow);
+  // No accent: the theme's own (--highlight) paints the buttons, so they match what Settings shows.
+  assert.equal(withAccent(snow, null).vars["--primary"], snow.vars["--highlight"]);
+  const graphite = BUILTIN_THEMES.find((t) => t.id === "graphite")!;
+  const own = withAccent(graphite, null).vars;
+  assert.equal(own["--primary"], graphite.vars["--highlight"]);
+  assert.equal(own["--sidebar-primary"], graphite.vars["--highlight"]);
+  assert.equal(own["--primary-foreground"], "#1b1b1a");
+  assert.equal(withAccent(BUILTIN_THEMES.find((t) => t.id === "paper")!, null).vars["--primary-foreground"], "#ffffff");
+  const named = { ...graphite, vars: { ...graphite.vars, "--highlight": "hotpink" } };
+  assert.equal(withAccent(named, null), named);
   const blue = ACCENTS.find((a) => a.id === "blue")!;
   assert.equal(withAccent(snow, "blue").vars["--primary"], blue.light);
   assert.equal(withAccent(night, "blue").vars["--highlight"], blue.dark);

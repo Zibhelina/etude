@@ -12,6 +12,8 @@ Open an entry and press **Install**:
 
 Installing again updates the entry in place. Items match by id, so a deck update changes content and keeps your scheduling. When the market has a newer version, the entry shows **Update**.
 
+With [Sync](sync.md), a deck you deleted, on this device or another, can't come back under the same item ids. The Market shows it as not installed once none of its items is left, and installing it again gives them fresh ids (`<id>.r1`, then `.r2` after another delete), the same on every device. The install record keeps the map, so later updates change those items, and `etude market install` lists them as `remap`. Without Sync nothing changes: a deleted deck still shows as installed, and installing it again brings back the same ids.
+
 ```sh
 etude market list --kind type
 etude market show typing-test

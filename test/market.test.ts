@@ -1,10 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Etude } from "../src/core/engine.ts";
-import { buildIndex, buildSubmission, checkEntry, entryJson, entryPath, fetchIndex, installEntry, installFile, installState, installedEntries, publishFile, type MarketFile } from "../src/core/market.ts";
+import { buildIndex, buildSubmission, checkEntry, entryJson, entryPath, fetchIndex, installEntry, installFile, installState, installedEntries, metaOf, packItemIds, publishFile, type MarketFile } from "../src/core/market.ts";
+import { syncFor } from "../src/core/sync/client.ts";
+import { drain } from "../src/core/sync/log.ts";
+import { project } from "../src/core/sync/project.ts";
 
 const dir = () => mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-market-"));
 const SHOWCASE = JSON.parse(readFileSync(new URL("../examples/showcase.pack.json", import.meta.url), "utf8"));
@@ -137,4 +140,138 @@ test("publish opens a pull request through a fork when you can't push", async ()
   const pr = calls.find((c) => c.args.at(-2) === "repos/Zibhelina/etude-market/pulls" || c.args.includes("repos/Zibhelina/etude-market/pulls"))!;
   assert.match(pr.input.head, /^ana:theme-sea-/);
   assert.equal(pr.input.base, "main");
+});
+
+/** A deck entry with two subdecks, as the Market serves it. */
+const deckEntry = (version: string, items: any[]): MarketFile => ({
+  etudeMarket: 1,
+  kind: "deck",
+  id: "pharm",
+  name: "Pharm",
+  description: "",
+  author: "ana",
+  tags: [],
+  version,
+  updated: "",
+  content: { etude: "pack/1", decks: [{ name: "Pharm" }, { name: "Pharm::Renal" }], items },
+});
+const P1 = { id: "p1", type: "basic", deck: "Pharm", fields: { front: "ACE inhibitor ending", back: "-pril" } };
+const P2 = { id: "p2", type: "basic", deck: "Pharm::Renal", fields: { front: "Loop diuretic", back: "furosemide" } };
+const itemIds = (e: Etude) => e.db.all("SELECT id FROM items ORDER BY id").map((r) => r.id as string);
+
+test("with no tombstones a deck installs under the pack's ids: no Sync, or Sync with nothing deleted", async () => {
+  const v1 = deckEntry("1", [P1, P2]);
+  const e = await Etude.open(":memory:");
+  const out = installFile(e, v1);
+  assert.equal(out.remap, undefined);
+  assert.deepEqual(itemIds(e), ["p1", "p2"]);
+  assert.equal("remap" in installedEntries(e).pharm, false);
+  assert.deepEqual(packItemIds(e, v1.content.items), {});
+  // Without Sync a deleted deck still reads as installed, and installing it again uses the same ids.
+  e.deleteDeck("Pharm", { items: true });
+  assert.equal(installState(e, metaOf(v1)), "installed");
+  const again = installFile(e, v1);
+  assert.equal(again.result, "updated");
+  assert.equal(again.remap, undefined);
+  assert.deepEqual(itemIds(e), ["p1", "p2"]);
+
+  const root = dir();
+  const s = await Etude.open(join(root, "s.db"), { home: join(root, "home") });
+  try {
+    syncFor(s).setup({ folder: join(root, "shared") });
+    assert.equal(installFile(s, v1).remap, undefined);
+    drain(s.db);
+    const twice = installFile(s, v1);
+    assert.equal(twice.result, "unchanged");
+    assert.equal(twice.remap, undefined);
+    assert.deepEqual(itemIds(s), ["p1", "p2"]);
+    assert.equal(installState(s, metaOf(v1)), "installed");
+  } finally {
+    s.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a deck deleted on a synced collection installs again under fresh ids, even before the delete was synced", async () => {
+  const root = dir();
+  const e = await Etude.open(join(root, "a.db"), { home: join(root, "home") });
+  try {
+    syncFor(e).setup({ folder: join(root, "shared") });
+    const v1 = deckEntry("1", [P1, P2]);
+    installFile(e, v1);
+    drain(e.db);
+    const faces = e.db.all("SELECT face FROM cards WHERE item_id = 'p1' ORDER BY face").map((r) => r.face as string);
+    assert.ok(faces.length > 0);
+    e.deleteDeck("Pharm", { items: true });
+    // The delete only waits in the outbox, and already counts.
+    assert.equal(installState(e, metaOf(v1)), null);
+    const r = installFile(e, v1);
+    assert.equal(r.result, "created", "a deck Sync took away is installed afresh");
+    assert.deepEqual(r.remap, { p1: "p1.r1", p2: "p2.r1" });
+    assert.deepEqual(installedEntries(e).pharm.remap, { p1: "p1.r1", p2: "p2.r1" });
+    assert.deepEqual(itemIds(e), ["p1.r1", "p2.r1"]);
+    assert.deepEqual(e.db.all("SELECT face FROM cards WHERE item_id = 'p1.r1' ORDER BY face").map((x) => x.face), faces, "cards follow the new id");
+    // What the projection makes of the registers: the old ids stay deleted, the new ones show.
+    drain(e.db);
+    project(e);
+    assert.deepEqual(itemIds(e), ["p1.r1", "p2.r1"]);
+    assert.deepEqual(e.db.all("SELECT DISTINCT item_id FROM cards ORDER BY item_id").map((x) => x.item_id), ["p1.r1", "p2.r1"]);
+    assert.equal(installState(e, metaOf(v1)), "installed");
+    const again = installFile(e, v1);
+    assert.deepEqual([again.remap, again.report.items.created], [{ p1: "p1.r1", p2: "p2.r1" }, 0]);
+    assert.deepEqual(itemIds(e), ["p1.r1", "p2.r1"]);
+  } finally {
+    e.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the state a reinstall by an earlier version left: decks back but empty, the deleted ids written again; the deck reads as gone and comes back", async () => {
+  const root = dir();
+  const e = await Etude.open(join(root, "a.db"), { home: join(root, "home") });
+  try {
+    syncFor(e).setup({ folder: join(root, "shared") });
+    const v1 = deckEntry("1", [P1, P2]);
+    installFile(e, v1);
+    e.deleteDeck("Pharm", { items: true });
+    drain(e.db);
+    // An earlier version imported the same ids again; the next sync hides them, and the decks stay, empty.
+    e.importPack(v1.content);
+    assert.equal(installState(e, metaOf(v1)), null, "items Sync deleted don't count, even before the projection hides them");
+    drain(e.db);
+    project(e);
+    assert.deepEqual(itemIds(e), []);
+    assert.deepEqual(e.db.all("SELECT name FROM decks WHERE name LIKE 'Pharm%' ORDER BY name").map((d) => d.name), ["Pharm", "Pharm::Renal"]);
+    assert.equal(installState(e, metaOf(v1)), null);
+    assert.deepEqual(installFile(e, v1).remap, { p1: "p1.r1", p2: "p2.r1" });
+    drain(e.db);
+    project(e);
+    assert.deepEqual(itemIds(e), ["p1.r1", "p2.r1"]);
+    assert.deepEqual(e.db.all("SELECT d.name FROM items i JOIN decks d ON d.id = i.deck_id ORDER BY i.id").map((d) => d.name), ["Pharm", "Pharm::Renal"]);
+  } finally {
+    e.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("fresh ids: the first free one, never another pack item's, within the item id limit, and the record's earlier choice wins", async () => {
+  const root = dir();
+  const e = await Etude.open(join(root, "a.db"), { home: join(root, "home") });
+  try {
+    syncFor(e).setup({ folder: join(root, "shared") });
+    const long = "x".repeat(200);
+    const items = ["a", "a.r1", "b", "constructor", long].map((id) => ({ id, type: "basic", deck: "D", fields: { front: id.slice(0, 20), back: "?" } }));
+    e.importPack({ etude: "pack/1", items: [...items, { id: "b.r1", type: "basic", deck: "D", fields: { front: "b.r1", back: "?" } }] });
+    e.deleteItems(["a", "b", "b.r1", "constructor", long]);
+    drain(e.db);
+    // a.r1 is the pack's own item, and b.r1 was deleted too.
+    assert.deepEqual(packItemIds(e, items), { a: "a.r2", b: "b.r2", constructor: "constructor.r1", [long]: "x".repeat(197) + ".r1" });
+    // An earlier choice that's alive is kept; one that was deleted moves on.
+    assert.deepEqual(packItemIds(e, items, { a: "a.r5", b: "b.r1" }).a, "a.r5");
+    assert.equal(packItemIds(e, items, { a: "a.r5", b: "b.r1" }).b, "b.r2");
+    assert.deepEqual(Object.keys(packItemIds(e, [{ id: "c" }, { id: "BAD id" }, {}, null])), []);
+  } finally {
+    e.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });

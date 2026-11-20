@@ -11,13 +11,14 @@ export function renderMarkdown(text: string): string {
   return render(text, DOMPurify);
 }
 
-export function Markdown({ children, className }: { children: string; className?: string }) {
+export function Markdown({ children, className, decorate }: { children: string; className?: string; decorate?(el: HTMLElement): void }) {
   const html = useMemo(() => parkLocalMedia(renderMarkdown(children ?? "")), [children]);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!ref.current) return;
     void highlightBlocks(ref.current);
     loadLocalMedia(ref.current);
-  }, [html]);
+    decorate?.(ref.current);
+  }, [html, decorate]);
   return <div ref={ref} className={cn("prose-etude", className)} dangerouslySetInnerHTML={{ __html: html }} />;
 }

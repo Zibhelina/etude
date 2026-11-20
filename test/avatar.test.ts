@@ -119,10 +119,10 @@ test("settings.name: default empty, trimmed, capped at 40", async () => {
   const e = await Etude.open(join(dir, "c.db"), { home: dir });
   try {
     assert.equal(e.settings().name, "");
-    assert.equal(e.updateSettings({ name: "  João   Henrique " }).name, "João Henrique");
+    assert.equal(e.updateSettings({ name: "  Ana   Silva " }).name, "Ana Silva");
     assert.throws(() => e.updateSettings({ name: "x".repeat(41) }), /too long/);
     assert.throws(() => e.updateSettings({ name: 3 as unknown as string }), /must be text/);
-    assert.equal(e.settings().name, "João Henrique");
+    assert.equal(e.settings().name, "Ana Silva");
   } finally {
     e.close();
     rmSync(dir, { recursive: true, force: true });

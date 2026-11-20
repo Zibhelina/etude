@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, ChevronLeft, ChevronRight, Clock, Database, Globe, Info, Keyboard, Loader2, MessageSquareCheck, Palette, RotateCcw, Save, Search, Shield, UserRound, X } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Clock, Database, Globe, Info, Keyboard, Loader2, Mail, MessageSquareCheck, Palette, Puzzle, RotateCcw, Save, Search, Shield, UserRound, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MyAvatar } from "@/components/avatar";
@@ -19,10 +19,12 @@ import { ShortcutsSection } from "@/components/settings-shortcuts";
 import { SyncSection } from "@/components/settings-sync";
 import { ACCOUNT_EVENT, AccountSection } from "@/components/settings-account";
 import { DesktopSection } from "@/components/settings-desktop";
-import { PrivacySection } from "@/components/settings-privacy";
-import { canShowPurchases, desktopApp } from "@/lib/platform";
+import { ActivitySection, HiddenAuthorsSection, PrivacySection } from "@/components/settings-privacy";
+import { PluginsSection } from "@/components/settings-plugins";
+import { canShowPurchases, desktopApp, isNativeApp } from "@/lib/platform";
 import { isPhone, usePhone } from "@/lib/device";
-import { account, type AccountStatus } from "@/lib/account";
+import { account, openMail, type AccountStatus } from "@/lib/account";
+import { CONTACT_EMAIL, contactMail } from "@/lib/contact";
 import { currentTheme, THEME_EVENT } from "@/lib/theme";
 import { Block, Group, NumberField, REVEAL_EVENT, SettingsPageContext } from "@/components/settings-ui";
 import { draftOf, matchPreset, normalize, validate, type SettingsDraft, type SettingsResponse } from "@/components/settings-model";
@@ -31,19 +33,21 @@ import { draftOf, matchPreset, normalize, validate, type SettingsDraft, type Set
 // a section list beside one section; a phone shows the list, and a tap opens the section on its own page.
 type Mode = "page" | "split" | "phone";
 
-const GROUPS = [
+const ALL_GROUPS = [
   { id: "account", label: "Account & Sync", icon: UserRound },
   { id: "study", label: "Study", icon: Clock },
   { id: "ai", label: "AI grading", icon: MessageSquareCheck },
   { id: "appearance", label: "Appearance", icon: Palette },
+  { id: "plugins", label: "Plugins", icon: Puzzle },
   { id: "data", label: "Data", icon: Database },
   { id: "privacy", label: "Privacy", icon: Shield },
   { id: "keys", label: "Keyboard", icon: Keyboard },
   { id: "about", label: "About", icon: Info },
 ] as const;
-type GroupId = (typeof GROUPS)[number]["id"];
+const GROUPS = ALL_GROUPS.filter((g) => g.id !== "plugins" || !isNativeApp());
+type GroupId = (typeof ALL_GROUPS)[number]["id"];
 const isGroup = (id: string): id is GroupId => GROUPS.some((g) => g.id === id);
-const groupLabel = (id: GroupId) => GROUPS.find((g) => g.id === id)!.label;
+const groupLabel = (id: GroupId) => ALL_GROUPS.find((g) => g.id === id)!.label;
 
 /** Old anchors (/settings#sync from first-run setup) and the inner sections they point at. */
 const ANCHOR_GROUP: Record<string, GroupId> = { sync: "account", account: "account", cleanup: "data", desktop: "about" };
@@ -64,7 +68,8 @@ const INDEX: { g: GroupId; label: string; words: string; fold?: string }[] = [
   { g: "ai", label: "API keys", words: "key token openrouter openai" },
   { g: "ai", label: "ChatGPT plan", words: "chatgpt plus pro sign in" },
   { g: "ai", label: "Feedback", words: "feedback automatically language explanation" },
-  { g: "ai", label: "Assistant", words: "ask etude agent chat model reasoning effort thinking" },
+  { g: "ai", label: "Agents", words: "ask etude agents profiles minimi tutor personality avatar body picture brain model reasoning effort default switch hermes gemini claude code codex acp external command" },
+  { g: "ai", label: "Providers", words: "ask agents chatgpt openrouter key custom endpoint sign in" },
   { g: "ai", label: "Test", words: "test try check grading works" },
   { g: "ai", label: "Decision model", words: "decision verdict model url timeout endpoint advanced", fold: "ai-endpoints" },
   { g: "ai", label: "Feedback model", words: "feedback model url timeout temperature endpoint advanced", fold: "ai-endpoints" },
@@ -73,7 +78,9 @@ const INDEX: { g: GroupId; label: string; words: string; fold?: string }[] = [
   { g: "appearance", label: "Accent color", words: "accent color colour highlight primary button tint brand" },
   { g: "appearance", label: "Fun mode", words: "fun minimi cat mascot" },
   { g: "appearance", label: "Minimi's personality", words: "minimi personality character behaviour behavior tone voice mascot prompt" },
+  { g: "appearance", label: "Sounds", words: "sound audio pop chime todo to-do tick check mute quiet" },
   { g: "appearance", label: "Custom themes", words: "custom theme css editor import market" },
+  { g: "plugins", label: "Installed", words: "plugin plugins pomodoro extensions timer permissions sandbox" },
   { g: "data", label: "Backup", words: "backup download restore copy database" },
   { g: "data", label: "Import packs", words: "import anki apkg colpkg pack" },
   { g: "data", label: "Export", words: "export pack share" },
@@ -81,22 +88,27 @@ const INDEX: { g: GroupId; label: string; words: string; fold?: string }[] = [
   { g: "data", label: "Unused media", words: "clean up media files images audio" },
   { g: "privacy", label: "Send error reports", words: "crash errors telemetry" },
   { g: "privacy", label: "Share usage stats", words: "usage analytics telemetry" },
+  { g: "privacy", label: "Keep track of my activity", words: "activity tracking time spent words written typed characters files pages stats history" },
+  { g: "privacy", label: "Hidden authors", words: "market hide hidden block author creator show again age rating 13" },
   { g: "keys", label: "Studying", words: "shortcuts keyboard space enter undo bury suspend keys" },
   { g: "keys", label: "Vim keys", words: "vim vi neovim modal editor normal insert visual hjkl code files notes" },
   { g: "keys", label: "Notes files", words: "shortcuts code file editor find replace fold comment notes" },
   { g: "keys", label: "Anywhere", words: "shortcuts keyboard ask search sidebar keys" },
   { g: "about", label: "Etude", words: "version update check new about" },
+  { g: "about", label: "Contact us", words: "contact email support help hello problem question feedback report" },
   { g: "about", label: "First-run setup", words: "setup onboarding first run again" },
   { g: "about", label: "The etude command", words: "cli terminal command line agents" },
+  { g: "about", label: "Use with an AI agent", words: "mcp claude code codex cursor agent ai assistant notes" },
   { g: "about", label: "Logs", words: "logs debug problem report" },
 ];
 
 function searchHits(q: string) {
   const w = q.toLowerCase().trim().split(/\s+/).filter(Boolean);
   if (!w.length) return [];
-  return INDEX.filter((e) => desktopApp() || (e.label !== "The etude command" && e.label !== "Logs"))
-    // Notes isn't on phones yet, nor its file editor's keys.
+  return INDEX.filter((e) => desktopApp() || !["The etude command", "Use with an AI agent", "Logs"].includes(e.label))
+    // Notes isn't on phones yet, nor its file editor's keys. Plugins are desktop and web only.
     .filter((e) => !isPhone() || (e.label !== "Vim keys" && e.label !== "Notes files"))
+    .filter((e) => !isNativeApp() || e.g !== "plugins")
     .filter((e) => {
       const t = `${e.label} ${e.words} ${groupLabel(e.g)}`.toLowerCase();
       return w.every((v) => t.includes(v));
@@ -441,12 +453,13 @@ export function SettingsPage() {
         You're using <b>{themeName}</b>. The theme is saved with your collection, so every device and the CLI look the same, and cards follow it too.
       </>
     ),
+    plugins: <>Free sandboxed extensions for desktop and web. Every plugin declares what it can touch, and you can toggle or revoke permissions any time.</>,
     data: serverless() ? (
       <>Your cards, history and media live in this browser. Keep a backup, or turn on Sync.</>
     ) : (
       <>Your cards, history and media live in one file on this computer. Back it up, bring cards in, or tidy what's left over.</>
     ),
-    privacy: <>Etude never sends what you study. The two switches below are anonymous and help fix bugs.</>,
+    privacy: <>Etude never sends what you study. The first two switches are anonymous and help fix bugs; Activity stays on this computer.</>,
     keys: <>Etude works without a mouse. These are every shortcut, by where they work.</>,
     about: (
       <>
@@ -460,6 +473,7 @@ export function SettingsPage() {
     study: dayOk ? `Day starts at ${hour12(day)}` : "Day start, learn ahead",
     ai: !draft.ai.feedback ? "Off" : preset ? { openrouter: "OpenRouter", openai: "OpenAI", chatgpt: "ChatGPT plan", local: "On this computer" }[preset] : "Your own setup",
     appearance: themeName,
+    plugins: "Extensions and permissions",
     data: "Backup, import, clean up",
     privacy: "What Etude sends",
     keys: "Every shortcut",
@@ -493,9 +507,18 @@ export function SettingsPage() {
           </Group>
         );
       case "ai":
-        return <AiSection ai={draft.ai} saved={saved} errors={shown} onChange={(ai) => setDraft({ ...draft, ai })} />;
+        return (
+          <AiSection
+            ai={draft.ai}
+            saved={saved}
+            errors={shown}
+            onChange={(ai) => setDraft({ ...draft, ai })}
+          />
+        );
       case "appearance":
         return <AppearanceSection />;
+      case "plugins":
+        return <PluginsSection />;
       case "data":
         return (
           <>
@@ -504,7 +527,13 @@ export function SettingsPage() {
           </>
         );
       case "privacy":
-        return <PrivacySection />;
+        return (
+          <>
+            <PrivacySection />
+            <ActivitySection />
+            <HiddenAuthorsSection />
+          </>
+        );
       case "keys":
         return <ShortcutsSection />;
       case "about":
@@ -531,7 +560,14 @@ export function SettingsPage() {
                       {l.label}
                     </a>
                   ))}
+                  <a href={contactMail()} onClick={(e) => (e.preventDefault(), openMail(contactMail()))} className="inline-flex items-center gap-1.5 font-medium text-muted-foreground transition-colors hover:text-foreground" data-contact>
+                    <Mail className="size-3.5" />
+                    Contact us
+                  </a>
                 </div>
+                <p className="text-[13px] text-muted-foreground">
+                  Questions, problems or something to report: <span className="text-foreground/90">{CONTACT_EMAIL}</span>
+                </p>
                 {!serverless() && (
                   <p className="text-[13px] text-muted-foreground">
                     From a terminal: <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11.5px] text-foreground/85">etude update --check</code>

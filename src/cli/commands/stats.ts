@@ -1,7 +1,7 @@
 import { alias, command, group } from "../registry.ts";
 import { DECK_FLAG, QUERY_FLAG, scopeOf, stateName } from "../common.ts";
 
-group({ name: "stats", summary: "Statistics: overview, forecast, recall per tag, adaptive skills", defaultVerb: "overview" });
+group({ name: "stats", summary: "Statistics: overview, forecast, recall per tag, adaptive skills, concepts", defaultVerb: "overview" });
 
 const SCOPE = [DECK_FLAG, QUERY_FLAG];
 const DAYS = { name: "days", type: "number" as const, description: "Activity window in days (heatmap, ratings, verdicts).", default: 30 };
@@ -35,6 +35,17 @@ command({
   examples: ['etude stats skills "Course"'],
   output: "{ deck, adaptive, root?, settings?, skills?: [{ skill, answers, success, ability, typical, level: { index, tag, progress, checkPassed, done, nextOpen } | null, placement: { probes, done, frontier, revised, checks: { done, passed } } | null }], known?: { items, assumed }, pace?: { value, base, youngRetention, minutesPerDay, reason } | null }",
   run: (ctx) => ctx.e.learnerSummary(ctx.args.deck),
+});
+
+command({
+  name: "stats concepts",
+  summary: "Concepts in a deck from `concept::` and `needs::` tags: what each needs, how many of its cards are mastered, and whether it's locked.",
+  description:
+    "Each item's `concept::<path>` tags say what it teaches and `needs::<path>` tags what it requires; a need is met by its concept and every concept below it. A concept is mastered when `masteryShare` of its cards are in review with their last `masteryStreak` answers passed. Rows come needs first (by depth). `cycles` lists concepts that need each other (treated as met among themselves); `danglingNeeds` lists needs no active card teaches (treated as met). With `prerequisites` off on the deck nothing is gated, but the map is still reported.",
+  args: [{ name: "deck", description: "Deck name.", required: true }],
+  examples: ['etude stats concepts "Algorithms"'],
+  output: "{ deck, prerequisites, concepts: [{ concept, depth, needs, cards, mastered, inProgress, state: mastered|in-progress|unlocked|locked, missing }], cycles: string[][], danglingNeeds: string[] }",
+  run: (ctx) => ctx.e.conceptMap(ctx.args.deck),
 });
 
 command({

@@ -175,7 +175,9 @@ function UpdateDetails({ st, onUpdate }: { st: UpdateStatus; onUpdate(): void })
         {st.behind > st.incoming.length && <li className="py-1 text-muted-foreground">and {st.behind - st.incoming.length} more</li>}
       </ul>
       <div className="flex items-center justify-between gap-3 border-t px-4 py-3">
-        <span className="text-xs text-muted-foreground">{st.blocked ?? (st.canRestart ? "Takes about a minute." : "Restart Etude afterwards.")}</span>
+        <span className="text-xs text-muted-foreground">
+          {st.blocked ?? `${st.kept?.length ? `Keeps your ${st.kept.length === 1 ? "local change" : `${st.kept.length} local changes`}. ` : ""}${st.canRestart ? "Takes about a minute." : "Restart Etude afterwards."}`}
+        </span>
         <Button size="sm" className="shrink-0" disabled={!!st.blocked} onClick={onUpdate}>
           Update
         </Button>

@@ -42,6 +42,25 @@ command({
     server = serve({ fetch: app.fetch, port, hostname: host }, (info) => {
       ctx.note(`etude ${ctx.flags.dev ? "api (dev) " : ""}on http://${host}:${info.port}  db ${ctx.dbPath}`);
     });
+    // Stopped from outside (systemd, Ctrl+C): close the collection first, so a reply still being written is saved as
+    // far as it got and the agents it started stop with us.
+    for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
+      process.once(sig, () => {
+        try {
+          ctx.e.close();
+        } catch {}
+        process.exit(128 + { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 }[sig]);
+      });
+    // Shared notes keep in step while the server runs, even with no window open (docs/sharing.md).
+    const { shareFor } = await import("../../core/share/client.ts");
+    const share = shareFor(ctx.e);
+    const shareTimer = setInterval(() => {
+      // Signed in is enough: invites to this account show up, and its identity exists before anyone invites it.
+      if (share.signedIn()) share.auto().catch((err) => ctx.note(`share: ${(err as Error).message}`));
+      // Each space keeps its own pace inside auto() (3 s, or 1 s while someone is on the page open here).
+    }, 1000);
+    shareTimer.unref();
+    ctx.e.onClose(() => clearInterval(shareTimer));
     return KEEP_OPEN;
   },
 });
@@ -77,12 +96,12 @@ command({
   name: "update",
   summary: "Update this copy of Etude from its GitHub repo: fetch, fast-forward, install dependencies, rebuild the web app.",
   description:
-    "Only works in a git checkout with no local changes. A running server keeps the old code until it restarts; the Update button in the app restarts it for you. Package installs (npm, the Mac app) get the latest release's version and a link instead.",
+    "Only works in a git checkout. Local changes are kept: they're set aside and put back on the new code (the ones the update already has just go); if they clash with it, or an untracked file is in the way of one it adds, nothing changes. A running server keeps the old code until it restarts; the Update button in the app restarts it for you. Package installs (npm, the Mac app) get the latest release's version and a link instead.",
   flags: [{ name: "check", type: "boolean", description: "Only check for new commits; change nothing." }],
   noDb: true,
   writes: true,
   examples: ["etude update --check", "etude update"],
-  output: "--check: { kind: git|package, version, commit, behind, incoming: [{ sha, date, subject }], blocked? } · otherwise { result: updated|current, from, to, commits, steps }",
+  output: "--check: { kind: git|package, version, commit, behind, incoming: [{ sha, date, subject }], dirty, kept, clash, blocked? } · otherwise { result: updated|current, from, to, commits, steps }",
   async run(ctx) {
     const { applyUpdate, updateStatus, UpdateError } = await import("../../core/update.ts");
     try {

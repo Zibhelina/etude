@@ -11,6 +11,9 @@ export const parse = <T>(s: string | null | undefined, fallback: T): T => {
 
 export const deckParts = (name: string) => name.split("::").map((s) => s.trim()).filter(Boolean);
 
+/** Two Market author names are the same author whatever their case and spacing. */
+export const sameAuthor = (a: string, b: string) => a.replace(/\s+/g, " ").trim().toLowerCase() === b.replace(/\s+/g, " ").trim().toLowerCase();
+
 export function hashString(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {

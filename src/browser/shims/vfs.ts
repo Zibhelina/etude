@@ -325,6 +325,17 @@ export function writeFileSync(path: string, data: unknown, opts?: unknown) {
   touch(p);
 }
 
+/** Adds to the end of a file, making it when it isn't there yet. */
+export function appendFileSync(path: string, data: unknown, _opts?: unknown) {
+  const p = norm(path);
+  const before = isFile(p) ? (readFileSync(p) as Uint8Array) : new Uint8Array();
+  const more = bytes(data);
+  const all = new Uint8Array(before.length + more.length);
+  all.set(before);
+  all.set(more, before.length);
+  writeFileSync(p, all);
+}
+
 export function renameSync(from: string, to: string) {
   const a = norm(from);
   const b = norm(to);
@@ -441,4 +452,4 @@ export function closeSync(fd: number) {
   writeFileSync(f.path, all);
 }
 
-export default { existsSync, realpathSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, unlinkSync, statSync, readdirSync, copyFileSync, mkdtempSync, chmodSync, openSync, writeSync, fsyncSync, closeSync, readSync };
+export default { existsSync, realpathSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, renameSync, rmSync, unlinkSync, statSync, readdirSync, copyFileSync, mkdtempSync, chmodSync, openSync, writeSync, fsyncSync, closeSync, readSync };

@@ -5,29 +5,45 @@ import { ArrowLeftToLine, EyeOff, FastForward, Loader2, Maximize2, MessageSquare
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { CardFrame, type CardFrameHandle, type CardResult } from "@/components/card-frame";
+import { CardFrame, type CardFrameHandle, type CardResult, type DockField } from "@/components/card-frame";
 import { AnswerRetry } from "@/components/answer-retry";
 import { api, relative, type Counts, type LearnerSummary, type Rating, type Scope, type StudyCard } from "@/lib/api";
 import { agentApi } from "@/lib/agent";
 import { cn } from "@/lib/utils";
 import { appPath, navigate } from "@/lib/router";
 import { usePhone } from "@/lib/phone";
+import { KEYBOARD_LIFT_EVENT } from "@/lib/device";
 import { useFunMode } from "@/lib/fun";
 import { ActionSheet, Tally } from "@/components/phone-shell";
 import { SketchBar, SketchLayer, sketchTransform, useSketch } from "@/components/sketch-pad";
 import { track } from "@/lib/telemetry";
+import { emitPluginReview } from "@/lib/plugins";
+import { currentView, useScreenLines } from "@/lib/screen";
 import {
-  AskTab, CardStage, cardEyebrow, flyOff, turnOver, useGlide, Composer, crumbPath, shownVerdict, Eyebrow, Feedback, IconButton, modKey, Ratings, reducedMotion, Slot, StudyTop, Suggestion, Thread, Track, useSwapIn, Verdict,
+  AnswerField, AskTab, CardStage, cardEyebrow, flyOff, turnOver, useGlide, Composer, crumbPath, shownVerdict, Eyebrow, Feedback, IconButton, modKey, PinnedPrompt, Ratings, reducedMotion, Slot, StudyTop, Suggestion, Thread, Track, useSwapIn, Verdict,
   type ChatMsg, type FlipSide,
 } from "@/components/study-shell";
 
 type Phase = "loading" | "answer" | "grading" | "result" | "done";
 
 const FOCUS_KEY = "etude.study.focus";
+// A card type made to fill the screen (`fitScreen`, a game) opens in focus mode, unless the learner left it there.
+const FIT_KEY = "etude.study.fitScreen";
 
 // On a phone, focus mode runs the card edge to edge; this strip under it holds the leave-focus button,
 // so the button never covers the card.
 const PHONE_FOCUS_STRIP = 56;
+// The phone's bottom inset (the home indicator's strip), in CSS pixels.
+function safeBottom() {
+  const el = document.createElement("div");
+  el.style.cssText = "position:fixed;bottom:0;height:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none";
+  document.body.appendChild(el);
+  const h = el.getBoundingClientRect().height;
+  el.remove();
+  return h;
+}
+// Elsewhere focus mode keeps this much under the card (the page's bottom padding, pb-6), so it doesn't scroll.
+const BARE_BOTTOM = 24;
 
 // Once per session the page dips toward the follow-up chat, to show there's more below the feedback.
 let nudged = false;
@@ -70,6 +86,8 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   // Focus mode: only the card, for cards that fill the screen (games). Remembered per browser.
   const [focus, setFocus] = useState(() => { try { return localStorage.getItem(FOCUS_KEY) === "1"; } catch { return false; } });
   useEffect(() => { try { localStorage.setItem(FOCUS_KEY, focus ? "1" : "0"); } catch { /* storage blocked */ } }, [focus]);
+  const [fitFocus, setFitFocus] = useState(() => { try { return localStorage.getItem(FIT_KEY) !== "0"; } catch { return true; } });
+  useEffect(() => { try { localStorage.setItem(FIT_KEY, fitFocus ? "1" : "0"); } catch { /* storage blocked */ } }, [fitFocus]);
   const mainRef = useRef<HTMLElement>(null);
   const frame = useRef<CardFrameHandle>(null);
   const shownAt = useRef(Date.now());
@@ -102,6 +120,21 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const slotRef = useRef<HTMLDivElement>(null);
   const askInput = useRef<HTMLInputElement>(null);
   const quiet = useRef(0);
+
+  // On a phone a card's one text field shows at the bottom of the screen, where Check was (runtime/dock.js).
+  // While it's being typed in, the card's question is pinned to the top in place of the header and the card
+  // shows only its picture, filling the room down to the field above the keyboard.
+  const [dock, setDock] = useState<DockField | null>(null);
+  const [dockText, setDockText] = useState("");
+  const [typing, setTyping] = useState(false);
+  const dockInput = useRef<HTMLInputElement>(null);
+  const onDock = useCallback((f: DockField | null) => {
+    // The same field again (its question changed): what's being typed stays as it is.
+    setDock((was) => {
+      if (!f || f.id !== was?.id) setDockText(f?.value ?? "");
+      return f;
+    });
+  }, []);
 
   const resetCard = () => {
     setResult(null);
@@ -152,6 +185,20 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       })
       .catch((e) => toast.error((e as Error).message));
   }, [load, startCard]);
+
+  // Ask Etude hears which card is up. Its answer stays out while it's being answered.
+  useScreenLines(
+    "study",
+    card
+      ? [
+          `Practising ${title}: card ${card.cardId} (item ${card.itemId}, ${card.type}, deck "${card.deck}")${counts ? `, ${counts.new + counts.learning + counts.review} left` : ""}`,
+          phase === "result" && result
+            ? `The card was answered${result.grade?.verdict ? ` (${result.grade.verdict})` : ""}; its answer is showing`
+            : "The user is answering it now: don't look up or give away its answer",
+          `Card on screen: ${clip(card.view, 600)}`,
+        ]
+      : null,
+  );
 
   const holdCard = useGlide(() => (currentKeyRef.current ? cardEls.current.get(currentKeyRef.current) : null));
   const askFeedback = useCallback(async (id: number) => {
@@ -205,10 +252,34 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     }
   }, [card, practice, askFeedback]);
 
-  const bare = focus && !!card && phase !== "done" && phase !== "loading";
+  const focused = focus || (!!card?.fitScreen && fitFocus);
+  const bare = focused && !!card && phase !== "done" && phase !== "loading";
+  const fitsScreen = !!card?.fitScreen;
+  const leaveFocus = useCallback(() => {
+    setFocus(false);
+    if (fitsScreen) setFitFocus(false);
+  }, [fitsScreen]);
+  const enterFocus = () => {
+    setFocus(true);
+    setFitFocus(true);
+  };
+  // Where the live card's frame starts once it fills the screen. The column is centred while the card is
+  // shorter, so the frame sits lower until then (see CardFrame's fitTop).
+  const fitTop = useCallback(() => {
+    const main = mainRef.current, col = main?.firstElementChild, el = frame.current?.frameElement();
+    if (!main || !col || !el) return null;
+    const pad = parseFloat(getComputedStyle(main).paddingTop) || 0;
+    return main.getBoundingClientRect().top + pad + (el.getBoundingClientRect().top - col.getBoundingClientRect().top) + window.scrollY;
+  }, []);
   const paper = !!card && card.grader === "self" && !bare;
   const currentKey = card ? frameKeyOf(card, retry?.count ?? 0) : null;
   currentKeyRef.current = currentKey;
+  // A new card, or another try at this one, has no field down there until its frame hands one over.
+  useEffect(() => {
+    setDock(null);
+    setDockText("");
+    setTyping(false);
+  }, [currentKey]);
   // Self-graded cards get a back face to turn over to; with reduced motion the answer just goes on.
   const twoFaced = paper && !reducedMotion();
 
@@ -228,10 +299,11 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const flipOverRef = useRef(flipOver);
   flipOverRef.current = flipOver;
 
-  const reveal = useCallback(() => {
+  // `anyway`: Check in the field the app shows for the card (on a phone) submits even an empty answer.
+  const reveal = useCallback((anyway?: boolean) => {
     if (!card || phase !== "answer" || flipping || busy.current) return;
     // Cards say when an answer is complete enough to submit (e.g. not an empty box).
-    if (!ready && card.grader !== "self") return;
+    if (!ready && card.grader !== "self" && anyway !== true) return;
     if (twoFaced && currentKey && cardEls.current.get(currentKey)?.querySelector(".st-backface")) {
       flipPending.current = true;
       setFlipping(true);
@@ -243,7 +315,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
         }
       }, 1200);
     }
-    frame.current?.collect();
+    frame.current?.collect(anyway === true);
   }, [card, phase, ready, twoFaced, currentKey, flipping]);
 
   const rate = useCallback(async (rating: Rating | 0) => {
@@ -252,8 +324,9 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     // The card flies off to the left while the next one is fetched; the next rises off the deck.
     const el = currentKey ? cardEls.current.get(currentKey) : null;
     const motion = !!el && !!currentKey && !reducedMotion() && !bare;
-    const rated = api.rate(card.cardId, rating, { attemptId: attemptId ?? undefined, durationMs: Date.now() - shownAt.current, practice });
-    rated.catch(() => {}); // handled below; this keeps a fast failure from being reported as unhandled during the beat
+    const dur = Date.now() - shownAt.current;
+    const rated = api.rate(card.cardId, rating, { attemptId: attemptId ?? undefined, durationMs: dur, practice });
+    rated.then(() => emitPluginReview({ cardId: card.cardId, rating, deck: card.deck, durationMs: dur }), () => {}); // handled below; this keeps a fast failure from being reported as unhandled during the beat
     if (motion) await sleep(RATE_BEAT_MS);
     if (motion && el && currentKey) {
       const r = el.getBoundingClientRect();
@@ -502,7 +575,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       }
       let acc = "";
       let failed = "";
-      await agentApi.send(c.id, { text, attachments: attached ? [attached.id] : [], model: c.model, page: appPath() + location.search }, (e) => {
+      await agentApi.send(c.id, { text, attachments: attached ? [attached.id] : [], model: c.model, page: appPath() + location.search, view: currentView() }, (e) => {
         if (e.type === "text") {
           acc += e.delta;
           setLast((m) => ({ ...m, text: acc }));
@@ -543,7 +616,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       if (key === "Escape") backToRating();
       return;
     }
-    if (key === "Escape") return void setFocus(false);
+    if (key === "Escape") return void leaveFocus();
     if (flipping) return;
     if (phase === "answer" || phase === "result") {
       // As in Anki: - and = bury the card or the note, @ and ! suspend them.
@@ -567,7 +640,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
         rate(s);
       }
     }
-  }, [phase, card, reveal, rate, result, undo, setAside, again, chatting, backToRating, flipping]);
+  }, [phase, card, reveal, rate, result, undo, setAside, again, chatting, backToRating, flipping, leaveFocus]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -575,7 +648,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       const t = e.target as HTMLElement;
       if (t?.closest("input, textarea, [contenteditable]")) return;
       if (e.key === " " && t?.closest("button")) e.preventDefault();
-      if (e.key === "Escape") return chatting ? backToRating() : focus ? setFocus(false) : navigate("/");
+      if (e.key === "Escape") return chatting ? backToRating() : focused ? leaveFocus() : navigate("/");
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") return onKey("Mod+Enter");
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "z") {
         e.preventDefault();
@@ -588,15 +661,67 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [onKey, focus, chatting, backToRating]);
+  }, [onKey, focused, leaveFocus, chatting, backToRating]);
 
   const suggested = result?.grade.suggested ?? null;
   const total = counts ? counts.new + counts.learning + counts.review : 0;
   const done = counts?.doneToday ?? 0;
   // In focus mode the header and the card's badges go, and the bottom bar only shows when it has
   // something to press: not while grading, nor while a card that submits by itself keeps Check disabled.
-  const idleBar = phase === "grading" || (phase === "answer" && !ready && card?.grader !== "self");
+  // A card whose field is down there keeps the bar: the field is in it.
+  const docked = phone && !!dock && (phase === "answer" || phase === "grading");
+  const idleBar = phase === "grading" || (phase === "answer" && !ready && card?.grader !== "self" && !docked);
   const showBar = !bare || !idleBar;
+  // A game on a phone gets the whole screen while it's played, with no button over it: it offers its own way
+  // out (etude.leaveFocus()).
+  const fullBleed = bare && phone && fitsScreen && !showBar;
+  // Typing in it, the header steps aside. A card with a picture has its question pinned at the top instead and
+  // shows only the picture, down to the field; a card without one shows whole, from its top.
+  const hideTop = docked && typing;
+  const pin = hideTop && dock?.picture && dock.question ? dock : null;
+  const onTyping = (on: boolean) => {
+    setTyping(on);
+    if (on) requestAnimationFrame(() => window.scrollTo({ top: 0 }));
+  };
+  const checkDocked = () => {
+    // The keyboard goes away so the result shows whole. Empty is an answer too: "I don't know".
+    dockInput.current?.blur();
+    reveal(true);
+  };
+  // The picture takes the height from under the pinned question to the field: measured again as the keyboard
+  // comes up (the field rides up with it before the page shrinks, see native-shell.ts) and as the page resizes.
+  const staged = !!pin;
+  useEffect(() => {
+    const handle = frame.current;
+    if (!staged || !currentKey) return;
+    let raf = 0;
+    const fit = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const cardEl = cardEls.current.get(currentKey);
+        const iframe = handle?.frameElement();
+        const slot = slotRef.current;
+        if (!cardEl || !iframe || !slot) return;
+        const lift = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--keyboard-lift")) || 0;
+        const fieldTop = window.innerHeight - lift - slot.offsetHeight;
+        const top = iframe.getBoundingClientRect().top;
+        const under = cardEl.getBoundingClientRect().bottom - iframe.getBoundingClientRect().bottom;
+        handle?.stage(Math.floor(fieldTop - top - under));
+      });
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(slotRef.current ?? document.body);
+    window.addEventListener("resize", fit);
+    window.addEventListener(KEYBOARD_LIFT_EVENT, fit);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      window.removeEventListener("resize", fit);
+      window.removeEventListener(KEYBOARD_LIFT_EVENT, fit);
+      handle?.stage(null);
+    };
+  }, [staged, currentKey]);
   const verdictShown = card?.showVerdict !== false ? shownVerdict(result?.grade.verdict) : null;
   const slotSwap = useSwapIn(`${currentKey}:${phase === "result" ? "r" : "a"}`);
   const deckPath = crumbPath(card?.deck, scope.deck);
@@ -610,7 +735,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       paper={isPaper}
       style={style}
       className={cn(!live && "st-leaving")}
-      eyebrow={!bare && <Eyebrow items={cardEyebrow(c, { ahead: scope.ahead, practice })} />}
+      eyebrow={!bare && !(live && staged) && <Eyebrow items={cardEyebrow(c, { ahead: scope.ahead, practice })} />}
       aside={live && !isPaper && phase === "result" && verdictShown ? <Verdict verdict={verdictShown} score={result?.grade.score} late={lateVerdict} /> : undefined}
       flip={flip?.key === key ? flip.side : "front"}
       back={isPaper && (twoFaced || flip?.key === key) ? (
@@ -631,13 +756,24 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
         src={src(c)}
         frameKey={key}
         view={c.view}
+        progress={c.progress}
+        onRecord={live ? async (answer, durationMs) => {
+          const r = await api.recordRun(c.cardId, c.seed, answer, { durationMs: durationMs ?? Date.now() - shownAt.current, practice, asOf: c.asOf });
+          if (live) setCard((cur) => (cur && cur.cardId === c.cardId ? { ...cur, progress: r.progress } : cur));
+          autoSync();
+          return r;
+        } : undefined}
         onSubmit={live ? onSubmit : undefined}
         onMorph={live ? setLateVerdict : undefined}
         onReady={live ? setReady : undefined}
+        dock={live && phone && c.grader !== "self"}
+        onDock={live ? onDock : undefined}
         onKey={live ? onKey : undefined}
         onError={live ? (m) => toast.error("Card error", { description: m }) : undefined}
         fitScreen={live && bare}
-        fitMargin={live && bare && phone && !showBar ? PHONE_FOCUS_STRIP : undefined}
+        fitTop={live && bare ? fitTop : undefined}
+        fitMargin={live && bare && !showBar ? (fullBleed ? safeBottom() : phone ? PHONE_FOCUS_STRIP : BARE_BOTTOM) : undefined}
+        onLeaveFocus={live ? leaveFocus : undefined}
       />
     </CardStage>
   );
@@ -656,9 +792,10 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
 
   return (
     <div
-      className={cn("flex min-h-dvh w-full flex-col", showBar ? "pb-[calc(9.5rem+env(safe-area-inset-bottom))]" : "pb-6", bare && "pt-[env(safe-area-inset-top)]", bare && phone && !showBar && "pb-0", sk.on && "overflow-x-clip")}
+      className={cn("flex min-h-dvh w-full flex-col", showBar ? "pb-[calc(9.5rem+env(safe-area-inset-bottom))]" : "pb-6", (bare || hideTop) && "pt-[env(safe-area-inset-top)]", bare && phone && !showBar && "pb-0", pin && "min-h-0 pb-0 pt-[calc(env(safe-area-inset-top)+64px)]", sk.on && "overflow-x-clip")}
     >
-      {!bare && (
+      {pin && <PinnedPrompt kicker={pin.kicker} kickerColor={pin.kickerColor} question={pin.question} onHide={() => dockInput.current?.blur()} />}
+      {!bare && !hideTop && (
         <StudyTop title={title} crumb={deckPath} onBack={() => navigate("/")}>
           {card && phase !== "done" && <span className="st-tag max-md:hidden">{card.type}</span>}
           {counts && (
@@ -693,7 +830,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
                   <DropdownMenuItem onClick={() => setAside("suspend", false)}><Pause />Suspend this card<kbd className="ml-auto pl-4 text-xs opacity-60">@</kbd></DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setAside("suspend", true)}><Pause />Suspend the whole note<kbd className="ml-auto pl-4 text-xs opacity-60">!</kbd></DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setFocus(true)}><Maximize2 />Focus on the card<kbd className="ml-auto pl-4 text-xs opacity-60">Esc leaves</kbd></DropdownMenuItem>
+                  <DropdownMenuItem onClick={enterFocus}><Maximize2 />Focus on the card<kbd className="ml-auto pl-4 text-xs opacity-60">Esc leaves</kbd></DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -704,7 +841,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       {phase === "done" && (scope.placement ? <PlacementDone deck={scope.deck ?? ""} /> : <Done counts={counts} scope={scope} />)}
 
       {(stageCards.length > 0 || (card && phase !== "done")) && (
-        <main ref={mainRef} style={phone ? sketchTransform(sk.view, mainRef.current) : undefined} className={cn("st-stage", bare && "p-0 sm:px-8", bare && !phone && "pt-4")}>
+        <main ref={mainRef} style={phone ? sketchTransform(sk.view, mainRef.current) : undefined} className={cn("st-stage", bare && "st-bare")}>
           <div className={cn("st-col", bare && "w-full max-w-3xl")}>
             {retry && phase === "answer" && <AnswerRetry hint={retry.hint} />}
             {stageCards}
@@ -746,9 +883,9 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
         </main>
       )}
 
-      {bare && (
+      {bare && !fullBleed && (
         <button
-          onClick={() => setFocus(false)}
+          onClick={leaveFocus}
           aria-label="Leave focus mode"
           title="Leave focus mode (Esc)"
           className={cn(
@@ -768,7 +905,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
             <Composer fun={fun} chips={chips} busy={asking} onSend={askSend} onAttach={askAttach} attached={attached?.name} onBack={backToRating} inputRef={askInput} />
           ) : phase !== "result" ? (
             <div className="st-row">
-              {phone && (
+              {phone && !hideTop && (
                 <div className="relative shrink-0">
                   {plus && (
                     <div className="absolute bottom-[calc(100%+0.6rem)] left-0 z-20 w-60 rounded-[1.6rem] border bg-card p-1.5 shadow-2xl">
@@ -789,9 +926,25 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
                   </button>
                 </div>
               )}
-              <button className="st-pri" id="study-main" disabled={(phase === "grading" && !flipping) || phase === "loading" || (!ready && card.grader !== "self")} onClick={reveal}>
-                {phase === "grading" && !flipping ? <><Loader2 className="size-4 animate-spin" /> Checking…</> : card.grader === "self" ? <>Show answer <kbd>Space</kbd></> : <>Check <kbd>{modKey()} ↵</kbd></>}
-              </button>
+              {docked && dock ? (
+                <AnswerField
+                  field={dock}
+                  value={dockText}
+                  onChange={(v) => {
+                    setDockText(v);
+                    frame.current?.dockInput(v);
+                  }}
+                  onCheck={checkDocked}
+                  onTyping={onTyping}
+                  checking={phase === "grading"}
+                  pinned={pin?.question}
+                  inputRef={dockInput}
+                />
+              ) : (
+                <button className="st-pri" id="study-main" disabled={(phase === "grading" && !flipping) || phase === "loading" || (!ready && card.grader !== "self")} onClick={() => reveal()}>
+                  {phase === "grading" && !flipping ? <><Loader2 className="size-4 animate-spin" /> Checking…</> : card.grader === "self" ? <>Show answer <kbd>Space</kbd></> : <>Check <kbd>{modKey()} ↵</kbd></>}
+                </button>
+              )}
             </div>
           ) : !card.scheduler.ratings ? (
             <div className="st-row">
@@ -830,7 +983,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
               { label: "Suspend the whole note", icon: Pause, onClick: () => setAside("suspend", true) },
             ],
             [
-              { label: "Focus on the card", icon: Maximize2, hint: "hide everything else", onClick: () => setFocus(true) },
+              { label: "Focus on the card", icon: Maximize2, hint: "hide everything else", onClick: enterFocus },
               { label: "Edit card", icon: Pencil, onClick: () => navigate(`/browse?item=${encodeURIComponent(card.itemId)}`) },
             ],
           ]}
@@ -872,6 +1025,9 @@ function PlacementDone({ deck }: { deck: string }) {
   );
 }
 
+/** A concept path as people read it: the last segment, dashes as spaces. */
+const conceptName = (path: string) => (path.split("::").pop() ?? path).replace(/[-_]+/g, " ");
+
 function Done({ counts, scope }: { counts: Counts | null; scope: Scope }) {
   useEffect(() => { void autoSync(); }, []);
   const aheadUrl = () => {
@@ -888,6 +1044,13 @@ function Done({ counts, scope }: { counts: Counts | null; scope: Scope }) {
         {counts?.doneToday ? `${counts.doneToday} reviews today. ` : ""}
         {scope.ahead ? "There are no cards in this deck." : counts?.nextDue ? `The next card comes back ${relative(counts.nextDue)}.` : "Nothing else is scheduled."}
       </p>
+      {!!counts?.locked && (
+        <p className="max-w-sm text-sm text-muted-foreground [text-wrap:balance]">
+          Master {(counts.unlockWith ?? []).map((c, i, all) => (
+            <span key={c}>{i > 0 && (i === all.length - 1 ? " and " : ", ")}<span className="whitespace-nowrap text-foreground">{conceptName(c)}</span></span>
+          ))} to unlock {counts.locked} new {counts.locked === 1 ? "card" : "cards"}.
+        </p>
+      )}
       <div className="mt-5 flex flex-wrap justify-center gap-3">
         <button className="st-sec" onClick={() => navigate("/")}>Back to the library</button>
         {!scope.ahead && counts?.nextDue && (

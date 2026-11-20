@@ -531,6 +531,13 @@ export function TypeEditor({ id }: { id: string }) {
 
             <TabsContent value="template" className="mt-5 flex flex-col gap-4">
               <TemplateTabs draft={draft} set={set} />
+              <label className="flex min-h-10 items-start gap-3 text-sm">
+                <Switch className="mt-0.5" checked={draft.fitScreen === true} onCheckedChange={(v) => set({ fitScreen: v || undefined })} />
+                <span>
+                  Fill the screen
+                  <span className="block text-xs text-muted-foreground">For a game: study shows the card alone, in focus mode, and tells it how tall the screen is (etude.screen) so it can scale to fit.</span>
+                </span>
+              </label>
               <TemplateReference />
             </TabsContent>
 

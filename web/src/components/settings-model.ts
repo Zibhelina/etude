@@ -1,5 +1,9 @@
 // Shapes and validation for the settings page. Mirrors `Settings` in src/core/engine.ts
 // and `AiSettings` in src/core/ai.ts.
+import type { AcpAgentDef } from "../../../src/core/acp-agents.ts";
+import { aiProviderId } from "../../../src/core/ai-providers.ts";
+
+export { aiProviderId, aiProviderName, aiProvidersOf } from "../../../src/core/ai-providers.ts";
 
 export interface DecisionProvider {
   kind: "openrouter-decisions" | "llm";
@@ -43,6 +47,8 @@ export interface AiSettings {
   language: string;
   /** The in-app assistant's default model ref (chatgpt:…, openrouter:…, custom:…); null uses the feedback model. */
   agent?: { model: string | null; effort?: string };
+  /** External agents over ACP, used as `agent:<id>`. */
+  agents?: AcpAgentDef[];
 }
 
 export interface SettingsDraft {
@@ -86,7 +92,7 @@ export const usesDecisionModel = (ai: AiSettings) => ai.decision?.kind === "open
 export type PresetId = "openrouter" | "openai" | "chatgpt" | "local";
 
 export function presetAi(id: PresetId, defaults: AiSettings, current: AiSettings): AiSettings {
-  const keep = { autoFeedback: current.autoFeedback, language: current.language, agent: current.agent };
+  const keep = { autoFeedback: current.autoFeedback, language: current.language, agent: current.agent, agents: current.agents };
   if (id === "openrouter") return { ...structuredClone(defaults), ...keep, vision: null };
   if (id === "chatgpt")
     return {
@@ -130,6 +136,12 @@ export function keyVars(ai: AiSettings): { name: string; usedBy: string[] }[] {
   add(isOpenAiChat(ai.feedback) ? ai.feedback.apiKeyEnv : undefined, usesDecisionModel(ai) ? "feedback" : "verdicts and feedback");
   add(isOpenAiChat(ai.vision) ? ai.vision.apiKeyEnv : undefined, "drawings");
   return [...out].map(([name, usedBy]) => ({ name, usedBy }));
+}
+
+/** The providers that would get answers with this key (aiProviderId), for the person's OK before it's saved. */
+export function providersForKey(ai: AiSettings, env: string): string[] {
+  const uses = [usesDecisionModel(ai) ? ai.decision : null, ai.feedback, ai.vision].filter((p) => !!p && "apiKeyEnv" in p && p.apiKeyEnv === env);
+  return [...new Set(uses.map(aiProviderId).filter((x): x is string => !!x))];
 }
 
 // --------------------------------------------------------------- validation
@@ -176,6 +188,10 @@ export function validate(d: SettingsDraft): Errors {
   }
   if (d.ai.feedback) checkProvider(d.ai.feedback, "feedback", e);
   if (d.ai.vision) checkProvider(d.ai.vision, "vision", e);
+  (d.ai.agents ?? []).forEach((a, i) => {
+    if (!a.command.trim()) e[`agents.${i}.command`] = "Enter the program to run";
+    if (!a.name.trim()) e[`agents.${i}.name`] = "Give it a name";
+  });
   if (!d.ai.language.trim()) e.language = "Say which language feedback should use";
   if (!(Number.isInteger(d.dayStartHour) && d.dayStartHour >= 0 && d.dayStartHour <= 23)) e.dayStartHour = "A whole hour from 0 to 23";
   if (!(Number.isInteger(d.learnAheadMinutes) && d.learnAheadMinutes >= 0 && d.learnAheadMinutes <= 1440)) e.learnAheadMinutes = "Whole minutes from 0 to 1440";
@@ -192,10 +208,12 @@ export function normalize(d: SettingsDraft): SettingsDraft {
     if (typeof o.model === "string") o.model = o.model.trim();
     return o as T;
   };
+  // `ai.agents` belongs to the agents' cards (saved at once by the server), never to the page's Save.
+  const { agents: _cards, ...ai } = d.ai;
   return {
     ...d,
     ai: {
-      ...d.ai,
+      ...ai,
       decision: d.ai.decision?.kind === "openrouter-decisions" ? clean(d.ai.decision) : null,
       feedback: clean(d.ai.feedback),
       vision: clean(d.ai.vision),

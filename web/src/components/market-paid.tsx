@@ -24,6 +24,7 @@ import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { useFunMode } from "@/lib/fun";
 import minimiShop from "@/assets/market/minimi-shop.webp";
+import { isOfficial, OfficialSeal } from "@/components/market-official";
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : "The request failed.");
 /** Selling needs two-step sign-in (or a passkey): the server answers `two_factor_required` until the account has one. */
@@ -108,11 +109,11 @@ export function PaidTile({ entry, counts, onOpen }: { entry: PaidEntry; counts?:
       <div className="mk-cover" data-hs-anchor><PaidCover entry={entry} /></div>
       <div className="mk-tile-body">
         <div className="mk-tile-title">
-          <b>{entry.name}</b>
+          <b>{entry.name}{isOfficial(entry.author, entry.soldBy) && <OfficialSeal className="mk-seal-title" />}</b>
           {entry.installed === "installed" ? <span className="mk-state"><Check className="size-3.5" strokeWidth={3} />Installed</span> : entry.installed === "update" ? <span className="mk-state update">Update</span> : <PriceMark entry={entry} />}
         </div>
         <p>{firstSentence(entry.description) || "Deck"}</p>
-        <div className="mk-tile-meta"><span>{plural(items, "card")}</span><span aria-hidden="true">·</span><span>{entry.author}</span><TileCounts c={counts} /></div>
+        <div className="mk-tile-meta"><span>{plural(items, "card")}</span>{!isOfficial(entry.author, entry.soldBy) && <><span aria-hidden="true">·</span><span>{entry.author}</span></>}<TileCounts c={counts} /></div>
       </div>
     </button>
   );
@@ -220,8 +221,8 @@ export function PaidDetail({ entry, signedIn, menu, notice, onBack, onChanged }:
       head={
         <>
           <div className="mk-eyebrow">Deck{canShowPurchases() ? " · paid" : ""}</div>
-          <h1 className="mk-serif">{entry.name}</h1>
-          <div className="mk-by">by {entry.author}{entry.owned && <span className="mk-pill"><BadgeCheck className="size-3" />Owned</span>}{entry.installed === "update" && <span className="mk-pill update">Update</span>}</div>
+          <h1 className="mk-serif">{entry.name}{isOfficial(entry.author, entry.soldBy) && <OfficialSeal size={28} className="mk-seal-title" />}</h1>
+          <div className="mk-by">by {isOfficial(entry.author, entry.soldBy) ? <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><OfficialSeal size={18} />Etude</span> : entry.author}{entry.owned && <span className="mk-pill"><BadgeCheck className="size-3" />Owned</span>}{entry.installed === "update" && <span className="mk-pill update">Update</span>}</div>
         </>
       }
       gallery={<CoverGallery cover={<PaidCover entry={entry} />} />}

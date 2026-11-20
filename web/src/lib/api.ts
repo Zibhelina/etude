@@ -748,6 +748,9 @@ export interface KanbanColumn { id: string; name: string; color: KanbanColor; li
 export interface KanbanCard { id: string; title: string; labels: string[]; due: string | null; cover: KanbanColor | null; doc: NoteDoc; created: string; updated: string }
 export interface KanbanBoard { type: "kanban"; version: 1; columns: KanbanColumn[]; cards: Record<string, KanbanCard>; labels: KanbanLabel[]; archived: string[] }
 
+/** The catalog index the Market last read (its `generated` time), for the cover URLs. */
+let marketRev = "";
+
 export const api = {
   notes: (archived = false) => call<NoteSummary[]>("GET", `/api/notes${qs({ archived: archived ? 1 : undefined })}`),
   viewCommands: (after?: number) => call<{ seq: number; commands: (ViewCommand & { seq: number })[]; owner?: string | null }>("GET", `/api/view/commands${qs({ after })}`),
@@ -951,12 +954,13 @@ export const api = {
   updateStatus: (check = false, force = false) => call<UpdateStatus>("GET", `/api/update${qs({ check: check ? 1 : undefined, force: force ? 1 : undefined })}`),
   applyUpdate: () => call<{ result: "updated" | "current"; from: string; to: string; commits: UpdateCommit[]; restarting: boolean }>("POST", "/api/update", {}),
 
-  market: (refresh = false) => call<MarketListing>("GET", `/api/market${refresh ? "?refresh=1" : ""}`),
+  market: (refresh = false) => call<MarketListing>("GET", `/api/market${refresh ? "?refresh=1" : ""}`).then((d) => ((marketRev = d.generated || marketRev), d)),
   marketEntry: (kind: MarketKind, id: string) => call<MarketFile>("GET", `/api/market/entry/${kind}/${encodeURIComponent(id)}`),
   marketInstall: (id: string, kind: MarketKind, opts: { use?: boolean; dryRun?: boolean } = {}) =>
     call<{ entry: MarketMeta; result: "created" | "updated" | "unchanged"; ids: string[]; report: any }>("POST", "/api/market/install", { id, kind, ...opts }),
   /** An <img> can't send the bearer token, so it rides in the query. */
-  marketCoverUrl: (kind: MarketKind, id: string) => `/api/market/cover/${kind}/${encodeURIComponent(id)}${apiToken() ? `?token=${encodeURIComponent(apiToken()!)}` : ""}`,
+  /** `v` is when the catalog's index was built, so a new cover shows at once instead of a cached old one. */
+  marketCoverUrl: (kind: MarketKind, id: string) => `/api/market/cover/${kind}/${encodeURIComponent(id)}${qs({ v: marketRev || undefined, token: apiToken() || undefined })}`,
   /** Coming soon pictures: "cover" or a preview's position. */
   comingSoonUrl: (id: string, slot: "cover" | number) => `/api/market/coming-soon/${encodeURIComponent(id)}/${slot}${apiToken() ? `?token=${encodeURIComponent(apiToken()!)}` : ""}`,
   marketForget: (id: string) => call<{ forgot: boolean }>("POST", "/api/market/forget", { id }),

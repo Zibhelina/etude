@@ -34,6 +34,7 @@ import { canShowPurchases, isNativeApp } from "@/lib/platform";
 import { SoonDetail, SoonTile } from "@/components/market-soon";
 import { track } from "@/lib/telemetry";
 import { notifyPluginsChanged } from "@/lib/plugins";
+import { isOfficial, OfficialSeal } from "@/components/market-official";
 
 const KIND_LABEL: Record<MarketKind, string> = { theme: "Theme", deck: "Deck", type: "Card type", plugin: "Plugin" };
 const KIND_ICON: Record<MarketKind, React.ComponentType<{ className?: string }>> = { theme: Palette, deck: Layers, type: Blocks, plugin: Puzzle };
@@ -42,7 +43,7 @@ const plural = (n: number, w: string) => `${n.toLocaleString("en-US")} ${w}${n =
 const kb = (b: number) => (b < 1e6 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1e6).toFixed(1)} MB`);
 /** The shelves' order: these first, the rest after, what you already have last. */
 const FEATURED = ["piano-hero", "kanji-mage", "countries-of-the-world", "chess", "anatomy-3d", "flippy-bit", "periodic-table", "piano", "logic-puzzles", "geometry-puzzles", "etude-showcase", "morse-code-letters"];
-const official = (author: string) => /^(Joao|João|Zibhelina)\b/.test(author);
+const official = (author: string) => isOfficial(author);
 
 type Filter = "all" | MarketKind;
 type Tab = "browse" | "library" | "selling";
@@ -84,7 +85,7 @@ function metaLine(e: MarketEntry): string {
   return `${plural(s.items, "card")}${p > 1 ? ` · ${p} parts` : ""}${s.watch ? " · tour" : ""}`;
 }
 function By({ author }: { author: string }) {
-  return official(author) ? <span className="inline-flex items-center gap-1 whitespace-nowrap"><span className="score-serif text-[15px] text-foreground">ε</span>Etude</span> : <span className="whitespace-nowrap">{author}</span>;
+  return official(author) ? <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><OfficialSeal size={18} />Etude</span> : <span className="whitespace-nowrap">{author}</span>;
 }
 
 export function MarketPage() {
@@ -494,7 +495,7 @@ function Hero({ it, counts, onOpen, onChanged }: { it: Item; counts?: EntryCount
       <div className="mk-hero-cover" data-hs-anchor>{cover}</div>
       <div className="mk-hero-text">
         <div className="mk-eyebrow">{eyebrow}</div>
-        <h2 className="mk-serif">{e.name}</h2>
+        <h2 className="mk-serif">{e.name}{(it.paid ? isOfficial(e.author, (e as PaidEntry).soldBy) : e.kind !== "theme" && official(e.author)) && <OfficialSeal size={26} className="mk-seal-title" />}</h2>
         <p>{pitch(e.description)}</p>
         <div className="mk-meta mb-[18px]">{meta}<span aria-hidden="true">·</span><By author={e.author} /><TileCounts c={counts} /></div>
         <div className="mk-actions">
@@ -565,7 +566,7 @@ function EntryTile({ entry, counts, onOpen, onTry }: { entry: MarketEntry; count
     <div role="link" tabIndex={0} className="mk-tile" onClick={onOpen} onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && onOpen()} data-entry={`${entry.kind}/${entry.id}`}>
       <div className="mk-cover" data-hs-anchor><Cover entry={entry} /></div>
       <div className="mk-tile-body">
-        <div className="mk-tile-title"><b>{entry.name}</b><StateMark state={entry.installed} /></div>
+        <div className="mk-tile-title"><b>{entry.name}{!isTheme && official(entry.author) && <OfficialSeal className="mk-seal-title" />}</b><StateMark state={entry.installed} /></div>
         <p>{firstSentence(entry.description) || KIND_LABEL[entry.kind]}</p>
         <div className="mk-tile-meta">
           <span>{metaLine(entry)}</span>
@@ -783,7 +784,7 @@ function EntryDetail({ entry, all, repo, inUse, trying, signedIn, menu, notice, 
       head={
         <>
           <div className="mk-eyebrow">{KIND_LABEL[entry.kind]}</div>
-          <h1 className="mk-serif">{entry.name}</h1>
+          <h1 className="mk-serif">{entry.name}{entry.kind !== "theme" && official(entry.author) && <OfficialSeal size={28} className="mk-seal-title" />}</h1>
           <div className="mk-by">
             by <By author={entry.author} />
             {entry.installed === "installed" && <span className="mk-pill"><Check className="size-3" strokeWidth={3} />Installed</span>}

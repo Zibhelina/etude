@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { useFunMode } from "@/lib/fun";
 import minimiShop from "@/assets/market/minimi-shop.webp";
 import { isOfficial, OfficialSeal } from "@/components/market-official";
+import { TitledCover } from "@/components/market-titled";
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : "The request failed.");
 /** Selling needs two-step sign-in (or a passkey): the server answers `two_factor_required` until the account has one. */
@@ -83,7 +84,7 @@ function SellPitch({ again, country, setCountry, busy, disabled, onStart }: { ag
 // ── paid tiles in Browse ────────────────────────────────────────
 /** The deck's cover, or its first sample cards when it has none. Fills whatever frame it's put in. */
 export function PaidCover({ entry }: { entry: PaidEntry }) {
-  if (entry.cover) return <img src={entry.cover} alt="" loading="lazy" className="size-full object-cover" />;
+  if (entry.cover) return <TitledCover src={entry.cover} local={false} eyebrow="Deck" name={entry.name} official={isOfficial(entry.author, entry.soldBy)} />;
   return (
     <div className="flex size-full min-w-0 flex-col justify-center gap-1.5 overflow-hidden p-4">
       {(entry.preview.length ? entry.preview : [{ fields: { front: entry.name } }]).slice(0, 2).map((p: any, i: number) => (

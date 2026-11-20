@@ -35,6 +35,7 @@ import { SoonDetail, SoonTile } from "@/components/market-soon";
 import { track } from "@/lib/telemetry";
 import { notifyPluginsChanged } from "@/lib/plugins";
 import { isOfficial, OfficialSeal } from "@/components/market-official";
+import { TitledCover } from "@/components/market-titled";
 
 const KIND_LABEL: Record<MarketKind, string> = { theme: "Theme", deck: "Deck", type: "Card type", plugin: "Plugin" };
 const KIND_ICON: Record<MarketKind, React.ComponentType<{ className?: string }>> = { theme: Palette, deck: Layers, type: Blocks, plugin: Puzzle };
@@ -549,18 +550,8 @@ function StateMark({ state }: { state: MarketEntry["installed"] }) {
 }
 
 /** The entry's cover: its image, its theme in miniature, or its first sample cards. */
-/** The cover in the detail gallery with its title set on it, as on the Featured card: the covers leave their left
- *  side dark for it, so without the title that side would read as an empty gap. */
-function TitledCover({ entry }: { entry: MarketEntry }) {
-  return (
-    <div className="mk-tcover">
-      <EtudeImg src={api.marketCoverUrl(entry.kind, entry.id)} alt="" />
-      <div className="mk-tcover-text" aria-hidden="true">
-        <div className="mk-eyebrow">{KIND_LABEL[entry.kind]}</div>
-        <div className="mk-serif mk-tcover-name">{entry.name}{official(entry.author) && <OfficialSeal size={22} className="mk-seal-title" />}</div>
-      </div>
-    </div>
-  );
+function TitledEntryCover({ entry }: { entry: MarketEntry }) {
+  return <TitledCover src={api.marketCoverUrl(entry.kind, entry.id)} eyebrow={KIND_LABEL[entry.kind]} name={entry.name} official={official(entry.author)} />;
 }
 
 function Cover({ entry }: { entry: MarketEntry }) {
@@ -585,7 +576,7 @@ function EntryTile({ entry, counts, onOpen, onTry }: { entry: MarketEntry; count
   const isTheme = entry.kind === "theme";
   return (
     <div role="link" tabIndex={0} className="mk-tile" onClick={onOpen} onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && onOpen()} data-entry={`${entry.kind}/${entry.id}`}>
-      <div className="mk-cover" data-hs-anchor><Cover entry={entry} /></div>
+      <div className="mk-cover" data-hs-anchor>{entry.cover && !isTheme ? <TitledEntryCover entry={entry} /> : <Cover entry={entry} />}</div>
       <div className="mk-tile-body">
         <div className="mk-tile-title"><b>{entry.name}{!isTheme && official(entry.author) && <OfficialSeal className="mk-seal-title" />}</b><StateMark state={entry.installed} /></div>
         <p>{firstSentence(entry.description) || KIND_LABEL[entry.kind]}</p>
@@ -813,7 +804,7 @@ function EntryDetail({ entry, all, repo, inUse, trying, signedIn, menu, notice, 
           </div>
         </>
       }
-      gallery={<MarketGallery entry={entry} cover={entry.kind === "theme" ? <div className="mk-theme-big"><ThemeMiniature theme={s.theme} /></div> : entry.cover ? <TitledCover entry={entry} /> : <Cover entry={entry} />} />}
+      gallery={<MarketGallery entry={entry} cover={entry.kind === "theme" ? <div className="mk-theme-big"><ThemeMiniature theme={s.theme} /></div> : entry.cover ? <TitledEntryCover entry={entry} /> : <Cover entry={entry} />} />}
       actions={
         <>
           <div className="mk-actions">{actions}</div>

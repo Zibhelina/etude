@@ -19,6 +19,15 @@ export const BRAIN_EFFORTS: BrainEffort[] = ["default", "minimal", "low", "mediu
 /** What an external brain is, so another device can offer to set it up. Never a command: that stays in this device's `ai.agents`. */
 export type ExternalVia = "hermes" | "antigravity" | "gemini" | "claude" | "codex" | "custom";
 const VIAS: ExternalVia[] = ["hermes", "antigravity", "gemini", "claude", "codex", "custom"];
+/** Built-in ACP harnesses an external profile can toggle on or off in Settings and switch between in Ask. */
+export const HARNESS_PRESETS = ["hermes", "antigravity", "claude", "codex", "gemini"] as const;
+export type HarnessPresetId = (typeof HARNESS_PRESETS)[number];
+
+/** Display label for a built-in external preset ("Hermes", "Antigravity", "Claude Code", "Codex", "Gemini CLI"). */
+export function viaLabel(via: ExternalVia | undefined, fallback: string): string {
+  if (!via || via === "custom") return fallback;
+  return ACP_PRESETS.find((p) => p.id === via)?.label ?? fallback;
+}
 
 export type AgentBrain =
   | { kind: "model"; model: string | null; effort?: BrainEffort }
@@ -26,12 +35,12 @@ export type AgentBrain =
 
 /**
  * One of the programs an external profile can run in: the same someone (name, pictures, memory of its own),
- * a different harness, such as Hermes or Antigravity. `agent` is an entry in this device's `ai.agents`;
- * the brain's own `agent` is the one a new chat starts in. A chat picks its harness in the message box.
+ * a different harness, such as Hermes, Antigravity, Claude Code, Codex or Gemini CLI. `agent` is an entry
+ * in this device's `ai.agents`; the brain's own `agent` is the one a new chat starts in.
  */
 export interface Harness {
   agent: string;
-  /** What the picker calls it ("Hermes", "Antigravity"). */
+  /** What the picker calls it ("Hermes", "Antigravity", "Claude Code", "Codex", "Gemini CLI"). */
   name: string;
 }
 export const HARNESSES_MAX = 6;
@@ -39,7 +48,7 @@ export const HARNESSES_MAX = 6;
 /** The harnesses a profile can run in, its own agent first; empty when it has only that one. */
 export function harnessesOf(b: AgentBrain): Harness[] {
   if (b.kind !== "external" || !b.harnesses?.length) return [];
-  const own = b.harnesses.find((h) => h.agent === b.agent) ?? { agent: b.agent, name: b.via === "hermes" ? "Hermes" : b.via === "antigravity" ? "Antigravity" : b.agent };
+  const own = b.harnesses.find((h) => h.agent === b.agent) ?? { agent: b.agent, name: viaLabel(b.via, b.agent) };
   return [own, ...b.harnesses.filter((h) => h.agent !== b.agent)];
 }
 

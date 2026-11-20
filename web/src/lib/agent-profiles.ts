@@ -2,9 +2,9 @@
 // kept in step after every change; a localStorage copy avoids a flash of Minimi before the list loads.
 import { useEffect, useState } from "react";
 import { etudeFetch } from "./transport";
-import { MINIMI_PROFILE, MINIMI_PROFILE_ID, type AgentProfile, type BrainPick, type ExternalVia } from "../../../src/core/agent-profiles.ts";
+import { HARNESS_PRESETS, MINIMI_PROFILE, MINIMI_PROFILE_ID, type AgentProfile, type BrainPick, type ExternalVia, type HarnessPresetId } from "../../../src/core/agent-profiles.ts";
 
-export { MINIMI_PROFILE_ID, type AgentBrain, type AgentProfile, type BrainPick, type ExternalVia } from "../../../src/core/agent-profiles.ts";
+export { HARNESS_PRESETS, MINIMI_PROFILE_ID, type AgentBrain, type AgentProfile, type BrainPick, type ExternalVia, type HarnessPresetId } from "../../../src/core/agent-profiles.ts";
 
 /** A profile as the app shows it: whether it can answer on this device, its agent's own name, and its entry here. */
 export type ProfileView = AgentProfile & { available: boolean; note?: string; agentName?: string; setup?: { command: string; args: string[]; env?: Record<string, string>; via: ExternalVia } };
@@ -53,11 +53,11 @@ export const profilesApi = {
   setDefault: (id: string) => call("POST", `/api/agent/profiles/${encodeURIComponent(id)}/default`),
   /** The brain from an agent's card: a model, Hermes with a profile, or another agent (its entry stays on this device). */
   setBrain: (id: string, pick: BrainPick) => call("PUT", `/api/agent/profiles/${encodeURIComponent(id)}/brain`, pick),
-  /** Toggle a second harness (Antigravity or Hermes) for an external agent so the chat can switch between them. */
-  toggleHarness: (id: string, toggle: "hermes" | "antigravity", enabled: boolean, hermesProfile?: string) =>
+  /** Toggle an extra harness (Hermes, Antigravity, Claude Code, Codex, Gemini CLI) for an external agent so the chat can switch between them. */
+  toggleHarness: (id: string, toggle: HarnessPresetId, enabled: boolean, hermesProfile?: string) =>
     call("PUT", `/api/agent/profiles/${encodeURIComponent(id)}/harnesses`, { toggle, enabled, ...(hermesProfile ? { hermesProfile } : {}) }),
-  /** Whether Hermes is on this computer, and its profiles. */
-  hermes: async (): Promise<{ installed: boolean; available: boolean; profiles: string[] }> => {
+  /** Whether Hermes and the built-in ACP adapters are on this computer, plus Hermes profiles. */
+  hermes: async (): Promise<{ installed: boolean; available: boolean; profiles: string[]; presets?: Partial<Record<HarnessPresetId, boolean>> }> => {
     try {
       const res = await etudeFetch("/api/agent/hermes");
       if (!res.ok) throw new Error(res.statusText);

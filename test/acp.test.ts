@@ -530,7 +530,7 @@ test("acp harnesses: one profile, two harnesses; a chat picks one, switches mid-
   e.setAgentHarnesses("pal", []);
   assert.equal((await a.controls(null, "pal")).controls.some((x) => x.id === "harness"), false);
 
-  // One-click harness toggle between Hermes and Antigravity adds/prunes the second agent entry.
+  // One-click harness toggle works across Hermes, Antigravity, Claude Code, Codex and Gemini CLI, adding/pruning entries.
   e.setAgentBrain("pal", { kind: "hermes", profile: "pal" });
   const toggled = e.toggleAgentHarness("pal", "antigravity", { enabled: true });
   assert.equal(toggled.brain.kind, "external");
@@ -538,10 +538,69 @@ test("acp harnesses: one profile, two harnesses; a chat picks one, switches mid-
     (toggled.brain as any).harnesses.map((h: any) => h.name),
     ["Hermes", "Antigravity"],
   );
+  const withClaude = e.toggleAgentHarness("pal", "claude", { enabled: true });
+  const withCodex = e.toggleAgentHarness("pal", "codex", { enabled: true });
+  assert.deepEqual(
+    (withClaude.brain as any).harnesses.map((h: any) => h.name),
+    ["Hermes", "Antigravity", "Claude Code"],
+  );
+  assert.deepEqual(
+    (withCodex.brain as any).harnesses.map((h: any) => h.name),
+    ["Hermes", "Antigravity", "Claude Code", "Codex"],
+  );
   assert.ok(e.settings().ai.agents?.some((x) => x.command === "agy" && x.preset === "antigravity"));
-  const off = e.toggleAgentHarness("pal", "antigravity", { enabled: false });
+  assert.ok(e.settings().ai.agents?.some((x) => x.command === "claude-agent-acp" && x.preset === "claude"));
+  assert.ok(e.settings().ai.agents?.some((x) => x.command === "codex-acp" && x.preset === "codex"));
+  e.toggleAgentHarness("pal", "antigravity", { enabled: false });
+  e.toggleAgentHarness("pal", "claude", { enabled: false });
+  const off = e.toggleAgentHarness("pal", "codex", { enabled: false });
   assert.equal((off.brain as any).harnesses, undefined);
-  assert.equal(e.settings().ai.agents?.some((x) => x.command === "agy"), false);
+  assert.equal(e.settings().ai.agents?.some((x) => x.command === "agy" || x.command === "claude-agent-acp" || x.command === "codex-acp"), false);
+
+  // Starting from Claude Code as main brain and adding Codex + Hermes harnesses works too.
+  e.setAgentBrain("pal", { kind: "agent", preset: "claude" });
+  const ccCodex = e.toggleAgentHarness("pal", "codex", { enabled: true });
+  assert.deepEqual(
+    (ccCodex.brain as any).harnesses.map((h: any) => h.name),
+    ["Claude Code", "Codex"],
+  );
+  assert.throws(() => e.toggleAgentHarness("pal", "claude", { enabled: true }), /already runs in Claude Code/);
+  e.close();
+});
+
+test("acp: Claude Code / Codex _session/steering injects mid-turn when advertised", async () => {
+  const { e, a, received } = await setup({ FAKE_ACP_STEER: "0", FAKE_ACP_META_STEER: "1" });
+  const conv = chat(e, a, "fake");
+  let turnId = "";
+  const events: AgentEvent[] = [];
+  const done = a.send(conv.id, { text: "work" }, (ev) => {
+    if (ev.type === "start") turnId = ev.turnId;
+    events.push(ev);
+  });
+  assert.ok(await waitFor(() => events.some((x) => x.type === "text")));
+  assert.equal(await a.steer(turnId, "switch to codex"), true);
+  const c = (await done).content as AssistantContent;
+  assert.deepEqual(c.items.map((i) => i.type), ["tool", "text", "steer", "text"]);
+  assert.equal((c.items[3] as any).text, "Changed course: switch to codex");
+  const req = received().find((x) => x.method === "_session/steering");
+  assert.ok(req, "used _session/steering method");
+  assert.equal(req.params.prompt[0].text, "switch to codex");
+  assert.equal(req.params._meta?.steering?.idleBehavior, "promptRequired");
+  e.close();
+});
+
+test("acp: missing Claude Code / Codex adapter surfaces the install command", async () => {
+  const { e, a } = await setup();
+  const s = e.settings();
+  e.updateSettings({
+    ai: {
+      ...s.ai,
+      agents: [...(s.ai.agents ?? []), { id: "missing-claude", name: "Claude Code", command: "nonexistent-claude-agent-acp-xyz", args: [], preset: "claude" }],
+    },
+  });
+  const conv = chat(e, a, "missing-claude");
+  const r = (await a.send(conv.id, { text: "hello" })).content as AssistantContent;
+  assert.match(r.error ?? "", /npm install -g @agentclientprotocol\/claude-agent-acp/);
   e.close();
 });
 

@@ -256,6 +256,8 @@ test("cards: Hermes on this computer is found on PATH, its profiles from ~/.herm
   const { writeFileSync, chmodSync } = await import("node:fs");
   writeFileSync(join(bin, "hermes"), "#!/bin/sh\n");
   chmodSync(join(bin, "hermes"), 0o755);
+  writeFileSync(join(bin, "codex-acp"), "#!/bin/sh\n");
+  chmodSync(join(bin, "codex-acp"), 0o755);
   const old = { PATH: process.env.PATH, HERMES_HOME: process.env.HERMES_HOME };
   t.after(() => {
     process.env.PATH = old.PATH;
@@ -266,7 +268,12 @@ test("cards: Hermes on this computer is found on PATH, its profiles from ~/.herm
   t.after(done);
   process.env.HERMES_HOME = home;
   process.env.PATH = bin;
-  assert.deepEqual(agentFor(e).hermes(), { installed: true, available: true, profiles: ["default", "bob", "coach"] });
+  assert.deepEqual(agentFor(e).hermes(), {
+    installed: true,
+    available: true,
+    profiles: ["default", "bob", "coach"],
+    presets: { hermes: true, antigravity: false, claude: false, codex: true, gemini: false },
+  });
   // Started from inside a Hermes profile (HERMES_HOME is that profile's folder): the same list.
   process.env.HERMES_HOME = join(home, "profiles", "coach");
   assert.deepEqual(agentFor(e).hermes().profiles, ["default", "bob", "coach"]);

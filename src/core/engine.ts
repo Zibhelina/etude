@@ -52,8 +52,8 @@ import { Adaptive, annotateVariants, placementSession, variantPrior, type AdaptC
 import { Prereqs } from "./prereqs.ts";
 import { deckParts, hashString, interleave, parse, sameAuthor } from "./util.ts";
 import { compile, isMediaRef, itemSearchText, QueryError, stripHtml, type Compiled } from "./query.ts";
-import { checkAgents, type AcpAgentDef } from "./acp-agents.ts";
-import { checkProfile, checkProfiles, clipFiles, clipProblem, isModelRef, MINIMI_PROFILE, MINIMI_PROFILE_ID, pickToBrain, ProfileError, profileId, viaOf, type AgentClips, type AgentProfile } from "./agent-profiles.ts";
+import { ACP_PRESETS, checkAgents, type AcpAgentDef } from "./acp-agents.ts";
+import { checkProfile, checkProfiles, clipFiles, clipProblem, HARNESS_PRESETS, isModelRef, MINIMI_PROFILE, MINIMI_PROFILE_ID, pickToBrain, ProfileError, profileId, viaLabel, viaOf, type AgentClips, type AgentProfile, type HarnessPresetId } from "./agent-profiles.ts";
 import { AGENT_EFFORTS, aiEditFields, aiFeedback, aiProviderId, aiProviderName, aiVerdict, AiError, DEFAULT_AI, type AiSettings, type ChatProvider, type GradingContext } from "./ai.ts";
 import { AI_PROVIDER_ID } from "./ai-providers.ts";
 import {
@@ -995,10 +995,11 @@ export class Etude {
   }
 
   /**
-   * Turns a second harness (Antigravity or Hermes) on or off for an external profile, creating or pruning
-   * its `ai.agents` entry on this device automatically so the chat's harness picker works in one click.
+   * Turns an extra harness (Hermes, Antigravity, Claude Code, Codex, or Gemini CLI) on or off for an external
+   * profile, creating or pruning its `ai.agents` entry on this device automatically so the chat's harness picker works in one click.
    */
-  toggleAgentHarness(id: string, harness: "hermes" | "antigravity", opts: { enabled: boolean; hermesProfile?: string }): AgentProfile {
+  toggleAgentHarness(id: string, harness: HarnessPresetId, opts: { enabled: boolean; hermesProfile?: string }): AgentProfile {
+    if (!HARNESS_PRESETS.includes(harness)) throw new EtudeError(`unknown harness "${String(harness)}"`);
     const cur = this.agentProfile(id);
     if (cur.brain.kind !== "external") throw new EtudeError(`${cur.name} runs on a chat model; harnesses are for an external agent`);
     const curBrain = cur.brain;
@@ -1006,12 +1007,14 @@ export class Etude {
     const curAgents = s.ai.agents ?? [];
     const ownDef = curAgents.find((a) => a.id === curBrain.agent);
     const ownVia = ownDef ? viaOf(ownDef) : curBrain.via;
-    if (ownVia === harness) throw new EtudeError(`${cur.name} already runs in ${harness === "hermes" ? "Hermes" : "Antigravity"} as its main harness`);
-    const ownLabel = ownVia === "hermes" ? "Hermes" : ownVia === "antigravity" ? "Antigravity" : curBrain.agent;
-    const targetLabel = harness === "hermes" ? "Hermes" : "Antigravity";
+    const preset = ACP_PRESETS.find((p) => p.id === harness)!;
+    const targetLabel = preset.label;
+    if (ownVia === harness) throw new EtudeError(`${cur.name} already runs in ${targetLabel} as its main harness`);
+    const ownLabel = viaLabel(ownVia, ownDef?.name || curBrain.agent);
     const baseHarnesses = curBrain.harnesses?.length ? [...curBrain.harnesses] : [{ agent: curBrain.agent, name: ownLabel }];
-    const suffix = harness === "antigravity" ? "agy" : "hermes";
-    const desiredId = `${cur.id.slice(0, 32 - suffix.length - 1)}-${suffix}`;
+    const suffix: Record<HarnessPresetId, string> = { hermes: "hermes", antigravity: "agy", claude: "claude", codex: "codex", gemini: "gemini" };
+    const suf = suffix[harness];
+    const desiredId = `${cur.id.slice(0, 32 - suf.length - 1)}-${suf}`;
     const existing = baseHarnesses.find((h) => {
       if (h.agent === curBrain.agent) return false;
       const d = curAgents.find((a) => a.id === h.agent);
@@ -1021,10 +1024,8 @@ export class Etude {
     let nextHarnesses = baseHarnesses.filter((h) => h.agent !== existing?.agent);
     if (opts.enabled) {
       const agentId = existing?.agent ?? desiredId;
-      const def: AcpAgentDef =
-        harness === "antigravity"
-          ? { id: agentId, name: cur.name, command: "agy", args: ["acp"], preset: "antigravity" }
-          : { id: agentId, name: cur.name, command: "hermes", args: ["-p", (opts.hermesProfile ?? "").trim() || cur.id, "acp"], preset: "hermes" };
+      const made = preset.make(harness === "hermes" ? { profile: (opts.hermesProfile ?? "").trim() || cur.id } : undefined);
+      const def: AcpAgentDef = { ...made, id: agentId, name: cur.name };
       nextAgents = nextAgents.some((a) => a.id === agentId) ? nextAgents.map((a) => (a.id === agentId ? def : a)) : [...nextAgents, def];
       if (!nextHarnesses.some((h) => h.agent === curBrain.agent)) nextHarnesses.unshift({ agent: curBrain.agent, name: ownLabel });
       nextHarnesses.push({ agent: agentId, name: targetLabel });

@@ -455,6 +455,10 @@ test("agent profiles: an external brain may list harnesses; each is a named agen
   const ok = checkProfile({ id: "pal", name: "Pal", brain: { kind: "external", agent: "pal", via: "hermes", hermes: "pal", harnesses: [{ agent: "pal-agy", name: " Antigravity " }] } });
   assert.deepEqual(ok.brain, { kind: "external", agent: "pal", via: "hermes", hermes: "pal", harnesses: [{ agent: "pal-agy", name: "Antigravity" }] });
   assert.deepEqual(harnessesOf(ok.brain), [{ agent: "pal", name: "Hermes" }, { agent: "pal-agy", name: "Antigravity" }]);
+  assert.deepEqual(
+    harnessesOf({ kind: "external", agent: "cc", via: "claude", harnesses: [{ agent: "cc-codex", name: "Codex" }] }),
+    [{ agent: "cc", name: "Claude Code" }, { agent: "cc-codex", name: "Codex" }],
+  );
   assert.deepEqual(harnessesOf({ kind: "external", agent: "pal" }), []);
   assert.throws(() => checkProfile({ id: "pal", name: "Pal", brain: { kind: "external", agent: "pal", harnesses: [{ agent: "Bad Id", name: "X" }] } }), /harnesses\[0\]\.agent/);
   assert.throws(() => checkProfile({ id: "pal", name: "Pal", brain: { kind: "external", agent: "pal", harnesses: [{ agent: "a", name: "A" }, { agent: "a", name: "B" }] } }), /twice/);

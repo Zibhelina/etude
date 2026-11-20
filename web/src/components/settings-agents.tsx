@@ -25,7 +25,7 @@ import { agentApi, type ModelGroup } from "@/lib/agent";
 import { api } from "@/lib/api";
 import { chatGptSignInHere, saveApiKey, serverless } from "@/lib/native";
 import { EtudeImg } from "@/lib/local-url";
-import { mediaUrl, MINIMI_PROFILE_ID, profilesApi, useAgentProfiles, type BrainPick, type ProfileView } from "@/lib/agent-profiles";
+import { HARNESS_PRESETS, mediaUrl, MINIMI_PROFILE_ID, profilesApi, useAgentProfiles, type BrainPick, type HarnessPresetId, type ProfileView } from "@/lib/agent-profiles";
 import { cn } from "@/lib/utils";
 import minimiLook from "@/assets/minimi/look.webp";
 import { holidayArt } from "@/lib/holiday";
@@ -48,7 +48,7 @@ type Models = {
   default: string | null;
   groups: ModelGroup[];
 };
-type Hermes = { installed: boolean; available: boolean; profiles: string[] };
+type Hermes = { installed: boolean; available: boolean; profiles: string[]; presets?: Partial<Record<HarnessPresetId, boolean>> };
 type Provider = "chatgpt" | "openrouter" | "custom";
 type Seg = "hermes" | Provider | "agent";
 type AgentPreset = Exclude<(typeof ACP_PRESETS)[number]["id"], "hermes">;
@@ -208,7 +208,7 @@ function AgentCard({ p, isDefault, models, hermes }: { p: ProfileView; isDefault
         <CardHeader p={p} isDefault={isDefault} minimi={minimi} />
         <div className="flex flex-col gap-5 border-t border-border/70 px-4 py-4 sm:px-5">
           <BrainEditor name={p.name} pick={pick} onPick={setBrain} onSeg={setShown} models={models} hermes={hermes} unavailable={external && !p.available ? { setupHere } : undefined} />
-          {!serverless() && p.brain.kind === "external" && (p.setup?.via === "hermes" || p.setup?.via === "antigravity" || p.brain.via === "hermes" || p.brain.via === "antigravity") && (
+          {!serverless() && p.brain.kind === "external" && (
             <HarnessesRow p={p} hermes={hermes} />
           )}
           <PersonalityField p={p} seg={shown ?? segOf(pick, models)} pick={pick} />
@@ -400,7 +400,7 @@ function BrainEditor({
         ) : seg === "hermes" ? (
           <HermesBrain pick={pick.kind === "hermes" ? pick : null} hermes={hermes} onPick={onPick} />
         ) : seg === "agent" ? (
-          <OtherAgentBrain pick={pick.kind === "agent" ? pick : null} onPick={onPick} />
+          <OtherAgentBrain pick={pick.kind === "agent" ? pick : null} hermes={hermes} onPick={onPick} />
         ) : (
           <ModelBrain provider={seg} pick={pick.kind === "model" && providerOf(pick.model ?? models?.default) === seg ? pick : null} models={models} effort={effort} onPick={onPick} />
         )}
@@ -526,7 +526,7 @@ function ModelBrain({
   );
 }
 
-function OtherAgentBrain({ pick, onPick }: { pick: Extract<BrainPick, { kind: "agent" }> | null; onPick(p: BrainPick): void }) {
+function OtherAgentBrain({ pick, hermes, onPick }: { pick: Extract<BrainPick, { kind: "agent" }> | null; hermes: Hermes | null; onPick(p: BrainPick): void }) {
   const [preset, setPreset] = useState<AgentPreset | "">(pick?.preset ?? "");
   const [line, setLine] = useState(() => (pick?.command ? joinWords([pick.command, ...(pick.args ?? [])]) : ""));
   const [env, setEnv] = useState(() => envText(pick?.env));
@@ -537,6 +537,7 @@ function OtherAgentBrain({ pick, onPick }: { pick: Extract<BrainPick, { kind: "a
     setEnv(envText(pick?.env));
   }, [JSON.stringify(pick)]);
   const p = AGENT_PRESETS.find((x) => x.id === preset);
+  const missing = !!(p && p.id !== "custom" && hermes?.available && hermes.presets && hermes.presets[p.id as HarnessPresetId] === false);
   const commit = (next: AgentPreset | "" = preset) => {
     if (!next) return;
     const parsed = parseEnv(env);
@@ -591,10 +592,21 @@ function OtherAgentBrain({ pick, onPick }: { pick: Extract<BrainPick, { kind: "a
           data-agent-command
         />
       )}
+      {p && missing && (
+        <p className="text-[12.5px] leading-relaxed text-amber-500/90" data-agent-adapter-missing={p.id}>
+          {p.needs ? (
+            <>
+              {p.label}'s ACP adapter isn't installed on this computer yet. Run <code className="inline-block font-mono text-foreground">{p.needs}</code>.
+            </>
+          ) : (
+            <>{p.label} isn't installed on this computer yet.</>
+          )}
+        </p>
+      )}
       {p && (
         <p className="text-[12.5px] leading-relaxed text-muted-foreground">
           {p.hint.replace(/`/g, "")}
-          {p.needs && (
+          {p.needs && !missing && (
             <>
               {" "}
               Needs <code className="font-mono text-foreground/85">{p.needs}</code>.
@@ -633,41 +645,62 @@ function OtherAgentBrain({ pick, onPick }: { pick: Extract<BrainPick, { kind: "a
   );
 }
 
-/** Lets an external Hermes or Antigravity profile also switch to the other harness in the chat's message box. */
+/** Lets an external profile also switch to other ACP harnesses (Hermes, Antigravity, Claude Code, Codex, Gemini CLI) in the chat's message box. */
 function HarnessesRow({ p, hermes }: { p: ProfileView; hermes: Hermes | null }) {
   const brain = p.brain;
   if (brain.kind !== "external") return null;
   const ownVia = p.setup?.via ?? brain.via;
-  const other: "antigravity" | "hermes" = ownVia === "hermes" ? "antigravity" : "hermes";
-  const otherLabel = other === "antigravity" ? "Antigravity" : "Hermes";
-  const enabled = (brain.harnesses ?? []).some((h) => h.agent !== brain.agent && h.name.toLowerCase() === otherLabel.toLowerCase());
+  const choices = HARNESS_PRESETS.filter((id) => id !== ownVia).map((id) => ACP_PRESETS.find((x) => x.id === id)!);
+  const isEnabled = (id: HarnessPresetId, label: string) =>
+    (brain.harnesses ?? []).some((h) => h.agent !== brain.agent && (h.name.toLowerCase() === label.toLowerCase() || h.agent.endsWith(`-${id === "antigravity" ? "agy" : id}`)));
   const [profile, setProfile] = useState(() => hermes?.profiles.find((x) => x === slug(p.name)) ?? hermes?.profiles.find((x) => x === "default") ?? hermes?.profiles[0] ?? "default");
-  const toggle = (on: boolean) =>
+  const toggle = (id: HarnessPresetId, label: string, on: boolean) =>
     void run(
-      () => profilesApi.toggleHarness(p.id, other, on, other === "hermes" ? profile : undefined),
-      on ? `${p.name} can also run in ${otherLabel}` : `Removed ${otherLabel} harness`,
+      () => profilesApi.toggleHarness(p.id, id, on, id === "hermes" ? profile : undefined),
+      on ? `${p.name} can also run in ${label}` : `Removed ${label} harness`,
     );
+  const hermesEnabled = ownVia !== "hermes" && isEnabled("hermes", "Hermes");
+  const missingHints = choices.filter((c) => isEnabled(c.id as HarnessPresetId, c.label) && hermes?.available && hermes.presets && hermes.presets[c.id as HarnessPresetId] === false);
   return (
-    <div className="flex flex-col gap-2 @[38rem]/agent:flex-row @[38rem]/agent:items-center @[38rem]/agent:gap-3" data-agent-harnesses>
-      <span className="text-xs font-medium text-muted-foreground @[38rem]/agent:w-24 @[38rem]/agent:shrink-0">Harnesses</span>
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-        <label className="flex cursor-pointer items-center gap-2 text-[13.5px] text-foreground">
-          <Switch checked={enabled} onCheckedChange={toggle} aria-label={`Also run ${p.name} in ${otherLabel}`} />
-          <span>Also run in {otherLabel}</span>
-        </label>
-        {other === "hermes" && enabled && (hermes?.profiles.length ?? 0) > 0 && (
-          <Select value={profile} onValueChange={(v) => (setProfile(v), void run(() => profilesApi.toggleHarness(p.id, "hermes", true, v), `Hermes harness · ${v}`))}>
-            <SelectTrigger className="h-8 w-44 text-xs" aria-label="Hermes harness profile">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {hermes!.profiles.map((x) => (
-                <SelectItem key={x} value={x}>{x}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        <span className="text-[12px] text-muted-foreground">Switch between Hermes and Antigravity right in the chat box.</span>
+    <div className="flex flex-col gap-2 @[38rem]/agent:flex-row @[38rem]/agent:items-start @[38rem]/agent:gap-3" data-agent-harnesses>
+      <span className="text-xs font-medium text-muted-foreground @[38rem]/agent:w-24 @[38rem]/agent:shrink-0 @[38rem]/agent:pt-1">Harnesses</span>
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {choices.map((c) => {
+            const id = c.id as HarnessPresetId;
+            const on = isEnabled(id, c.label);
+            return (
+              <label key={id} className="flex cursor-pointer items-center gap-2 text-[13px] text-foreground" data-harness-toggle={id}>
+                <Switch checked={on} onCheckedChange={(v) => toggle(id, c.label, v)} aria-label={`Also run ${p.name} in ${c.label}`} />
+                <span>{c.label}</span>
+              </label>
+            );
+          })}
+          {hermesEnabled && (hermes?.profiles.length ?? 0) > 0 && (
+            <Select value={profile} onValueChange={(v) => (setProfile(v), void run(() => profilesApi.toggleHarness(p.id, "hermes", true, v), `Hermes harness · ${v}`))}>
+              <SelectTrigger className="h-8 w-40 text-xs" aria-label="Hermes harness profile">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {hermes!.profiles.map((x) => (
+                  <SelectItem key={x} value={x}>{x}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+        {missingHints.map((c) => (
+          <p key={c.id} className="text-[12px] leading-relaxed text-amber-500/90" data-harness-missing={c.id}>
+            {c.needs ? (
+              <>
+                {c.label} needs its ACP adapter on this computer: <code className="inline-block font-mono text-foreground">{c.needs}</code>.
+              </>
+            ) : (
+              <>{c.label} isn't installed on this computer yet.</>
+            )}
+          </p>
+        ))}
+        <span className="text-[12px] text-muted-foreground">Also run {p.name} in these harnesses and switch right in the chat box.</span>
       </div>
     </div>
   );

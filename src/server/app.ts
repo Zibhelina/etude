@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { DEFAULT_SETTINGS, Etude, EtudeError, type StudyScope } from "../core/engine.ts";
+import { HARNESS_PRESETS, type HarnessPresetId } from "../core/agent-profiles.ts";
 import { isFsId } from "../core/folders.ts";
 import { folderRoutes } from "./folders.ts";
 import { ScriptError } from "../core/sandbox.ts";
@@ -846,15 +847,15 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     etude.setAgentBrain(c.req.param("id"), await body(c));
     return c.json(agent.profiles());
   });
-  // Harnesses an external profile can switch between in the chat message box (Hermes, Antigravity).
+  // Harnesses an external profile can switch between in the chat message box (Hermes, Antigravity, Claude Code, Codex, Gemini CLI).
   app.put("/api/agent/profiles/:id/harnesses", async (c) => {
     const b = await body(c);
-    if (b.toggle === "hermes" || b.toggle === "antigravity") {
-      etude.toggleAgentHarness(c.req.param("id"), b.toggle, { enabled: !!b.enabled, hermesProfile: typeof b.hermesProfile === "string" ? b.hermesProfile : undefined });
+    if (typeof b.toggle === "string" && (HARNESS_PRESETS as readonly string[]).includes(b.toggle)) {
+      etude.toggleAgentHarness(c.req.param("id"), b.toggle as HarnessPresetId, { enabled: !!b.enabled, hermesProfile: typeof b.hermesProfile === "string" ? b.hermesProfile : undefined });
     } else if (Array.isArray(b.harnesses)) {
       etude.setAgentHarnesses(c.req.param("id"), b.harnesses);
     } else {
-      throw new EtudeError("give { toggle: 'hermes'|'antigravity', enabled } or { harnesses: [...] }", 400);
+      throw new EtudeError(`give { toggle: '${HARNESS_PRESETS.join("'|'")}', enabled } or { harnesses: [...] }`, 400);
     }
     return c.json(agent.profiles());
   });

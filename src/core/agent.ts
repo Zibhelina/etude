@@ -639,19 +639,33 @@ export class Agent {
     };
   }
 
-  /** Whether Hermes is installed here (on PATH) and its profiles (folders under ~/.hermes/profiles, plus default). */
-  hermes(): { installed: boolean; available: boolean; profiles: string[] } {
-    if (!acpAvailable()) return { installed: false, available: false, profiles: [] };
-    const exe = process.platform === "win32" ? ["hermes.exe", "hermes.cmd", "hermes"] : ["hermes"];
-    const installed = (process.env.PATH ?? "").split(delimiter).some((dir) => dir && exe.some((x) => {
-      // statSync, not accessSync: the in-browser engine's fs shim has no accessSync (and never gets here).
-      try {
-        const s = statSync(join(dir, x));
-        return s.isFile() && (process.platform === "win32" || (s.mode & 0o111) !== 0);
-      } catch {
-        return false;
-      }
-    }));
+  /** Whether Hermes and the other built-in ACP adapters are installed here (on PATH), plus Hermes profiles. */
+  hermes(): { installed: boolean; available: boolean; profiles: string[]; presets: Record<"hermes" | "antigravity" | "claude" | "codex" | "gemini", boolean> } {
+    const none = { hermes: false, antigravity: false, claude: false, codex: false, gemini: false };
+    if (!acpAvailable()) return { installed: false, available: false, profiles: [], presets: none };
+    const dirs = (process.env.PATH ?? "").split(delimiter).filter(Boolean);
+    const hasBin = (cmd: string) => {
+      const exe = process.platform === "win32" ? [`${cmd}.exe`, `${cmd}.cmd`, cmd] : [cmd];
+      return dirs.some((dir) =>
+        exe.some((x) => {
+          // statSync, not accessSync: the in-browser engine's fs shim has no accessSync (and never gets here).
+          try {
+            const s = statSync(join(dir, x));
+            return s.isFile() && (process.platform === "win32" || (s.mode & 0o111) !== 0);
+          } catch {
+            return false;
+          }
+        }),
+      );
+    };
+    const installed = hasBin("hermes");
+    const presets = {
+      hermes: installed,
+      antigravity: hasBin("agy"),
+      claude: hasBin("claude-agent-acp"),
+      codex: hasBin("codex-acp"),
+      gemini: hasBin("gemini"),
+    };
     // HERMES_HOME can be one profile's own folder (…/.hermes/profiles/<name>): its profiles are two levels up.
     let home = process.env.HERMES_HOME || join(homedir(), ".hermes");
     if (basename(dirname(home)) === "profiles") home = dirname(dirname(home));
@@ -663,7 +677,7 @@ export class Agent {
         .sort();
     } catch {}
     if (existsSync(home) && !profiles.includes("default")) profiles.unshift("default");
-    return { installed, available: true, profiles };
+    return { installed, available: true, profiles, presets };
   }
 
   /**

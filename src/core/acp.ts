@@ -10,7 +10,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { basename } from "node:path";
 import { homedir } from "node:os";
-import type { AcpAgentDef } from "./acp-agents.ts";
+import { ACP_PRESETS, type AcpAgentDef } from "./acp-agents.ts";
 
 export const ACP_PROTOCOL_VERSION = 1;
 
@@ -26,6 +26,7 @@ export interface AcpInit {
   agentInfo?: { name?: string; title?: string; version?: string };
   agentCapabilities?: { loadSession?: boolean; promptCapabilities?: { image?: boolean; audio?: boolean; embeddedContext?: boolean }; [k: string]: unknown };
   authMethods?: { id: string; name: string; description?: string }[];
+  _meta?: Record<string, unknown>;
 }
 
 export interface AcpPermissionOption {
@@ -176,6 +177,8 @@ export class AcpConnection {
   private turns = new Map<string, { handlers: AcpTurnHandlers; chained: Promise<{ stopReason?: string }>[] }>();
   /** True when the agent steers a running turn via a second concurrent `session/prompt` (Antigravity `agy acp`). */
   private promptSteer = false;
+  /** True when the agent advertises the pre-standard `_session/steering` extension (Claude Code, Codex). */
+  private metaSteer = false;
   /** Who answers a permission request that comes while a pick is being made (no turn running): Hermes asks before a
    * switch it thinks costs something (a large context re-read on the new model). Without one, the ask is cancelled. */
   private picking = new Map<string, (req: AcpPermissionRequest) => Promise<AcpPermissionOutcome>>();
@@ -235,7 +238,9 @@ export class AcpConnection {
     const failed = new Promise<never>((_, reject) => {
       child.once("error", (e: NodeJS.ErrnoException) => {
         this.exited = e.message;
-        reject(new AcpError(e.code === "ENOENT" ? `couldn't start "${def.command}": it isn't installed or isn't on the PATH` : `couldn't start "${def.command}": ${e.message}`));
+        const preset = ACP_PRESETS.find((p) => p.id === def.preset || (p.id !== "custom" && p.make().command === def.command));
+        const hint = preset?.needs ? `. Install it with: ${preset.needs}` : "";
+        reject(new AcpError(e.code === "ENOENT" ? `couldn't start "${def.command}": it isn't installed or isn't on the PATH${hint}` : `couldn't start "${def.command}": ${e.message}`));
       });
     });
     child.once("exit", (code, signal) => {
@@ -258,6 +263,7 @@ export class AcpConnection {
       failed,
     ])) as AcpInit;
     this.info = init ?? { protocolVersion: ACP_PROTOCOL_VERSION };
+    this.metaSteer = Boolean((this.info._meta as any)?.steering?.supported || (this.info.agentCapabilities as any)?._meta?.steering?.supported);
     this.promptSteer =
       Boolean((this.info.agentCapabilities as any)?._meta?.antigravity) ||
       this.def.preset === "antigravity" ||
@@ -516,19 +522,31 @@ export class AcpConnection {
     return info;
   }
 
-  /** True when words can reach this session's running turn (Hermes `/steer` command or Antigravity concurrent `session/prompt`). */
+  /** True when words can reach this session's running turn (Hermes `/steer`, ACP `_session/steering` for Claude Code/Codex, or Antigravity concurrent `session/prompt`). */
   canSteer(sessionId: string): boolean {
-    return this.turns.has(sessionId) && (!!this.sessionInfo.get(sessionId)?.commands?.includes("steer") || this.promptSteer);
+    return this.turns.has(sessionId) && (!!this.sessionInfo.get(sessionId)?.commands?.includes("steer") || this.metaSteer || this.promptSteer);
   }
 
   /**
    * Hands the user's words to the turn that's running: through `/steer` when the agent advertises that
-   * command (Hermes), or through a second concurrent `session/prompt` when the agent supports prompt-steering
-   * (Antigravity `agy acp`, which ends the prior prompt and continues streaming under the new one).
+   * command (Hermes), through `_session/steering` when the agent advertises `_meta.steering.supported`
+   * (Claude Code, Codex), or through a second concurrent `session/prompt` (Antigravity `agy acp`).
    */
   async steer(sessionId: string, text: string): Promise<boolean> {
     if (!this.canSteer(sessionId)) return false;
     const hasSlashSteer = !!this.sessionInfo.get(sessionId)?.commands?.includes("steer");
+    if (!hasSlashSteer && this.metaSteer) {
+      try {
+        const r = await this.request<{ outcome?: string }>(
+          "_session/steering",
+          { sessionId, prompt: [{ type: "text", text }], _meta: { steering: { idleBehavior: "promptRequired" } } },
+          30_000,
+        );
+        return r?.outcome === "injected" || r?.outcome === "startedNewTurn";
+      } catch {
+        return false;
+      }
+    }
     if (!hasSlashSteer && this.promptSteer) {
       const turn = this.turns.get(sessionId);
       if (!turn) return false;

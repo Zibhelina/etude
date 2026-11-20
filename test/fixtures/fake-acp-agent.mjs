@@ -262,6 +262,7 @@ process.stdin.on("data", (d) => {
             promptCapabilities: { image: true, embeddedContext: true },
             ...(process.env.FAKE_ACP_PROMPT_STEER === "1" ? { _meta: { antigravity: { tier: true } } } : {}),
           },
+          ...(process.env.FAKE_ACP_META_STEER === "1" ? { _meta: { steering: { supported: true } } } : {}),
           authMethods: [],
         },
       });
@@ -293,7 +294,16 @@ process.stdin.on("data", (d) => {
       picks.get(p.sessionId)[p.configId] = p.value;
       send({ jsonrpc: "2.0", id: m.id, result: { configOptions: configOptions(p.sessionId) } });
     } else if (m.method === "session/prompt") prompt(m.id, p);
-    else if (m.method === "session/cancel") cancels.get(p.sessionId)?.();
+    else if (m.method === "_session/steering") {
+      const text = [...(p.prompt ?? [])].reverse().find((b) => b.type === "text")?.text ?? "";
+      const take = steers.get(p.sessionId);
+      if (!take) {
+        send({ jsonrpc: "2.0", id: m.id, result: { outcome: "promptRequired", reason: "noRunningTurn" } });
+      } else {
+        send({ jsonrpc: "2.0", id: m.id, result: { outcome: "injected" } });
+        take(text);
+      }
+    } else if (m.method === "session/cancel") cancels.get(p.sessionId)?.();
     else if (m.id !== undefined) send({ jsonrpc: "2.0", id: m.id, error: { code: -32601, message: "no" } });
   }
 });

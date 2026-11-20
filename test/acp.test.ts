@@ -557,7 +557,7 @@ test("acp harnesses: one profile, two harnesses; a chat picks one, switches mid-
   assert.equal((off.brain as any).harnesses, undefined);
   assert.equal(e.settings().ai.agents?.some((x) => x.command === "agy" || x.command === "claude-agent-acp" || x.command === "codex-acp"), false);
 
-  // Starting from Claude Code as main brain and adding Codex + Hermes harnesses works too.
+  // Starting from Claude Code as main brain, promoting Codex to default, and disabling the primary harness.
   e.setAgentBrain("pal", { kind: "agent", preset: "claude" });
   const ccCodex = e.toggleAgentHarness("pal", "codex", { enabled: true });
   assert.deepEqual(
@@ -565,6 +565,27 @@ test("acp harnesses: one profile, two harnesses; a chat picks one, switches mid-
     ["Claude Code", "Codex"],
   );
   assert.throws(() => e.toggleAgentHarness("pal", "claude", { enabled: true }), /already runs in Claude Code/);
+  const promoted = e.setDefaultAgentHarness("pal", "codex");
+  assert.equal((promoted.brain as any).via, "codex");
+  assert.deepEqual(
+    (promoted.brain as any).harnesses.map((h: any) => h.name),
+    ["Codex", "Claude Code"],
+  );
+  const droppedDefault = e.toggleAgentHarness("pal", "codex", { enabled: false });
+  assert.equal((droppedDefault.brain as any).via, "claude");
+  assert.equal((droppedDefault.brain as any).harnesses, undefined);
+  assert.throws(() => e.toggleAgentHarness("pal", "claude", { enabled: false }), /at least one harness/);
+  e.close();
+});
+
+test("acp: trailing session/load replay updates are drained before the next prompt turn", async () => {
+  const { e, a } = await setup({ FAKE_ACP_LOAD: "1", FAKE_ACP_LATE_REPLAY: "1" });
+  const conv = chat(e, a, "fake");
+  await a.send(conv.id, { text: "hello" });
+  a.closeAgents();
+  const c = (await a.send(conv.id, { text: "say fresh reply" })).content as AssistantContent;
+  assert.equal(c.text, "fresh reply");
+  assert.equal(c.items.some((i) => i.type === "tool" && i.label === "Old step"), false, "trailing replay tool call must not leak into next turn");
   e.close();
 });
 

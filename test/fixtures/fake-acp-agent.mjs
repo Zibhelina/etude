@@ -276,6 +276,13 @@ process.stdin.on("data", (d) => {
       // A real agent replays the history first; the client must not show it as a new reply.
       chunk(p.sessionId, "REPLAYED HISTORY");
       send({ jsonrpc: "2.0", id: m.id, result: { configOptions: configOptions(p.sessionId) } });
+      if (process.env.FAKE_ACP_LATE_REPLAY === "1") {
+        // Like Antigravity `agy acp`: trailing historical updates keep flushing briefly after session/load responds.
+        setTimeout(() => {
+          update(p.sessionId, { sessionUpdate: "tool_call", toolCallId: "old-t1", title: "Old step", kind: "read", status: "completed" });
+          chunk(p.sessionId, "STALE PREVIOUS ANSWER");
+        }, 25);
+      }
       commands(p.sessionId);
     } else if (m.method === "session/set_config_option" && p.configId === "model" && p.value === "other:huge") {
       // Like Hermes' large-context switch guard: it asks first, and a no fails the pick.

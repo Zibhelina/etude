@@ -850,12 +850,14 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
   // Harnesses an external profile can switch between in the chat message box (Hermes, Antigravity, Claude Code, Codex, Gemini CLI).
   app.put("/api/agent/profiles/:id/harnesses", async (c) => {
     const b = await body(c);
-    if (typeof b.toggle === "string" && (HARNESS_PRESETS as readonly string[]).includes(b.toggle)) {
+    if (typeof b.default === "string" && (HARNESS_PRESETS as readonly string[]).includes(b.default)) {
+      etude.setDefaultAgentHarness(c.req.param("id"), b.default as HarnessPresetId, { hermesProfile: typeof b.hermesProfile === "string" ? b.hermesProfile : undefined });
+    } else if (typeof b.toggle === "string" && (HARNESS_PRESETS as readonly string[]).includes(b.toggle)) {
       etude.toggleAgentHarness(c.req.param("id"), b.toggle as HarnessPresetId, { enabled: !!b.enabled, hermesProfile: typeof b.hermesProfile === "string" ? b.hermesProfile : undefined });
     } else if (Array.isArray(b.harnesses)) {
       etude.setAgentHarnesses(c.req.param("id"), b.harnesses);
     } else {
-      throw new EtudeError(`give { toggle: '${HARNESS_PRESETS.join("'|'")}', enabled } or { harnesses: [...] }`, 400);
+      throw new EtudeError(`give { toggle: '${HARNESS_PRESETS.join("'|'")}', enabled }, { default: '...' } or { harnesses: [...] }`, 400);
     }
     return c.json(agent.profiles());
   });

@@ -53,9 +53,12 @@ export const profilesApi = {
   setDefault: (id: string) => call("POST", `/api/agent/profiles/${encodeURIComponent(id)}/default`),
   /** The brain from an agent's card: a model, Hermes with a profile, or another agent (its entry stays on this device). */
   setBrain: (id: string, pick: BrainPick) => call("PUT", `/api/agent/profiles/${encodeURIComponent(id)}/brain`, pick),
-  /** Toggle an extra harness (Hermes, Antigravity, Claude Code, Codex, Gemini CLI) for an external agent so the chat can switch between them. */
+  /** Toggle a harness (Hermes, Antigravity, Claude Code, Codex, Gemini CLI) on or off for an external agent. */
   toggleHarness: (id: string, toggle: HarnessPresetId, enabled: boolean, hermesProfile?: string) =>
     call("PUT", `/api/agent/profiles/${encodeURIComponent(id)}/harnesses`, { toggle, enabled, ...(hermesProfile ? { hermesProfile } : {}) }),
+  /** Make one of an external agent's harnesses the default for new chats, keeping the other enabled harnesses. */
+  setDefaultHarness: (id: string, harness: HarnessPresetId, hermesProfile?: string) =>
+    call("PUT", `/api/agent/profiles/${encodeURIComponent(id)}/harnesses`, { default: harness, ...(hermesProfile ? { hermesProfile } : {}) }),
   /** Whether Hermes and the built-in ACP adapters are on this computer, plus Hermes profiles. */
   hermes: async (): Promise<{ installed: boolean; available: boolean; profiles: string[]; presets?: Partial<Record<HarnessPresetId, boolean>> }> => {
     try {

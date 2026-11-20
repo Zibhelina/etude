@@ -186,6 +186,8 @@ export class AcpConnection {
   private steering = new Map<string, { n: number; said: string }>();
   /** Sessions whose history is being replayed by session/load: their updates aren't a live turn. */
   private loading = new Set<string>();
+  /** Callbacks notified as historical replay updates arrive during/right after session/load, so we drain before prompting. */
+  private loadDrain = new Map<string, () => void>();
   /** Sessions this process created or loaded, so a chat can keep using its own. */
   readonly sessions = new Set<string>();
   /** Each open session's pickers and context use, kept current from what the agent sends. */
@@ -321,7 +323,10 @@ export class AcpConnection {
         this.sessionInfo.set(params.sessionId, info);
         return;
       }
-      if (this.loading.has(params.sessionId)) return;
+      if (this.loading.has(params.sessionId)) {
+        this.loadDrain.get(params.sessionId)?.();
+        return;
+      }
       if (u.sessionUpdate === "tool_call" || u.sessionUpdate === "tool_call_update") {
         this.trackToolUpdate(String(params.sessionId ?? ""), u);
       }
@@ -392,13 +397,47 @@ export class AcpConnection {
   /** Reopens an earlier session. The history the agent replays is dropped: the chat already shows it. */
   async loadSession(sessionId: string, cwd: string, mcpServers: AcpMcpServer[]): Promise<void> {
     this.loading.add(sessionId);
+    let sawReplay = false;
+    this.loadDrain.set(sessionId, () => {
+      sawReplay = true;
+    });
     try {
       const r = await this.request<{ configOptions?: unknown } | null>("session/load", { sessionId, cwd, mcpServers }, 120_000);
       this.sessions.add(sessionId);
       this.sessionInfo.set(sessionId, { ...this.sessionInfo.get(sessionId), options: cleanOptions(r?.configOptions) });
+      // Some agents (e.g. Antigravity `agy acp`) answer `session/load` while historical `session/update`
+      // notifications are still flushing on stdout. Wait for replay updates to go quiet before leaving `loading`,
+      // so the previous reply can never spill into the next prompt turn.
+      await this.drainLoadReplay(sessionId, sawReplay);
     } finally {
+      this.loadDrain.delete(sessionId);
       this.loading.delete(sessionId);
     }
+  }
+
+  private drainLoadReplay(sessionId: string, sawReplay: boolean): Promise<void> {
+    if (!this.alive) return Promise.resolve();
+    return new Promise((resolve) => {
+      let quietMs = sawReplay ? 250 : 80;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const done = () => {
+        if (timer) clearTimeout(timer);
+        clearTimeout(cap);
+        this.loadDrain.delete(sessionId);
+        resolve();
+      };
+      const bump = () => {
+        quietMs = 250;
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(done, quietMs);
+        timer.unref?.();
+      };
+      const cap = setTimeout(done, 10_000);
+      cap.unref?.();
+      this.loadDrain.set(sessionId, bump);
+      timer = setTimeout(done, quietMs);
+      timer.unref?.();
+    });
   }
 
   /** Background tasks currently running in a session. */

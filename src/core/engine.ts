@@ -995,8 +995,9 @@ export class Etude {
   }
 
   /**
-   * Turns an extra harness (Hermes, Antigravity, Claude Code, Codex, or Gemini CLI) on or off for an external
-   * profile, creating or pruning its `ai.agents` entry on this device automatically so the chat's harness picker works in one click.
+   * Turns a harness (Hermes, Antigravity, Claude Code, Codex, or Gemini CLI) on or off for an external
+   * profile, creating or pruning its `ai.agents` entry on this device automatically so the chat's harness picker
+   * works in one click. Turning off the current default harness promotes the next enabled harness to default.
    */
   toggleAgentHarness(id: string, harness: HarnessPresetId, opts: { enabled: boolean; hermesProfile?: string }): AgentProfile {
     if (!HARNESS_PRESETS.includes(harness)) throw new EtudeError(`unknown harness "${String(harness)}"`);
@@ -1009,9 +1010,48 @@ export class Etude {
     const ownVia = ownDef ? viaOf(ownDef) : curBrain.via;
     const preset = ACP_PRESETS.find((p) => p.id === harness)!;
     const targetLabel = preset.label;
-    if (ownVia === harness) throw new EtudeError(`${cur.name} already runs in ${targetLabel} as its main harness`);
     const ownLabel = viaLabel(ownVia, ownDef?.name || curBrain.agent);
     const baseHarnesses = curBrain.harnesses?.length ? [...curBrain.harnesses] : [{ agent: curBrain.agent, name: ownLabel }];
+
+    if (ownVia === harness) {
+      if (opts.enabled) {
+        if (harness === "hermes" && opts.hermesProfile) {
+          const hp = opts.hermesProfile.trim() || cur.id;
+          const made = preset.make({ profile: hp });
+          const def: AcpAgentDef = { ...made, id: curBrain.agent, name: cur.name };
+          const nextAgents = curAgents.some((a) => a.id === def.id) ? curAgents.map((a) => (a.id === def.id ? def : a)) : [...curAgents, def];
+          const brain = this.checkedProfile({ ...cur, brain: { ...curBrain, hermes: hp } }).brain;
+          const after = s.agentProfiles.map((p) => (p.id === cur.id ? { ...p, brain } : p));
+          const next = this.updateSettings({ agentProfiles: after, ai: { ...s.ai, agents: this.prunedAgents(s.agentProfiles, after, nextAgents) } });
+          return next.agentProfiles.find((x) => x.id === cur.id)!;
+        }
+        throw new EtudeError(`${cur.name} already runs in ${targetLabel} as its main harness`);
+      }
+      // Turning off the current default harness: promote the next enabled harness if one exists.
+      const remaining = baseHarnesses.filter((h) => h.agent !== curBrain.agent);
+      if (!remaining.length) throw new EtudeError(`${cur.name} needs at least one harness (or switch Brain to a model)`);
+      const nextPrimary = remaining[0];
+      const nextPrimaryDef = curAgents.find((a) => a.id === nextPrimary.agent);
+      const nextVia = nextPrimaryDef ? viaOf(nextPrimaryDef) : undefined;
+      const nextHermes = remaining.some((h) => {
+        const d = curAgents.find((a) => a.id === h.agent);
+        return (d ? viaOf(d) : null) === "hermes";
+      })
+        ? curBrain.hermes
+        : undefined;
+      const nextBrainRaw = {
+        kind: "external" as const,
+        agent: nextPrimary.agent,
+        ...(nextVia ? { via: nextVia } : {}),
+        ...(nextHermes ? { hermes: nextHermes } : {}),
+        ...(remaining.length > 1 ? { harnesses: remaining } : {}),
+      };
+      const brain = this.checkedProfile({ ...cur, brain: nextBrainRaw }).brain;
+      const after = s.agentProfiles.map((p) => (p.id === cur.id ? { ...p, brain } : p));
+      const next = this.updateSettings({ agentProfiles: after, ai: { ...s.ai, agents: this.prunedAgents(s.agentProfiles, after, curAgents) } });
+      return next.agentProfiles.find((x) => x.id === cur.id)!;
+    }
+
     const suffix: Record<HarnessPresetId, string> = { hermes: "hermes", antigravity: "agy", claude: "claude", codex: "codex", gemini: "gemini" };
     const suf = suffix[harness];
     const desiredId = `${cur.id.slice(0, 32 - suf.length - 1)}-${suf}`;
@@ -1022,19 +1062,75 @@ export class Etude {
     });
     let nextAgents = [...curAgents];
     let nextHarnesses = baseHarnesses.filter((h) => h.agent !== existing?.agent);
+    let nextHermes = curBrain.hermes;
     if (opts.enabled) {
       const agentId = existing?.agent ?? desiredId;
-      const made = preset.make(harness === "hermes" ? { profile: (opts.hermesProfile ?? "").trim() || cur.id } : undefined);
+      const hp = harness === "hermes" ? (opts.hermesProfile ?? "").trim() || curBrain.hermes || cur.id : undefined;
+      if (hp) nextHermes = hp;
+      const made = preset.make(hp ? { profile: hp } : undefined);
       const def: AcpAgentDef = { ...made, id: agentId, name: cur.name };
       nextAgents = nextAgents.some((a) => a.id === agentId) ? nextAgents.map((a) => (a.id === agentId ? def : a)) : [...nextAgents, def];
       if (!nextHarnesses.some((h) => h.agent === curBrain.agent)) nextHarnesses.unshift({ agent: curBrain.agent, name: ownLabel });
       nextHarnesses.push({ agent: agentId, name: targetLabel });
+    } else if (harness === "hermes") {
+      nextHermes = undefined;
     }
     // If only the primary harness remains, clear harnesses so no single-option picker appears.
     if (nextHarnesses.length <= 1) nextHarnesses = [];
-    const brain = this.checkedProfile({ ...cur, brain: { ...curBrain, harnesses: nextHarnesses } }).brain;
+    const nextBrainRaw = {
+      ...curBrain,
+      ...(nextHermes ? { hermes: nextHermes } : { hermes: undefined }),
+      harnesses: nextHarnesses,
+    };
+    const brain = this.checkedProfile({ ...cur, brain: nextBrainRaw }).brain;
     const after = s.agentProfiles.map((p) => (p.id === cur.id ? { ...p, brain } : p));
     const next = this.updateSettings({ agentProfiles: after, ai: { ...s.ai, agents: this.prunedAgents(s.agentProfiles, after, nextAgents) } });
+    return next.agentProfiles.find((x) => x.id === cur.id)!;
+  }
+
+  /** Makes one of an external profile's harnesses its default (the one new chats start in), keeping the rest enabled. */
+  setDefaultAgentHarness(id: string, harness: HarnessPresetId, opts: { hermesProfile?: string } = {}): AgentProfile {
+    if (!HARNESS_PRESETS.includes(harness)) throw new EtudeError(`unknown harness "${String(harness)}"`);
+    let cur = this.agentProfile(id);
+    if (cur.brain.kind !== "external") throw new EtudeError(`${cur.name} runs on a chat model; harnesses are for an external agent`);
+    const b0 = cur.brain;
+    const s0 = this.settings();
+    const agents0 = s0.ai.agents ?? [];
+    const ownDef0 = agents0.find((a) => a.id === b0.agent);
+    const ownVia0 = ownDef0 ? viaOf(ownDef0) : b0.via;
+    if (ownVia0 === harness) return cur;
+    const preset = ACP_PRESETS.find((p) => p.id === harness)!;
+    const targetLabel = preset.label;
+    const alreadyEnabled = (b0.harnesses ?? []).some((h) => {
+      const d = agents0.find((a) => a.id === h.agent);
+      return (d ? viaOf(d) : null) === harness || h.name.toLowerCase() === targetLabel.toLowerCase();
+    });
+    if (!alreadyEnabled) cur = this.toggleAgentHarness(id, harness, { enabled: true, hermesProfile: opts.hermesProfile });
+    if (cur.brain.kind !== "external") return cur;
+    const b = cur.brain;
+    const s = this.settings();
+    const curAgents = s.ai.agents ?? [];
+    const ownDef = curAgents.find((a) => a.id === b.agent);
+    const ownVia = ownDef ? viaOf(ownDef) : b.via;
+    const ownLabel = viaLabel(ownVia, ownDef?.name || b.agent);
+    const hs = b.harnesses?.length ? [...b.harnesses] : [{ agent: b.agent, name: ownLabel }];
+    const target = hs.find((h) => {
+      const d = curAgents.find((a) => a.id === h.agent);
+      return (d ? viaOf(d) : null) === harness || h.name.toLowerCase() === targetLabel.toLowerCase();
+    });
+    if (!target) throw new EtudeError(`couldn't find ${targetLabel} harness on ${cur.name}`);
+    const reordered = [target, ...hs.filter((h) => h.agent !== target.agent)];
+    const brain = this.checkedProfile({
+      ...cur,
+      brain: {
+        ...b,
+        agent: target.agent,
+        via: harness,
+        harnesses: reordered.length > 1 ? reordered : undefined,
+      },
+    }).brain;
+    const after = s.agentProfiles.map((p) => (p.id === cur.id ? { ...p, brain } : p));
+    const next = this.updateSettings({ agentProfiles: after, ai: { ...s.ai, agents: this.prunedAgents(s.agentProfiles, after, curAgents) } });
     return next.agentProfiles.find((x) => x.id === cur.id)!;
   }
 

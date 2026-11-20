@@ -482,8 +482,11 @@ export class Agent {
   private streams = new Map<string, TurnStream>();
   private modelCache: { at: number; groups: ModelGroup[] } | null = null;
   private acp: AcpPool | null = null;
+  private hermesTasksMod: typeof import("./hermes-tasks.ts") | null = null;
   /** Subscribers watching background tasks for a conversation, keyed by convId. */
   private taskSubs = new Map<string, Set<(tasks: BackgroundTask[]) => void>>();
+  /** Polling timers for external agents whose background tasks live in their own store (Hermes). */
+  private taskPollers = new Map<string, ReturnType<typeof setInterval>>();
   /** For tests: replaces OpenRouter's model list URL. */
   openRouterModelsUrl = "https://openrouter.ai/api/v1/models";
 
@@ -493,7 +496,19 @@ export class Agent {
     this.snapshotDir = join(etude.home, "agent-snapshots");
     this.attachmentDir = join(etude.home, "agent-attachments");
     // A reply still being written when the collection closes (the server restarts) is kept as far as it got.
-    etude.onClose(() => this.cutTurns());
+    etude.onClose(() => {
+      for (const t of this.taskPollers.values()) clearInterval(t);
+      this.taskPollers.clear();
+      this.cutTurns();
+    });
+    if (acpAvailable()) {
+      void import("./hermes-tasks.ts")
+        .then((m) => {
+          this.hermesTasksMod = m;
+          for (const convId of this.taskSubs.keys()) this.pushTasksToSubs(convId);
+        })
+        .catch(() => {});
+    }
   }
 
   /** Saves every running turn's reply so far, marked as cut short. The turns themselves end with the process. */
@@ -828,10 +843,15 @@ export class Agent {
 
   /** Background processes currently running for a conversation's external agent session. */
   backgroundTasks(convId: string): BackgroundTask[] {
-    if (!this.acp) return [];
     const row = this.store.get("SELECT acp_agent, acp_session FROM agent_conversations WHERE id = ?", convId) as { acp_agent?: string; acp_session?: string } | undefined;
     if (!row?.acp_agent || !row?.acp_session) return [];
-    return this.acp.backgroundTasks(row.acp_agent, row.acp_session);
+    const fromAcp = this.acp ? this.acp.backgroundTasks(row.acp_agent, row.acp_session) : [];
+    const def = this.agentDefs().find((a) => a.id === row.acp_agent);
+    const fromHermes = def && this.hermesTasksMod ? this.hermesTasksMod.hermesBackgroundTasks(def, row.acp_session) : [];
+    if (!fromHermes.length) return fromAcp;
+    if (!fromAcp.length) return fromHermes;
+    const seen = new Set(fromAcp.map((t) => t.id));
+    return [...fromAcp, ...fromHermes.filter((t) => !seen.has(t.id))];
   }
 
   /** Subscribes to live updates of a conversation's background processes. Calls `on` immediately with the current list. */
@@ -842,27 +862,62 @@ export class Agent {
       this.taskSubs.set(convId, set);
     }
     set.add(on);
-    try {
-      on(this.backgroundTasks(convId));
-    } catch {}
+    let lastJson = "";
+    const send = (tasks: BackgroundTask[], force = false) => {
+      const json = JSON.stringify(tasks);
+      if (!force && json === lastJson) return;
+      lastJson = json;
+      try {
+        on(tasks);
+      } catch {}
+    };
+    send(this.backgroundTasks(convId), true);
+    // Hermes keeps async subagents and background shell processes in its own state.db / processes.json
+    // rather than leaving ACP tool calls open, so poll lightly while a client is watching this chat.
+    if (acpAvailable() && !this.taskPollers.has(convId)) {
+      let prev = JSON.stringify(this.backgroundTasks(convId));
+      const timer = setInterval(() => {
+        if (!this.taskSubs.has(convId)) {
+          clearInterval(timer);
+          this.taskPollers.delete(convId);
+          return;
+        }
+        const cur = this.backgroundTasks(convId);
+        const json = JSON.stringify(cur);
+        if (json === prev) return;
+        prev = json;
+        this.pushTasksToSubs(convId, cur);
+      }, 2000);
+      timer.unref?.();
+      this.taskPollers.set(convId, timer);
+    }
     return () => {
       set!.delete(on);
-      if (set!.size === 0) this.taskSubs.delete(convId);
+      if (set!.size === 0) {
+        this.taskSubs.delete(convId);
+        const t = this.taskPollers.get(convId);
+        if (t) {
+          clearInterval(t);
+          this.taskPollers.delete(convId);
+        }
+      }
     };
   }
 
-  private emitBackgroundTasks(agentId: string, sessionId: string, tasks: BackgroundTask[]) {
+  private pushTasksToSubs(convId: string, tasks = this.backgroundTasks(convId)) {
+    const subs = this.taskSubs.get(convId);
+    if (!subs) return;
+    for (const fn of subs) {
+      try {
+        fn(tasks);
+      } catch {}
+    }
+  }
+
+  private emitBackgroundTasks(agentId: string, sessionId: string, _tasks: BackgroundTask[]) {
     if (!this.taskSubs.size) return;
     const rows = this.store.all("SELECT id FROM agent_conversations WHERE acp_agent = ? AND acp_session = ?", agentId, sessionId) as { id: string }[];
-    for (const r of rows) {
-      const subs = this.taskSubs.get(r.id);
-      if (!subs) continue;
-      for (const fn of subs) {
-        try {
-          fn(tasks);
-        } catch {}
-      }
-    }
+    for (const r of rows) this.pushTasksToSubs(r.id);
   }
 
   /** Stops every external agent this collection started (they start again on the next message). */
@@ -1945,7 +2000,7 @@ Today: ${new Date().toISOString().slice(0, 10)}${page || view ? `\n${this.viewTe
       checkWrites();
     }
     for (const it of tools.values()) if (it.status === "running" || it.status === "waiting") it.status = cancelled ? "denied" : "done";
-    emit({ type: "tasks", tasks: conn.backgroundTasks(sid) });
+    emit({ type: "tasks", tasks: this.backgroundTasks(convId) });
     usage = conn.sessionInfo.get(sid)?.usage ?? usage;
     if (cancelled || r.stopReason === "cancelled") return { text: text.trimStart(), name, stopped: true, usage };
     if (r.stopReason === "refusal") return { text: text.trimStart(), name, error: `${name} declined to answer`, usage };

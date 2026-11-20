@@ -591,3 +591,83 @@ test("acp: tool calls left in_progress after end_turn surface as live background
   }
   e.close();
 });
+
+test("hermes background tasks: reads live async_delegations subagents and processes.json, ignoring dead PIDs", async (t) => {
+  const { mkdirSync, rmSync, writeFileSync } = await import("node:fs");
+  const { DatabaseSync } = await import("node:sqlite");
+  const { hermesBackgroundTasks } = await import("../src/core/hermes-tasks.ts");
+  const root = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "etude-hermes-bg-"));
+  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
+  const prof = join(root, "profiles", "tutor");
+  mkdirSync(prof, { recursive: true });
+  const db = new DatabaseSync(join(prof, "state.db"));
+  db.exec(`
+    CREATE TABLE async_delegations (
+      delegation_id TEXT PRIMARY KEY,
+      origin_session TEXT NOT NULL,
+      origin_ui_session_id TEXT NOT NULL DEFAULT '',
+      parent_session_id TEXT,
+      state TEXT NOT NULL,
+      dispatched_at REAL NOT NULL,
+      completed_at REAL,
+      updated_at REAL NOT NULL,
+      owner_pid INTEGER,
+      task_json TEXT,
+      origin_session_id TEXT
+    );
+    CREATE TABLE sessions (
+      id TEXT PRIMARY KEY,
+      title TEXT,
+      parent_session_id TEXT,
+      started_at REAL,
+      ended_at REAL
+    );
+  `);
+  const nowSec = Date.now() / 1000;
+  const sid = "local-abc123";
+  // Live delegation with 2 children: 1 finished, 1 still running
+  db.prepare("INSERT INTO async_delegations (delegation_id, origin_session, parent_session_id, state, dispatched_at, updated_at, owner_pid, task_json, origin_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+    "deleg_live1",
+    `agent:tutor:local:dm:${sid}`,
+    sid,
+    "running",
+    nowSec - 10,
+    nowSec,
+    process.pid,
+    JSON.stringify({ goal: "2 parallel subagents", goals: ["Render cover A", "Render cover B"] }),
+    sid,
+  );
+  // Stale delegation with an impossible dead PID: must be ignored
+  db.prepare("INSERT INTO async_delegations (delegation_id, origin_session, parent_session_id, state, dispatched_at, updated_at, owner_pid, task_json, origin_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+    "deleg_dead1",
+    `agent:tutor:local:dm:${sid}`,
+    sid,
+    "running",
+    nowSec - 100,
+    nowSec - 100,
+    9999999,
+    JSON.stringify({ goal: "Dead job" }),
+    sid,
+  );
+  db.prepare("INSERT INTO sessions (id, title, parent_session_id, started_at, ended_at) VALUES (?, ?, ?, ?, ?)").run("child_done", "Subagent: Render cover A", sid, nowSec - 9, nowSec - 2);
+  db.prepare("INSERT INTO sessions (id, title, parent_session_id, started_at, ended_at) VALUES (?, ?, ?, ?, ?)").run("child_run", "Subagent: Render cover B", sid, nowSec - 9, null);
+  db.close();
+
+  writeFileSync(
+    join(prof, "processes.json"),
+    JSON.stringify([
+      { task_id: "proc_live", command: "blender -b scene.blend", pid: process.pid, started_at: nowSec - 5, parent_session_id: sid },
+      { task_id: "proc_other", command: "other chat cmd", pid: process.pid, started_at: nowSec - 5, parent_session_id: "local-other" },
+    ]),
+  );
+
+  const def = { id: "tutor", name: "Tutor", command: "hermes", args: ["-p", "tutor", "acp"], preset: "hermes" as const, env: { HERMES_HOME: root } };
+  const tasks = hermesBackgroundTasks(def, sid);
+  assert.deepEqual(
+    tasks.map((x) => ({ id: x.id, kind: x.kind, title: x.title })),
+    [
+      { id: "child_run", kind: "subagent", title: "Render cover B" },
+      { id: "proc_live", kind: "execute", title: "blender -b scene.blend" },
+    ],
+  );
+});

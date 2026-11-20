@@ -470,26 +470,35 @@ export function useAgentChat({ onClose, onChanged, takeAsk = true, store = LAST_
     };
   }, [convId, profile.id]);
 
-  // Watch live background tasks for this conversation while any are running (closes automatically when empty).
-  const hasBgTasks = bgTasks.length > 0;
+  // Watch live background tasks (ACP background tool calls, Hermes subagents & shell jobs) for any open external chat.
+  const isExternalChat = profile.brain.kind === "external";
   useEffect(() => {
-    if (!convId || !hasBgTasks) return;
+    if (!convId || !isExternalChat) return;
     const ctl = new AbortController();
-    void (async () => {
-      try {
-        await agentApi.watchTasks(convId, (next) => {
-          if (!ctl.signal.aborted) setBgTasks(next);
-        }, ctl.signal);
-      } catch {}
-      if (ctl.signal.aborted) return;
-      // Stream closed while tasks were shown: re-check once so a dropped connection doesn't leave a stale badge.
-      setTimeout(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const loop = async () => {
+      while (!ctl.signal.aborted) {
+        try {
+          await agentApi.watchTasks(
+            convId,
+            (next) => {
+              if (!ctl.signal.aborted) setBgTasks(next);
+            },
+            ctl.signal,
+          );
+        } catch {}
         if (ctl.signal.aborted) return;
-        agentApi.get(convId).then((c) => !ctl.signal.aborted && setBgTasks(c.tasks ?? []), () => {});
-      }, 1500);
-    })();
-    return () => ctl.abort();
-  }, [convId, hasBgTasks]);
+        await new Promise<void>((r) => {
+          timer = setTimeout(r, 3000);
+        });
+      }
+    };
+    void loop();
+    return () => {
+      ctl.abort();
+      if (timer) clearTimeout(timer);
+    };
+  }, [convId, isExternalChat]);
 
   // Following a turn that went on without this window: what it did so far, then the rest live, with stop and steer.
   useEffect(() => {
@@ -1596,11 +1605,14 @@ function BackgroundTasksBar({ tasks }: { tasks: BackgroundTask[] }) {
         <ChevronDown className={cn("size-3.5 shrink-0 opacity-60 transition-transform", open && "rotate-180")} aria-hidden />
       </button>
       {open && (
-        <div className="flex flex-col gap-1 border-t border-border/60 px-3 py-2">
+        <div className="flex flex-col gap-1.5 border-t border-border/60 px-3 py-2">
           {tasks.map((t) => (
             <div key={t.id} className="flex items-start gap-2 text-[12px]">
               <Loader2 className="mt-0.5 size-3 shrink-0 animate-spin text-primary/80" aria-hidden />
-              <span className="min-w-0 flex-1 break-words text-foreground/85">{t.title}</span>
+              <span className="min-w-0 flex-1 break-words text-foreground/85">
+                {t.kind === "subagent" && <span className="mr-1.5 rounded bg-muted px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground">Subagent</span>}
+                {t.title}
+              </span>
               <span className="shrink-0 tabular-nums text-[11px] opacity-70">{formatElapsed(t.startedAt, now)}</span>
             </div>
           ))}

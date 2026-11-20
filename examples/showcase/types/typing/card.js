@@ -302,10 +302,10 @@ etude.onResult(({ grade, answer }) => {
     for (let v = 0; v <= ymax; v += step) g += `<line class="grid" x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}"/><text class="ax" x="${pl - 6}" y="${Y(v) + 3.5}" text-anchor="end">${v}</text>`;
     const ticks = Math.min(h.length, Math.max(2, Math.floor((W - pl - pr) / 34)));
     const every = Math.ceil(h.length / ticks);
-    // The last label is right-aligned so it stays inside the card; labels too close to it are skipped.
+    // The last label is right-aligned so it stays inside the card; labels closer than its width (~4 digits) are skipped.
     h.forEach((p, i) => {
       const end = i === h.length - 1;
-      if (!end && (i % every !== 0 || X(h[h.length - 1][0]) - X(p[0]) < 26)) return;
+      if (!end && (i % every !== 0 || X(h[h.length - 1][0]) - X(p[0]) < 44)) return;
       g += `<text class="ax" x="${X(p[0])}" y="${H - 6}" text-anchor="${end ? "end" : "middle"}">${Number.isInteger(p[0]) ? p[0] : p[0].toFixed(1)}</text>`;
     });
     const line = (k) => h.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[k]).toFixed(1)}`).join("");

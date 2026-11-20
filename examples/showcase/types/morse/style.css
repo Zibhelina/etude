@@ -19,7 +19,10 @@
 .mo-code .ph { color: var(--muted-foreground); font-size: 16px; }
 .mo-code.big .dot { width: 22px; height: 22px; }
 .mo-code.big .dash { width: 68px; height: 22px; }
-.mo-code.big.long .dash { width: 52px; }
+/* Up to nine symbols (SOS) still fit a 390 px phone: smaller pills and gaps once a code is long. */
+.mo-code.big.long { gap: 8px; }
+.mo-code.big.long .dot { width: 17px; height: 17px; }
+.mo-code.big.long .dash { width: 44px; height: 17px; }
 @keyframes mo-in { 0% { transform: scale(0.4); opacity: 0; } 100% { transform: none; opacity: 1; } }
 
 /* The key: one round button you tap for a dot and hold for a dash. */

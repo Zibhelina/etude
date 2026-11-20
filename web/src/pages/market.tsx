@@ -41,7 +41,7 @@ const GRADER_WORD: Record<string, string> = { self: "self-rated", script: "check
 const plural = (n: number, w: string) => `${n.toLocaleString("en-US")} ${w}${n === 1 ? "" : "s"}`;
 const kb = (b: number) => (b < 1e6 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1e6).toFixed(1)} MB`);
 /** The shelves' order: these first, the rest after, what you already have last. */
-const FEATURED = ["kanji-mage", "countries-of-the-world", "anatomy-3d", "flippy-bit", "periodic-table", "piano", "logic-puzzles", "geometry-puzzles", "etude-showcase", "morse-code-letters"];
+const FEATURED = ["piano-hero", "kanji-mage", "countries-of-the-world", "chess", "anatomy-3d", "flippy-bit", "periodic-table", "piano", "logic-puzzles", "geometry-puzzles", "etude-showcase", "morse-code-letters"];
 const official = (author: string) => /^(Joao|João|Zibhelina)\b/.test(author);
 
 type Filter = "all" | MarketKind;
@@ -499,7 +499,7 @@ function Hero({ it, counts, onOpen, onChanged }: { it: Item; counts?: EntryCount
         <div className="mk-meta mb-[18px]">{meta}<span aria-hidden="true">·</span><By author={e.author} /><TileCounts c={counts} /></div>
         <div className="mk-actions">
           {btn}
-          <Button variant="ghost" className="h-10 text-muted-foreground" onClick={(x) => (x.stopPropagation(), onOpen())}>Details</Button>
+          <Button variant="ghost" className="mk-hero-ghost" onClick={(x) => (x.stopPropagation(), onOpen())}>Details</Button>
         </div>
       </div>
     </div>

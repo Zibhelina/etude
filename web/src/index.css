@@ -1825,7 +1825,7 @@ body.note-dragging .note-row:hover:not(.is-drop-into) { background: transparent;
 /* Beside the pages the side panel has a hairline on its edge, like the one between two panes. */
 .achat[data-agent-panel]:not(.fixed) { box-shadow: inset 1px 0 0 var(--border); }
 .achat-docked { display: flex; min-height: 0; flex: 1; flex-direction: column; }
-.achat-docked [data-agent-scroll] > *, .achat-docked [data-agent-composer] { width: 100%; max-width: 46rem; margin-left: auto; margin-right: auto; }
+.achat-docked [data-agent-scroll] > *, .achat-docked [data-agent-composer], .achat-docked [data-agent-bg-tasks] { width: 100%; max-width: 46rem; margin-left: auto; margin-right: auto; }
 .achat-docked [data-agent-composer-wrap] { max-width: none; }
 .note-chat-slot { display: flex; align-items: center; }
 /* A web tab (desktop app): a bar with back, forward, reload and the address, then the page. The page is a <webview>

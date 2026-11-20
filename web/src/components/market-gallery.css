@@ -339,3 +339,6 @@
 .mk-seal { display: inline-block; flex: none; vertical-align: -0.16em; filter: drop-shadow(0 1px 2px rgb(0 0 0 / .25)); }
 .mk-seal-title { margin-left: 0.32em; }
 .mk-hero h2 .mk-seal { vertical-align: -0.08em; }
+
+/* In the Featured card the counts follow the author, instead of running off to the right edge. */
+.mk-hero .mk-counts { margin-left: 4px; }

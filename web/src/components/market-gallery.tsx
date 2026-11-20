@@ -5,9 +5,19 @@ import { api, type MarketEntry } from "@/lib/api";
 import { EtudeImg, useEtudeSrc } from "@/lib/local-url";
 import { cn } from "@/lib/utils";
 import { HArrows, useHScroll } from "@/lib/hscroll";
+import { isPhone } from "@/lib/device";
 import "./market-gallery.css";
 
 const isVideo = (p: string) => /\.(mp4|webm)$/.test(p);
+/** Screens made for phones end in `-phone` (`03-wrong-answer-phone.webp`); the rest are desktop screens. Each device
+ *  shows its own, and falls back to the other set when an entry only has one. Clips show on both. */
+const forPhone = (p: string) => /-phone\.[a-z0-9]+$/.test(p);
+function mediaForDevice(media: string[]): number[] {
+  const all = media.map((_, i) => i);
+  const phone = isPhone();
+  const mine = all.filter((i) => isVideo(media[i]) || forPhone(media[i]) === phone);
+  return mine.some((i) => !isVideo(media[i])) ? mine : all;
+}
 
 type Slide = { kind: "cover" } | { kind: "image"; src: string } | { kind: "video"; src: string };
 
@@ -22,13 +32,13 @@ export function MarketGallery({ entry, cover }: { entry: MarketEntry; cover: Rea
     u.pathname = u.pathname.replace("/cover/", "/media/") + `/${i}`;
     return u.pathname + u.search;
   };
-  const slides: Slide[] = [{ kind: "cover" }, ...media.map((p, i): Slide => (isVideo(p) ? { kind: "video", src: url(i) } : { kind: "image", src: url(i) }))];
+  const slides: Slide[] = [{ kind: "cover" }, ...mediaForDevice(media).map((i): Slide => (isVideo(media[i]) ? { kind: "video", src: url(i) } : { kind: "image", src: url(i) }))];
   return <Gallery name={entry.name} slides={slides} cover={cover} thumb={entry.kind === "theme" ? cover : entry.cover ? <EtudeImg src={api.marketCoverUrl(entry.kind, entry.id)} alt="" /> : cover} />;
 }
 
 /** The same gallery from catalog paths and a URL for each (Coming soon decks). */
 export function MediaGallery({ name, media, url, cover }: { name: string; media: string[]; url(i: number): string; cover: React.ReactNode }) {
-  const slides: Slide[] = [{ kind: "cover" }, ...media.map((p, i): Slide => (isVideo(p) ? { kind: "video", src: url(i) } : { kind: "image", src: url(i) }))];
+  const slides: Slide[] = [{ kind: "cover" }, ...mediaForDevice(media).map((i): Slide => (isVideo(media[i]) ? { kind: "video", src: url(i) } : { kind: "image", src: url(i) }))];
   return <Gallery name={name} slides={slides} cover={cover} />;
 }
 

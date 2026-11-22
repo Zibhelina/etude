@@ -1670,13 +1670,17 @@ function NoteTabs({ pane, node, groupAct, iconAct, tabs, all, current, onPick, o
   useEffect(() => {
     const el = strip.current;
     if (!el) return;
-    const f = () => setOver({ l: el.scrollLeft > 2, r: el.scrollLeft + el.clientWidth < el.scrollWidth - 2 });
+    const f = () => {
+      const l = el.scrollLeft > 2;
+      const r = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+      setOver((prev) => (prev.l === l && prev.r === r ? prev : { l, r }));
+    };
     f();
     el.addEventListener("scroll", f, { passive: true });
     const ro = new ResizeObserver(f);
     ro.observe(el);
     return () => (el.removeEventListener("scroll", f), ro.disconnect());
-  });
+  }, [tabs.length]);
   // The current tab stays in view when the strip scrolls.
   useEffect(() => {
     strip.current?.querySelector<HTMLElement>(".note-tab.is-on")?.scrollIntoView({ block: "nearest", inline: "nearest" });

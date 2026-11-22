@@ -4,6 +4,7 @@ import "./index.css";
 import "./agent-type.css";
 import { App } from "./App";
 import { startThemeSync } from "@/lib/theme";
+import { startAppZoom } from "@/lib/app-zoom";
 import { startStoreKit } from "@/lib/storekit";
 import { startViewRemote } from "@/lib/view-remote";
 import { startTelemetry } from "@/lib/telemetry";
@@ -18,6 +19,8 @@ applyDevice();
 
 // index.html already applied the cached theme; this confirms it with the server.
 startThemeSync();
+// Device-local global zoom level (Settings → Appearance → Zoom).
+startAppZoom();
 // The scrollbar that only shows while something scrolls.
 startScrollbars();
 // iOS app: App Store transactions still waiting for the Sync server, and new ones as they come.

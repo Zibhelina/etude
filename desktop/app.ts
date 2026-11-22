@@ -37,6 +37,12 @@ const front = (): BrowserWindow | null => {
 let engine: Engine | null = null;
 let env: Record<string, string | undefined> = process.env;
 let bg = DEFAULT_BG;
+const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2] as const;
+const clampZoom = (v: unknown) => {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? Math.round(Math.min(2, Math.max(0.5, n)) * 100) / 100 : 1;
+};
+let zoomFactor = 1;
 let booting = false;
 let lastCrash = 0;
 let watching: NodeJS.Timeout | null = null;
@@ -184,6 +190,7 @@ interface WindowState {
   height: number;
   maximized?: boolean;
   bg?: string;
+  zoom?: number;
 }
 
 const statePath = () => join(app.getPath("userData"), "window.json");
@@ -194,7 +201,12 @@ function loadState(): WindowState {
     const box = { x: Number(s.x), y: Number(s.y), width: Number(s.width) || 1180, height: Number(s.height) || 800 };
     // Only where a screen still is (a monitor may be gone).
     const onScreen = screen.getAllDisplays().some(({ workArea: a }) => box.x < a.x + a.width && box.x + box.width > a.x && box.y < a.y + a.height && box.y + box.height > a.y);
-    return { ...(onScreen ? box : { width: box.width, height: box.height }), maximized: !!s.maximized, bg: /^#[0-9a-f]{6}$/i.test(s.bg) ? s.bg : undefined };
+    return {
+      ...(onScreen ? box : { width: box.width, height: box.height }),
+      maximized: !!s.maximized,
+      bg: /^#[0-9a-f]{6}$/i.test(s.bg) ? s.bg : undefined,
+      zoom: typeof s.zoom === "number" && Number.isFinite(s.zoom) ? clampZoom(s.zoom) : undefined,
+    };
   } catch {
     return { width: 1180, height: 800 };
   }
@@ -203,8 +215,17 @@ function loadState(): WindowState {
 function saveState(w: BrowserWindow) {
   if (w !== win) return;
   try {
-    writeFileSync(statePath(), JSON.stringify({ ...w.getNormalBounds(), maximized: w.isMaximized(), bg }));
+    writeFileSync(statePath(), JSON.stringify({ ...w.getNormalBounds(), maximized: w.isMaximized(), bg, ...(zoomFactor !== 1 ? { zoom: zoomFactor } : {}) }));
   } catch {}
+}
+
+function applyZoomFactor(factor: number, broadcast = true) {
+  zoomFactor = clampZoom(factor);
+  for (const w of allWindows()) {
+    w.webContents.setZoomFactor(zoomFactor);
+    if (broadcast) w.webContents.send("etude:zoom", zoomFactor);
+  }
+  if (win && !win.isDestroyed()) saveState(win);
 }
 
 /** `path` with ?window=: "new" starts that window empty, "extra" keeps what it had (web/src/lib/window-store.ts). */
@@ -224,7 +245,10 @@ function createWindow(extraPath?: string) {
   const extra = extraPath !== undefined;
   const from = extra ? front()?.getNormalBounds() : undefined;
   const state: WindowState = from ? { x: from.x + 32, y: from.y + 32, width: from.width, height: from.height } : loadState();
-  if (!extra) bg = state.bg ?? DEFAULT_BG;
+  if (!extra) {
+    bg = state.bg ?? DEFAULT_BG;
+    if (state.zoom !== undefined) zoomFactor = state.zoom;
+  }
   const w = new BrowserWindow({
     x: state.x,
     y: state.y,
@@ -258,6 +282,8 @@ function createWindow(extraPath?: string) {
   w.on("close", () => saveState(w));
   const wc = w.webContents;
   const id = wc.id;
+  wc.setZoomFactor(zoomFactor);
+  wc.on("did-finish-load", () => wc.setZoomFactor(zoomFactor));
   w.on("closed", () => {
     webLinks.delete(id);
     extras.delete(w);
@@ -391,6 +417,12 @@ function answer() {
   ipcMain.handle("etude:new-window", (e, path: unknown) => {
     if (fromWindow(e) && typeof path === "string" && /^\/(?!\/)/.test(path) && path.length < 4000) openWindow(path);
   });
+  ipcMain.handle("etude:zoom-get", (e) => (fromWindow(e) ? zoomFactor : 1));
+  ipcMain.handle("etude:zoom-set", (e, factor: unknown) => {
+    if (!fromWindow(e)) return zoomFactor;
+    applyZoomFactor(clampZoom(factor));
+    return zoomFactor;
+  });
   ipcMain.handle("etude:pick-folder", async (e) => {
     const w = fromWindow(e);
     if (!w) return null;
@@ -420,7 +452,7 @@ function reload() {
   else void boot();
 }
 
-/** Zoom: the Notebook's focused pane when the page takes it, else the whole window (Chromium's zoom levels). */
+/** Zoom: the Notebook's focused pane when the page takes it, else the whole window (saved across launches). */
 async function zoom(by: 1 | -1 | 0, whole = false) {
   const wc = front()?.webContents;
   if (!wc) return;
@@ -428,7 +460,13 @@ async function zoom(by: 1 | -1 | 0, whole = false) {
     const done = await wc.executeJavaScript(`globalThis.etudePaneZoom ? globalThis.etudePaneZoom(${by}) : false`).catch(() => false);
     if (done === true) return;
   }
-  wc.setZoomLevel(by === 0 ? 0 : Math.min(9, Math.max(-8, wc.getZoomLevel() + by * 0.5)));
+  const next =
+    by === 0
+      ? 1
+      : by > 0
+        ? (ZOOM_STEPS.find((s) => s > zoomFactor + 0.005) ?? 2)
+        : ([...ZOOM_STEPS].reverse().find((s) => s < zoomFactor - 0.005) ?? 0.5);
+  applyZoomFactor(next);
 }
 
 function menu(): Menu {

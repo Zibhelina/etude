@@ -1,10 +1,11 @@
 // Settings → Appearance: pick a theme (applies at once, saved for every device), and make custom
 // themes from CSS variables plus extra CSS, previewed live on the whole page while editing.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Copy, Download, Loader2, MoreHorizontal, Paintbrush, Pencil, Plus, RotateCcw, Save, Trash2, Upload } from "lucide-react";
+import { Check, ChevronDown, Copy, Download, Loader2, Minus, MoreHorizontal, Paintbrush, Pencil, Plus, RotateCcw, Save, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,6 +21,7 @@ import { useMinimiFaces } from "@/components/minimi-faces";
 import { useMinimiFace } from "@/lib/minimi-face";
 import { setFunMode, useFunMode } from "@/lib/fun";
 import { playSound, setSounds, useSounds } from "@/lib/sounds";
+import { APP_ZOOM_MAX, APP_ZOOM_MIN, APP_ZOOM_PRESETS, stepAppZoom, useAppZoom } from "@/lib/app-zoom";
 import { setMinimiHidden, useMinimiHidden } from "@/lib/minimi-hidden";
 import { ThemeMiniature, ThemeSample, ThemeSwatches } from "@/components/settings-theme-preview";
 import { api } from "@/lib/api";
@@ -215,6 +217,7 @@ export function AppearanceSection() {
       {!editing && <HolidayBlock />}
       {!editing && <PersonalityBlock />}
       {!editing && <SoundsBlock />}
+      {!editing && <ZoomBlock />}
 
       {themes && !editing && (
         <>
@@ -483,6 +486,88 @@ function SoundsBlock() {
       description="A little pop when you tick a to-do in a Notebook page, and a chime when the whole list is done."
       aside={<BigSwitch id="sounds" checked={on} onCheckedChange={flip} aria-label="Sounds" />}
     />
+  );
+}
+
+/** Global zoom level: scales the whole app on this device (native WebContents zoom in desktop, CSS zoom in browsers). */
+function ZoomBlock() {
+  const [zoom, setZoom] = useAppZoom();
+  const pct = Math.round(zoom * 100);
+  return (
+    <Block
+      title="Zoom"
+      description="Scales the whole app on this device. Shortcuts: Ctrl/⌘+Alt+−, = and 0 (or Ctrl/⌘+−, = and 0 outside the Notebook)."
+      stackAside
+      aside={
+        <div className="flex items-center gap-1.5">
+          {pct !== 100 && (
+            <Button variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs text-muted-foreground" onClick={() => setZoom(1)}>
+              <RotateCcw className="size-3.5" />Reset
+            </Button>
+          )}
+          <div className="flex items-center rounded-lg border bg-card p-0.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              aria-label="Zoom out"
+              disabled={zoom <= APP_ZOOM_MIN + 0.005}
+              onClick={() => setZoom(stepAppZoom(zoom, -1))}
+            >
+              <Minus className="size-3.5" />
+            </Button>
+            <span data-app-zoom-value className="min-w-[3.25rem] text-center text-xs font-medium tabular-nums">
+              {pct}%
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              aria-label="Zoom in"
+              disabled={zoom >= APP_ZOOM_MAX - 0.005}
+              onClick={() => setZoom(stepAppZoom(zoom, 1))}
+            >
+              <Plus className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <Slider
+          aria-label="Global zoom"
+          min={Math.round(APP_ZOOM_MIN * 100)}
+          max={Math.round(APP_ZOOM_MAX * 100)}
+          step={5}
+          value={[pct]}
+          onValueChange={([v]) => typeof v === "number" && setZoom(v / 100)}
+        />
+        <div className="flex flex-wrap gap-1.5">
+          {APP_ZOOM_PRESETS.map((p) => {
+            const label = `${Math.round(p * 100)}%`;
+            const active = Math.abs(zoom - p) < 0.005;
+            return (
+              <button
+                key={p}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setZoom(p)}
+                className={cn(
+                  "h-7 rounded-md border px-2.5 text-xs font-medium tabular-nums transition-colors",
+                  active
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-foreground hover:bg-accent",
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </Block>
   );
 }
 

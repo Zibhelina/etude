@@ -79,6 +79,7 @@ const INDEX: { g: GroupId; label: string; words: string; fold?: string }[] = [
   { g: "appearance", label: "Fun mode", words: "fun minimi cat mascot" },
   { g: "appearance", label: "Minimi's personality", words: "minimi personality character behaviour behavior tone voice mascot prompt" },
   { g: "appearance", label: "Sounds", words: "sound audio pop chime todo to-do tick check mute quiet" },
+  { g: "appearance", label: "Zoom", words: "zoom scale size text interface display magnification bigger smaller" },
   { g: "appearance", label: "Custom themes", words: "custom theme css editor import market" },
   { g: "plugins", label: "Installed", words: "plugin plugins pomodoro extensions timer permissions sandbox" },
   { g: "data", label: "Backup", words: "backup download restore copy database" },

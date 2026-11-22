@@ -53,4 +53,16 @@ contextBridge.exposeInMainWorld("etudeDesktop", {
     status: () => ipcRenderer.invoke("etude:command-status"),
     install: () => ipcRenderer.invoke("etude:command-install"),
   },
+  zoom: {
+    /** Current global app zoom factor (1 = 100%). */
+    get: () => ipcRenderer.invoke("etude:zoom-get"),
+    /** Sets the global app zoom factor (0.5–2.0) across all Etude windows. */
+    set: (factor) => ipcRenderer.invoke("etude:zoom-set", Number(factor)),
+    /** Calls back when the global zoom changes (e.g. from View menu shortcuts). */
+    onChange: (callback) => {
+      const listener = (_event, factor) => callback(factor);
+      ipcRenderer.on("etude:zoom", listener);
+      return () => ipcRenderer.off("etude:zoom", listener);
+    },
+  },
 });

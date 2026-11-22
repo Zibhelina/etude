@@ -15,6 +15,7 @@ import { AnyCodeEditor } from "@/components/live-editor";
 import { RESIZE_ATTRS, useResizable } from "./note-resize";
 import { cn } from "@/lib/utils";
 import { useOwnZoom, zoomKey, type Anchor } from "@/lib/pane-zoom";
+import { connectMidi, subscribeMidi } from "@/lib/midi";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -107,16 +108,32 @@ export function HtmlFrame({ html, run = 0, height, title = "Web file", className
   const heard = useRef({ onMessage, onSize });
   heard.current = { onMessage, onSize };
   useEffect(() => {
+    let midiUnsub: (() => void) | null = null;
     const on = (e: MessageEvent) => {
       if (e.source !== frame.current?.contentWindow || e.data?.etudeEmbed !== 1) return;
-      if (typeof e.data.height === "number") {
+      if (e.data.midi === "connect") {
+        if (!midiUnsub) {
+          midiUnsub = subscribeMidi({
+            onState: (s) => frame.current?.contentWindow?.postMessage({ etudeEmbed: 1, midiState: s }, "*"),
+            onMessage: (data, input) => frame.current?.contentWindow?.postMessage({ etudeEmbed: 1, midiMessage: { data, input } }, "*"),
+          });
+        }
+        void connectMidi().then((s) => frame.current?.contentWindow?.postMessage({ etudeEmbed: 1, midiState: s }, "*"));
+      } else if (e.data.midi === "disconnect") {
+        midiUnsub?.();
+        midiUnsub = null;
+      } else if (typeof e.data.height === "number") {
         const height = Math.max(minHeight, Math.min(2400, e.data.height));
         setH(height);
         heard.current.onSize?.({ ...e.data, height });
       } else heard.current.onMessage?.(e.data);
     };
     window.addEventListener("message", on);
-    return () => window.removeEventListener("message", on);
+    return () => {
+      midiUnsub?.();
+      midiUnsub = null;
+      window.removeEventListener("message", on);
+    };
   }, [minHeight]);
   return doc ? (
     <iframe key={`${doc.src ?? ""}${run}`} ref={frame} sandbox="allow-scripts allow-pointer-lock" src={doc.src} srcDoc={doc.srcDoc} title={title} className={cn("note-embed-frame note-cards-frame", className)} style={{ height: height ?? h, colorScheme: scheme, ...style }} />

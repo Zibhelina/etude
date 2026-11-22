@@ -7,6 +7,7 @@ import { pageScheme, THEME_EVENT, useScheme } from "@/lib/theme";
 import { etudeFetch, isLocal } from "@/lib/transport";
 import { MEDIA_EVENT, MEDIA_STATE_EVENT, mediaPending } from "@/lib/sync";
 import { useFieldOnScreen } from "@/lib/field-on-screen";
+import { connectMidi, subscribeMidi } from "@/lib/midi";
 
 // Where the serverless builds keep the editor kit, from this bundle file (assets/…). A variable, so
 // the bundler leaves it alone: the kit is built after the app.
@@ -278,6 +279,7 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
 
   useEffect(() => {
     setLoaded(false);
+    let midiUnsub: (() => void) | null = null;
     const onMessage = (e: MessageEvent) => {
       if (e.source !== iframe.current?.contentWindow) return;
       const msg = e.data;
@@ -347,6 +349,21 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
         case "leave-focus":
           p.onLeaveFocus?.();
           break;
+        case "midi-connect": {
+          const req = msg.req;
+          if (!midiUnsub) {
+            midiUnsub = subscribeMidi({
+              onState: (s) => post({ type: "midi-state", ...s }),
+              onMessage: (data, input) => post({ type: "midi-message", data, input }),
+            });
+          }
+          void connectMidi().then((s) => post({ type: "midi-state", req, ...s }));
+          break;
+        }
+        case "midi-disconnect":
+          midiUnsub?.();
+          midiUnsub = null;
+          break;
         case "error":
           p.onError?.(String(msg.message));
           break;
@@ -390,7 +407,11 @@ export const CardFrame = forwardRef<CardFrameHandle, Props>(function CardFrame(p
       }
     };
     window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
+    return () => {
+      midiUnsub?.();
+      midiUnsub = null;
+      window.removeEventListener("message", onMessage);
+    };
   }, [props.frameKey, post, onField]);
 
   const localDoc = (html: string | undefined) => (html !== undefined && isLocal() ? withPageNonce(html) : html);

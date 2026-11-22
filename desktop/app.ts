@@ -22,7 +22,7 @@ const VERSION: string = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf
 const DEFAULT_BG = "#0f0f0f";
 const isMac = process.platform === "darwin";
 /** What Etude's own pages may use. Everything else (camera, microphone, location, notifications…) is refused. */
-const PERMISSIONS = new Set(["clipboard-read", "clipboard-sanitized-write", "fullscreen"]);
+const PERMISSIONS = new Set(["clipboard-read", "clipboard-sanitized-write", "fullscreen", "midi", "midiSysex"]);
 
 /** The main window. */
 let win: BrowserWindow | null = null;

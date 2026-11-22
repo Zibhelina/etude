@@ -78,6 +78,11 @@ function createApi(init, assets = { type: "", files: {} }) {
   let resultHandlers = [];
   let screenHandlers = [];
   let progressHandlers = [];
+  let midiStateHandlers = [];
+  let midiMsgHandlers = [];
+  const pendingMidi = new Map();
+  let midiSeq = 0;
+  let midiInputs = [];
   const pendingRecords = new Map();
   let recordSeq = 0;
   let submitted = false;
@@ -150,6 +155,60 @@ function createApi(init, assets = { type: "", files: {} }) {
     },
     /** Plays a sound (a URL, e.g. from `etude.asset()`), stopping the one played before: `{ stop(), finished }`. */
     play: (url) => audio.play(url),
+    /** Non-sysex Web MIDI bridged from the host page so sandboxed cards can read MIDI keyboards. */
+    midi: {
+      get inputs() {
+        return [...midiInputs];
+      },
+      connect() {
+        const req = ++midiSeq;
+        return new Promise((resolve) => {
+          pendingMidi.set(req, resolve);
+          send("midi-connect", { req });
+        });
+      },
+      disconnect() {
+        send("midi-disconnect");
+      },
+      onState(fn) {
+        midiStateHandlers.push(fn);
+        return () => {
+          const i = midiStateHandlers.indexOf(fn);
+          if (i >= 0) midiStateHandlers.splice(i, 1);
+        };
+      },
+      onMessage(fn) {
+        midiMsgHandlers.push(fn);
+        return () => {
+          const i = midiMsgHandlers.indexOf(fn);
+          if (i >= 0) midiMsgHandlers.splice(i, 1);
+        };
+      },
+    },
+    _midiState(msg) {
+      const inputs = Array.isArray(msg.inputs) ? msg.inputs.map(String) : [];
+      midiInputs = inputs;
+      const state = { ok: !!msg.ok, supported: msg.supported !== false, inputs, error: msg.error ? String(msg.error) : undefined };
+      if (msg.req != null && pendingMidi.has(msg.req)) {
+        const resolve = pendingMidi.get(msg.req);
+        pendingMidi.delete(msg.req);
+        resolve(state);
+      }
+      for (const fn of midiStateHandlers) {
+        try {
+          fn(state);
+        } catch {}
+      }
+    },
+    _midiMessage(msg) {
+      if (!Array.isArray(msg.data)) return;
+      const ev = { data: new Uint8Array(msg.data), input: String(msg.input ?? "") };
+      for (const fn of midiMsgHandlers) {
+        try {
+          fn(ev);
+        } catch {}
+      }
+    },
     /** Tell the app how to read the current answer when the learner presses Submit. */
     getAnswer(fn) {
       getter = fn;
@@ -672,6 +731,8 @@ export function boot(main, templateHtml, assets) {
     } else if (msg.type === "dock-input") dock?.setValue(msg.value);
     else if (msg.type === "dock-stage") dock?.stage(typeof msg.height === "number" ? msg.height : null);
     else if (msg.type === "record-result") api?._recordResult(msg.req, !!msg.ok, msg.result, msg.error);
+    else if (msg.type === "midi-state") api?._midiState(msg);
+    else if (msg.type === "midi-message") api?._midiMessage(msg);
     else if (msg.type === "media") retryMedia();
     else if (msg.type === "media-state") setMediaPending(!!msg.pending);
   });

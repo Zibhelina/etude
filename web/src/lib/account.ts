@@ -250,7 +250,30 @@ export const bytes = (b: number) => (b < 1024 ** 2 ? `${Math.max(0, Math.round(b
 
 /** Opens a page outside Etude (checkout, billing, Stripe onboarding) in the browser. */
 export function openOutside(url: string) {
-  window.open(url, "_blank", "noopener,noreferrer");
+  return Boolean(window.open(url, "_blank", "noopener,noreferrer"));
+}
+
+/**
+ * Opens an external URL fetched asynchronously (checkout, billing portal, Stripe onboarding).
+ * In a web browser, calling `window.open` after an `await` loses user activation and gets blocked by popup
+ * blockers (Safari, Firefox, Chrome). Opening a blank tab synchronously during the click keeps activation alive,
+ * then navigates it once the URL arrives; desktop (Electron) and phone apps hand URLs to the system browser directly.
+ */
+export async function openOutsideAsync(getUrl: () => Promise<string>): Promise<{ url: string; opened: boolean }> {
+  const popup = !isNativeApp() && !desktopApp() ? window.open("", "_blank") : null;
+  if (popup) popup.opener = null;
+  try {
+    const url = await getUrl();
+    if (popup && !popup.closed) {
+      popup.location.replace(url);
+      return { url, opened: true };
+    }
+    const opened = Boolean(openOutside(url) || isNativeApp() || desktopApp());
+    return { url, opened };
+  } catch (e) {
+    if (popup && !popup.closed) popup.close();
+    throw e;
+  }
 }
 
 /**

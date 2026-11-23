@@ -16,7 +16,7 @@ import { Comments, socialCells, TileCounts, useEntryStats, Votes } from "@/compo
 import type { EntryCounts } from "@/lib/market-social";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { appleDecks, buyDeck, type AppleDeck } from "@/lib/storekit";
-import { account, bytes, IMMEDIATE_ACCESS_TEXT, money, openOutside, type Creator, type LibraryItem, type Listing, type PaidEntry, type RevokedItem, type Sales } from "@/lib/account";
+import { account, bytes, IMMEDIATE_ACCESS_TEXT, money, openOutside, openOutsideAsync, type Creator, type LibraryItem, type Listing, type PaidEntry, type RevokedItem, type Sales } from "@/lib/account";
 import { etudeFetch } from "@/lib/transport";
 import { api } from "@/lib/api";
 import { canShowPurchases } from "@/lib/platform";
@@ -164,8 +164,11 @@ export function PaidDetail({ entry, signedIn, menu, notice, onBack, onChanged }:
     if (!signedIn) return navigate("/settings#account");
     setBusy("buy");
     try {
-      openOutside((await account.buy(entry.listing)).url);
-      toast("Finish the purchase in your browser", { description: "The deck shows up in your Library once it's paid." });
+      const { url, opened } = await openOutsideAsync(async () => (await account.buy(entry.listing)).url);
+      toast(opened ? "Finish the purchase in your browser" : "Open checkout to finish the purchase", {
+        description: "The deck shows up in your Library once it's paid.",
+        action: { label: "Open checkout", onClick: () => openOutside(url) },
+      });
     } catch (e) {
       toast.error("Couldn't start the purchase", { description: msg(e) });
     } finally {
@@ -449,7 +452,7 @@ export function SellingView() {
   if (!state) return <Skeleton className="h-48 rounded-xl" />;
   const start = () => void act("start", async () => {
     await account.becomeCreator(country);
-    openOutside((await account.onboarding()).url);
+    await openOutsideAsync(async () => (await account.onboarding()).url);
   }, "Finish setting up your Stripe account in the browser");
   if (!state.signedIn) return <SellPitch busy={false} />;
   const c = state.creator;
@@ -464,8 +467,8 @@ export function SellingView() {
             <Stat label="Your earnings" value={money(state.sales?.totals.earnings ?? 0)} sub={state.sales?.totals.gross ? `of ${money(state.sales.totals.gross)} gross, before Stripe's fees` : "after Etude's 20%, before Stripe's fees"} />
           </div>
           <div className="flex flex-wrap gap-2">
-            {!c.setupRequired && !c.chargesEnabled && <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={() => void act("onb", async () => openOutside((await account.onboarding()).url))}><ExternalLink className="size-4" />Finish Stripe setup</Button>}
-            {!c.setupRequired && c.detailsSubmitted && <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={() => void act("dash", async () => openOutside((await account.dashboard()).url))} data-stripe-dashboard><ExternalLink className="size-4" />Open Stripe dashboard</Button>}
+            {!c.setupRequired && !c.chargesEnabled && <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={() => void act("onb", async () => void (await openOutsideAsync(async () => (await account.onboarding()).url)))}><ExternalLink className="size-4" />Finish Stripe setup</Button>}
+            {!c.setupRequired && c.detailsSubmitted && <Button variant="outline" size="sm" className="phone:h-10 gap-1.5 h-8" onClick={() => void act("dash", async () => void (await openOutsideAsync(async () => (await account.dashboard()).url)))} data-stripe-dashboard><ExternalLink className="size-4" />Open Stripe dashboard</Button>}
             {!c.setupRequired && <Button size="sm" className="phone:h-10 gap-1.5 h-8" onClick={() => setCreating(true)} data-new-listing><Upload className="size-4" />List a deck</Button>}
           </div>
           {!c.setupRequired && c.detailsSubmitted && <p className="-mt-3 text-xs text-muted-foreground">Sign in to the Stripe Dashboard with the Stripe login you made during setup. Refunds, disputes and payouts are managed there.</p>}

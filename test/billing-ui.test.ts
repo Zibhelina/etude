@@ -28,3 +28,12 @@ test("Manage subscription: only a website (Polar) subscription has a portal", ()
   assert.equal(storeSource({ source: "manual" }), null);
   assert.match(storeSource({ source: "apple" }) ?? "", /Apple account/);
 });
+
+test("Checkout flow: opens tab synchronously via openOutsideAsync and renders a fallback checkout link", () => {
+  const onboarding = readFileSync(new URL("../web/src/components/onboarding.tsx", import.meta.url), "utf8");
+  assert.match(sync, /openOutsideAsync\(/);
+  assert.match(sync, /data-checkout-link/);
+  assert.match(sync, /canShowPurchases\(\)[\s\S]{0,200}US\$5\/month or US\$40\/year/);
+  assert.match(onboarding, /openOutsideAsync\(/);
+  assert.match(onboarding, /data-checkout-link/);
+});

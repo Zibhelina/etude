@@ -15,7 +15,7 @@ import { etudeFetch } from "@/lib/transport";
 import { shareStatus } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { ACCOUNT_EVENT, SecondStep } from "@/components/settings-account";
-import { account, AccountApiError, bytes, openOutside, type AccountStatus } from "@/lib/account";
+import { account, AccountApiError, bytes, openOutsideAsync, type AccountStatus } from "@/lib/account";
 import { hasWebPortal, storageNote, storeSource } from "@/lib/billing-ui";
 import { canShowPurchases, desktopApp, isNativeApp, storeSafeMessage } from "@/lib/platform";
 import { NATIVE_COPY } from "@/lib/native-copy";
@@ -544,7 +544,20 @@ export function SyncSection() {
                 void start();
               }}
             >
-              <StepTitle title={reauth ? "Confirm it's you" : "Turn on Etude Sync"} lead={changing ? `Sign in again to ${reauth === "protect" ? "add" : "remove"} the Sync password.` : reauth ? (serverVault ? "Sign in again to start syncing on this device." : "Sign in again before unlocking sync. Then enter your sync password or recovery key.") : status.configured && status.kind === "cloud" && status.server && status.server !== DEFAULT_SERVER ? <>Codes are sent by <span className="font-mono text-[13px] text-foreground/85">{status.server}</span>.</> : "We'll email you a code. No account password to remember."} />
+              <StepTitle
+                title={reauth ? "Confirm it's you" : "Turn on Etude Sync"}
+                lead={
+                  changing
+                    ? `Sign in again to ${reauth === "protect" ? "add" : "remove"} the Sync password.`
+                    : reauth
+                      ? (serverVault ? "Sign in again to start syncing on this device." : "Sign in again before unlocking sync. Then enter your sync password or recovery key.")
+                      : status.configured && status.kind === "cloud" && status.server && status.server !== DEFAULT_SERVER
+                        ? <>Codes are sent by <span className="font-mono text-[13px] text-foreground/85">{status.server}</span>.</>
+                        : canShowPurchases()
+                          ? "Encrypted sync across your devices: US$5/month or US$40/year, cancel anytime. Free with your own folder or server. We'll email you a code to sign in."
+                          : "We'll email you a code. No account password to remember."
+                }
+              />
               {(!status.configured ? !folder.trim() : status.kind === "cloud") && (
                 <TextInput label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" inputMode="email" placeholder="you@example.com" />
               )}
@@ -1078,7 +1091,7 @@ function ManagePlan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise
       onClick={async () => {
         setBusy(true);
         try {
-          openOutside((await account.portal()).url);
+          await openOutsideAsync(async () => (await account.portal()).url);
         } catch (e) {
           toast.error("Couldn't open the page", { description: errorMessage(e) });
         } finally {
@@ -1098,6 +1111,8 @@ function ManagePlan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise
 function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(): void; onRefresh(): Promise<void> }) {
   const [plan, setPlan] = useState<"monthly" | "yearly">("yearly");
   const [waiting, setWaiting] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const purchases = canShowPurchases();
@@ -1146,11 +1161,24 @@ function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(
       <div className="flex flex-col gap-3 rounded-lg border border-highlight/30 bg-highlight/5 p-4" data-sync-step="waiting">
         <div className="flex items-center gap-2.5 text-sm">
           <Loader2 className="size-4 animate-spin text-highlight" />
-          <span>Finish the payment in your browser. This moves on by itself once it goes through.</span>
+          <span>{blocked ? "Your browser blocked the checkout tab. Open it below to finish payment." : "Finish the payment in your browser. This moves on by itself once it goes through."}</span>
         </div>
         {note && <p className="text-xs text-muted-foreground">{note}</p>}
         <div className="flex flex-wrap items-center gap-2">
+          {checkoutUrl && (
+            <Button
+              variant={blocked ? "default" : "outline"}
+              size="sm"
+              className="phone:h-10 gap-1.5 h-8"
+              asChild
+            >
+              <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" data-checkout-link>
+                <ExternalLink className="size-4" /> Open checkout
+              </a>
+            </Button>
+          )}
           <Button
+            variant={blocked ? "outline" : "default"}
             size="sm"
             className="phone:h-10 h-8"
             disabled={busy}
@@ -1166,7 +1194,7 @@ function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(
           >
             {busy && <Loader2 className="size-4 animate-spin" />} I've paid
           </Button>
-          <Button variant="ghost" size="sm" className="phone:h-10 h-8" onClick={() => setWaiting(false)}>Back to plans</Button>
+          <Button variant="ghost" size="sm" className="phone:h-10 h-8" onClick={() => (setWaiting(false), setBlocked(false))}>Back to plans</Button>
         </div>
       </div>
     );
@@ -1209,7 +1237,9 @@ function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(
             onClick={async () => {
               setBusy(true);
               try {
-                openOutside((await account.checkout(plan)).url);
+                const { url, opened } = await openOutsideAsync(async () => (await account.checkout(plan)).url);
+                setCheckoutUrl(url);
+                setBlocked(!opened);
                 setNote(null);
                 setWaiting(true);
               } catch (e) {
@@ -1222,7 +1252,7 @@ function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(
             {busy ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />} Continue to checkout
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">Payment opens on etude.study, handled by Polar.</p>
+        <p className="text-xs text-muted-foreground">Checkout opens in Polar (our payment provider) and returns here once it's done.</p>
       </div>
     </div>
   );

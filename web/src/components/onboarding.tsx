@@ -39,7 +39,7 @@ import { asksAiConsent, useAiConsent, WHAT_IS_SENT } from "@/components/ai-conse
 import { useImportPicker } from "@/pages/decks";
 import { announceDataChange } from "@/components/agent-panel";
 import { api } from "@/lib/api";
-import { account, openOutside } from "@/lib/account";
+import { account, openOutside, openOutsideAsync } from "@/lib/account";
 import { chatGptSignInHere, saveApiKey, serverless } from "@/lib/native";
 import { canShowPurchases, isNativeApp } from "@/lib/platform";
 import { canBuyInApp, inAppProductIds } from "@/lib/storekit";
@@ -868,6 +868,8 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [plan, setPlan] = useState<"monthly" | "yearly">("yearly");
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [appleProducts, setAppleProducts] = useState<string[] | null>(null);
@@ -1023,11 +1025,13 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
           <Option kind="radio" icon={CalendarDays} title="Yearly · US$40" hint="Works out to US$3.33 a month." selected={plan === "yearly"} onClick={() => setPlan("yearly")} />
           <Option kind="radio" icon={CalendarClock} title="Monthly · US$5" hint="Billed every month." selected={plan === "monthly"} onClick={() => setPlan("monthly")} />
         </Options>
-        <Note>Payment opens on etude.study, handled by Polar. Come back here when it's done.</Note>
+        <Note>Checkout opens in Polar (our payment provider). Come back here when it's done.</Note>
         {error && <Problem>{error}</Problem>}
         <Foot ghost={<Ghost onClick={() => onDone("subscribe later")}>Later</Ghost>}>
           <Primary busy={busy} onClick={() => void run(async () => {
-            openOutside((await account.checkout(plan)).url);
+            const { url, opened } = await openOutsideAsync(async () => (await account.checkout(plan)).url);
+            setCheckoutUrl(url);
+            setBlocked(!opened);
             onStage("waiting");
           })}>Subscribe</Primary>
         </Foot>
@@ -1036,12 +1040,17 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
 
   return (
     <>
-      <Title eyebrow="Etude Sync" lead="Finish the payment in the browser. This page moves on by itself once Sync is active.">Waiting for the payment</Title>
-      <div className="mt-6 flex items-center gap-3 text-[14px] text-muted-foreground">
+      <Title eyebrow="Etude Sync" lead={blocked ? "Your browser blocked the checkout tab. Open it below to finish payment." : "Finish the payment in the browser. This page moves on by itself once Sync is active."}>Waiting for the payment</Title>
+      <div className="mt-6 flex flex-wrap items-center gap-3 text-[14px] text-muted-foreground">
         <Loader2 className="size-4 animate-spin" /> Checking every few seconds…
+        {checkoutUrl && (
+          <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" data-checkout-link className="inline-flex items-center gap-1.5 font-medium text-foreground underline underline-offset-4 hover:opacity-80">
+            Open checkout
+          </a>
+        )}
       </div>
       {error && <Problem>{error}</Problem>}
-      <Foot ghost={<Ghost onClick={() => onStage("plan", true)}>Back to plans</Ghost>}>
+      <Foot ghost={<Ghost onClick={() => (setBlocked(false), onStage("plan", true))}>Back to plans</Ghost>}>
         <Primary onClick={() => void run(async () => {
           const a = await account.status();
           if (a.me?.sync.active) onDone("finish in Settings");

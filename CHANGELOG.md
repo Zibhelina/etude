@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.2.1
+
+- **Web edition & Market covers:** fix `Unknown encoding: base64url` in the browser crypto shim so Market cover images load on `etude.study/app`, and make canvas element IDs browser-safe.
+- **Sync & Market checkout:** open payment tabs synchronously on click so browser popup blockers don't block Polar/Stripe checkout, show a direct **Open checkout** fallback link while waiting, and show Etude Sync pricing (and free folder/self-host options) before sign-in in Settings → Sync.
+- **Notebook:** fix an infinite render loop in the Notebook tab bar overflow check that could pin CPU usage.
+- **Global zoom & dark themes:** add app zoom controls in Settings → Appearance (50%–200%, synced with desktop zoom shortcuts) and drop ambient shadows on Ask and Notebook start surfaces in dark themes.
+- **Web MIDI in cards:** bridge non-sysex Web MIDI from the host page into sandboxed card and embed frames.
+- **Market:** decks in a grid, cover title overlays across tiles and galleries, desktop/phone gallery screenshots, and ETag revalidation for redrawn covers.
+- **Ask Etude:** first-class Claude Code, Codex and Gemini CLI harnesses with steering, conversation-scoped background tasks bar, and clean handling when an external agent CLI isn't installed on `PATH`.
+
 ## 3.2.0
 
 - **Adaptive drills hold steady.** A card type can say what score passes (`passAt`, such as 4 stars in a typing test). Adaptive decks then judge every run by it and predict the chance of passing, so a run picked to fit you passes about as often as the deck's target success, instead of about half the time; cards get held, levels open and the pace stops sinking. Placement probes and quick checks show a version of the usual difficulty on drills too, the pace holds a drill's young runs to the target success instead of the desired retention, and deck options have a **Target success** field.

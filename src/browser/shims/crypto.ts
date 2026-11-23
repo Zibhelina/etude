@@ -5,6 +5,12 @@ import { sha1 } from "@noble/hashes/legacy.js";
 
 const ALGOS: Record<string, (b: Uint8Array) => Uint8Array> = { sha1, sha256, sha512 };
 
+const toBase64Url = (b: Buffer) => b.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const fromBase64Url = (s: string) => {
+  const padded = s.replace(/-/g, "+").replace(/_/g, "/");
+  return Buffer.from(padded + "=".repeat((4 - (padded.length % 4)) % 4), "base64");
+};
+
 class Hash {
   private readonly fn: (b: Uint8Array) => Uint8Array;
   private chunks: Uint8Array[] = [];
@@ -14,13 +20,19 @@ class Hash {
     this.fn = fn;
   }
   update(data: string | Uint8Array, enc?: BufferEncoding) {
-    this.chunks.push(typeof data === "string" ? Buffer.from(data, enc ?? "utf8") : data);
+    if (typeof data === "string") {
+      this.chunks.push(enc === "base64url" ? fromBase64Url(data) : Buffer.from(data, enc ?? "utf8"));
+    } else {
+      this.chunks.push(data);
+    }
     return this;
   }
   digest(enc?: BufferEncoding): any {
     const all = Buffer.concat(this.chunks);
     const out = Buffer.from(this.fn(all));
-    return enc ? out.toString(enc) : out;
+    if (!enc) return out;
+    if (enc === "base64url") return toBase64Url(out);
+    return out.toString(enc);
   }
 }
 

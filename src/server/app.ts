@@ -195,6 +195,9 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
       return c.json(typeof code === "string" ? { error: err.message, code } : { error: err.message }, err.status as 400);
     }
     if (err instanceof AgentError) return c.json({ error: err.message, ...(err.code ? { code: err.code, provider: err.provider } : {}) }, err.status as 400);
+    // An external ACP agent failing to start (missing CLI on PATH, exited, timed out) is an environment problem,
+    // not a bug in Etude: answer cleanly without sending a core.error crash report.
+    if (err?.name === "AcpError") return c.json({ error: err.message }, 409);
     if (err instanceof UpdateError) return c.json({ error: err.message, details: err.details }, err.status as 400);
     // A card type's own script failing (prepare, a generator, a grader) is the deck's problem, not a bug in Etude, and
     // its message carries the card's ids and text: answered, never sent as an error report.
@@ -1131,7 +1134,7 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     if (!hit?.cover) return c.json({ error: "no cover" }, 404);
     const { body, type } = await fetchCover(url, hit.cover);
     // A cover keeps its path when it's redrawn, so the client asks again each time and gets a 304 when nothing changed.
-    const etag = `"${createHash("sha1").update(body).digest("base64url")}"`;
+    const etag = `"${createHash("sha1").update(body).digest("hex")}"`;
     const headers = { "Cache-Control": "no-cache", ETag: etag, "X-Content-Type-Options": "nosniff" };
     if (c.req.header("if-none-match") === etag) return c.body(null, 304, headers);
     return c.body(new Uint8Array(body), 200, { ...headers, "Content-Type": type });

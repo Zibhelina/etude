@@ -216,3 +216,44 @@ test("telemetry: route counters and the event list", () => {
   assert.equal(osFromUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 26_1 like Mac OS X)"), "iOS 26.1");
   assert.equal(osFromUserAgent("Mozilla/5.0 (Linux; Android 16; Pixel 9)"), "Android 16");
 });
+
+test("browser crypto shim supports base64url digest and update", async () => {
+  const nodeCrypto = await import("node:crypto");
+  const shim = await import("../src/browser/shims/crypto.ts");
+  assert.equal(
+    shim.createHash("sha1").update("market-cover-bytes").digest("base64url"),
+    nodeCrypto.createHash("sha1").update("market-cover-bytes").digest("base64url"),
+  );
+  const b64u = nodeCrypto.createHash("sha256").update("abc").digest("base64url");
+  assert.equal(
+    shim.createHash("sha256").update(b64u, "base64url").digest("hex"),
+    nodeCrypto.createHash("sha256").update(b64u, "base64url").digest("hex"),
+  );
+});
+
+test("telemetry: AcpError returns 409 without queueing a core.error crash report", async () => {
+  await withEnv("1", async () => {
+    const dir = home();
+    const e = await open(dir);
+    e.updateSettings({
+      ai: {
+        ...e.settings().ai,
+        agents: [{ id: "missing-cli", name: "Missing", command: "etude-definitely-not-installed-cli-xyz", args: [] }],
+      },
+    });
+    const prof = e.agentProfiles().profiles[0];
+    e.updateSettings({
+      agentProfiles: [{ ...prof, brain: { kind: "external", agent: "missing-cli" } }],
+    });
+    const srv = fakeServer();
+    startTelemetry(e, { platform: "linux", os: "Linux 6.18", fetch: srv.fetch });
+    const app = createApp(e);
+    const res = await app.request(`/api/agent/controls?profile=${encodeURIComponent(prof.id)}&warm=1`);
+    assert.equal(res.status, 409);
+    const body = (await res.json()) as { error?: string };
+    assert.match(body.error ?? "", /isn't installed or isn't on the PATH/);
+    assert.deepEqual(telemetryFor(e).pending(), { errors: 0, counters: 0 });
+    telemetryFor(e).stop();
+    e.close();
+  });
+});

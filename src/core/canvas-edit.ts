@@ -31,7 +31,7 @@ const color = (v: unknown, fill = false) => {
   throw new EtudeError(`"${v}" isn't a colour: use #rrggbb or one of ${Object.keys(COLORS).join(", ")}`);
 };
 
-const nid = () => randomBytes(15).toString("base64url").slice(0, 20);
+const nid = () => randomBytes(15).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "").slice(0, 20);
 const seed = () => 1 + (randomBytes(4).readUInt32BE(0) % (2 ** 31 - 2));
 
 export interface ElementSpec {

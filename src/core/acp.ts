@@ -91,6 +91,7 @@ export class AcpError extends Error {
   code?: number;
   constructor(message: string, code?: number) {
     super(message);
+    this.name = "AcpError";
     this.code = code;
   }
 }

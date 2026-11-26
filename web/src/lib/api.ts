@@ -987,6 +987,19 @@ export const api = {
     call<{ events: { id: number; pluginId: string; ts: string; kind: string; payload: unknown }[] }>("GET", `/api/plugins/${encodeURIComponent(id)}/events${qs(opts)}`),
   pluginAppendEvent: (id: string, kind: string, payload: unknown) =>
     call<{ id: number; pluginId: string; ts: string; kind: string; payload: unknown }>("POST", `/api/plugins/${encodeURIComponent(id)}/events`, { kind, payload }),
+
+  courses: () => call<{ courses: InstalledCourseInfo[] }>("GET", "/api/courses"),
+  course: (id: string) => call<InstalledCourseInfo>("GET", `/api/courses/${encodeURIComponent(id)}`),
+  importCourse: (payload: Record<string, unknown>) =>
+    call<{ course: InstalledCourseInfo; status: "installed" | "updated" | "unchanged" }>("POST", "/api/courses/import", payload),
+  exportCourse: (id: string) => call<{ manifest: CourseManifestInfo; html: string }>("GET", `/api/courses/${encodeURIComponent(id)}/export`),
+  removeCourse: (id: string) => call<{ removed: string }>("DELETE", `/api/courses/${encodeURIComponent(id)}`),
+  saveCourseProgress: (
+    id: string,
+    body: { state?: Record<string, unknown>; doneCount?: number; totalCount?: number; minsLeft?: number | null; currentId?: string | null; currentTitle?: string | null },
+  ) => call<CourseProgressInfo>("PUT", `/api/courses/${encodeURIComponent(id)}/progress`, body),
+  resetCourseProgress: (id: string) => call<{ reset: string }>("DELETE", `/api/courses/${encodeURIComponent(id)}/progress`),
+  courseFrameUrl: (id: string) => `/frame-course/${encodeURIComponent(id)}${apiToken() ? `?token=${encodeURIComponent(apiToken()!)}` : ""}`,
 };
 
 export interface UpdateCommit {
@@ -1002,7 +1015,52 @@ export type UpdateStatus = { canRestart: boolean; checked: string | null; checkE
   | { kind: "desktop"; mode: "self" | "link" | "system"; latest: string | null; ready: boolean; percent: number | null; url: string }
 );
 
-export type MarketKind = "theme" | "deck" | "type" | "plugin";
+export type MarketKind = "theme" | "deck" | "type" | "plugin" | "course";
+
+export interface CourseLessonOutlineInfo {
+  id: string;
+  title: string;
+  unit?: string;
+  minutes?: number;
+}
+
+export interface CourseManifestInfo {
+  etude: "course/1";
+  id: string;
+  name: string;
+  subtitle?: string;
+  description?: string;
+  author?: string;
+  version: string;
+  icon?: string;
+  language?: string;
+  tags?: string[];
+  units?: string[];
+  lessons?: CourseLessonOutlineInfo[];
+  kit?: string;
+}
+
+export interface CourseProgressInfo {
+  state: Record<string, unknown>;
+  doneCount: number;
+  totalCount: number;
+  minsLeft: number | null;
+  currentId: string | null;
+  currentTitle: string | null;
+  updatedAt: string | null;
+}
+
+export interface InstalledCourseInfo {
+  id: string;
+  manifest: CourseManifestInfo;
+  hash: string;
+  source: "local" | "market";
+  installedAt: string;
+  updatedAt: string;
+  lastOpened: string | null;
+  bytes: number;
+  progress: CourseProgressInfo;
+}
 
 export interface PluginManifestInfo {
   etude: "plugin/1";
@@ -1055,7 +1113,8 @@ export type MarketSummary =
   | { theme: ThemeData }
   | { decks: string[]; items: number; cardTypes: Record<string, number>; types: { id: string; name: string }[]; watch: boolean; samples: string[] }
   | { types: { id: string; name: string; description: string; grader: string; fields: string[] }[]; items: number; samples: string[] }
-  | { plugin: { id: string; version: string; permissions: string[]; platforms: string[]; hash: string; files: number } };
+  | { plugin: { id: string; version: string; permissions: string[]; platforms: string[]; hash: string; files: number } }
+  | { course: { id: string; subtitle?: string; version: string; lessons: number; units: string[]; lessonTitles: string[]; language?: string; kit?: string; hash: string } };
 
 export interface MarketEntry extends MarketMeta {
   path: string;

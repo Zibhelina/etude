@@ -525,7 +525,7 @@ These work on every command, before or after the command words.
   - [`media path`](#media-path) Show the collection's media folder.
   - [`media prune`](#media-prune) Delete media files nothing in the collection names any more.
   - [`media add`](#media-add) Copy an image, audio or video file into the collection's media folder.
-- **market**: Market: browse, install and publish shared themes, decks, card types and plugins (`etude market` alone runs `list`)
+- **market**: Market: browse, install and publish shared themes, decks, courses, card types and plugins (`etude market` alone runs `list`)
   - [`market list`](#market-list) Entries in the market, newest first, with whether each is installed here. Entries by authors you hid are left out.
   - [`market coming-soon`](#market-coming-soon) Decks the catalog lists as coming soon: names, descriptions and previews, nothing to install yet.
   - [`market show`](#market-show) One entry: its details from the index and what it contains.
@@ -548,6 +548,14 @@ These work on every command, before or after the command words.
   - [`market block`](#market-block) Stop seeing someone's comments (by the author id a comment shows). Only you stop seeing them.
   - [`market unblock`](#market-unblock) See someone's comments again.
   - [`market blocks`](#market-blocks) People whose comments you blocked.
+- **course**: Courses: interactive HTML courses (plain HTML or Course Kit) in your Library (`etude course` alone runs `list`)
+  - [`course list`](#course-list) Installed courses and their progress.
+  - [`course show`](#course-show) Details, outline and progress of one installed course.
+  - [`course check`](#course-check) Validate a course folder, .html file, or course/1 JSON package.
+  - [`course import`](#course-import) Import a course from a folder (course.json + index.html), a standalone .html file, or a course/1 JSON file.
+  - [`course export`](#course-export) Export an installed course as a course/1 JSON package.
+  - [`course reset`](#course-reset) Reset saved progress for an installed course.
+  - [`course remove`](#course-remove) Remove an installed course and its progress from your Library.
 - **plugin**: Plugins: sandboxed extensions for Desktop and Web (install, check, permissions, scaffold) (`etude plugin` alone runs `list`)
   - [`plugin list`](#plugin-list) Installed plugins and bundled free plugins ready to install.
   - [`plugin show`](#plugin-show) Details, granted permissions and hash of one installed plugin.
@@ -7841,7 +7849,7 @@ etude media add ./pronunciation.mp3 --dry-run
 
 ## market
 
-Market: browse, install and publish shared themes, decks, card types and plugins.
+Market: browse, install and publish shared themes, decks, courses, card types and plugins.
 
 ### etude market list
 
@@ -7857,7 +7865,7 @@ etude market list [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
-| `--kind <theme\|deck\|type\|plugin>` | string | theme, deck, type or plugin. |
+| `--kind <theme\|deck\|type\|plugin\|course>` | string | theme, deck, type, plugin or course. |
 | `--query <WORDS>` | string | Only entries whose name, description, author or tags contain these words. Also `--q`. |
 | `--refresh` | boolean | Skip the one-minute cache of the index. |
 | `--all` | boolean | Include entries by authors you hid (`market hide-author`). |
@@ -7915,7 +7923,7 @@ etude market show <id> [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
-| `--kind <theme\|deck\|type\|plugin>` | string | theme, deck, type or plugin. |
+| `--kind <theme\|deck\|type\|plugin\|course>` | string | theme, deck, type, plugin or course. |
 | `--url <URL>` | string | Read the market from this URL or folder instead of the configured one (`settings set market.url=…`). |
 | `--content` | boolean | Download the entry and print the whole file. |
 
@@ -7946,7 +7954,7 @@ etude market install [id] [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
-| `--kind <theme\|deck\|type\|plugin>` | string | theme, deck, type or plugin. |
+| `--kind <theme\|deck\|type\|plugin\|course>` | string | theme, deck, type, plugin or course. |
 | `--url <URL>` | string | Read the market from this URL or folder instead of the configured one (`settings set market.url=…`). |
 | `--file <FILE>` | string | Install this entry file (`-` for stdin). |
 | `--use` | boolean | Themes: also select it. |
@@ -8080,7 +8088,7 @@ etude market publish <ref> [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
-| `--kind <theme\|deck\|type\|plugin>` | string | theme, deck or type. |
+| `--kind <theme\|deck\|type\|plugin\|course>` | string | theme, deck, type, plugin or course. |
 | `--id <SLUG>` | string | Entry id in the market (default: from the name). |
 | `--name <TEXT>` | string | Name shown in the market (default: the theme's, deck's or type's). |
 | `--description <TEXT>` | string | A few lines on what it is and who it's for. |
@@ -8355,6 +8363,182 @@ etude market blocks
 *read-only*
 
 Output: { blocks: [{ authorId, name, created }] }
+
+## course
+
+Courses: interactive HTML courses (plain HTML or Course Kit) in your Library.
+
+### etude course list
+
+<a id="course-list"></a>
+
+Installed courses and their progress.
+
+```
+etude course list
+```
+
+*read-only*
+
+Output: array of installed courses with manifest metadata and progress
+
+```sh
+etude course list
+```
+
+### etude course show
+
+<a id="course-show"></a>
+
+Details, outline and progress of one installed course.
+
+```
+etude course show <id>
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Course id. |
+
+Output: installed course metadata and progress
+
+```sh
+etude course show intro-networking
+```
+
+### etude course check
+
+<a id="course-check"></a>
+
+Validate a course folder, .html file, or course/1 JSON package.
+
+```
+etude course check <source>
+```
+
+*read-only · no database*
+
+| Argument | Description |
+| --- | --- |
+| `source` | Course folder, .html file, or .json package. |
+
+Output: { ok, id, name, version, lessons, hash, errors }
+
+```sh
+etude course check ./my-course
+etude course check ./my-course.html
+```
+
+### etude course import
+
+<a id="course-import"></a>
+
+Import a course from a folder (course.json + index.html), a standalone .html file, or a course/1 JSON file.
+
+```
+etude course import <source> [flags]
+```
+
+*writes · `--dry-run`*
+
+| Argument | Description |
+| --- | --- |
+| `source` | Course folder, .html file, or .json package. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--id <SLUG>` | string | Override the course slug id. |
+| `--name <VALUE>` | string | Override the course title. |
+| `--subtitle <VALUE>` | string | Override the course subtitle. |
+| `--description <VALUE>` | string | Override the course description. |
+| `--author <VALUE>` | string | Override the author name. |
+| `--version <VALUE>` | string | Override the version. |
+| `--icon <VALUE>` | string | Emoji icon shown in Library. |
+| `--dry-run` | boolean | Show what would change without writing anything. |
+
+Output: { course, status: installed|updated|unchanged }
+
+```sh
+etude course import ./my-course
+etude course import ./intro.html --name 'Intro to DSP'
+```
+
+### etude course export
+
+<a id="course-export"></a>
+
+Export an installed course as a course/1 JSON package.
+
+```
+etude course export <id> [flags]
+```
+
+*read-only*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Course id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-o, --out <FILE>` | string | Write the package to this file instead of stdout. |
+| `--force` | boolean | Overwrite an existing --out file. |
+
+Output: { manifest, html } or { written, id, bytes } with --out
+
+```sh
+etude course export intro-networking -o intro-networking.course.json
+```
+
+### etude course reset
+
+<a id="course-reset"></a>
+
+Reset saved progress for an installed course.
+
+```
+etude course reset <id> [flags]
+```
+
+*writes · needs `--yes`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Course id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+```sh
+etude course reset intro-networking --yes
+```
+
+### etude course remove
+
+<a id="course-remove"></a>
+
+Remove an installed course and its progress from your Library.
+
+```
+etude course remove <id> [flags]
+```
+
+*writes · needs `--yes`*
+
+| Argument | Description |
+| --- | --- |
+| `id` | Course id. |
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `-y, --yes` | boolean | Confirm a destructive operation. |
+
+```sh
+etude course remove intro-networking --yes
+```
 
 ## plugin
 

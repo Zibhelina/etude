@@ -3,7 +3,7 @@
 // Themes can be tried on: the whole app repaints until you keep it or take it off. Publish opens a pull
 // request with the user's GitHub CLI.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Blocks, Check, ChevronRight, Download, ExternalLink, Eye, GitPullRequest, Layers, Loader2, Palette, Puzzle, RefreshCw, Search, Store, Upload, X } from "lucide-react";
+import { Blocks, Check, ChevronRight, Download, ExternalLink, Eye, GitPullRequest, GraduationCap, Layers, Loader2, Palette, Puzzle, RefreshCw, Search, Store, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,8 +37,8 @@ import { notifyPluginsChanged } from "@/lib/plugins";
 import { isOfficial, OfficialSeal } from "@/components/market-official";
 import { TitledCover } from "@/components/market-titled";
 
-const KIND_LABEL: Record<MarketKind, string> = { theme: "Theme", deck: "Deck", type: "Card type", plugin: "Plugin" };
-const KIND_ICON: Record<MarketKind, React.ComponentType<{ className?: string }>> = { theme: Palette, deck: Layers, type: Blocks, plugin: Puzzle };
+const KIND_LABEL: Record<MarketKind, string> = { theme: "Theme", deck: "Deck", type: "Card type", plugin: "Plugin", course: "Course" };
+const KIND_ICON: Record<MarketKind, React.ComponentType<{ className?: string }>> = { theme: Palette, deck: Layers, type: Blocks, plugin: Puzzle, course: GraduationCap };
 const GRADER_WORD: Record<string, string> = { self: "self-rated", script: "checked by script", ai: "AI-graded", hybrid: "script + AI" };
 const plural = (n: number, w: string) => `${n.toLocaleString("en-US")} ${w}${n === 1 ? "" : "s"}`;
 const kb = (b: number) => (b < 1e6 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1e6).toFixed(1)} MB`);
@@ -82,6 +82,10 @@ function metaLine(e: MarketEntry): string {
   if (e.kind === "theme") return `${s.theme.scheme === "light" ? "Light" : "Dark"} theme`;
   if (e.kind === "type") return `Card type · ${(s.types as any[]).map((t) => GRADER_WORD[t.grader] ?? t.grader).join(", ")}`;
   if (e.kind === "plugin") return `Plugin · ${s.plugin?.permissions?.length ?? 0} permission${s.plugin?.permissions?.length === 1 ? "" : "s"}`;
+  if (e.kind === "course") {
+    const n = Number(s.course?.lessons ?? 0);
+    return n > 0 ? `Course · ${plural(n, "lesson")}` : "Interactive course";
+  }
   const p = parts(s.decks).length;
   return `${plural(s.items, "card")}${p > 1 ? ` · ${p} parts` : ""}${s.watch ? " · tour" : ""}`;
 }
@@ -214,7 +218,7 @@ export function MarketPage() {
   ].filter((it) => !(data?.hiddenAuthors ?? []).some((a) => sameAuthor(a, it.e.author))), [paid.entries, data]);
   const kindOf = (it: AnyItem): MarketKind => (it.paid ? "deck" : it.e.kind);
   const counts = useMemo(() => {
-    const c = { all: 0, theme: 0, deck: 0, type: 0, plugin: 0 } as Record<Filter, number>;
+    const c = { all: 0, theme: 0, deck: 0, type: 0, plugin: 0, course: 0 } as Record<Filter, number>;
     for (const it of [...items, ...soon]) (c.all++, c[kindOf(it)]++);
     return c;
   }, [items, soon]);
@@ -300,11 +304,11 @@ export function MarketPage() {
             <p className="mt-2 max-w-[560px] text-[14.5px] leading-snug text-muted-foreground">
               {canShowPurchases()
                 ? isNativeApp()
-                  ? "Decks, card types and themes people made. Most of it is free."
-                  : "Decks, card types, themes and plugins people made. Most of it is free."
+                  ? "Decks, courses, card types and themes people made. Most of it is free."
+                  : "Decks, courses, card types, themes and plugins people made. Most of it is free."
                 : isNativeApp()
-                  ? "Decks, card types and themes people made, free to install."
-                  : "Decks, card types, themes and plugins people made, free to install."}{" "}
+                  ? "Decks, courses, card types and themes people made, free to install."
+                  : "Decks, courses, card types, themes and plugins people made, free to install."}{" "}
               {data && <a className="whitespace-nowrap underline decoration-muted-foreground/40 underline-offset-2 hover:text-foreground" href={`https://github.com/${data.repo}`} target="_blank" rel="noreferrer">Browse on GitHub</a>}
             </p>
           </div>
@@ -335,11 +339,11 @@ export function MarketPage() {
           <>
             <label className="mk-search">
               <Search className="size-[18px]" />
-              <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={isNativeApp() ? "Search decks, card types, themes" : "Search decks, card types, themes, plugins"} aria-label="Search the market" autoComplete="off" />
+              <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={isNativeApp() ? "Search decks, courses, card types, themes" : "Search decks, courses, card types, themes, plugins"} aria-label="Search the market" autoComplete="off" />
               {query ? <button type="button" aria-label="Clear search" onClick={() => (setQuery(""), searchRef.current?.focus())}><X className="size-4" /></button> : <kbd>/</kbd>}
             </label>
             <div className="mk-chips" role="group" aria-label="Kind">
-              {((isNativeApp() ? ["all", "deck", "type", "theme"] : ["all", "deck", "type", "theme", "plugin"]) as Filter[]).map((f) => (
+              {((isNativeApp() ? ["all", "deck", "course", "type", "theme"] : ["all", "deck", "course", "type", "theme", "plugin"]) as Filter[]).map((f) => (
                 <button key={f} aria-pressed={filter === f} onClick={() => setFilter(f)}>
                   {f === "all" ? "All" : f === "type" ? "Card types" : `${KIND_LABEL[f]}s`}
                   {data && <span>{counts[f]}</span>}
@@ -389,6 +393,7 @@ export function MarketPage() {
                   </div>
                   <div className="mk-grid">{sorted(items.filter((it) => !it.paid && it.e.kind === "deck")).map((it) => <AnyTile key={it.key} it={it} counts={stats[it.key]} onOpen={() => open(it)} onTry={tryOn} />)}</div>
                 </section>
+                <Shelf title="Courses" sub="Interactive step-by-step courses that live in your Library and follow your theme." items={sorted(items.filter((it) => !it.paid && it.e.kind === "course"))} stats={stats} onAll={() => setFilter("course")} onOpen={open} onTry={tryOn} />
                 <Shelf
                   title={canShowPurchases() ? "Paid decks" : "Your decks"}
                   sub={canShowPurchases() ? "From creators, sold on etude.study. The creator sets the price." : "Bought with your Etude account"}
@@ -485,7 +490,7 @@ function Hero({ it, counts, onOpen, onChanged }: { it: Item; counts?: EntryCount
       setBusy(true);
       try {
         const r = await api.marketInstall(f.id, f.kind);
-        toast.success(`${r.result === "updated" ? "Updated" : "Installed"} ${f.name}`, { description: f.kind === "deck" ? "It's in your Library." : undefined });
+        toast.success(`${r.result === "updated" ? "Updated" : "Installed"} ${f.name}`, { description: f.kind === "deck" || f.kind === "course" ? "It's in your Library." : undefined });
         onChanged();
       } catch (err) {
         toast.error("Install failed", { description: (err as Error).message });
@@ -493,7 +498,16 @@ function Hero({ it, counts, onOpen, onChanged }: { it: Item; counts?: EntryCount
         setBusy(false);
       }
     };
-    const goTo = () => navigate(f.kind === "deck" ? `/deck?name=${encodeURIComponent(s_(f).decks[0])}` : `/types/${encodeURIComponent(s_(f).types[0].id)}`);
+    const goTo = () =>
+      navigate(
+        f.kind === "deck"
+          ? `/deck?name=${encodeURIComponent(s_(f).decks[0])}`
+          : f.kind === "course"
+            ? `/course?id=${encodeURIComponent(f.installedIds[0] ?? f.id)}`
+            : f.kind === "plugin"
+              ? "/settings#plugins"
+              : `/types/${encodeURIComponent(s_(f).types[0].id)}`,
+      );
     btn = f.installed === "installed"
       ? <Button className="mk-big" onClick={(x) => (stop(x), goTo())}>Open</Button>
       : <Button className="mk-big gap-1.5" disabled={busy} onClick={(x) => (stop(x), void get())}>{busy ? <Loader2 className="size-4 animate-spin" /> : f.installed === "update" ? <RefreshCw className="size-4" /> : <Check className="size-[18px]" strokeWidth={2.4} />}{f.installed === "update" ? "Update" : "Get it"}</Button>;
@@ -636,6 +650,7 @@ function Yours({ data, showBought, onOpen, onChanged, onThemes }: { data: { sele
   const goTo = (e: MarketEntry) => {
     const s = s_(e);
     if (e.kind === "deck") navigate(`/deck?name=${encodeURIComponent(s.decks[0])}`);
+    else if (e.kind === "course") navigate(`/course?id=${encodeURIComponent(e.installedIds[0] ?? e.id)}`);
     else if (e.kind === "plugin") navigate("/settings#plugins");
     else navigate(`/types/${encodeURIComponent(s.types[0].id)}`);
   };
@@ -715,14 +730,16 @@ function EntryDetail({ entry, all, repo, inUse, trying, signedIn, menu, notice, 
         if (sel) applyTheme(sel);
       }
       if (entry.kind === "plugin") notifyPluginsChanged();
-      const what = entry.kind === "theme" ? "theme" : entry.kind === "deck" ? "deck" : entry.kind === "plugin" ? "plugin" : "card type";
+      const what = entry.kind === "theme" ? "theme" : entry.kind === "deck" ? "deck" : entry.kind === "course" ? "course" : entry.kind === "plugin" ? "plugin" : "card type";
       toast.success(r.result === "unchanged" ? `You already have the latest ${what}` : `${r.result === "updated" ? "Updated" : "Installed"} ${entry.name}`, {
         description:
           entry.kind === "theme"
             ? use ? "It's on now." : "Pick it in Settings → Appearance."
-            : entry.kind === "plugin"
-              ? r.report?.pausedForPermissions ? "Paused in Settings → Plugins so you can review its new permissions." : "Manage permissions any time in Settings → Plugins."
-              : `${r.report.items.created} new, ${r.report.items.updated} updated item${r.report.items.updated === 1 ? "" : "s"}${r.report.types.created ? `, ${plural(r.report.types.created, "card type")}` : ""}.`,
+            : entry.kind === "course"
+              ? "It's in your Library under Courses."
+              : entry.kind === "plugin"
+                ? r.report?.pausedForPermissions ? "Paused in Settings → Plugins so you can review its new permissions." : "Manage permissions any time in Settings → Plugins."
+                : `${r.report.items.created} new, ${r.report.items.updated} updated item${r.report.items.updated === 1 ? "" : "s"}${r.report.types.created ? `, ${plural(r.report.types.created, "card type")}` : ""}.`,
       });
       onInstalled();
     } catch (e) {
@@ -734,6 +751,7 @@ function EntryDetail({ entry, all, repo, inUse, trying, signedIn, menu, notice, 
 
   const goTo = () => {
     if (entry.kind === "deck") navigate(`/deck?name=${encodeURIComponent(s.decks[0])}`);
+    else if (entry.kind === "course") navigate(`/course?id=${encodeURIComponent(entry.installedIds[0] ?? entry.id)}`);
     else if (entry.kind === "type") navigate(`/types/${encodeURIComponent(s.types[0].id)}`);
     else if (entry.kind === "plugin") navigate("/settings#plugins");
     else navigate("/settings#appearance");
@@ -760,7 +778,7 @@ function EntryDetail({ entry, all, repo, inUse, trying, signedIn, menu, notice, 
       </>
     );
   } else if (entry.installed === "installed") {
-    actions = <Button className="mk-big" onClick={goTo}>{entry.kind === "deck" ? "Open in Library" : "Open"}</Button>;
+    actions = <Button className="mk-big" onClick={goTo}>{entry.kind === "deck" ? "Open in Library" : entry.kind === "course" ? "Open course" : "Open"}</Button>;
   } else if (entry.installed === "update") {
     actions = (
       <>
@@ -782,6 +800,7 @@ function EntryDetail({ entry, all, repo, inUse, trying, signedIn, menu, notice, 
   const info: InfoCell[] = [...socialCells(stats), AGE_CELL];
   // Parts and card types have their own sections below, so the row only counts the cards.
   if (entry.kind === "deck") info.push({ label: s.items === 1 ? "Card" : "Cards", value: Number(s.items).toLocaleString("en-US") });
+  if (entry.kind === "course" && Number(s.course?.lessons ?? 0) > 0) info.push({ label: s.course.lessons === 1 ? "Lesson" : "Lessons", value: Number(s.course.lessons).toLocaleString("en-US") });
   if (entry.kind === "type") info.push({ label: "Checks", value: (s.types as any[]).map((t) => GRADER_WORD[t.grader] ?? t.grader).join(", ") });
   if (entry.kind === "theme") info.push({ label: "Look", value: s.theme.scheme === "light" ? "Light" : "Dark" });
   info.push({ label: "Size", value: kb(entry.bytes) });
@@ -833,6 +852,16 @@ function EntryDetail({ entry, all, repo, inUse, trying, signedIn, menu, notice, 
               const m = all.find((x) => x.kind === "type" && (x.summary as any).types?.[0]?.id === t.id);
               return m ? <button key={t.id} onClick={() => onOpen(m)}>{t.name}<ChevronRight className="size-3.5" /></button> : <span key={t.id}>{t.name}</span>;
             })}
+          </div>
+        </section>
+      )}
+      {entry.kind === "course" && ((s.course?.units?.length ?? 0) > 0 || (s.course?.lessonTitles?.length ?? 0) > 0) && (
+        <section className="mk-sec">
+          <h3 className="mk-serif">What's inside</h3>
+          <div className="mk-parts">
+            {((s.course.units?.length ? s.course.units : s.course.lessonTitles) as string[]).map((x: string, i: number) => (
+              <span key={i}>{x}</span>
+            ))}
           </div>
         </section>
       )}
@@ -907,12 +936,19 @@ function PublishDialog({ repo, onClose }: { repo: string; onClose(): void }) {
 
   useEffect(() => {
     api.publishStatus().then(setGh).catch(() => setGh({ ok: false, reason: "couldn't check gh" }));
-    Promise.all([api.themes(), api.decks(), api.types(), api.plugins().catch(() => ({ plugins: [], bundled: [] }))]).then(([t, d, ty, pl]) => {
+    Promise.all([
+      api.themes(),
+      api.decks(),
+      api.types(),
+      api.plugins().catch(() => ({ plugins: [], bundled: [] })),
+      api.courses().catch(() => ({ courses: [] })),
+    ]).then(([t, d, ty, pl, co]) => {
       setOptions({
         theme: t.themes.filter((x) => !x.builtin).map((x) => ({ value: x.id, label: x.name })),
         deck: d.filter((x) => x.cards > 0).map((x) => ({ value: x.name, label: `${"  ".repeat(x.depth)}${x.name.split("::").pop()}` })),
         type: ty.filter((x) => !x.builtin).map((x) => ({ value: x.id, label: `${x.name} (${x.id})` })),
         plugin: pl.plugins.map((x) => ({ value: x.id, label: `${x.manifest.name} (${x.id})` })),
+        course: co.courses.map((x) => ({ value: x.id, label: `${x.manifest.name} (${x.id})` })),
       });
     });
   }, []);
@@ -1000,7 +1036,7 @@ function PublishDialog({ repo, onClose }: { repo: string; onClose(): void }) {
 
         <div className="flex flex-col gap-4">
           <ToggleGroup type="single" variant="outline" value={kind} onValueChange={(v) => v && setKind(v as MarketKind)} className="w-full">
-            {(["deck", "type", "theme"] as MarketKind[]).map((k) => {
+            {(["deck", "course", "type", "theme"] as MarketKind[]).map((k) => {
               const Icon = KIND_ICON[k];
               return (
                 <ToggleGroupItem key={k} value={k} className="flex-1 gap-1.5 text-[13px]">
@@ -1010,7 +1046,7 @@ function PublishDialog({ repo, onClose }: { repo: string; onClose(): void }) {
             })}
           </ToggleGroup>
 
-          <Field label={kind === "deck" ? "Deck" : kind === "type" ? "Card type" : "Theme"} hint={list.length === 0 && options ? (kind === "theme" ? "Make a custom theme in Settings → Appearance first." : kind === "type" ? "Only your own card types can be published." : "No decks with cards yet.") : undefined}>
+          <Field label={kind === "deck" ? "Deck" : kind === "course" ? "Course" : kind === "type" ? "Card type" : "Theme"} hint={list.length === 0 && options ? (kind === "theme" ? "Make a custom theme in Settings → Appearance first." : kind === "course" ? "Import an HTML or Course Kit course into your Library first." : kind === "type" ? "Only your own card types can be published." : "No decks with cards yet.") : undefined}>
             <Select value={ref} onValueChange={setRef} disabled={!list.length}>
               <SelectTrigger className="h-10 w-full"><SelectValue placeholder={options ? "Choose one" : "Loading…"} /></SelectTrigger>
               <SelectContent>

@@ -278,3 +278,115 @@ export function pluginViewFrame(pluginId: string, viewId: string, viewHtml: stri
   }
   return `<!doctype html><html><head><meta charset="utf-8">${headInject}</head><body>${cleaned}</body></html>`;
 }
+
+// ------------------------------------------------------------------ course frames
+
+/**
+ * Content-Security-Policy for sandboxed course iframes.
+ * Courses are self-contained HTML/CSS/JS (plain HTML or built with Etude Course Kit):
+ * they can use inline scripts/styles, embedded data/blob images, media and fonts,
+ * and communicate with Etude only via the postMessage bridge.
+ */
+export function courseCsp(baseOrigin?: string): string {
+  const self = baseOrigin && baseOrigin !== "null" ? ` ${baseOrigin}` : "";
+  return [
+    "default-src 'none'",
+    "script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data:",
+    "style-src 'unsafe-inline' https:",
+    `img-src data: blob: https:${self}`,
+    `media-src data: blob: https:${self}`,
+    "font-src data: https:",
+    "connect-src 'none'",
+    "worker-src blob:",
+    "frame-src 'none'",
+    "object-src 'none'",
+    "form-action 'none'",
+    "base-uri 'none'",
+  ].join("; ");
+}
+
+function courseBridgeScript(courseId: string): string {
+  const idJson = JSON.stringify(courseId).replace(/</g, "\\u003c");
+  return `(() => {
+  const COURSE_ID = ${idJson};
+  const themeHandlers = [];
+  const stateHandlers = [];
+  let lastTheme = null;
+  let lastState = null;
+
+  function applyTheme(vars, scheme) {
+    let el = document.getElementById("etude-host-theme");
+    if (!el) {
+      el = document.createElement("style");
+      el.id = "etude-host-theme";
+      (document.head || document.documentElement).prepend(el);
+    }
+    const decls = [];
+    if (vars && typeof vars === "object") {
+      for (const [k, v] of Object.entries(vars)) {
+        if (typeof k === "string" && k.startsWith("--") && typeof v === "string") {
+          decls.push(k + ":" + v);
+        }
+      }
+    }
+    const resolved = scheme === "light" ? "light" : "dark";
+    el.textContent = ":root{color-scheme:" + resolved + ";" + decls.join(";") + "}";
+    document.documentElement.dataset.etudeHost = "1";
+    document.documentElement.dataset.etudeScheme = resolved;
+    lastTheme = { scheme: resolved, vars: vars || {} };
+    window.dispatchEvent(new CustomEvent("etude:theme", { detail: lastTheme }));
+    for (const fn of themeHandlers) try { fn(lastTheme); } catch {}
+  }
+
+  window.addEventListener("message", (ev) => {
+    const d = ev.data;
+    if (!d || d.etudeCourse !== COURSE_ID) return;
+    if (d.kind === "theme") {
+      applyTheme(d.vars, d.colorScheme);
+      return;
+    }
+    if (d.kind === "state") {
+      lastState = d.state && typeof d.state === "object" ? d.state : {};
+      for (const fn of stateHandlers) try { fn(lastState); } catch {}
+    }
+  });
+
+  window.etudeCourse = Object.freeze({
+    id: COURSE_ID,
+    onTheme(fn) {
+      if (typeof fn !== "function") return;
+      themeHandlers.push(fn);
+      if (lastTheme) try { fn(lastTheme); } catch {}
+    },
+    onState(fn) {
+      if (typeof fn !== "function") return;
+      stateHandlers.push(fn);
+      if (lastState) try { fn(lastState); } catch {}
+    },
+    getState() { return lastState; },
+    saveState(state, summary) {
+      window.parent.postMessage({ etudeCourse: COURSE_ID, kind: "save", state: state ?? {}, summary: summary ?? null }, "*");
+    },
+    reportProgress(summary) {
+      window.parent.postMessage({ etudeCourse: COURSE_ID, kind: "progress", summary: summary ?? null }, "*");
+    },
+  });
+
+  window.parent.postMessage({ etudeCourse: COURSE_ID, kind: "ready" }, "*");
+})();`;
+}
+
+/** Sandboxed iframe document for an installed Course. Injects host CSP, live theme style slot and progress bridge. */
+export function courseFrame(courseId: string, courseHtml: string, baseOrigin?: string): string {
+  const bridge = courseBridgeScript(courseId);
+  const cleaned = courseHtml
+    .replace(/<meta[^>]+http-equiv\s*=\s*["']?content-security-policy["']?[^>]*>/gi, "")
+    .replace(/<base\b[^>]*>/gi, "");
+  const headInject = `<meta http-equiv="Content-Security-Policy" content="${courseCsp(baseOrigin)}">\n<style id="etude-host-theme"></style>\n<script>${esc(bridge)}</script>\n`;
+  const headMatch = /<head\b[^>]*>/i.exec(cleaned);
+  const scriptMatch = /<script\b/i.exec(cleaned);
+  if (headMatch && (!scriptMatch || headMatch.index < scriptMatch.index)) {
+    return cleaned.slice(0, headMatch.index + headMatch[0].length) + "\n" + headInject + cleaned.slice(headMatch.index + headMatch[0].length);
+  }
+  return `<!doctype html><html><head><meta charset="utf-8">${headInject}</head><body>${cleaned}</body></html>`;
+}

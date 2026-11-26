@@ -22,6 +22,7 @@ import "./pack.ts";
 import "./anki.ts";
 import "./media.ts";
 import "./market.ts";
+import "./course.ts";
 import "./plugin.ts";
 import "./agent.ts";
 import "./agents.ts";

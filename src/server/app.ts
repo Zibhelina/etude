@@ -20,8 +20,9 @@ import { chatProviderKeyEnv } from "../core/ai.ts";
 import { chatGptNativeHost, readChatGptHostId } from "../core/chatgpt.ts";
 import { DEFAULT_PRESET, type Rating } from "../core/model.ts";
 import { MAX_MEDIA_BYTES, mediaType } from "../core/media.ts";
-import { cardFrame, deckHomeFrame, pluginControllerFrame, pluginViewFrame } from "./frame.ts";
+import { cardFrame, courseFrame, deckHomeFrame, pluginControllerFrame, pluginViewFrame } from "./frame.ts";
 import { bundledPlugin, bundledPlugins, describePermission, pluginsFor, type PluginPackage } from "../core/plugins.ts";
+import { coursesFor, packageFromHtml, type CoursePackage } from "../core/courses.ts";
 import { runFrameHtml } from "../core/run-frame.ts";
 import { pyodideFile } from "./pyodide.ts";
 import { ASSET_NAME, assetMime } from "../core/assets.ts";
@@ -1288,6 +1289,60 @@ export function createApp(etude: Etude, opts: AppOptions = {}) {
     const rel = pkg.manifest.views?.[viewId];
     if (!rel || typeof pkg.files[rel] !== "string") return c.text("plugin view not found", 404);
     return c.body(pluginViewFrame(pkg.manifest.id, viewId, pkg.files[rel], pkg.granted), 200, FRAME_HEADERS);
+  });
+
+  // ------------------------------------------------------------- courses
+  const courses = coursesFor(etude);
+  app.get("/api/courses", (c) => c.json({ courses: courses.list() }));
+  app.get("/api/courses/:id", (c) => {
+    const found = courses.get(c.req.param("id"));
+    if (!found) throw new EtudeError(`unknown course "${c.req.param("id")}"`, 404);
+    return c.json(found);
+  });
+  app.post("/api/courses/import", async (c) => {
+    const b = await body(c);
+    let pkg: CoursePackage;
+    if (b.package && typeof b.package === "object" && b.package.manifest && typeof b.package.html === "string") {
+      pkg = b.package as CoursePackage;
+    } else if (b.etudeMarket === 1 && b.kind === "course" && b.content?.manifest && typeof b.content?.html === "string") {
+      pkg = b.content as CoursePackage;
+    } else if (b.manifest && typeof b.html === "string") {
+      pkg = { manifest: b.manifest, html: b.html };
+    } else if (typeof b.html === "string") {
+      pkg = packageFromHtml(b.html, {
+        id: typeof b.id === "string" ? b.id : undefined,
+        name: typeof b.name === "string" ? b.name : undefined,
+        subtitle: typeof b.subtitle === "string" ? b.subtitle : undefined,
+        description: typeof b.description === "string" ? b.description : undefined,
+        author: typeof b.author === "string" ? b.author : undefined,
+        version: typeof b.version === "string" ? b.version : undefined,
+        icon: typeof b.icon === "string" ? b.icon : undefined,
+        fallbackName: typeof b.filename === "string" ? b.filename.replace(/\.html?$/i, "") : undefined,
+      });
+    } else {
+      throw new EtudeError("expected a course/1 package ({ manifest, html }) or { html }", 400);
+    }
+    return c.json(courses.install(pkg, { source: b.source === "market" ? "market" : "local" }));
+  });
+  app.get("/api/courses/:id/export", (c) => {
+    const pkg = courses.packageOf(c.req.param("id"));
+    if (!pkg) throw new EtudeError(`unknown course "${c.req.param("id")}"`, 404);
+    return c.json({ manifest: pkg.manifest, html: pkg.html });
+  });
+  app.delete("/api/courses/:id", (c) => c.json(courses.remove(c.req.param("id"))));
+  app.get("/api/courses/:id/progress", (c) => c.json(courses.getProgress(c.req.param("id"))));
+  app.put("/api/courses/:id/progress", async (c) => {
+    const b = await body(c);
+    return c.json(courses.saveProgress(c.req.param("id"), b));
+  });
+  app.delete("/api/courses/:id/progress", (c) => c.json(courses.resetProgress(c.req.param("id"))));
+  app.get("/frame-course/:id", (c) => {
+    const id = c.req.param("id");
+    const pkg = courses.packageOf(id);
+    if (!pkg) return c.text("course not found", 404);
+    courses.touchOpened(id);
+    const origin = new URL(publicBase(c)).origin;
+    return c.body(courseFrame(pkg.manifest.id, pkg.html, origin), 200, FRAME_HEADERS);
   });
   // Unsaved previews (type editor, Market) as a served document: a srcdoc frame would inherit the
   // app page's Content-Security-Policy, which doesn't allow a card's inline scripts.

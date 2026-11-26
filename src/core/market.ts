@@ -15,10 +15,11 @@ import { ITEM_ID, validateType } from "./types.ts";
 import type { CardTypeDef } from "./model.ts";
 import { deletedKeys } from "./sync/log.ts";
 import { checkPlugin, loadPluginDir, pluginHash, pluginsFor, type PluginPackage } from "./plugins.ts";
+import { checkCourse, courseHash, coursesFor, loadCourseSource, type CoursePackage } from "./courses.ts";
 
 export const MARKET_REPO = "Zibhelina/etude-market";
 export const DEFAULT_MARKET = { url: `https://raw.githubusercontent.com/${MARKET_REPO}/main`, repo: MARKET_REPO };
-export const MARKET_KINDS = ["theme", "deck", "type", "plugin"] as const;
+export const MARKET_KINDS = ["theme", "deck", "type", "plugin", "course"] as const;
 export type MarketKind = (typeof MARKET_KINDS)[number];
 /** Largest entry file the app will download or publish. */
 export const MAX_ENTRY_BYTES = 32 * 1024 * 1024;
@@ -51,7 +52,8 @@ export type MarketSummary =
   | { theme: Theme }
   | { decks: string[]; items: number; cardTypes: Record<string, number>; types: { id: string; name: string }[]; watch: boolean; samples: string[] }
   | { types: { id: string; name: string; description: string; grader: string; fields: string[]; assets?: { files: number; bytes: number } }[]; items: number; samples: string[] }
-  | { plugin: { id: string; version: string; permissions: string[]; platforms: string[]; hash: string; files: number } };
+  | { plugin: { id: string; version: string; permissions: string[]; platforms: string[]; hash: string; files: number } }
+  | { course: { id: string; subtitle?: string; version: string; lessons: number; units: string[]; lessonTitles: string[]; language?: string; kit?: string; hash: string } };
 
 /** A one-line label for an item, from its first text-like field. */
 function sampleOf(item: any): string {
@@ -196,6 +198,14 @@ export function checkEntry(file: any): string[] {
       const actual = pluginHash(c as PluginPackage);
       if (c.hash !== actual) errors.push(`plugin hash mismatch (manifest/files changed since hash was computed)`);
     }
+  } else if (file.kind === "course") {
+    const ce = checkCourse(c);
+    if (ce.length) errors.push(...ce.map((x) => `course: ${x}`));
+    else if (c.manifest.id !== file.id) errors.push(`course manifest.id "${c.manifest.id}" must match entry id "${file.id}"`);
+    if (c.hash !== undefined && typeof c.hash === "string" && ce.length === 0) {
+      const actual = courseHash(c as CoursePackage);
+      if (c.hash !== actual) errors.push(`course hash mismatch (manifest/html changed since hash was computed)`);
+    }
   }
   return errors;
 }
@@ -230,6 +240,22 @@ export function summarize(file: MarketFile): MarketSummary {
       },
     };
   }
+  if (file.kind === "course") {
+    const pkg = c as CoursePackage;
+    return {
+      course: {
+        id: pkg.manifest.id,
+        ...(pkg.manifest.subtitle ? { subtitle: pkg.manifest.subtitle } : {}),
+        version: pkg.manifest.version,
+        lessons: pkg.manifest.lessons?.length ?? 0,
+        units: pkg.manifest.units ?? [],
+        lessonTitles: (pkg.manifest.lessons ?? []).slice(0, 12).map((l) => l.title),
+        ...(pkg.manifest.language ? { language: pkg.manifest.language } : {}),
+        ...(pkg.manifest.kit ? { kit: pkg.manifest.kit } : {}),
+        hash: courseHash(pkg),
+      },
+    };
+  }
   const items: any[] = c.items ?? [];
   const types: any[] = c.types ?? [];
   if (file.kind === "type") {
@@ -260,7 +286,7 @@ export const MAX_COVER_BYTES = 600 * 1024;
 const COVER_TYPE: Record<string, string> = { webp: "image/webp", png: "image/png", jpg: "image/jpeg" };
 
 /** Only catalog-owned image/video paths can be served. No external URLs or traversal. */
-export const MARKET_MEDIA_PATH = /^media\/(themes|decks|types|plugins|paid)\/[a-z0-9-]+\/[a-z0-9-]+\.(webp|png|jpg|mp4|webm)$/;
+export const MARKET_MEDIA_PATH = /^media\/(themes|decks|types|plugins|courses|paid)\/[a-z0-9-]+\/[a-z0-9-]+\.(webp|png|jpg|mp4|webm)$/;
 export const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
 /**
  * Screens for a paid deck. Its pack lives on the sync server, but its gallery sits in the public catalog under
@@ -305,7 +331,7 @@ export async function fetchMarketMedia(url: string, path: string): Promise<{ bod
 
 /** An entry's cover image, as bytes and a content type. */
 export async function fetchCover(url: string, cover: string): Promise<{ body: Buffer; type: string }> {
-  const m = /^covers\/(themes|decks|types|plugins)\/[a-z0-9-]+\.(webp|png|jpg)$/.exec(cover);
+  const m = /^covers\/(themes|decks|types|plugins|courses)\/[a-z0-9-]+\.(webp|png|jpg)$/.exec(cover);
   if (!m) throw new MarketError(`unexpected cover path ${cover}`);
   let body: Buffer;
   if (!isRemote(url)) {
@@ -468,7 +494,7 @@ export async function fetchIndex(url: string, opts: { refresh?: boolean } = {}):
 
 export async function fetchEntry(url: string, entry: Pick<IndexEntry, "kind" | "id" | "path">): Promise<MarketFile> {
   const path = entry.path || entryPath(entry.kind, entry.id);
-  if (!/^entries\/(themes|decks|types|plugins)\/[a-z0-9-]+\.json$/.test(path)) throw new MarketError(`unexpected entry path ${path}`);
+  if (!/^entries\/(themes|decks|types|plugins|courses)\/[a-z0-9-]+\.json$/.test(path)) throw new MarketError(`unexpected entry path ${path}`);
   const { text } = await readMarketFile(url, path);
   const file = parseJson(text, path);
   const errors = checkEntry(file);
@@ -585,6 +611,10 @@ const mapped = (map: Record<string, string> | undefined, id: string) => (map && 
  * Always false without Sync, where a deck you deleted still reads as installed.
  */
 export function installGone(e: Etude, rec: InstalledEntry): boolean {
+  if (rec.kind === "course") {
+    const id = rec.ids?.[0];
+    return !!id && !coursesFor(e).get(id);
+  }
   if (rec.kind !== "deck") return false;
   const dead = deletedKeys(e.db, "items");
   if (!dead) return false;
@@ -685,6 +715,21 @@ export function installFile(e: Etude, file: MarketFile, opts: { dryRun?: boolean
       ids = [res.plugin.id];
       report = { plugin: res.plugin.id, hash: res.plugin.hash, pausedForPermissions: res.pausedForPermissions, pendingPermissions: res.plugin.pendingPermissions };
     }
+  } else if (file.kind === "course") {
+    const pkg = file.content as CoursePackage & { hash?: string };
+    const store = coursesFor(e);
+    const existing = store.get(pkg.manifest.id);
+    if (opts.dryRun) {
+      const h = courseHash(pkg);
+      result = !existing ? "created" : existing.hash === h ? "unchanged" : "updated";
+      ids = [pkg.manifest.id];
+      report = { course: pkg.manifest.id, hash: h, lessons: pkg.manifest.lessons?.length ?? 0 };
+    } else {
+      const res = store.install(pkg, { source: "market", expectedHash: typeof pkg.hash === "string" ? pkg.hash : undefined });
+      result = res.status === "installed" ? "created" : res.status;
+      ids = [res.course.id];
+      report = { course: res.course.id, hash: res.course.hash, lessons: res.course.manifest.lessons?.length ?? 0 };
+    }
   } else {
     const pack = file.content;
     remap = packItemIds(e, pack.items ?? [], prev?.kind === file.kind ? prev.remap : undefined);
@@ -757,6 +802,17 @@ export function buildSubmission(e: Etude, input: SubmissionInput): MarketFile {
     content = { manifest: pkg.manifest, files: pkg.files, hash: pluginHash(pkg) };
     name ||= pkg.manifest.name;
     description ||= pkg.manifest.description;
+  } else if (kind === "course") {
+    const store = coursesFor(e);
+    const installed = store.packageOf(ref);
+    const pkg: CoursePackage = installed ? { manifest: installed.manifest, html: installed.html } : loadCourseSource(ref);
+    const ce = checkCourse(pkg);
+    if (ce.length) throw new MarketError(`course check failed: ${ce.join("; ")}`);
+    const entryId = input.id?.trim() || pkg.manifest.id;
+    const finalPkg: CoursePackage = { manifest: { ...pkg.manifest, id: entryId }, html: pkg.html };
+    content = { manifest: finalPkg.manifest, html: finalPkg.html, hash: courseHash(finalPkg) };
+    name ||= finalPkg.manifest.name;
+    description ||= finalPkg.manifest.description ?? "";
   } else {
     const def = e.typeWithAssets(ref) as CardTypeDef & { builtin?: boolean };
     def.builtin = e.type(ref).builtin;

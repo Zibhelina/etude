@@ -14,6 +14,7 @@ import { DeckMenu, type DeckMenuEntry, useDeckActions } from "@/components/deck-
 import { ArchiveLink, useArchiveCount } from "@/components/archive-link";
 import { ChangeIconDialog, DeckBadge } from "@/components/deck-icon";
 import { DonePanel, SessionCard, StreakCelebration, useMilestone } from "@/components/library-session";
+import { CoursesSection } from "@/components/library-courses";
 
 const enc = encodeURIComponent;
 const work = (d: DeckNode) => d.new + d.learning + d.review;
@@ -26,7 +27,7 @@ export function practiceUrl(d: DeckNode) {
 }
 
 export function PhoneDecks() {
-  const { decks, stats, reload } = useLibrary();
+  const { decks, courses, stats, reload } = useLibrary();
   const archivedCount = useArchiveCount();
   const [creating, setCreating] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -58,10 +59,10 @@ export function PhoneDecks() {
         <div className="@container mx-5">{allDone ? <DonePanel decks={all} stats={stats} phone /> : due > 0 ? <SessionCard decks={all} stats={stats} phone /> : null}</div>
       )}
 
-      {decks && decks.length === 0 && (
+      {decks && decks.length === 0 && courses.length === 0 && (
         <div className="mx-5 mt-4 rounded-3xl border border-dashed px-6 py-12 text-center">
           <div className="lib-title text-2xl font-semibold">Nothing here yet.</div>
-          <p className="mx-auto mt-2 max-w-64 text-[14px] text-muted-foreground">Make a deck, or bring in a pack or an Anki file.</p>
+          <p className="mx-auto mt-2 max-w-64 text-[14px] text-muted-foreground">Make a deck, or bring in a pack, course or Anki file.</p>
           <div className="mt-6 flex flex-col gap-2">
             <button onClick={() => setCreating(true)} className="lib-primary h-12 rounded-xl text-[15px] font-semibold">New deck</button>
             <button onClick={pickFile} className="h-12 rounded-xl border bg-card text-[15px]">Import a file</button>
@@ -72,7 +73,8 @@ export function PhoneDecks() {
       {!decks && <div className="mx-5 mt-2 h-44 animate-pulse rounded-2xl bg-muted/50" />}
 
       {top.length > 0 && <DeckList decks={all} parent="" label="Decks" aside={`${top.length} · ${plural(cards, "card")}`} onChanged={reload} />}
-      {decks && decks.length > 0 && (
+      <CoursesSection courses={courses} phone onChanged={reload} />
+      {decks && (decks.length > 0 || courses.length > 0) && (
         <div className="mx-5 mt-auto pt-8"><ArchiveLink count={archivedCount} /></div>
       )}
 
@@ -82,7 +84,7 @@ export function PhoneDecks() {
         title="Add"
         groups={[[
           { label: "New deck", icon: FolderPlus, onClick: () => setCreating(true) },
-          { label: "Import a file", icon: Upload, hint: ".json · .apkg", onClick: pickFile },
+          { label: "Import a file", icon: Upload, hint: ".json · .html · .apkg", onClick: pickFile },
         ]]}
       />
       <NewDeckDialog open={creating} onOpenChange={setCreating} onDone={reload} />

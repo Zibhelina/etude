@@ -47,19 +47,27 @@ const STARTER = `<div class="box">
 </script>
 `;
 
-const THEME_VARS = ["--background", "--foreground", "--card", "--card-foreground", "--muted", "--muted-foreground", "--border", "--primary", "--primary-foreground", "--accent", "--success", "--danger", "--highlight", "--radius", "--font-sans", "--font-mono"];
+const THEME_VARS = ["--background", "--foreground", "--card", "--card-foreground", "--popover", "--popover-foreground", "--muted", "--muted-foreground", "--secondary", "--secondary-foreground", "--border", "--input", "--primary", "--primary-foreground", "--accent", "--accent-foreground", "--success", "--warning", "--danger", "--highlight", "--radius", "--font-sans", "--font-mono"];
 
-function themeCss(): string {
+function readThemeSnapshot(): { scheme: string; vars: Record<string, string> } {
   const cs = getComputedStyle(document.documentElement);
-  const vars = THEME_VARS.map((v) => [v, cs.getPropertyValue(v).trim()]).filter(([, x]) => x);
+  const vars: Record<string, string> = {};
+  for (const v of THEME_VARS) {
+    const val = cs.getPropertyValue(v).trim();
+    if (val) vars[v] = val;
+  }
   const hl = cs.getPropertyValue("--card-highlight").trim();
-  if (hl) vars.push(["--highlight", hl]);
-  return `:root{color-scheme:${pageScheme()};${vars.map(([k, x]) => `${k}:${x}`).join(";")}}html,body{margin:0;background:transparent;color:var(--foreground);font-family:var(--font-sans);font-size:15px;line-height:1.5}`;
+  if (hl) vars["--highlight"] = hl;
+  return { scheme: pageScheme(), vars };
 }
 
-/** The document an HTML block runs as: the app's colours and fonts as CSS variables, and a little script that
- * tells the page how tall it is. Its policy lets it load from the web (a library from a CDN, a picture) but not
- * from the app. */
+function themeCss(snap = readThemeSnapshot()): string {
+  const decls = Object.entries(snap.vars).map(([k, x]) => `${k}:${x}`).join(";");
+  return `:root{color-scheme:${snap.scheme};${decls}}`;
+}
+
+/** The document an HTML block runs as: the app's colours and fonts as CSS variables, live theme updates
+ * over postMessage, and a little script that tells the page how tall it is. */
 function htmlDoc(src: string, head = ""): string {
   const origin = location.origin;
   const csp = [
@@ -72,14 +80,24 @@ function htmlDoc(src: string, head = ""): string {
     "connect-src https:",
     "worker-src blob:",
   ].join("; ");
+  const snap = readThemeSnapshot();
+  const fullDoc = /^\s*<!doctype\b|^\s*<html\b/i.test(src);
+  const baseBodyCss = fullDoc ? "" : "html,body{margin:0;background:transparent;color:var(--foreground);font-family:var(--font-sans);font-size:15px;line-height:1.5}";
+  const themeBridge = `<script>(()=>{const set=(vars,scheme)=>{let el=document.getElementById("etude-host-theme");if(!el){el=document.createElement("style");el.id="etude-host-theme";(document.head||document.documentElement).prepend(el)}const d=Object.entries(vars||{}).filter(([k,v])=>typeof k==="string"&&k.startsWith("--")&&typeof v==="string").map(([k,v])=>k+":"+v).join(";");const sc=scheme==="light"?"light":"dark";el.textContent=":root{color-scheme:"+sc+";"+d+"}";document.documentElement.dataset.etudeHost="1";document.documentElement.dataset.etudeScheme=sc;window.dispatchEvent(new CustomEvent("etude:theme",{detail:{scheme:sc,vars:vars||{}}}))};document.documentElement.dataset.etudeHost="1";document.documentElement.dataset.etudeScheme=${JSON.stringify(snap.scheme)};addEventListener("message",(e)=>{if(e.data&&e.data.etudeTheme===1)set(e.data.vars,e.data.colorScheme)})})()</script>`;
   // Its height, and how wide its content is against the frame (`min` is a width the page asked for itself, with
   // <meta name="etude-min-width" content="640">; 0 never shrinks it), so a page too narrow for it can show it as a
   // picture instead.
   const size = `<script>(()=>{const m=()=>{const t=document.querySelector('meta[name="etude-min-width"]'),n=t?Number(t.content):NaN;return n>=0?n:null};const s=()=>{const d=document.documentElement;parent.postMessage({etudeEmbed:1,height:Math.ceil(d.getBoundingClientRect().height),width:d.scrollWidth,view:innerWidth,min:m()},"*")};new ResizeObserver(s).observe(document.documentElement);addEventListener("load",()=>{s();setTimeout(s,400);setTimeout(s,1500)});s()})()</script>`;
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width, initial-scale=1"><base href="${origin}/"><style>${themeCss()}</style>${size}${head}</head><body>${src}</body></html>`;
+  const inject = `<meta http-equiv="Content-Security-Policy" content="${csp}"><base href="${origin}/"><style id="etude-host-theme">${themeCss(snap)}</style>${baseBodyCss ? `<style>${baseBodyCss}</style>` : ""}${themeBridge}${size}${head}`;
+  if (fullDoc) {
+    const cleaned = src.replace(/<meta[^>]+http-equiv\s*=\s*["']?content-security-policy["']?[^>]*>/gi, "").replace(/<base\b[^>]*>/gi, "");
+    const hm = /<head\b[^>]*>/i.exec(cleaned);
+    if (hm) return cleaned.slice(0, hm.index + hm[0].length) + inject + cleaned.slice(hm.index + hm[0].length);
+  }
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${inject}</head><body>${src}</body></html>`;
 }
 
-function useFrameDoc(html: string, scheme: string, head = "") {
+function useFrameDoc(html: string, key: number, head = "") {
   const [url, setUrl] = useState<{ src?: string; srcDoc?: string } | null>(null);
   useEffect(() => {
     const doc = htmlDoc(html, head);
@@ -92,7 +110,7 @@ function useFrameDoc(html: string, scheme: string, head = "") {
       live = false;
       clearTimeout(t);
     };
-  }, [html, scheme]);
+  }, [html, key]);
   return url;
 }
 
@@ -104,9 +122,19 @@ export function HtmlFrame({ html, run = 0, height, title = "Web file", className
   const scheme = useScheme();
   const [h, setH] = useState(160);
   const frame = useRef<HTMLIFrameElement>(null);
-  const doc = useFrameDoc(html, scheme + run, head);
+  const doc = useFrameDoc(html, run, head);
   const heard = useRef({ onMessage, onSize });
   heard.current = { onMessage, onSize };
+  const pushTheme = useCallback(() => {
+    const win = frame.current?.contentWindow;
+    if (!win) return;
+    const snap = readThemeSnapshot();
+    win.postMessage({ etudeTheme: 1, vars: snap.vars, colorScheme: snap.scheme }, "*");
+  }, []);
+  useEffect(() => {
+    window.addEventListener(THEME_EVENT, pushTheme);
+    return () => window.removeEventListener(THEME_EVENT, pushTheme);
+  }, [pushTheme]);
   useEffect(() => {
     let midiUnsub: (() => void) | null = null;
     const on = (e: MessageEvent) => {
@@ -136,7 +164,7 @@ export function HtmlFrame({ html, run = 0, height, title = "Web file", className
     };
   }, [minHeight]);
   return doc ? (
-    <iframe key={`${doc.src ?? ""}${run}`} ref={frame} sandbox="allow-scripts allow-pointer-lock" src={doc.src} srcDoc={doc.srcDoc} title={title} className={cn("note-embed-frame note-cards-frame", className)} style={{ height: height ?? h, colorScheme: scheme, ...style }} />
+    <iframe key={`${doc.src ?? ""}${run}`} ref={frame} onLoad={pushTheme} sandbox="allow-scripts allow-pointer-lock" src={doc.src} srcDoc={doc.srcDoc} title={title} className={cn("note-embed-frame note-cards-frame", className)} style={{ height: height ?? h, colorScheme: scheme, ...style }} />
   ) : (
     <div className="px-4 py-3 text-[13px] text-muted-foreground">Loading…</div>
   );

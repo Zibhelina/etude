@@ -4,8 +4,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { api, relative, type DeckNode, type Stats } from "@/lib/api";
+import { api, relative, type DeckNode, type InstalledCourseInfo, type Stats } from "@/lib/api";
+import { CoursesSection } from "@/components/library-courses";
 import { navigate } from "@/lib/router";
+import { cssZoom } from "@/lib/pane-zoom";
 import { cn } from "@/lib/utils";
 import { EmptyState, Page } from "@/components/page";
 import { childrenOf, clashes, leafOf, moveDeck, MoveDeckDialog, parentOf } from "@/components/move-deck";
@@ -39,13 +41,15 @@ export function DecksPage({ archived = false }: { archived?: boolean }) {
   return phone ? <PhoneDecks /> : <DesktopDecks />;
 }
 
-/** The decks and today's numbers, reloaded when the window comes back into focus. */
+/** The decks, courses and today's numbers, reloaded when the window comes back into focus. */
 export function useLibrary() {
   const [decks, setDecks] = useState<DeckNode[] | null>(null);
+  const [courses, setCourses] = useState<InstalledCourseInfo[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const reload = () =>
     Promise.all([
       api.decks().then((all) => setDecks(all.filter((d) => !d.archived))),
+      api.courses().then((r) => setCourses(r.courses)).catch(() => {}),
       api.stats({}, 14).then(setStats).catch(() => {}),
     ]).catch((e) => toast.error((e as Error).message));
   useEffect(() => {
@@ -54,7 +58,7 @@ export function useLibrary() {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, []);
-  return { decks, stats, reload };
+  return { decks, courses, stats, reload };
 }
 
 /** The date over the title, like "Thursday, Nov 5". */
@@ -87,7 +91,7 @@ export function DeckCounts({ d, note, className }: { d: DeckNode; note?: string;
 
 function DesktopDecks() {
   const archived = useArchiveCount();
-  const { decks, stats, reload } = useLibrary();
+  const { decks, courses, stats, reload } = useLibrary();
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(JSON.parse(localStorage.getItem("etude.collapsed") ?? "[]")));
   const [creating, setCreating] = useState(false);
   const [iconFor, setIconFor] = useState<DeckNode | null>(null);
@@ -241,15 +245,21 @@ function DesktopDecks() {
   };
   const dragged = (n: string) => !!drag && (n === drag.name || n.startsWith(drag.name + "::"));
   const listTop = () => listRef.current?.getBoundingClientRect().top ?? 0;
+  // Pointer and rect positions come zoomed; the drop line and the dragged label are placed in unzoomed CSS px.
+  const zoomOf = () => (listRef.current ? cssZoom(listRef.current) : 1);
 
   // Tree elbows: a trunk hangs from each open deck's chevron, and every subdeck joins it with a rounded elbow
   // that ends at its own chevron (or at its name when it has no subdecks). One SVG path over the list.
+  // Rects come zoomed (app zoom on <html>, or the Notebook pane's own zoom) while the SVG draws in the list's own
+  // CSS px, so every distance is divided by the zoom; unscaled, the elbows drift further below each row.
   const [elbows, setElbows] = useState("");
   useLayoutEffect(() => {
     const list = listRef.current;
     if (!list) return;
     const measure = () => {
       const base = list.getBoundingClientRect();
+      const z = cssZoom(list);
+      const X = (v: number) => (v - base.left) / z, Y = (v: number) => (v - base.top) / z;
       const R = 7;
       let path = "";
       const at = (name: string) => rows.current.get(name);
@@ -259,8 +269,8 @@ function DesktopDecks() {
         if (!chev) continue;
         const kids = visible.filter((k) => k.name.lastIndexOf("::") === d.name.length && k.name.startsWith(d.name + "::"));
         if (!kids.length) continue;
-        const x = Math.round(chev.left + chev.width / 2 - base.left) + 0.5;
-        const top = chev.bottom - base.top + 2;
+        const x = Math.round(X(chev.left + chev.width / 2)) + 0.5;
+        const top = Y(chev.bottom) + 2;
         let lastMid = top;
         for (const k of kids) {
           const row = at(k.name);
@@ -270,8 +280,8 @@ function DesktopDecks() {
           const own = k.hasChildren ? row.querySelector<SVGElement>("button[aria-expanded] svg")?.getBoundingClientRect() : null;
           const nm = row.querySelector<HTMLElement>("[data-deck-name]")?.getBoundingClientRect();
           const target = own ?? nm ?? r;
-          const mid = Math.round(target.top + target.height / 2 - base.top) + 0.5;
-          const end = (own ? own.left - 1 : (nm?.left ?? r.left) - 6) - base.left;
+          const mid = Math.round(Y(target.top + target.height / 2)) + 0.5;
+          const end = own ? X(own.left) - 1 : X(nm?.left ?? r.left) - 6;
           path += `M${x} ${mid - R}Q${x} ${mid} ${x + R} ${mid}H${Math.round(end)}`;
           lastMid = mid;
         }
@@ -302,12 +312,12 @@ function DesktopDecks() {
   ];
 
   return (
-    <Page className="flex max-w-[52rem] flex-col -mb-[5.5rem] min-h-[calc(100dvh-2.5rem)]">
+    <Page className="flex max-w-[52rem] flex-col min-h-[calc(100dvh-3rem)]">
       <LibraryHeader onImport={reload} onNew={() => setCreating(true)} hasDecks={!!decks?.length} />
 
-      {decks && decks.length === 0 && (
+      {decks && decks.length === 0 && courses.length === 0 && (
         <EmptyState title="No decks yet" action={<><ImportButton onDone={reload} /><Button size="sm" className="gap-1.5" onClick={() => setCreating(true)}><Plus className="size-4" />New deck</Button></>}>
-          Import a pack or create a deck to start.
+          Import a pack, course or Anki file, or create a deck to start.
         </EmptyState>
       )}
       {!decks && <div className="h-56 animate-pulse rounded-2xl bg-muted/60" />}
@@ -409,7 +419,7 @@ function DesktopDecks() {
               <div
                 aria-hidden
                 className={cn("pointer-events-none absolute right-3 z-20 h-0.5 -translate-y-1/2 rounded-full", blocked(drag.name, drag.drop) ? "bg-destructive" : "bg-primary")}
-                style={{ top: drag.drop.y - listTop(), left: drag.drop.depth * (anyIcon ? ROW_INDENT : 14) + (anyKids ? 24 : 0) }}
+                style={{ top: (drag.drop.y - listTop()) / zoomOf(), left: drag.drop.depth * (anyIcon ? ROW_INDENT : 14) + (anyKids ? 24 : 0) }}
               >
                 <span className={cn("absolute -top-[3px] -left-1.5 size-2 rounded-full border-2 bg-background", blocked(drag.name, drag.drop) ? "border-destructive" : "border-primary")} />
               </div>
@@ -417,13 +427,14 @@ function DesktopDecks() {
           </div>
         </section>
       )}
-      {decks && decks.length > 0 && <ArchiveLink count={archived} className="mt-auto pt-10" />}
+      <CoursesSection courses={courses} onChanged={reload} />
+      {decks && (decks.length > 0 || courses.length > 0) && <ArchiveLink count={archived} className="mt-auto pt-10" />}
       {deckActions.deleteDialog}
       {drag && (
         <div
           aria-hidden
           className="pointer-events-none fixed z-50 flex h-9 max-w-64 -translate-x-[17px] -translate-y-1/2 cursor-grabbing items-center gap-1.5 rounded-lg border bg-card pr-3 pl-2 text-sm font-medium shadow-xl"
-          style={{ left: drag.x, top: drag.y }}
+          style={{ left: drag.x / zoomOf(), top: drag.y / zoomOf() }}
         >
           <GripVertical className="size-4 shrink-0 text-muted-foreground" />
           <span className="truncate">{leafOf(drag.name)}</span>
@@ -518,7 +529,7 @@ export function useImportPicker(onDone: () => void) {
     input.type = "file";
     // iOS Safari and WKWebView grey out .apkg/.colpkg when accept lists unknown extensions, so leave accept open on iOS.
     const ios = isIOSApp() || (typeof navigator !== "undefined" && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)));
-    if (!ios) input.accept = ".json,.apkg,.colpkg,application/json";
+    if (!ios) input.accept = ".json,.apkg,.colpkg,.html,.htm,application/json,text/html";
     input.multiple = true;
     input.onchange = async () => {
       for (const f of Array.from(input.files ?? [])) {
@@ -528,10 +539,19 @@ export function useImportPicker(onDone: () => void) {
             const media = r.media.files ? ` · ${r.media.files} media` : "";
             const skipped = r.skipped.length ? ` · ${r.skipped.length} skipped` : "";
             toast.success(`Imported ${f.name}`, { description: `${r.items.created} new, ${r.items.updated} updated, ${r.items.unchanged} unchanged · ${r.cards} cards · ${r.reviews} reviews${media}${skipped}` });
+          } else if (/\.(html|htm)$/i.test(f.name)) {
+            const r = await api.importCourse({ html: await f.text(), filename: f.name });
+            toast.success(`${r.status === "updated" ? "Updated" : "Imported"} course ${r.course.manifest.name}`);
           } else {
-            const r = await api.importPack(JSON.parse(await f.text()));
-            const assets = r.assets?.created + r.assets?.updated ? ` · ${r.assets.created + r.assets.updated} asset files` : "";
-            toast.success(`Imported ${f.name}`, { description: `${r.items.created} new, ${r.items.updated} updated, ${r.items.unchanged} unchanged${assets}` });
+            const parsed = JSON.parse(await f.text());
+            if ((parsed?.manifest?.etude === "course/1" && typeof parsed?.html === "string") || (parsed?.etudeMarket === 1 && parsed?.kind === "course")) {
+              const r = await api.importCourse(parsed);
+              toast.success(`${r.status === "updated" ? "Updated" : "Imported"} course ${r.course.manifest.name}`);
+            } else {
+              const r = await api.importPack(parsed);
+              const assets = r.assets?.created + r.assets?.updated ? ` · ${r.assets.created + r.assets.updated} asset files` : "";
+              toast.success(`Imported ${f.name}`, { description: `${r.items.created} new, ${r.items.updated} updated, ${r.items.unchanged} unchanged${assets}` });
+            }
           }
         } catch (e) {
           toast.error(`Couldn't import ${f.name}`, { description: (e as Error).message.slice(0, 400) });

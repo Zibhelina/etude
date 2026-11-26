@@ -29,9 +29,9 @@ import { sameAuthor } from "../../core/util.ts";
 import { command, group, CliError, Failed } from "../registry.ts";
 import { parseJson, readSource } from "../input.ts";
 
-group({ name: "market", summary: "Market: browse, install and publish shared themes, decks, card types and plugins", defaultVerb: "list" });
+group({ name: "market", summary: "Market: browse, install and publish shared themes, decks, courses, card types and plugins", defaultVerb: "list" });
 
-const KIND_FLAG = { name: "kind", type: "string" as const, description: "theme, deck, type or plugin.", values: [...MARKET_KINDS] };
+const KIND_FLAG = { name: "kind", type: "string" as const, description: "theme, deck, type, plugin or course.", values: [...MARKET_KINDS] };
 const URL_FLAG = { name: "url", type: "string" as const, description: "Read the market from this URL or folder instead of the configured one (`settings set market.url=…`).", placeholder: "URL" };
 
 command({
@@ -170,7 +170,7 @@ command({
 });
 
 const PUBLISH_FLAGS = [
-  { name: "kind", type: "string" as const, description: "theme, deck or type.", values: [...MARKET_KINDS] },
+  { name: "kind", type: "string" as const, description: "theme, deck, type, plugin or course.", values: [...MARKET_KINDS] },
   { name: "id", type: "string" as const, description: "Entry id in the market (default: from the name).", placeholder: "SLUG" },
   { name: "name", type: "string" as const, description: "Name shown in the market (default: the theme's, deck's or type's).", placeholder: "TEXT" },
   { name: "description", type: "string" as const, description: "A few lines on what it is and who it's for.", placeholder: "TEXT" },

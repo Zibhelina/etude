@@ -41,7 +41,7 @@ function Marked({ text, q }: { text: string; q: string }) {
   return <>{parts}</>;
 }
 
-export function ChatSidebar({ convs, profiles, active, current, overlay, embedded = false, running: runningProp, onClose, onPick, onNew, onNewWith, onDelete, onRenamed, onOpenNew, onSettings }: {
+export function ChatSidebar({ convs, profiles, active, current, overlay, embedded = false, noPeople = false, running: runningProp, onClose, onPick, onNew, onNewWith, onDelete, onRenamed, onOpenNew, onSettings }: {
   convs: Conversation[];
   profiles: ProfileView[];
   /** The chat open beside it. */
@@ -52,6 +52,8 @@ export function ChatSidebar({ convs, profiles, active, current, overlay, embedde
   overlay: boolean;
   /** Inside the app sidebar (Notes' Chats): no head or foot of its own, and it scrolls with the sidebar. */
   embedded?: boolean;
+  /** No list of agents above the chats (the Agents screen shows them as cards of its own). */
+  noPeople?: boolean;
   /** Chats writing a reply now, when the caller already knows; else it asks every few seconds. */
   running?: string[];
   onClose(): void;
@@ -74,6 +76,7 @@ export function ChatSidebar({ convs, profiles, active, current, overlay, embedde
   const [hits, setHits] = useState<Hit[] | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [sure, setSure] = useState<string | null>(null);
+  const [showAllPeople, setShowAllPeople] = useState(false);
   const field = useRef<HTMLInputElement>(null);
 
   // Which chats are writing a reply right now, kept fresh while the sidebar is open.
@@ -114,6 +117,17 @@ export function ChatSidebar({ convs, profiles, active, current, overlay, embedde
   }, [convs]);
   // Everyone you can talk to here, then anyone who only has old chats.
   const people = useMemo(() => profiles.filter((p) => p.available || counts[p.id]), [profiles, counts]);
+  // When there are many agents, tuck zero-chat ones behind a toggle so recent chats stay above the fold.
+  const quietIds = useMemo(() => {
+    if (people.length <= 4) return new Set<string>();
+    const quiet = people.filter((p) => (counts[p.id] ?? 0) === 0 && p.id !== who && p.id !== current.id);
+    if (quiet.length === 0 || quiet.length >= people.length) return new Set<string>();
+    return new Set(quiet.map((p) => p.id));
+  }, [people, counts, who, current.id]);
+  const visiblePeople = useMemo(
+    () => (showAllPeople || quietIds.size === 0 ? people : people.filter((p) => !quietIds.has(p.id))),
+    [people, showAllPeople, quietIds],
+  );
   const shown = useMemo(() => convs.filter((c) => !who || c.profile === who), [convs, who]);
   const groups = useMemo(() => {
     const now = new Date();
@@ -229,6 +243,8 @@ export function ChatSidebar({ convs, profiles, active, current, overlay, embedde
     </div>
   );
 
+  const showPeople = people.length > 0 && !noPeople;
+
   return (
     <aside className={cn("csb", overlay && "is-overlay", embedded && "is-embedded")} data-chat-sidebar aria-label="Chats">
       {!embedded && <div className="csb-head">
@@ -240,12 +256,18 @@ export function ChatSidebar({ convs, profiles, active, current, overlay, embedde
             <button type="button" aria-label="Close the sidebar" title="Close the sidebar (Ctrl+Shift+S)" className="csb-icon" onClick={onClose}>
               <Menu className="size-[17px]" />
             </button>
-            <span className="csb-brand">
-              <span className="truncate">Chats</span>
-            </span>
+            <span className="flex-1" />
             <button type="button" aria-label="Search chats" title="Search chats" className="csb-icon" onClick={() => setSearching(true)}>
-              <Search className="size-[17px]" />
+              <Search className="size-[16px]" />
             </button>
+            <button type="button" aria-label="New chat" title="New chat" className="csb-icon" onClick={() => (onNew(), overlay && onClose())}>
+              <SquarePen className="size-[16px]" />
+            </button>
+            {!showPeople && (
+              <button type="button" aria-label="Agents and models" title="Agents and models" className="csb-icon" onClick={onSettings}>
+                <Settings2 className="size-[16px]" />
+              </button>
+            )}
           </>
         )}
       </div>}
@@ -262,23 +284,32 @@ export function ChatSidebar({ convs, profiles, active, current, overlay, embedde
           </ul>
         ) : (
           <>
-            <nav className="csb-nav">
-              <button type="button" className="csb-nav-row" onClick={() => (onNew(), overlay && onClose())}>
-                <SquarePen className="size-[17px]" /> <span className="flex-1">New chat</span>
-              </button>
-              <button type="button" className="csb-nav-row" onClick={() => setSearching(true)}>
-                <Search className="size-[17px]" /> <span className="flex-1">Search chats</span>
-              </button>
-            </nav>
+            {embedded && (
+              <nav className="csb-nav">
+                <button type="button" className="csb-nav-row" onClick={() => (onNew(), overlay && onClose())}>
+                  <SquarePen className="size-[17px]" /> <span className="flex-1">New chat</span>
+                </button>
+                <button type="button" className="csb-nav-row" onClick={() => setSearching(true)}>
+                  <Search className="size-[17px]" /> <span className="flex-1">Search chats</span>
+                </button>
+              </nav>
+            )}
 
-            {people.length > 0 && (
+            {showPeople && (
               <section className="csb-section">
-                <h3 className="csb-label">Agents</h3>
+                <div className="csb-sec-head">
+                  <h3 className="csb-label">Agents</h3>
+                  {!embedded && (
+                    <button type="button" aria-label="Agents and models" title="Agents and models" className="csb-sec-act outline-ring focus-visible:outline-2" onClick={onSettings}>
+                      <Settings2 className="size-3.5" />
+                    </button>
+                  )}
+                </div>
                 <ul className="csb-list">
-                  {people.map((p) => (
+                  {visiblePeople.map((p) => (
                     <li key={p.id} className={cn("csb-row group/row", who === p.id && "is-on")}>
                       <button type="button" className="csb-row-main outline-ring focus-visible:outline-2" aria-pressed={who === p.id} title={who === p.id ? "Show everyone's chats" : `Only chats with ${p.name}`} onClick={() => setWho((w) => (w === p.id ? null : p.id))}>
-                        <AgentAvatar profile={p} size={20} />
+                        <AgentAvatar profile={p} size={19} />
                         <span className="min-w-0 flex-1 truncate">{p.name}</span>
                         {who === p.id ? <Check className="size-3.5 shrink-0" /> : <span className="csb-count">{counts[p.id] ?? 0}</span>}
                       </button>
@@ -288,6 +319,11 @@ export function ChatSidebar({ convs, profiles, active, current, overlay, embedde
                     </li>
                   ))}
                 </ul>
+                {quietIds.size > 0 && (
+                  <button type="button" className="csb-more-people outline-ring focus-visible:outline-2" onClick={() => setShowAllPeople((v) => !v)}>
+                    {showAllPeople ? "Show fewer" : `+${quietIds.size} more`}
+                  </button>
+                )}
               </section>
             )}
 
@@ -304,15 +340,7 @@ export function ChatSidebar({ convs, profiles, active, current, overlay, embedde
           </>
         )}
       </div>
-
-      {!embedded && <button type="button" className="csb-foot" onClick={onSettings} title="Agents and models">
-        <AgentAvatar profile={current} size={28} />
-        <span className="min-w-0 flex-1 text-left">
-          <span className="block truncate text-[13.5px] font-medium text-foreground">{current.name}</span>
-          <span className="block truncate text-xs text-muted-foreground">{convs.length} {convs.length === 1 ? "chat" : "chats"} · Settings</span>
-        </span>
-        <Settings2 className="size-4 shrink-0 text-muted-foreground" />
-      </button>}
+      {!embedded && <div className="csb-fade" aria-hidden="true" />}
     </aside>
   );
 }
@@ -350,7 +378,7 @@ function RenameField({ title, onDone }: { title: string; onDone(t: string | null
  * The chats as Notes shows them in the app sidebar: the same list, with no head or foot, loading its own data.
  * `active` is the chat in the front tab of the focused pane; opening one goes through the Notebook (`onOpen`).
  */
-export function NotesChats({ active, onOpen, onNewWith, onOpenNew }: { active: string | null; onOpen(conv: string | null): void; onNewWith(profile: string): void; onOpenNew(conv: string): void }) {
+export function NotesChats({ active, onOpen, onNewWith, onOpenNew, noPeople = false }: { active: string | null; onOpen(conv: string | null): void; onNewWith(profile: string): void; onOpenNew(conv: string): void; noPeople?: boolean }) {
   const profiles = useAgentProfiles();
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [running, setRunning] = useState<string[]>([]);
@@ -384,6 +412,7 @@ export function NotesChats({ active, onOpen, onNewWith, onOpenNew }: { active: s
   return (
     <ChatSidebar
       embedded
+      noPeople={noPeople}
       convs={convs}
       running={running}
       profiles={profiles.profiles}

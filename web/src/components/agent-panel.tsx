@@ -26,7 +26,7 @@ import { track } from "@/lib/telemetry";
 import { useFunMode } from "@/lib/fun";
 import { setMinimiHidden } from "@/lib/minimi-hidden";
 import { mediaUrl, MINIMI_PROFILE_ID, profileFrom, useAgentProfiles, type ProfileView } from "@/lib/agent-profiles";
-import { AgentAvatar, AgentSwitcher } from "@/components/agent-avatar";
+import { AgentAvatar, AgentSwitcher, openAgentSettings } from "@/components/agent-avatar";
 import { currentView, look } from "@/lib/screen";
 import { asksAiConsent, consentProvider, useAiConsent } from "@/components/ai-consent";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -1054,12 +1054,13 @@ export function DockHost({ onChanged }: { onChanged(final: boolean): void }) {
   const d = useDock();
   const phone = usePhone();
   const onConv = useCallback((key: string, conv: string | null) => dock.setConv(key, conv), []);
+  const onOpenNew = useCallback((conv: string) => notebookSide()?.open({ key: tabKey(), conv }, undefined), []);
   if (phone) return null;
   return (
     <>
       {d.chats.map((c) =>
         createPortal(
-          <ChatTab tab={c} active={!!d.shown[c.key]} ask={false} phone={false} docked slot={d.slots[c.key] ?? null} onClose={noop} onChanged={onChanged} onMeta={dock.setMeta} onConv={onConv} onPick={never} onDeleted={noop} />,
+          <ChatTab tab={c} active={!!d.shown[c.key]} ask={false} phone={false} docked slot={d.slots[c.key] ?? null} onClose={noop} onChanged={onChanged} onMeta={dock.setMeta} onConv={onConv} onPick={never} onDeleted={noop} onOpenNew={onOpenNew} />,
           dockNode(c.key),
           c.key,
         ),
@@ -1435,21 +1436,20 @@ function ChatTab({ tab, active, ask, phone, slot, docked = false, onClose, onCha
     ro.observe(el);
     return () => ro.disconnect();
   }, [phone]);
-  // In the Notebook the list lives in the app sidebar (Notes' Chats), so a chat there draws none of its own.
-  const sideOpen = side && active && !docked;
+  // A chat in a Notebook tab has its own list too (the app sidebar shows pages).
+  const sideOpen = side && (active || docked);
   useEffect(() => {
     if (sideOpen) loadList();
   }, [sideOpen, conv?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Ctrl+Shift+S opens and closes it from inside this chat.
   useEffect(() => {
-    if (!active) return;
+    if (!active && !docked) return;
     const h = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.altKey || e.code !== "KeyS") return;
       const a = document.activeElement;
       if (!panel.current || !(a && panel.current.contains(a))) return;
       e.preventDefault();
-      if (docked) notesView === "chats" && notesPages ? setNotesView("pages") : showNotesChats();
-      else setSide(!side);
+      setSide(!side);
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -1498,7 +1498,7 @@ function ChatTab({ tab, active, ask, phone, slot, docked = false, onClose, onCha
             announceChat({ conv: c });
           }}
           onOpenNew={onOpenNew}
-          onSettings={openAiSettings}
+          onSettings={openAgentSettings}
         />
       )}
 
@@ -1511,8 +1511,8 @@ function ChatTab({ tab, active, ask, phone, slot, docked = false, onClose, onCha
               <button
                 type="button"
                 aria-label="Chats"
-                aria-pressed={docked ? notesView === "chats" && notesPages : side}
-                onClick={() => (docked ? (notesView === "chats" && notesPages ? setNotesView("pages") : showNotesChats()) : setSide(!side))}
+                aria-pressed={side}
+                onClick={() => setSide(!side)}
                 className="csb-icon outline-ring focus-visible:outline-2"
                 data-chat-sidebar-toggle
               >
@@ -1806,8 +1806,7 @@ export function Composer({ chat, phone, compact = false, below = false, onDelete
 }
 
 export function openAiSettings() {
-  navigate("/settings");
-  setTimeout(() => document.getElementById("ai")?.scrollIntoView({ block: "start" }), 120);
+  navigate("/settings#ai");
 }
 
 function TitleField({ title, onDone }: { title: string; onDone(t: string | null): void }) {

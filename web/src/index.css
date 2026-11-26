@@ -514,33 +514,37 @@ body.minimi-resizing, body.minimi-resizing * { cursor: nwse-resize !important; u
 @media (pointer: coarse) { .achat-tab { height: 36px; } .achat-tab:not(.is-on) .achat-tab-x { display: none; } }
 
 /* The chats' sidebar (chat-sidebar.tsx): beside the chat when there's room, over it with a scrim in a narrow pane.
-   Same background as the chat and its tabs, split by a hairline; quiet rows; the open chat is a soft fill, never a coloured band. */
-.csb { --csb-bg: var(--achat-bg, var(--background)); position: relative; display: flex; width: 264px; flex: none; flex-direction: column; min-height: 0; background: var(--csb-bg); color: var(--foreground); border-right: 1px solid color-mix(in oklab, var(--border) 70%, transparent); animation: csb-in 0.16s ease-out; }
-.csb.is-overlay { position: absolute; inset: 0 auto 0 0; z-index: 30; width: min(280px, 86%); box-shadow: 12px 0 32px rgb(0 0 0 / 0.28); }
+   Same background as the chat and its tabs, seamless with no vertical hairline; quiet rows; active chat is a soft fill. */
+.csb { --csb-bg: var(--achat-bg, var(--background)); position: relative; display: flex; width: 256px; flex: none; flex-direction: column; min-height: 0; padding-right: 4px; background: var(--csb-bg); color: var(--foreground); animation: csb-in 0.16s ease-out; }
+.csb.is-overlay { position: absolute; inset: 0 auto 0 0; z-index: 30; width: min(280px, 86%); padding-right: 0; box-shadow: 12px 0 32px rgb(0 0 0 / 0.28); }
 .csb-scrim { position: absolute; inset: 0; z-index: 29; background: rgb(0 0 0 / 0.35); animation: csb-fade 0.16s ease-out; }
 @keyframes csb-in { from { transform: translateX(-10px); opacity: 0; } }
 @keyframes csb-fade { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .csb, .csb-scrim { animation: none; } }
 .csb-head { display: flex; height: 44px; flex: none; align-items: center; gap: 2px; padding: 0 8px; }
-.csb-brand { display: flex; min-width: 0; flex: 1; align-items: center; gap: 8px; padding-left: 6px; font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
 .csb-icon { display: grid; width: 32px; height: 32px; flex: none; place-items: center; border-radius: 9px; color: var(--muted-foreground); transition: background 0.12s, color 0.12s; }
 .csb-icon:hover { background: color-mix(in oklab, var(--foreground) 6%, transparent); color: var(--foreground); }
 .csb-search { display: flex; min-width: 0; flex: 1; height: 34px; align-items: center; gap: 8px; padding: 0 2px 0 10px; border-radius: 10px; background: var(--card); box-shadow: inset 0 0 0 1px var(--border); }
 .csb-search input { min-width: 0; flex: 1; background: transparent; font-size: 13.5px; outline: none; }
 .csb-search .csb-icon { width: 28px; height: 28px; }
-.csb-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 2px 8px 12px; }
+.csb-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 2px 8px 24px; }
 /* No scrollbar-width/-color here: in Chromium they replace the app's ::-webkit-scrollbar, which fades out at rest. */
 .csb-nav { display: flex; flex-direction: column; gap: 1px; padding-bottom: 8px; }
 .csb-nav-row { display: flex; height: 36px; align-items: center; gap: 10px; padding: 0 8px; border-radius: 10px; font-size: 13.5px; color: var(--foreground); text-align: left; transition: background 0.12s; }
 .csb-nav-row svg { color: var(--muted-foreground); }
 .csb-nav-row:hover { background: color-mix(in oklab, var(--foreground) 6%, transparent); }
 .csb-section { padding-top: 14px; }
+.csb-section:first-child { padding-top: 4px; }
+.csb-sec-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 4px 8px; }
+.csb-sec-head .csb-label { padding: 0; }
+.csb-sec-act { display: grid; width: 24px; height: 24px; flex: none; place-items: center; border-radius: 7px; color: var(--muted-foreground); transition: background 0.12s, color 0.12s; }
+.csb-sec-act:hover { background: color-mix(in oklab, var(--foreground) 6%, transparent); color: var(--foreground); }
 .csb-label { padding: 0 8px 4px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); }
 .csb-list { display: flex; flex-direction: column; gap: 1px; }
 .csb-row { position: relative; display: flex; align-items: center; border-radius: 10px; transition: background 0.12s; }
 .csb-row:hover, .csb-row:focus-within { background: color-mix(in oklab, var(--foreground) 6%, transparent); }
 .csb-row.is-on { background: color-mix(in oklab, var(--foreground) 9%, transparent); }
-.csb-row-main { display: flex; min-width: 0; flex: 1; min-height: 34px; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 10px; font-size: 13.5px; color: color-mix(in oklab, var(--foreground) 88%, transparent); text-align: left; }
+.csb-row-main { display: flex; min-width: 0; flex: 1; min-height: 31px; align-items: center; gap: 9px; padding: 5px 8px; border-radius: 10px; font-size: 13.5px; color: color-mix(in oklab, var(--foreground) 88%, transparent); text-align: left; }
 .csb-row.is-on .csb-row-main { color: var(--foreground); font-weight: 520; }
 .csb-row-face { opacity: 0.9; }
 .csb-row.has-snippet .csb-row-main { align-items: flex-start; }
@@ -558,8 +562,10 @@ body.minimi-resizing, body.minimi-resizing * { cursor: nwse-resize !important; u
 @media (pointer: coarse) { .csb-row-more { opacity: 1; } .csb-row-main { min-height: 40px; padding-right: 34px; } .csb-count { display: none; } }
 .csb-row.is-editing { padding: 3px; background: var(--card); box-shadow: inset 0 0 0 1px var(--ring); }
 .csb-row.is-editing input { width: 100%; height: 28px; padding: 0 6px; background: transparent; font-size: 13.5px; outline: none; }
+.csb-more-people { display: inline-flex; align-items: center; margin-top: 2px; padding: 4px 8px; border-radius: 8px; font-size: 12px; color: var(--muted-foreground); transition: background 0.12s, color 0.12s; }
+.csb-more-people:hover { background: color-mix(in oklab, var(--foreground) 6%, transparent); color: var(--foreground); }
 .csb-empty { padding: 14px 8px; font-size: 13px; color: var(--muted-foreground); }
-.csb-foot { display: flex; flex: none; align-items: center; gap: 10px; margin: 0 8px 8px; padding: 10px 8px; border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent); border-radius: 0 0 10px 10px; transition: background 0.12s; }
+.csb-fade { pointer-events: none; position: absolute; inset: auto 0 0 0; height: 24px; background: linear-gradient(to bottom, transparent, var(--csb-bg)); }
 /* Notes in the app sidebar: Pages or Chats, one list at a time (notes.tsx). The chats there are the same list, flat. */
 .nsb-switch { display: flex; gap: 2px; margin: 0 0 10px; padding: 3px; border-radius: 10px; background: color-mix(in oklab, var(--foreground) 3%, transparent); }
 .nsb-switch button { flex: 1; height: 26px; border-radius: 7px; font-size: 12.5px; font-weight: 550; color: var(--muted-foreground); transition: background 0.12s, color 0.12s; }
@@ -2541,3 +2547,15 @@ body.kb-dragging, body.kb-dragging * { cursor: grabbing !important; user-select:
 .note-embed.note-html:is(:fullscreen, .is-full) > .note-rs { display: none; }
 .note-portal.is-bare:is(:fullscreen, .is-full) > .note-embed-head { position: static; height: 38px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; opacity: 1; pointer-events: auto; }
 .note-portal.is-bare:is(:fullscreen, .is-full) > .note-embed-head > button:first-child { max-width: none; }
+
+/* Screens in tabs (desktops): Library, Browse, Stats, Agents… drawn inside a Notebook pane, under its tab bar.
+   A study session scrolls in its own box the height of the pane, so its fixed bottom bar and pinned header sit
+   at the bottom and top of the pane instead of the window. */
+.screen-study { position: relative; height: calc(100dvh - 48px); overflow-y: auto; overflow-x: clip; contain: layout paint; overscroll-behavior: contain; }
+.screen-fill { position: relative; height: calc(100dvh - 48px); overflow: hidden; }
+.screen-study .min-h-dvh { min-height: 100%; }
+.notes-split.is-multi .note-pane:has(> :is(.screen-study, .screen-fill)) { height: 100%; }
+.notes-split.is-multi :is(.screen-study, .screen-fill) { height: calc(100% - 48px); }
+.note-pane[data-zoom] > :is(.screen-study, .screen-fill) { height: calc((100dvh - 48px) / var(--pane-zoom)); }
+.notes-split.is-multi .note-pane[data-zoom] > :is(.screen-study, .screen-fill) { height: calc(100% - 48px / var(--pane-zoom)); }
+.note-pane > .screen-body:not(.screen-study):not(.screen-fill) { min-height: calc(100dvh - 48px); }

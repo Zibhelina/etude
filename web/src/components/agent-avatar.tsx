@@ -12,10 +12,9 @@ import { navigate } from "@/lib/router";
 import { mediaUrl, MINIMI_PROFILE_ID, useAgentProfiles, type ProfileView } from "@/lib/agent-profiles";
 import { cn } from "@/lib/utils";
 
-/** Settings → AI, scrolled to the agents. */
+/** Settings → AI → Agents. */
 export function openAgentSettings() {
-  navigate("/settings#ai");
-  setTimeout(() => document.getElementById("ai-agents")?.scrollIntoView({ block: "start" }), 160);
+  navigate("/settings#ai-agents");
 }
 
 /** A profile's round picture: Minimi's face (the ε when Fun mode is off), a picture from the media, or the name's first letter. */

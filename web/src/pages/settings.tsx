@@ -23,6 +23,7 @@ import { ActivitySection, HiddenAuthorsSection, PrivacySection } from "@/compone
 import { PluginsSection } from "@/components/settings-plugins";
 import { canShowPurchases, desktopApp, isNativeApp } from "@/lib/platform";
 import { isPhone, usePhone } from "@/lib/device";
+import { useLocation } from "@/lib/router";
 import { account, openMail, type AccountStatus } from "@/lib/account";
 import { CONTACT_EMAIL, contactMail } from "@/lib/contact";
 import { currentTheme, THEME_EVENT } from "@/lib/theme";
@@ -50,7 +51,7 @@ const isGroup = (id: string): id is GroupId => GROUPS.some((g) => g.id === id);
 const groupLabel = (id: GroupId) => ALL_GROUPS.find((g) => g.id === id)!.label;
 
 /** Old anchors (/settings#sync from first-run setup) and the inner sections they point at. */
-const ANCHOR_GROUP: Record<string, GroupId> = { sync: "account", account: "account", cleanup: "data", desktop: "about" };
+const ANCHOR_GROUP: Record<string, GroupId> = { sync: "account", account: "account", "ai-agents": "ai", cleanup: "data", desktop: "about" };
 
 /** What search knows: [section, row title as shown, extra words]. A row inside a fold names the fold. */
 const INDEX: { g: GroupId; label: string; words: string; fold?: string }[] = [
@@ -194,7 +195,8 @@ export function SettingsPage() {
   const [themeName, setThemeName] = useState(() => currentTheme().name);
   const rootRef = useRef<HTMLDivElement>(null);
   const mode = useMode(rootRef);
-  const initial = decodeURIComponent(location.hash.slice(1));
+  const { hash } = useLocation();
+  const initial = decodeURIComponent(hash.slice(1));
   const initialGroup: GroupId | null = isGroup(initial) ? initial : ANCHOR_GROUP[initial] ?? null;
   // The section shown in split and phone mode (null on a phone: the list), and the one under the TOC on desktop.
   const [active, setActive] = useState<GroupId | null>(initialGroup);
@@ -379,10 +381,15 @@ export function SettingsPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, [saved, mode]);
 
-  // /settings#sync (from first-run setup): open at that spot once it has rendered. Sections above it load on their
-  // own and push it down, so follow it until the page settles or the user scrolls.
+  // /settings#sync or /settings#ai-agents: open that section and scroll to it once rendered. Sections above it load on
+  // their own and push it down, so follow it until the page settles or the user scrolls.
   useEffect(() => {
-    if (!saved || !initial) return;
+    if (!initial) return;
+    if (initialGroup) {
+      setActive(initialGroup);
+      setSpy(initialGroup);
+    }
+    if (!saved) return;
     let userScrolled = false;
     const stop = () => (userScrolled = true);
     window.addEventListener("wheel", stop, { passive: true, once: true });
@@ -400,7 +407,7 @@ export function SettingsPage() {
       window.removeEventListener("touchmove", stop);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saved]);
+  }, [saved, initial]);
 
   // Saved settings can't be invalid, so errors only show once something was edited.
   const shown = dirty ? errors : {};

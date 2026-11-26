@@ -7,7 +7,8 @@ import { SidebarIcon } from "@/components/sidebar-icon";
 import { Wordmark } from "@/components/logo";
 import { SidebarUpdate } from "@/components/update-bar";
 import { ACCOUNT_EVENT } from "@/components/settings-account";
-import { ArchiveIcon, BrowseIcon, LibraryIcon, NotesIcon, MarketIcon, SettingsIcon, StatsIcon, TypesIcon } from "@/components/nav-icons";
+import { AgentsIcon, ArchiveIcon, BrowseIcon, LibraryIcon, NotesIcon, MarketIcon, SettingsIcon, StatsIcon, TypesIcon } from "@/components/nav-icons";
+import { openScreen, type ScreenOpen } from "@/lib/screen-tabs";
 import { account } from "@/lib/account";
 import { useMyName } from "@/lib/avatar";
 import { MyAvatar } from "@/components/avatar";
@@ -16,7 +17,7 @@ import { etudeFetch, isLocal } from "@/lib/transport";
 import { navigate } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
-import { SB_DEFAULT, SB_FOLD, SB_RAIL, SB_MAX, SB_MIN, runNotesAction, setNotesPagesOpen, setNotesSlot, setNotesView, setSidebarWidth, useNotesPagesOpen, useNotesView, useSidebarWidth, type NotesAction } from "@/lib/sidebar-slot";
+import { SB_DEFAULT, SB_FOLD, SB_RAIL, SB_MAX, SB_MIN, runNotesAction, setNotesPagesOpen, setNotesSlot, setSidebarWidth, useNotesPagesOpen, useSidebarWidth, type NotesAction } from "@/lib/sidebar-slot";
 
 type Item = { to: string; label: string; beta?: boolean; icon: (p: { className?: string }) => React.ReactNode; match(p: string): boolean };
 
@@ -26,6 +27,7 @@ export const NAV_GROUPS: { label: string; items: Item[] }[] = [
     items: [
       { to: "/", label: "Library", icon: LibraryIcon, match: (p) => p === "/" || p === "/deck" },
       { to: "/notes", label: "Notebook", icon: NotesIcon, match: (p) => p === "/notes" },
+      { to: "/agents", label: "Agents", icon: AgentsIcon, match: (p) => p === "/agents" },
       { to: "/browse", label: "Browse", icon: BrowseIcon, match: (p) => p === "/browse" },
       { to: "/stats", label: "Stats", icon: StatsIcon, match: (p) => p === "/stats" },
       { to: "/archive", label: "Archive", icon: ArchiveIcon, match: (p) => p === "/archive" },
@@ -74,9 +76,6 @@ export function Sidebar({ path, mode, onMode }: { path: string; mode: "open" | "
   const pagesOpen = useNotesPagesOpen();
   const onNotes = path === "/notes";
   const showPages = pagesOpen && !collapsed;
-  // Notes' Pages · Chats, at the top. On Chats the sidebar is only the chats: no Library, Notebook and the rest.
-  const notesView = useNotesView();
-  const chatsOnly = showPages && notesView === "chats";
   const [drag, setDrag] = useState<number | null>(null);
   const shown = drag ?? (none ? 0 : collapsed ? SB_RAIL : width);
   return (
@@ -112,19 +111,8 @@ export function Sidebar({ path, mode, onMode }: { path: string; mode: "open" | "
         </Tooltip>
       </div>
 
-      {showPages && (
-        <div className="nsb-switch sb-fade shrink-0" role="tablist" aria-label="Show in the sidebar">
-          {(["pages", "chats"] as const).map((v) => (
-            <button key={v} type="button" role="tab" aria-selected={notesView === v} className={cn(notesView === v && "is-on")} onClick={() => setNotesView(v)} data-notes-view={v}>
-              {v === "pages" ? "Pages" : "Chats"}
-            </button>
-          ))}
-        </div>
-      )}
-
       <nav className="sb-nav -mx-2.5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-2.5">
-        {chatsOnly && <div ref={setNotesSlot} data-notes-slot className="sb-pages shrink-0" />}
-        {!chatsOnly && NAV_GROUPS.map((g, gi) => (
+        {NAV_GROUPS.map((g, gi) => (
           <div key={g.label} className="flex flex-col gap-0.5">
             {/* Open: the group's title. Rail: nothing above the first group, a small gap above the others. */}
             <div className={cn("sb-group shrink-0 overflow-hidden", gi === 0 && "sb-group-first")}>
@@ -137,12 +125,16 @@ export function Sidebar({ path, mode, onMode }: { path: string; mode: "open" | "
               const isNotes = n.to === "/notes";
               const button = (
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
+                    // A screen with Ctrl/⌘ held opens in a new tab, with Shift too in a pane to the side.
+                    if (!isNotes && (e.metaKey || e.ctrlKey) && openScreen(n.to, e.shiftKey ? "side" : "new")) return;
                     // Notes: clicking it again shows or hides your pages; from another tab it opens them.
                     if (isNotes && onNotes && !collapsed) return setNotesPagesOpen(!pagesOpen);
                     if (isNotes) setNotesPagesOpen(true);
                     navigate(n.to);
                   }}
+                  onMouseDown={(e) => !isNotes && e.button === 1 && e.preventDefault()}
+                  onAuxClick={(e) => !isNotes && e.button === 1 && openScreen(n.to, "new")}
                   aria-label={n.label}
                   aria-current={on ? "page" : undefined}
                   aria-expanded={isNotes && !collapsed ? pagesOpen : undefined}
@@ -161,7 +153,7 @@ export function Sidebar({ path, mode, onMode }: { path: string; mode: "open" | "
               return (
                 <div key={n.to} className="contents">
                   <Tip show={collapsed} label={n.label}>
-                    {isNotes ? <NotesMenu pagesOpen={showPages}>{button}</NotesMenu> : button}
+                    {isNotes ? <NotesMenu pagesOpen={showPages}>{button}</NotesMenu> : <ScreenMenu to={n.to}>{button}</ScreenMenu>}
                   </Tip>
                   {isNotes && showPages && <div ref={setNotesSlot} data-notes-slot className="sb-pages shrink-0" />}
                 </div>
@@ -183,6 +175,25 @@ export function Sidebar({ path, mode, onMode }: { path: string; mode: "open" | "
 export function SidebarEdge({ onMode }: { onMode(m: "open" | "rail" | "none"): void }) {
   return (
     <button type="button" className="sb-edge" aria-label={`Show the sidebar (${SIDEBAR_HIDE_KEY})`} title={`Show the sidebar · ${SIDEBAR_HIDE_KEY}`} onClick={() => onMode("rail")} />
+  );
+}
+
+/** Right-click a screen: where it opens. */
+function ScreenMenu({ to, children }: { to: string; children: React.ReactElement }) {
+  const go = (how: ScreenOpen) => void (openScreen(to, how) || navigate(to));
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="w-60" onCloseAutoFocus={(e) => e.preventDefault()}>
+        <ContextMenuItem onSelect={() => go("here")}>Open here</ContextMenuItem>
+        <ContextMenuItem onSelect={() => go("new")}>
+          Open in a new tab <span className="ml-auto text-[12px] text-muted-foreground">{mac ? "⌘-click" : "Ctrl+click"}</span>
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => go("side")}>
+          Open to the side <span className="ml-auto text-[12px] text-muted-foreground">{mac ? "⌘⇧-click" : "Ctrl+Shift+click"}</span>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

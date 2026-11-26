@@ -87,3 +87,37 @@ export const SettingsIcon = (p: P) => (
     <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
   </Glyph>
 );
+
+/** Two speech bubbles, the front one with a spark: talking to an agent. */
+export const AgentsIcon = (p: P) => (
+  <Glyph {...p}>
+    <path d="M14 4H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h1v3.5l4-3.5h4a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Z" />
+    <path d="M19 8h0.5A1.5 1.5 0 0 1 21 9.5V15a1.5 1.5 0 0 1-1.5 1.5H19v2.5l-3-2.5" />
+    <path d="M9.5 7.5v4M7.5 9.5h4" />
+  </Glyph>
+);
+
+/** A study session: a card with a play mark. */
+export const StudyIcon = (p: P) => (
+  <Glyph {...p}>
+    <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+    <path d="m10.5 9.5 4 2.5-4 2.5Z" />
+  </Glyph>
+);
+
+/** The icon a screen's tab wears: the same glyph as its row in the sidebar. */
+export function screenIcon(route: string, className?: string) {
+  const path = new URL(route, "http://x").pathname;
+  const I =
+    path === "/browse" ? BrowseIcon
+    : path === "/stats" ? StatsIcon
+    : path === "/archive" ? ArchiveIcon
+    : path.startsWith("/types") ? TypesIcon
+    : path === "/market" ? MarketIcon
+    : path === "/settings" ? SettingsIcon
+    : path === "/more" ? MoreIcon
+    : path === "/agents" ? AgentsIcon
+    : path === "/study" || path === "/watch" ? StudyIcon
+    : LibraryIcon;
+  return <I className={className} />;
+}

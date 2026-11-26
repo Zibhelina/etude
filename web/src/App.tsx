@@ -18,6 +18,7 @@ import { StatsPage } from "@/pages/stats";
 import { SettingsPage } from "@/pages/settings";
 import { EmbedStudy } from "@/pages/embed";
 import { MarketPage } from "@/pages/market";
+import { CoursePage } from "@/pages/course";
 import { NotesPage } from "@/pages/notes";
 import { AGENT_SHORTCUT, AgentLauncher, AgentPanel, DockHost, WITH_KEY, announceDataChange, useAgentPanel } from "@/components/agent-panel";
 import { MinimiCorner, placeMinimiAt } from "@/components/minimi";
@@ -45,6 +46,9 @@ import { isNativeApp } from "@/lib/platform";
 import { TooSmall, useTooSmall } from "@/components/too-small";
 import { reportShell, setShellHandler } from "@/lib/view-remote";
 import { setNotesPagesOpen, SHOW_CHATS_EVENT, useNotesPagesOpen } from "@/lib/sidebar-slot";
+import { isScreenPath } from "@/lib/screen-tabs";
+import { isChatTab } from "@/lib/agent-dock";
+import { ScreenDataKey } from "@/components/screen-view";
 
 /** First-run setup: shown when the collection has no decks and setup wasn't finished or skipped, or on request. */
 function useOnboarding(skip: boolean) {
@@ -203,7 +207,7 @@ function useMedia(q: string) {
 }
 
 export function App() {
-  const { path, params } = useLocation();
+  const { path, params, hash } = useLocation();
   const fun = useFunMode();
   const phone = usePhone();
   const small = useTooSmall();
@@ -238,6 +242,10 @@ export function App() {
     if (phone && path === "/notes") navigate("/", { replace: true });
   }, [phone, path]);
   const studying = path === "/study" || path === "/watch";
+  // Desktops: every screen (Library, Browse, a study session…) is a tab among the Notebook's panes. Phones keep
+  // their screens one at a time, and a study session fills the phone.
+  const inTabs = !phone && isScreenPath(path);
+  const fullStudy = studying && phone;
   const onNotes = path === "/notes";
   const notesId = useRef<string | null>(null);
   if (onNotes) notesId.current = params.get("id");
@@ -331,7 +339,7 @@ export function App() {
     window.addEventListener(SHOW_CHATS_EVENT, h);
     return () => window.removeEventListener(SHOW_CHATS_EVENT, h);
   }, []);
-  const route = path + (params.size ? `?${params}` : "");
+  const route = path + (params.size ? `?${params}` : "") + (hash || "");
   useEffect(() => {
     if (path !== "/embed") reportShell(route, { sidebar: phone ? "none" : sbMode, pages: pagesOpen, panel: agent.open });
   }, [route, sbMode, pagesOpen, agent.open, phone]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -347,7 +355,8 @@ export function App() {
     );
   }
   let page: React.ReactNode;
-  if (path === "/watch") {
+  if (inTabs) page = null;
+  else if (path === "/watch") {
     const deck = params.get("deck") ?? undefined;
     const q = params.get("q") ?? undefined;
     page = <WatchPage key={`${deck}|${q}`} scope={{ deck, q }} title={deck ? deck.split("::").pop()! : q ? `Search: ${q}` : "All cards"} />;
@@ -365,6 +374,7 @@ export function App() {
   else if (path === "/stats") page = <StatsPage deck={params.get("deck") ?? undefined} />;
   else if (path === "/settings") page = <SettingsPage />;
   else if (path === "/market") page = <MarketPage />;
+  else if (path === "/course") page = <CoursePage key={params.get("id")} id={params.get("id") ?? ""} />;
   // The Notebook stays mounted (hidden) on the other screens, so its pages keep showing in the sidebar.
   else if (path === "/notes") page = null;
   else if (path === "/more") page = <MorePage />;
@@ -377,7 +387,7 @@ export function App() {
       {!phone && path !== "/embed" && (
         <AppContextMenu
           path={path}
-          sidebar={studying ? null : sbMode}
+          sidebar={fullStudy ? null : sbMode}
           onSidebar={setSbMode}
           extra={(x, y) =>
             minimiOff && !agent.open && !studying
@@ -386,7 +396,7 @@ export function App() {
           }
         />
       )}
-      {studying ? (
+      {fullStudy ? (
         page
       ) : (
         <div
@@ -394,17 +404,19 @@ export function App() {
           data-agent-open={agent.open}
           style={{ "--agent-offset": agent.open ? `${agent.width}px` : "0px", } as React.CSSProperties}
         >
-          {!phone && <Sidebar path={path} mode={sbMode} onMode={setSbMode} />}
+          {!phone && <Sidebar path={onNotes && isChatTab(params.get("id")) ? "/agents" : path} mode={sbMode} onMode={setSbMode} />}
           {!phone && sbMode === "none" && <SidebarEdge onMode={setSbMode} />}
           {/* Room under the last row for the corner Minimi or ε, and on a phone for the tab island and its fade. */}
-          <main key={dataKey} className="min-w-0 flex-1 pb-32 phone:overflow-x-clip phone:pb-[calc(var(--tabbar-h)+2.5rem)]">
-            <ScreenSwap path={path} page={page} />
+          <ScreenDataKey.Provider value={dataKey}>
+          <main key={phone ? dataKey : 0} className={cn("min-w-0 flex-1", phone && path === "/course" ? "pb-0 phone:overflow-x-clip" : "pb-32 phone:overflow-x-clip phone:pb-[calc(var(--tabbar-h)+2.5rem)]")}>
+            {!inTabs && <ScreenSwap path={path} page={page} />}
             {!phone && (
-              <div hidden={!onNotes} className="page-in">
-                <NotesPage id={notesId.current} active={onNotes} />
+              <div hidden={!onNotes && !inTabs} className="page-in">
+                <NotesPage id={onNotes ? notesId.current : null} route={inTabs ? route : null} active={onNotes || inTabs} />
               </div>
             )}
           </main>
+          </ScreenDataKey.Provider>
           {agent.open ? (
             <AgentPanel
               onProfile={setChatWith}
@@ -416,7 +428,7 @@ export function App() {
                 if (final) setDataKey((k) => k + 1);
               }}
             />
-          ) : phone ? null : minimiOff ? null : seated ? (
+          ) : phone ? null : minimiOff || path === "/course" ? null : seated ? (
             <>
               <MinimiCorner key={lead.body === "minimi" ? "minimi" : lead.id} profile={lead} onOpen={() => agent.setMini((m) => !m)} shortcut={AGENT_SHORTCUT} talking={agent.mini} />
               {agent.mini && (

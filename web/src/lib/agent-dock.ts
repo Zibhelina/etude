@@ -52,6 +52,8 @@ export const dockState = () => state;
 
 // A chat on its way to the Notebook from another screen: the Notebook opens it when it shows.
 let waiting: string[] = [];
+// Added during an effect before the layout re-renders with its tab: `keep` leaves it alone until seen.
+const young = new Set<string>();
 export const takeWaiting = () => {
   const w = waiting;
   waiting = [];
@@ -62,6 +64,7 @@ export const dock = {
   has: (key: string) => state.chats.some((c) => c.key === key),
   add(chat: DockedChat, meta?: ChatMeta) {
     if (dock.has(chat.key)) return;
+    young.add(chat.key);
     set({ ...state, chats: [...state.chats, chat], metas: meta ? { ...state.metas, [chat.key]: meta } : state.metas });
   },
   /** Docks a chat for the Notebook to open as soon as it's on screen. */
@@ -70,6 +73,7 @@ export const dock = {
     waiting.push(chat.key);
   },
   remove(key: string) {
+    young.delete(key);
     if (!dock.has(key)) return;
     const { [key]: _m, ...metas } = state.metas;
     const { [key]: _s, ...slots } = state.slots;
@@ -80,7 +84,8 @@ export const dock = {
   },
   /** Chats whose tab is gone (closed in the Notebook) leave. */
   keep(keys: Set<string>) {
-    for (const c of state.chats) if (!keys.has(c.key) && !waiting.includes(c.key)) dock.remove(c.key);
+    for (const y of young) if (keys.has(y)) young.delete(y);
+    for (const c of state.chats) if (!keys.has(c.key) && !waiting.includes(c.key) && !young.has(c.key)) dock.remove(c.key);
   },
   setConv(key: string, conv: string | null) {
     if (!state.chats.some((c) => c.key === key && c.conv !== conv)) return;

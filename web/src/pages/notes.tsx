@@ -47,7 +47,9 @@ import { NoteStart, StartTabIcon, isStartTab, newStartTab, startShortcut } from 
 import { reportView, setViewHandler } from "@/lib/view-remote";
 import { OPEN_NOTE_EVENT, type OpenNoteDetail } from "@/components/agent-rich";
 import { chatKey, chatTabId, dock, dockNode, dockState, isChatTab, registerNotebook, requestChat, takeWaiting, useDock, type ChatMeta, type DockedChat } from "@/lib/agent-dock";
-import { NotesChats } from "@/components/chat-sidebar";
+import { isScreenTab, registerScreenOpener, screenTabs, screenTitle, screenOf, useScreenRoutes, type ScreenOpen } from "@/lib/screen-tabs";
+import { ScreenView } from "@/components/screen-view";
+import { screenIcon } from "@/components/nav-icons";
 import { chatToPanel } from "@/components/agent-panel";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { profileFrom, useAgentProfiles } from "@/lib/agent-profiles";
@@ -1688,7 +1690,8 @@ function NoteTabs({ pane, node, groupAct, iconAct, tabs, all, current, onPick, o
   const docked = useDock();
   const profiles = useAgentProfiles();
   const webs = useWebTabs();
-  const shown = tabs.filter((t) => by.has(t) || isStartTab(t) || isChatTab(t) || (isWebTab(t) && !!webs[t]));
+  const screens = useScreenRoutes();
+  const shown = tabs.filter((t) => by.has(t) || isStartTab(t) || isChatTab(t) || (isWebTab(t) && !!webs[t]) || (isScreenTab(t) && t in screens));
   const labelled = new Set<string>();
   // Folding a group tucks its tabs into the label one by one, last first; unfolding deals them back out.
   // A folded group's tabs stay in the strip for the length of that, then go.
@@ -1725,7 +1728,8 @@ function NoteTabs({ pane, node, groupAct, iconAct, tabs, all, current, onPick, o
         // Nor is a chat: its tab has who it's with and the chat's name.
         const chat = isChatTab(tid) ? (docked.metas[chatKey(tid)] ?? { title: "", profile: "", busy: false }) : null;
         const web = isWebTab(tid) ? webs[tid] : undefined;
-        const n = by.get(tid) ?? { id: tid, title: chat ? chat.title || "New chat" : web || isWebTab(tid) ? webTitle(web) : "New tab", kind: "page" as const, icon: null };
+        const screen = isScreenTab(tid) ? (screens[tid] ?? "/") : null;
+        const n = by.get(tid) ?? { id: tid, title: screen ? screenTitle(screen) : chat ? chat.title || "New chat" : web || isWebTab(tid) ? webTitle(web) : "New tab", kind: "page" as const, icon: null };
         const start = isStartTab(tid);
         const on = tid === current;
         return [
@@ -1757,7 +1761,7 @@ function NoteTabs({ pane, node, groupAct, iconAct, tabs, all, current, onPick, o
                     </PopoverContent>
                   </Popover>
                 )}
-                <span className="note-tab-icon" aria-hidden>{chat?.busy ? <Loader2 className="size-3.5 animate-spin" /> : own ? <NoteIcon icon={own} size={18} /> : chat ? (chat.busy ? <Loader2 className="size-3.5 animate-spin" /> : <AgentAvatar profile={profileFrom(profiles, chat.profile || null)} size={16} />) : isWebTab(tid) ? <WebTabIcon meta={web} /> : start ? <StartTabIcon /> : isFile(n) && !n.icon ? <FileCode2 className="size-3.5" /> : isWeb(n) && !n.icon ? <Code2 className="size-3.5" /> : <NoteIcon icon={n.icon} size={15} />}</span>
+                <span className="note-tab-icon" aria-hidden>{chat?.busy ? <Loader2 className="size-3.5 animate-spin" /> : own ? <NoteIcon icon={own} size={18} /> : chat ? (chat.busy ? <Loader2 className="size-3.5 animate-spin" /> : <AgentAvatar profile={profileFrom(profiles, chat.profile || null)} size={16} />) : screen ? screenIcon(screen, "size-3.5") : isWebTab(tid) ? <WebTabIcon meta={web} /> : start ? <StartTabIcon /> : isFile(n) && !n.icon ? <FileCode2 className="size-3.5" /> : isWeb(n) && !n.icon ? <Code2 className="size-3.5" /> : <NoteIcon icon={n.icon} size={15} />}</span>
                 <span className={cn("note-tab-title min-w-0 flex-1 truncate", !n.title.trim() && "text-muted-foreground")}>{display(n)}</span>
                 <button
                   type="button"
@@ -1827,6 +1831,20 @@ type PaneCtx = {
   createFromStart(pane: string, title: string, newTab: boolean): Promise<void>;
 };
 
+/** A screen (Library, Browse, Stats…) in a tab: the pane's top bar with its tabs, then the screen. */
+function ScreenPane({ id, strip, plus }: { id: string; strip: React.ReactNode; plus: React.ReactNode }) {
+  const routes = useScreenRoutes();
+  const route = routes[id] ?? "/";
+  const top = (
+    <div className="note-topbar">
+      {strip ?? <span className="ns-tabname">{screenTitle(route)}</span>}
+      {plus}
+      <span />
+    </div>
+  );
+  return <ScreenView route={route} top={top} />;
+}
+
 /** One open page and its own top bar, editor and saving. With one pane it scrolls with the window, as before. */
 function NotePane({ pane, noteId, ctx, focused, zoom, strip, plus }: {
   pane: string;
@@ -1842,7 +1860,7 @@ function NotePane({ pane, noteId, ctx, focused, zoom, strip, plus }: {
   const bump = noteId ? (ctx.bumps[noteId] ?? 0) : 0;
   const seen = useRef<{ id: string | null; bump: number }>({ id: null, bump: 0 });
   useEffect(() => {
-    if (!noteId || isStartTab(noteId) || isChatTab(noteId) || isWebTab(noteId)) return setNote(null);
+    if (!noteId || isStartTab(noteId) || isChatTab(noteId) || isWebTab(noteId) || isScreenTab(noteId)) return setNote(null);
     const p = ctx.primed.get(noteId);
     if (p) {
       ctx.primed.delete(noteId);
@@ -2128,7 +2146,9 @@ function NotePane({ pane, noteId, ctx, focused, zoom, strip, plus }: {
               {Math.round(zoom * 100)}%
             </button>
           )}
-          {isChatTab(noteId) ? (
+          {isScreenTab(noteId) ? (
+            <ScreenPane id={noteId} strip={strip} plus={plus} />
+          ) : isChatTab(noteId) ? (
             <ChatPage key={noteId} id={noteId} strip={strip} plus={plus} onFocus={() => ctx.focus(pane)} />
           ) : isWebTab(noteId) ? (
             <WebPage
@@ -2454,7 +2474,9 @@ function loadLayout(): Layout {
   return single([]);
 }
 
-export function NotesPage({ id, active = true }: { id: string | null; active?: boolean }) {
+export function NotesPage({ id, route = null, active = true }: { id: string | null; /** A screen's route (Library, Browse…) the window's address is on, shown in a tab. */ route?: string | null; active?: boolean }) {
+  const routeRef = useRef(route);
+  routeRef.current = route;
   const activeRef = useRef(active);
   activeRef.current = active;
   const phone = usePhone();
@@ -2674,13 +2696,33 @@ export function NotesPage({ id, active = true }: { id: string | null; active?: b
     if (phone || !list) return;
     // The Notebook stays mounted behind the other screens: a load on Decks or Settings stays there.
     if (!active) return;
+    // A screen's address is the screen tabs' business (below).
+    if (route) return void (lastId.current = undefined);
     if (lastId.current === id) return;
     lastId.current = id;
     const l = layoutRef.current;
-    // No page in the address (the Notebook opened from another screen): the panes, tabs and front pages are as
-    // they were left. The New tab is only for a Notebook with nothing open.
+    // No page in the address (Notebook clicked in the sidebar): the panes, tabs and front pages are as they were
+    // left. With a screen in front, the Notebook brings a page forward: one in that pane, else in another pane,
+    // else a New tab beside it. The New tab is only for a Notebook with nothing open.
     if (!id && panes(l.root).some((p) => p.tabs.length > 0)) {
-      const front = focusedPane(l)?.active ?? null;
+      let front = focusedPane(l)?.active ?? null;
+      if (isScreenTab(front) || isChatTab(front)) {
+        const isPage = (t: string) => !isScreenTab(t) && !isChatTab(t);
+        const here = focusedPane(l)!;
+        const other = panes(l.root).find((p) => p.id !== l.focus && p.active && isPage(p.active));
+        const inPane = [...here.tabs].reverse().find(isPage);
+        if (inPane) {
+          setLayout((x) => activate(x, here.id, inPane));
+          front = inPane;
+        } else if (other) {
+          setLayout((x) => focusLayout(x, other.id));
+          front = other.active;
+        } else {
+          const t = newStartTab();
+          setLayout((x) => openIn(x, x.focus, t, "new"));
+          front = t;
+        }
+      }
       if (front) {
         lastId.current = front;
         navigate(`/notes?id=${encodeURIComponent(front)}`, { replace: true });
@@ -2693,7 +2735,7 @@ export function NotesPage({ id, active = true }: { id: string | null; active?: b
       const owner = panes(l.root).find((p) => p.tabs.includes(target));
       return owner ? activate(l, owner.id, target) : openIn(l, l.focus, target, id ? "replace" : "new");
     });
-  }, [id, list, phone, active]);
+  }, [id, list, phone, active, route]);
   // Just added: its folder unfolds and Start here opens, unless the address asked for another page.
   useEffect(() => {
     const s = seeded.current;
@@ -2708,11 +2750,88 @@ export function NotesPage({ id, active = true }: { id: string | null; active?: b
     if (phone || lastActive.current === current) return;
     lastActive.current = current;
     lastId.current = current;
-    if (current !== id) navigate(current ? `/notes?id=${encodeURIComponent(current)}` : "/notes", { replace: true });
+    // A screen in front: the address is its route (Library, a deck, Browse's search).
+    if (isScreenTab(current)) {
+      const r = screenTabs.route(current) ?? "/";
+      if (r !== routeRef.current) navigate(r, { replace: true });
+      return;
+    }
+    if (current !== id || routeRef.current) navigate(current ? `/notes?id=${encodeURIComponent(current)}` : "/notes", { replace: true });
   }, [current, phone]);
+  // The address went to a screen (the sidebar, a link, a button inside a screen, Back): the screen tab in front of
+  // the focused pane goes there, the way a browser tab does. A chat in front keeps its place: the screen opens in
+  // the pane beside it, or in a new tab next to it. Agents opens a chat tab directly (the blank chat start screen).
+  const newBlankChat = () => {
+    const key = Math.random().toString(36).slice(2, 9);
+    dock.add({ key, conv: null });
+    return chatTabId(key);
+  };
+  useEffect(() => {
+    if (phone || !route || !active) return;
+    const l = layoutRef.current;
+    const front = findPane(l.root, l.focus)?.active ?? null;
+    if (screenOf(route) === "/agents") {
+      if (isChatTab(front)) {
+        const k = chatKey(front);
+        if (dockState().chats.find((c) => c.key === k)?.conv) requestChat(k, { open: null });
+        navigate(`/notes?id=${encodeURIComponent(front)}`, { replace: true });
+        return;
+      }
+      const there = panes(l.root).find((p) => p.active && isChatTab(p.active));
+      if (there?.active) {
+        setLayout((x) => focusLayout(x, there.id));
+        navigate(`/notes?id=${encodeURIComponent(there.active)}`, { replace: true });
+        return;
+      }
+      const same = findPane(l.root, l.focus)?.tabs.find(isChatTab);
+      if (same) {
+        setLayout((x) => activate(x, x.focus, same));
+        navigate(`/notes?id=${encodeURIComponent(same)}`, { replace: true });
+        return;
+      }
+      const tab = newBlankChat();
+      setLayout((x) => openIn(x, x.focus, tab, front ? "replace" : "new"));
+      navigate(`/notes?id=${encodeURIComponent(tab)}`, { replace: true });
+      return;
+    }
+    const stays = (t: string | null) => isChatTab(t);
+    if (isScreenTab(front) && !stays(front)) return screenTabs.go(front, route);
+    // Already in front of another pane (the focus moved there): nothing to open.
+    const there = panes(l.root).find((p) => p.active && isScreenTab(p.active) && screenTabs.route(p.active) === route);
+    if (there) return setLayout((x) => focusLayout(x, there.id));
+    // The same screen already among this pane's tabs (Back to where it was): that tab comes forward.
+    const same = findPane(l.root, l.focus)?.tabs.find((t) => isScreenTab(t) && screenTabs.route(t) === route && !stays(front));
+    if (same) return setLayout((x) => activate(x, x.focus, same));
+    const fresh = () => screenTabs.create(route);
+    if (stays(front)) {
+      const other = panes(l.root).find((p) => p.id !== l.focus && !stays(p.active));
+      if (other) {
+        if (isScreenTab(other.active)) {
+          screenTabs.go(other.active, route);
+          return setLayout((x) => focusLayout(x, other.id));
+        }
+        const tab = fresh();
+        return setLayout((x) => focusLayout(openIn(x, other.id, tab, "replace"), other.id));
+      }
+      const tab = fresh();
+      return setLayout((x) => openIn(x, x.focus, tab, "new"));
+    }
+    const tab = fresh();
+    setLayout((x) => openIn(x, x.focus, tab, front ? "replace" : "new"));
+  }, [route, active, phone]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Any saved /agents screen tab from before Agents opened a chat directly becomes a blank chat tab in place.
+  useEffect(() => {
+    if (phone) return;
+    const isOld = (t: string) => isScreenTab(t) && screenOf(screenTabs.route(t) ?? "/") === "/agents";
+    if (!panes(layout.root).some((p) => p.tabs.some(isOld))) return;
+    setLayout((l) => {
+      const old = panes(l.root).flatMap((p) => p.tabs.filter(isOld));
+      return old.length ? old.reduce((acc, t) => renameTab(acc, t, newBlankChat()), l) : l;
+    });
+  }, [layout, phone]);
   // Opening a note tells the server, for the start page's Jump back in (folders don't count, the server knows).
   useEffect(() => {
-    if (!current || isStartTab(current) || isChatTab(current) || isWebTab(current)) return;
+    if (!current || isStartTab(current) || isChatTab(current) || isWebTab(current) || isScreenTab(current)) return;
     let live = true;
     api.noteOpened(current).then((n) => live && (patchRow(n.id, { opened: n.opened }), isFsId(n.id) && void reloadMarked().catch(() => {})), () => {});
     return () => void (live = false);
@@ -2730,7 +2849,7 @@ export function NotesPage({ id, active = true }: { id: string | null; active?: b
       const parent = fsParent(x);
       return !!parent && !!d.dirs[parent];
     };
-    setLayout((l) => prune(l, (x) => ids.has(x) || isStartTab(x) || (isChatTab(x) && dock.has(chatKey(x))) || (isWebTab(x) && webTabs.has(x)) || (isFsId(x) && !diskGone(x))));
+    setLayout((l) => prune(l, (x) => ids.has(x) || isStartTab(x) || (isScreenTab(x) && screenTabs.has(x)) || (isChatTab(x) && dock.has(chatKey(x))) || (isWebTab(x) && webTabs.has(x)) || (isFsId(x) && !diskGone(x))));
   }, [list]);
   // Chats open here as tabs: one sent over from another screen opens now, and one whose tab closed leaves.
   useEffect(() => {
@@ -2740,6 +2859,8 @@ export function NotesPage({ id, active = true }: { id: string | null; active?: b
     dock.keep(new Set(panes(layout.root).flatMap((p) => p.tabs).filter(isChatTab).map(chatKey)));
     // A web tab that closed forgets its page (in the desktop app; elsewhere they stay for when it's opened there).
     if (canWebTabs()) webTabs.keep(new Set(panes(layout.root).flatMap((p) => p.tabs).filter(isWebTab)));
+    // A screen tab that closed forgets its route.
+    screenTabs.keep(new Set(panes(layout.root).flatMap((p) => p.tabs).filter(isScreenTab)));
   }, [layout, phone]);
 
   const setOpen = useCallback((oid: string, on: boolean) => {
@@ -3824,17 +3945,12 @@ export function NotesPage({ id, active = true }: { id: string | null; active?: b
     navigate(`/notes?id=${encodeURIComponent(pid)}`);
   };
   // The chats, in the same sidebar: the chat in front of the focused pane, and opening one the way a page opens.
-  const notesView = useNotesView();
   const dockNow = useDock();
   const frontTab = findPane(layout.root, layout.focus)?.active ?? null;
   const frontChat = isChatTab(frontTab) ? chatKey(frontTab) : null;
   const frontConv = frontChat ? (dockNow.chats.find((c) => c.key === frontChat)?.conv ?? null) : null;
-  // A chat tab coming to the front shows the chats; a page coming to the front shows the pages. Flipping it by hand
-  // in between sticks until the front changes kind.
-  const frontKind = frontTab === null ? null : frontChat ? "chats" : "pages";
-  useEffect(() => {
-    if (active && !phone && frontKind) setNotesView(frontKind);
-  }, [frontKind]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The sidebar always shows the pages now; the chats live on the Agents screen and in each chat's own list.
+  useEffect(() => setNotesView("pages"), []);
   /** A chat in a tab: the tab that has it comes forward, else the chat in front changes to it, else a new tab. */
   const openChat = (conv: string | null, how: "here" | "new" = "here", withProfile?: string) => {
     if (!active) navigate("/notes");
@@ -3854,13 +3970,30 @@ export function NotesPage({ id, active = true }: { id: string | null; active?: b
     if (withProfile) requestChat(key, { with: withProfile });
     setLayout((x) => focusLayout(openIn(x, x.focus, chatTabId(key), "new"), x.focus));
   };
+  // The sidebar's screens: a plain click goes there in the tab in front; Ctrl/⌘-click, a middle click or its menu
+  // open it in a new tab or in a pane to the side. Agents opens a fresh blank chat tab.
+  const openScreenRef = useRef<(route: string, how: ScreenOpen) => void>(() => {});
+  openScreenRef.current = (r, how) => {
+    if (how === "here") return navigate(r);
+    const tab = screenOf(r) === "/agents" ? newBlankChat() : screenTabs.create(r);
+    if (how === "new") return setLayout((x) => focusLayout(openIn(x, x.focus, tab, "new"), x.focus));
+    const next = openSplit(layoutRef.current, layoutRef.current.focus, tab, "right");
+    if (next) setLayout(() => next);
+    else {
+      toast("Up to four panes side by side");
+      setLayout((x) => focusLayout(openIn(x, x.focus, tab, "new"), x.focus));
+    }
+  };
+  useEffect(() => {
+    if (phone) return;
+    registerScreenOpener((r, how) => openScreenRef.current(r, how));
+    return () => registerScreenOpener(null);
+  }, [phone]);
   const sidebarTree =
     inSidebar &&
     createPortal(
       <>
-      {notesView === "chats" ? (
-        <NotesChats active={frontConv} onOpen={(c) => openChat(c)} onNewWith={(p) => openChat(null, "here", p)} onOpenNew={(c) => openChat(c, "new")} />
-      ) : (
+      {(
       <div role="tree" aria-label="Pages">
         {invites}
         {list === null ? null : top.length === 0 ? (
@@ -4191,7 +4324,7 @@ export function NotesPage({ id, active = true }: { id: string | null; active?: b
 
   const shownPanes = phone ? [{ k: "pane" as const, id: "phone", tabs: id ? [id] : [], active: id }] : panes(layout.root);
   const geo = multi ? rects(layout.root) : null;
-  const existing = (t: string) => isStartTab(t) || isChatTab(t) || (isWebTab(t) && webTabs.has(t)) || !!list?.some((n) => n.id === t);
+  const existing = (t: string) => isStartTab(t) || isChatTab(t) || (isScreenTab(t) && screenTabs.has(t)) || (isWebTab(t) && webTabs.has(t)) || !!list?.some((n) => n.id === t);
   const sharingNote = sharing ? list?.find((n) => n.id === sharing) : undefined;
   return (
     <ShareCtx.Provider value={shareCtx}>

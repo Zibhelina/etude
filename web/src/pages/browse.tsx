@@ -573,8 +573,8 @@ export function BrowsePage({ initialQuery, openItem }: { initialQuery: string; o
     </>
   );
 
-  // Fills the window exactly: the app's main adds bottom padding for scrolling pages, which this one cancels.
-  const H = "h-[calc(100dvh-var(--tabbar-h))] -mb-16 phone:-mb-6";
+  // Fills the pane on desktop (under the tab bar) and the window on phones (cancelling main's bottom padding).
+  const H = phone ? "h-[calc(100dvh-var(--tabbar-h))] -mb-6" : "h-full";
 
   // An empty library: one page, no split, search or chips.
   if (library === 0 && !rows.length)

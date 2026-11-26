@@ -64,6 +64,7 @@ export type DesktopBridge = {
   pickFolder(): Promise<string | null>;
   showLogs(): Promise<void>;
   updates: { status(check?: boolean): Promise<DesktopUpdateState>; restart(): Promise<void>; onChange(callback: (s: DesktopUpdateState) => void): () => void };
+  web?: { outside(url: string): Promise<void> };
   command: { status(): Promise<DesktopCommandState>; install(): Promise<DesktopCommandState> };
   zoom?: { get(): Promise<number>; set(factor: number): Promise<number>; onChange(callback: (factor: number) => void): () => void };
 };

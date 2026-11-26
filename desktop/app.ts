@@ -75,8 +75,8 @@ else {
       env = { ...shellEnv, ...process.env, PATH: shellEnv.PATH ?? process.env.PATH };
       log(`took PATH and ${Object.keys(shellEnv).length - 1} other settings from the login shell`);
     }
-    await boot();
     startUpdates((s) => allWindows().forEach((w) => w.webContents.send("etude:update", s)));
+    await boot();
     // Niceties: if one fails, Etude still works.
     try {
       refreshAppImageCommand();
@@ -389,7 +389,7 @@ function answer() {
   ipcMain.handle("etude:show-logs", (e) => {
     if (fromWindow(e)) void shell.openPath(logDir());
   });
-  ipcMain.handle("etude:update-status", (e, check: unknown) => (fromWindow(e) ? (check ? checkForUpdates() : updateState()) : null));
+  ipcMain.handle("etude:update-status", (e, check: unknown) => (fromWindow(e) ? (check ? checkForUpdates(true) : updateState()) : null));
   ipcMain.handle("etude:update-restart", (e) => {
     if (fromWindow(e)) restartToUpdate();
   });

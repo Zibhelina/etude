@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { api, relative, type UpdateStatus } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { serverless } from "@/lib/native";
-import { desktopApp } from "@/lib/platform";
+import { desktopApp, type DesktopUpdateState } from "@/lib/platform";
 
 type Phase = "idle" | "checking" | "updating" | "restarting";
 
@@ -24,13 +24,29 @@ const DOWNLOAD = "https://etude.study/download";
 const headline = (st: UpdateStatus) =>
   st.kind === "git" ? (st.behind === 1 ? "1 update available" : `${st.behind} updates available`) : st.kind === "desktop" && st.ready ? `Etude ${st.latest} is ready` : `Etude ${st.latest} is out`;
 
-/** In the desktop app: its own updater, or (link, system) the engine's check worded for how this copy updates. */
+function fromDesktop(d: DesktopUpdateState): Extract<UpdateStatus, { kind: "desktop" }> {
+  return {
+    kind: "desktop",
+    mode: d.mode as "self" | "link" | "system",
+    version: d.version,
+    latest: d.latest,
+    ready: d.ready,
+    percent: d.percent,
+    url: DOWNLOAD,
+    canRestart: false,
+    checked: d.checked,
+    ...(d.error ? { checkError: d.error } : {}),
+  };
+}
+
+/** In the desktop app: its own updater, or (link, system) the desktop shell's check (with engine fallback on older shells). */
 async function fetchStatus(force: boolean): Promise<UpdateStatus> {
   const d = await desktopApp()?.updates.status(force);
   if (!d || d.mode === "none") return api.updateStatus(true, force);
-  if (d.mode === "self") return { kind: "desktop", mode: "self", version: d.version, latest: d.latest, ready: d.ready, percent: d.percent, url: DOWNLOAD, canRestart: false, checked: d.checked, ...(d.error ? { checkError: d.error } : {}) };
+  if (d.mode === "self") return fromDesktop(d);
+  if (d.checked || d.latest || d.error) return fromDesktop(d);
   const st = await api.updateStatus(true, force);
-  return { kind: "desktop", mode: d.mode, version: st.version, latest: st.kind === "package" ? st.latest : null, ready: false, percent: null, url: DOWNLOAD, canRestart: false, checked: st.checked, ...(st.checkError ? { checkError: st.checkError } : {}) };
+  return { kind: "desktop", mode: d.mode, version: d.version || st.version, latest: st.kind === "package" ? st.latest : null, ready: false, percent: null, url: DOWNLOAD, canRestart: false, checked: st.checked, ...(st.checkError ? { checkError: st.checkError } : {}) };
 }
 
 // One status for the whole app, so the sidebar, the tab bar and Settings agree and GitHub is asked once.
@@ -106,12 +122,22 @@ export function useUpdater() {
     if (!started && !serverless()) {
       started = true;
       check();
-      // The desktop app downloads in the background and says when the update is ready.
-      desktopApp()?.updates.onChange(() => void check());
+      // The desktop app downloads in the background and pushes state changes directly.
+      desktopApp()?.updates.onChange((d) => {
+        if (d && d.mode !== "none") set({ st: fromDesktop(d) });
+        else void check();
+      });
     }
   }, []);
   const busy = s.phase === "updating" || s.phase === "restarting";
   return { ...s, busy, behind: s.st ? behindOf(s.st) : 0, check, update };
+}
+
+function openDownloadOutside(e: React.MouseEvent, url: string) {
+  const outside = desktopApp()?.web?.outside;
+  if (!outside) return;
+  e.preventDefault();
+  void outside(url);
 }
 
 function DesktopDetails({ st }: { st: Extract<UpdateStatus, { kind: "desktop" }> }) {
@@ -131,7 +157,7 @@ function DesktopDetails({ st }: { st: Extract<UpdateStatus, { kind: "desktop" }>
         </Button>
       ) : st.mode === "link" ? (
         <Button size="sm" className="mt-3" asChild>
-          <a href={st.url} target="_blank" rel="noreferrer">
+          <a href={st.url} target="_blank" rel="noreferrer" onClick={(e) => openDownloadOutside(e, st.url)}>
             Download
           </a>
         </Button>
@@ -149,7 +175,7 @@ function UpdateDetails({ st, onUpdate }: { st: UpdateStatus; onUpdate(): void })
         <div className="font-medium">Etude {st.latest} is out</div>
         <div className="mt-1 text-xs text-muted-foreground">This copy wasn't installed from git, so it can't update itself. Download the new version from GitHub.</div>
         <Button size="sm" className="mt-3" asChild>
-          <a href={st.url} target="_blank" rel="noreferrer">
+          <a href={st.url} target="_blank" rel="noreferrer" onClick={(e) => openDownloadOutside(e, st.url)}>
             Open releases
           </a>
         </Button>

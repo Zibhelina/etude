@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.3.0
+
+- **Courses:** import standalone HTML or Course Kit packages (`course/1`) into your Library alongside decks, run them in a sandboxed viewer with live Etude theme and accent sync, save progress locally per collection, publish and install courses on the Market, and manage them with `etude course`. Embedded HTML blocks in Notebook pages now receive live theme updates without reloading.
+- **Desktop screens as tabs:** Library, Browse, Stats, Archive, Market, Settings, study sessions, deck pages and courses now open as tabs inside the Notebook's panes on desktop (Ctrl/⌘-click or middle-click opens a new tab, Shift+Ctrl/⌘-click opens to the side, and right-click picks where to open). Fixed bottom margin gaps and pane-zoom height scaling across Library, Browse and Courses.
+- **Agents & Ask chat sidebar:** clicking **Agents** in the sidebar opens directly into a clean chat tab with its own collapsible chat list (`≡`), keeping existing chats open while you switch to Library or Notebook. Simplified the chat sidebar layout (seamless edge, header actions, tucked zero-chat agents, bottom scroll fade) and fixed the Agents settings button to jump straight to Settings → AI → Agents.
+- **Library zoom alignment:** scale deck-tree connector elbows, drag-drop indicator lines and dragged deck labels by CSS zoom so they stay aligned under app and pane zoom.
+
 ## 3.2.1
 
 - **Web edition & Market covers:** fix `Unknown encoding: base64url` in the browser crypto shim so Market cover images load on `etude.study/app`, and make canvas element IDs browser-safe.

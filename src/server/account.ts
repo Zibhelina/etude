@@ -64,14 +64,31 @@ export function accountRoutes(app: Hono, e: Etude) {
 
   app.get("/api/account/billing", async (c) => c.json(await a.billing()));
   app.post("/api/account/billing/checkout", async (c) => {
-    const plan = (await body(c).catch(() => ({})))?.plan;
-    return c.json(await a.syncCheckout(plan === "yearly" ? "yearly" : "monthly"));
+    const b = await body(c).catch(() => ({}));
+    const plan = b?.plan === "yearly" ? "yearly" : "monthly";
+    const tier = b?.tier === "plus" || b?.tier === "max" ? b.tier : "basic";
+    return c.json(await a.syncCheckout(plan, tier));
+  });
+  app.post("/api/account/billing/credits/checkout", async (c) => {
+    const pack = (await body(c).catch(() => ({})))?.pack;
+    if (pack !== "pack_10k" && pack !== "pack_50k") throw new AccountError("pack must be pack_10k or pack_50k", 400, "invalid");
+    return c.json(await a.creditsCheckout(pack));
   });
   app.post("/api/account/billing/portal", async (c) => c.json(await a.billingPortal()));
   app.get("/api/account/billing/apple", async (c) => c.json(await a.appleInfo()));
   app.post("/api/account/billing/apple/transaction", async (c) => c.json(await a.appleTransaction(need((await body(c)).jws, "jws"))));
   app.get("/api/account/billing/google", async (c) => c.json(await a.googleInfo()));
   app.post("/api/account/billing/google/purchase", async (c) => c.json(await a.googlePurchase(need((await body(c)).purchaseToken, "purchaseToken"))));
+  app.post("/api/account/billing/google/credits", async (c) => {
+    const b = await body(c);
+    return c.json(await a.googleCredits(need(b.productId, "productId"), need(b.purchaseToken, "purchaseToken")));
+  });
+  app.get("/api/account/ai/status", async (c) => c.json(await a.aiStatus()));
+  app.get("/api/account/ai/history", async (c) => {
+    const limit = c.req.query("limit") ? Number(c.req.query("limit")) : undefined;
+    const before = c.req.query("before") || undefined;
+    return c.json(await a.aiHistory({ limit, before }));
+  });
 
   app.get("/api/account/market", async (c) => c.json(await a.paidIndex()));
   app.post("/api/account/market/checkout", async (c) => c.json(await a.checkout(need((await body(c)).listing, "listing"))));

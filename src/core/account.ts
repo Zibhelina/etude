@@ -1,6 +1,7 @@
 // The Etude account on an etude-cloud server: sign-in, devices, passkeys, email, export, deletion,
 // the Sync subscription, and the paid Market (catalog, library, selling, review).
 // The device token is kept per install in $ETUDE_HOME/account.json (0600); the collection never holds it.
+import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { EtudeError, type Etude } from "./engine.ts";
@@ -34,10 +35,15 @@ interface Saved {
   accountId?: string;
   /** This install's device on the server (sharing keeps a keypair per device). */
   deviceId?: string;
+  /** Stable per-install key for anti-abuse welcome-credit claims (never contains personal info). */
+  deviceKey?: string;
   /** The address of the last emailed sign-in, so a 6-digit code can be redeemed with it. */
   pendingEmail?: string;
   pendingSecond?: PendingSecondStep;
 }
+
+export type SyncTier = "basic" | "plus" | "max";
+export type CreditPackId = "pack_10k" | "pack_50k";
 
 /** The ticket from a 401 `second_factor_required`, or null for any other error. */
 export function secondStepFrom(e: unknown): PendingSecondStep | null {
@@ -112,6 +118,15 @@ export class AccountClient {
       chmodSync(tmp, 0o600);
     } catch {}
     renameSync(tmp, this.file);
+  }
+
+  /** Stable per-install key for hosted AI welcome-credit anti-abuse (never contains personal info). */
+  deviceKey(): string {
+    const s = this.load();
+    if (s.deviceKey) return s.deviceKey;
+    const key = randomUUID();
+    this.save({ ...s, deviceKey: key });
+    return key;
   }
 
   /** The server this install talks to: saved choice, then $ETUDE_CLOUD_URL, then sync.etude.study. */
@@ -240,15 +255,19 @@ export class AccountClient {
     const offering: Json = "value" in offered ? offered.value : null;
     const offline = "error" in offered ? (offered.error as Error).message : null;
     const base = { server, offering, offline, signedIn: !!saved.token, email: saved.email ?? null };
-    if (!saved.token || offline || !mine) return { ...base, me: null, billing: null, vault: null };
+    if (!saved.token || offline || !mine) return { ...base, me: null, billing: null, vault: null, ai: null };
     if ("error" in mine) {
-      if (mine.error instanceof AccountError && mine.error.status === 401) return { ...base, signedIn: false, me: null, billing: null, vault: null };
+      if (mine.error instanceof AccountError && mine.error.status === 401) return { ...base, signedIn: false, me: null, billing: null, vault: null, ai: null };
       throw mine.error;
     }
     const me: Json = mine.value;
     if (me.email && me.email !== saved.email) this.save({ ...this.load(), email: me.email, accountId: me.id });
-    const [billing, vault] = await Promise.all([this.json("GET", "/v1/billing/sync").catch(() => null), me.sync?.active ? this.json("GET", "/v1/vault").catch(() => null) : null]);
-    return { ...base, email: me.email, me, billing, vault };
+    const [billing, vault, ai] = await Promise.all([
+      this.json("GET", "/v1/billing/sync").catch(() => null),
+      me.sync?.active ? this.json("GET", "/v1/vault").catch(() => null) : null,
+      offering?.ai?.enabled ? this.aiStatus().catch(() => null) : null,
+    ]);
+    return { ...base, email: me.email, me, billing, vault, ai };
   }
 
   // ── signing in and out ────────────────────────────────────────
@@ -377,17 +396,32 @@ export class AccountClient {
     return r;
   }
 
-  // ── Sync subscription (Polar, on the website) ─────────────────
+  // ── Sync subscription & prepaid AI credits (Polar, on the website) ──
   billing = () => this.json("GET", "/v1/billing/sync");
-  syncCheckout = (plan: "monthly" | "yearly" = "monthly") => this.json("POST", "/v1/billing/sync/checkout", { plan });
+  syncCheckout = (plan: "monthly" | "yearly" = "monthly", tier: SyncTier = "basic") => this.json("POST", "/v1/billing/sync/checkout", { plan, tier });
+  creditsCheckout = (pack: CreditPackId) => this.json("POST", "/v1/billing/credits/checkout", { pack });
   billingPortal = () => this.json("GET", "/v1/billing/portal");
 
-  // ── Sync subscription (App Store, in the iOS app) ─────────────
+  // ── Hosted AI wallet & usage history ──────────────────────────
+  async aiStatus() {
+    const res = await this.request("GET", "/v1/ai/status", { headers: { "X-Etude-Device-Key": this.deviceKey() } });
+    return res.json();
+  }
+  aiHistory = (opts: { limit?: number; before?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.limit) q.set("limit", String(opts.limit));
+    if (opts.before) q.set("before", opts.before);
+    const qs = q.toString();
+    return this.json("GET", `/v1/ai/history${qs ? `?${qs}` : ""}`);
+  };
+
+  // ── Sync subscription & credit packs (App Store, in the iOS app) ──
   appleInfo = () => this.json("GET", "/v1/billing/apple");
   appleTransaction = (jws: string) => this.json("POST", "/v1/billing/apple/transaction", { jws });
-  // ── Sync subscription (Google Play, in the Android app) ───────
+  // ── Sync subscription & credit packs (Google Play, in the Android app) ──
   googleInfo = () => this.json("GET", "/v1/billing/google");
   googlePurchase = (purchaseToken: string) => this.json("POST", "/v1/billing/google/purchase", { purchaseToken, packageName: "study.etude.app" });
+  googleCredits = (productId: string, purchaseToken: string) => this.json("POST", "/v1/billing/google/credits", { productId, purchaseToken, packageName: "study.etude.app" });
 
   // ── paid Market ───────────────────────────────────────────────
   async paidIndex() {

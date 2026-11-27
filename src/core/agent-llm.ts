@@ -1,6 +1,6 @@
-// Streaming chat with function tools, for the in-app agent. Two protocols: the Responses API
-// (the user's ChatGPT plan) and OpenAI-compatible Chat Completions (OpenRouter, OpenAI, local servers).
-import { AiError, type AgentEffort, type ChatProvider } from "./ai.ts";
+// Streaming chat with function tools, for the in-app agent. Three protocols: the Responses API
+// (the user's ChatGPT plan), Etude AI (hosted credits proxy), and OpenAI-compatible Chat Completions (OpenRouter, OpenAI, local servers).
+import { AiError, DEFAULT_ETUDE_AI_CHAT_MODEL, hostedAiError, readHostedAiAuth, type AgentEffort, type ChatProvider } from "./ai.ts";
 import { chatGptEndpoints, chatGptFetch, chatGptNativeHost, getChatGptCredentials, failureMessage, streamErrorFields, ChatGptError, DEFAULT_CHATGPT_MODEL } from "./chatgpt.ts";
 
 export interface ToolSpec {
@@ -255,28 +255,41 @@ function chatMessages(system: string, messages: LlmMessage[]): unknown[] {
   return out;
 }
 
-async function chatTurn(req: LlmRequest, p: Extract<ChatProvider, { kind: "openai-chat" }>): Promise<LlmResult> {
+async function chatTurn(req: LlmRequest, p: Extract<ChatProvider, { kind: "openai-chat" | "etude-cloud" }>): Promise<LlmResult> {
   const t0 = Date.now();
-  const key = p.apiKeyEnv ? process.env[p.apiKeyEnv] : undefined;
-  if (p.apiKeyEnv && !key) throw new AiError(`${p.apiKeyEnv} is not set`);
+  const hosted = p.kind === "etude-cloud";
+  const auth = hosted ? readHostedAiAuth(req.home, p.server) : null;
+  if (hosted && !auth?.token) throw new AiError("Sign in to your Etude account in Settings → Sync to use Etude AI.");
+  const key = !hosted && p.apiKeyEnv ? process.env[p.apiKeyEnv] : undefined;
+  if (!hosted && p.apiKeyEnv && !key) throw new AiError(`${p.apiKeyEnv} is not set`);
+  const url = hosted ? `${auth!.server}/v1/ai/chat/completions` : p.url;
   const timeout = AbortSignal.timeout(p.timeoutMs && p.timeoutMs > 120_000 ? p.timeoutMs : 180_000);
-  const openrouter = /openrouter\.ai/.test(p.url);
+  const openrouter = !hosted && /openrouter\.ai/.test(url);
+  const modelId = p.model || (hosted ? DEFAULT_ETUDE_AI_CHAT_MODEL : "");
   const body: Record<string, unknown> = {
-    model: p.model,
+    ...(hosted ? { purpose: "chat" } : {}),
+    ...(modelId ? { model: modelId } : {}),
     messages: chatMessages(req.system, req.messages),
     ...(req.tools.length
-      ? { tools: req.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } })), parallel_tool_calls: req.parallel !== false }
+      ? { tools: req.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } })), ...(!hosted ? { parallel_tool_calls: req.parallel !== false } : {}) }
       : {}),
     stream: true,
-    stream_options: { include_usage: true },
+    ...(!hosted ? { stream_options: { include_usage: true } } : {}),
     ...(openrouter ? { usage: { include: true } } : {}),
-    ...(openrouter && req.effort && req.effort !== "default" ? { reasoning: { effort: req.effort === "minimal" ? "low" : req.effort } } : {}),
+    ...((openrouter || hosted) && req.effort && req.effort !== "default" ? { reasoning: { effort: req.effort === "minimal" ? "low" : req.effort } } : {}),
     temperature: p.temperature ?? 0.3,
   };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+    ...(hosted
+      ? { Authorization: `Bearer ${auth!.token}`, ...(auth!.deviceKey ? { "X-Etude-Device-Key": auth!.deviceKey } : {}) }
+      : { ...(key ? { Authorization: `Bearer ${key}` } : {}), "X-Title": "Etude" }),
+  };
   const post = () =>
-    fetch(p.url, {
+    fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...(key ? { Authorization: `Bearer ${key}` } : {}), "X-Title": "Etude", Accept: "text/event-stream" },
+      headers,
       body: JSON.stringify(body),
       signal: req.signal ? AbortSignal.any([req.signal, timeout]) : timeout,
     }).catch((e) => {
@@ -291,10 +304,14 @@ async function chatTurn(req: LlmRequest, p: Extract<ChatProvider, { kind: "opena
       res = await post();
     }
   }
-  if (!res.ok) throw new AiError(`HTTP ${res.status}: ${(await res.text().catch(() => "")).slice(0, 300)}`);
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    if (hosted) throw hostedAiError(res.status, errText);
+    throw new AiError(`HTTP ${res.status}: ${errText.slice(0, 300)}`);
+  }
   if (!res.body) throw new AiError("the model returned an empty response");
   let text = "";
-  let model = p.model;
+  let model = modelId || DEFAULT_ETUDE_AI_CHAT_MODEL;
   let cost: number | undefined;
   let tokens: number | undefined;
   const parts: { id: string; name: string; args: string }[] = [];

@@ -34,15 +34,80 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return data as T;
 }
 
+export type SyncTier = "basic" | "plus" | "max";
+export type CreditPackId = "pack_10k" | "pack_50k";
+
+export interface CatalogPlan {
+  id: "free" | SyncTier;
+  name: string;
+  sync: boolean;
+  quotaBytes: number;
+  monthlyCredits: number;
+  welcomeCredits: number;
+  webPrice: { monthly: number; yearly: number };
+  storePrice: { monthly: number; yearly: number };
+  webAvailable?: { monthly: boolean; yearly: boolean };
+}
+
+export interface CatalogCreditPack {
+  id: CreditPackId;
+  name: string;
+  credits: number;
+  webPrice: number;
+  storePrice: number;
+  webAvailable?: boolean;
+}
+
+export interface PlanCatalog {
+  currency: string;
+  creditUnitUsd: number;
+  plans: CatalogPlan[];
+  creditPacks: CatalogCreditPack[];
+}
+
+export interface AiWallet {
+  plan: "free" | SyncTier;
+  monthlyQuota: number;
+  monthlyUsed: number;
+  monthlyRemaining: number;
+  purchasedBalance: number;
+  totalRemaining: number;
+  periodStart: string;
+  periodEnd: string;
+  warning80: boolean;
+  welcomeClaimed: boolean;
+  welcomeCredits: number;
+}
+
+export interface AiChatModel {
+  id: string;
+  name: string;
+  vision?: boolean;
+}
+
+export interface AiStatus {
+  enabled: boolean;
+  creditUnitUsd: number;
+  autoFeedbackPolicy: "wrong_or_partial";
+  wallet: AiWallet;
+  models: { decision: string; feedback: string; chat: AiChatModel[] };
+}
+
 export interface Offering {
   billing: boolean;
   market: boolean;
   quotaBytes: number;
   passkeys: { rpId: string };
+  catalog?: PlanCatalog;
+  ai?: { enabled: boolean; creditUnitUsd: number; autoFeedbackPolicy?: string; models?: { decision: string; feedback: string; chat: AiChatModel[] } };
   /** App Store product ids for Sync, when the server takes App Store purchases. */
   appleProducts?: string[];
+  appleProductTiers?: Record<string, { tier: SyncTier; interval: "monthly" | "yearly" }>;
+  appleCreditPacks?: Record<string, CreditPackId>;
   /** Google Play subscription and base plans for Sync, when the server takes Google Play purchases. */
   googleProducts?: { productIds: string[]; basePlans: string[] };
+  googleBasePlanTiers?: Record<string, { tier: SyncTier; interval: "monthly" | "yearly" }>;
+  googleCreditPacks?: Record<string, CreditPackId>;
   marketRules?: { minPrice: number; feeBps: number; currency: string; buyerCountries: string[]; immediateAccess?: { version: string; text: string } };
 }
 
@@ -58,13 +123,14 @@ export interface Me {
   displayName: string;
   created: string;
   device?: Device;
-  sync: { active: boolean; reason: string };
+  sync: { active: boolean; reason: string; plan?: "free" | SyncTier; quotaBytes?: number; monthlyCredits?: number };
+  ai?: AiWallet;
   creator: { country: string; chargesEnabled: boolean; payoutsEnabled: boolean } | null;
   admin: boolean;
 }
-export interface Billing { active: boolean; reason: string; source?: "polar" | "apple" | "google" | "manual" | null; status: string | null; expires: string | null; graceUntil: string | null; billing: boolean }
-export interface Vault { quotaBytes: number; usedBytes: number; events: number; blobs: number; hasKeys: boolean }
-export interface AccountStatus { server: string; offering: Offering | null; offline: string | null; signedIn: boolean; email: string | null; me: Me | null; billing: Billing | null; vault: Vault | null }
+export interface Billing { active: boolean; reason: string; plan?: "free" | SyncTier; quotaBytes?: number; monthlyCredits?: number; source?: "polar" | "apple" | "google" | "manual" | null; status: string | null; expires: string | null; graceUntil: string | null; billing: boolean }
+export interface Vault { plan?: "free" | SyncTier; quotaBytes: number; usedBytes: number; warning80?: boolean; events: number; blobs: number; hasKeys: boolean }
+export interface AccountStatus { server: string; offering: Offering | null; offline: string | null; signedIn: boolean; email: string | null; me: Me | null; billing: Billing | null; vault: Vault | null; ai?: AiStatus | null }
 export interface Device { id: string; name: string; via: string; created: string; lastSeen: string; current: boolean }
 export interface Passkey { id: string; name: string; credentialId: string; deviceType: string; backedUp: boolean; created: string; lastUsed: string | null }
 export interface PaidEntry {
@@ -171,16 +237,27 @@ export const account = {
   emailCancel: () => call<{ ok: boolean }>("DELETE", "/api/account/email"),
   exportData: () => call<unknown>("GET", "/api/account/export"),
   deleteAccount: (confirm: string) => call<{ ok: boolean }>("POST", "/api/account/delete", { confirm }),
-  checkout: (plan: "monthly" | "yearly" = "monthly") => call<{ url: string }>("POST", "/api/account/billing/checkout", { plan }),
+  checkout: (plan: "monthly" | "yearly" = "yearly", tier: SyncTier = "basic") => call<{ url: string; id?: string; plan?: string; tier?: SyncTier }>("POST", "/api/account/billing/checkout", { plan, tier }),
+  creditsCheckout: (pack: CreditPackId) => call<{ url: string; id?: string; pack: CreditPackId; credits: number }>("POST", "/api/account/billing/credits/checkout", { pack }),
   portal: () => call<{ url: string }>("POST", "/api/account/billing/portal"),
+  aiStatus: () => call<AiStatus>("GET", "/api/account/ai/status"),
+  aiHistory: (opts?: { limit?: number; before?: string }) => {
+    const q = new URLSearchParams();
+    if (opts?.limit) q.set("limit", String(opts.limit));
+    if (opts?.before) q.set("before", opts.before);
+    const qs = q.toString();
+    return call<{ entries: { id: string; kind: string; purpose: string | null; model: string | null; credits: number; costUsd: number; created: string }[] }>("GET", `/api/account/ai/history${qs ? `?${qs}` : ""}`);
+  },
   /** iOS app: the App Store products and the appAccountToken to buy them with. */
-  appleInfo: () => call<{ productIds: string[]; appAccountToken: string; decks?: { listing: string; slug: string; name: string; productId: string }[] }>("GET", "/api/account/billing/apple"),
+  appleInfo: () => call<{ productIds: string[]; productTiers?: Record<string, { tier: SyncTier; interval: "monthly" | "yearly" }>; creditPacks?: Record<string, CreditPackId>; appAccountToken: string; decks?: { listing: string; slug: string; name: string; productId: string }[] }>("GET", "/api/account/billing/apple"),
   /** iOS app: hands a signed App Store transaction (JWS) to the Sync server. */
   appleTransaction: (jws: string) => call<import("./storekit").AppleResult>("POST", "/api/account/billing/apple/transaction", { jws }),
   /** Android app: the Play subscription, base plans and the obfuscatedAccountId to buy with. */
-  googleInfo: () => call<{ productIds: string[]; basePlans: string[]; obfuscatedAccountId: string }>("GET", "/api/account/billing/google"),
+  googleInfo: () => call<{ productIds: string[]; basePlans: string[]; basePlanTiers?: Record<string, { tier: SyncTier; interval: "monthly" | "yearly" }>; creditPacks?: Record<string, CreditPackId>; obfuscatedAccountId: string }>("GET", "/api/account/billing/google"),
   /** Android app: hands a Play purchase token to the Sync server, which checks it with Google. */
   googlePurchase: (purchaseToken: string) => call<import("./storekit").GoogleResult>("POST", "/api/account/billing/google/purchase", { purchaseToken }),
+  /** Android app: hands a consumable credit pack purchase token to the Sync server. */
+  googleCredits: (productId: string, purchaseToken: string) => call<{ ok: boolean; result: string; consume: boolean; pack: CreditPackId; credits: number; wallet?: AiWallet }>("POST", "/api/account/billing/google/credits", { productId, purchaseToken }),
   market: () => call<{ entries: PaidEntry[]; server: string }>("GET", "/api/account/market"),
   buy: (listing: string) => call<{ url: string; price: number; fee: number }>("POST", "/api/account/market/checkout", { listing }),
   library: () => call<{ library: LibraryItem[]; revoked?: RevokedItem[]; changes?: { removed: string[]; unlocked: string[] } }>("GET", "/api/account/library"),

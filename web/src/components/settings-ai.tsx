@@ -1,6 +1,6 @@
 // Settings → AI: grading (providers, presets, key status and a live test), then Ask's agents and their providers.
-import { useState } from "react";
-import { CircleAlert, CircleCheck, FlaskConical, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { CircleAlert, CircleCheck, ExternalLink, FlaskConical, Loader2, Sparkles } from "lucide-react";
 import { AskSettings } from "@/components/settings-agents";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,7 +8,12 @@ import { Markdown } from "@/components/markdown";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
+import { account, openOutsideAsync, type AccountStatus, type CreditPackId } from "@/lib/account";
 import { chatGptSignInHere, saveApiKey, serverless } from "@/lib/native";
+import { canShowPurchases } from "@/lib/platform";
+import { canBuyInApp, inAppCreditPackIds, STOREKIT_EVENT } from "@/lib/storekit";
+import { AppStoreCreditPacks } from "@/components/app-store-plans";
+import { ACCOUNT_EVENT } from "@/components/settings-account";
 import { cn } from "@/lib/utils";
 import { BigSwitch, Block, Disclosure, Field, Group, NumberField, Section, TextField } from "@/components/settings-ui";
 import { ChatGptBlock } from "@/components/settings-chatgpt";
@@ -16,6 +21,7 @@ import { AiConsentBlocks, useAiConsent } from "@/components/ai-consent";
 import {
   aiProvidersOf,
   isChatGpt,
+  isEtudeCloud,
   isOpenAiChat,
   keyVars,
   matchPreset,
@@ -26,6 +32,7 @@ import {
   type ChatGptProvider,
   type ChatProvider,
   type Errors,
+  type EtudeCloudProvider,
   type OpenAiChatProvider,
   type PresetId,
   type SettingsResponse,
@@ -33,6 +40,7 @@ import {
 } from "@/components/settings-model";
 
 const PRESETS: { id: PresetId; label: string; hint: string }[] = [
+  { id: "etude", label: "Etude AI (hosted)", hint: "Ready to use with your Etude account, no API key needed. Includes 1,000 free welcome credits." },
   { id: "openrouter", label: "OpenRouter", hint: "Decision model for verdicts, a chat model for feedback. One key." },
   { id: "openai", label: "OpenAI", hint: "OpenAI's chat API judges and writes feedback. Needs an OpenAI key." },
   { id: "chatgpt", label: "ChatGPT", hint: "Grade with your ChatGPT Plus or Pro plan. No API key." },
@@ -50,6 +58,7 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
   const fb = ai.feedback;
   const fbOpen = isOpenAiChat(fb) ? fb : null;
   const fbGpt = isChatGpt(fb) ? fb : null;
+  const fbEtude = isEtudeCloud(fb) ? fb : null;
   const setFb = (patch: Partial<OpenAiChatProvider>) => set({ feedback: { ...(fbOpen ?? { kind: "openai-chat", url: "", model: "" }), ...patch } });
   const visionOpen = isOpenAiChat(ai.vision) ? ai.vision : null;
   const visionTarget = ai.vision ?? (fb?.vision ? fb : null);
@@ -85,9 +94,15 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
               </button>
             ))}
           </div>
+          {fbEtude && (
+            <EtudeAiBlock
+              provider={fbEtude}
+              onChange={(patch: Partial<EtudeCloudProvider>) => set({ feedback: { ...fbEtude, ...patch } })}
+            />
+          )}
           {fbGpt && !chatGptSignInHere() && (
             <Block>
-              <p className="text-sm text-warning">Signing in with ChatGPT needs the desktop app. Pick OpenRouter or OpenAI above and paste a key below.</p>
+              <p className="text-sm text-warning">Signing in with ChatGPT needs the desktop app. Pick Etude AI, OpenRouter or OpenAI above.</p>
             </Block>
           )}
           {fbGpt && chatGptSignInHere() && (
@@ -97,17 +112,18 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
               onChange={(patch: Partial<ChatGptProvider>) => set({ feedback: { ...fbGpt, ...patch } })}
             />
           )}
-          <KeysBlock ai={ai} saved={saved} />
+          {!fbEtude && <KeysBlock ai={ai} saved={saved} />}
           <AiConsentBlocks savedAi={saved.ai} />
         </Group>
 
         <Group title="Feedback">
           <Block>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Write feedback automatically">
+              <Field label="Write feedback automatically" hint={fbEtude ? "With Etude AI, automatic feedback runs on wrong or partial answers by default to save credits." : undefined}>
                 <Select value={ai.autoFeedback} onValueChange={(v) => set({ autoFeedback: v as AiSettings["autoFeedback"] })}>
                   <SelectTrigger className="phone:h-10 w-full h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="wrong-or-partial">Only when wrong or partial</SelectItem>
                     <SelectItem value="ai-graded">After AI-graded answers</SelectItem>
                     <SelectItem value="always">After every graded answer</SelectItem>
                     <SelectItem value="never">Only when I ask</SelectItem>
@@ -129,7 +145,7 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
           <TestBlock ai={ai} saved={saved} />
         </Group>
 
-        <Disclosure id="ai-endpoints" title="Models and endpoints" open={endpointError} defaultOpen={!preset && !fbGpt}>
+        <Disclosure id="ai-endpoints" title="Models and endpoints" open={endpointError} defaultOpen={!preset && !fbGpt && !fbEtude}>
           <Group
             note={
               <>
@@ -142,20 +158,24 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
             <Block
               title="Decision model"
               description={
-                decisionOn ? (
+                ai.decision?.kind === "etude-cloud" ? (
+                  "Managed by Etude AI. Verdicts run on Etude's fast decision model using your AI credits."
+                ) : decisionOn ? (
                   <>Returns the verdict as calibrated probabilities, through OpenRouter's <code className="font-mono">openrouter-decisions</code> endpoint. Text answers only.</>
                 ) : (
                   "Off. The feedback model judges the answer and writes feedback in one call."
                 )
               }
               aside={
-                <BigSwitch
-                  checked={decisionOn}
-                  aria-label="Use a decision model"
-                  onCheckedChange={(on) =>
-                    set({ decision: on ? { ...(defaults?.decision ?? { kind: "openrouter-decisions" }), ...(ai.decision?.kind === "openrouter-decisions" ? ai.decision : {}), kind: "openrouter-decisions" } : null })
-                  }
-                />
+                ai.decision?.kind === "etude-cloud" ? undefined : (
+                  <BigSwitch
+                    checked={decisionOn}
+                    aria-label="Use a decision model"
+                    onCheckedChange={(on) =>
+                      set({ decision: on ? { ...(defaults?.decision ?? { kind: "openrouter-decisions" }), ...(ai.decision?.kind === "openrouter-decisions" ? ai.decision : {}), kind: "openrouter-decisions" } : null })
+                    }
+                  />
+                )
               }
             >
               {decisionOn && ai.decision && (
@@ -177,10 +197,12 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
 
             <Block
               title="Feedback model"
-              description={fbGpt ? "Grading runs through your ChatGPT plan. The account and model are above." : "Any OpenAI-compatible chat completions endpoint."}
+              description={fbEtude ? "Grading and feedback run through Etude AI using your account credits." : fbGpt ? "Grading runs through your ChatGPT plan. The account and model are above." : "Any OpenAI-compatible chat completions endpoint."}
             >
               {fb ? (
-                fbGpt ? (
+                fbEtude ? (
+                  <p className="text-sm text-muted-foreground">Managed by Etude AI. Drawings and retries are included automatically.</p>
+                ) : fbGpt ? (
                   <div className="flex items-center justify-between gap-4">
                     <label htmlFor="fb-vision" className="min-w-0">
                       <span className="block text-sm">Accepts images</span>
@@ -252,6 +274,115 @@ export function AiSection({ ai, saved, errors, onChange }: { ai: AiSettings; sav
         <AskSettings saved={saved} />
       </div>
     </Section>
+  );
+}
+
+function EtudeAiBlock({ provider, onChange }: { provider: EtudeCloudProvider; onChange(patch: Partial<EtudeCloudProvider>): void }) {
+  const [st, setSt] = useState<AccountStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [buying, setBuying] = useState<CreditPackId | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    account
+      .status()
+      .then((s) => setSt(s))
+      .catch(() => setSt(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    load();
+    const h = () => load();
+    window.addEventListener(ACCOUNT_EVENT, h);
+    window.addEventListener(STOREKIT_EVENT, h);
+    return () => {
+      window.removeEventListener(ACCOUNT_EVENT, h);
+      window.removeEventListener(STOREKIT_EVENT, h);
+    };
+  }, [load]);
+
+  const wallet = st?.ai?.wallet ?? st?.me?.ai ?? null;
+  const models = st?.ai?.models?.chat ?? st?.offering?.ai?.models?.chat ?? [];
+  const purchases = canShowPurchases();
+  const storePacks = inAppCreditPackIds(st?.offering);
+  const webPacks = st?.offering?.catalog?.creditPacks ?? [
+    { id: "pack_10k" as const, name: "10,000 credits", credits: 10_000, webPrice: 500, storePrice: 699 },
+    { id: "pack_50k" as const, name: "50,000 credits", credits: 50_000, webPrice: 2000, storePrice: 2499 },
+  ];
+
+  const buyWebPack = async (pack: CreditPackId) => {
+    setBuying(pack);
+    try {
+      await openOutsideAsync(async () => (await account.creditsCheckout(pack)).url);
+    } catch (e) {
+      toast.error("Couldn't open credit checkout", { description: (e as Error).message });
+    } finally {
+      setBuying(null);
+    }
+  };
+
+  return (
+    <Block title="Etude AI account" description="Uses your Etude account credits. Monthly credits refresh every billing cycle; prepaid credits never expire.">
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Checking account…
+        </div>
+      ) : !st?.signedIn ? (
+        <div className="flex flex-col gap-2 text-sm">
+          <p className="text-muted-foreground">
+            Sign in to your Etude account in <a href="#sync" className="font-medium text-foreground underline underline-offset-4">Settings → Sync</a> or <a href="#account" className="font-medium text-foreground underline underline-offset-4">Account</a> to use Etude AI and claim 1,000 free welcome credits.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3.5">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <Sparkles className="size-4 shrink-0 text-highlight" />
+            <span className="font-medium">{st.email}</span>
+            {wallet && (
+              <span className="tabular-nums text-muted-foreground" data-ai-credits={wallet.totalRemaining}>
+                · <strong className="text-foreground">{wallet.totalRemaining.toLocaleString()}</strong> credits left
+                {wallet.purchasedBalance > 0 ? ` (${wallet.monthlyRemaining.toLocaleString()} monthly + ${wallet.purchasedBalance.toLocaleString()} prepaid)` : ""}
+              </span>
+            )}
+          </div>
+          {wallet?.warning80 && (
+            <p className="text-xs text-warning" role="status">
+              You've used over 80% of your monthly AI credits. When credits run out, cards fall back to self-rating until renewal or top-up.
+            </p>
+          )}
+          {models.length > 0 && (
+            <Field label="Chat model for Ask Etude" hint="Curated fast models available on Etude AI credits. Use your own API key or ChatGPT for other models.">
+              <Select value={provider.model || "__default__"} onValueChange={(v) => onChange({ model: v === "__default__" ? undefined : v })}>
+                <SelectTrigger className="phone:h-10 h-9 sm:max-w-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__default__">Automatic (recommended)</SelectItem>
+                  {models.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
+          {purchases && (
+            <div className="flex flex-wrap items-center gap-2">
+              {webPacks.map((p) => (
+                <Button key={p.id} variant="outline" size="sm" className="phone:h-10 h-8 gap-1.5" disabled={buying !== null} onClick={() => void buyWebPack(p.id)}>
+                  {buying === p.id ? <Loader2 className="size-3.5 animate-spin" /> : <ExternalLink className="size-3.5" />}
+                  Buy {p.credits.toLocaleString()} credits · US${(p.webPrice / 100).toFixed(0)}
+                </Button>
+              ))}
+            </div>
+          )}
+          {!purchases && canBuyInApp() && storePacks.length > 0 && (
+            <AppStoreCreditPacks packs={storePacks} onBought={load} />
+          )}
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Privacy: unlike end-to-end encrypted Sync, Etude AI sends the card and your answer through Etude's server to OpenRouter so we can meter credits. We don't store your cards or answers on our server.
+          </p>
+        </div>
+      )}
+    </Block>
   );
 }
 

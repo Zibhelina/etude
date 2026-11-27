@@ -484,7 +484,8 @@ These work on every command, before or after the command words.
   - [`account email-confirm`](#account-email-confirm) Confirm an email change with the code from the link.
   - [`account export`](#account-export) Download everything the server holds about the account (JSON).
   - [`account delete`](#account-delete) Delete the account on the server: devices, passkeys, the Sync vault, purchases. Orders stay anonymized for tax. Local data stays.
-  - [`account subscribe`](#account-subscribe) A checkout link for Etude Sync (US$5/month or US$40/year). Open it in a browser.
+  - [`account subscribe`](#account-subscribe) A checkout link for Etude Sync (Basic, Plus or Max; monthly or yearly). Open it in a browser.
+  - [`account credits`](#account-credits) Show your Etude AI credit balance, or create a checkout link to buy a prepaid credit pack (10k or 50k credits).
   - [`account billing`](#account-billing) A link to manage the Sync subscription (cancel, card, invoices).
   - [`account market`](#account-market) Paid decks on the server's Market, with price and whether you own them.
   - [`account buy`](#account-buy) A checkout link for a paid deck. Open it in a browser.
@@ -5678,7 +5679,7 @@ etude settings get ai.feedback.model
 
 Change settings with dotted key=value pairs (JSON values when they parse).
 
-Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words, the same text as his profile's in `etude agents`; empty keeps his usual one), agentProfiles and agentProfile (who you talk to in Ask and the default one; easier with `etude agents`), minimiFace (the face he wears: deadpan, wink, proud, smug, hi, wand, close, curious, reading, sleepy, shocked or thinking), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own), avatar (your picture: {kind:"char",id}, {kind:"emoji",e,bg}, {kind:"photo",media}, or null for your initial; see `etude settings avatar`), banner (the cover behind your picture: a preset id like sky or night, image:files/<sha>.<ext>[:y], or null to match your picture; see `etude settings banner`), name (your name in the app, up to 40 characters; empty uses the account's), vim (true turns on Vim keys in Notes' file editor), sounds (false silences the pop when you tick a to-do and the chime when a list is done), holiday (auto puts Minimi in his Christmas outfit with the extras from Nov 15 to Jan 6; on or off forces it), holidayDecor (none, few for a garland and a holly sprig on today's session, or cozy for a warm glow too), holidaySnow (true lets a few slow flakes fall outside the study screen), ai.agents (the external agents Ask Etude can use over ACP: a JSON list of { id, name, command, args, env?, cwd? }; only you can set it, never the assistant or `etude mcp`). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.
+Examples of keys: dayStartHour, learnAheadMinutes, ai.autoFeedback (ai-graded|wrong-or-partial|always|never), ai.language, ai.decision (null disables the decision model), ai.decision.model, ai.feedback.model, ai.feedback.url, ai.feedback.apiKeyEnv, ai.vision, onboarding.level (simple|standard|tinker), onboarding.done, fun (true shows Minimi, the mascot; false keeps the plain ε), minimi (Minimi's personality in your words, the same text as his profile's in `etude agents`; empty keeps his usual one), agentProfiles and agentProfile (who you talk to in Ask and the default one; easier with `etude agents`), minimiFace (the face he wears: deadpan, wink, proud, smug, hi, wand, close, curious, reading, sleepy, shocked or thinking), accent (the app's accent over any theme: green, teal, blue, violet, pink, red, orange, amber, graphite, a #rrggbb color, or null for the theme's own), avatar (your picture: {kind:"char",id}, {kind:"emoji",e,bg}, {kind:"photo",media}, or null for your initial; see `etude settings avatar`), banner (the cover behind your picture: a preset id like sky or night, image:files/<sha>.<ext>[:y], or null to match your picture; see `etude settings banner`), name (your name in the app, up to 40 characters; empty uses the account's), vim (true turns on Vim keys in Notes' file editor), sounds (false silences the pop when you tick a to-do and the chime when a list is done), holiday (auto puts Minimi in his Christmas outfit with the extras from Nov 15 to Jan 6; on or off forces it), holidayDecor (none, few for a garland and a holly sprig on today's session, or cozy for a warm glow too), holidaySnow (true lets a few slow flakes fall outside the study screen), ai.agents (the external agents Ask Etude can use over ACP: a JSON list of { id, name, command, args, env?, cwd? }; only you can set it, never the assistant or `etude mcp`). API keys themselves live in the environment or $ETUDE_HOME/.env (see `etude settings key set`), never in settings.
 
 ```
 etude settings set <pairs...> [flags]
@@ -6976,7 +6977,7 @@ Output: { ok, deleted }
 
 <a id="account-subscribe"></a>
 
-A checkout link for Etude Sync (US$5/month or US$40/year). Open it in a browser.
+A checkout link for Etude Sync (Basic, Plus or Max; monthly or yearly). Open it in a browser.
 
 ```
 etude account subscribe [flags]
@@ -6986,9 +6987,28 @@ etude account subscribe [flags]
 
 | Flag | Type | Description |
 | --- | --- | --- |
-| `--yearly` | boolean | The yearly plan (US$40) instead of monthly. |
+| `--tier <VALUE>` | string | Plan tier: basic (2 GB, 5k credits/mo), plus (20 GB, 20k credits/mo) or max (100 GB, 60k credits/mo). Default: basic. |
+| `--yearly` | boolean | The yearly plan instead of monthly. |
 
-Output: { url, id, plan }
+Output: { url, id, plan, tier }
+
+### etude account credits
+
+<a id="account-credits"></a>
+
+Show your Etude AI credit balance, or create a checkout link to buy a prepaid credit pack (10k or 50k credits).
+
+```
+etude account credits [flags]
+```
+
+*writes*
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--buy <VALUE>` | string | Buy a prepaid credit pack: 10k (US$5) or 50k (US$20). |
+
+Output: AI credit status, or { url, id, pack, credits }
 
 ### etude account billing
 

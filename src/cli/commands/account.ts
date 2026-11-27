@@ -126,7 +126,35 @@ command({
   output: "{ ok, deleted }",
   run: (c) => call(() => a(c).deleteAccount(c.flags.confirm ?? "")),
 });
-command({ name: "account subscribe", summary: "A checkout link for Etude Sync (US$5/month or US$40/year). Open it in a browser.", flags: [{ name: "yearly", type: "boolean", description: "The yearly plan (US$40) instead of monthly." }], writes: true, output: "{ url, id, plan }", run: (c) => call(() => a(c).syncCheckout(c.flags.yearly ? "yearly" : "monthly")) });
+command({
+  name: "account subscribe",
+  summary: "A checkout link for Etude Sync (Basic, Plus or Max; monthly or yearly). Open it in a browser.",
+  flags: [
+    { name: "tier", type: "string", description: "Plan tier: basic (2 GB, 5k credits/mo), plus (20 GB, 20k credits/mo) or max (100 GB, 60k credits/mo). Default: basic." },
+    { name: "yearly", type: "boolean", description: "The yearly plan instead of monthly." },
+  ],
+  writes: true,
+  output: "{ url, id, plan, tier }",
+  run: (c) => {
+    const rawTier = String(c.flags.tier ?? "basic").toLowerCase();
+    if (!["basic", "plus", "max"].includes(rawTier)) throw new CliError("--tier must be basic, plus or max", "validation");
+    return call(() => a(c).syncCheckout(c.flags.yearly ? "yearly" : "monthly", rawTier as "basic" | "plus" | "max"));
+  },
+});
+command({
+  name: "account credits",
+  summary: "Show your Etude AI credit balance, or create a checkout link to buy a prepaid credit pack (10k or 50k credits).",
+  flags: [{ name: "buy", type: "string", description: "Buy a prepaid credit pack: 10k (US$5) or 50k (US$20)." }],
+  writes: true,
+  output: "AI credit status, or { url, id, pack, credits }",
+  run: (c) => {
+    if (!c.flags.buy) return call(() => a(c).aiStatus());
+    const v = String(c.flags.buy).toLowerCase();
+    const pack = v === "10k" || v === "pack_10k" ? "pack_10k" : v === "50k" || v === "pack_50k" ? "pack_50k" : null;
+    if (!pack) throw new CliError("--buy must be 10k or 50k", "validation");
+    return call(() => a(c).creditsCheckout(pack));
+  },
+});
 command({ name: "account billing", summary: "A link to manage the Sync subscription (cancel, card, invoices).", output: "{ url }", run: (c) => call(() => a(c).billingPortal()) });
 command({ name: "account market", summary: "Paid decks on the server's Market, with price and whether you own them.", output: "{ entries: [{ id, name, price, currency, listing, owned, installed }] }", run: (c) => call(() => a(c).paidIndex()) });
 command({ name: "account buy", summary: "A checkout link for a paid deck. Open it in a browser.", args: [LISTING], writes: true, output: "{ url, id, price, fee, currency }", run: (c) => call(() => a(c).checkout(c.args.listing)) });

@@ -8,7 +8,8 @@ import { basename, delimiter, dirname, extname, join } from "node:path";
 import { homedir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
-import { AiError, aiProviderId, aiProviderName, type AgentEffort, type ChatProvider } from "./ai.ts";
+import { AiError, aiProviderId, aiProviderName, DEFAULT_ETUDE_AI_CHAT_MODEL, type AgentEffort, type ChatProvider } from "./ai.ts";
+import { accountFor } from "./account.ts";
 import { cheatSheet } from "./agent-cheatsheet.ts";
 import { agentRefusal } from "./agent-guard.ts";
 import { chatGptStatus, listChatGptModels } from "./chatgpt.ts";
@@ -188,7 +189,7 @@ export interface ModelChoice {
 }
 
 export interface ModelGroup {
-  provider: "chatgpt" | "openrouter" | "custom" | "agent";
+  provider: "etude" | "chatgpt" | "openrouter" | "custom" | "agent";
   label: string;
   models: ModelChoice[];
   error?: string;
@@ -758,7 +759,7 @@ export class Agent {
     this.store.setKv("lastModel", null);
   }
 
-  /** A model ref as a provider. Refs: `chatgpt:<slug>`, `openrouter:<id>`, `custom:<id>`; null means the feedback provider. */
+  /** A model ref as a provider. Refs: `etude:<id>`, `chatgpt:<slug>`, `openrouter:<id>`, `custom:<id>`; null means the feedback provider. */
   resolveModel(ref: string | null | undefined): ChatProvider {
     const ai = this.etude.settings().ai;
     const fb = ai.feedback;
@@ -770,6 +771,7 @@ export class Agent {
     const i = r.indexOf(":");
     const kind = i < 0 ? "" : r.slice(0, i);
     const model = r.slice(i + 1);
+    if (kind === "etude") return { kind: "etude-cloud", model, vision: this.visionOf(r), ...(fb?.kind === "etude-cloud" && fb.server ? { server: fb.server } : {}), timeoutMs: 180_000 };
     if (kind === "chatgpt") return { kind: "chatgpt", model, vision: true, ...(fb?.kind === "chatgpt" && fb.baseUrl ? { baseUrl: fb.baseUrl } : {}), timeoutMs: 180_000 };
     if (kind === "openrouter") {
       const env = fb?.kind === "openai-chat" && /openrouter\.ai/.test(fb.url) ? fb.apiKeyEnv : "OPENROUTER_API_KEY";
@@ -781,7 +783,7 @@ export class Agent {
       return { ...fb, model, timeoutMs: Math.max(fb.timeoutMs ?? 0, 180_000) };
     }
     if (kind === "agent") throw new AgentError(`"${r}" is an external agent, not a chat model`, 409);
-    throw new AgentError(`unknown model "${r}" (use chatgpt:<model>, openrouter:<model>, custom:<model> or agent:<id>)`);
+    throw new AgentError(`unknown model "${r}" (use etude:<model>, chatgpt:<model>, openrouter:<model>, custom:<model> or agent:<id>)`);
   }
 
   private visionOf(ref: string): boolean {
@@ -793,6 +795,7 @@ export class Agent {
   feedbackRef(): string | null {
     const fb = this.etude.settings().ai.feedback;
     if (!fb) return null;
+    if (fb.kind === "etude-cloud") return `etude:${fb.model || DEFAULT_ETUDE_AI_CHAT_MODEL}`;
     if (fb.kind === "chatgpt") return `chatgpt:${fb.model}`;
     return /openrouter\.ai/.test(fb.url) ? `openrouter:${fb.model}` : `custom:${fb.model}`;
   }
@@ -805,6 +808,24 @@ export class Agent {
     const agents: ModelGroup[] = [];
     if (!force && this.modelCache && Date.now() - this.modelCache.at < 10 * 60_000) return { configured: this.configured(), default: this.defaultChatModel() ?? this.feedbackRef(), groups: [...this.modelCache.groups, ...agents] };
     const groups: ModelGroup[] = [];
+    const acct = accountFor(this.etude);
+    if (acct.token() || fb?.kind === "etude-cloud") {
+      try {
+        const aiSt = await acct.aiStatus();
+        if (aiSt?.enabled && Array.isArray(aiSt.models?.chat) && aiSt.models.chat.length) {
+          groups.push({
+            provider: "etude",
+            label: "Etude AI",
+            models: aiSt.models.chat.map((m: any) => ({ ref: `etude:${m.id}`, name: m.name ?? m.id, vision: m.vision !== false })),
+          });
+        }
+      } catch {
+        if (fb?.kind === "etude-cloud") {
+          const m = fb.model || DEFAULT_ETUDE_AI_CHAT_MODEL;
+          groups.push({ provider: "etude", label: "Etude AI", models: [{ ref: `etude:${m}`, name: m, vision: fb.vision !== false }] });
+        }
+      }
+    }
     const st = chatGptStatus(this.etude.home);
     if (st.signedIn) {
       const g: ModelGroup = { provider: "chatgpt", label: "ChatGPT", models: [] };
@@ -942,7 +963,7 @@ export class Agent {
   configured(): boolean {
     const ai = this.etude.settings().ai;
     if (ai.feedback || ai.agent?.model || ai.agents?.length) return true;
-    return chatGptStatus(this.etude.home).signedIn || !!process.env.OPENROUTER_API_KEY;
+    return chatGptStatus(this.etude.home).signedIn || !!process.env.OPENROUTER_API_KEY || !!accountFor(this.etude).token();
   }
 
   // ------------------------------------------------------------ attachments
@@ -1537,7 +1558,7 @@ Today: ${new Date().toISOString().slice(0, 10)}${page || view ? `\n${this.viewTe
     // The screen tools need the app to answer them, so they exist only for a message the app sent (it sends the view).
     const screen = !!input.view;
     const tools = screen ? [...TOOLS, ...SCREEN_SPECS.filter((t) => t.name !== "screenshot" || provider?.vision !== false)] : TOOLS;
-    const system = provider ? await this.systemPrompt(input.page, provider.model, profile, input.view, screen) : "";
+    const system = provider ? await this.systemPrompt(input.page, provider.model ?? DEFAULT_ETUDE_AI_CHAT_MODEL, profile, input.view, screen) : "";
     const effort: AgentEffort = (EFFORTS.includes(input.effort as AgentEffort) ? input.effort : undefined) ?? (profile.brain.kind === "model" ? profile.brain.effort : undefined) ?? this.etude.settings().ai.agent?.effort ?? "low";
     const changes: string[] = [];
     // Steer, for a model Etude runs itself: the words wait here and go in after the step that's running.
@@ -1581,7 +1602,7 @@ Today: ${new Date().toISOString().slice(0, 10)}${page || view ? `\n${this.viewTe
         // Screenshots aren't kept: a later turn hears that one was taken, not the picture. A cut reply's steps may be
         // half done (a call with no result), so later turns hear only its words.
         llm: cut ? [] : messages.slice(startLen).map((m) => (m.role === "tool" ? { ...m, content: truncate(m.content, 2000) } : m.role === "user" && m.images?.length ? { role: "user" as const, content: `${SHOT_NOTE} (not kept after this reply)` } : m)),
-        model: modelName || (provider && "model" in provider ? provider.model : ""),
+        model: modelName || (provider && "model" in provider && provider.model ? provider.model : ""),
         ms: Date.now() - t0,
         changed: changed && !!snapshot,
         modelRef: model ?? this.feedbackRef() ?? undefined,

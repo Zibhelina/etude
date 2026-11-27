@@ -1,7 +1,7 @@
 ---
 title: Refund Policy
 description: When Etude refunds Sync subscriptions and paid Market decks.
-last-updated: 2026-11-11
+last-updated: 2026-11-27
 ---
 
 # Refund Policy
@@ -16,6 +16,11 @@ Etude is free to use without paying, so you can try everything before you subscr
 - Bought on the website, Sync is sold by Polar as merchant of record, so refunds are issued through Polar to your original payment method. Write to hello@etude.study or reply to your Polar receipt.
 - **Bought in the iPhone or iPad app**, Sync is sold and billed by Apple, so refunds go through Apple under Apple's rules: ask at [reportaproblem.apple.com](https://reportaproblem.apple.com). We can't refund App Store charges ourselves. To stop renewing, cancel in your iPhone's Settings → your name → Subscriptions.
 - **Bought in the Android app**, Sync is sold and billed through Google Play, so refunds go through Google under Google Play's rules: ask at [play.google.com/store/account/orderhistory](https://play.google.com/store/account/orderhistory) or through Google Play's help. We can't refund Google Play charges ourselves. To stop renewals, cancel in the Play Store app → Payments & subscriptions → Subscriptions.
+
+## Prepaid AI credit packs
+
+- Prepaid credit packs (10,000 or 50,000 credits) are consumable one-time purchases that never expire.
+- **Final sale once used:** we refund duplicate charges, billing errors, or unused packs where the law where you live gives you a cancellation right (for example, 7 days in Brazil or 14 days in the EU/UK while unused). Credits purchased through Apple or Google Play follow Apple's or Google Play's refund channels above.
 
 ## Paid Market decks
 

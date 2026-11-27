@@ -1,7 +1,7 @@
 ---
 title: Terms of Service
 description: The terms for Etude's online services: accounts, Sync and the paid Market.
-last-updated: 2026-11-11
+last-updated: 2026-11-27
 ---
 
 # Terms of Service
@@ -29,13 +29,14 @@ Etude Sync keeps your collection in step across your devices.
 
 - **End-to-end encryption.** Your collection is encrypted on your device before it's uploaded, with a key that we never receive. We store data we can't read.
 - **Your Sync password and recovery key are your responsibility.** We can't reset them, and we can't recover your synced data without one of them. If you lose both, the copy on our server is unreadable for good. The copies on your devices are not affected.
-- **Price.** On the website, US$5 per month or US$40 per year, plus any tax, with 1 GB of storage per account. In the iPhone and iPad app, the price is the one the App Store shows you before you subscribe, and in the Android app the one Google Play shows you. Prices can change; we'll tell you by email at least 30 days before a change affects your renewal.
+- **Plans and price.** On the website, Etude Sync is offered in three tiers, each with encrypted storage and monthly Etude AI credits: **Basic** (US$5/month or US$40/year; 2 GB, 5,000 credits/month), **Plus** (US$10/month or US$80/year; 20 GB, 20,000 credits/month), and **Max** (US$20/month or US$160/year; 100 GB, 60,000 credits/month), plus any tax. In the iPhone and iPad app, the price is the one the App Store shows you before you subscribe, and in the Android app the one Google Play shows you. Prices can change; we'll tell you by email at least 30 days before a change affects your renewal.
+- **Prepaid AI credit packs.** Any signed-in account (free or paid) can also buy one-time prepaid AI credit packs: **10,000 credits** (US$5 on the website) or **50,000 credits** (US$20 on the website), or at the localized price shown by the App Store or Google Play. Prepaid credits do not expire and are used after your monthly credit quota.
 - **Bought on the website, payments are handled by Polar** (Polar Software Inc.), which acts as the merchant of record: Polar sells you the subscription, charges your card, collects tax and issues your receipt, under its own terms and privacy policy. Etude never sees your card number.
 - **Bought in the iPhone or iPad app, Sync is sold and billed by Apple** through the App Store, under Apple's own terms. Apple charges the payment method on your Apple Account; Etude never sees it. The subscription gives Sync to the Etude account you were signed in to when you bought it. Refunds for these purchases go through Apple, at [reportaproblem.apple.com](https://reportaproblem.apple.com).
 - **Bought in the Android app, Sync is sold and billed through Google Play** under Google's own terms. Google charges the payment method on your Google account; Etude never sees it. The subscription gives Sync to the Etude account you were signed in to. Refunds for it go through Google Play.
 - **Renewal and cancellation.** Subscriptions renew automatically until you cancel. Cancel a website subscription at any time from the customer portal linked in Settings. Cancel a Google Play subscription in the Play Store app → your profile → Payments & subscriptions → Subscriptions. Cancel an App Store subscription in your iPhone's Settings → your name → Subscriptions, at least 24 hours before the period ends. Either way, Sync keeps working until the end of the period you've paid for. If a website payment fails, Sync keeps working for a 7-day grace period, then pauses. If an App Store payment fails, Apple tries it again, and Sync can pause until it goes through. Pausing or ending Sync never deletes anything on your devices.
 - **After Sync ends**, we keep your encrypted data for 90 days so you can resubscribe without uploading again, then delete it.
-- **Storage limit.** When you reach your quota, new uploads stop until you free space. Nothing already stored is deleted.
+- **Storage limit.** We warn you at 80% of your storage quota. When you reach your quota, new media uploads pause while reviews and text edits continue syncing; nothing already stored is deleted.
 - Refunds are covered in the [Refund Policy](refunds).
 
 ## 4. The Market
@@ -74,7 +75,12 @@ For decks you publish to the Market, you grant Etude a worldwide, non-exclusive 
 
 ## 7. AI features
 
-Some Etude features (AI grading, Ask Etude, Edit for me) send the content involved to the AI provider you configure, such as OpenAI or OpenRouter, directly from your device and under your own account with that provider. OpenRouter passes it on to the company that runs the model you picked. Etude does not receive that content. The provider's terms apply, and AI output can be wrong.
+Etude's AI features (AI grading, Ask Etude, Edit for me) can run in two ways:
+
+- **Your own provider (BYOK / ChatGPT).** Content goes directly from your device to the provider you configure (such as OpenRouter, OpenAI, your ChatGPT plan, or a local server). Etude does not receive that content, and we do not charge for using your own provider on any plan.
+- **Etude AI (hosted credits).** If you choose Etude AI, requests pass through Etude's server to OpenRouter so we can meter your credit balance (1 credit = US$0.0001 of provider cost, rounded up, minimum 1 credit per request). Unlike end-to-end encrypted Sync, hosted AI requests are not end-to-end encrypted in transit through our server; we do not store your cards or answers on our server, only the credit ledger (timestamp, purpose, model, credits charged). Monthly credits reset each period and do not roll over; prepaid credit packs do not expire. When credits reach zero, AI-graded cards fall back to self-rating until your quota resets or you top up. Rate limits apply to prevent abuse.
+
+In both cases, the underlying model provider's terms apply, and AI output can be wrong.
 
 ## 8. Open source and third-party services
 

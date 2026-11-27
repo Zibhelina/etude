@@ -9,9 +9,8 @@
 // Sync server gives for the signed-in account, send the signed transaction to the server, and finish
 // it only once the server gave a definite answer. Renewals and late approvals arrive through the
 // `transaction` event and the unfinished list, and go the same way.
-import { account, AccountApiError } from "./account";
+import { account, AccountApiError, type AiWallet, type CreditPackId, type Offering } from "./account";
 import { isAndroidApp, isIOSApp } from "./platform";
-import type { Offering } from "./account";
 
 export interface StoreProduct {
   id: string;
@@ -32,7 +31,18 @@ export interface StoreTransaction {
   revoked?: string;
 }
 export type PurchaseOutcome = { status: "purchased"; sync: AppleResult["sync"] } | { status: "pending" | "cancelled" | "unknown" };
-export interface AppleResult { ok: boolean; result: string; sync: { active: boolean; reason: string; source: string | null }; subscription: { productId: string; status: string; expires: string | null; environment: string }; /** Set instead of `subscription` for a deck (non-consumable). */ deck?: { listing: string; slug: string; name: string } }
+export interface AppleResult {
+  ok: boolean;
+  result: string;
+  sync: { active: boolean; reason: string; source: string | null };
+  subscription: { productId: string; status: string; expires: string | null; environment: string };
+  /** Set instead of `subscription` for a deck (non-consumable). */
+  deck?: { listing: string; slug: string; name: string };
+  /** Set instead of `subscription` for a prepaid AI credit pack (consumable). */
+  pack?: CreditPackId;
+  credits?: number;
+  wallet?: AiWallet;
+}
 export interface GoogleResult { ok: boolean; result: string; acknowledge: boolean; sync: AppleResult["sync"]; subscription: { productId: string; basePlanId: string; status: string; expires: string | null; test: boolean } }
 
 interface StorePlugin {
@@ -65,6 +75,14 @@ export function inAppProductIds(o: Offering | null | undefined): string[] {
     return g ? g.productIds.flatMap((p) => (g.basePlans.length ? g.basePlans.map((b) => `${p}:${b}`) : [])) : [];
   }
   return [];
+}
+
+/** Prepaid AI credit pack product ids offered by the server for this store ([] when none). */
+export function inAppCreditPackIds(o: Offering | null | undefined): { productId: string; pack: CreditPackId }[] {
+  const src = storeSource();
+  const map = src === "apple" ? o?.appleCreditPacks : src === "google" ? o?.googleCreditPacks : undefined;
+  if (!map) return [];
+  return Object.entries(map).map(([productId, pack]) => ({ productId, pack }));
 }
 
 /** Fired after the server accepted an App Store transaction, so account views can refresh. */
@@ -128,6 +146,24 @@ export async function appleDecks(): Promise<AppleDeck[]> {
   if (!decks.length) return [];
   const products = await loadProducts(decks.map((d) => d.productId)).catch(() => [] as StoreProduct[]);
   return decks.map((d) => ({ listing: d.listing, productId: d.productId, product: products.find((p) => p.id === d.productId) ?? null }));
+}
+
+/** Buys a prepaid AI credit pack (consumable) through the App Store or Google Play. */
+export async function buyCreditPack(productId: string): Promise<{ status: "purchased" | "pending" | "cancelled" | "unknown"; credits?: number; wallet?: AiWallet }> {
+  const p = storeKit();
+  const src = storeSource();
+  if (!p || !src) throw new Error("In-app purchases aren't available here.");
+  const appAccountToken = src === "google" ? (await account.googleInfo()).obfuscatedAccountId : (await account.appleInfo()).appAccountToken;
+  const r = await p.purchase({ productId, appAccountToken });
+  if (r.status !== "purchased" || !r.jws) return { status: (r.status as "pending" | "cancelled" | "unknown") ?? "unknown" };
+  if (src === "google") {
+    const res = await account.googleCredits(productId, r.jws);
+    if (res.consume && r.transactionId) await p.finish({ transactionId: r.transactionId }).catch(() => {});
+    window.dispatchEvent(new Event(STOREKIT_EVENT));
+    return { status: "purchased", credits: res.credits, wallet: res.wallet };
+  }
+  const res = await submitTransaction(r as StoreTransaction);
+  return { status: "purchased", credits: res.credits, wallet: res.wallet };
 }
 
 /** Buys a deck through the App Store for the signed-in Etude account; the server puts it in the library. */

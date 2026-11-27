@@ -6,10 +6,11 @@ import { aiProviderId } from "../../../src/core/ai-providers.ts";
 export { aiProviderId, aiProviderName, aiProvidersOf } from "../../../src/core/ai-providers.ts";
 
 export interface DecisionProvider {
-  kind: "openrouter-decisions" | "llm";
+  kind: "openrouter-decisions" | "etude-cloud" | "llm";
   url?: string;
   model?: string;
   apiKeyEnv?: string;
+  server?: string;
   timeoutMs?: number;
 }
 
@@ -32,20 +33,31 @@ export interface ChatGptProvider {
   vision?: boolean;
 }
 
-export type ChatProvider = OpenAiChatProvider | ChatGptProvider;
+/** Etude's hosted AI credits proxy. No API key; uses the signed-in Etude account. */
+export interface EtudeCloudProvider {
+  kind: "etude-cloud";
+  model?: string;
+  server?: string;
+  timeoutMs?: number;
+  vision?: boolean;
+  temperature?: number;
+}
+
+export type ChatProvider = OpenAiChatProvider | ChatGptProvider | EtudeCloudProvider;
 
 export const CHATGPT_DEFAULT_MODEL = "gpt-6.1-sol";
 
 export const isOpenAiChat = (p: ChatProvider | null | undefined): p is OpenAiChatProvider => p?.kind === "openai-chat";
 export const isChatGpt = (p: ChatProvider | null | undefined): p is ChatGptProvider => p?.kind === "chatgpt";
+export const isEtudeCloud = (p: ChatProvider | null | undefined): p is EtudeCloudProvider => p?.kind === "etude-cloud";
 
 export interface AiSettings {
   decision: DecisionProvider | null;
   feedback: ChatProvider | null;
   vision: ChatProvider | null;
-  autoFeedback: "ai-graded" | "always" | "never";
+  autoFeedback: "ai-graded" | "wrong-or-partial" | "always" | "never";
   language: string;
-  /** The in-app assistant's default model ref (chatgpt:…, openrouter:…, custom:…); null uses the feedback model. */
+  /** The in-app assistant's default model ref (etude:…, chatgpt:…, openrouter:…, custom:…); null uses the feedback model. */
   agent?: { model: string | null; effort?: string };
   /** External agents over ACP, used as `agent:<id>`. */
   agents?: AcpAgentDef[];
@@ -89,10 +101,18 @@ export const draftOf = (s: SettingsResponse | SettingsDraft): SettingsDraft => (
 /** The decision provider "llm" grades with the chat model, same as having none. */
 export const usesDecisionModel = (ai: AiSettings) => ai.decision?.kind === "openrouter-decisions";
 
-export type PresetId = "openrouter" | "openai" | "chatgpt" | "local";
+export type PresetId = "etude" | "openrouter" | "openai" | "chatgpt" | "local";
 
 export function presetAi(id: PresetId, defaults: AiSettings, current: AiSettings): AiSettings {
   const keep = { autoFeedback: current.autoFeedback, language: current.language, agent: current.agent, agents: current.agents };
+  if (id === "etude")
+    return {
+      ...keep,
+      autoFeedback: current.autoFeedback === "ai-graded" ? "wrong-or-partial" : current.autoFeedback,
+      decision: { kind: "etude-cloud", timeoutMs: 12000 },
+      feedback: { kind: "etude-cloud", vision: true, timeoutMs: 45000 },
+      vision: null,
+    };
   if (id === "openrouter") return { ...structuredClone(defaults), ...keep, vision: null };
   if (id === "chatgpt")
     return {
@@ -117,6 +137,7 @@ export function presetAi(id: PresetId, defaults: AiSettings, current: AiSettings
 }
 
 export function matchPreset(ai: AiSettings, defaults: AiSettings | undefined): PresetId | null {
+  if (ai.feedback?.kind === "etude-cloud") return "etude";
   if (!usesDecisionModel(ai) && ai.feedback?.kind === "chatgpt") return "chatgpt";
   const url = isOpenAiChat(ai.feedback) ? ai.feedback.url : "";
   if (defaults && usesDecisionModel(ai) && url === (isOpenAiChat(defaults.feedback) ? defaults.feedback.url : "")) return "openrouter";
@@ -173,7 +194,9 @@ function checkChatGpt(p: ChatGptProvider, prefix: string, e: Errors) {
 }
 
 function checkProvider(p: ChatProvider, prefix: string, e: Errors) {
-  if (isChatGpt(p)) checkChatGpt(p, prefix, e);
+  if (isEtudeCloud(p)) {
+    if (p.timeoutMs != null && !(p.timeoutMs >= 1000 && p.timeoutMs <= 600_000)) e[`${prefix}.timeoutMs`] = "Between 1 and 600 seconds";
+  } else if (isChatGpt(p)) checkChatGpt(p, prefix, e);
   else checkChat(p, prefix, e);
 }
 
@@ -214,7 +237,7 @@ export function normalize(d: SettingsDraft): SettingsDraft {
     ...d,
     ai: {
       ...ai,
-      decision: d.ai.decision?.kind === "openrouter-decisions" ? clean(d.ai.decision) : null,
+      decision: d.ai.decision?.kind === "openrouter-decisions" || d.ai.decision?.kind === "etude-cloud" ? clean(d.ai.decision) : null,
       feedback: clean(d.ai.feedback),
       vision: clean(d.ai.vision),
       language: d.ai.language.trim(),

@@ -94,9 +94,9 @@ const ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const AVATAR_FILE = /^files\/[0-9a-f]{64}\.(?:png|jpg|webp|gif|avif)$/;
 const BODY_FILE = /^files\/[0-9a-f]{64}\.(?:png|webp)$/;
 const CLIP_FILE = /^files\/[0-9a-f]{64}\.webm$/;
-const MODEL_REF = /^(?:chatgpt|openrouter|custom):\S.{0,199}$/;
+const MODEL_REF = /^(?:etude|chatgpt|openrouter|custom):\S.{0,199}$/;
 export const HERMES_PROFILE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
-/** A chat model ref a model brain can name: chatgpt:…, openrouter:…, custom:… */
+/** A chat model ref a model brain can name: etude:…, chatgpt:…, openrouter:…, custom:… */
 export const isModelRef = (s: unknown): s is string => typeof s === "string" && MODEL_REF.test(s);
 
 /** A free id for a new profile, from its name: tutor, tutor-2… */

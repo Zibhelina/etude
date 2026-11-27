@@ -29,7 +29,10 @@ export const WHAT_IS_SENT = "your cards and answers, your messages to the assist
 export const consentSentence = (ids: string[]) => `Etude sends ${WHAT_IS_SENT} from this device to ${names(ids)}.`;
 
 /** The small print under it. */
-const fine = (n: number) => `It goes straight there, under ${n > 1 ? "their" : "its"} own privacy policy; Etude's servers never see it. Nothing is sent until you agree, and you can take it back any time in Settings → AI grading.`;
+const fine = (ids: string[]) =>
+  ids.includes("etude-cloud")
+    ? "With Etude AI, requests pass through Etude's server to OpenRouter so we can meter your credits; we don't keep your cards or answers. Nothing is sent until you agree, and you can take it back any time in Settings → AI grading."
+    : `It goes straight there, under ${ids.length > 1 ? "their" : "its"} own privacy policy; Etude's servers never see it. Nothing is sent until you agree, and you can take it back any time in Settings → AI grading.`;
 
 /** The one dialog: who, what, and Not now / I agree. `intro` comes before the sentence (the launch sheet says why it asks). */
 function ConsentDialog({ ids, intro, onAgree, onCancel }: { ids: string[]; intro?: string; onAgree(): void; onCancel(): void }) {
@@ -40,7 +43,7 @@ function ConsentDialog({ ids, intro, onAgree, onCancel }: { ids: string[]; intro
           <DialogTitle>Send to {names(ids)}?</DialogTitle>
           <DialogDescription>{intro ? `${intro} ` : ""}{consentSentence(ids)}</DialogDescription>
         </DialogHeader>
-        <p className="text-[13px] leading-relaxed text-muted-foreground">{fine(ids.length)}</p>
+        <p className="text-[13px] leading-relaxed text-muted-foreground">{fine(ids)}</p>
         <DialogFooter>
           <Button variant="ghost" onClick={onCancel} data-ai-not-now>Not now</Button>
           <Button onClick={onAgree} data-ai-agree>I agree</Button>

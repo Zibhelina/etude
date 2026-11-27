@@ -15,12 +15,12 @@ import { etudeFetch } from "@/lib/transport";
 import { shareStatus } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { ACCOUNT_EVENT, SecondStep } from "@/components/settings-account";
-import { account, AccountApiError, bytes, openOutsideAsync, type AccountStatus } from "@/lib/account";
+import { account, AccountApiError, bytes, openOutsideAsync, type AccountStatus, type CreditPackId, type SyncTier } from "@/lib/account";
 import { hasWebPortal, storageNote, storeSource } from "@/lib/billing-ui";
 import { canShowPurchases, desktopApp, isNativeApp, storeSafeMessage } from "@/lib/platform";
 import { NATIVE_COPY } from "@/lib/native-copy";
-import { canBuyInApp, inAppProductIds, storeSource as thisStore, STOREKIT_EVENT } from "@/lib/storekit";
-import { AppStoreManage, AppStorePlans } from "@/components/app-store-plans";
+import { canBuyInApp, inAppCreditPackIds, inAppProductIds, storeSource as thisStore, STOREKIT_EVENT } from "@/lib/storekit";
+import { AppStoreCreditPacks, AppStoreManage, AppStorePlans } from "@/components/app-store-plans";
 
 const DEFAULT_SERVER = "https://sync.etude.study";
 
@@ -554,7 +554,7 @@ export function SyncSection() {
                       : status.configured && status.kind === "cloud" && status.server && status.server !== DEFAULT_SERVER
                         ? <>Codes are sent by <span className="font-mono text-[13px] text-foreground/85">{status.server}</span>.</>
                         : canShowPurchases()
-                          ? "Encrypted sync across your devices: US$5/month or US$40/year, cancel anytime. Free with your own folder or server. We'll email you a code to sign in."
+                          ? "Encrypted sync across your devices: plans from US$5/month or US$40/year (2 GB, 20 GB, or 100 GB + AI credits), cancel anytime. Free with your own folder or server. We'll email you a code to sign in."
                           : "We'll email you a code. No account password to remember."
                 }
               />
@@ -664,7 +664,7 @@ export function SyncSection() {
             <div className="flex flex-col gap-4" data-sync-step="plan">
               <StepTitle
                 title={canShowPurchases() ? "Pick a plan" : "Etude Sync"}
-                lead={<>Signed in{status.email ? <> as <span className="text-foreground/90">{status.email}</span></> : null}. 1 GB of encrypted storage.</>}
+                lead={<>Signed in{status.email ? <> as <span className="text-foreground/90">{status.email}</span></> : null}. Encrypted storage plus monthly Etude AI credits.</>}
               />
               <PlanChooser st={acct} onActive={afterPlan} onRefresh={loadAccount} />
               <div>
@@ -1035,21 +1035,64 @@ const REASON: Record<string, string> = {
 // The store apps say what the account has, never how to pay for it.
 const NATIVE_REASON: Record<string, string> = { none: "Not active", past_due: "Paused", grace: "Syncing for a few more days" };
 
-/** Plan and storage, as rows of the Sync card. */
+const TIER_LABEL: Record<string, string> = { free: "Free", basic: "Basic", plus: "Plus", max: "Max" };
+
+const FALLBACK_TIERS: { id: SyncTier; name: string; quotaLabel: string; quotaBytes: number; monthlyCredits: number; monthlyCents: number; yearlyCents: number }[] = [
+  { id: "basic", name: "Basic", quotaLabel: "2 GB", quotaBytes: 2 * 1024 ** 3, monthlyCredits: 5_000, monthlyCents: 500, yearlyCents: 4000 },
+  { id: "plus", name: "Plus", quotaLabel: "20 GB", quotaBytes: 20 * 1024 ** 3, monthlyCredits: 20_000, monthlyCents: 1000, yearlyCents: 8000 },
+  { id: "max", name: "Max", quotaLabel: "100 GB", quotaBytes: 100 * 1024 ** 3, monthlyCredits: 60_000, monthlyCents: 2000, yearlyCents: 16000 },
+];
+
+function tiersFrom(st: AccountStatus) {
+  const fromServer = st.offering?.catalog?.plans?.filter((p): p is typeof p & { id: SyncTier } => p.id === "basic" || p.id === "plus" || p.id === "max");
+  if (!fromServer?.length) return FALLBACK_TIERS;
+  return fromServer.map((p) => ({
+    id: p.id,
+    name: p.name,
+    quotaLabel: `${Math.round(p.quotaBytes / 1024 ** 3)} GB`,
+    quotaBytes: p.quotaBytes,
+    monthlyCredits: p.monthlyCredits,
+    monthlyCents: p.webPrice.monthly,
+    yearlyCents: p.webPrice.yearly,
+  }));
+}
+
+/** Plan, storage and AI credits, as rows of the Sync card. */
 function PlanRows({ st }: { st: AccountStatus }) {
+  const [buyingPack, setBuyingPack] = useState<CreditPackId | null>(null);
   const b = st.billing;
   const active = !!st.me?.sync.active;
   const reason = st.me?.sync.reason ?? "none";
-  const quota = st.vault?.quotaBytes ?? st.offering?.quotaBytes ?? 1024 ** 3;
+  const planId = st.vault?.plan ?? st.billing?.plan ?? st.me?.sync.plan ?? (active ? "basic" : "free");
+  const tierName = TIER_LABEL[planId] ?? planId;
+  const quota = st.vault?.quotaBytes ?? st.billing?.quotaBytes ?? st.me?.sync.quotaBytes ?? st.offering?.quotaBytes ?? 2 * 1024 ** 3;
   // The server only reports storage while Sync is active; without it there's no number to show.
   const used = st.vault ? st.vault.usedBytes : null;
   const pct = used == null ? 0 : Math.min(100, (used / quota) * 100);
+  const warning80 = !!st.vault?.warning80 || (used != null && quota > 0 && used / quota >= 0.8);
+  const wallet = st.ai?.wallet ?? st.me?.ai ?? null;
   const purchases = canShowPurchases();
+  const storePacks = inAppCreditPackIds(st.offering);
   const when = b?.expires ? (reason === "active" ? `Renews ${date(b.expires)}` : reason === "canceled_until_end" ? `Ends ${date(b.expires)}` : reason === "grace" ? `Syncing until ${date(b.graceUntil)}` : reason === "expired" || reason === "revoked" ? date(b.expires) : "") : "";
+  const webPacks = st.offering?.catalog?.creditPacks ?? [
+    { id: "pack_10k" as const, name: "10,000 credits", credits: 10_000, webPrice: 500, storePrice: 699 },
+    { id: "pack_50k" as const, name: "50,000 credits", credits: 50_000, webPrice: 2000, storePrice: 2499 },
+  ];
+  const buyWebPack = async (pack: CreditPackId) => {
+    setBuyingPack(pack);
+    try {
+      await openOutsideAsync(async () => (await account.creditsCheckout(pack)).url);
+    } catch (e) {
+      toast.error("Couldn't open credit checkout", { description: errorMessage(e) });
+    } finally {
+      setBuyingPack(null);
+    }
+  };
   return (
     <>
       <dt className="text-muted-foreground">Plan</dt>
       <dd className={cn(active ? "text-foreground" : "text-muted-foreground")} data-plan-state={reason}>
+        {active && reason !== "billing_off" ? `${tierName} · ` : ""}
         {(!purchases && NATIVE_REASON[reason]) || REASON[reason] || reason}
         {when && <span className="text-muted-foreground"> · {when}</span>}
         {purchases && active && storeSource(b) && <span className="block text-xs text-muted-foreground" data-store-source={b!.source}>{storeSource(b)}</span>}
@@ -1061,14 +1104,51 @@ function PlanRows({ st }: { st: AccountStatus }) {
             — <span className="text-xs">· {storageNote(st, active)}</span>
           </span>
         ) : (
-          <div className="flex flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-foreground/10 sm:min-w-24 sm:max-w-56 sm:flex-1" role="meter" aria-valuemin={0} aria-valuemax={quota} aria-valuenow={used} aria-label="Storage used">
-              <div className="h-full rounded-full bg-highlight" style={{ width: `${Math.max(pct, used ? 1.5 : 0)}%` }} />
+          <div className="flex flex-col gap-1">
+            <div className="flex flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-foreground/10 sm:min-w-24 sm:max-w-56 sm:flex-1" role="meter" aria-valuemin={0} aria-valuemax={quota} aria-valuenow={used} aria-label="Storage used">
+                <div className={cn("h-full rounded-full", warning80 ? "bg-warning" : "bg-highlight")} style={{ width: `${Math.max(pct, used ? 1.5 : 0)}%` }} />
+              </div>
+              <span className="shrink-0 tabular-nums text-muted-foreground">{bytes(used)} of {bytes(quota)}</span>
             </div>
-            <span className="shrink-0 tabular-nums text-muted-foreground">{bytes(used)} of {bytes(quota)}</span>
+            {warning80 && (
+              <span className="text-xs text-warning">
+                {pct >= 100 ? "Storage full: reviews and text keep syncing, new media is paused." : "Over 80% of storage used. Reviews and text keep syncing even if storage fills."}
+              </span>
+            )}
           </div>
         )}
       </dd>
+      {wallet && (
+        <>
+          <dt className="text-muted-foreground">AI credits</dt>
+          <dd className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 tabular-nums">
+              <span className="font-medium text-foreground">{wallet.totalRemaining.toLocaleString()} left</span>
+              <span className="text-xs text-muted-foreground">
+                {wallet.monthlyRemaining.toLocaleString()} of {wallet.monthlyQuota.toLocaleString()} monthly
+                {wallet.purchasedBalance > 0 ? ` + ${wallet.purchasedBalance.toLocaleString()} prepaid` : ""}
+              </span>
+            </div>
+            {wallet.warning80 && (
+              <span className="text-xs text-warning">Over 80% of monthly AI credits used.</span>
+            )}
+            {purchases && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {webPacks.map((p) => (
+                  <Button key={p.id} variant="outline" size="sm" className="h-7 px-2.5 text-xs gap-1" disabled={buyingPack !== null} onClick={() => void buyWebPack(p.id)}>
+                    {buyingPack === p.id ? <Loader2 className="size-3 animate-spin" /> : null}
+                    +{p.credits.toLocaleString()} · US${(p.webPrice / 100).toFixed(0)}
+                  </Button>
+                ))}
+              </div>
+            )}
+            {!purchases && canBuyInApp() && storePacks.length > 0 && (
+              <AppStoreCreditPacks packs={storePacks} onBought={() => void window.dispatchEvent(new Event(ACCOUNT_EVENT))} />
+            )}
+          </dd>
+        </>
+      )}
     </>
   );
 }
@@ -1109,6 +1189,10 @@ function ManagePlan({ st, onChanged }: { st: AccountStatus; onChanged(): Promise
  * waits for; in the store apps, the App Store or Google Play plans; anywhere else, just that it isn't on.
  */
 function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(): void; onRefresh(): Promise<void> }) {
+  const tiers = tiersFrom(st);
+  const usedBytes = st.vault ? st.vault.usedBytes : null;
+  const suggestedTier: SyncTier = usedBytes != null && usedBytes > 20 * 1024 ** 3 ? "max" : usedBytes != null && usedBytes > 2 * 1024 ** 3 ? "plus" : "basic";
+  const [tier, setTier] = useState<SyncTier>(suggestedTier);
   const [plan, setPlan] = useState<"monthly" | "yearly">("yearly");
   const [waiting, setWaiting] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
@@ -1199,34 +1283,58 @@ function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(
       </div>
     );
 
-  const options = [
-    { id: "yearly" as const, price: "US$40", per: "/ year", hint: "US$3.33 a month · save 33%" },
-    { id: "monthly" as const, price: "US$5", per: "/ month", hint: "Cancel anytime" },
-  ];
+  const fmtUsd = (cents: number) => `US$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
   return (
     <div className="flex flex-col gap-4">
-      <div role="radiogroup" aria-label="Plan" className="grid gap-2.5 sm:grid-cols-2 sm:max-w-lg">
-        {options.map((o) => (
+      <div className="inline-flex self-start rounded-lg border bg-muted/40 p-0.5 text-xs" role="radiogroup" aria-label="Billing interval">
+        {(["yearly", "monthly"] as const).map((interval) => (
           <button
-            key={o.id}
+            key={interval}
             type="button"
             role="radio"
-            aria-checked={plan === o.id}
-            data-plan-option={o.id}
-            onClick={() => setPlan(o.id)}
+            aria-checked={plan === interval}
+            data-plan-option={interval}
+            onClick={() => setPlan(interval)}
             className={cn(
-              "flex flex-col items-start gap-0.5 rounded-xl border px-4 py-3 text-left transition-colors",
-              plan === o.id ? "border-highlight bg-highlight/5 ring-1 ring-highlight" : "hover:border-foreground/25",
+              "rounded-md px-3 py-1.5 font-medium transition-colors",
+              plan === interval ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <span className="flex w-full items-baseline gap-1">
-              <span className="text-lg font-semibold tabular-nums">{o.price}</span>
-              <span className="text-sm text-muted-foreground">{o.per}</span>
-              {plan === o.id && <Check className="ml-auto size-4 self-center text-highlight" />}
-            </span>
-            <span className="text-xs text-muted-foreground">{o.hint}</span>
+            {interval === "yearly" ? "Yearly · save 33%" : "Monthly"}
           </button>
         ))}
+      </div>
+      <div role="radiogroup" aria-label="Sync tier" className="grid gap-2.5 sm:grid-cols-3">
+        {tiers.map((t) => {
+          const priceCents = plan === "yearly" ? t.yearlyCents : t.monthlyCents;
+          const perMonth = plan === "yearly" ? `US$${(t.yearlyCents / 1200).toFixed(2)}/mo` : "Cancel anytime";
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="radio"
+              aria-checked={tier === t.id}
+              data-tier-option={t.id}
+              onClick={() => setTier(t.id)}
+              className={cn(
+                "flex flex-col items-start gap-1 rounded-xl border px-4 py-3 text-left transition-colors",
+                tier === t.id ? "border-highlight bg-highlight/5 ring-1 ring-highlight" : "hover:border-foreground/25",
+              )}
+            >
+              <span className="flex w-full items-center gap-1.5">
+                <span className="text-sm font-semibold">{t.name}</span>
+                {usedBytes != null && usedBytes > 0 && suggestedTier === t.id && <span className="rounded bg-highlight/15 px-1.5 py-0.5 text-[10px] font-medium text-highlight">Fits collection</span>}
+                {tier === t.id && <Check className="ml-auto size-4 text-highlight" />}
+              </span>
+              <span className="flex items-baseline gap-1">
+                <span className="text-lg font-semibold tabular-nums">{fmtUsd(priceCents)}</span>
+                <span className="text-xs text-muted-foreground">{plan === "yearly" ? "/ year" : "/ month"}</span>
+              </span>
+              <span className="text-xs text-foreground/85">{t.quotaLabel} encrypted · {t.monthlyCredits.toLocaleString()} AI credits/mo</span>
+              <span className="text-[11px] text-muted-foreground">{perMonth}</span>
+            </button>
+          );
+        })}
       </div>
       <div className="flex flex-col gap-2">
         <div>
@@ -1237,7 +1345,7 @@ function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(
             onClick={async () => {
               setBusy(true);
               try {
-                const { url, opened } = await openOutsideAsync(async () => (await account.checkout(plan)).url);
+                const { url, opened } = await openOutsideAsync(async () => (await account.checkout(plan, tier)).url);
                 setCheckoutUrl(url);
                 setBlocked(!opened);
                 setNote(null);
@@ -1252,7 +1360,7 @@ function PlanChooser({ st, onActive, onRefresh }: { st: AccountStatus; onActive(
             {busy ? <Loader2 className="size-4 animate-spin" /> : <ExternalLink className="size-4" />} Continue to checkout
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">Checkout opens in Polar (our payment provider) and returns here once it's done.</p>
+        <p className="text-xs text-muted-foreground">Checkout opens in Polar (our payment provider) and returns here once it's done. Bring your own API key stays free on every plan.</p>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 ---
 title: Privacy Policy
 description: What the Etude app, the website and Etude's server collect, who processes it, how long it's kept and how to delete it.
-last-updated: 2026-11-09
+last-updated: 2026-11-27
 ---
 
 # Privacy Policy
@@ -27,7 +27,7 @@ The Etude app stores your collection (decks, cards, reviews, media, settings) on
 | you turned on **Share usage stats** (off unless you do) | our server (sync.etude.study) | anonymous daily feature counts (below) |
 | you use an account, Sync or the paid Market | our server (sync.etude.study) | see sections 3 to 5 |
 
-**AI providers.** AI features are off until you add a key or sign in. You choose the provider: OpenRouter, OpenAI (through an API key or your ChatGPT sign-in), or any compatible server, including one on your own computer. OpenRouter passes each request on to the company that runs the model you picked. Out of the box those are `liquid/d1-ultra` for quick grading decisions and `deepseek/deepseek-v4.1-flash-1017` for written feedback, and you can change both in Settings. Content you send to an AI provider goes straight from your device to that provider, under your own account with it. Etude never receives it. That provider's privacy policy applies.
+**AI providers.** AI features are off until you choose a provider. You can bring your own provider — OpenRouter, OpenAI (through an API key or your ChatGPT sign-in), or any compatible server, including one on your own computer — in which case content goes straight from your device to that provider under your own account and Etude never receives it. Alternatively, you can choose **Etude AI (hosted)** using your Etude account credits: in that case, the card, your answer, or your Ask Etude message passes through our server (sync.etude.study) to OpenRouter so we can meter credits and forward the response. Unlike end-to-end encrypted Sync, hosted AI requests are decrypted in memory on our server during transit; we do not store your prompts, cards, or answers, and keep only the credit usage ledger (account id, timestamp, purpose, model id, and credits charged). OpenRouter passes each request on to the company that runs the model you picked. That provider's privacy policy applies.
 
 **Error reports and usage counts.** Both are anonymous and go to our own server (sync.etude.study, hosted by DigitalOcean in Toronto), even if your Sync uses a server of your own. They're never linked to your Etude account, and they carry no device or install id.
 
@@ -59,7 +59,8 @@ An account is optional. You need one only for Sync and the paid Market.
 | Email change requests: old and new address, IP address and time, with the link stored only as a hash | to confirm the new address | deleted a day after the link expires |
 | A security log of sign-ins and account events: account id, IP address, time, and for sign-in attempts a hash of the email address | to detect abuse and investigate incidents | 12 months, also after you delete your account |
 | **Your encrypted collection** (encrypted changes, encrypted media and your wrapped keys), with its size, upload times and which of your devices uploaded each change | to sync your devices | see section 5 |
-| Subscription status from Polar (active, renewal or end date, Polar customer id) | to turn Sync on and off | while your account exists |
+| Subscription status from Polar (active, plan tier, renewal or end date, Polar customer id) | to turn Sync on and off and set your storage and monthly credit quota | while your account exists |
+| AI credit wallet and usage ledger (monthly and prepaid credit balances, credit pack purchases, timestamp, purpose, model id, credits charged, and a salted hash of your email/device key for one-time welcome credits) | to meter hosted AI credits and prevent duplicate welcome-credit claims | while your account exists (salted welcome-claim hashes are kept to prevent repeat claims; no card content is stored) |
 | For Sync bought in the iPhone or iPad app: Apple's transaction id and original transaction id, the product (monthly or yearly), its status and renewal or end date, linked to your Etude account through a random token the app passes to Apple | to turn Sync on and off for the right account | while your account exists |
 | For Sync bought in the Android app: Google Play's purchase token and order id, the product (monthly or yearly), its status and renewal or end date, linked to your Etude account | to give your account Sync and handle renewals, cancellations and refunds | while the account exists |
 | Paid Market orders: deck, price, fee, tax, billing country, Stripe payment ids or Polar order ids | to deliver purchases, handle refunds and meet tax law | 6 years after the sale, as Canadian tax law requires |
@@ -75,6 +76,7 @@ An account is optional. You need one only for Sync and the paid Market.
 | Provider | What it does | Where |
 |---|---|---|
 | DigitalOcean | hosts the server, database and encrypted storage, its backups, and the anonymous error reports and usage counts | Toronto, Canada |
+| OpenRouter | processes hosted Etude AI requests forwarded by our server (only if you choose Etude AI) | United States |
 | Resend | sends sign-in and account email (your address and the message) | United States |
 | Porkbun and Google | Porkbun forwards mail sent to hello@etude.study to a Gmail inbox, where it's read and stored | United States |
 | Polar | sells and bills Sync subscriptions bought on the website and decks sold by Etude (merchant of record) | United States |

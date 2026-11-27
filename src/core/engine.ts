@@ -1284,10 +1284,16 @@ export class Etude {
    */
   aiConsentStatus(ask: (ChatProvider | null)[] = []): { required: boolean; providers: { id: string; name: string; for: ("grading" | "assistant")[]; ready: boolean; agreed: string | null }[]; agreed: Record<string, string> } {
     const s = this.settings();
-    const grading = [s.ai.decision?.kind === "openrouter-decisions" ? s.ai.decision : null, s.ai.feedback, s.ai.vision].filter((p) => !!p) as { kind: string; url?: string; apiKeyEnv?: string }[];
+    const grading = [s.ai.decision?.kind === "openrouter-decisions" || s.ai.decision?.kind === "etude-cloud" ? s.ai.decision : null, s.ai.feedback, s.ai.vision].filter((p) => !!p) as { kind: string; url?: string; apiKeyEnv?: string }[];
     const assistant = ask.filter((p): p is ChatProvider => !!p);
     let signedIn: boolean | null = null;
-    const live = (p: { kind: string; apiKeyEnv?: string }) => (p.kind === "chatgpt" ? (signedIn ??= this.chatgptSignedIn()) : !p.apiKeyEnv || !!process.env[p.apiKeyEnv]);
+    let cloudSignedIn: boolean | null = null;
+    const live = (p: { kind: string; apiKeyEnv?: string }) =>
+      p.kind === "chatgpt"
+        ? (signedIn ??= this.chatgptSignedIn())
+        : p.kind === "etude-cloud"
+          ? (cloudSignedIn ??= this.etudeCloudSignedIn())
+          : !p.apiKeyEnv || !!process.env[p.apiKeyEnv];
     const ids = [...new Set([...grading, ...assistant].map(aiProviderId).filter((x): x is string => !!x))];
     const uses = (id: string) => [...(grading.some((p) => aiProviderId(p) === id) ? ["grading" as const] : []), ...(assistant.some((p) => aiProviderId(p) === id) ? ["assistant" as const] : [])];
     const ready = (id: string) => [...grading, ...assistant].some((p) => aiProviderId(p) === id && live(p));
@@ -1297,6 +1303,17 @@ export class Etude {
   private chatgptSignedIn(): boolean {
     try {
       return !!this.chatgptStatus().signedIn;
+    } catch {
+      return false;
+    }
+  }
+
+  private etudeCloudSignedIn(): boolean {
+    try {
+      const f = join(this.home, "account.json");
+      if (!existsSync(f)) return false;
+      const saved = JSON.parse(readFileSync(f, "utf8")) as { token?: string };
+      return !!saved?.token;
     } catch {
       return false;
     }
@@ -3577,8 +3594,17 @@ export class Etude {
         .lastInsertRowid,
     );
     const quiet = this.type(this.cardWithDeck(cardId).type).showVerdict === false;
-    const wantsFeedback = !quiet && !grade.feedback && grade.grader.kind === "ai" && !grade.grader.error && this.settings().ai.autoFeedback !== "never";
-    return { attemptId: id, grade, key: prep.key, wantsFeedback: wantsFeedback || (!quiet && this.settings().ai.autoFeedback === "always" && !grade.feedback), retry: null };
+    const ai = this.settings().ai;
+    const hosted = ai.feedback?.kind === "etude-cloud" || ai.decision?.kind === "etude-cloud";
+    const auto = ai.autoFeedback;
+    const aiWants =
+      auto === "never"
+        ? false
+        : auto === "wrong-or-partial" || (hosted && auto === "ai-graded")
+          ? grade.verdict !== "correct"
+          : true;
+    const wantsFeedback = !quiet && !grade.feedback && grade.grader.kind === "ai" && !grade.grader.error && aiWants;
+    return { attemptId: id, grade, key: prep.key, wantsFeedback: wantsFeedback || (!quiet && auto === "always" && !grade.feedback), retry: null };
   }
 
   /** Grades an answer against a card variant without storing anything. */

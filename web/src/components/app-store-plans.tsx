@@ -9,7 +9,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { openOutside } from "@/lib/account";
-import { buy, loadProducts, manageSubscriptions, periodLabel, restore, storeSource, unavailableHere, type StoreProduct } from "@/lib/storekit";
+import { buy, buyCreditPack, loadProducts, manageSubscriptions, periodLabel, restore, storeSource, unavailableHere, type StoreProduct } from "@/lib/storekit";
+import type { CreditPackId } from "@/lib/account";
 
 export const TERMS_URL = "https://etude.study/terms";
 export const PRIVACY_URL = "https://etude.study/privacy";
@@ -187,6 +188,78 @@ export function AppStoreManage({ onChanged }: { onChanged(): void | Promise<void
       >
         {busy && <Loader2 className="size-4 animate-spin" />} Restore Purchases
       </Button>
+    </div>
+  );
+}
+
+/** Prepaid AI credit packs from the App Store or Google Play (prices come from the store, localized). */
+export function AppStoreCreditPacks({ packs, onBought }: { packs: { productId: string; pack: CreditPackId }[]; onBought(): void | Promise<void> }) {
+  const [products, setProducts] = useState<StoreProduct[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    loadProducts(packs.map((x) => x.productId))
+      .then((ps) => {
+        if (live) setProducts(ps);
+      })
+      .catch((e) => {
+        if (live) setLoadError((e as Error).message);
+      });
+    return () => {
+      live = false;
+    };
+  }, [packs.map((x) => x.productId).join(",")]);
+
+  const handleBuy = async (productId: string) => {
+    setBusy(productId);
+    setError(null);
+    try {
+      const r = await buyCreditPack(productId);
+      if (r.status === "purchased") {
+        toast.success(r.credits ? `Added ${r.credits.toLocaleString()} AI credits` : "Credits added");
+        await onBought();
+      } else if (r.status === "pending") {
+        setError("Purchase is waiting for approval. Credits are added once approved.");
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (products === null && !loadError) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Loader2 className="size-3.5 animate-spin" /> Loading credit packs…
+      </div>
+    );
+  }
+  if (loadError) return <p className="text-xs text-muted-foreground">{loadError}</p>;
+  if (!products?.length) return null;
+
+  return (
+    <div className="flex flex-col gap-2" data-appstore-credit-packs>
+      <div className="flex flex-wrap gap-2">
+        {products.map((p) => (
+          <Button
+            key={p.id}
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5"
+            disabled={!!busy}
+            onClick={() => void handleBuy(p.id)}
+          >
+            {busy === p.id && <Loader2 className="size-3.5 animate-spin" />}
+            <span>{p.displayName}</span>
+            <span className="tabular-nums text-muted-foreground">· {p.displayPrice}</span>
+          </Button>
+        ))}
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }

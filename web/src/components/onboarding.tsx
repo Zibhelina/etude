@@ -39,7 +39,7 @@ import { asksAiConsent, useAiConsent, WHAT_IS_SENT } from "@/components/ai-conse
 import { useImportPicker } from "@/pages/decks";
 import { announceDataChange } from "@/components/agent-panel";
 import { api } from "@/lib/api";
-import { account, openOutside, openOutsideAsync } from "@/lib/account";
+import { account, openOutside, openOutsideAsync, type SyncTier } from "@/lib/account";
 import { chatGptSignInHere, saveApiKey, serverless } from "@/lib/native";
 import { canShowPurchases, isNativeApp } from "@/lib/platform";
 import { canBuyInApp, inAppProductIds } from "@/lib/storekit";
@@ -77,7 +77,7 @@ const LEVELS: { id: OnboardingLevel; icon: typeof Coffee; title: string; hint: s
 ];
 const levelTitle = (l: OnboardingLevel) => LEVELS.find((x) => x.id === l)!.title;
 
-const PRESET_LABEL: Record<PresetId, string> = { chatgpt: "ChatGPT", openrouter: "OpenRouter", openai: "OpenAI", local: "Local server" };
+const PRESET_LABEL: Record<PresetId, string> = { etude: "Etude AI", chatgpt: "ChatGPT", openrouter: "OpenRouter", openai: "OpenAI", local: "Local server" };
 const KEY_ENV: Record<"openrouter" | "openai", string> = { openrouter: "OPENROUTER_API_KEY", openai: "OPENAI_API_KEY" };
 
 /** The one path the ticked boxes lead to: ChatGPT, then OpenRouter, then OpenAI, then a local server. */
@@ -395,12 +395,13 @@ function AiStep({ value, onChange, onNext }: { value: boolean | null; onChange(v
 /** The iPhone app: what the Agree button on a connect screen agrees to, or that it was. */
 function AgreeNote({ ids, agreed }: { ids: string[]; agreed: boolean }) {
   const who = ids.map(aiProviderName).join(" and ");
+  const hosted = ids.includes("etude-cloud");
   return (
     <Note className="mt-2.5">
       {agreed ? (
         <>You agreed: Etude sends {WHAT_IS_SENT} from this device to {who}, for grading and the assistant. Take it back any time in Settings → AI grading.</>
       ) : (
-        <><b>Agree</b> lets Etude send {WHAT_IS_SENT} from this device to {who}, for grading and the assistant. Etude's servers never see it. Take it back any time in Settings → AI grading.</>
+        <><b>Agree</b> lets Etude send {WHAT_IS_SENT} from this device to {who}, for grading and the assistant. {hosted ? "Requests pass through Etude's server to meter credits (we don't store your cards or answers)." : "Etude's servers never see it."} Take it back any time in Settings → AI grading.</>
       )}
     </Note>
   );
@@ -819,7 +820,7 @@ function SyncStep({ level, onDone }: { level: OnboardingLevel; onDone(o: SyncOut
           kind="radio"
           icon={CloudLock}
           title="Etude Sync"
-          hint={canShowPurchases() ? "Encrypted, works everywhere. US$5/month or US$40/year." : "Encrypted, works everywhere."}
+          hint={canShowPurchases() ? "Encrypted, works everywhere. Plans from US$5/month or US$40/year." : "Encrypted, works everywhere."}
           selected={choice === "cloud"}
           onClick={() => setChoice("cloud")}
         />
@@ -867,6 +868,7 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
   const backer = useContext(BackCtx);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [tier, setTier] = useState<SyncTier>("basic");
   const [plan, setPlan] = useState<"monthly" | "yearly">("yearly");
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
@@ -1008,7 +1010,7 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
   if (stage === "plan" && !canShowPurchases() && appleProducts)
     return (
       <>
-        <Title eyebrow="Etude Sync" lead="1 GB of encrypted storage, end-to-end with a Sync password. Cancel anytime.">Pick a plan</Title>
+        <Title eyebrow="Etude Sync" lead="Encrypted storage (2 GB, 20 GB, or 100 GB) plus monthly Etude AI credits. Cancel anytime.">Pick a plan</Title>
         <div className="mt-5">
           <AppStorePlans productIds={appleProducts} onActive={() => { window.dispatchEvent(new Event(ACCOUNT_EVENT)); onDone("finish in Settings"); }} />
         </div>
@@ -1017,19 +1019,35 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
     );
   if (stage === "plan" && !canShowPurchases()) return <NativePlanGate onCheck={() => void run(afterSignIn)} error={error} />;
 
-  if (stage === "plan")
+  if (stage === "plan") {
+    const tiers: { id: SyncTier; title: string; quota: string; credits: string; monthly: number; yearly: number }[] = [
+      { id: "basic", title: "Basic", quota: "2 GB", credits: "5,000 AI credits/mo", monthly: 5, yearly: 40 },
+      { id: "plus", title: "Plus", quota: "20 GB", credits: "20,000 AI credits/mo", monthly: 10, yearly: 80 },
+      { id: "max", title: "Max", quota: "100 GB", credits: "60,000 AI credits/mo", monthly: 20, yearly: 160 },
+    ];
     return (
       <>
-        <Title eyebrow="Etude Sync" lead="1 GB of encrypted storage, end-to-end with a Sync password. Cancel anytime.">Pick a plan</Title>
+        <Title eyebrow="Etude Sync" lead="Encrypted storage plus monthly Etude AI credits. Cancel anytime.">Pick a plan</Title>
+        <div className="mt-4 inline-flex rounded-lg border bg-muted/40 p-0.5 text-xs" role="radiogroup" aria-label="Billing interval">
+          <button type="button" role="radio" aria-checked={plan === "yearly"} onClick={() => setPlan("yearly")} className={cn("rounded-md px-3 py-1.5 font-medium transition-colors", plan === "yearly" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground")}>
+            Yearly · save 33%
+          </button>
+          <button type="button" role="radio" aria-checked={plan === "monthly"} onClick={() => setPlan("monthly")} className={cn("rounded-md px-3 py-1.5 font-medium transition-colors", plan === "monthly" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground")}>
+            Monthly
+          </button>
+        </div>
         <Options role="radiogroup">
-          <Option kind="radio" icon={CalendarDays} title="Yearly · US$40" hint="Works out to US$3.33 a month." selected={plan === "yearly"} onClick={() => setPlan("yearly")} />
-          <Option kind="radio" icon={CalendarClock} title="Monthly · US$5" hint="Billed every month." selected={plan === "monthly"} onClick={() => setPlan("monthly")} />
+          {tiers.map((t) => {
+            const price = plan === "yearly" ? `US$${t.yearly}/yr` : `US$${t.monthly}/mo`;
+            const hint = plan === "yearly" ? `${t.quota} · ${t.credits} · US$${(t.yearly / 12).toFixed(2)}/mo` : `${t.quota} · ${t.credits}`;
+            return <Option key={t.id} kind="radio" icon={plan === "yearly" ? CalendarDays : CalendarClock} title={`${t.title} · ${price}`} hint={hint} selected={tier === t.id} onClick={() => setTier(t.id)} />;
+          })}
         </Options>
         <Note>Checkout opens in Polar (our payment provider). Come back here when it's done.</Note>
         {error && <Problem>{error}</Problem>}
         <Foot ghost={<Ghost onClick={() => onDone("subscribe later")}>Later</Ghost>}>
           <Primary busy={busy} onClick={() => void run(async () => {
-            const { url, opened } = await openOutsideAsync(async () => (await account.checkout(plan)).url);
+            const { url, opened } = await openOutsideAsync(async () => (await account.checkout(plan, tier)).url);
             setCheckoutUrl(url);
             setBlocked(!opened);
             onStage("waiting");
@@ -1037,6 +1055,7 @@ function CloudSignup({ stage, onStage, onDone }: { stage: CloudStage; onStage(s:
         </Foot>
       </>
     );
+  }
 
   return (
     <>

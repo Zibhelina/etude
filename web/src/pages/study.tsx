@@ -20,7 +20,7 @@ import { track } from "@/lib/telemetry";
 import { emitPluginReview } from "@/lib/plugins";
 import { currentView, useScreenLines } from "@/lib/screen";
 import {
-  AnswerField, AskTab, CardStage, cardEyebrow, flyOff, turnOver, useGlide, Composer, crumbPath, shownVerdict, Eyebrow, Feedback, IconButton, modKey, PinnedPrompt, Ratings, reducedMotion, Slot, StudyTop, Suggestion, Thread, Track, useSwapIn, Verdict,
+  AnswerField, AskTab, CardStage, cardEyebrow, fixedRect, flyOff, studyScroller, turnOver, useGlide, Composer, crumbPath, shownVerdict, Eyebrow, Feedback, IconButton, modKey, PinnedPrompt, Ratings, reducedMotion, Slot, StudyTop, Suggestion, Thread, Track, useSwapIn, Verdict,
   type ChatMsg, type FlipSide,
 } from "@/components/study-shell";
 
@@ -88,7 +88,10 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   useEffect(() => { try { localStorage.setItem(FOCUS_KEY, focus ? "1" : "0"); } catch { /* storage blocked */ } }, [focus]);
   const [fitFocus, setFitFocus] = useState(() => { try { return localStorage.getItem(FIT_KEY) !== "0"; } catch { return true; } });
   useEffect(() => { try { localStorage.setItem(FIT_KEY, fitFocus ? "1" : "0"); } catch { /* storage blocked */ } }, [fitFocus]);
+  const rootRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+  const scroller = () => studyScroller(rootRef.current);
+  const scrollPage = (top: number, behavior?: ScrollBehavior) => (scroller() ?? window).scrollTo({ top, behavior });
   const frame = useRef<CardFrameHandle>(null);
   const shownAt = useRef(Date.now());
   const lastCard = useRef<number | undefined>(undefined);
@@ -164,7 +167,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       setPractice(false);
       setPhase(r.card ? "answer" : "done");
       shownAt.current = Date.now();
-      window.scrollTo({ top: 0 });
+      scrollPage(0);
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -269,7 +272,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     const main = mainRef.current, col = main?.firstElementChild, el = frame.current?.frameElement();
     if (!main || !col || !el) return null;
     const pad = parseFloat(getComputedStyle(main).paddingTop) || 0;
-    return main.getBoundingClientRect().top + pad + (el.getBoundingClientRect().top - col.getBoundingClientRect().top) + window.scrollY;
+    return main.getBoundingClientRect().top + pad + (el.getBoundingClientRect().top - col.getBoundingClientRect().top) + (scroller()?.scrollTop ?? window.scrollY);
   }, []);
   const paper = !!card && card.grader === "self" && !bare;
   const currentKey = card ? frameKeyOf(card, retry?.count ?? 0) : null;
@@ -329,8 +332,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
     rated.then(() => emitPluginReview({ cardId: card.cardId, rating, deck: card.deck, durationMs: dur }), () => {}); // handled below; this keeps a fast failure from being reported as unhandled during the beat
     if (motion) await sleep(RATE_BEAT_MS);
     if (motion && el && currentKey) {
-      const r = el.getBoundingClientRect();
-      setLeaving({ key: currentKey, card, rect: { left: r.left, top: r.top, width: r.width }, paper, done: false });
+      setLeaving({ key: currentKey, card, rect: fixedRect(el), paper, done: false });
     }
     setExiting(true);
     try {
@@ -455,11 +457,17 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
 
   // ---------------------------------------------------------------- the follow-up chat
   const hasAsk = phase === "result" && !!feedback?.text && !bare && !exiting;
-  const headerH = () => document.querySelector<HTMLElement>(".st-top")?.offsetHeight ?? 64;
-  const maxScroll = () => document.documentElement.scrollHeight - window.innerHeight;
+  const headerH = () => rootRef.current?.querySelector<HTMLElement>(".st-top")?.offsetHeight ?? 64;
+  const scrollY = () => scroller()?.scrollTop ?? window.scrollY;
+  const viewTop = () => scroller()?.getBoundingClientRect().top ?? 0;
+  const viewH = () => scroller()?.clientHeight ?? window.innerHeight;
+  const maxScroll = () => {
+    const sc = scroller();
+    return Math.max(0, sc ? sc.scrollHeight - sc.clientHeight : document.documentElement.scrollHeight - window.innerHeight);
+  };
   const chatPos = () => {
     const el = fbRef.current;
-    return el ? Math.max(0, el.getBoundingClientRect().top + window.scrollY - headerH() - 14) : 0;
+    return el ? Math.max(0, el.getBoundingClientRect().top - viewTop() + scrollY() - headerH() - 14) : 0;
   };
   const chatTop = () => Math.min(chatPos(), maxScroll());
   // The page ends where the chat starts: scrolled to the bottom, the feedback sits under the header.
@@ -479,7 +487,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   }, []);
   const glide = (top: number) => {
     quiet.current = Date.now() + 700;
-    window.scrollTo({ top, behavior: reducedMotion() ? "auto" : "smooth" });
+    scrollPage(top, reducedMotion() ? "auto" : "smooth");
   };
   const openChat = useCallback(() => {
     setChatting(true);
@@ -506,9 +514,9 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       const fb = fbRef.current;
       if (!fb) return;
       const slotH = slotRef.current?.offsetHeight ?? 96;
-      const bottom = fb.getBoundingClientRect().bottom + window.scrollY;
-      const T = Math.min(chatTop(), Math.max(30, bottom - (window.innerHeight - slotH) + 30));
-      const y = window.scrollY;
+      const bottom = fb.getBoundingClientRect().bottom - viewTop() + scrollY();
+      const T = Math.min(chatTop(), Math.max(30, bottom - (viewH() - slotH) + 30));
+      const y = scrollY();
       setChatting((on) => {
         if (!on && y >= T) {
           setSawChat(true);
@@ -519,23 +527,24 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
       });
     };
     const onResize = () => sizePad();
-    window.addEventListener("scroll", onScroll, { passive: true });
+    const target: EventTarget = scroller() ?? window;
+    target.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onResize);
     if (!nudged && !reducedMotion()) {
       nudged = true;
       const t1 = window.setTimeout(() => {
         quiet.current = Date.now() + 1600;
-        window.scrollTo({ top: Math.min(120, chatTop()), behavior: "smooth" });
-        window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 650);
+        scrollPage(Math.min(120, chatTop()), "smooth");
+        window.setTimeout(() => scrollPage(0, "smooth"), 650);
       }, 700);
       return () => {
         window.clearTimeout(t1);
-        window.removeEventListener("scroll", onScroll);
+        target.removeEventListener("scroll", onScroll);
         window.removeEventListener("resize", onResize);
       };
     }
     return () => {
-      window.removeEventListener("scroll", onScroll);
+      target.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onResize);
     };
   }, [hasAsk, sizePad]);
@@ -681,7 +690,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
   const pin = hideTop && dock?.picture && dock.question ? dock : null;
   const onTyping = (on: boolean) => {
     setTyping(on);
-    if (on) requestAnimationFrame(() => window.scrollTo({ top: 0 }));
+    if (on) requestAnimationFrame(() => scrollPage(0));
   };
   const checkDocked = () => {
     // The keyboard goes away so the result shows whole. Empty is an answer too: "I don't know".
@@ -792,6 +801,7 @@ export function StudyPage({ scope, title, startCard }: { scope: Scope; title: st
 
   return (
     <div
+      ref={rootRef}
       className={cn("flex min-h-dvh w-full flex-col", showBar ? "pb-[calc(9.5rem+env(safe-area-inset-bottom))]" : "pb-6", (bare || hideTop) && "pt-[env(safe-area-inset-top)]", bare && phone && !showBar && "pb-0", pin && "min-h-0 pb-0 pt-[calc(env(safe-area-inset-top)+64px)]", sk.on && "overflow-x-clip")}
     >
       {pin && <PinnedPrompt kicker={pin.kicker} kickerColor={pin.kickerColor} question={pin.question} onHide={() => dockInput.current?.blur()} />}

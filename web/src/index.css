@@ -2549,9 +2549,10 @@ body.kb-dragging, body.kb-dragging * { cursor: grabbing !important; user-select:
 .note-portal.is-bare:is(:fullscreen, .is-full) > .note-embed-head > button:first-child { max-width: none; }
 
 /* Screens in tabs (desktops): Library, Browse, Stats, Agents… drawn inside a Notebook pane, under its tab bar.
-   A study session scrolls in its own box the height of the pane, so its fixed bottom bar and pinned header sit
-   at the bottom and top of the pane instead of the window. */
-.screen-study { position: relative; height: calc(100dvh - 48px); overflow-y: auto; overflow-x: clip; contain: layout paint; overscroll-behavior: contain; }
+   A study session scrolls inside a paint-contained shell the height of the pane, so its fixed bottom bar stays
+   pinned to the bottom of the pane instead of scrolling with the content or pinning to the window. */
+.screen-study { position: relative; height: calc(100dvh - 48px); overflow: hidden; contain: layout paint; }
+.screen-study-scroll { height: 100%; overflow-y: auto; overflow-x: clip; overscroll-behavior: contain; }
 .screen-fill { position: relative; height: calc(100dvh - 48px); overflow: hidden; }
 .screen-study .min-h-dvh { min-height: 100%; }
 .notes-split.is-multi .note-pane:has(> :is(.screen-study, .screen-fill)) { height: 100%; }

@@ -457,22 +457,36 @@ export const Slot = forwardRef<HTMLDivElement, { className?: string; children: R
   );
 });
 
+/** The box a study or watch screen scrolls in: its tab's scroll box on desktop, or null when the window scrolls. */
+export const studyScroller = (el: Element | null | undefined) => el?.closest<HTMLElement>("[data-study-scroll]") ?? null;
+
+/** Coordinates for a `position: fixed` leaving card, relative to its containing block (`.screen-study` or the viewport). */
+export function fixedRect(el: HTMLElement): { left: number; top: number; width: number } {
+  const r = el.getBoundingClientRect();
+  const host = el.closest<HTMLElement>(".screen-study");
+  if (!host) return { left: r.left, top: r.top, width: r.width };
+  const hr = host.getBoundingClientRect();
+  const z = parseFloat(getComputedStyle(host).getPropertyValue("zoom")) || 1;
+  return { left: (r.left - hr.left) / z, top: (r.top - hr.top) / z, width: r.width / z };
+}
+
 /** Keeps the card from jumping when the column around it changes (the result appearing under it re-centres
  *  the column): call the returned `mark()` right before such a state change, and after that render the card
  *  glides from where it was. */
 export function useGlide(getEl: () => HTMLElement | null | undefined) {
   const from = useRef<{ el: HTMLElement; top: number } | null>(null);
+  const scrollYOf = (el: HTMLElement) => studyScroller(el)?.scrollTop ?? window.scrollY;
   useLayoutEffect(() => {
     const f = from.current;
     if (!f) return;
     from.current = null;
     if (!f.el.isConnected || reducedMotion()) return;
-    const dy = f.top - (f.el.getBoundingClientRect().top + window.scrollY);
+    const dy = f.top - (f.el.getBoundingClientRect().top + scrollYOf(f.el));
     if (Math.abs(dy) > 1) f.el.animate([{ translate: `0 ${dy}px` }, { translate: "0 0" }], { duration: 460, easing: "cubic-bezier(.2,.8,.2,1)" });
   });
   return () => {
     const el = getEl();
-    if (el && !from.current) from.current = { el, top: el.getBoundingClientRect().top + window.scrollY };
+    if (el && !from.current) from.current = { el, top: el.getBoundingClientRect().top + scrollYOf(el) };
   };
 }
 

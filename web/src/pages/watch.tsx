@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { navigate } from "@/lib/router";
 import { useFunMode } from "@/lib/fun";
 import { track } from "@/lib/telemetry";
-import { CardStage, cardEyebrow, crumbPath, Eyebrow, Feedback, flyOff, IconButton, reducedMotion, shownVerdict, Slot, StudyTop, Track, turnOver, useGlide, useSwapIn, Verdict, type FlipSide } from "@/components/study-shell";
+import { CardStage, cardEyebrow, crumbPath, Eyebrow, Feedback, fixedRect, flyOff, IconButton, reducedMotion, shownVerdict, Slot, studyScroller, StudyTop, Track, turnOver, useGlide, useSwapIn, Verdict, type FlipSide } from "@/components/study-shell";
 
 type Phase = "loading" | "answer" | "grading" | "result" | "done" | "empty";
 
@@ -64,6 +64,7 @@ export function WatchPage({ scope, title }: { scope: Scope; title: string }) {
   const fun = useFunMode();
   // Motion: a self-graded card turns over to its back face; an answered example morphs across frames;
   // the card flies off when you move on.
+  const rootRef = useRef<HTMLDivElement>(null);
   const stageEl = useRef<HTMLDivElement>(null);
   const backFrame = useRef<CardFrameHandle>(null);
   const backSized = useRef<(() => void) | null>(null);
@@ -90,8 +91,7 @@ export function WatchPage({ scope, title }: { scope: Scope; title: string }) {
     const el = stageEl.current;
     const fly = !!cur.shown && !!el && !reducedMotion() && cur.phase !== "done" && cur.phase !== "empty";
     if (fly && cur.shown && el) {
-      const r = el.getBoundingClientRect();
-      setLeaving({ stageKey: stageKeyOf(cur.shown), shown: cur.shown, result: cur.result, by: cur.by, flip: cur.flip, rect: { left: r.left, top: r.top, width: r.width }, dir, done: false });
+      setLeaving({ stageKey: stageKeyOf(cur.shown), shown: cur.shown, result: cur.result, by: cur.by, flip: cur.flip, rect: fixedRect(el), dir, done: false });
     }
     if (i >= list.length) {
       if (fly) await sleep(NEXT_AFTER_MS);
@@ -108,7 +108,7 @@ export function WatchPage({ scope, title }: { scope: Scope; title: string }) {
       setShown((s) => ({ ...r, n: (s?.n ?? 0) + 1 }));
       setIndex(i);
       setPhase("answer");
-      window.scrollTo({ top: 0 });
+      (studyScroller(rootRef.current) ?? window).scrollTo({ top: 0 });
     } catch (e) {
       toast.error((e as Error).message);
       setLeaving(null);
@@ -133,7 +133,7 @@ export function WatchPage({ scope, title }: { scope: Scope; title: string }) {
   // the filled-in answer is the point, and the verdict also shows above the card.
   useEffect(() => {
     if (phase !== "result") return;
-    if (by === "example") window.scrollTo({ top: 0, behavior: "smooth" });
+    if (by === "example") (studyScroller(rootRef.current) ?? window).scrollTo({ top: 0, behavior: "smooth" });
     else setTimeout(() => resultRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }), 120);
   }, [phase, by]);
 
@@ -315,7 +315,7 @@ export function WatchPage({ scope, title }: { scope: Scope; title: string }) {
   };
 
   return (
-    <div className="flex min-h-dvh w-full flex-col pb-[calc(9.5rem+env(safe-area-inset-bottom))]">
+    <div ref={rootRef} className="flex min-h-dvh w-full flex-col pb-[calc(9.5rem+env(safe-area-inset-bottom))]">
       <StudyTop title={title} crumb={crumbPath(entry?.deck, scope.deck)} onBack={() => navigate("/")}>
         {card && phase !== "done" && phase !== "empty" && <span className="st-tag max-md:hidden">{card.type}</span>}
         {total > 0 && phase !== "done" && (

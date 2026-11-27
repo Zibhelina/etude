@@ -57,9 +57,9 @@ export function ScreenView({ route, top }: { route: string; top: React.ReactNode
   return (
     <LocationContext.Provider value={route}>
       {top}
-      {/* A study session scrolls in a box of its own, so its bottom bar stays at the bottom of this pane. */}
+      {/* A study session scrolls inside a paint-contained shell, so its fixed bottom bar stays pinned to the bottom of this pane while the inner box scrolls under it. */}
       <div key={`${screen}:${data}`} className={cn("screen-body page-in", study && "screen-study", fill && "screen-fill")} data-screen={screen}>
-        {page(route)}
+        {study ? <div className="screen-study-scroll" data-study-scroll>{page(route)}</div> : page(route)}
       </div>
     </LocationContext.Provider>
   );
